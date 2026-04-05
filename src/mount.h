@@ -6,13 +6,15 @@
 #include "display.h"
 #include "themes.h"
 
-
-// Structure to handle formatting verbose output messages for mount
+/**
+ * @brief Canonical list of all supported configuration settings with validation.
+ * @details Provides high-performance string formatting for ISO mount operations, 
+ * utilizing a pre-allocated internal buffer to minimize heap allocations during output.
+ */
 struct VerbosityFormatter {
     const ListTheme* theme;
     const bool isOriginal;
 
-    // Original hardcoded sequences (used as fallback when isOriginal)
     static constexpr std::string_view orig_errorPrefix    = "\033[1;91m";
     static constexpr std::string_view orig_errorFilename  = "\033[1;93m";
     static constexpr std::string_view orig_successLabel   = "\033[1m";
@@ -21,8 +23,8 @@ struct VerbosityFormatter {
     static constexpr std::string_view orig_skippedLabel   = "\033[1;93m";
     static constexpr std::string_view orig_skippedFile    = "\033[1;92m";
     static constexpr std::string_view orig_skippedMount   = "\033[1;94m";
-    static constexpr std::string_view reset               = "\033[0m";
-    static constexpr std::string_view bold                = "\033[0;1m";
+    static constexpr std::string_view reset                = "\033[0m";
+    static constexpr std::string_view bold                 = "\033[0;1m";
 
     std::string outputBuffer;
 
@@ -31,6 +33,9 @@ struct VerbosityFormatter {
         outputBuffer.reserve(512);
     }
 
+    /**
+     * @brief Formats a message indicating a successful ISO mount.
+     */
     std::string formatMountSuccess(const std::string& isoDirectory, const std::string& isoFilename,
                                    const std::string& mountisoDirectory, const std::string& mountisoFilename,
                                    const std::string& fsType = "") {
@@ -60,6 +65,9 @@ struct VerbosityFormatter {
         return outputBuffer;
     }
 
+    /**
+     * @brief Formats a standard error message for failed mount attempts.
+     */
     std::string formatError(const std::string& isoDirectory, const std::string& isoFilename,
                             const std::string& errorCode) {
         outputBuffer.clear();
@@ -78,6 +86,9 @@ struct VerbosityFormatter {
         return outputBuffer;
     }
 
+    /**
+     * @brief Formats a detailed error message including specific failure descriptions.
+     */
     std::string formatDetailedError(const std::string& isoDirectory, const std::string& isoFilename,
                                     const std::string& errorDetail) {
         outputBuffer.clear();
@@ -95,6 +106,9 @@ struct VerbosityFormatter {
         return outputBuffer;
     }
 
+    /**
+     * @brief Formats a message for an ISO that is already mounted.
+     */
     std::string formatSkipped(const std::string& isoDirectory, const std::string& isoFilename,
                               const std::string& mountisoDirectory, const std::string& mountisoFilename) {
         outputBuffer.clear();
@@ -117,6 +131,9 @@ struct VerbosityFormatter {
         return outputBuffer;
     }
 
+    /**
+     * @brief Formats a failure message categorized by specific error types (e.g., permissions, missing file).
+     */
     std::string formatMountFailure(const std::string& isoDirectory, const std::string& isoFilename,
                                    const std::string& errorType, const std::string& mountTarget = "") {
         outputBuffer.clear();
@@ -149,6 +166,9 @@ struct VerbosityFormatter {
         return outputBuffer;
     }
 
+    /**
+     * @brief Formats a generic skip message for an ISO.
+     */
     std::string formatMountSkipped(const std::string& isoDirectory, const std::string& isoFilename) {
         outputBuffer.clear();
 

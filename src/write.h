@@ -4,36 +4,47 @@
 #define WRITE_H
 
 
-// IsoInfo structure
+/**
+ * @brief Information about an ISO image file.
+ */
 struct IsoInfo {
+    /** @brief Full filesystem path to the ISO file. */
     std::string path;
+    
+    /** @brief Name of the file without path. */
     std::string filename;
+    
+    /** @brief Size of the ISO in bytes. */
     uint64_t size;
+    
+    /** @brief Human-readable size string (e.g., "4.2 GB"). */
     std::string sizeStr;
+    
+    /** @brief Original sort index for maintaining list order. */
     size_t originalIndex;
 };
 
-
-// Progress tracking structure
+/**
+ * @brief Canonical list of all supported configuration settings with validation.
+ * @details Manages the state of an ongoing or completed write process, 
+ * utilizing atomics for thread-safe progress updates.
+ */
 struct ProgressInfo {
     std::string filename;
     std::string device;
     std::string totalSize;
 
-    // Atomic members for tracking progress
     std::atomic<bool> completed{false};
     std::atomic<bool> failed{false};
     std::atomic<uint64_t> bytesWritten{0};
     std::atomic<int> progress{0};
     std::atomic<double> speed{0.0};
 
-    // Constructor to initialize members
     ProgressInfo(std::string filename, std::string device, std::string totalSize)
         : filename(std::move(filename)),
           device(std::move(device)),
           totalSize(std::move(totalSize)) {}
 
-    // Explicitly define the move constructor
     ProgressInfo(ProgressInfo&& other) noexcept
         : filename(std::move(other.filename)),
           device(std::move(other.device)),
@@ -44,7 +55,6 @@ struct ProgressInfo {
           progress(other.progress.load()),
           speed(other.speed.load()) {}
 
-    // Explicitly define the move assignment operator
     ProgressInfo& operator=(ProgressInfo&& other) noexcept {
         if (this != &other) {
             filename = std::move(other.filename);
@@ -59,10 +69,8 @@ struct ProgressInfo {
         return *this;
     }
 
-    // Delete the copy constructor and copy assignment operator
     ProgressInfo(const ProgressInfo&) = delete;
     ProgressInfo& operator=(const ProgressInfo&) = delete;
 };
-
 
 #endif // WRITE_H

@@ -3,14 +3,28 @@
 #ifndef DISPLAY_H
 #define DISPLAY_H
 
-
-// Holds displayConfig variables for all lists
+/**
+ * @brief Canonical list of all supported configuration settings with validation.
+ * @details Namespace containing global toggles that control the verbosity and 
+ * detail level of various list-based operations within the UI.
+ */
 namespace displayConfig {
+    /** @brief Toggle to show the full list during mount operations. */
     extern bool toggleFullListMount;
+    
+    /** @brief Toggle to show the full list during unmount operations. */
     extern bool toggleFullListUmount;
+    
+    /** @brief Toggle to show the full list during file operations (Cp/Mv/Rm). */
     extern bool toggleFullListCpMvRm;
+    
+    /** @brief Toggle to show the full list during write operations. */
     extern bool toggleFullListWrite;
+    
+    /** @brief Toggle to show the full list during image conversions. */
     extern bool toggleFullListConversions;
+    
+    /** @brief Toggle to display only filenames, hiding full directory paths. */
     extern bool toggleNamesOnly;
 }
 

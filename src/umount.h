@@ -5,8 +5,11 @@
 
 #include "themes.h"
 
-
-// Structure to handle verbose messages based on message type for umount
+/**
+ * @brief Canonical list of all supported configuration settings with validation.
+ * @details Formats terminal output messages for unmounting operations using 
+ * ANSI color codes and theme-aware styling.
+ */
 struct VerboseMessageFormatter {
     const ListTheme* theme;
     const bool isOriginal;
@@ -15,12 +18,18 @@ struct VerboseMessageFormatter {
     static constexpr std::string_view orig_errorPath    = "\033[1;93m";
     static constexpr std::string_view orig_successLabel = "\033[0;1m";
     static constexpr std::string_view orig_successPath  = "\033[1;92m";
-    static constexpr std::string_view reset             = "\033[0m";
-    static constexpr std::string_view bold              = "\033[0;1m";
+    static constexpr std::string_view reset              = "\033[0m";
+    static constexpr std::string_view bold               = "\033[0;1m";
 
     VerboseMessageFormatter()
         : theme(getActiveTheme()), isOriginal(globalTheme == "original") {}
 
+    /**
+     * @brief Generates a formatted string based on the status of an unmount attempt.
+     * @param messageType The category of the result (e.g., "success", "error").
+     * @param path The filesystem path being processed.
+     * @return A styled string ready for terminal output.
+     */
     std::string format(const std::string& messageType, const std::string& path) {
         std::string buf;
         buf.reserve(256);

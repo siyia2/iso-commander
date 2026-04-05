@@ -5,9 +5,12 @@
 
 #include "./headers.h"
 
-
-// ========================= LOCK-FREE QUEUE =========================
-// Modern C++20 Lock-free queue using atomic shared_ptr
+/**
+ * @brief A lock-free, concurrent queue implementation.
+ * @details Utilizes C++20 atomic shared_ptr to manage nodes without traditional 
+ * mutex locking, ensuring high-performance task distribution.
+ * @tparam T The type of elements stored in the queue.
+ */
 template <typename T>
 class LockFreeQueue {
 private:
@@ -28,6 +31,10 @@ public:
         tail.store(dummy, std::memory_order_relaxed);
     }
 
+    /**
+     * @brief Pushes a value to the back of the queue.
+     * @param value The item to be enqueued.
+     */
     void enqueue(T value) {
         auto new_node = std::make_shared<Node>(std::move(value));
         while (true) {
@@ -53,6 +60,11 @@ public:
         }
     }
 
+    /**
+     * @brief Attempts to pop a value from the front of the queue.
+     * @param result Reference to store the dequeued item.
+     * @return True if an item was successfully dequeued, false if empty.
+     */
     bool dequeue(T& result) {
         while (true) {
             std::shared_ptr<Node> first = head.load(std::memory_order_acquire);
@@ -66,7 +78,6 @@ public:
                                               std::memory_order_release, 
                                               std::memory_order_relaxed);
                 } else {
-                    // Copy shared_ptr/function first to ensure stability during CAS
                     T captured_data = next->data; 
                     if (head.compare_exchange_weak(first, next,
                                                   std::memory_order_release,
@@ -80,7 +91,11 @@ public:
     }
 };
 
-// ========================= THREAD POOL =========================
+/**
+ * @brief Canonical list of all supported configuration settings with validation.
+ * @details Manages a fixed-size pool of worker threads and a lock-free task queue.
+ * Tracks task states (pending vs. active) within a single 64-bit atomic.
+ */
 class ThreadPool {
 private:
     const size_t num_threads;
@@ -172,6 +187,12 @@ public:
         }
     }
 
+    /**
+     * @brief Submits a function to be executed asynchronously.
+     * @tparam F Function type.
+     * @tparam Args Argument types.
+     * @return A std::future that will eventually hold the function's result.
+     */
     template <class F, class... Args>
     auto enqueue(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>> {
         using return_type = std::invoke_result_t<F, Args...>;
@@ -199,6 +220,9 @@ public:
         return result;
     }
 
+    /**
+     * @brief Blocks until all tasks in the queue and active threads are finished.
+     */
     void waitAllTasksCompleted() {
         std::unique_lock<std::mutex> lock(mutex);
         cv.wait(lock, [this] {
@@ -206,13 +230,13 @@ public:
         });
     }
 
-    // Getters for naturalSort and processInput ---
     bool isIdle() const { return task_state.load(std::memory_order_acquire) == 0; }
     size_t threadCount() const { return num_threads; }
 };
 
-
-// Static access helper
+/**
+ * @brief Retrieves a singleton instance of the ThreadPool.
+ */
 inline ThreadPool& getStaticThreadPool() {
     static ThreadPool instance([] {
         constexpr size_t MAX_USEFUL_THREADS = 32;
