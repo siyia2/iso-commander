@@ -8,66 +8,32 @@ Iso Commander (isocmd) is a command-line utility for managing .iso files and con
 
 .SH NON-INTERACTIVE COMMANDS
 .TP
-.B -v, --version
-.br
+.B \-v, \-\-version
 Show program version.
-
 .TP
-.B --silent
-.br
+.B \-\-silent
 Suppress informational, error and warning output.
-
 .TP
-.B -d\<N\>
-.br
-Set max directory recursion depth when scanning for ISOs; default is -1 (unlimited).
-
+.B \-d\fIN\fR
+Max recursion depth when scanning for ISOs (default: unlimited).
 .TP
 .B mount
-.br
-Mount one or more ISO files or directories containing ISOs. Requires root.
-
+Mount one or more ISO files or directories containing ISOs (requires root).
 .TP
-.B umount, unmount
-.br
-Unmount ISO mount points. Without arguments or with "all", unmounts all under /mnt. Requires root.
-
+.B umount | unmount
+Unmount ISO mount points; without arguments or with \fBall\fR, unmounts all under /mnt (requires root).
 .SH EXAMPLES
-
-.TP
-Mount specific ISOs:
-.br
-\fBisocmd /path/to/file1.iso /path/to/file2.iso mount\fR
-
-.TP
-Mount all ISOs within a directory:
-.br
-\fBisocmd /path/to/dir mount\fR
-
-.TP
-Mount all ISOs within a directory up to depth 2:
-.br
-\fBisocmd -d2 /path/to/dir mount\fR
-
-.TP
-Mount an ISO silently:
-.br
-\fBisocmd --silent /path/to/file.iso mount\fR
-
-.TP
-Unmount ISO mount points:
-.br
-\fBisocmd /mnt/iso_example /mnt/iso_other umount\fR
-
-.TP
-Unmount all ISO mount points:
-.br
-\fBisocmd all umount or isocmd umount\fR
-
-.TP
-Unmount all ISO mount points silently:
-.br
-\fBisocmd --silent all umount or isocmd --silent umount\fR
+.TS
+tab(@);
+lb l.
+isocmd /path/to/file1.iso /path/to/file2.iso mount@Mount specific ISOs
+isocmd /path/to/dir mount@Mount all ISOs in a directory
+isocmd \-d2 /path/to/dir mount@Mount ISOs up to depth 2
+isocmd \-\-silent /path/to/file.iso mount@Mount silently
+isocmd /mnt/iso_example /mnt/iso_other umount@Unmount specific mount points
+isocmd umount@Unmount all ISO mount points
+isocmd \-\-silent umount@Unmount all silently
+.TE
 
 .TP
 Unmount an ISO mount point silently:
@@ -88,86 +54,56 @@ Converts .bin, .img, .mdf, and .nrg files to .iso. Ported from original C tools 
 Creates and updates a local ISO database. The database has a maximum file size limit of \fB1MB\fR.
 
 .SH CONFIGURATION
-The configuration file is located at \fI~/.config/isocmd/config\fR. It uses a simple \fIkey = value\fR format.
-
-.SS GENERAL SETTINGS
-.TP
-.B auto_update
-Enable background metadata updates from folder history upon startup. 
-.br
-Values: on, off (Default: off)
-.TP
-.B filenames_only
-Display only filenames instead of full paths. This acts as a global override for all list display modes except for the unmount list.
-.br
-Values: on, off (Default: on)
-.TP
-.B pagination
-Items per page in list view.
-.br
-Values: integer >= 0 (Default: 25). Set to 0 to disable.
-
-.SS THEME SETTINGS
-.TP
-.B skin
-Sets the accent color for menus and headers.
-.br
-Values: green, cyan, white, purple, amber, rose  (Default: white)
-.TP
-.B theme
-Defines the color palette used for displaying lists and prompts.
-.br
-Values: original, classic, high_contrast, neon, ocean, sunset, forest, midnight, mono, retro, crimson, dracula (Default: original)
-
-.SS HISTORY SETTINGS
-.TP
-.B folder_path_history_lines
-Max unique folder paths to persist in history. (Default: 30)
-.TP
-.B filter_history_lines
-Max unique search filters to persist in history. (Default: 15)
-
-.SS DISPLAY SETTINGS
-Controls whether lists are shown in \fBfull\fR (detailed) or \fBcompact\fR format. 
-.br
-\fBNote:\fR If \fBfilenames_only\fR is enabled, path details will be stripped regardless of these settings.
-.IP
-\fBmount_list\fR (Default: compact)
-.br
-\fBumount_list\fR (Default: full)
-.br
-\fBcp_mv_rm_list\fR (Default: compact)
-.br
-\fBwrite_list\fR (Default: compact)
-.br
-\fBconversion_lists\fR (Default: compact)
-
-.SS THREAD SETTINGS
-Iso Commander utilizes a multi-threaded architecture to optimize I/O-heavy operations and UI responsiveness.
-.TP
-.B max_thread_cap
-Global maximum concurrent threads allowed. (Default: 32)
-.TP
-.B threads_for_cp_mv
-Threads allocated for copy/move tasks. (Default: 8)
-.TP
-.B threads_for_conversions
-Threads allocated for ISO file conversions. (Default: 8)
-.TP
-.B threads_for_mount
-Threads allocated for mounting tasks. (Default: 16)
-.TP
-.B threads_for_umount
-Threads allocated for unmounting tasks. (Default: 32)
-.TP
-.B threads_for_database_cleanup
-Threads allocated for database maintenance and synchronization. (Default: 16)
-.TP
-.B threads_for_rm
-Threads allocated for file removal tasks. (Default: 32)
-.TP
-.B threads_for_list_sorting / threads_for_list_filtering
-Threads allocated for UI responsiveness during sorting and filtering. (Default: 4)
+The configuration file is located at \fI~/.config/isocmd/config\fR and uses a \fIkey = value\fR format.
+.SS GENERAL
+.TS
+tab(@);
+lb l l.
+auto_update@Enable background metadata updates on startup@on|off (Default: off)
+filenames_only@Show filenames instead of full paths; global override except unmount list@on|off (Default: on)
+pagination@Items per page (0 to disable)@integer >= 0 (Default: 25)
+.TE
+.SS THEME
+.TS
+tab(@);
+lb l l.
+skin@Accent color for menus and headers@green|cyan|white|purple|amber|rose (Default: white)
+theme@Color palette for lists and prompts@original|classic|high_contrast|neon|ocean|sunset|forest|midnight|mono|retro|crimson|dracula (Default: original)
+.TE
+.SS HISTORY
+.TS
+tab(@);
+lb l l.
+folder_path_history_lines@Max unique folder paths to persist@integer (Default: 30)
+filter_history_lines@Max unique search filters to persist@integer (Default: 15)
+.TE
+.SS DISPLAY
+Controls whether lists are shown in \fBfull\fR (detailed) or \fBcompact\fR format.
+If \fBfilenames_only\fR is enabled, path details are stripped regardless of these settings.
+.TS
+tab(@);
+lb l.
+mount_list@compact
+umount_list@full
+cp_mv_rm_list@compact
+write_list@compact
+conversion_lists@compact
+.TE
+.SS THREADS
+Iso Commander uses a multi-threaded architecture to optimize I/O-heavy operations and UI responsiveness.
+.TS
+tab(@);
+lb l.
+max_thread_cap@Global maximum concurrent threads (Default: 32)
+threads_for_cp_mv@Copy/move tasks (Default: 8)
+threads_for_conversions@ISO conversions (Default: 8)
+threads_for_mount@Mounting tasks (Default: 16)
+threads_for_umount@Unmounting tasks (Default: 32)
+threads_for_database_cleanup@Database maintenance and synchronization (Default: 16)
+threads_for_rm@File removal tasks (Default: 32)
+threads_for_list_sorting@Sorting and filtering UI responsiveness (Default: 4)
+threads_for_list_filtering@Sorting and filtering UI responsiveness (Default: 4)
+.TE
 
 .SH FILES
 .B Note: If run with sudo or as the root user, the following paths will be relative to /root/ instead of the current user's home directory.
