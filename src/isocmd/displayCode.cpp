@@ -93,7 +93,7 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     }
 
     if (isEmpty) {
-        std::cout << "\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
+        std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
         std::cout << color << "\n↵ to return..." << reset;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return false;
