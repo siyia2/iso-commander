@@ -4,100 +4,133 @@
 #define MOUNT_H
 
 #include "display.h"
+#include "themes.h"
 
 
 // Structure to handle formatting verbose output messages for mount
 struct VerbosityFormatter {
-    // Format strings for different message types
-    const std::string mountedFormatPrefix = "\033[1mISO: \033[1;92m'";
-    const std::string mountedFormatMiddle = "'\033[0m\033[1m mnt@: \033[1;94m'";
-    const std::string mountedFormatSuffix = "\033[1;94m'\033[0;1m.";
-    const std::string mountedFormatSuffixWithFS = "\033[1;94m'\033[0;1m. {";
-    const std::string mountedFormatEnd = "\033[0m";
-    const std::string errorFormatPrefix = "\033[1;91mFailed to mnt: \033[1;93m'";
-    const std::string errorFormatSuffix = "'\033[0m\033[1;91m.\033[0;1m ";
-    const std::string errorFormatEnd = "\033[0m";
-    const std::string skippedFormatPrefix = "\033[1;93mISO: \033[1;92m'";
-    const std::string skippedFormatMiddle = "'\033[1;93m alr mnt@: \033[1;94m'";
-    const std::string skippedFormatSuffix = "\033[1;94m'\033[1;93m.\033[0m";
-    
-    // String buffer for message formatting
+    const ListTheme* theme;
+    const bool isOriginal;
+
+    // Original hardcoded sequences (used as fallback when isOriginal)
+    static constexpr std::string_view orig_errorPrefix    = "\033[1;91m";
+    static constexpr std::string_view orig_errorFilename  = "\033[1;93m";
+    static constexpr std::string_view orig_successLabel   = "\033[1m";
+    static constexpr std::string_view orig_successFile    = "\033[1;92m";
+    static constexpr std::string_view orig_successMount   = "\033[1;94m";
+    static constexpr std::string_view orig_skippedLabel   = "\033[1;93m";
+    static constexpr std::string_view orig_skippedFile    = "\033[1;92m";
+    static constexpr std::string_view orig_skippedMount   = "\033[1;94m";
+    static constexpr std::string_view reset               = "\033[0m";
+    static constexpr std::string_view bold                = "\033[0;1m";
+
     std::string outputBuffer;
-    
-    VerbosityFormatter() {
-        outputBuffer.reserve(512);  // Reserve space for a typical message
+
+    VerbosityFormatter()
+        : theme(getActiveTheme()), isOriginal(globalTheme == "original") {
+        outputBuffer.reserve(512);
     }
-    
-    // Format a successful mount message
+
     std::string formatMountSuccess(const std::string& isoDirectory, const std::string& isoFilename,
-                                  const std::string& mountisoDirectory, const std::string& mountisoFilename,
-                                  const std::string& fsType = "") {
+                                   const std::string& mountisoDirectory, const std::string& mountisoFilename,
+                                   const std::string& fsType = "") {
         outputBuffer.clear();
-		outputBuffer.append(mountedFormatPrefix)
-					.append(displayConfig::toggleNamesOnly ? "" : isoDirectory + "/")
-					.append(isoFilename)
-					.append(mountedFormatMiddle)
-					.append(mountisoDirectory).append("/").append(mountisoFilename);
+
+        std::string_view labelColor = isOriginal ? orig_successLabel   : theme->muted;
+        std::string_view fileColor  = isOriginal ? orig_successFile    : theme->primary;
+        std::string_view mountColor = isOriginal ? orig_successMount   : theme->accent;
+
+        outputBuffer.append(labelColor).append("ISO: ")
+                    .append(fileColor).append("'")
+                    .append(displayConfig::toggleNamesOnly ? "" : isoDirectory + "/")
+                    .append(isoFilename)
+                    .append("'")
+                    .append(reset)
+                    .append(labelColor).append(" mnt@: ")
+                    .append(mountColor).append("'")
+                    .append(mountisoDirectory).append("/").append(mountisoFilename)
+                    .append("'")
+                    .append(reset).append(bold).append(".");
 
         if (!fsType.empty()) {
-            outputBuffer.append(mountedFormatSuffixWithFS)
-                       .append(fsType)
-                       .append("}")
-                       .append(mountedFormatEnd);
-        } else {
-            outputBuffer.append(mountedFormatSuffix)
-                       .append(mountedFormatEnd);
+            outputBuffer.append(" {").append(fsType).append("}");
         }
-        
+
+        outputBuffer.append(reset);
         return outputBuffer;
     }
-    
-    // Format an error message
-    std::string formatError(const std::string& isoDirectory, const std::string& isoFilename, 
-                           const std::string& errorCode) {
+
+    std::string formatError(const std::string& isoDirectory, const std::string& isoFilename,
+                            const std::string& errorCode) {
         outputBuffer.clear();
-        outputBuffer.append(errorFormatPrefix)
-					.append(displayConfig::toggleNamesOnly ? "" : isoDirectory + "/")
-					.append(isoFilename)
-					.append(errorFormatSuffix).append("{").append(errorCode).append("}")
-					.append(errorFormatEnd);
+
+        std::string_view errLabel = isOriginal ? orig_errorPrefix   : theme->secondary;
+        std::string_view errFile  = isOriginal ? orig_errorFilename : theme->warning;
+
+        outputBuffer.append(errLabel).append("Failed to mnt: ")
+                    .append(errFile).append("'")
+                    .append(displayConfig::toggleNamesOnly ? "" : isoDirectory + "/")
+                    .append(isoFilename)
+                    .append("'")
+                    .append(reset)
+                    .append(errLabel).append(". {").append(errorCode).append("}")
+                    .append(reset);
         return outputBuffer;
     }
-    
-    // Format a detailed error message with custom text
-    std::string formatDetailedError(const std::string& isoDirectory, const std::string& isoFilename, 
-                                   const std::string& errorDetail) {
+
+    std::string formatDetailedError(const std::string& isoDirectory, const std::string& isoFilename,
+                                    const std::string& errorDetail) {
         outputBuffer.clear();
-        outputBuffer.append(errorFormatPrefix)
-                   .append(isoDirectory).append("/").append(isoFilename)
-                   .append(errorFormatSuffix).append(errorDetail)
-                   .append(errorFormatEnd);
+
+        std::string_view errLabel = isOriginal ? orig_errorPrefix   : theme->secondary;
+        std::string_view errFile  = isOriginal ? orig_errorFilename : theme->warning;
+
+        outputBuffer.append(errLabel).append("Failed to mnt: ")
+                    .append(errFile).append("'")
+                    .append(isoDirectory).append("/").append(isoFilename)
+                    .append("'")
+                    .append(reset)
+                    .append(errLabel).append(". ").append(errorDetail)
+                    .append(reset);
         return outputBuffer;
     }
-    
-    // Format a skipped (already mounted) message
+
     std::string formatSkipped(const std::string& isoDirectory, const std::string& isoFilename,
-                             const std::string& mountisoDirectory, const std::string& mountisoFilename) {
+                              const std::string& mountisoDirectory, const std::string& mountisoFilename) {
         outputBuffer.clear();
-        outputBuffer.append(skippedFormatPrefix)
-					.append(displayConfig::toggleNamesOnly ? "" : isoDirectory + "/")
-					.append(isoFilename)
-					.append(skippedFormatMiddle)
-					.append(mountisoDirectory).append("/").append(mountisoFilename)
-					.append(skippedFormatSuffix);
+
+        std::string_view labelColor = isOriginal ? orig_skippedLabel : theme->warning;
+        std::string_view fileColor  = isOriginal ? orig_skippedFile  : theme->primary;
+        std::string_view mountColor = isOriginal ? orig_skippedMount : theme->accent;
+
+        outputBuffer.append(labelColor).append("ISO: ")
+                    .append(fileColor).append("'")
+                    .append(displayConfig::toggleNamesOnly ? "" : isoDirectory + "/")
+                    .append(isoFilename)
+                    .append("'")
+                    .append(labelColor).append(" alr mnt@: ")
+                    .append(mountColor).append("'")
+                    .append(mountisoDirectory).append("/").append(mountisoFilename)
+                    .append("'")
+                    .append(labelColor).append(".")
+                    .append(reset);
         return outputBuffer;
     }
-    
-    // Add the missing methods that were causing compilation errors
-    
-    // Format a mount failure message
-    std::string formatMountFailure(const std::string& isoDirectory, const std::string& isoFilename, 
-                                 const std::string& errorType, const std::string& mountTarget = "") {
+
+    std::string formatMountFailure(const std::string& isoDirectory, const std::string& isoFilename,
+                                   const std::string& errorType, const std::string& mountTarget = "") {
         outputBuffer.clear();
-        outputBuffer.append(errorFormatPrefix)
-                   .append(isoDirectory).append("/").append(isoFilename)
-                   .append(errorFormatSuffix);
-                   
+
+        std::string_view errLabel = isOriginal ? orig_errorPrefix   : theme->secondary;
+        std::string_view errFile  = isOriginal ? orig_errorFilename : theme->warning;
+
+        outputBuffer.append(errLabel).append("Failed to mnt: ")
+                    .append(errFile).append("'")
+                    .append(isoDirectory).append("/").append(isoFilename)
+                    .append("'")
+                    .append(reset)
+                    .append(errLabel).append(". ");
+
         if (errorType == "clx") {
             outputBuffer.append("Operation was cancelled");
         } else if (errorType == "needsRoot") {
@@ -107,23 +140,27 @@ struct VerbosityFormatter {
         } else if (errorType == "badFS") {
             outputBuffer.append("Failed to mount (unsupported filesystem or corrupted ISO)");
         } else if (!mountTarget.empty()) {
-            // This is for the case when it's already mounted
             outputBuffer.append("Already mounted at ").append(mountTarget);
         } else {
-            // For other custom error messages
             outputBuffer.append(errorType);
         }
-        
-        outputBuffer.append(errorFormatEnd);
+
+        outputBuffer.append(reset);
         return outputBuffer;
     }
-    
-    // Format a mount skipped message
+
     std::string formatMountSkipped(const std::string& isoDirectory, const std::string& isoFilename) {
         outputBuffer.clear();
-        outputBuffer.append(skippedFormatPrefix)
-                   .append(isoDirectory).append("/").append(isoFilename)
-                   .append("'\033[1;93m skipped.\033[0m");
+
+        std::string_view labelColor = isOriginal ? orig_skippedLabel : theme->warning;
+        std::string_view fileColor  = isOriginal ? orig_skippedFile  : theme->primary;
+
+        outputBuffer.append(labelColor).append("ISO: ")
+                    .append(fileColor).append("'")
+                    .append(isoDirectory).append("/").append(isoFilename)
+                    .append("'")
+                    .append(labelColor).append(" skipped.")
+                    .append(reset);
         return outputBuffer;
     }
 };

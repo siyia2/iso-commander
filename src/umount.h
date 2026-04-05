@@ -3,47 +3,58 @@
 #ifndef UMOUNT_H
 #define UMOUNT_H
 
+#include "themes.h"
+
 
 // Structure to handle verbose messages based on message type for umount
 struct VerboseMessageFormatter {
-    // Store format strings as member variables
-    const std::string rootErrorPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
-    const std::string rootErrorSuffix = "\033[1;93m'\033[1;91m.\033[0;1m {needsRoot}";
-    const std::string successPrefix = "\033[0;1mUnmounted: \033[1;92m'";
-    const std::string successSuffix = "\033[1;92m'\033[0m.";
-    const std::string errorPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
-    const std::string errorSuffix = "'\033[1;91m.\033[0;1m {notAnISO}";
-    const std::string cancelPrefix = "\033[1;91mFailed to unmount: \033[1;93m'";
-    const std::string cancelSuffix = "'\033[1;91m.\033[0;1m {cxl}";
-    
-    // Format message based on message type
+    const ListTheme* theme;
+    const bool isOriginal;
+
+    static constexpr std::string_view orig_errorLabel   = "\033[1;91m";
+    static constexpr std::string_view orig_errorPath    = "\033[1;93m";
+    static constexpr std::string_view orig_successLabel = "\033[0;1m";
+    static constexpr std::string_view orig_successPath  = "\033[1;92m";
+    static constexpr std::string_view reset             = "\033[0m";
+    static constexpr std::string_view bold              = "\033[0;1m";
+
+    VerboseMessageFormatter()
+        : theme(getActiveTheme()), isOriginal(globalTheme == "original") {}
+
     std::string format(const std::string& messageType, const std::string& path) {
-        // Create a reusable string buffer
-        std::string outputBuffer;
-        outputBuffer.reserve(256);  // Reserve space for a typical message
-        
+        std::string buf;
+        buf.reserve(256);
+
+        std::string_view errLabel  = isOriginal ? orig_errorLabel   : theme->secondary;
+        std::string_view errPath   = isOriginal ? orig_errorPath    : theme->warning;
+        std::string_view okLabel   = isOriginal ? orig_successLabel : theme->muted;
+        std::string_view okPath    = isOriginal ? orig_successPath  : theme->primary;
+
         if (messageType == "root_error") {
-            outputBuffer.append(rootErrorPrefix)
-                      .append(path)
-                      .append(rootErrorSuffix);
+            buf.append(errLabel).append("Failed to unmount: ")
+               .append(errPath).append("'").append(path).append("'")
+               .append(reset).append(bold).append(" {needsRoot}")
+               .append(reset);
         }
         else if (messageType == "success") {
-            outputBuffer.append(successPrefix)
-                      .append(path)
-                      .append(successSuffix);
+            buf.append(okLabel).append("Unmounted: ")
+               .append(okPath).append("'").append(path).append("'")
+               .append(reset).append(".");
         }
         else if (messageType == "error") {
-            outputBuffer.append(errorPrefix)
-                      .append(path)
-                      .append(errorSuffix);
+            buf.append(errLabel).append("Failed to unmount: ")
+               .append(errPath).append("'").append(path).append("'")
+               .append(reset).append(bold).append(" {notAnISO}")
+               .append(reset);
         }
         else if (messageType == "cancel") {
-            outputBuffer.append(cancelPrefix)
-                      .append(path)
-                      .append(cancelSuffix);
+            buf.append(errLabel).append("Failed to unmount: ")
+               .append(errPath).append("'").append(path).append("'")
+               .append(reset).append(bold).append(" {cxl}")
+               .append(reset);
         }
-        
-        return outputBuffer;
+
+        return buf;
     }
 };
 
