@@ -102,11 +102,19 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     }
 
     if (isEmpty) {
-        std::cout << "\n\033[1;93mISO Cache is empty. Choose 'ImportISO' from the Main Menu Options.\033[0;1m\n";
-        std::cout << color << "\n↵ to return..." << reset;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return false;
-    }
+		
+		const ListTheme* theme = getActiveTheme();
+        const bool isOriginal = (globalTheme == "original");
+		
+		const std::string_view warnColor   = isOriginal ? originalColors::yellow  : theme->warning;
+		const std::string_view reset       = originalColors::reset;
+
+		std::cout << "\n" << warnColor << "ISO Cache is empty. Choose 'ImportISO' from the Main Menu Options." << reset << "\n";
+		std::cout << color << "\n↵ to return..." << reset;
+
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		return false;
+	}
 
     return true;
 }
@@ -166,16 +174,28 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 
     isoDirs = std::move(newIsoDirs);
 
-    if (isoDirs.empty()) {
-        clearScrollBuffer();
-        std::cerr << "\n\033[1;93mNo paths matching the '/mnt/iso_{name}' pattern found.\033[0m\033[0;1m\n";
-        std::cout << color << "\n↵ to return..." << reset;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        std::vector<std::string>().swap(isoDirs); 
-        std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>>().swap(cachedParsesForUmount);
-        return false;
-    }
+	if (isoDirs.empty()) {
+		clearScrollBuffer();
+		
+		const ListTheme* theme = getActiveTheme();
+        const bool isOriginal = (globalTheme == "original");
+		
+		// Determine colors using ternary operators
+		const std::string_view warnColor   = isOriginal ? originalColors::yellow : theme->warning;
+		const std::string_view reset       = originalColors::reset;
 
+		std::cerr << "\n" << warnColor << "No paths matching the '/mnt/iso_{name}' pattern found." << reset << "\n";
+		std::cout << color << "\n↵ to return..." << reset;
+
+		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+		// Clear memory resources
+		std::vector<std::string>().swap(isoDirs); 
+		std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>>().swap(cachedParsesForUmount);
+		
+		return false;
+	}
+	
     clearScrollBuffer();
 
     if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {

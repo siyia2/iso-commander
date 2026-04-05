@@ -4,6 +4,7 @@
 #include "../threadpool.h"
 #include "../display.h"
 #include "../umount.h"
+#include "../themes.h"
 
 /**
  * @brief Checks if a directory is empty.
@@ -33,11 +34,12 @@ bool isDirectoryEmpty(const std::string& path) {
 static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessageFormatter& fmt, const char* messageKey) {
     auto dirParts = parseMountPointComponents(isoDir);
     std::string formattedDir = std::get<1>(dirParts);
+    std::string_view squareColor = originalColors::dimGray;
 
     if (displayConfig::toggleFullListUmount) {
-        formattedDir = std::get<0>(dirParts) + formattedDir +
-                       "\033[38;5;245m" + std::get<2>(dirParts) + "\033[0m";
-    }
+		formattedDir = std::get<0>(dirParts) + formattedDir 
+					   + std::string(squareColor) + std::get<2>(dirParts) + "\033[0m";
+	}
     return fmt.format(messageKey, formattedDir);
 }
 

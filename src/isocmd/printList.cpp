@@ -66,6 +66,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     std::string_view isoColor    = isOriginal ? originalColors::purple   : theme->accent; 
     std::string_view imgColor    = isOriginal ? originalColors::orange   : theme->highlight; 
     std::string_view mntColor    = isOriginal ? originalColors::blue     : theme->secondary; 
+    std::string_view squareColor = originalColors::dimGray;
 
     std::string output;
     output.reserve(((endIndex - startIndex) * 128) + 1024);
@@ -104,9 +105,9 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
         // Show original indices if filtering is active (useful for complex operations)
         if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
-            output.append(":").append(originalColors::boldAlt).append("\033[38;5;105;1m"); 
+            output.append(":").append(originalColors::boldAlt).append(squareColor); 
             output.append(ib2.format(filteringStack.back().originalIndices[i] + 1));
-            output.append(originalColors::boldAlt).append("^ ");
+            output.append(originalColors::boldAlt).append(squareColor).append("^ ");
         } else {
             output.append(". ").append(originalColors::boldAlt);
         }
@@ -124,7 +125,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             if (displayConfig::toggleFullListUmount) {
                 output.append(mntColor).append(dirPart)
                       .append(isoColor).append(pathPart)
-                      .append(isOriginal ? "\033[38;5;245m" : theme->muted).append(hashPart);
+                      .append(squareColor).append(hashPart);
             } else {
                 output.append(isoColor).append(pathPart);
             }
