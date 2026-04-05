@@ -262,6 +262,16 @@ bool isDeviceMounted(const std::string& device) {
 // Function used for pair (ISO>DEVICE) validation
 std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<std::pair<size_t, std::string>>& deviceMap, const std::vector<IsoInfo>& selectedIsos, bool& permissions) {
     
+    const ListTheme* theme = getActiveTheme();
+    const bool isOriginal  = (globalTheme == "original");
+
+    std::string_view errLabel   = isOriginal ? originalColors::red    : theme->secondary;
+    std::string_view errPath    = isOriginal ? originalColors::yellow : theme->warning;
+    std::string_view warnLabel  = isOriginal ? originalColors::yellow : theme->warning;
+    std::string_view infoLabel  = isOriginal ? originalColors::green  : theme->primary;
+    std::string_view reset      = originalColors::reset;
+    std::string_view bold       = originalColors::boldAlt;
+
     std::vector<std::string> validationErrors;
     std::vector<std::pair<IsoInfo, std::string>> validPairs;
     
@@ -270,30 +280,50 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
         const std::string& device = devicePair.second;
         const auto& iso = selectedIsos[index - 1];
         
-        // Get device size before other checks
         uint64_t deviceSize = getBlockDeviceSize(device);
         std::string deviceSizeStr = formatFileSize(deviceSize);
         std::string driveName = getDriveName(device);
         
+        std::string errMsg;
+        errMsg.reserve(256);
+
         if (!isUsbDevice(device)) {
-            validationErrors.push_back("\033[1;93m'" + device + "'\033[0;1m is not a removable USB device");
+            errMsg.append(errPath).append("'").append(device).append("'")
+                  .append(reset).append(errLabel).append(" is not a removable USB device")
+                  .append(reset);
+            validationErrors.push_back(std::move(errMsg));
             continue;
         }
         
         if (isDeviceMounted(device)) {
-            validationErrors.push_back("\033[1;93m'" + device + "'\033[0;1m or its partitions are mounted");
+            errMsg.append(errPath).append("'").append(device).append("'")
+                  .append(reset).append(errLabel).append(" or its partitions are mounted")
+                  .append(reset);
+            validationErrors.push_back(std::move(errMsg));
             continue;
         }
         
         if (deviceSize == 0) {
-            validationErrors.push_back("\033[0;1mFailed to get size for \033[1;93m'" + device + "'\033[0;1m check permissions ");
+            errMsg.append(errLabel).append("Failed to get size for ")
+                  .append(errPath).append("'").append(device).append("'")
+                  .append(reset).append(errLabel).append(" check permissions")
+                  .append(reset);
+            validationErrors.push_back(std::move(errMsg));
             permissions = true;
             continue;
         }
         
         if (iso.size > deviceSize) {
-            validationErrors.push_back("\033[1;92m'" + iso.filename + "'\033[0;1m (\033[1;95m" + iso.sizeStr + "\033[0;1m) is too large for \033[1;93m'" + 
-                device + " <" + driveName  +">' \033[0;1m(\033[1;95m" + deviceSizeStr + "\033[0;1m)");
+            errMsg.append(infoLabel).append("'").append(iso.filename).append("'")
+                  .append(reset).append(bold).append(" (")
+                  .append(warnLabel).append(iso.sizeStr).append(reset).append(bold)
+                  .append(") is too large for ")
+                  .append(errPath).append("'").append(device)
+                  .append(" <").append(driveName).append(">'")
+                  .append(reset).append(bold).append(" (")
+                  .append(warnLabel).append(deviceSizeStr).append(reset).append(bold).append(")")
+                  .append(reset);
+            validationErrors.push_back(std::move(errMsg));
             continue;
         }
         
@@ -301,19 +331,17 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
     }
     
     if (!validationErrors.empty()) {
-        std::cerr << "\n\033[1;91mValidation errors:\033[0;1m\n";
+        std::cerr << "\n" << errLabel << "Validation errors:" << reset << bold << "\n";
         for (const auto& err : validationErrors) {
-            std::cerr << "  • " << err << "\033[0;1m\n";
+            std::cerr << "  \u2022 " << err << bold << "\n";
         }
         
-        signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
-		disable_ctrl_d();
-		std::cout << color << "\n↵ to " << (!permissions ? "try again..." : "continue...") << reset;
-		if (permissions) permissions = false;
+        signal(SIGINT, SIG_IGN);
+        disable_ctrl_d();
+        std::cout << bold << "\n\u21b5 to " << (!permissions ? "try again..." : "continue...") << reset;
+        if (permissions) permissions = false;
         
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        
-        // Return an empty vector if any validation errors were found
         return {};
     }
     
