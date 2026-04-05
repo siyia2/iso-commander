@@ -164,12 +164,12 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
 
 
 // Function to automatically update ISO list if auto-update is on
-void refreshListAfterAutoUpdate(int timeoutSeconds, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::atomic<bool>& newISOFound) {
+void refreshListAfterAutoUpdate(int timeoutMs, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::atomic<bool>& newISOFound) {
     // Continuously checks for conditions at intervals specified by timeoutSeconds
     
     while (true) {
-        // Sleep for the given timeout (1s) before checking the conditions
-        std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
+        // Sleep for the given timeout (0.5s) before checking the conditions
+        std::this_thread::sleep_for(std::chrono::milliseconds(timeoutMs));
 
         // Only proceed if the import process is not running
         if (!isImportRunning.load()) {
@@ -271,7 +271,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             umountMvRmBreak = false;
         }
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
-            std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
+            std::thread(refreshListAfterAutoUpdate, 500, std::ref(isAtISOList), 
                         std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
                         std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(pendingIndices), 
                         std::ref(hasPendingProcess), std::ref(currentPage), std::ref(originalPage), std::ref(newISOFound)).detach();
