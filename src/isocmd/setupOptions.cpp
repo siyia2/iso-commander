@@ -24,7 +24,6 @@ auto isNum = [](const std::string& v, int min, int max) {
     try { 
         size_t pos;
         int n = std::stoi(v, &pos); 
-        // Ensure the entire string was processed and it's not just a prefix
         if (pos != v.length()) return false; 
         return n >= min && n <= max; 
     } catch (...) { 
@@ -75,6 +74,10 @@ static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {"threads_for_list_filtering", "4", "Threads allocated for UI list filtering", "", [](const std::string& v){ return isNum(v, 1, 64); }},
 };
 
+// ---------------------------------------------------------------------------
+// Internal Helpers
+// ---------------------------------------------------------------------------
+
 /**
  * @brief Utility to remove leading/trailing whitespace from strings.
  */
@@ -85,6 +88,65 @@ static std::string trim(std::string str) {
     if (last != std::string::npos) str.erase(last + 1);
     return str;
 }
+
+/**
+ * @brief Thin wrapper that resolves the four most-used theme colors in one call.
+ *
+ * Callers receive four std::string_view values covering the common semantic
+ * roles (label/muted, accent/success, warning/value, error/secondary).
+ * Centralising this lookup eliminates the repetitive isOrig ternary that
+ * previously appeared in every command handler.
+ */
+struct ThemeColors {
+    std::string_view label;     ///< Neutral label / muted text
+    std::string_view accent;    ///< Success / enable / positive highlight
+    std::string_view warning;   ///< Value / numeric highlight
+    std::string_view error;     ///< Error / disable / negative highlight
+};
+
+static ThemeColors resolveTheme() {
+    const ListTheme* theme = getActiveTheme();
+    const bool isOrig = (globalTheme == "original");
+    return {
+        isOrig ? "\033[0;1m"   : theme->muted,
+        isOrig ? "\033[1;92m"  : theme->accent,
+        isOrig ? "\033[1;93m"  : theme->warning,
+        isOrig ? "\033[1;91m"  : theme->secondary,
+    };
+}
+
+/**
+ * @brief Prints a standardised config-file access error then flushes to stderr.
+ */
+static void printConfigError(const std::string& configPath) {
+    auto [label, accent, warning, error] = resolveTheme();
+    std::cerr << "\n" << error
+              << "Error: Unable to access configuration file: "
+              << warning << "'" << configPath << "'"
+              << error << ".\033[J\033[0;1m\n";
+}
+
+/**
+ * @brief Prints the standard "↵ to continue…" pause and waits for Enter.
+ */
+static void pauseForInput() {
+    std::cout << color << "\n↵ to continue..." << reset;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+/**
+ * @brief Commits a mutated cache to disk, printing an error on failure.
+ * @return true if the write succeeded.
+ */
+static bool flushCache(const std::string& configPath) {
+    if (writeConfig(configPath, g_configCache)) return true;
+    printConfigError(configPath);
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// Core Config I/O
+// ---------------------------------------------------------------------------
 
 /**
  * @brief Logic to write the current configuration state back to disk.
@@ -164,18 +226,22 @@ static void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::str
         } catch (...) { return defaultVal; }
     };
     
-    MAX_HISTORY_LINES = getVal("folder_path_history_lines", 30);
-    MAX_HISTORY_PATTERN_LINES = getVal("filter_history_lines", 15);
-    MAX_USEFUL_THREADS = getVal("max_thread_cap", 32);
-    CPMV_THREAD_CAP = getVal("threads_for_cp_mv", 8);
-    CONV_THREAD_CAP = getVal("threads_for_conversions", 8);
-    MOUNT_THREAD_CAP = getVal("threads_for_mount", 16);
-    CLEAN_THREAD_CAP = getVal("threads_for_database_cleanup", 16);
-    UMOUNT_THREAD_CAP = getVal("threads_for_umount", 32); 
-    RM_THREAD_CAP = getVal("threads_for_rm", 32);
-    SORT_THREAD_CAP = getVal("threads_for_list_sorting", 4);
-    FILTER_THREAD_CAP = getVal("threads_for_list_filtering", 4);
+    MAX_HISTORY_LINES         = getVal("folder_path_history_lines",    30);
+    MAX_HISTORY_PATTERN_LINES = getVal("filter_history_lines",         15);
+    MAX_USEFUL_THREADS        = getVal("max_thread_cap",               32);
+    CPMV_THREAD_CAP           = getVal("threads_for_cp_mv",             8);
+    CONV_THREAD_CAP           = getVal("threads_for_conversions",       8);
+    MOUNT_THREAD_CAP          = getVal("threads_for_mount",            16);
+    CLEAN_THREAD_CAP          = getVal("threads_for_database_cleanup", 16);
+    UMOUNT_THREAD_CAP         = getVal("threads_for_umount",           32); 
+    RM_THREAD_CAP             = getVal("threads_for_rm",               32);
+    SORT_THREAD_CAP           = getVal("threads_for_list_sorting",      4);
+    FILTER_THREAD_CAP         = getVal("threads_for_list_filtering",    4);
 }
+
+// ---------------------------------------------------------------------------
+// Read-only accessors
+// ---------------------------------------------------------------------------
 
 /**
  * @brief Optimized: Checks if auto_update is enabled using cache.
@@ -218,10 +284,8 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     if (!fs::exists(configFilePath.parent_path()) && !configFilePath.parent_path().empty()) 
         fs::create_directories(configFilePath.parent_path());
  
-    // Load and Self-Heal once into cache
     syncCache(filePath);
  
-    // Synchronize Display Settings from Cache
     displayConfig::toggleFullListMount       = (g_configCache["mount_list"]       == "full");
     displayConfig::toggleFullListUmount      = (g_configCache["umount_list"]      == "full");
     displayConfig::toggleFullListCpMvRm      = (g_configCache["cp_mv_rm_list"]    == "full");
@@ -229,16 +293,18 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     displayConfig::toggleFullListConversions = (g_configCache["conversion_lists"] == "full");
     displayConfig::toggleNamesOnly           = (g_configCache["filenames_only"]   == "on");
  
-    // Synchronize Theme Settings from Cache
-    skin = g_configCache["skin"];
-    color = getskin();
+    skin        = g_configCache["skin"];
+    color       = getskin();
     globalTheme = g_configCache["theme"];
  
-    // Synchronize Threading & History Limits
     applyThreadCapsAndHistoryLimits(g_configCache);
     
     return g_configCache;
 }
+
+// ---------------------------------------------------------------------------
+// Command Handlers
+// ---------------------------------------------------------------------------
 
 /**
  * @brief Command handler for changing pagination.
@@ -248,53 +314,38 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
 
-    size_t underscorePos = inputSearch.find(':');
-    if (underscorePos != std::string::npos) {
-        std::string valueStr = inputSearch.substr(underscorePos + 1);
-        
-        if (isNum(valueStr, 0, 1000)) { 
-            syncCache(configPath);
-            int val = std::stoi(valueStr);
-            
-            // Update Cache
-            g_configCache["pagination"] = valueStr;
-            
-            // Persistent Storage
-            const ListTheme* theme = getActiveTheme();
-			const bool isOrig = (globalTheme == "original");
-			
-			// Thematic color for "Success/Status" labels
-			std::string_view labelCol = isOrig ? "\033[0;1m" : theme->accent;
-			std::string_view valCol   = isOrig ? "\033[1;93m" : theme->warning;
-			std::string_view errCol   = isOrig ? "\033[1;91m" : theme->secondary;
+    size_t colonPos = inputSearch.find(':');
+    if (colonPos == std::string::npos) {
+        auto [label, accent, warning, error] = resolveTheme();
+        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\033[0m\n";
+        pauseForInput();
+        return;
+    }
 
-			if (val > 0) {
-				std::cout << "\n" << labelCol << "Pagination status updated: Max entries per page set to " 
-						  << valCol << val << labelCol << ".\033[J\033[0m" << std::endl;
-			} else {
-				std::cout << "\n" << labelCol << "Pagination status updated: " 
-						  << errCol << "Disabled" << labelCol << ".\033[J\033[0m" << std::endl;
-			}
-		} else {
-			// Config access error
-			const ListTheme* theme = getActiveTheme();
-			const bool isOrig = (globalTheme == "original");
-			
-			std::cerr << "\n" << (isOrig ? "\033[1;91m" : theme->secondary) << "Error: Unable to access configuration file: " 
-					  << (isOrig ? "\033[1;93m" : theme->warning) << "'" << configPath << "'" 
-					  << (isOrig ? "\033[1;91m" : theme->secondary) << ".\033[J\033[0;1m\n";
-		}
-	} else {
-		// Range validation error
-		const ListTheme* theme = getActiveTheme();
-		const bool isOrig = (globalTheme == "original");
-		
-		std::cout << "\n" << (isOrig ? "\033[1;31m" : theme->secondary) 
-				  << "Error: Invalid number (0-1000 required)\033[J\033[0m\n";
-	}
-    
-    std::cout << color << "\n↵ to continue..." << reset;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    std::string valueStr = inputSearch.substr(colonPos + 1);
+    if (!isNum(valueStr, 0, 1000)) {
+        auto [label, accent, warning, error] = resolveTheme();
+        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\033[0m\n";
+        pauseForInput();
+        return;
+    }
+
+    syncCache(configPath);
+    int val = std::stoi(valueStr);
+    g_configCache["pagination"] = valueStr;
+
+    if (flushCache(configPath)) {
+        auto [label, accent, warning, error] = resolveTheme();
+        if (val > 0) {
+            std::cout << "\n" << label << "Pagination status updated: Max entries per page set to "
+                      << warning << val << label << ".\033[J\033[0m\n";
+        } else {
+            std::cout << "\n" << label << "Pagination status updated: "
+                      << error << "Disabled" << label << ".\033[J\033[0m\n";
+        }
+    }
+
+    pauseForInput();
 }
 
 /**
@@ -304,54 +355,28 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
 void updateFilenamesOnly(const std::string& configPath, const std::string& inputSearch) {
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
-    
 
-    if (inputSearch == "*flno:on" || inputSearch == "*flno:off") {
-        bool isEnabling = (inputSearch == "*flno:on");
-        syncCache(configPath);
-        
-        // Update Cache
-        g_configCache["filenames_only"] = isEnabling ? "on" : "off";
+    if (inputSearch != "*flno:on" && inputSearch != "*flno:off") {
+        auto [label, accent, warning, error] = resolveTheme();
+        std::cerr << "\n" << error << "Error: Invalid command format.\033[J\033[0;1m\n";
+        pauseForInput();
+        return;
+    }
 
-        // Persistent Storage
-        if (writeConfig(configPath, g_configCache)) {
-			displayConfig::toggleNamesOnly = isEnabling;
-			
-			const ListTheme* theme = getActiveTheme();
-			const bool isOrig = (globalTheme == "original");
+    bool isEnabling = (inputSearch == "*flno:on");
+    syncCache(configPath);
+    g_configCache["filenames_only"] = isEnabling ? "on" : "off";
 
-			// Semantic color selection:
-			// accent (Success/Enable) vs secondary (Disable/Error)
-			std::string_view statusCol = isEnabling ? 
-				(isOrig ? "\033[1;92m" : theme->accent) : 
-				(isOrig ? "\033[1;91m" : theme->secondary);
-			
-			std::string_view labelCol = isOrig ? "\033[0;1m" : theme->muted;
+    if (flushCache(configPath)) {
+        displayConfig::toggleNamesOnly = isEnabling;
+        auto [label, accent, warning, error] = resolveTheme();
+        std::cout << "\n" << label << "Filename-only lists have been "
+                  << (isEnabling ? accent : error)
+                  << (isEnabling ? "enabled" : "disabled")
+                  << label << ".\033[J\033[0;1m\n";
+    }
 
-			std::cout << "\n" << labelCol << "Filename-only lists have been "
-					  << statusCol << (isEnabling ? "enabled" : "disabled")
-					  << labelCol << ".\033[J\033[0;1m\n";
-		} else {
-			// Config access error
-			const ListTheme* theme = getActiveTheme();
-			const bool isOrig = (globalTheme == "original");
-
-			std::cerr << "\n" << (isOrig ? "\033[1;91m" : theme->secondary) 
-					  << "Error: Unable to access configuration file: " 
-					  << (isOrig ? "\033[1;93m" : theme->warning) << "'" << configPath << "'" 
-					  << (isOrig ? "\033[1;91m" : theme->secondary) << ".\033[J\033[0;1m\n";
-		}
-	} else {
-		// Format error
-		const ListTheme* theme = getActiveTheme();
-		const bool isOrig = (globalTheme == "original");
-
-		std::cerr << "\n" << (isOrig ? "\033[1;31m" : theme->secondary) 
-				  << "Error: Invalid command format.\033[J\033[0;1m\n";
-	}
-
-    std::cout << color << "\n↵ to continue..." << reset;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    pauseForInput();
 }
 
 /**
@@ -362,83 +387,49 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
 
-    std::string key;
-    std::string value;
-    bool isValid = false;
+    std::string key, value;
 
-    // Handle Menu Color: Added purple, amber, rose
     if (inputSearch.substr(0, 6) == "*skin:") {
-        key = "skin";
-        value = inputSearch.substr(6); 
-        if (value == "green" || value == "cyan" || value == "white" || 
-            value == "purple" || value == "amber" || value == "rose") {
-            isValid = true;
-        }
+        key   = "skin";
+        value = inputSearch.substr(6);
+    } else if (inputSearch.substr(0, 7) == "*theme:") {
+        key   = "theme";
+        value = inputSearch.substr(7);
     }
-    // Handle List Themes: *theme:midnight, *theme:dracula, etc.
-    else if (inputSearch.substr(0, 7) == "*theme:") {
-        key = "theme";
-        value = inputSearch.substr(7); // Get everything after *theme:
-        const std::unordered_set<std::string> validThemes = {
-            "original", "classic", "high_contrast", "neon", "ocean", 
-            "sunset", "forest", "midnight", "mono", "retro", "crimson", "dracula"
-        };
-        if (validThemes.count(value)) {
-            isValid = true;
+
+    // Validate via the canonical CONFIG_ORDERED_DEFAULTS entry
+    bool isValid = false;
+    if (!key.empty()) {
+        for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
+            if (entry.key == key) { isValid = entry.validate(value); break; }
         }
     }
 
-    if (isValid) {
-        syncCache(configPath);
-        g_configCache[key] = value;
+    if (!isValid) {
+        auto [label, accent, warning, error] = resolveTheme();
+        std::cerr << "\n" << error << "Error: Invalid command or unsupported value.\033[J\033[0;1m\n";
+        pauseForInput();
+        return;
+    }
 
-        if (writeConfig(configPath, g_configCache)) {
-			// Apply live changes to global variables
-			if (key == "skin") {
-				skin = value;
-				color = getskin(); // Refresh ANSI string
-				
-				const ListTheme* theme = getActiveTheme();
-				const bool isOrig = (globalTheme == "original");
-				
-				// Custom feedback for Skin Color using theme accent
-				std::cout << "\n" << (isOrig ? "\033[0;1m" : theme->muted) << "Skin color set to: " 
-						  << (isOrig ? "\033[1;92m" : theme->accent) << value 
-						  << (isOrig ? "\033[0;1m" : theme->muted) << ".\033[J\033[0m\n";
-			} 
-			else if (key == "theme") {
-				globalTheme = value;
-				
-				// Fetch the NEW theme immediately for the feedback message
-				const ListTheme* theme = getActiveTheme();
-				const bool isOrig = (globalTheme == "original");
-				
-				// Themed feedback for UI Theme
-				std::cout << "\n" << (isOrig ? "\033[0;1m" : theme->muted) << "UI theme set to: " 
-						  << (isOrig ? "\033[1;92m" : theme->accent) << value 
-						  << (isOrig ? "\033[0;1m" : theme->muted) << ".\033[J\033[0m\n";
-			}
-		} else {
-			// Config access error handling
-			const ListTheme* theme = getActiveTheme();
-			const bool isOrig = (globalTheme == "original");
+    syncCache(configPath);
+    g_configCache[key] = value;
 
-			std::cerr << "\n" << (isOrig ? "\033[1;91m" : theme->secondary) 
-					  << "Error: Unable to access configuration file: " 
-					  << (isOrig ? "\033[1;93m" : theme->warning) << "'" << configPath << "'" 
-					  << (isOrig ? "\033[1;91m" : theme->secondary) << ".\033[J\033[0;1m\n";
-		}
-	} else {
-		// Command/Value error handling
-		const ListTheme* theme = getActiveTheme();
-		const bool isOrig = (globalTheme == "original");
+    if (flushCache(configPath)) {
+        if (key == "skin") {
+            skin  = value;
+            color = getskin();
+        } else {
+            globalTheme = value;
+        }
+        // Resolve theme AFTER applying the new value so feedback uses the new colors.
+        auto [label, accent, warning, error] = resolveTheme();
+        std::string_view settingLabel = (key == "skin") ? "Skin color" : "UI theme";
+        std::cout << "\n" << label << settingLabel << " set to: "
+                  << accent << value << label << ".\033[J\033[0m\n";
+    }
 
-		std::cerr << "\n" << (isOrig ? "\033[1;31m" : theme->secondary) 
-				  << "Error: Invalid command or unsupported value.\033[J\033[0;1m\n";
-	}
-
-    std::cout << color << "\n↵ to continue..." << reset;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    pauseForInput();
 }
 
 const std::unordered_map<char, std::string> settingMap = {
@@ -465,7 +456,6 @@ bool isValidInput(const std::string& input) {
     return true;
 }
 
-
 /**
  * @brief Command handler for switching list views between Compact and Full.
  * Updates both memory cache and disk.
@@ -474,78 +464,41 @@ void setDisplayMode(const std::string& inputSearch) {
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
 
-    std::string command = inputSearch.substr(1, 2); 
-    size_t underscorePos = inputSearch.find('_');
+    std::string command     = inputSearch.substr(1, 2); 
+    size_t      underscorePos = inputSearch.find('_');
     
-    if (underscorePos != std::string::npos) {
-        std::string settingsStr = inputSearch.substr(underscorePos + 1);
-        std::string newValue = (command == "cl") ? "compact" : "full";
-        bool isFull = (newValue == "full");
-        
-        syncCache(configPath);
-        std::vector<std::string> updatedLabels;
+    if (underscorePos == std::string::npos) { pauseForInput(); return; }
 
-        for (char c : settingsStr) {
-            auto it = settingMap.find(c);
-            if (it != settingMap.end()) {
-                std::string key = it->second;
-                g_configCache[key] = newValue; // Update Cache
+    std::string settingsStr = inputSearch.substr(underscorePos + 1);
+    std::string newValue    = (command == "cl") ? "compact" : "full";
+    bool        isFull      = (newValue == "full");
+    
+    syncCache(configPath);
+    std::vector<std::string> updatedLabels;
 
-                if (key == "mount_list") {
-                    displayConfig::toggleFullListMount = isFull;
-                    updatedLabels.push_back("\033[1;92mmount");
-                } 
-                else if (key == "umount_list") {
-                    displayConfig::toggleFullListUmount = isFull;
-                    updatedLabels.push_back("\033[1;93munmount");
-                } 
-                else if (key == "cp_mv_rm_list") {
-                    displayConfig::toggleFullListCpMvRm = isFull;
-                    updatedLabels.push_back("\033[1;92mcp\033[0;1m/\033[1;93mmv\033[0;1m/\033[1;91mrm");
-                } 
-                else if (key == "conversion_lists") {
-                    displayConfig::toggleFullListConversions = isFull;
-                    updatedLabels.push_back("\033[1;38;5;208mconversions");
-                } 
-                else if (key == "write_list") {
-                    displayConfig::toggleFullListWrite = isFull;
-                    updatedLabels.push_back("\033[1;33mwrite");
-                }
-            }
-        }
+    for (char c : settingsStr) {
+        auto it = settingMap.find(c);
+        if (it == settingMap.end()) continue;
 
-        if (writeConfig(configPath, g_configCache)) {
-			if (!updatedLabels.empty()) {
-				const ListTheme* theme = getActiveTheme();
-				const bool isOrig = (globalTheme == "original");
+        const std::string& key = it->second;
+        g_configCache[key] = newValue;
 
-				// Semantic Colors
-				std::string_view labelCol = isOrig ? "\033[0;1m" : theme->muted;
-				std::string_view valueCol = isOrig ? "\033[1;92m" : theme->accent;
-				std::string_view resetCol = "\033[0m";
+        if      (key == "mount_list")       { displayConfig::toggleFullListMount       = isFull; updatedLabels.push_back("\033[1;92mmount"); }
+        else if (key == "umount_list")      { displayConfig::toggleFullListUmount      = isFull; updatedLabels.push_back("\033[1;93munmount"); }
+        else if (key == "cp_mv_rm_list")    { displayConfig::toggleFullListCpMvRm      = isFull; updatedLabels.push_back("\033[1;92mcp\033[0;1m/\033[1;93mmv\033[0;1m/\033[1;91mrm"); }
+        else if (key == "conversion_lists") { displayConfig::toggleFullListConversions = isFull; updatedLabels.push_back("\033[1;38;5;208mconversions"); }
+        else if (key == "write_list")       { displayConfig::toggleFullListWrite       = isFull; updatedLabels.push_back("\033[1;33mwrite"); }
+    }
 
-				std::cout << "\n" << labelCol << "Display mode set to " 
-						  << valueCol << newValue << labelCol << " for:\033[J" << resetCol << "\n";
-				
-				for (const auto& label : updatedLabels) {
-					// Indented list with muted bullet points
-					std::cout << "  " << labelCol << "- " << resetCol << label << "\n";
-				}
-			}
-		} else {
-			// Standardized configuration error handling
-			const ListTheme* theme = getActiveTheme();
-			const bool isOrig = (globalTheme == "original");
+    if (flushCache(configPath) && !updatedLabels.empty()) {
+        auto [label, accent, warning, error] = resolveTheme();
+        std::cout << "\n" << label << "Display mode set to "
+                  << accent << newValue << label << " for:\033[J\033[0m\n";
+        for (const auto& lbl : updatedLabels)
+            std::cout << "  " << label << "- \033[0m" << lbl << "\n";
+    }
 
-			std::cerr << "\n" << (isOrig ? "\033[1;91m" : theme->secondary) 
-					  << "Error: Unable to access configuration file: " 
-					  << (isOrig ? "\033[1;93m" : theme->warning) << "'" << configPath << "'" 
-					  << (isOrig ? "\033[1;91m" : theme->secondary) << ".\033[J\033[0;1m\n";
-		}
-	}
-
-    std::cout << color << "\n↵ to continue..." << reset;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    pauseForInput();
 }
 
 /**
@@ -555,9 +508,6 @@ void setDisplayMode(const std::string& inputSearch) {
 void updateConfigSettings(const std::string& inputSearch, const std::string& configPath) {
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
-
-    const ListTheme* theme = getActiveTheme();
-    const bool isOrig = (globalTheme == "original");
 
     static const std::unordered_map<std::string, std::string> keyMap = {
         {"filterhist", "filter_history_lines"}, {"pathhist", "folder_path_history_lines"},
@@ -569,42 +519,36 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
     size_t eqPos = inputSearch.find('=');
     if (eqPos != std::string::npos) {
         std::string shortName = inputSearch.substr(5, eqPos - 5);
-        std::string valueStr = inputSearch.substr(eqPos + 1);
+        std::string valueStr  = inputSearch.substr(eqPos + 1);
         auto it = keyMap.find(shortName);
 
         if (it != keyMap.end()) {
             bool valid = false;
-            for(const auto& entry : CONFIG_ORDERED_DEFAULTS) {
-                if(entry.key == it->second) { 
-                    valid = entry.validate(valueStr); 
-                    break; 
-                }
+            for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
+                if (entry.key == it->second) { valid = entry.validate(valueStr); break; }
             }
+
+            auto [label, accent, warning, error] = resolveTheme();
 
             if (valid) {
                 syncCache(configPath);
-                g_configCache[it->second] = valueStr; 
+                g_configCache[it->second] = valueStr;
 
-                if (writeConfig(configPath, g_configCache)) {
-                    applyThreadCapsAndHistoryLimits(g_configCache); 
-                    
-                    // Themed Success Message
-                    std::cout << "\n" << (isOrig ? "\033[1;37m" : theme->accent) << it->second 
-                              << (isOrig ? "\033[0;1m" : theme->muted) << " updated to: " 
-                              << (isOrig ? "\033[1;93m" : theme->warning) << valueStr 
-                              << "\033[0m\n";
+                if (flushCache(configPath)) {
+                    applyThreadCapsAndHistoryLimits(g_configCache);
+                    std::cout << "\n" << accent << it->second
+                              << label  << " updated to: "
+                              << warning << valueStr << "\033[0m\n";
                 }
             } else {
-                // Themed Validation Error
-                std::cout << "\n" << (isOrig ? "\033[1;31m" : theme->secondary) 
-                          << "Error: Value " 
-                          << (isOrig ? "\033[1;93m" : theme->warning) << "'" << valueStr << "'" 
-                          << (isOrig ? "\033[1;31m" : theme->secondary) << " is out of range or invalid.\033[0m\n";
+                std::cout << "\n" << error << "Error: Value "
+                          << warning << "'" << valueStr << "'"
+                          << error  << " is out of range or invalid.\033[0m\n";
             }
         }
     }
-    std::cout << color << "\n↵ to continue..." << reset;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    pauseForInput();
 }
 
 /**
@@ -613,45 +557,34 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
 void displayConfigurationOptions(const std::string& configPath) {
     clearScrollBuffer();
 
-    const ListTheme* theme = getActiveTheme();
-    const bool isOrig = (globalTheme == "original");
-
     fs::path p(configPath);
     if (!fs::exists(p.parent_path()) && !p.parent_path().empty()) 
         fs::create_directories(p.parent_path());
 
-    // Ensure cache is synced and file is healthy before displaying
     syncCache(configPath);
 
     std::ifstream configFile(configPath);
     if (!configFile.is_open()) {
-        std::cerr << "\n" << (isOrig ? "\033[1;91m" : theme->secondary) 
-                  << "Error: Unable to access configuration file: " 
-                  << (isOrig ? "\033[1;93m" : theme->warning) << "'" << configPath << "'" 
-                  << (isOrig ? "\033[1;91m" : theme->secondary) << ".\033[0;1m\n";
+        printConfigError(configPath);
         return;
     }
 
-    // Header: Uses Cyan in original or theme->accent
-    std::cout << "\n" << (isOrig ? "\033[1;96m" : theme->accent) << "==== Current Configuration ====\033[0;1m\n\n";
+    auto [label, accent, warning, error] = resolveTheme();
+    std::cout << "\n" << accent << "==== Current Configuration ====\033[0;1m\n\n";
 
     std::string line; 
     int lineNumber = 1;
     
     while (std::getline(configFile, line)) {
         std::string trimmed = trim(line);
-        // Skip comments and empty lines
         if (!trimmed.empty() && trimmed[0] != '#') {
-            // Line numbers in muted color, data in default white/reset
-            std::cout << (isOrig ? "\033[1;92m" : theme->muted) << lineNumber++ << ". " 
+            std::cout << label << lineNumber++ << ". "
                       << "\033[1;97m" << trimmed << "\033[0m\n";
         }
     }
     configFile.close();
 
-    // Standardized pause prompt
     std::cout << "\n\033[1;93mPath: \033[1;97m" << configPath 
               << color << "\n\n↵ to return..." << reset;
-
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
