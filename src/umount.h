@@ -14,13 +14,6 @@ struct VerboseMessageFormatter {
     const ListTheme* theme;
     const bool isOriginal;
 
-    static constexpr std::string_view orig_errorLabel   = "\033[1;91m";
-    static constexpr std::string_view orig_errorPath    = "\033[1;93m";
-    static constexpr std::string_view orig_successLabel = "\033[0;1m";
-    static constexpr std::string_view orig_successPath  = "\033[1;92m";
-    static constexpr std::string_view reset              = "\033[0m";
-    static constexpr std::string_view bold               = "\033[0;1m";
-
     VerboseMessageFormatter()
         : theme(getActiveTheme()), isOriginal(globalTheme == "original") {}
 
@@ -34,33 +27,38 @@ struct VerboseMessageFormatter {
         std::string buf;
         buf.reserve(256);
 
-        std::string_view errLabel  = isOriginal ? orig_errorLabel   : theme->secondary;
-        std::string_view errPath   = isOriginal ? orig_errorPath    : theme->warning;
-        std::string_view okLabel   = isOriginal ? orig_successLabel : theme->muted;
-        std::string_view okPath    = isOriginal ? orig_successPath  : theme->primary;
-
-        if (messageType == "root_error") {
+        // Determine styling based on theme state
+        std::string_view errLabel = isOriginal ? originalColors::red      : theme->secondary;
+        std::string_view errPath  = isOriginal ? originalColors::yellow   : theme->warning;
+        std::string_view okLabel  = isOriginal ? originalColors::boldAlt  : theme->muted;
+        std::string_view okPath   = isOriginal ? originalColors::green    : theme->primary;
+        
+        // New: Theme the tag based on the theme's 'accent' or 'muted' property
+        // (Adjust 'theme->muted' to whatever property fits your ListTheme best)
+        std::string_view tagStyle = isOriginal ? originalColors::boldAlt : theme->muted;
+        
+        // Helper for the repeating error structure
+        auto appendError = [&](std::string_view tag) {
             buf.append(errLabel).append("Failed to unmount: ")
                .append(errPath).append("'").append(path).append("'")
-               .append(reset).append(bold).append(" {needsRoot}")
-               .append(reset);
-        }
-        else if (messageType == "success") {
+               .append(originalColors::reset).append(tagStyle) // Use the dynamic style here
+               .append(" {").append(tag).append("}")
+               .append(originalColors::reset);
+        };
+
+        if (messageType == "success") {
             buf.append(okLabel).append("Unmounted: ")
                .append(okPath).append("'").append(path).append("'")
-               .append(reset).append(".");
+               .append(originalColors::reset).append(".");
+        }
+        else if (messageType == "root_error") {
+            appendError("needsRoot");
         }
         else if (messageType == "error") {
-            buf.append(errLabel).append("Failed to unmount: ")
-               .append(errPath).append("'").append(path).append("'")
-               .append(reset).append(bold).append(" {notAnISO}")
-               .append(reset);
+            appendError("notAnISO");
         }
         else if (messageType == "cancel") {
-            buf.append(errLabel).append("Failed to unmount: ")
-               .append(errPath).append("'").append(path).append("'")
-               .append(reset).append(bold).append(" {cxl}")
-               .append(reset);
+            appendError("cxl");
         }
 
         return buf;
