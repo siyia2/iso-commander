@@ -482,7 +482,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 			(isFiltered ? ("\001" + colorFilter + "\002F⊳ \001") : "\001")
 			+ colorHighlight + "\002" + fileExtensionWithOutDots + "\001"
 			+ colorMuted     + "\002 ↵ for \001"
-			+ colorIso       + "\002ISO \001"
+			+ colorIso       + "\002ISO\001"
 			+ colorHighlight + "\002 conversion \001" 
 			+ colorMuted     + "\002, ? ↵ for help, < ↵ to return:\001" 
 			+ colorReset     + "\002 ";
