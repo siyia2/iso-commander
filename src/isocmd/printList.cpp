@@ -122,14 +122,26 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     }
 
     if (hasPendingProcess && !pendingIndices.empty()) {
-        output.append("\n\033[1;48;5;19mPending for [\033[1;92mproc\033[0;1;48;5;19m]: ");
-        std::string_view pColor = (listType != "IMAGE_FILES" ? magentaBold : orangeBold);
-        for (size_t i = 0; i < pendingIndices.size(); ++i) {
-            output.append(pColor).append(pendingIndices[i]);
-            if (i < pendingIndices.size() - 1) output.push_back(' ');
-        }
-        output.append(reset).append("\033[0;1m\n");
-    }
+		output.append("\n");
+
+		std::string_view bracketColor = isOriginal ? "\033[0;1;48;5;19m" : theme->background;
+		std::string_view procColor    = isOriginal ? "\033[1;92m"         : theme->accent;
+
+		output.append(bracketColor).append("Pending for [");
+		output.append(procColor).append("proc");
+		output.append(reset).append("\033[1m").append(bracketColor).append("]: ");
+
+		std::string_view pColor = isOriginal
+			? (listType != "IMAGE_FILES" ? magentaBold : orangeBold)
+			: (listType != "IMAGE_FILES" ? theme->primary : theme->highlight);
+
+		output.append(pColor);
+		for (size_t i = 0; i < pendingIndices.size(); ++i) {
+			output.append(pendingIndices[i]);
+			if (i < pendingIndices.size() - 1) output.push_back(' ');
+		}
+		output.append(reset).append(isOriginal ? "\033[0;1m" : "").append("\n");
+	}
 
     std::cout.write(output.data(), output.size());
 }
