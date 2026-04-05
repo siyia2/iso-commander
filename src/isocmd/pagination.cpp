@@ -104,122 +104,104 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 
 
 // Function that handles all pagination logic for selected entries in Cp/Mv
-std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std::unordered_set<std::string>& uniqueErrorMessages, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn) {
+std::string handlePaginatedDisplay(const std::vector<std::string>& entries, 
+                                  std::unordered_set<std::string>& uniqueErrorMessages, 
+                                  const std::string& promptPrefix, 
+                                  const std::string& promptSuffix, 
+                                  const std::function<void()>& setupEnvironmentFn, 
+                                  bool& isPageTurn) {
 
     // 1. Theme Selection
     const bool isOriginal = (globalTheme == "original");
-    const ListTheme* theme = isOriginal ? nullptr : getActiveTheme();
+    const ListTheme* theme = getActiveTheme();
 
-    static constexpr std::string_view defaultColor = "\033[0;1m";
-    static constexpr std::string_view darkCyan     = "\033[38;5;37;1m";
-    static constexpr std::string_view yellowBold   = "\033[1;93m";
-    static constexpr std::string_view brownBold    = "\033[1;38;5;94m";
+    // Semantic color mapping
+    // Brown/Muted for labels, Accent for numbers/values
+    std::string_view labelCol = isOriginal ? "\033[1;38;5;94m" : theme->muted;
+    std::string_view valueCol = isOriginal ? "\033[38;5;37;1m" : theme->accent;
+    std::string_view totalCol = isOriginal ? "\033[1;93m"      : theme->accent;
+    std::string_view resetCol = "\033[0;1m";
 
-    // Determine whether pagination is needed
     bool disablePagination = (ITEMS_PER_PAGE <= 0 || entries.size() <= ITEMS_PER_PAGE);
-    
-    // Calculate total pages (if pagination is enabled)
     size_t totalPages = disablePagination ? 1 : ((entries.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
-    size_t currentPage = 0; // Start at the first page
-    size_t totalEntries = entries.size(); // Total number of items
+    size_t currentPage = 0; 
+    size_t totalEntries = entries.size();
 
     while (true) {
-        // Call the setup function if provided (e.g., to clear screen, set terminal settings)
-        if (setupEnvironmentFn) {
-            setupEnvironmentFn();
-        }
+        if (setupEnvironmentFn) setupEnvironmentFn();
 
-        // Calculate the range of items to display for the current page
         size_t start = disablePagination ? 0 : (currentPage * ITEMS_PER_PAGE);
         size_t end = disablePagination ? totalEntries : std::min(start + ITEMS_PER_PAGE, totalEntries);
 
-        // Clear the scroll buffer (for terminal output)
         clearScrollBuffer();
-
-        // Display any accumulated error messages before showing the entries
         displayErrors(uniqueErrorMessages);
 
         std::ostringstream pageContent;
 
         // 2. Themed Header Construction
-        // Display pagination info if applicable
         if (!disablePagination) {
-            const std::string_view numColor = isOriginal ? darkCyan : std::string_view(theme->accent);
             pageContent
-                << brownBold << "Page "
-                << numColor  << std::to_string(currentPage + 1)
-                << brownBold << "/" << yellowBold << std::to_string(totalPages)
-                << brownBold << " (Items ("
-                << numColor  << std::to_string(start + 1) << "-" << std::to_string(end)
-                << brownBold << ")/" << yellowBold << std::to_string(totalEntries)
-                << brownBold << ")"
-                << defaultColor << "\n\n";
+                << labelCol << "Page "
+                << valueCol << (currentPage + 1)
+                << labelCol << "/" << totalCol << totalPages
+                << labelCol << " (Items ("
+                << valueCol << (start + 1) << "-" << end
+                << labelCol << ")/" << totalCol << totalEntries
+                << labelCol << ")"
+                << resetCol << "\n\n";
         }
 
-        // Append entries for the current page to the output
         for (size_t i = start; i < end; ++i) {
             pageContent << entries[i];
         }
 
         // 3. Themed Navigation Footer
-        // If pagination is enabled, show navigation options
         if (!disablePagination && totalPages > 1) {
-            pageContent << "\n" << brownBold << "Pagination: ";
-            if (currentPage > 0)              pageContent << "[p] ↵ Previous | ";
-            if (currentPage < totalPages - 1) pageContent << "[n] ↵ Next | ";
-            pageContent << "[g<num>] ↵ Go to | " << defaultColor << "\n";
+            pageContent << "\n" << labelCol << "Pagination: ";
+            if (currentPage > 0)               pageContent << "[p] ↵ Previous | ";
+            if (currentPage < totalPages - 1)  pageContent << "[n] ↵ Next | ";
+            pageContent << "[g<num>] ↵ Go to | " << resetCol << "\n";
         }
 
-        // Construct the prompt with the current page content
+        // 4. Prompt Construction
         std::string prompt = promptPrefix + pageContent.str() + promptSuffix;
 
-        // 4. Read User Input
-        // Read user input using readline (allocates memory, needs to be freed)
         std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
 
-        // If readline returns null (e.g., CTRL+D), return a special signal
-        if (!input.get()) {
-            return "EOF_SIGNAL";
-        }
+        if (!input.get()) return "EOF_SIGNAL";
 
-        std::string userInput = trimWhitespace(input.get()); // Remove leading/trailing whitespace
+        std::string userInput = trimWhitespace(input.get());
 
-        // Process navigation commands
         if (!userInput.empty()) {
             bool isNavigation = false;
 
-            // Check if user input is a page jump command (e.g., "g2" to go to page 2)
             if (userInput.size() >= 2 && userInput[0] == 'g' && std::isdigit(userInput[1])) {
                 try {
-                    size_t requestedPage = std::stoul(userInput.substr(1)); // Extract page number
+                    size_t requestedPage = std::stoul(userInput.substr(1));
                     isPageTurn = true;
                     isNavigation = true;
                     if (requestedPage >= 1 && requestedPage <= totalPages) {
-                        currentPage = requestedPage - 1; // Convert to zero-based index
+                        currentPage = requestedPage - 1;
                     }
-                } catch (const std::exception&) {
+                } catch (...) {
                     isPageTurn = true;
                     isNavigation = true;
                 }
             }
-            // Move to the next page
             else if (userInput == "n") {
                 isPageTurn = true;
                 isNavigation = true;
                 if (currentPage < totalPages - 1) currentPage++;
             }
-            // Move to the previous page
             else if (userInput == "p") {
                 isPageTurn = true;
                 isNavigation = true;
                 if (currentPage > 0) currentPage--;
             }
 
-            // If navigation occurred, restart the loop to display the new page
             if (isNavigation) continue;
         }
 
-        // If no navigation was performed, return the user input for further processing
         isPageTurn = false;
         return userInput;
     }

@@ -10,18 +10,41 @@
 
 
 // Function to process results from selectIsoFiles
-void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& skippedMessages, const std::string& operation, bool& verbose, bool isMount, bool& isFiltered, bool& umountMvRmBreak, bool isUnmount, bool& needsClrScrn) {
+void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMessages, 
+                                 std::unordered_set<std::string>& operationFiles, 
+                                 std::unordered_set<std::string>& operationFails, 
+                                 std::unordered_set<std::string>& skippedMessages, 
+                                 const std::string& operation, bool& verbose, bool isMount, 
+                                 bool& isFiltered, bool& umountMvRmBreak, bool isUnmount, 
+                                 bool& needsClrScrn) {
+    
+    const ListTheme* theme = getActiveTheme();
+    const bool isOrig = (globalTheme == "original");
+    
     // Result handling and display
-    if (!uniqueErrorMessages.empty() && operationFiles.empty() && operationFails.empty() && skippedMessages.empty()) {
+    if (!uniqueErrorMessages.empty() && operationFiles.empty() && 
+         operationFails.empty() && skippedMessages.empty()) {
+        
         clearScrollBuffer();
         needsClrScrn = true;
-        std::cout << "\n\033[1;91mNo valid input provided.\033[0;1m\n\n" << color << "↵ to continue..." << reset;
+        
+        // Use theme->secondary for "No valid input" (error state)
+        std::cout << "\n" << (isOrig ? originalColors::red : theme->secondary) 
+                  << "No valid input provided." 
+                  << originalColors::boldAlt << "\n\n";
+
+        // Use theme->muted for the pause prompt
+        std::cout << color << "↵ to continue..." << reset; 
+        
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    } else if (verbose) {
+    } 
+    else if (verbose) {
         clearScrollBuffer();
         needsClrScrn = true;
+        
+        // Only pass skippedMessages if we are in a Mount operation
         std::unordered_set<std::string> conditionalSet = isMount ? skippedMessages : std::unordered_set<std::string>{};
-        std::unordered_set<std::string> emptySet{};
+        
         verbosePrint(operationFiles, operationFails, conditionalSet, uniqueErrorMessages, isMount ? 2 : 1);
     }
 
@@ -35,8 +58,14 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
     if (!isUnmount && globalIsoFileList.empty()) {
         clearScrollBuffer();
         needsClrScrn = true;
-        std::cout << "\n\033[1;93mNo ISO available for " << operation << ".\033[0m\n\n";
-        std::cout << color << "\n↵ to continue..." << reset;
+        
+        // Use theme->warning for "No ISO available"
+        std::cout << "\n" << (isOrig ? originalColors::yellow : theme->warning) 
+                  << "No ISO available for " << operation << "." 
+                  << originalColors::reset << "\n\n";
+        
+        std::cout << color << "↵ to continue..." << reset; 
+
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         return;
     }

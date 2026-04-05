@@ -33,182 +33,148 @@ void restoreInput(struct termios *oldt, int oldf) {
 // End of terminal blocking for progress bar
 
 // Function to display progress bar for native operations
-void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose,  const std::string& operation) {
+void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, 
+                                std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, 
+                                size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose,  
+                                const std::string& operation) {
     // Set up terminal for non-blocking input
     disableInputForProgressBar(&oldt, &oldf);
 
-    int processingBarWidth = 42; // Default to 42
-    int finalBarWidth = 30; // Default to 30
+    const ListTheme* theme = getActiveTheme();
+    const bool isOrig = (globalTheme == "original");
+
+    int processingBarWidth = 42;
+    int finalBarWidth = 30;
     
-    if (operation.find("mount") != std::string::npos || 
-    operation.find("umount") != std::string::npos) {
-		processingBarWidth = 46;
-		finalBarWidth = 30;
-	} else if (operation.find("MDF") != std::string::npos || 
-           operation.find("NRG") != std::string::npos || 
-           operation.find("BIN/IMG") != std::string::npos) {
-		processingBarWidth = 49;
-		finalBarWidth = 40;
-	}
+    // Width logic remains the same
+    if (operation.find("mount") != std::string::npos || operation.find("umount") != std::string::npos) {
+        processingBarWidth = 46;
+    } else if (operation.find("MDF") != std::string::npos || operation.find("NRG") != std::string::npos || operation.find("BIN/IMG") != std::string::npos) {
+        processingBarWidth = 49;
+        finalBarWidth = 40;
+    }
     
     bool enterPressed = false;
     auto startTime = std::chrono::high_resolution_clock::now();
     const bool bytesTrackingEnabled = (completedBytes != nullptr);
     
-    // Size formatting function
     auto formatSize = [](double bytes) -> std::string {
         std::stringstream ss;
         const char* units[] = {" B", " KB", " MB", " GB"};
         int unit = 0;
         double size = bytes;
-        
-        while (size >= 1024 && unit < 3) {
-            size /= 1024;
-            unit++;
-        }
-        
+        while (size >= 1024 && unit < 3) { size /= 1024; unit++; }
         ss << std::fixed << std::setprecision(2) << size << units[unit];
         return ss.str();
     };
     
-    // Pre-format total bytes if needed
-    std::string totalBytesFormatted;
-    if (bytesTrackingEnabled) {
-        totalBytesFormatted = formatSize(static_cast<double>(totalBytes));
-    }
+    std::string totalBytesFormatted = bytesTrackingEnabled ? formatSize(static_cast<double>(totalBytes)) : "";
     
-    // Function to render the progress bar
+    // --- Themed Render Function ---
     auto renderProgressBar = [&](bool isFinal = false) -> std::string {
-        // Load current progress information
         const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
         const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
-        const size_t completedBytesValue = bytesTrackingEnabled ? 
-            completedBytes->load(std::memory_order_acquire) : 0;
+        const size_t completedBytesValue = bytesTrackingEnabled ? completedBytes->load(std::memory_order_acquire) : 0;
         
-        // Calculate progress
         double tasksProgress = static_cast<double>(completedTasksValue + failedTasksValue) / totalTasks;
-        double overallProgress = tasksProgress;
-        if (bytesTrackingEnabled) {
+        double overallProgress = isFinal ? 1.0 : tasksProgress;
+        if (bytesTrackingEnabled && !isFinal) {
             double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
             overallProgress = std::max(bytesProgress, tasksProgress);
         }
         
-        // For final display, always show 100%
-        if (isFinal) {
-            overallProgress = 1.0;
-        }
-        
-        // Use different bar width based on whether this is the final render
         int barWidth = isFinal ? finalBarWidth : processingBarWidth;
-        
-        // Calculate the position of the progress bar
         int progressPos = static_cast<int>(barWidth * overallProgress);
         
-        // Calculate elapsed time and speed
         auto currentTime = std::chrono::high_resolution_clock::now();
-        auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime);
-        double elapsedSeconds = elapsedTime.count() / 1000.0;
-        double speed = bytesTrackingEnabled && elapsedSeconds > 0.0 ? 
-            (static_cast<double>(completedBytesValue) / elapsedSeconds) : 0.0;
+        double elapsedSeconds = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() / 1000.0;
+        double speed = (bytesTrackingEnabled && elapsedSeconds > 0.0) ? (static_cast<double>(completedBytesValue) / elapsedSeconds) : 0.0;
         
-        // Construct the progress bar display
         std::stringstream ss;
+        std::string_view accentCol = isOrig ? "\033[1;92m" : theme->accent;
+        std::string_view mutedCol  = isOrig ? "\033[1;94m" : theme->muted;
+        std::string_view dataCol   = "\033[1;97m";
         
-        // First line: progress bar with percentage, task count, and time elapsed
-        ss << "\r\033[2K[";
+        // Line 1
+        ss << "\r\033[2K" << (isOrig ? "\033[0;1m" : theme->muted) << "[";
         for (int i = 0; i < barWidth; ++i) {
-            ss << (i < progressPos ? "=" : (i == progressPos && !isFinal ? ">" : " "));
+            if (i < progressPos) ss << accentCol << "=";
+            else if (i == progressPos && !isFinal) ss << accentCol << ">";
+            else ss << " ";
         }
-        ss << "] " << std::fixed << std::setprecision(0) << (overallProgress * 100.0)
-           << "% (" << completedTasksValue << "/" << totalTasks << ") Time Elapsed: " 
-           << std::fixed << std::setprecision(1) << elapsedSeconds << "s";
+        ss << (isOrig ? "\033[0;1m" : theme->muted) << "] " 
+           << accentCol << std::fixed << std::setprecision(0) << (overallProgress * 100.0) << "%"
+           << "\033[0m (" << dataCol << completedTasksValue << "/" << totalTasks << "\033[0m) "
+           << mutedCol << "Time: " << dataCol << std::fixed << std::setprecision(1) << elapsedSeconds << "s\033[0m";
         
-        // Second line: size information right under the percentage part
         if (bytesTrackingEnabled) {
             int percentPos = barWidth + 3;
+            ss << "\n\r\033[2K";
+            for (int i = 0; i < percentPos; i++) ss << " ";
+            ss << mutedCol << "Processed: " << dataCol << formatSize(static_cast<double>(completedBytesValue)) << "/" << totalBytesFormatted;
             
             ss << "\n\r\033[2K";
-            for (int i = 0; i < percentPos; i++) {
-                ss << " ";
-            }
-            ss << "Processed: " << formatSize(static_cast<double>(completedBytesValue)) 
-               << "/" << totalBytesFormatted;
-
-            ss << "\n\r\033[2K";
-            for (int i = 0; i < percentPos; i++) {
-                ss << " ";
-            }
-            ss << "Speed: " << formatSize(speed) << "/s";
+            for (int i = 0; i < percentPos; i++) ss << " ";
+            ss << mutedCol << "Speed:     " << dataCol << formatSize(speed) << "/s\033[0m";
         }
-        
         return ss.str();
     };
     
-    // Main loop to update progress bar
+    // Update loop
     while (!isComplete->load(std::memory_order_acquire) || !enterPressed) {
-        // Non-blocking read to check for input
         char ch;
         while (read(STDIN_FILENO, &ch, 1) > 0);
         
-        // Display current progress
-        std::string progressOutput = renderProgressBar();
-        std::cout << progressOutput << std::flush;
+        std::cout << renderProgressBar() << std::flush;
         
-        // Move cursor back up if we have a multi-line output (for updating in place)
         if (bytesTrackingEnabled && !isComplete->load(std::memory_order_acquire)) {
-            std::cout << "\033[2A";
+            std::cout << "\033[2A"; // Move up for 3-line bar
         }
         
-        // If processing is complete, show a final message
         if (isComplete->load(std::memory_order_acquire) && !enterPressed) {
             signal(SIGINT, SIG_IGN);
             
-            if (bytesTrackingEnabled) {
-                std::cout << "\033[1J\033[3A";
-            } else {
-                std::cout << "\033[1J\033[1A";
-            }
+            // Clear current bar to write status
+            std::cout << (bytesTrackingEnabled ? "\033[1J\033[3A" : "\033[1J\033[1A");
             
             const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
             const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
             
+            // --- Themed Status Output ---
+            std::string statusStr;
+            if (g_operationCancelled.load()) {
+                statusStr = std::string(isOrig ? "\033[1;33m" : theme->warning) + "INTERRUPTED";
+            } else if (failedTasksValue > 0) {
+                statusStr = (completedTasksValue > 0) ? 
+                    std::string(isOrig ? "\033[1;93m" : theme->warning) + "PARTIAL" : 
+                    std::string(isOrig ? "\033[1;91m" : theme->secondary) + "FAILED";
+            } else {
+                statusStr = std::string(isOrig ? "\033[1;92m" : theme->accent) + "COMPLETED";
+            }
+
             std::cout << "\r\033[2K\033[0;1m Status: " << operation << "\033[0;1m → " 
-                      << (!g_operationCancelled.load() 
-                          ? (failedTasksValue > 0 
-                             ? (completedTasksValue > 0 
-                                ? "\033[1;93mPARTIAL"
-                                : "\033[1;91mFAILED")
-                             : "\033[1;92mCOMPLETED")
-                          : "\033[1;33mINTERRUPTED")
-                      << "\033[0;1m" << std::endl;
+                      << statusStr << "\033[0;1m" << std::endl;
             
-            std::cout << renderProgressBar(true);
+            std::cout << renderProgressBar(true) << "\n\n";
             
             disableReadlineForConfirmation();
-            
             enterPressed = true;
-            std::cout << "\n\n";
-            
             restoreInput(&oldt, oldf);
-            const ListTheme* theme = getActiveTheme();
-			const bool isOriginal = (globalTheme == "original");
 
-			const std::string prompt = 
-				"\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + 
-				"\002Display verbose output? (y/n):\001\033[0;1m\002 ";
+            // --- Themed Question ---
+            const std::string prompt = "\001" + std::string(isOrig ? "\033[1;94m" : theme->muted) + 
+                                       "\002Display verbose output? (y/n):\001\033[0;1m\002 ";
+            
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-            
             if (input.get()) {
-                *verbose = (std::string(input.get()) == "y" || std::string(input.get()) == "Y");
+                std::string res = input.get();
+                *verbose = (res == "y" || res == "Y");
             }
-            
             restoreReadline();
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
     }
-    
     std::cout << std::endl;
-    
     restoreInput(&oldt, oldf);
 }

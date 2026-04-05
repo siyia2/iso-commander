@@ -171,9 +171,14 @@ void saveHistory(bool& filterHistory) {
 void clearHistory(const std::string& inputSearch) {
     signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
     disable_ctrl_d();
+
+    const ListTheme* theme = getActiveTheme();
+    const bool isOrig = (globalTheme == "original");
+
     const std::string basePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/";
     std::string filePath;
     std::string historyType;
+
     if (inputSearch == "!clr_paths") {
         filePath = basePath + "iso_commander_path_database.txt";
         historyType = "FolderPath";
@@ -181,17 +186,24 @@ void clearHistory(const std::string& inputSearch) {
         filePath = basePath + "iso_commander_filter_database.txt";
         historyType = "FilterTerm";
     } else {
-        std::cerr << "\n\001\033[1;91mInvalid command: \001\033[1;93m'" 
-                  << inputSearch << "'\001\033[1;91m.\033[J" << std::endl;
+        // Use theme->secondary (Error) and theme->warning (Highlight)
+        std::cerr << "\n" << (isOrig ? originalColors::red : theme->secondary) << "Invalid command: " 
+                  << (isOrig ? originalColors::yellow : theme->warning) << "'" << inputSearch << "'" 
+                  << (isOrig ? originalColors::red : theme->secondary) << ".\033[J" << std::endl;
         return;
     }
+
     std::ofstream ofs(filePath, std::ofstream::out | std::ofstream::trunc);
     if (!ofs) {
-        std::cerr << "\n\001\033[1;91mError clearing " << historyType << " database: \001\033[1;93m'" 
-                  << filePath << "'\001\033[1;91m. File missing or inaccessible.\033[J" << std::endl;
+        std::cerr << "\n" << (isOrig ? originalColors::red : theme->secondary) 
+                  << "Error clearing " << historyType << " database: " 
+                  << (isOrig ? originalColors::yellow : theme->warning) << "'" << filePath << "'" 
+                  << (isOrig ? originalColors::red : theme->secondary) << ". File missing or inaccessible.\033[J" << std::endl;
     } else {
         ofs.close();
-        std::cout << "\n\001\033[1;92m" << historyType << " database cleared successfully.\033[J" << std::endl;
+        // Use theme->accent (Success)
+        std::cout << "\n" << (isOrig ? originalColors::green : theme->accent) 
+                  << historyType << " database cleared successfully.\033[J" << std::endl;
         clear_history();
     }
     std::cout << color << "\n\033[1;32m↵ to continue..." << reset;

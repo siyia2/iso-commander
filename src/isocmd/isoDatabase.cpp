@@ -505,80 +505,69 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
 
 
 // Function to display on-disk and ram statistics
-void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList) {
-    signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C signal to prevent interruption
-    disable_ctrl_d();               // Disable Ctrl+D to avoid unwanted program termination
-    clearScrollBuffer();            // Clear any buffered data from the scroll buffer
+void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize, 
+                                const std::unordered_map<std::string, std::string>& transformationCache, 
+                                const std::vector<std::string>& globalIsoFileList) {
+    signal(SIGINT, SIG_IGN);
+    disable_ctrl_d();
+    clearScrollBuffer();
+
+    const ListTheme* theme = getActiveTheme();
+    const bool isOrig = (globalTheme == "original");
+
+    // Semantic Color Mapping
+    std::string_view headerCol = isOrig ? "\033[1;94m" : theme->accent;
+    std::string_view labelCol  = isOrig ? "\033[1;92m" : theme->muted;
+    std::string_view dataCol   = "\033[1;97m";
+    std::string_view warnCol   = "\033[1;38;5;208m"; // Keep orange for non-ISO formats
+    std::string_view resetCol  = "\033[0m";
 
     try {
-        // Create the database file if it does not exist
-        std::filesystem::path filePath(databaseFilePath);
-        if (!std::filesystem::exists(filePath)) {
-            std::ofstream createFile(databaseFilePath);
-            createFile.close();  // Close the file after creation
-        }
-        
-        // Create history file if it doesn't exist
-        if (!std::filesystem::exists(historyFilePath)) {
-            std::ofstream createFile(historyFilePath);
-            createFile.close();  // Close the file after creation
+        // Ensure files exist
+        for (const auto& path : {databaseFilePath, historyFilePath, filterHistoryFilePath}) {
+            if (!std::filesystem::exists(path)) {
+                std::ofstream createFile(path);
+            }
         }
 
-        // Create filter history file if it doesn't exist
-        if (!std::filesystem::exists(filterHistoryFilePath)) {
-            std::ofstream createFile(filterHistoryFilePath);
-            createFile.close();  // Close the file after creation
-        }
-
-        // Display the statistics for the ISO database
-        std::cout << "\n\033[1;94m=== ISO Database ===\033[0m\n";
+        // --- ISO Database ---
+        std::cout << "\n" << headerCol << "=== ISO Database ===" << resetCol << "\n";
         
-        // Get the file size in bytes
-        std::uintmax_t fileSizeInBytes = std::filesystem::file_size(filePath);
-        std::uintmax_t cachesizeInBytes = maxDatabaseSize;
-        
-        // Convert file size and cache size to kilobytes
+        std::uintmax_t fileSizeInBytes = std::filesystem::file_size(databaseFilePath);
         double fileSizeInKB = fileSizeInBytes / 1024.0;
-        double cachesizeInKb = cachesizeInBytes / 1024.0;
+        double cachesizeInKb = maxDatabaseSize / 1024.0;
+        double usagePercentage = (fileSizeInBytes * 100.0) / maxDatabaseSize;
         
-        // Calculate the usage percentage of the database file
-        double usagePercentage = (fileSizeInBytes * 100.0) / cachesizeInBytes;
+        std::cout << "\n" << labelCol << "Capacity: " << dataCol << std::fixed << std::setprecision(0) 
+                  << fileSizeInKB << "KB/" << cachesizeInKb << "KB (" << std::setprecision(1) << usagePercentage << "%)"
+                  << "\n" << labelCol << "Entries: " << dataCol << countNonEmptyLines(databaseFilePath) 
+                  << "\n" << labelCol << "Location: " << dataCol << "'" << databaseFilePath << "'" << resetCol << "\n";
+
+        // --- History Database ---
+        std::cout << "\n" << headerCol << "=== History Database ===" << resetCol << "\n"
+                  << "\n" << labelCol << "FolderPath Entries: " << dataCol << countNonEmptyLines(historyFilePath) << "/" << MAX_HISTORY_LINES
+                  << "\n" << labelCol << "Location: " << dataCol << "'" << historyFilePath << "'"
+                  << "\n\n" << labelCol << "FilterTerm Entries: " << dataCol << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
+                  << "\n" << labelCol << "Location: " << dataCol << "'" << filterHistoryFilePath << "'" << std::endl;
         
-        // Display the capacity, file size, and usage percentage of the database
-        std::cout << "\n\033[1;92mCapacity:\033[1;97m " << std::fixed << std::setprecision(0) << fileSizeInKB << "KB" 
-                  << "/" << std::setprecision(0) << cachesizeInKb << "KB" 
-                  << " (" << std::setprecision(1) << usagePercentage << "%)"
-                  << " \n\033[1;92mEntries:\033[1;97m " << countNonEmptyLines(databaseFilePath) 
-                  << "\n\033[1;92mLocation:\033[1;97m " << "'" << databaseFilePath << "'\033[0;1m\n";
-       
-        // Display the statistics for the history database
-        std::cout  << "\n\033[1;94m=== History Database ===\033[0m\n"
-                  << " \n\033[1;92mFolderPath Entries:\033[1;97m " << countNonEmptyLines(historyFilePath)<< "/" << MAX_HISTORY_LINES
-                  << "\n\033[1;92mLocation:\033[1;97m " << "'" << historyFilePath << "'\033[0;1m"
-                  << " \n\n\033[1;92mFilterTerm Entries:\033[1;97m " << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
-                  << "\n\033[1;92mLocation:\033[1;97m " << "'" << filterHistoryFilePath << "'\033[0;1m" << std::endl;
+        // --- Buffered Entries (RAM) ---
+        std::cout << "\n" << headerCol << "=== Buffered Entries ===" << resetCol << "\n";
         
-        // Display the buffered entries in RAM
-        std::cout << "\n\033[1;94m=== Buffered Entries ===\033[0m\n";
+        // Use Cyan/Accent for RAM stats
+        std::cout << (isOrig ? "\033[1;96m" : theme->accent) << "\nSTR → RAM: " << dataCol 
+                  << (transformationCache.size() + cachedParsesForUmount.size()) << "\n";
         
-        // Show the total number of cached string entries in RAM
-        std::cout << "\033[1;96m\nSTR → RAM:\033[1;97m " << transformationCache.size() + cachedParsesForUmount.size() << "\n";
+        std::cout << "\n" << labelCol << "ISO → RAM: " << dataCol << globalIsoFileList.size() << "\n";
         
-        // Show the number of ISO files in RAM
-        std::cout << "\n\033[1;92mISO → RAM:\033[1;97m " << globalIsoFileList.size() << "\n";
-        
-        // Show the number of BIN/IMG files in RAM
-        std::cout << "\n\033[1;38;5;208mBIN/IMG → RAM:\033[1;97m " << binImgFilesCache.size() << "\n";
-        
-        // Show the number of MDF files in RAM
-        std::cout << "\033[1;38;5;208mMDF → RAM:\033[1;97m " << mdfMdsFilesCache.size() << "\n";
-        
-        // Show the number of NRG files in RAM
-        std::cout << "\033[1;38;5;208mNRG → RAM:\033[1;97m " << nrgFilesCache.size() << "\n";
+        // Use Warning/Orange for conversion-ready formats
+        std::cout << "\n" << warnCol << "BIN/IMG → RAM: " << dataCol << binImgFilesCache.size() << "\n"
+                  << warnCol << "MDF → RAM: " << dataCol << mdfMdsFilesCache.size() << "\n"
+                  << warnCol << "NRG → RAM: " << dataCol << nrgFilesCache.size() << "\n";
+
     } catch (const std::filesystem::filesystem_error& e) {
-        // Handle filesystem errors (e.g., unable to access a configuration file)
-        std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
-                  << configPath << "'\033[1;91m.\033[0;1m\n";
+        std::cerr << "\n" << (isOrig ? "\033[1;91m" : theme->secondary) << "Error: Unable to access configuration file: "
+                  << (isOrig ? "\033[1;93m" : theme->warning) << "'" << configPath << "'" 
+                  << (isOrig ? "\033[1;91m" : theme->secondary) << ".\033[0;1m\n";
     }
 
     // Prompt the user to press Enter to return
@@ -591,6 +580,9 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
 void updateAutoUpdateConfig(const std::string& configPath, const std::string& inputSearch) {
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
+
+    const ListTheme* theme = getActiveTheme();
+    const bool isOrig = (globalTheme == "original");
 
     // 1. Ensure directories exist
     fs::path p(configPath);
@@ -605,14 +597,23 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
     g_configCache["auto_update"] = isEnabling ? "on" : "off";
 
     // 4. Use the robust writeConfig function to persist changes
-    // This respects CONFIG_ORDERED_DEFAULTS and keeps your comments/headers intact.
     if (writeConfig(configPath, g_configCache)) {
-        std::cout << "\n\033[0;1mAutomatic background updates have been "
-                  << (isEnabling ? "\033[1;92menabled" : "\033[1;91mdisabled")
-                  << "\033[0;1m.\033[J\033[0m\n";
+        // Semantic color: accent for enabled, secondary for disabled
+        std::string_view statusCol = isEnabling ? 
+            (isOrig ? "\033[1;92m" : theme->accent) : 
+            (isOrig ? "\033[1;91m" : theme->secondary);
+            
+        std::string_view labelCol = isOrig ? "\033[0;1m" : theme->muted;
+
+        std::cout << "\n" << labelCol << "Automatic background updates have been "
+                  << statusCol << (isEnabling ? "enabled" : "disabled")
+                  << labelCol << ".\033[J\033[0m\n";
     } else {
-        std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
-                  << configPath << "'\033[1;91m.\033[J\033[0m\n";
+        // Themed Error message
+        std::cerr << "\n" << (isOrig ? "\033[1;91m" : theme->secondary) 
+                  << "Error: Unable to access configuration file: " 
+                  << (isOrig ? "\033[1;93m" : theme->warning) << "'" << configPath << "'" 
+                  << (isOrig ? "\033[1;91m" : theme->secondary) << ".\033[J\033[0m\n";
     }
 
     std::cout << color << "\n↵ to continue..." << reset;
@@ -625,6 +626,9 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
     
+    const ListTheme* theme = getActiveTheme();
+    const bool isOrig = (globalTheme == "original");
+    
     std::string initialDir = "";
     
     if (inputSearch == "?stats") {
@@ -633,14 +637,18 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
         displayConfigurationOptions(configPath);
     } else if (inputSearch == "!clr") {
         std::ofstream ofs(databaseFilePath, std::ofstream::out | std::ofstream::trunc);
-		if (!ofs) {
-            std::cerr << "\n\001\033[1;91mError clearing ISO database: \001\033[1;93m'" 
-                      << databaseFilePath << "\001'\033[1;91m. File missing or inaccessible.\033[J" << std::endl;
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+        if (!ofs) {
+            // Error handling for database clear
+            std::cerr << "\n" << (isOrig ? "\033[1;91m" : theme->secondary) 
+                      << "Error clearing ISO database: " 
+                      << (isOrig ? "\033[1;93m" : theme->warning) << "'" << databaseFilePath << "'" 
+                      << (isOrig ? "\033[1;91m" : theme->secondary) << ". File missing or inaccessible.\033[J" << std::endl;
+            
+            std::cout << "\n" << (isOrig ? "\033[1;32m" : theme->muted) << "↵ to continue..." << originalColors::reset;
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         } else {
             ofs.close();
-            // Clean transformationCache for .iso entries (case-insensitive)
+            // Clean transformationCache for .iso entries
             for (auto it = transformationCache.begin(); it != transformationCache.end();) {
                 const std::string& key = it->first;
                 if (key.size() >= 4) {
@@ -653,31 +661,27 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
                 }
                 ++it;
             }
-                    
-            std::cout << "\n\001\033[1;92mISO database cleared successfully\001\033[1;92m.\033[J" << std::endl;
-            std::cout << "\n\033[1;32m↵ to continue...\033[0;1m";
+            
+            // Success message
+            std::cout << "\n" << (isOrig ? "\033[1;92m" : theme->accent) 
+                      << "ISO database cleared successfully." << "\033[J" << std::endl;
+            
+            std::cout << color << "\n↵ to continue..." << reset; 
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             std::vector<std::string>().swap(globalIsoFileList);
         }
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
         clearHistory(inputSearch);
-    } else if (inputSearch == "*auto:on" || inputSearch == "*auto:off") { // Changed to :
+    } else if (inputSearch == "*auto:on" || inputSearch == "*auto:off") {
         updateAutoUpdateConfig(configPath, inputSearch);
-    } else if (inputSearch == "*flno:on" || inputSearch == "*flno:off") { // Changed to :
+    } else if (inputSearch == "*flno:on" || inputSearch == "*flno:off") {
         needSortingAfterflno = true;
         updateFilenamesOnly(configPath, inputSearch);
-    } else if (inputSearch.substr(0, 12) == "*pagination:") { // Changed to :
+    } else if (inputSearch.substr(0, 12) == "*pagination:") {
         updatePagination(inputSearch, configPath);
-    } 
-    // --- New functionality for Menu Color ---
-    else if (inputSearch.substr(0, 6) == "*skin:") { // Changed to :
+    } else if (inputSearch.substr(0, 6) == "*skin:" || inputSearch.substr(0, 7) == "*theme:") {
         updateUIAppearance(configPath, inputSearch);
-    } 
-    // --- New functionality for List Theme ---
-    else if (inputSearch.substr(0, 7) == "*theme:") { // Changed to :
-        updateUIAppearance(configPath, inputSearch);
-    } 
-    else if (isValidInput(inputSearch)) {
+    } else if (isValidInput(inputSearch)) {
         setDisplayMode(inputSearch);
     }
 

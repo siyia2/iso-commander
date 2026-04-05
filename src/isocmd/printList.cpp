@@ -24,19 +24,10 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     
     if (items.empty()) return;
 
-    static constexpr std::string_view defaultColor = "\033[0;1m";
-    static constexpr std::string_view darkCyan     = "\033[38;5;37;1m";
-    static constexpr std::string_view magentaBold   = "\033[95;1m";
-    static constexpr std::string_view brownBold     = "\033[1;38;5;94m";
-    static constexpr std::string_view yellowBold    = "\033[1;93m";
-    static constexpr std::string_view orangeBold    = "\033[1;38;5;208m";
-    static constexpr std::string_view blueBold      = "\033[94;1m";
-    static constexpr std::string_view gray          = "\033[0;2m";
-    static constexpr std::string_view reset         = "\033[0m";
-
     const ListTheme* theme = getActiveTheme();
     const bool isOriginal = (globalTheme == "original");
     
+    // Pagination Logic
     const size_t totalItems = items.size();
     const bool disablePagination = (ITEMS_PER_PAGE == 0 || totalItems <= ITEMS_PER_PAGE);
     const size_t totalPages = disablePagination ? 1 : (totalItems + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
@@ -49,32 +40,39 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     const size_t maxDigits = ib1.format(totalItems).length();
     const bool isIsoWithAutoUpdate = (isImportRunning.load() && listType == "ISO_FILES" && !isFiltered && !globalIsoFileList.empty());
 
+    // Color Mapping
+    std::string_view accentColor = isOriginal ? originalColors::darkCyan : theme->accent;
+    std::string_view headColor   = isOriginal ? originalColors::brown    : theme->muted; // brownBold
+    std::string_view numColor    = isOriginal ? originalColors::yellow   : theme->warning; // yellowBold
+    std::string_view isoColor    = isOriginal ? originalColors::purple   : theme->accent; // magentaBold
+    std::string_view imgColor    = isOriginal ? originalColors::orange   : theme->highlight; // orangeBold
+    std::string_view mntColor    = isOriginal ? originalColors::blue     : theme->secondary; // blueBold
+
     std::string output;
     output.reserve(((endIndex - startIndex) * 128) + 1024);
-    
-    // Exact match of your original start
     output += '\n';
 
+    // Header / Pagination Info
     if (!disablePagination) {
-        output.append(brownBold).append("Page ");
-        output.append(isOriginal ? darkCyan : theme->accent).append(ib1.format(effectivePage + 1));
-        output.append(brownBold).append("/").append(yellowBold).append(ib2.format(totalPages));
-        output.append(brownBold).append(" (Items (");
-        output.append(isOriginal ? darkCyan : theme->accent).append(ib3.format(startIndex + 1));
-        output.append("-").append(ib4.format(endIndex)).append(brownBold).append(")/").append(yellowBold);
-        output.append(ib1.format(totalItems)).append(brownBold).append(")");
+        output.append(headColor).append("Page ")
+              .append(accentColor).append(ib1.format(effectivePage + 1))
+              .append(headColor).append("/").append(numColor).append(ib2.format(totalPages))
+              .append(headColor).append(" (Items (")
+              .append(accentColor).append(ib3.format(startIndex + 1))
+              .append("-").append(ib4.format(endIndex)).append(headColor).append(")/").append(numColor)
+              .append(ib1.format(totalItems)).append(headColor).append(")");
         
         if (isIsoWithAutoUpdate) {
-            output.append(gray).append("\n\n[Auto-Update: List restructures if newISOFound]");
+            output.append(originalColors::dim).append("\n\n[Auto-Update: List restructures if newISOFound]");
         }
-        output.append(defaultColor).append("\n\n"); // The two newlines from your original Header block
+        output.append(originalColors::boldAlt).append("\n\n");
     } 
     else if (isIsoWithAutoUpdate) {
-        output.append(gray).append("[Auto-Update: List restructures if newISOFound]");
-        output.append(defaultColor).append("\n\n");
+        output.append(originalColors::dim).append("[Auto-Update: List restructures if newISOFound]");
+        output.append(originalColors::boldAlt).append("\n\n");
     }
 
-    // Main Loop (logic unchanged)
+    // Main Item Loop
     for (size_t i = startIndex; i < endIndex; ++i) {
         const std::string_view seqColor = (i % 2 == 0) ? theme->secondary : theme->accent;
         std::string_view idxStr = ib1.format(i + 1);
@@ -84,64 +82,62 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append(idxStr);
 
         if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
-            output.append(":").append(defaultColor).append("\033[38;5;105;1m");
+            output.append(":").append(originalColors::boldAlt).append("\033[38;5;105;1m"); // Custom filter color kept
             output.append(ib2.format(filteringStack.back().originalIndices[i] + 1));
-            output.append(defaultColor).append("^ ");
+            output.append(originalColors::boldAlt).append("^ ");
         } else {
-            output.append(". ").append(defaultColor);
+            output.append(". ").append(originalColors::boldAlt);
         }
 
         const std::string& item = items[i];
         if (listType == "ISO_FILES" || listType == "IMAGE_FILES") {
             auto [dir, fname] = extractDirectoryAndFilename(item, listSubType);
             if (!displayConfig::toggleNamesOnly) {
-                output.append(isOriginal ? defaultColor : theme->muted).append(dir).append(defaultColor).append("/");
+                output.append(isOriginal ? originalColors::boldAlt : theme->muted).append(dir).append(originalColors::boldAlt).append("/");
             }
-            output.append(listType == "ISO_FILES" ? (isOriginal ? magentaBold : theme->accent) 
-                                                  : (isOriginal ? orangeBold : theme->highlight));
-            output.append(fname);
-        } else if (listType == "MOUNTED_ISOS") {
+            output.append(listType == "ISO_FILES" ? isoColor : imgColor).append(fname);
+        } 
+        else if (listType == "MOUNTED_ISOS") {
             auto [dirPart, pathPart, hashPart] = parseMountPointComponents(item);
             if (displayConfig::toggleFullListUmount) {
-                output.append(isOriginal ? blueBold : theme->secondary).append(dirPart);
-                output.append(isOriginal ? magentaBold : theme->accent).append(pathPart);
-                output.append(isOriginal ? "\033[38;5;245m" : theme->muted).append(hashPart);
+                output.append(mntColor).append(dirPart)
+                      .append(isoColor).append(pathPart)
+                      .append(isOriginal ? "\033[38;5;245m" : theme->muted).append(hashPart);
             } else {
-                output.append(isOriginal ? magentaBold : theme->accent).append(pathPart);
+                output.append(isoColor).append(pathPart);
             }
         }
-        output.append(reset).append("\n");
+        output.append(originalColors::reset).append("\n");
     }
 
-    // Footer (logic unchanged)
+    // Footer / Navigation
     if (!disablePagination) {
-        output.append("\n").append(brownBold).append("Pagination: ");
+        output.append("\n").append(headColor).append("Pagination: ");
         if (effectivePage > 0) output.append("[p] ↵ Previous | ");
         if (effectivePage < totalPages - 1) output.append("[n] ↵ Next | ");
-        output.append("[g<num>] ↵ Go to | ").append(defaultColor).append("\n");
+        output.append("[g<num>] ↵ Go to | ").append(originalColors::boldAlt).append("\n");
     }
 
+    // Pending Processes block
     if (hasPendingProcess && !pendingIndices.empty()) {
-		output.append("\n");
+        output.append("\n");
 
-		std::string_view bracketColor = isOriginal ? "\033[0;1;48;5;19m" : theme->background;
-		std::string_view procColor    = isOriginal ? "\033[1;92m"         : theme->accent;
+        std::string_view bracketBg = isOriginal ? "\033[0;1;48;5;19m" : theme->background;
+        std::string_view procText   = isOriginal ? originalColors::green     : theme->accent;
 
-		output.append(bracketColor).append("Pending for [");
-		output.append(procColor).append("proc");
-		output.append(reset).append("\033[1m").append(bracketColor).append("]: ");
+        output.append(bracketBg).append("Pending for [")
+              .append(procText).append("proc")
+              .append(originalColors::reset).append(originalColors::bold).append(bracketBg).append("]: ");
 
-		std::string_view pColor = isOriginal
-			? (listType != "IMAGE_FILES" ? magentaBold : orangeBold)
-			: (listType != "IMAGE_FILES" ? theme->primary : theme->highlight);
+        std::string_view pColor = (listType != "IMAGE_FILES") ? isoColor : imgColor;
 
-		output.append(pColor);
-		for (size_t i = 0; i < pendingIndices.size(); ++i) {
-			output.append(pendingIndices[i]);
-			if (i < pendingIndices.size() - 1) output.push_back(' ');
-		}
-		output.append(reset).append(isOriginal ? "\033[0;1m" : "").append("\n");
-	}
+        output.append(pColor);
+        for (size_t i = 0; i < pendingIndices.size(); ++i) {
+            output.append(pendingIndices[i]);
+            if (i < pendingIndices.size() - 1) output.push_back(' ');
+        }
+        output.append(originalColors::reset).append(isOriginal ? originalColors::boldAlt : "").append("\n");
+    }
 
     std::cout.write(output.data(), output.size());
 }

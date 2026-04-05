@@ -378,15 +378,27 @@ size_t calculateSizeForConverted(const std::vector<std::string>& filesToProcess,
 }
 
 // Function to process user input and convert selected BIN/MDF/NRG files to ISO format
-void processInputForConversions(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound) {
+void processInputForConversions(const std::string& input, std::vector<std::string>& fileList, 
+                               const bool& modeMdf, const bool& modeNrg, 
+                               std::unordered_set<std::string>& processedErrors, 
+                               std::unordered_set<std::string>& successOuts, 
+                               std::unordered_set<std::string>& skippedOuts, 
+                               std::unordered_set<std::string>& failedOuts, 
+                               bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound) {
+    
     // Setup signal handler for cancellation (e.g., for Ctrl+C)
     setupSignalHandlerCancellations();
     
+    // Get theme context
+    const ListTheme* theme = getActiveTheme();
+    const bool isOrig = (globalTheme == "original");
+
     // Initialize the cancellation flag for the operation
     g_operationCancelled.store(false);
 
     // Track indices of files that are processed
     std::unordered_set<int> processedIndices;
+    
     // Tokenize the input and populate processedIndices with valid file indices
     if (!(input.empty() || std::all_of(input.begin(), input.end(), isspace))){
         tokenizeInput(input, fileList, processedErrors, processedIndices);
@@ -397,9 +409,15 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     // If no valid files were processed, show a message and exit
     if (processedIndices.empty()) {
         clearScrollBuffer();  // Clear the screen buffer
-        std::cout << "\n\033[1;91mNo valid input provided.\033[1;91m\n";  // Error message
+        
+        // Use theme->secondary for "No valid input" error message
+        std::cout << "\n" << (isOrig ? originalColors::red : theme->secondary) 
+                  << "No valid input provided." << originalColors::boldAlt << "\n";
+        
+        // Standardized "Press Enter" prompt using the theme's muted/secondary color
         std::cout << color << "\n↵ to continue..." << reset;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Ignore input
+        
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         needsClrScrn = true;  // Set flag for screen clearing
         return;
     }
