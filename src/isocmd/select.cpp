@@ -5,11 +5,22 @@
 #include "../filtering.h"
 #include "../themes.h"
 
-
-// ISO SELECTION
-
-
-// Function to process results from selectIsoFiles
+/**
+ * @brief Processes and displays the results of ISO file selection operations.
+ * * Handles error messaging, verbose output, and screen refresh logic after
+ * a mount, unmount, or file operation has been attempted.
+ * * @param uniqueErrorMessages Set of unique error strings collected during the operation.
+ * @param operationFiles Set of files successfully operated on.
+ * @param operationFails Set of files that failed the operation.
+ * @param skippedMessages Set of messages for files that were skipped.
+ * @param operation String representing the current operation (e.g., "mv", "rm").
+ * @param verbose Boolean flag for detailed output.
+ * @param isMount Boolean indicating if the operation was a mount.
+ * @param isFiltered Boolean indicating if a filter is currently active.
+ * @param umountMvRmBreak Flag to trigger screen break on destructive actions.
+ * @param isUnmount Boolean indicating if the operation was an unmount.
+ * @param needsClrScrn Output flag to signal if the screen should be cleared.
+ */
 void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMessages, 
                                  std::unordered_set<std::string>& operationFiles, 
                                  std::unordered_set<std::string>& operationFails, 
@@ -21,19 +32,16 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
     const ListTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
     
-    // Result handling and display
     if (!uniqueErrorMessages.empty() && operationFiles.empty() && 
          operationFails.empty() && skippedMessages.empty()) {
         
         clearScrollBuffer();
         needsClrScrn = true;
         
-        // Use theme->secondary for "No valid input" (error state)
         std::cout << "\n" << (isOrig ? originalColors::red : theme->secondary) 
                   << "No valid input provided." 
                   << originalColors::boldAlt << "\n\n";
 
-        // Use theme->muted for the pause prompt
         std::cout << color << "↵ to continue..." << reset; 
         
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -42,24 +50,19 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
         clearScrollBuffer();
         needsClrScrn = true;
         
-        // Only pass skippedMessages if we are in a Mount operation
         std::unordered_set<std::string> conditionalSet = isMount ? skippedMessages : std::unordered_set<std::string>{};
-        
         verbosePrint(operationFiles, operationFails, conditionalSet, uniqueErrorMessages, isMount ? 2 : 1);
     }
 
-    // Reset filter for certain operations
     if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {
         clear_history();
         needsClrScrn = true;
     }
 
-    // For non-umount operations, if there are no ISOs in the global list, inform the user.
     if (!isUnmount && globalIsoFileList.empty()) {
         clearScrollBuffer();
         needsClrScrn = true;
         
-        // Use theme->warning for "No ISO available"
         std::cout << "\n" << (isOrig ? originalColors::yellow : theme->warning) 
                   << "No ISO available for " << operation << "." 
                   << originalColors::reset << "\n\n";
@@ -71,38 +74,49 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
     }
 }
 
-
-// Function to process operations from selectIsoFiles
+/**
+ * @brief Routes the user input to the specific logic for mounting, writing, or file manipulation.
+ * * @param inputString Raw user input from readline.
+ * @param isMount Operation is a mount.
+ * @param isUnmount Operation is an unmount.
+ * @param write Operation is a USB write.
+ * @param isFiltered Current list state.
+ * @param filteredFiles Vector of currently filtered file paths.
+ * @param isoDirs Vector of mounted directories.
+ * @param operationFiles Set for tracking successful files.
+ * @param operationFails Set for tracking failed files.
+ * @param uniqueErrorMessages Set for tracking error strings.
+ * @param skippedMessages Set for tracking skipped files.
+ * @param needsClrScrn Boolean to control screen refreshing.
+ * @param operation The operation name string.
+ * @param isAtISOList Atomic flag indicating if the UI is at the ISO list.
+ * @param umountMvRmBreak Boolean to break list view on specific actions.
+ * @param filterHistory Flag for filtering history state.
+ * @param newISOFound Atomic flag for background refresh.
+ */
 void processOperationForSelectedIsoFiles(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered, const std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& skippedMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
     
     clearScrollBuffer();
-    // Default flags
     needsClrScrn = true;
     bool verbose = false;
     
     if (isMount || isUnmount) {
         isAtISOList.store(false);
-        
-        // Determine which list to use
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : 
                                                     (isUnmount ? isoDirs : globalIsoFileList);
         
-        // Set umountMvRmBreak for unmount operations
         if (isUnmount) {
             umountMvRmBreak = true;
         }
         
-        // Use the merged function for both mount and unmount
         processInputForMountOrUmount(inputString, activeList, operationFiles, skippedMessages, 
                             operationFails, uniqueErrorMessages, umountMvRmBreak, verbose, isUnmount);
     } else if (write) {
         isAtISOList.store(false);
-        // Use const reference instead of copying
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
         writeToUsb(inputString, activeList, uniqueErrorMessages);
     } else {
         isAtISOList.store(false);
-        // Use const reference instead of copying
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
         processInputForCpMvRm(inputString, activeList, operation, operationFiles, operationFails, 
                              uniqueErrorMessages, umountMvRmBreak, filterHistory, verbose, newISOFound);
@@ -112,47 +126,44 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
                                operation, verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn);
 }
 
-
-// Parse pending indices and remove duplicates
+/**
+ * @brief Parses input for semicolon-delimited indices to be processed later.
+ * * @param inputString Raw user input.
+ * @param pendingIndices Vector to store indices for delayed processing.
+ * @param hasPendingProcess Flag indicating if pending items exist.
+ * @param needsClrScrn Flag to control screen refreshing.
+ * @return true If indices were successfully added to the pending queue.
+ * @return false If the input format was invalid for induction.
+ */
 bool handlePendingInduction(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& needsClrScrn) {
-    // Check if the input contains a semicolon and does not contain a slash
     if (inputString.find(';') == std::string::npos || inputString.find('/') != std::string::npos) {
         return false;
     }
 
-    // Strip the semicolon from the input
     std::string indicesInput = inputString.substr(0, inputString.find(';'));
     
-    // Trim whitespace from the end
     while (!indicesInput.empty() && std::isspace(indicesInput.back())) {
         indicesInput.pop_back();
     }
     
     if (!indicesInput.empty()) {
-        // Parse and store the indices
         std::istringstream iss(indicesInput);
         std::string token;
-        
-        // Use a set to track duplicates
         std::unordered_set<std::string> uniqueTokens;
         
-        // Add existing pending indices to the set to ensure no duplicates
         for (const auto& index : pendingIndices) {
             uniqueTokens.insert(index);
         }
         
-        // Temporarily store new indices to preserve order
         std::vector<std::string> newIndices;
         
-        // Parse new indices and add them to the vector if they are not duplicates
         while (iss >> token) {
-            if (uniqueTokens.find(token) == uniqueTokens.end()) { // Check if the token is not already in the set
-                newIndices.push_back(token); // Add to the newIndices vector
-                uniqueTokens.insert(token); // Add to the set to track duplicates
+            if (uniqueTokens.find(token) == uniqueTokens.end()) {
+                newIndices.push_back(token);
+                uniqueTokens.insert(token);
             }
         }
         
-        // Append new indices to pendingIndices
         pendingIndices.insert(pendingIndices.end(), newIndices.begin(), newIndices.end());
         
         if (!pendingIndices.empty()) {
@@ -164,12 +175,17 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
     return false;
 }
 
-
-// Function to handle Pending Execution
+/**
+ * @brief Triggers the batch processing of indices stored in the pending queue.
+ * * @param inputString The command string (expects "proc").
+ * @param pendingIndices The queue of file indices.
+ * @param hasPendingProcess State flag for pending operations.
+ * @return true If the "proc" command was executed.
+ * @return false Otherwise.
+ */
 bool handlePendingProcess(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingProcess,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
     
     if (hasPendingProcess && !pendingIndices.empty() && inputString == "proc") {
-        // Combine all pending indices into a single string as if they were entered normally
         std::string combinedIndices = "";
         for (size_t i = 0; i < pendingIndices.size(); ++i) {
             combinedIndices += pendingIndices[i];
@@ -178,12 +194,11 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
             }
         }
         
-        // Process the pending operations
         processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered, 
-                 filteredFiles, isoDirs, operationFiles, 
-                 operationFails, uniqueErrorMessages, skippedMessages,
-                 needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-                 filterHistory, newISOFound);
+                     filteredFiles, isoDirs, operationFiles, 
+                     operationFails, uniqueErrorMessages, skippedMessages,
+                     needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
+                     filterHistory, newISOFound);
 
         return true;
     }
@@ -191,51 +206,49 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
     return false;
 }
 
-
-// Function to automatically update ISO list if auto-update is on
+/**
+ * @brief Background thread function to refresh the ISO list when data changes.
+ * * @param timeoutMs Polling interval in milliseconds.
+ * @param isAtISOList Flag indicating if list view is active.
+ * @param isImportRunning Flag preventing refresh during active imports.
+ * @param updateHasRun Atomic trigger for a refresh.
+ */
 void refreshListAfterAutoUpdate(int timeoutMs, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::atomic<bool>& newISOFound) {
-    // Continuously checks for conditions at intervals specified by timeoutSeconds
     
     while (true) {
-        // Sleep for the given timeout (0.5s) before checking the conditions
         std::this_thread::sleep_for(std::chrono::milliseconds(timeoutMs));
 
-        // Only proceed if the import process is not running
         if (!isImportRunning.load()) {
 
-            // Check if the list is a non-filtered ISO list
             if (isAtISOList.load() && !isFiltered) {
-                // If conditions are met, clear and reload the ISO list with the updated data
                 loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning);
                 std::cout << "\n";
                 
-                rl_on_new_line(); // necessary to avoid the graphical glitch when transitioning from filtered -> non-filtered list
-                rl_redisplay();    // Refresh the readline interface to display updated content
+                rl_on_new_line();
+                rl_redisplay();
             }
 
-            // Reset flags indicating update status and new ISO discovery
-            updateHasRun.store(false);  // Reset update status flag
-            newISOFound.store(false);   // Reset the flag for newly found ISO
+            updateHasRun.store(false);
+            newISOFound.store(false);
             
             break;
         }
     }
 }
 
-
-// Main function to select and operate on ISOs by number for umount mount cp mv and rm
+/**
+ * @brief The main menu loop for ISO operations (mount, umount, cp, mv, rm, write).
+ * * Provides a paginated, filterable interface for selecting ISO files and executing 
+ * system operations.
+ */
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
-    // Bind readline keys
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
     
     std::unordered_set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
     std::vector<std::string> filteredFiles;
-    
-    // Static vector renamed to isoDirs: used exclusively for umount
     static std::vector<std::string> isoDirs; 
     
-    // Vector to store delayed execution indices
     std::vector<std::string> pendingIndices;
     bool hasPendingProcess = false;
     
@@ -247,13 +260,9 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     bool needsClrScrn = true;
     bool umountMvRmBreak = false;
     bool filterHistory = false;
-
-    // Reset page when entering this menu
     size_t currentPage = 0;
-    // Variable to store current page
     size_t originalPage = currentPage;
 
-    // Determine operation color and specific flags
     std::string operationColor = operation == "rm" ? "\033[1;91m" :
                                  operation == "cp" ? "\033[1;92m" : 
                                  operation == "mv" ? "\033[1;93m" :
@@ -276,16 +285,13 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         filterHistory = false;
         clear_history();
         
-        // Store currentPage for unfiltered list on cp execution
         if (!isFiltered) originalPage = currentPage;
         
-        // Initiates cleanup sequence for non-existent ISO
         if (!isUnmount) {
-			removeNonExistentPathsFromDatabase(globalIsoFileList);
+            removeNonExistentPathsFromDatabase(globalIsoFileList);
             isAtISOList.store(true);
         }
         
-        // Load files based on operation type
         if (needsClrScrn) {
             if (!isUnmount) {
                 if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning))
@@ -294,9 +300,8 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning))
                     break;
             }
-			
+            
             std::cout << "\n\n";
-            // Flag for initiating screen clearing on destructive list actions e.g. Umount/Mv/Rm
             umountMvRmBreak = false;
         }
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
@@ -306,25 +311,23 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                         std::ref(hasPendingProcess), std::ref(currentPage), std::ref(originalPage), std::ref(newISOFound)).detach();
         }
         
-        
         std::cout << "\033[1A\033[K";
 
         const ListTheme* theme = getActiveTheme();
-		const bool isOriginal = (globalTheme == "original");
+        const bool isOriginal = (globalTheme == "original");
         
         std::string colorIso    = isOriginal ? "\033[1;92m" : std::string(theme->accent);
-		std::string colorMuted  = isOriginal ? "\033[1;94m" : std::string(theme->muted);
-		std::string colorFilter = isOriginal ? "\033[1;96m" : std::string(theme->accent);
-		std::string colorReset  = "\033[0;1m";
+        std::string colorMuted  = isOriginal ? "\033[1;94m" : std::string(theme->muted);
+        std::string colorFilter = isOriginal ? "\033[1;96m" : std::string(theme->accent);
+        std::string colorReset  = "\033[0;1m";
 
-		// The prompt construction remains the same
-		std::string prompt = 
-			(isFiltered ? ("\001" + colorFilter + "\002F⊳ \001") : "\001")
-			+ colorIso    + "\002ISO\001"
-			+ colorMuted  + "\002 ↵ for \001"
-			+ operationColor + "\002" + operation + "\001" 
-			+ colorMuted  + "\002, ? ↵ for help, < ↵ to return:\001" 
-			+ colorReset  + "\002 ";
+        std::string prompt = 
+            (isFiltered ? ("\001" + colorFilter + "\002F⊳ \001") : "\001")
+            + colorIso    + "\002ISO\001"
+            + colorMuted  + "\002 ↵ for \001"
+            + operationColor + "\002" + operation + "\001" 
+            + colorMuted  + "\002, ? ↵ for help, < ↵ to return:\001" 
+            + colorReset  + "\002 ";
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         
@@ -332,25 +335,23 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             
         std::string inputString(input.get());
         
-        // Check specifically for "<" to return/exit
         if (inputString == "<") {
             if (isFiltered) {
                 isFiltered = false;
-                // Clear the filtering stack when returning to unfiltered mode
                 filteringStack.clear();
                 currentPage = originalPage;
                 needsClrScrn = true;
                 continue;
             } else {
-				currentPage = 0;
-                return; // Exit the function
+                currentPage = 0;
+                return;
             }
         }
         
         if (inputString == "proc" && pendingIndices.empty()) {
-			hasPendingProcess = false;
-			continue;
-		}
+            hasPendingProcess = false;
+            continue;
+        }
             
         if (inputString == "clr") {
             pendingIndices.clear();
@@ -359,30 +360,24 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             continue;
         }
         
-        // check if first char is ; and skip
         if (input && input[0] == ';') {
-			needsClrScrn = false;
+            needsClrScrn = false;
             continue;
         }
 
         const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-        
         size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
-		
-		// Dummy variable never used from here
-		bool need2Sort = false;
+        bool need2Sort = false;
         
         bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, isMount, isUnmount, write, isConversion, need2Sort, isAtISOList);
 
         if (validCommand) continue;
         
-        // Handle empty input - just continue the loop
         if (inputString.empty()) {
-            needsClrScrn = false; // Optionally keep the current screen
-            continue; // Just continue the loop
+            needsClrScrn = false; 
+            continue; 
         }
 
-        // Handle pending execution
         bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isMount, isUnmount, write, isFiltered, 
                                                     filteredFiles, isoDirs, operationFiles, skippedMessages, operationFails, uniqueErrorMessages,
                                                     needsClrScrn, operation, isAtISOList, umountMvRmBreak, filterHistory, newISOFound);
@@ -390,19 +385,16 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             continue;
         }
 
-        // Handle filtering operations
         if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn, 
                                     filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage)) {
                 continue;
         }
 
-        // Handle pending induction (delayed execution with ;)
         bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn);
         if (pendingHandled) {
             continue;
         }
 
-        // Process operation for selected ISO files if no special handling needed
         processOperationForSelectedIsoFiles(inputString, isMount, isUnmount, write, isFiltered, 
                                            filteredFiles, isoDirs, operationFiles, 
                                            operationFails, uniqueErrorMessages, skippedMessages,
@@ -411,53 +403,45 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     }
 }
 
-
-// IMAGE SELECTION
-
-
-// Main function to select and convert image files based on type to ISO
+/**
+ * @brief The main menu loop for converting various disk image formats (BIN, MDF, NRG) to ISO.
+ * * Provides a specialized interface for selecting raw image files and passing them
+ * to conversion utilities.
+ */
 void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {
 
-    // Bind keys for preventing clear screen and enabling tab completion
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
     
-    // Containers to track file processing results
     std::unordered_set<std::string> processedErrors, successOuts, skippedOuts, failedOuts;
-    
-    // New vector to store delayed execution indices
     std::vector<std::string> pendingIndices;
     bool hasPendingProcess = false;
     
-    // Reset page when entering this menu
     size_t currentPage = 0;
-    // Variable to store current page
     size_t originalPage = currentPage;
     
-    bool isFiltered = false; // Indicates if the file list is currently filtered
+    bool isFiltered = false; 
     bool needsClrScrn = true;
     bool filterHistory = false;
     bool need2Sort = true;
 
     std::string fileExtension = (fileType == "bin" || fileType == "img") ? ".bin/.img" 
-                               : (fileType == "mdf") ? ".mdf" : ".nrg"; // Determine file extension based on type
+                               : (fileType == "mdf") ? ".mdf" : ".nrg"; 
     
     std::string fileExtensionWithOutDots;
     for (char c : fileExtension) {
         if (c != '.') {
-            fileExtensionWithOutDots += toupper(c);  // Capitalize the character and add it to the result
+            fileExtensionWithOutDots += toupper(c);
         }
     }
     
-    // Main processing loop
     while (true) {
         enable_ctrl_d();
         setupSignalHandlerCancellations();
         g_operationCancelled.store(false);
-        bool verbose = false; // Reset verbose mode
+        bool verbose = false; 
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         
-        // Store currentPage for unfiltered list
         if (!isFiltered) originalPage = currentPage;
         
         clear_history();
@@ -466,61 +450,53 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         std::cout << "\n\n";
         std::cout << "\033[1A\033[K";
         
-        // Build the user prompt string dynamically
-		const ListTheme* theme = getActiveTheme();
-		const bool isOriginal = (globalTheme == "original");
+        const ListTheme* theme = getActiveTheme();
+        const bool isOriginal = (globalTheme == "original");
 
-		// Define theme-aware color strings
-		std::string colorIso       = isOriginal ? "\033[1;92m" : std::string(theme->accent);
-		std::string colorMuted     = isOriginal ? "\033[1;94m" : std::string(theme->muted);
-		std::string colorFilter    = isOriginal ? "\033[1;96m" : std::string(theme->accent);
-		std::string colorHighlight = isOriginal ? "\033[1;38;5;208m" : std::string(theme->highlight);
-		std::string colorReset     = "\033[0;1m";
+        std::string colorIso        = isOriginal ? "\033[1;92m" : std::string(theme->accent);
+        std::string colorMuted      = isOriginal ? "\033[1;94m" : std::string(theme->muted);
+        std::string colorFilter     = isOriginal ? "\033[1;96m" : std::string(theme->accent);
+        std::string colorHighlight = isOriginal ? "\033[1;38;5;208m" : std::string(theme->highlight);
+        std::string colorReset      = "\033[0;1m";
 
-		// Build the prompt using the mapped colors
-		std::string prompt = 
-			(isFiltered ? ("\001" + colorFilter + "\002F⊳ \001") : "\001")
-			+ colorHighlight + "\002" + fileExtensionWithOutDots + "\001"
-			+ colorMuted     + "\002 ↵ for \001"
-			+ colorIso       + "\002ISO\001"
-			+ colorHighlight + "\002 conversion \001" 
-			+ colorMuted     + "\002, ? ↵ for help, < ↵ to return:\001" 
-			+ colorReset     + "\002 ";
+        std::string prompt = 
+            (isFiltered ? ("\001" + colorFilter + "\002F⊳ \001") : "\001")
+            + colorHighlight + "\002" + fileExtensionWithOutDots + "\001"
+            + colorMuted     + "\002 ↵ for \001"
+            + colorIso       + "\002ISO\001"
+            + colorHighlight + "\002 conversion \001" 
+            + colorMuted     + "\002, ? ↵ for help, < ↵ to return:\001" 
+            + colorReset     + "\002 ";
         
-        // Get user input
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
         
         if (!rawInput) break;
         
         std::string inputString(rawInput.get());
         
-        // Check specifically for "<" to return/exit
         if (inputString == "<") {
             clearScrollBuffer();
             if (isFiltered) {
-                // Restore the original file list
                 files = (fileType == "bin" || fileType == "img") ? binImgFilesCache :
                         (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
                 needsClrScrn = true;
-                isFiltered = false; // Reset filter status
-                // Clear the filtering stack when returning to unfiltered mode
+                isFiltered = false; 
                 filteringStack.clear();
                 currentPage = originalPage;
                 need2Sort = false;
                 continue;
             } else {
-				currentPage = 0;
+                currentPage = 0;
                 need2Sort = false;
-                break; // Exit the loop
+                break; 
             }
         }
         
         if (inputString == "proc" && pendingIndices.empty()) {
-			hasPendingProcess = false;
-			continue;
-		}
+            hasPendingProcess = false;
+            continue;
+        }
         
-        // Check for clear pending command
         if (inputString == "clr") {
             pendingIndices.clear();
             hasPendingProcess = false;
@@ -528,11 +504,10 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             continue;
         }
         
-        // check if first char is ; and skip
         if (rawInput && rawInput.get()[0] == ';') {
-             std::cout << "\033[2A\033[K"; // Clear the line when entering ;
+             std::cout << "\033[2A\033[K"; 
              needsClrScrn = false;
-			 continue;
+             continue;
         }
         
         std::atomic<bool> isAtISOList{false};
@@ -542,16 +517,13 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         
         if (validCommand) continue;
                 
-        // Handle input for blank Enter - just continue the loop
         if (rawInput.get()[0] == '\0') {
-            std::cout << "\033[2A\033[K"; // Clear the line when entering blank enter
+            std::cout << "\033[2A\033[K";
             needsClrScrn = false;
-            continue; // Just continue the loop
+            continue; 
         }
         
-        // Check for "proc" command to execute pending operations
         if (inputString == "proc" && hasPendingProcess && !pendingIndices.empty()) {
-            // Combine all pending indices into a single string as if they were entered normally
             std::string combinedIndices = "";
             for (size_t i = 0; i < pendingIndices.size(); ++i) {
                 combinedIndices += pendingIndices[i];
@@ -560,7 +532,6 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                 }
             }
             
-            // Process the pending operations
             processInputForConversions(combinedIndices, files, (fileType == "mdf"), (fileType == "nrg"), 
                         processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsClrScrn, newISOFound);
             
@@ -571,23 +542,21 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             continue;
         }       
 
-        // Handle filter commands
         if (inputString == "/" || (!inputString.empty() && inputString[0] == '/')) {
             handleFilteringConvert2ISO(inputString, files, fileExtensionWithOutDots, isFiltered, needsClrScrn, filterHistory, need2Sort, currentPage);
             continue;
-        }// Check if input contains a semicolon for delayed execution
+        }
         else if (inputString.find(';') != std::string::npos) {
             if (handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn)) {
-                continue; // Continue the loop if new indices were processed
+                continue; 
             }
         }
-        // Process other input commands for file processing
         else {
             processInputForConversions(inputString, files, (fileType == "mdf"), (fileType == "nrg"), 
                          processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsClrScrn, newISOFound);
             needsClrScrn = true;
             if (verbose) {
-                verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3); // Print detailed logs if verbose mode is enabled
+                verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3);
                 needsClrScrn = true;
             }
         }

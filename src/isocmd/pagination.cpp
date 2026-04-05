@@ -4,22 +4,28 @@
 #include "../display.h"
 #include "../themes.h"
 
+/**
+ * @file pagination.cpp
+ * @brief Logic for terminal pagination, navigation commands, and display toggles.
+ */
 
-// Main pagination function
+/**
+ * @brief Processes standard navigation and help commands for the main application loop.
+ * * Handles 'n' (next), 'p' (prev), 'g<num>' (go to), and special toggles like '*' 
+ * (filename-only mode) and '~' (full path toggle).
+ * * @return true if a pagination/help command was handled (caller should usually continue the loop).
+ * @return false if the command was not recognized as a pagination/help command.
+ */
 bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& isFiltered, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, bool& need2Sort, std::atomic<bool>& isAtISOList) {
-	
-	// To fix a hang
-	if (command.find("//") != std::string::npos) {
-		// true to continue loop in main
-		return true;
-	}
-	
-	// Added proper page validation
-	if (totalPages > 0 && currentPage >= totalPages) {
-		currentPage = totalPages - 1;
-	}
-	
-    // Handle "next" command
+    
+    if (command.find("//") != std::string::npos) {
+        return true;
+    }
+    
+    if (totalPages > 0 && currentPage >= totalPages) {
+        currentPage = totalPages - 1;
+    }
+    
     if (command == "n") {
         if (totalPages > 0 && currentPage < totalPages - 1) {
             currentPage++;
@@ -27,7 +33,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
         }
         return true;
     }
-    // Handle "prev" command
+
     if (command == "p") {
         if (currentPage > 0) {
             currentPage--;
@@ -35,75 +41,67 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
         }
         return true;
     }
-    // Handle go-to specific page command (e.g., "g3" goes to page 3)
+
     if (command.size() >= 2 && command[0] == 'g' && std::isdigit(command[1])) {
         try {
-            int pageNum = std::stoi(command.substr(1)) - 1; // convert to 0-based index
+            int pageNum = std::stoi(command.substr(1)) - 1; 
             if (totalPages > 0 && pageNum >= 0 && pageNum < static_cast<int>(totalPages)) {
                 currentPage = pageNum;
                 needsClrScrn = true;
             }
-        } catch (...) {
-            // Ignore invalid page numbers
-        }
+        } catch (...) { /* Ignore invalid formats */ }
         return true;
     }
     
-     // Handle special commands
-	if (command == "?") {
-		isAtISOList.store(false);
-		helpSelections();
-		needsClrScrn = true;
-		return true;
-	}
-	
-	if (command == "*" && !isFiltered) {
-		// Async sorting when enabling filename-only mode
-		if (!isUnmount) {
-			displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
-			std::thread([] {
-				std::lock_guard<std::mutex> lock(updateListMutex);
-				sortFilesCaseInsensitive(globalIsoFileList);
-			}).detach(); // Launch in background and detach
-			std::thread([] {
-				std::lock_guard<std::mutex> lock(binImgCacheMutex);
-				sortFilesCaseInsensitive(binImgFilesCache);
-			}).detach();
-			std::thread([] {
-				std::lock_guard<std::mutex> lock(mdfMdsCacheMutex);
-				sortFilesCaseInsensitive(mdfMdsFilesCache);
-			}).detach();
-			std::thread([] {
-				std::lock_guard<std::mutex> lock(nrgCacheMutex);
-				sortFilesCaseInsensitive(nrgFilesCache);
-			}).detach();
-		}
-		
-		// Flag to initialize list sorting immediately for convert2ISO only
-		if (isConversion) need2Sort = true;
+    if (command == "?") {
+        isAtISOList.store(false);
+        helpSelections();
+        needsClrScrn = true;
+        return true;
+    }
+    
+    if (command == "*" && !isFiltered) {
+        if (!isUnmount) {
+            displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
+            
+            auto sortJob = [](std::vector<std::string>& list, std::mutex& mtx) {
+                std::lock_guard<std::mutex> lock(mtx);
+                sortFilesCaseInsensitive(list);
+            };
 
-		needsClrScrn = true;
-		return true;
-	} // Do not change to filename-only mode when list is already filtered to maintain index^ validity 
-	else if (command == "*" && isFiltered ) return true;
+            std::thread(sortJob, std::ref(globalIsoFileList), std::ref(updateListMutex)).detach();
+            std::thread(sortJob, std::ref(binImgFilesCache), std::ref(binImgCacheMutex)).detach();
+            std::thread(sortJob, std::ref(mdfMdsFilesCache), std::ref(mdfMdsCacheMutex)).detach();
+            std::thread(sortJob, std::ref(nrgFilesCache), std::ref(nrgCacheMutex)).detach();
+        }
         
-	if (command == "~") {
-		// Toggle full list display based on operation type
-		if (isMount && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListMount = !displayConfig::toggleFullListMount;
-		else if (isUnmount) displayConfig::toggleFullListUmount = !displayConfig::toggleFullListUmount;
-		else if (isWrite && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListWrite = !displayConfig::toggleFullListWrite;
-		else if (isConversion && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListConversions = !displayConfig::toggleFullListConversions;
-		else if (!displayConfig::toggleNamesOnly) displayConfig::toggleFullListCpMvRm = !displayConfig::toggleFullListCpMvRm;
-		
-		needsClrScrn = true;
-		return true;
-	}
-    // If no valid command was found
+        if (isConversion) need2Sort = true;
+        needsClrScrn = true;
+        return true;
+    } 
+    else if (command == "*" && isFiltered) return true;
+        
+    if (command == "~") {
+        if (isMount && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListMount = !displayConfig::toggleFullListMount;
+        else if (isUnmount) displayConfig::toggleFullListUmount = !displayConfig::toggleFullListUmount;
+        else if (isWrite && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListWrite = !displayConfig::toggleFullListWrite;
+        else if (isConversion && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListConversions = !displayConfig::toggleFullListConversions;
+        else if (!displayConfig::toggleNamesOnly) displayConfig::toggleFullListCpMvRm = !displayConfig::toggleFullListCpMvRm;
+        
+        needsClrScrn = true;
+        return true;
+    }
+
     return false;
 }
 
-
-// Function that handles all pagination logic for selected entries in Cp/Mv
+/**
+ * @brief A self-contained loop for displaying and navigating paginated entries during 
+ * secondary prompts (like confirming files for Copy/Move).
+ * * @param entries The pre-formatted strings to display.
+ * @param setupEnvironmentFn Callback to refresh environment (e.g., re-printing static headers).
+ * @return The user's non-navigation input string, or "EOF_SIGNAL" on Ctrl+D.
+ */
 std::string handlePaginatedDisplay(const std::vector<std::string>& entries, 
                                   std::unordered_set<std::string>& uniqueErrorMessages, 
                                   const std::string& promptPrefix, 
@@ -111,12 +109,9 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                                   const std::function<void()>& setupEnvironmentFn, 
                                   bool& isPageTurn) {
 
-    // 1. Theme Selection
     const bool isOriginal = (globalTheme == "original");
     const ListTheme* theme = getActiveTheme();
 
-    // Semantic color mapping
-    // Brown/Muted for labels, Accent for numbers/values
     std::string_view labelCol = isOriginal ? "\033[1;38;5;94m" : theme->muted;
     std::string_view valueCol = isOriginal ? "\033[38;5;37;1m" : theme->accent;
     std::string_view totalCol = isOriginal ? "\033[1;93m"      : theme->accent;
@@ -138,7 +133,6 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
 
         std::ostringstream pageContent;
 
-        // 2. Themed Header Construction
         if (!disablePagination) {
             pageContent
                 << labelCol << "Page "
@@ -155,17 +149,14 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
             pageContent << entries[i];
         }
 
-        // 3. Themed Navigation Footer
         if (!disablePagination && totalPages > 1) {
             pageContent << "\n" << labelCol << "Pagination: ";
-            if (currentPage > 0)               pageContent << "[p] ↵ Previous | ";
+            if (currentPage > 0)                pageContent << "[p] ↵ Previous | ";
             if (currentPage < totalPages - 1)  pageContent << "[n] ↵ Next | ";
             pageContent << "[g<num>] ↵ Go to | " << resetCol << "\n";
         }
 
-        // 4. Prompt Construction
         std::string prompt = promptPrefix + pageContent.str() + promptSuffix;
-
         std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
 
         if (!input.get()) return "EOF_SIGNAL";
@@ -183,10 +174,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                     if (requestedPage >= 1 && requestedPage <= totalPages) {
                         currentPage = requestedPage - 1;
                     }
-                } catch (...) {
-                    isPageTurn = true;
-                    isNavigation = true;
-                }
+                } catch (...) { isNavigation = true; }
             }
             else if (userInput == "n") {
                 isPageTurn = true;

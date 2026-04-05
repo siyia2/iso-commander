@@ -4,8 +4,12 @@
 #include "../threadpool.h"
 #include "../mount.h"
 
-
-// Function to build a cache of currently mounted points
+/**
+ * @brief Scans /proc/mounts to identify currently active mount points.
+ * * This helper uses libmount to read the kernel's mount table and provides
+ * a quick lookup set to avoid redundant mount attempts.
+ * * @return std::unordered_set<std::string> A set containing the target paths of all current mounts.
+ */
 static std::unordered_set<std::string> buildMountPointCache() {
     std::unordered_set<std::string> mounted;
     struct libmnt_table* tb = mnt_new_table_from_file("/proc/mounts");
@@ -24,14 +28,25 @@ static std::unordered_set<std::string> buildMountPointCache() {
     return mounted;
 }
 
-
-// Function to mount selected ISO files called from processAndMountIsoFiles
-void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedFiles, std::unordered_set<std::string>& skippedMessages, 
-std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool silentMode) {
-    // Check root once
+/**
+ * @brief Mounts a list of ISO files to unique directories under /mnt.
+ * * This function handles the logic for mounting ISO images using loop devices.
+ * It includes checks for root privileges, existence of files, and handles 
+ * cancellation signals. Thread-safe buffering is used for status messages.
+ * * @param isoFiles Vector of absolute paths to ISO files to be mounted.
+ * @param mountedFiles Output set for successful mount messages.
+ * @param skippedMessages Output set for files already mounted.
+ * @param mountedFails Output set for error messages.
+ * @param completedTasks Atomic counter for successful/skipped operations.
+ * @param failedTasks Atomic counter for failed operations.
+ * @param silentMode If true, suppresses message generation and global set updates.
+ */
+void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedFiles, 
+                   std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& mountedFails, 
+                   std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool silentMode) {
+    
     const bool hasRoot = (geteuid() == 0);
 
-    // Create mount context
     struct libmnt_context* ctx = mnt_new_context();
     if (!ctx) {
         if (!silentMode) {
@@ -41,13 +56,11 @@ std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTas
         return;
     }
 
-    // RAII guard ensures context is freed
     struct CtxGuard {
         libmnt_context* c;
         ~CtxGuard() { mnt_free_context(c); }
     } ctxGuard{ctx};
 
-    // Cache already-mounted points
     const std::unordered_set<std::string> mountPointCache = buildMountPointCache();
 
     std::vector<std::string> tempMountedFiles;
@@ -73,7 +86,6 @@ std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTas
         tempMountedFails.clear();
     };
 
-    // Early exit if no root — mark all as failed
     if (!hasRoot) {
         for (const auto& isoFile : isoFiles) {
             if (!silentMode) {
@@ -90,7 +102,6 @@ std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTas
         fs::path isoPath(isoFile);
         auto [isoDirectory, isoFilename] = extractDirectoryAndFilename(isoFile, "mount");
 
-        // Hash-based unique mount point
         std::hash<std::string> hasher;
         size_t hashValue = hasher(isoFile);
         constexpr std::string_view base36 = "0123456789abcdefghijklmnopqrstuvwxyz";
@@ -104,7 +115,6 @@ std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTas
         const std::string mountPoint = "/mnt/iso_" + uniqueId;
         auto [mountisoDirectory, mountisoFilename] = extractDirectoryAndFilename(mountPoint, "mount");
 
-        // Check if already mounted
         if (mountPointCache.count(mountPoint)) {
             if (!silentMode)
                 tempSkippedMessages.push_back(formatter.formatSkipped(
@@ -114,7 +124,6 @@ std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTas
             continue;
         }
 
-        // Cancellation check **after already-mounted** — preserves successes
         if (g_operationCancelled.load()) {
             if (!silentMode)
                 tempMountedFails.push_back(formatter.formatError(isoDirectory, isoFilename, "cxl"));
@@ -122,7 +131,6 @@ std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTas
             continue;
         }
 
-        // Check ISO exists
         if (!fs::exists(isoPath)) {
             if (!silentMode)
                 tempMountedFails.push_back(formatter.formatError(isoDirectory, isoFilename, "missingISO"));
@@ -130,7 +138,6 @@ std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTas
             continue;
         }
 
-        // Create mount directory
         std::error_code ec;
         fs::create_directory(mountPoint, ec);
         if (ec && ec != std::errc::file_exists) {
@@ -141,7 +148,6 @@ std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTas
             continue;
         }
 
-        // Configure and mount
         mnt_reset_context(ctx);
         mnt_context_set_source(ctx, isoFile.c_str());
         mnt_context_set_target(ctx, mountPoint.c_str());
@@ -164,10 +170,9 @@ std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTas
             if (!silentMode)
                 tempMountedFails.push_back(formatter.formatError(isoDirectory, isoFilename, "badFS"));
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
-            fs::remove(mountPoint, ec); // ignore errors
+            fs::remove(mountPoint, ec); 
         }
 
-        // Flush batches if needed
         if (!silentMode &&
             (tempMountedFiles.size() >= 50 ||
              tempSkippedMessages.size() >= 50 ||
@@ -176,6 +181,5 @@ std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTas
         }
     }
 
-    // Final flush
     flushBuffers();
 }

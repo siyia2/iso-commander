@@ -4,48 +4,43 @@
 #include "../display.h"
 #include "../themes.h"
 
-
-// Main verbose print function for results
+/**
+ * @brief Performs a high-visibility print of operation results categorized by sets.
+ * @details Handles signal management, terminal cleanup, and sorted output of 
+ * success, warning, and error strings based on a specific operation context.
+ * * @param primarySet Main data set (usually processed items).
+ * @param secondarySet Supporting data set (usually successes).
+ * @param tertiarySet Additional context (usually skipped items).
+ * @param errorSet Set of error strings.
+ * @param printType UI mode: 0 (Unmounted), 1 (Ops), 2 (Mounted), 3 (Conversion).
+ */
 void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet, std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& errorSet, int printType) {
-    // Ignore SIGINT (Ctrl+C) to prevent interruptions
     signal(SIGINT, SIG_IGN);
-    
-    // Disable Ctrl+D to avoid accidental termination (assuming this function is defined elsewhere)
     disable_ctrl_d();
-
-    // Clear terminal scroll buffer to ensure clean output display
     clearScrollBuffer(); 
 
-	// Lambda function to move elements from an unordered_set to a sorted vector and print them
-	auto printSortedSet = [](std::unordered_set<std::string>& set, bool isError = false) {
-		if (!set.empty()) {
-			// Move elements from the set into a vector
-			std::vector<std::string> vec(
-				std::make_move_iterator(set.begin()), 
-				std::make_move_iterator(set.end())
-			);
-			
-			// Sort vector contents in a case-insensitive manner
-			sortFilesCaseInsensitive(vec);
-        
-			std::cout << "\n";
-			
-			// Print elements to either stdout or stderr based on isError flag
-			for (const auto& item : vec) {
-				if (isError) {
-					// Print errors in bold red
-					std::cerr << "\033[1;91m" << item << "\033[0m\033[1m\n";
-				} else {
-					// Print regular entries normally
-					std::cout << item << "\n";
-				}
-			}
-		}
-	};
+    auto printSortedSet = [](std::unordered_set<std::string>& set, bool isError = false) {
+        if (!set.empty()) {
+            std::vector<std::string> vec(
+                std::make_move_iterator(set.begin()), 
+                std::make_move_iterator(set.end())
+            );
+            
+            sortFilesCaseInsensitive(vec);
+            std::cout << "\n";
+            
+            for (const auto& item : vec) {
+                if (isError) {
+                    std::cerr << "\033[1;91m" << item << "\033[0m\033[1m\n";
+                } else {
+                    std::cout << item << "\n";
+                }
+            }
+        }
+    };
 
-    // Select the printing behavior based on printType
     switch (printType) {
-        case 0: // Unmounted state: Print primary and secondary normally, errors in red
+        case 0:
         {
             printSortedSet(primarySet, false);
             printSortedSet(secondarySet, false);
@@ -53,7 +48,7 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
             std::cout << "\n";
             break;
         }
-        case 1: // Operation state: Print everything normally
+        case 1:
         {
             printSortedSet(primarySet, false);
             printSortedSet(secondarySet, false);
@@ -61,7 +56,7 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
             std::cout << "\n";
             break;
         }
-        case 2: // Mounted state: Print primary normally, all others (tertiary, secondary, errors) in red
+        case 2:
         {
             printSortedSet(primarySet, false);
             printSortedSet(tertiarySet, true);
@@ -70,12 +65,12 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
             std::cout << "\n";
             break;
         }
-        case 3: // Conversion state: Print in a specific order
+        case 3:
         {
-            printSortedSet(secondarySet, false);   // Success outputs
-            printSortedSet(tertiarySet, false);    // Skipped outputs
-            printSortedSet(errorSet, false);       // Failed outputs
-            printSortedSet(primarySet, false);     // Processed errors
+            printSortedSet(secondarySet, false);
+            printSortedSet(tertiarySet, false);
+            printSortedSet(errorSet, false);
+            printSortedSet(primarySet, false);
             std::cout << "\n";
             break;
         }
@@ -85,23 +80,20 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
-
-
-// Function to clear and de-allocate verbose sets
-void resetVerboseSets(std::unordered_set<std::string>& processedErrors,std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts) {
-    // Clear the verbose sets
-	processedErrors.clear();
-	successOuts.clear();
-	skippedOuts.clear();
-	failedOuts.clear();
-
+/**
+ * @brief Clears and deallocates memory for all verbose reporting sets.
+ */
+void resetVerboseSets(std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts) {
+    processedErrors.clear();
+    successOuts.clear();
+    skippedOuts.clear();
+    failedOuts.clear();
 }
 
-
-
-//Function to disblay errors from tokenization
+/**
+ * @brief Displays a collection of unique error messages generated during tokenization.
+ */
 void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages) {
-    // Display user input errors at the top
     if (!uniqueErrorMessages.empty()) {
         std::cout << "\n";
         for (const auto& err : uniqueErrorMessages) {
@@ -111,10 +103,11 @@ void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages) {
     }
 }
 
-
-// CP/MV/RM
-
-// Function to handle error reporting for Cp/Mv/Rm
+/**
+ * @brief Generates and logs color-coded error messages for file operations (CP, MV, RM).
+ * @details Utilizes the current theme to construct a human-readable error string 
+ * and updates atomic operation counters.
+ */
 void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, const std::string& srcFile, 
                        const std::string& destDir, const std::string& errorDetail, const std::string& operation, 
                        std::vector<std::string>& verboseErrors, std::atomic<size_t>* failedTasks, 
@@ -123,17 +116,15 @@ void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, 
     const ListTheme* theme = getActiveTheme();
     const bool isOriginal  = (globalTheme == "original");
 
-    // Simplify color selection using your new struct
-    std::string_view errLabel     = isOriginal ? originalColors::red     : theme->secondary;
-    std::string_view errPath      = isOriginal ? originalColors::yellow  : theme->warning;
-    std::string_view missingLabel = isOriginal ? originalColors::purple  : theme->secondary;
+    std::string_view errLabel     = isOriginal ? originalColors::red      : theme->secondary;
+    std::string_view errPath      = isOriginal ? originalColors::yellow   : theme->warning;
+    std::string_view missingLabel = isOriginal ? originalColors::purple   : theme->secondary;
     
     const std::string displaySrc  = (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile;
 
     std::string errorMsg;
-    errorMsg.reserve(256); // Increased slightly to prevent reallocs with long paths
+    errorMsg.reserve(256);
 
-    // Logic Mapping
     if (errorType == "same_file") {
         errorMsg.append(errLabel).append("Cannot ").append(operation).append(" file to itself: ")
                 .append(errPath).append("'").append(srcDir).append("/").append(srcFile).append("'")
@@ -183,24 +174,22 @@ void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, 
                 .append(originalColors::reset).append(originalColors::boldAlt);
     }
 
-    // State Updates
     verboseErrors.push_back(std::move(errorMsg));
     failedTasks->fetch_add(1, std::memory_order_acq_rel);
     operationSuccessful.store(false, std::memory_order_release);
     batchInsertFunc();
 }
 
-
-// ISO DATABASE
-
-// Function to count differences between new and old ISO files
+/**
+ * @brief Identifies items present in the current search that do not exist in the cached list.
+ * @return Integer count of new/different entries found.
+ */
 int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std::vector<std::string>& globalIsoFileList) {
-    // Use string_view to avoid extra allocations
     std::unordered_set<std::string_view> globalSet;
-    globalSet.reserve(globalIsoFileList.size());  // Reserve memory to avoid rehashing
+    globalSet.reserve(globalIsoFileList.size());
 
     for (const auto& file : globalIsoFileList) {
-        globalSet.insert(file);  // Insert string_views pointing to existing strings
+        globalSet.insert(file);
     }
 
     int count = 0;
@@ -213,8 +202,10 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
     return count;
 }
 
-
-// Function that provides verbose output for refreshForDatabase
+/**
+ * @brief Handles verbose output and result logic for the ISO database refresh process.
+ * @details Summarizes time taken, files imported, and displays any path errors encountered.
+ */
 void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& filterHistory, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
@@ -222,7 +213,6 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
     const ListTheme* theme = getActiveTheme();
     const bool isOriginal  = (globalTheme == "original");
 
-    // Map to global struct
     std::string_view errLabel    = isOriginal ? originalColors::red       : theme->secondary;
     std::string_view warnLabel   = isOriginal ? originalColors::yellow    : theme->warning;
     std::string_view okLabel     = isOriginal ? originalColors::green     : theme->accent;
@@ -263,7 +253,6 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
     std::cout << boldLabel << "\nTotal time taken: " << std::fixed << std::setprecision(1)
               << total_elapsed << " seconds\n";
 
-    // Result Logic
     if (g_operationCancelled) {
         std::cout << "\n" << okLabel << "Database Refresh: [" << warnLabel << "Cancelled" << okLabel << "]" << boldLabel << "\n";
     } else if (!allIsoFiles.empty() && newISOFound.load() && !saveSuccess) {
@@ -285,10 +274,9 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
     refreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
 }
 
-
-// IMAGE FILE SEARCHING VERBOSITY
-
-// Function to print invalid directory paths from search
+/**
+ * @brief Prints directory paths and specific errors encountered during a filesystem search.
+ */
 void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const std::vector<std::string>& directoryPaths, std::unordered_set<std::string>& processedErrorsFind) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
@@ -297,7 +285,7 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
     const bool isOriginal  = (globalTheme == "original");
 
     std::string_view boldLabel = isOriginal ? originalColors::boldAlt : theme->muted;
-    std::string_view errLabel  = isOriginal ? "\033[31m"              : theme->secondary; // Keeping your specific non-bold red
+    std::string_view errLabel  = isOriginal ? "\033[31m"              : theme->secondary;
 
     if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
         std::cout << "\r" << boldLabel << "Total files processed: 0" << std::flush;
@@ -322,8 +310,9 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
     invalidDirectoryPaths.clear();
 }
 
-
-// Function that handles verbose results and timing from select select_and_convert_files_to_iso
+/**
+ * @brief Displays a summary of image file search results, including cache status and time elapsed.
+ */
 void verboseSearchResults(const std::string& fileExtension, std::unordered_set<std::string>& fileNames, std::unordered_set<std::string>& invalidDirectoryPaths, bool newFilesFound, bool list, int currentCacheOld, const std::vector<std::string>& files, const std::chrono::high_resolution_clock::time_point& start_time, std::unordered_set<std::string>& processedErrorsFind, std::vector<std::string>& directoryPaths) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
@@ -342,7 +331,6 @@ void verboseSearchResults(const std::string& fileExtension, std::unordered_set<s
 
     if (g_operationCancelled.load()) return;
 
-    // Case: Files were found
     if (!fileNames.empty()) {
         std::cout << "\n\n"
                   << okLabel   << fileNames.size() << " "
@@ -353,7 +341,6 @@ void verboseSearchResults(const std::string& fileExtension, std::unordered_set<s
                   << warnLabel << "cached entries" << originalColors::boldAlt << "\n\n";
     }
 
-    // Case: No new files found, but cache exists
     if (!newFilesFound && !files.empty() && !list) {
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
         std::cout << "\n\n"
@@ -367,7 +354,6 @@ void verboseSearchResults(const std::string& fileExtension, std::unordered_set<s
                   << warnLabel << "↵ to list" << originalColors::boldAlt << "\n\n";
     }
 
-    // Case: Total emptiness
     if (files.empty() && !list) {
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
         std::cout << "\n\n"

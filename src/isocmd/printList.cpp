@@ -5,8 +5,15 @@
 #include "../filtering.h"
 #include "../themes.h"
 
+/**
+ * @file list_renderer.cpp
+ * @brief Optimized terminal list rendering with pagination, color themes, and stack-based formatting.
+ */
 
-// Reusable stack buffer for fast integer-to-string conversion without heap allocation
+/**
+ * @brief Reusable stack buffer for fast integer-to-string conversion without heap allocation.
+ * Defaults to 20 characters, sufficient for a 64-bit integer.
+ */
 template<std::size_t N = 20>
 struct IntBuf {
     char data[N];
@@ -16,8 +23,19 @@ struct IntBuf {
     }
 };
 
-
-// Function to print all required lists
+/**
+ * @brief Renders formatted lists (ISO, Image, or Mounts) to the terminal.
+ * * Performance Note: Uses a large reserved std::string buffer and std::cout.write 
+ * to minimize syscall overhead and flickering during high-frequency updates.
+ * * @param items The list of strings to display.
+ * @param listType Category of the list (e.g., "ISO_FILES").
+ * @param listSubType Extension or sub-format details.
+ * @param pendingIndices Current user selection indices awaiting processing.
+ * @param hasPendingProcess Flag indicating if a process action is staged.
+ * @param isFiltered Flag indicating if a search filter is currently active.
+ * @param currentPage Mutable reference to the current pagination index.
+ * @param isImportRunning Atomic flag to detect if a background scan is active.
+ */
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, 
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered, 
                size_t& currentPage, std::atomic<bool>& isImportRunning) {
@@ -27,11 +45,12 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     const ListTheme* theme = getActiveTheme();
     const bool isOriginal = (globalTheme == "original");
     
-    // Pagination Logic
+    // --- Pagination Logic ---
     const size_t totalItems = items.size();
     const bool disablePagination = (ITEMS_PER_PAGE == 0 || totalItems <= ITEMS_PER_PAGE);
     const size_t totalPages = disablePagination ? 1 : (totalItems + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
     
+    // Ensure the page stays within bounds after deletions/filtering
     size_t effectivePage = (disablePagination) ? 0 : (currentPage >= totalPages ? totalPages - 1 : currentPage);
     const size_t startIndex = disablePagination ? 0 : (effectivePage * ITEMS_PER_PAGE);
     const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + ITEMS_PER_PAGE, totalItems);
@@ -40,19 +59,19 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     const size_t maxDigits = ib1.format(totalItems).length();
     const bool isIsoWithAutoUpdate = (isImportRunning.load() && listType == "ISO_FILES" && !isFiltered && !globalIsoFileList.empty());
 
-    // Color Mapping
+    // --- Color Mapping ---
     std::string_view accentColor = isOriginal ? originalColors::darkCyan : theme->accent;
-    std::string_view headColor   = isOriginal ? originalColors::brown    : theme->muted; // brownBold
-    std::string_view numColor    = isOriginal ? originalColors::yellow   : theme->warning; // yellowBold
-    std::string_view isoColor    = isOriginal ? originalColors::purple   : theme->accent; // magentaBold
-    std::string_view imgColor    = isOriginal ? originalColors::orange   : theme->highlight; // orangeBold
-    std::string_view mntColor    = isOriginal ? originalColors::blue     : theme->secondary; // blueBold
+    std::string_view headColor   = isOriginal ? originalColors::brown    : theme->muted; 
+    std::string_view numColor    = isOriginal ? originalColors::yellow   : theme->warning; 
+    std::string_view isoColor    = isOriginal ? originalColors::purple   : theme->accent; 
+    std::string_view imgColor    = isOriginal ? originalColors::orange   : theme->highlight; 
+    std::string_view mntColor    = isOriginal ? originalColors::blue     : theme->secondary; 
 
     std::string output;
     output.reserve(((endIndex - startIndex) * 128) + 1024);
     output += '\n';
 
-    // Header / Pagination Info
+    // --- Header / Pagination Info ---
     if (!disablePagination) {
         output.append(headColor).append("Page ")
               .append(accentColor).append(ib1.format(effectivePage + 1))
@@ -72,17 +91,20 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append(originalColors::boldAlt).append("\n\n");
     }
 
-    // Main Item Loop
+    // --- Main Item Loop ---
     for (size_t i = startIndex; i < endIndex; ++i) {
+        // Alternating sequence colors for better row readability
         const std::string_view seqColor = (i % 2 == 0) ? theme->secondary : theme->accent;
         std::string_view idxStr = ib1.format(i + 1);
         
         output.append(seqColor);
+        // Right-align index numbers based on total digit count
         for (size_t p = 0; p < (maxDigits - idxStr.length()); ++p) output.push_back(' ');
         output.append(idxStr);
 
+        // Show original indices if filtering is active (useful for complex operations)
         if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
-            output.append(":").append(originalColors::boldAlt).append("\033[38;5;105;1m"); // Custom filter color kept
+            output.append(":").append(originalColors::boldAlt).append("\033[38;5;105;1m"); 
             output.append(ib2.format(filteringStack.back().originalIndices[i] + 1));
             output.append(originalColors::boldAlt).append("^ ");
         } else {
@@ -110,7 +132,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append(originalColors::reset).append("\n");
     }
 
-    // Footer / Navigation
+    // --- Footer / Navigation ---
     if (!disablePagination) {
         output.append("\n").append(headColor).append("Pagination: ");
         if (effectivePage > 0) output.append("[p] ↵ Previous | ");
@@ -118,7 +140,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append("[g<num>] ↵ Go to | ").append(originalColors::boldAlt).append("\n");
     }
 
-    // Pending Processes block
+    // --- Pending Processes block ---
     if (hasPendingProcess && !pendingIndices.empty()) {
         output.append("\n");
 

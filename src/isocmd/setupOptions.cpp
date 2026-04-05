@@ -4,7 +4,6 @@
 #include "../display.h"
 #include "../themes.h"
 
-
 /**
  * @struct ConfigEntry
  * @brief Metadata for a single configuration setting.

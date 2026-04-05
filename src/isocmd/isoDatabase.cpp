@@ -5,26 +5,28 @@
 #include "../threadpool.h"
 #include "../themes.h"
 
-
 // Local ISO Database mutex
 namespace {
     std::mutex dbFileMutex;
 }
 
-
-// Function to remove non-existent ISO paths from database and cache
+/**
+ * @brief Removes non-existent ISO paths from the database and in-memory cache
+ * 
+ * This function reads the database file, checks each path for existence using
+ * parallel filesystem access, and rewrites the database with only valid paths.
+ * 
+ * @param globalIsoFileList Reference to the in-memory list of ISO files to update
+ */
 void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList)
 {
     std::vector<std::string> retained;
     bool anyRemoved = false;
     {
-        // dbFileMutex must be acquired before flock() — flock() is advisory
-        // and provides no mutual exclusion between threads in the same process.
         std::lock_guard<std::mutex> fileLock(dbFileMutex);
 
         int fd = open(databaseFilePath.c_str(), O_RDWR, 0644);
         if (fd == -1) {
-            // Database does not exist — clear the in-memory list to match
             if (errno == ENOENT) {
                 std::lock_guard<std::mutex> lock(updateListMutex);
                 globalIsoFileList.clear();
@@ -32,27 +34,20 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
             return;
         }
 
-        // RAII guard — ensures flock(LOCK_UN) and close() are always called,
-        // even on early returns, without duplicating cleanup on every error path.
         struct FdGuard {
             int fd;
             ~FdGuard() { if (fd != -1) { flock(fd, LOCK_UN); close(fd); } }
-            void release() { fd = -1; }  // call before manual close to prevent double-close
+            void release() { fd = -1; }
         } fdGuard{fd};
 
-        // Exclusive lock — prevents other processes from reading or writing
-        // while we inspect and potentially rewrite the file.
         if (flock(fd, LOCK_EX) == -1) return;
 
-        // dup() so fdopen() can own and close its fd independently of the
-        // original fd, which we need to keep open for ftruncate/write later.
         int dupFd = dup(fd);
         if (dupFd == -1) return;
 
         FILE* file = fdopen(dupFd, "r");
         if (!file) { close(dupFd); return; }
 
-        // Read all entries from the database into memory
         std::vector<std::string> cache;
         char* linePtr = nullptr;
         size_t len    = 0;
@@ -62,27 +57,22 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
             if (!line.empty()) cache.push_back(std::move(line));
         }
         free(linePtr);
-        fclose(file);  // also closes dupFd
+        fclose(file);
 
         if (cache.empty()) return;
 
-        // Get static threadpool
         ThreadPool& pool = getStaticThreadPool();
 
-        // Parallel filesystem existence checks — each thread owns a contiguous
-        // chunk of cache indices, writing only to its own slice of pathExists,
-        // so no mutex is needed inside the lambda.
         std::vector<int> pathExists(cache.size(), 0);
         std::atomic<size_t> existingCount{0};
-		
-		const size_t numThread = std::min({
-			pool.threadCount(),
-			static_cast<size_t>(CLEAN_THREAD_CAP),
-			cache.size()
-		});
+        
+        const size_t numThread = std::min({
+            pool.threadCount(),
+            static_cast<size_t>(CLEAN_THREAD_CAP),
+            cache.size()
+        });
 
-		// Ceiling division for chunking
-		const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
+        const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
 
         std::vector<std::future<void>> futures;
         futures.reserve(numThread);
@@ -102,31 +92,22 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
                 }));
         }
 
-        // .get() propagates any task exception and guarantees all workers
-        // have finished before we inspect results or touch the file.
         for (auto& f : futures) f.get();
 
-        // Nothing removed — skip the write entirely
         if (existingCount == cache.size()) return;
 
-        // Pass 1: Collect surviving entries in original order and calculate
-        // the exact buffer size needed — avoids a reallocation mid-build.
         const size_t surviving = existingCount.load();
         retained.reserve(surviving);
         size_t totalBufferSize = 0;
         for (size_t i = 0; i < cache.size(); ++i) {
             if (pathExists[i]) {
-                totalBufferSize += cache[i].size() + 1;  // +1 for '\n'
+                totalBufferSize += cache[i].size() + 1;
                 retained.push_back(std::move(cache[i]));
             }
         }
 
         anyRemoved = true;
 
-        // Pass 2: Build a single contiguous buffer — one write() syscall
-        // instead of one per path, reducing kernel transitions significantly
-        // when many entries survive. Both passes are over hot cache data
-        // so the cost is negligible versus the write() and access() calls.
         std::string buf;
         buf.reserve(totalBufferSize);
         for (const auto& path : retained) {
@@ -134,32 +115,28 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
             buf += '\n';
         }
 
-        // Rewrite the file in-place — truncate first, then write from offset 0
         if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) return;
 
-        // Guard against partial writes — write() may write fewer bytes than
-        // requested if interrupted or if the buffer is unusually large.
         ssize_t written = ::write(fd, buf.data(), buf.size());
         if (written == -1 || static_cast<size_t>(written) != buf.size()) return;
 
-        // File is fully written — release manually before dbFileMutex drops
-        // so loadFromDatabase cannot observe a partially written file.
         fdGuard.release();
         flock(fd, LOCK_UN);
         close(fd);
+    }
 
-    }  // dbFileMutex released here
-
-    // Update the in-memory list only after the file is fully written and
-    // the mutex released, so other threads see a consistent state.
     if (anyRemoved) {
         std::lock_guard<std::mutex> lock(updateListMutex);
         globalIsoFileList = std::move(retained);
     }
 }
 
-
-// Count Database entries for stats
+/**
+ * @brief Counts non-empty lines in a file for statistics display
+ * 
+ * @param filePath Path to the file to analyze
+ * @return Number of non-empty lines, or -1 if file cannot be opened
+ */
 int countNonEmptyLines(const std::string& filePath) {
     std::ifstream file(filePath);
     if (!file.is_open()) {
@@ -170,7 +147,6 @@ int countNonEmptyLines(const std::string& filePath) {
     int nonEmptyLineCount = 0;
     std::string line;
     while (std::getline(file, line)) {
-        // Check if the line is not empty (ignoring whitespace)
         if (!line.empty() && line.find_first_not_of(" \t\n\r\f\v") != std::string::npos) {
             ++nonEmptyLineCount;
         }
@@ -180,8 +156,11 @@ int countNonEmptyLines(const std::string& filePath) {
     return nonEmptyLineCount;
 }
 
-
-// Set default home dir
+/**
+ * @brief Gets the user's home directory path
+ * 
+ * @return Home directory path string, or empty string if not found
+ */
 std::string getHomeDirectory() {
     const char* homeDir = getenv("HOME");
     if (homeDir) {
@@ -190,13 +169,19 @@ std::string getHomeDirectory() {
     return "";
 }
 
-
-// Function to get paths from history in leaf style and push them into backgroundDatabaseImport for traverse to work with
+/**
+ * @brief Reduces hierarchical paths by grouping related directories
+ * 
+ * This function groups paths by their first 3 directory levels and reduces
+ * redundant parent paths to optimize directory traversal.
+ * 
+ * @param paths Vector of semicolon-delimited path strings
+ * @return Vector of reduced/optimized path strings
+ */
 std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string>& paths) {
     std::map<std::string, std::vector<std::string>> pathGroups;
     std::vector<std::string> allPaths;
     
-    // Split semicolon-delimited paths and normalize
     for (const auto& pathEntry : paths) {
         std::istringstream iss(pathEntry);
         std::string path;
@@ -208,11 +193,9 @@ std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string
         }
     }
     
-    // Group paths by first 3 directory levels
     for (const auto& path : allPaths) {
         size_t slashCount = 0, pos = 0;
         
-        // Find position after 3rd slash
         for (size_t i = 1; i < path.length() && slashCount < 3; ++i) {
             if (path[i] == '/') {
                 pos = i;
@@ -224,21 +207,17 @@ std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string
         pathGroups[key].push_back(path);
     }
     
-    // Create final paths: use prefix if multiple paths, original if single
     std::vector<std::string> finalPaths;
     for (const auto& [prefix, groupPaths] : pathGroups) {
         finalPaths.push_back((groupPaths.size() > 1) ? prefix : groupPaths[0]);
     }
     
-    // Remove redundant parent paths (only top-level with ≤2 directory levels)
     std::sort(finalPaths.begin(), finalPaths.end());
     std::vector<std::string> result;
     
     for (const auto& path : finalPaths) {
-        // Count directory levels
         int levels = std::count(path.begin() + 1, path.end(), '/');
         
-        // Skip if it's a top-level path that's a parent of another path
         bool isRedundant = (levels <= 2) && 
             std::any_of(finalPaths.begin(), finalPaths.end(), 
                 [&path](const std::string& other) {
@@ -253,14 +232,20 @@ std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string
     return result;
 }
 
-
-// Function to auto-import ISO files in cache without blocking the UI
+/**
+ * @brief Performs background ISO file import without blocking the UI
+ * 
+ * Reads history paths, reduces them hierarchically, traverses directories
+ * to find ISO files, and saves them to the database.
+ * 
+ * @param isImportRunning Atomic flag indicating if import is in progress
+ * @param newISOFound Atomic flag set to true if new ISOs were found
+ */
 void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     std::vector<std::string> paths;
     int localMaxDepth = -1;
     bool localPromptFlag = false;
     
-    // Read paths from file
     {
         std::ifstream file(historyFilePath);
         if (!file.is_open()) {
@@ -284,7 +269,6 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
         }
     }
     
-    // Exclude root path '/' only when there are other paths
     if (paths.size() > 1) {
         auto it = std::find(paths.begin(), paths.end(), "/");
         if (it != paths.end()) {
@@ -292,31 +276,26 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
         }
     }
     
-    // Apply path generalization
     std::vector<std::string> finalPaths = hierarchicalPathReduction(paths);
     
-    
-    // Set up data structures for processing
     std::vector<std::string> allIsoFiles;
     std::atomic<size_t> totalFiles{0};
     std::unordered_set<std::string> uniqueErrorMessages;
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
     
-    // ── Build the I/O thread pool ─────────────────────────────────────────
     const size_t hwThreads  = static_cast<size_t>(maxThreads);
     const size_t ioMultiple = 2;
     const size_t ioCap      = MAX_USEFUL_THREADS;
     const size_t numThreads = std::min({
-			finalPaths.size(),
-			static_cast<size_t>(hwThreads * ioMultiple),
-			static_cast<size_t>(ioCap)
-	});
-	
+            finalPaths.size(),
+            static_cast<size_t>(hwThreads * ioMultiple),
+            static_cast<size_t>(ioCap)
+    });
+    
     ThreadPool pool(numThreads);
     std::vector<std::future<void>> futures;
     
-    // Enqueue tasks for each valid directory
     for (const auto& path : finalPaths) {
         if (isValidDirectory(path)) {
             futures.emplace_back(pool.enqueue([&, path]() {
@@ -327,18 +306,19 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
         }
     }
     
-    // Wait for all tasks to complete
     for (auto& future : futures) {
         future.wait();
     }
-
     
     saveToDatabase(allIsoFiles, newISOFound);
     isImportRunning.store(false);
 }
 
-
-// Function to load ISO database from file
+/**
+ * @brief Loads ISO database from file into memory
+ * 
+ * @param outList Reference to vector that will receive the loaded ISO paths
+ */
 void loadFromDatabase(std::vector<std::string>& outList) {
     std::lock_guard<std::mutex> fileLock(dbFileMutex);
     
@@ -380,31 +360,29 @@ void loadFromDatabase(std::vector<std::string>& outList) {
     outList = std::move(loadedFiles);
 }
 
-
-// Function to save ISO cache to database
+/**
+ * @brief Saves ISO cache to database file
+ * 
+ * Merges new ISO files with existing cache, respects maximum size limit,
+ * and updates the atomic flag if new files were found.
+ * 
+ * @param globalIsoFileList Vector of ISO file paths to save
+ * @param newISOFound Atomic flag to set if new ISOs were added
+ * @return true if save operation succeeded, false otherwise
+ */
 bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool>& newISOFound) {
-    // Parameter is passed by value — caller's copy is made at the call site before this
-    // function runs, so globalIsoFileList is exclusively owned here with no mutex needed.
-
-    // Construct the full path to the database file
     std::filesystem::path cachePath = databaseDirectory;
     cachePath /= databaseFilename;
 
-    // Create the database directory if it doesn't exist
     if (!std::filesystem::exists(databaseDirectory) && !std::filesystem::create_directories(databaseDirectory)) {
         return false;
     }
-    // Check if the database path is a valid directory
     if (!std::filesystem::is_directory(databaseDirectory)) {
         return false;
     }
 
-    // Acquire database mutex before opening the file.
-    // flock() is advisory and provides no mutual exclusion between threads in the
-    // same process — both threads share the same lock. This mutex fills that gap.
     std::lock_guard<std::mutex> fileLock(dbFileMutex);
 
-    // Open file and acquire lock FIRST
     int fd = open(cachePath.c_str(), O_RDWR | O_CREAT, 0644);
     if (fd == -1) return false;
 
@@ -413,17 +391,14 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
         return false;
     }
 
-    // Load the existing cache from the same file descriptor
     std::vector<std::string> existingCache;
 
     struct stat fileStat;
     if (fstat(fd, &fileStat) == 0 && fileStat.st_size > 0) {
-        // Read existing content
         std::vector<char> buffer(fileStat.st_size);
         ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
 
         if (bytesRead > 0 && bytesRead <= fileStat.st_size) {
-            // Parse the buffer
             char* start = buffer.data();
             char* end = buffer.data() + bytesRead;
 
@@ -436,23 +411,16 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
                 if (!line.empty()) {
                     existingCache.push_back(std::move(line));
                 }
-                // Clamp to end to avoid UB when last line has no trailing newline
                 start = (lineEnd < end) ? lineEnd + 1 : end;
             }
         }
     }
 
-    // Convert the existing cache to a set for efficient lookup
     std::unordered_set<std::string> existingSet(existingCache.begin(), existingCache.end());
 
-    // Vector to store new entries that are not already in the cache
     std::vector<std::string> newEntries;
-
-    // Use a local flag instead of writing directly to the shared atomic during the loop,
-    // preventing concurrent calls from clobbering each other's result mid-execution.
     bool localNewISOFound = false;
 
-    // Iterate through the ISO files to find new entries
     for (const auto& iso : globalIsoFileList) {
         if (existingSet.find(iso) == existingSet.end()) {
             newEntries.push_back(iso);
@@ -460,7 +428,6 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
         }
     }
 
-    // If no new entries are found, set newISOFound to false and return
     if (newEntries.empty()) {
         newISOFound.store(false);
         flock(fd, LOCK_UN);
@@ -468,43 +435,46 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
         return false;
     }
 
-    // Combine the existing cache with new entries, respecting the maximum size limit
     std::vector<std::string> combinedCache = existingCache;
     combinedCache.insert(combinedCache.end(), newEntries.begin(), newEntries.end());
     if (combinedCache.size() > maxDatabaseSize) {
         combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - maxDatabaseSize));
     }
 
-    // Truncate and write back to the same file descriptor
     if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) {
         flock(fd, LOCK_UN);
         close(fd);
         return false;
     }
 
-    // Write the combined cache to the file
     bool success = true;
     for (const auto& entry : combinedCache) {
         std::string line = entry + "\n";
-        // Use ::write to explicitly call POSIX syscall, preventing name collision
         if (::write(fd, line.data(), line.size()) == -1) {
             success = false;
             break;
         }
     }
 
-    // Release the lock and close the file
     flock(fd, LOCK_UN);
     close(fd);
 
-    // Write the local result to the shared atomic only once, after all work is done
     newISOFound.store(localNewISOFound);
 
     return success;
 }
 
-
-// Function to display on-disk and ram statistics
+/**
+ * @brief Displays database statistics including on-disk and RAM usage
+ * 
+ * Shows information about ISO database, history database, transformation cache,
+ * and various file format caches.
+ * 
+ * @param databaseFilePath Path to the ISO database file
+ * @param maxDatabaseSize Maximum allowed database size in bytes
+ * @param transformationCache Map of transformation cache entries
+ * @param globalIsoFileList Vector of ISO files in memory
+ */
 void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize, 
                                 const std::unordered_map<std::string, std::string>& transformationCache, 
                                 const std::vector<std::string>& globalIsoFileList) {
@@ -515,22 +485,19 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
     const ListTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
-    // Semantic Color Mapping
     std::string_view headerCol = isOrig ? "\033[1;94m" : theme->accent;
     std::string_view labelCol  = isOrig ? "\033[1;92m" : theme->muted;
     std::string_view dataCol   = "\033[1;97m";
-    std::string_view warnCol   = "\033[1;38;5;208m"; // Keep orange for non-ISO formats
+    std::string_view warnCol   = "\033[1;38;5;208m";
     std::string_view resetCol  = "\033[0m";
 
     try {
-        // Ensure files exist
         for (const auto& path : {databaseFilePath, historyFilePath, filterHistoryFilePath}) {
             if (!std::filesystem::exists(path)) {
                 std::ofstream createFile(path);
             }
         }
 
-        // --- ISO Database ---
         std::cout << "\n" << headerCol << "=== ISO Database ===" << resetCol << "\n";
         
         std::uintmax_t fileSizeInBytes = std::filesystem::file_size(databaseFilePath);
@@ -543,23 +510,19 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
                   << "\n" << labelCol << "Entries: " << dataCol << countNonEmptyLines(databaseFilePath) 
                   << "\n" << labelCol << "Location: " << dataCol << "'" << databaseFilePath << "'" << resetCol << "\n";
 
-        // --- History Database ---
         std::cout << "\n" << headerCol << "=== History Database ===" << resetCol << "\n"
                   << "\n" << labelCol << "FolderPath Entries: " << dataCol << countNonEmptyLines(historyFilePath) << "/" << MAX_HISTORY_LINES
                   << "\n" << labelCol << "Location: " << dataCol << "'" << historyFilePath << "'"
                   << "\n\n" << labelCol << "FilterTerm Entries: " << dataCol << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
                   << "\n" << labelCol << "Location: " << dataCol << "'" << filterHistoryFilePath << "'" << std::endl;
         
-        // --- Buffered Entries (RAM) ---
         std::cout << "\n" << headerCol << "=== Buffered Entries ===" << resetCol << "\n";
         
-        // Use Cyan/Accent for RAM stats
         std::cout << (isOrig ? "\033[1;96m" : theme->accent) << "\nSTR → RAM: " << dataCol 
                   << (transformationCache.size() + cachedParsesForUmount.size()) << "\n";
         
         std::cout << "\n" << labelCol << "ISO → RAM: " << dataCol << globalIsoFileList.size() << "\n";
         
-        // Use Warning/Orange for conversion-ready formats
         std::cout << "\n" << warnCol << "BIN/IMG → RAM: " << dataCol << binImgFilesCache.size() << "\n"
                   << warnCol << "MDF → RAM: " << dataCol << mdfMdsFilesCache.size() << "\n"
                   << warnCol << "NRG → RAM: " << dataCol << nrgFilesCache.size() << "\n";
@@ -570,13 +533,19 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
                   << (isOrig ? "\033[1;91m" : theme->secondary) << ".\033[0;1m\n";
     }
 
-    // Prompt the user to press Enter to return
     std::cout << color << "\n↵ to return..." << reset;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');  // Wait for the user to press Enter
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
-
-// Function to set the AutoUpdate switch in teh config file
+/**
+ * @brief Updates the auto-update configuration setting
+ * 
+ * Modifies the auto_update setting in the configuration file and updates
+ * the in-memory cache.
+ * 
+ * @param configPath Path to the configuration file
+ * @param inputSearch Command string containing the new setting ("*auto:on" or "*auto:off")
+ */
 void updateAutoUpdateConfig(const std::string& configPath, const std::string& inputSearch) {
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
@@ -584,21 +553,16 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
     const ListTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
-    // 1. Ensure directories exist
     fs::path p(configPath);
     if (!fs::exists(p.parent_path()) && !p.parent_path().empty()) 
         fs::create_directories(p.parent_path());
 
-    // 2. Sync memory cache with disk
     syncCache(configPath);
 
-    // 3. Update the value in the global cache
     bool isEnabling = (inputSearch == "*auto:on");
     g_configCache["auto_update"] = isEnabling ? "on" : "off";
 
-    // 4. Use the robust writeConfig function to persist changes
     if (writeConfig(configPath, g_configCache)) {
-        // Semantic color: accent for enabled, secondary for disabled
         std::string_view statusCol = isEnabling ? 
             (isOrig ? "\033[1;92m" : theme->accent) : 
             (isOrig ? "\033[1;91m" : theme->secondary);
@@ -609,7 +573,6 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
                   << statusCol << (isEnabling ? "enabled" : "disabled")
                   << labelCol << ".\033[J\033[0m\n";
     } else {
-        // Themed Error message
         std::cerr << "\n" << (isOrig ? "\033[1;91m" : theme->secondary) 
                   << "Error: Unable to access configuration file: " 
                   << (isOrig ? "\033[1;93m" : theme->warning) << "'" << configPath << "'" 
@@ -620,8 +583,18 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
-
-// Function that can delete or show stats for ISO cache it is called from within refreshForDatabase
+/**
+ * @brief Handles database management commands and statistics display
+ * 
+ * Processes various database-related commands including stats display,
+ * cache clearing, configuration updates, and theme changes.
+ * 
+ * @param inputSearch Command string to process
+ * @param promptFlag Flag controlling prompt behavior
+ * @param maxDepth Maximum directory traversal depth
+ * @param filterHistory Flag for filter history management
+ * @param newISOFound Atomic flag indicating if new ISOs were found
+ */
 void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& filterHistory, std::atomic<bool>& newISOFound) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
@@ -638,7 +611,6 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     } else if (inputSearch == "!clr") {
         std::ofstream ofs(databaseFilePath, std::ofstream::out | std::ofstream::trunc);
         if (!ofs) {
-            // Error handling for database clear
             std::cerr << "\n" << (isOrig ? "\033[1;91m" : theme->secondary) 
                       << "Error clearing ISO database: " 
                       << (isOrig ? "\033[1;93m" : theme->warning) << "'" << databaseFilePath << "'" 
@@ -648,7 +620,6 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         } else {
             ofs.close();
-            // Clean transformationCache for .iso entries
             for (auto it = transformationCache.begin(); it != transformationCache.end();) {
                 const std::string& key = it->first;
                 if (key.size() >= 4) {
@@ -662,7 +633,6 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
                 ++it;
             }
             
-            // Success message
             std::cout << "\n" << (isOrig ? "\033[1;92m" : theme->accent) 
                       << "ISO database cleared successfully." << "\033[J" << std::endl;
             

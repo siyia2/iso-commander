@@ -2,9 +2,16 @@
 
 #include "../headers.h"
 
-
+/**
+ * @brief Primary entry point for handling mount/umount CLI commands.
+ * * This function parses command-line arguments to facilitate batch mounting 
+ * or unmounting of ISO files. It supports recursion depth limits, 
+ * silent mode operation, and handles root privilege verification.
+ * * @param argc Argument count from main.
+ * @param argv Argument vector from main.
+ * @return int Status code (0 for success, 1 for error).
+ */
 int handleMountUmountCommands(int argc, char* argv[]) {
-    // Setup signal handler
     setupSignalHandlerCancellations();
     g_operationCancelled.store(false);
 
@@ -13,9 +20,8 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         return 1;
     }
 
-    // Parse flags
     bool silentMode = false;
-    int maxDepth = -1; // Default: max depth
+    int maxDepth = -1; 
     std::vector<std::string> args;
     args.reserve(argc);
 
@@ -28,7 +34,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                 maxDepth = std::stoi(arg.substr(2));
                 if (maxDepth < 0) {
                     std::cerr << "\033[1;93mWarning: Negative depth (" << maxDepth
-                              << ") means a full recursive scan.\n\033[0m"; // Fixed typo: recursive
+                              << ") means a full recursive scan.\n\033[0m";
                     maxDepth = -1;
                 }
             } catch (...) {
@@ -48,7 +54,10 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
     std::string action = args.back();
 
-    // ---------- MOUNT MULTIPLE ----------
+    /**
+     * @section Mount Logic
+     * Handles recursive directory scanning and individual file validation for ISO mounting.
+     */
     if (action == "mount") {
         if (geteuid() != 0) {
             std::cerr << "\033[1;91mError: Root privileges required for mounting ISOs.\n\033[0m";
@@ -58,7 +67,6 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         std::unordered_set<std::string> isoFiles;
         bool hasErrors = false;
 
-        // Collect all args except the last one (which is "mount")
         for (size_t i = 0; i < args.size() - 1; ++i) {
             if (g_operationCancelled.load()) {
                 if (!silentMode) std::cout << "\033[1;33m\nOperation cancelled by user.\n\033[0m";
@@ -89,17 +97,17 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                     }
                     isoFiles.insert(fs::canonical(path).string());
                 } else if (fs::is_directory(path)) {
-					disableInput();
+                    disableInput();
                     if (!silentMode) {
-						std::cout << "Scanning directory " << path << " ("<< (maxDepth == 0 ? "surface scan" : "max depth: " + std::string(maxDepth < 0 ? "unlimited" : std::to_string(maxDepth))) << ")...\n";
-					}
+                        std::cout << "Scanning directory " << path << " ("<< (maxDepth == 0 ? "surface scan" : "max depth: " + std::string(maxDepth < 0 ? "unlimited" : std::to_string(maxDepth))) << ")...\n";
+                    }
 
                     std::function<void(const fs::path&, int)> scanDir;
                     scanDir = [&](const fs::path& dir, int currentDepth) {
                         try {
                             for (const auto& entry : fs::directory_iterator(dir)) {
                                 if (g_operationCancelled.load()) return;
-                                if (entry.is_symlink()) continue;  // <-- skip symlinks
+                                if (entry.is_symlink()) continue; 
 
                                 if (entry.is_regular_file()) {
                                     std::string ext = entry.path().extension().string();
@@ -108,7 +116,6 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                                         isoFiles.insert(fs::canonical(entry.path()).string());
                                     }
                                 }
-                                // Allow recursion when maxDepth is -1 (unlimited) or within depth limit
                                 else if (entry.is_directory() && (maxDepth == -1 || currentDepth < maxDepth)) {
                                     scanDir(entry.path(), currentDepth + 1);
                                 }
@@ -120,7 +127,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                             hasErrors = true;
                         }
                     };
-					
+                    
                     scanDir(path, 0);
                 } else {
                     if (!silentMode)
@@ -135,17 +142,17 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                 hasErrors = true;
             }
         }
-		
-		if (!silentMode && g_operationCancelled.load()) std::cout << "\033[1;33mMount Operation cancelled by user.\n\033[0m";
-		
+        
+        if (!silentMode && g_operationCancelled.load()) std::cout << "\033[1;33mMount Operation cancelled by user.\n\033[0m";
+        
         if (isoFiles.empty()) {
             if (!silentMode && !g_operationCancelled.load()) std::cout << "\n\033[1;93mNo ISO files found to mount.\n\033[0m";
             return hasErrors ? 1 : 0;
         }
 
         if (!silentMode) {
-			std::cout << "\nLocated " << isoFiles.size() << " ISO file" << (isoFiles.size() == 1 ? "" : "s") << "; Attempting to mount...\n";
-		}
+            std::cout << "\nLocated " << isoFiles.size() << " ISO file" << (isoFiles.size() == 1 ? "" : "s") << "; Attempting to mount...\n";
+        }
 
         std::unordered_set<std::string> mountedFiles;
         std::unordered_set<std::string> skippedMessages;
@@ -161,9 +168,6 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             for (const auto& msg : mountedFiles) std::cout << msg << "\n";
             for (const auto& msg : skippedMessages) std::cout << msg << "\n";
             for (const auto& msg : mountedFails) std::cout << msg << "\n";
-        }
-
-        if (!silentMode) {
             std::cout << "\nMount Summary:\n";
             std::cout << "Successful: " << completedTasks.load() << "\n";
             std::cout << "Failed: " << failedTasks.load() << "\n";
@@ -172,9 +176,12 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         return (completedTasks.load() > 0 || (!hasErrors && isoFiles.empty())) ? 0 : 1;
     }
 
-    // ---------- UMOUNT MULTIPLE ----------
+    /**
+     * @section Unmount Logic
+     * Handles the safe removal of ISO mount points under the /mnt/iso_* schema.
+     */
     else if (action == "umount" || action == "unmount") {
-        std::unordered_set<std::string> mountPointsToUnmount; // Automatic deduplication
+        std::unordered_set<std::string> mountPointsToUnmount; 
         bool hasErrors = false;
         
         if (geteuid() != 0) {
@@ -182,9 +189,8 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             return 1;
         }
 
-        // If no arguments before "umount" or if explicitly "all"
         if (args.size() <= 1 || (args.size() == 2 && (args[0] == "all"))) {
-			disableInput();
+            disableInput();
             if (!silentMode) std::cout << "Scanning /mnt for ISO mount points (surface scan)...\n";
             try {
                 for (const auto& entry : fs::directory_iterator("/mnt")) {
@@ -204,7 +210,6 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                 return 1;
             }
         } else {
-            // Reject directory parameters other than /mnt
             for (size_t i = 0; i < args.size() - 1; ++i) {
                 if (g_operationCancelled.load()) {
                     if (!silentMode) std::cout << "\033[1;93m\nOperation cancelled by user.\n\033[0m";
@@ -215,15 +220,12 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                 std::string originalPath = path.string();
 
                 try {
-                    // Reject if directory parameter and not /mnt or /mnt/iso_*
                     if (fs::exists(path) && fs::is_directory(path)) {
                         auto canonicalPath = fs::canonical(path);
                         std::string canonicalStr = canonicalPath.string();
 
-                        // Allowed directories: /mnt or /mnt/iso_*
                         if (canonicalStr == "/mnt") {
-							disableInput();
-                            // Surface scan for iso_ dirs in /mnt
+                            disableInput();
                             if (!silentMode) std::cout << "Scanning /mnt for ISO mount points (surface scan)...\n";
                             for (const auto& entry : fs::directory_iterator(canonicalPath)) {
                                 if (entry.is_directory()) {
@@ -234,7 +236,6 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                                 }
                             }
                         } else if (canonicalStr.rfind("/mnt/iso_", 0) == 0) {
-                            // Accept specific /mnt/iso_* dir
                             mountPointsToUnmount.insert(canonicalStr);
                         } else {
                             if (!silentMode)
@@ -243,8 +244,6 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                             hasErrors = true;
                         }
                     } else {
-                        // For relative paths or non-directory paths, treat as mount point name under /mnt/iso_*
-                        // Compose full path:
                         fs::path candidatePath = path;
                         if (path.is_relative()) {
                             candidatePath = fs::path("/mnt") / ("iso_" + path.filename().string());
@@ -267,8 +266,9 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                 }
             }
         }
-		if (!silentMode && g_operationCancelled.load()) std::cout << "\033[1;33mUmount Operation cancelled by user.\n\033[0m";
-		
+        
+        if (!silentMode && g_operationCancelled.load()) std::cout << "\033[1;33mUmount Operation cancelled by user.\n\033[0m";
+        
         if (mountPointsToUnmount.empty()) {
             if (!silentMode && !g_operationCancelled.load()) std::cout << "\n\033[1;93mNo ISO mount points found to unmount.\n\033[0m";
             return hasErrors ? 1 : 0;
@@ -287,9 +287,6 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         if (!silentMode) {
             for (const auto& msg : unmountedFiles) std::cout << msg << "\n";
             for (const auto& msg : unmountedErrors) std::cout << msg << "\n";
-        }
-
-        if (!silentMode) {
             std::cout << "\nUnmount Summary:\n";
             std::cout << "Successful: " << completedTasks.load() << "\n";
             std::cout << "Failed: " << failedTasks.load() << "\n";

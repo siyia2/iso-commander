@@ -2,37 +2,65 @@
 
 #include "../headers.h"
 
-
-// Function to check if a string starts with '0' for tokenize input
+/**
+ * @brief Checks if a string has a leading zero.
+ * @details Used to identify invalid numeric inputs where a leading zero might 
+ * imply octal or simply be an unsupported format for index selection.
+ * @param str The string to check.
+ * @return True if the string starts with '0'.
+ */
 bool startsWithZero(const std::string& str) {
     return !str.empty() && str[0] == '0';
 }
 
-
-// Function to check if a string is numeric for tokenize
+/**
+ * @brief Validates if a string consists entirely of decimal digits.
+ * @param str The string to check.
+ * @return True if all characters are digits.
+ */
 bool isNumeric(const std::string& str) {
     return std::all_of(str.begin(), str.end(), [](char c) {
         return std::isdigit(c);
     });
 }
 
-
-// General function to tokenize input strings
-void tokenizeInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<int>& processedIndices) {
+/**
+ * @brief Parses user input strings into a set of unique file indices.
+ * @details Supports individual indices (e.g., "5"), ranges (e.g., "1-10"), 
+ * and reverse ranges (e.g., "10-1"). Performs extensive validation against
+ * the current file list size and handles various formatting errors.
+ * * @param input The raw input string from the user.
+ * @param isoFiles The vector of available files to validate indices against.
+ * @param uniqueErrorMessages Set to store color-coded, categorized error strings.
+ * @param processedIndices Set to store the successfully parsed unique indices.
+ */
+void tokenizeInput(const std::string& input, 
+                   const std::vector<std::string>& isoFiles, 
+                   std::unordered_set<std::string>& uniqueErrorMessages, 
+                   std::unordered_set<int>& processedIndices) {
+    
     std::istringstream iss(input);
     std::string token;
+    
+    // Categorize errors to provide specific feedback
     std::unordered_set<std::string> invalidInputs;
     std::unordered_set<std::string> invalidIndices;
     std::unordered_set<std::string> invalidRanges;
+
     while (iss >> token) {
+        // Reject leading zeros
         if (startsWithZero(token)) {
             invalidIndices.insert(token);
             continue;
         }
-        if (std::count(token.begin(), token.end(), '-') > 1) {
+
+        // Check for range format (start-end)
+        size_t dashCount = std::count(token.begin(), token.end(), '-');
+        if (dashCount > 1) {
             invalidInputs.insert(token);
             continue;
         }
+
         size_t dashPos = token.find('-');
         if (dashPos != std::string::npos) {
             int start, end;
@@ -46,25 +74,28 @@ void tokenizeInput(const std::string& input, const std::vector<std::string>& iso
                 invalidRanges.insert(token);
                 continue;
             }
-            if (start < 1 || static_cast<size_t>(start) > isoFiles.size() || end < 1 || static_cast<size_t>(end) > isoFiles.size() || start == 0 || end == 0) {
+
+            // Validate range bounds
+            bool boundsInvalid = (start < 1 || static_cast<size_t>(start) > isoFiles.size() || 
+                                  end < 1 || static_cast<size_t>(end) > isoFiles.size());
+            
+            if (boundsInvalid) {
                 invalidRanges.insert(token);
                 continue;
             }
+
+            // Process the range (supports both ascending and descending)
             int step = (start <= end) ? 1 : -1;
             for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                if (i >= 1 && i <= static_cast<int>(isoFiles.size())) {
-                    if (processedIndices.find(i) == processedIndices.end()) {
-                        processedIndices.insert(i);
-                    }
-                }
+                processedIndices.insert(i);
             }
-        } else if (isNumeric(token)) {
+        } 
+        // Handle single numeric index
+        else if (isNumeric(token)) {
             try {
                 int num = std::stoi(token);
                 if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
-                    if (processedIndices.find(num) == processedIndices.end()) {
-                        processedIndices.insert(num);
-                    }
+                    processedIndices.insert(num);
                 } else {
                     invalidIndices.insert(token);
                 }
@@ -73,14 +104,20 @@ void tokenizeInput(const std::string& input, const std::vector<std::string>& iso
             } catch (const std::out_of_range&) {
                 invalidIndices.insert(token);
             }
-        } else {
+        } 
+        // Non-numeric, non-range tokens are garbage
+        else {
             invalidInputs.insert(token);
         }
     }
-    // Helper to format error messages with pluralization
+
+    /**
+     * @brief Formats error categories with appropriate pluralization and ANSI colors.
+     */
     auto formatCategory = [](const std::string& singular, const std::string& plural,
-                            const std::unordered_set<std::string>& items) {
+                             const std::unordered_set<std::string>& items) {
         if (items.empty()) return std::string();
+        
         std::ostringstream oss;
         oss << "\033[1;91m" << (items.size() > 1 ? plural : singular) << ": '";
         for (auto it = items.begin(); it != items.end(); ++it) {
@@ -90,7 +127,8 @@ void tokenizeInput(const std::string& input, const std::vector<std::string>& iso
         oss << "'.\033[0;1m";
         return oss.str();
     };
-    // Add formatted messages with conditional pluralization
+
+    // Populate the error set with formatted messages
     if (!invalidInputs.empty()) {
         uniqueErrorMessages.insert(formatCategory("Invalid input", "Invalid inputs", invalidInputs));
     }

@@ -4,7 +4,14 @@
 #include "../display.h"
 #include "../themes.h"
 
-
+/**
+ * @brief Constructs a list of formatted strings representing ISO files for display.
+ * @details Extracts filenames and directories, applying theme-specific colors and 
+ * formatting based on global display configurations.
+ * * @param indexChunks Chunks of indices pointing to selected files.
+ * @param isoFiles The full list of available ISO file paths.
+ * @return A vector of formatted strings ready for console output.
+ */
 std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>& indexChunks, const std::vector<std::string>& isoFiles) {
     std::vector<std::string> entries;
 
@@ -41,13 +48,15 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
     return entries;
 }
 
-
+/**
+ * @brief Validates a Linux filesystem path for absolute format, control characters, and existence.
+ * @param path The string representing the filesystem path to check.
+ * @return An empty string if valid, or a color-coded error message if invalid.
+ */
 static std::string validateLinuxPath(const std::string& path) {
     const ListTheme* theme = getActiveTheme();
     const bool isOriginal  = (globalTheme == "original");
 
-    // \001/\002 wrappers are required for readline prompt width calculation —
-    // keep them even in themed mode so cursor position stays correct
     std::string errLabel = isOriginal
         ? std::string(originalColors::rl_red)
         : "\001" + std::string(theme->secondary) + "\002";
@@ -79,7 +88,11 @@ static std::string validateLinuxPath(const std::string& path) {
     return "";
 }
 
-
+/**
+ * @brief Orchestrates the user confirmation prompt for file deletion operations.
+ * @details Handles paginated or batch display of files marked for deletion and captures user input.
+ * * @return True if the user confirms deletion (Y), false otherwise.
+ */
 bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::vector<std::vector<int>>& indexChunks,
 bool& umountMvRmBreak, bool& abortDel) {
     rl_attempted_completion_function = nullptr;
@@ -180,7 +193,11 @@ bool& umountMvRmBreak, bool& abortDel) {
     }
 }
 
-
+/**
+ * @brief Prompts the user for a destination directory for Copy or Move operations.
+ * @details Validates the input path, handles pagination, and processes flags such as overwrite (-o).
+ * * @return The validated destination directory path string.
+ */
 std::string userDestDirCpMv(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages,
 std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel,
 bool& overwriteExisting) {
@@ -296,7 +313,15 @@ bool& overwriteExisting) {
     return userDestDir;
 }
 
-
+/**
+ * @brief Performs a binary file copy with real-time progress tracking and cancellation support.
+ * @details Uses a buffered stream approach to transfer data and updates an atomic byte counter.
+ * * @param src Source path.
+ * @param dst Destination path.
+ * @param completedBytes Atomic counter for tracking bytes written.
+ * @param ec Error code object to capture system failures.
+ * @return True if copy completed successfully, false if cancelled or failed.
+ */
 bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::atomic<size_t>* completedBytes, std::error_code& ec) {
     const size_t bufferSize = 8 * 1024 * 1024;
     std::vector<char> buffer(bufferSize);
@@ -339,7 +364,9 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
     return true;
 }
 
-
+/**
+ * @brief Logs the final result of a Move or Copy operation into verbose reporting sets.
+ */
 static void logOperationResult(bool success, bool cancelled, const std::error_code& ec, const std::string& verb, const std::string& srcDir, const std::string& srcFile,
 const std::string& destDirProcessed, const std::string& destFile, std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<size_t>* completedTasks,
 std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages) {
@@ -351,7 +378,7 @@ std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful, const 
     std::string_view errPath  = isOriginal ? originalColors::yellow   : theme->warning;
     std::string_view okLabel  = isOriginal ? originalColors::boldAlt  : theme->muted;
     std::string_view okPath   = isOriginal ? originalColors::green    : theme->primary;
-    std::string_view destPath = isOriginal ? originalColors::blue     : theme->accent;
+    std::string_view destPath = isOriginal ? originalColors::blue      : theme->accent;
 
     const std::string displaySrc = (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile;
 
@@ -382,7 +409,9 @@ std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful, const 
     batchInsertMessages();
 }
 
-
+/**
+ * @brief Removes a single ISO file from the disk and logs the outcome.
+ */
 void performDeleteOperation(const fs::path& srcPath, const std::string& srcDir, const std::string& srcFile, size_t fileSize, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks,
 std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages) {
 
@@ -435,7 +464,11 @@ std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, 
     batchInsertMessages();
 }
 
-
+/**
+ * @brief Executes a file Move operation. 
+ * @details Tries a quick filesystem rename first; if moving across different devices, 
+ * falls back to a manual copy-then-delete procedure.
+ */
 bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath, const std::string& srcDir, const std::string& srcFile, const std::string& destDirProcessed,
 const std::string& destFile, size_t fileSize, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks,
 std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages,
@@ -490,7 +523,9 @@ const std::function<void(const fs::path&)>& changeOwnership) {
     return success;
 }
 
-
+/**
+ * @brief Specialized move operation for multiple destinations.
+ */
 bool performMultiDestMoveOperation(const fs::path& srcPath, const fs::path& destPath, const std::string& srcDir, const std::string& srcFile, const std::string& destDirProcessed,
 const std::string& destFile, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::vector<std::string>& verboseIsos,
 std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages, const std::function<void(const fs::path&)>& changeOwnership) {
@@ -503,7 +538,9 @@ std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful,
     return success;
 }
 
-
+/**
+ * @brief Specialized copy operation.
+ */
 bool performCopyOperation(const fs::path& srcPath, const fs::path& destPath, const std::string& srcDir, const std::string& srcFile, const std::string& destDirProcessed,
 const std::string& destFile, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::vector<std::string>& verboseIsos,
 std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages, const std::function<void(const fs::path&)>& changeOwnership) {
@@ -516,7 +553,11 @@ std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful,
     return success;
 }
 
-
+/**
+ * @brief High-level handler that iterates through ISO files to perform CP, MV, or RM.
+ * @details Manages thread-safe updates to reporting sets and handles ownership changes 
+ * for newly created files.
+ */
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& operationIsos,
 std::unordered_set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes,
 std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool overwriteExisting) {
@@ -531,7 +572,7 @@ std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool over
     std::vector<std::string> verboseIsos;
     std::vector<std::string> verboseErrors;
 
-    const size_t BATCH_SIZE = 1000;
+    const size_t BATCH_SIZE = 50;
 
     auto batchInsertMessages = [&]() {
         if (verboseIsos.size() >= BATCH_SIZE || verboseErrors.size() >= BATCH_SIZE) {

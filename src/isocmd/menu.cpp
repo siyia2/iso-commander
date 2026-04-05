@@ -3,11 +3,13 @@
 #include "../headers.h"
 #include "../themes.h"
 
-
-// Function to print ascii
+/**
+ * @brief Renders a multi-colored ASCII art banner to the terminal.
+ * * Uses TrueColor (24-bit RGB) escape sequences to create a vertical flame 
+ * gradient sampled from real fire photography, transitioning from 
+ * near-white heat at the top to burnt maroon at the base.
+ */
 void print_ascii() {
-    // True RGB — requires terminal with truecolor support (most modern terminals do)
-    // Format: \033[38;2;R;G;Bm
     auto rgb = [](int r, int g, int b) -> std::string {
         return "\033[38;2;" + std::to_string(r) + ";" +
                std::to_string(g) + ";" + std::to_string(b) + "m";
@@ -15,208 +17,190 @@ void print_ascii() {
 
     const std::string reset = "\033[0m";
 
-    // True flame gradient sampled from real fire photography
     std::string rows[] = {
-        rgb(255, 255, 240),  // row 0: near-white (hottest tips)
-        rgb(255, 248, 150),  // row 1: pale lemon
-        rgb(255, 220,  50),  // row 2: bright yellow
-        rgb(255, 165,   0),  // row 3: orange
-        rgb(240,  80,   0),  // row 4: red-orange
-        rgb(200,  20,   0),  // row 5: bright red
-        rgb(175,  20,  15),  // row 6: rich crimson
-        rgb(110,  10,  5),  // row 7: burnt maroon
+        rgb(255, 255, 240), // row 0: near-white
+        rgb(255, 248, 150), // row 1: pale lemon
+        rgb(255, 220,  50), // row 2: bright yellow
+        rgb(255, 165,   0), // row 3: orange
+        rgb(240,  80,   0), // row 4: red-orange
+        rgb(200,  20,   0), // row 5: bright red
+        rgb(175,  20,  15), // row 6: rich crimson
+        rgb(110,  10,   5), // row 7: burnt maroon
     };
 
     std::cout << rows[0] << R"( (   (       )             )    * * ) (         (  )" << "\n";
-    std::cout << rows[1] << R"( )\ ))\ ) ( /(     (  ( /(  (  `   (  `    (      ( /( )\ )      )\ ) )" << "\n";
-    std::cout << rows[2] << R"((()/(()/( )\())    )\ )\()) )\))(  )\))(   )\     )\()(()/(  (  (()/( )" << "\n";
+    std::cout << rows[1] << R"( )\ ))\ ) ( /(     (  ( /(  (  `   (  `    (       ( /( )\ )      )\ ) )" << "\n";
+    std::cout << rows[2] << R"(((()/( )/())   )\ )\()) )\))(  )\))(   )\     )\()(()/(  (  (()/( )" << "\n";
     std::cout << rows[3] << R"( /(_)/(_)((_)\    (((_((_)\ ((_)()\((_)()((((_)( ((_)\ /(_)) )\  /(_)) )" << "\n";
     std::cout << rows[4] << R"((_))(_))   ((_)  )\___ ((_)(_()((_(_()((_)\ _ )\ _((_(_))_ ((_)(_)) )" << "\n";
     std::cout << rows[5] << R"(|_ _/ __| / _ \ ((/ __/ _ \|  \/  |  \/  (_)_\(_| \| ||   \| __| _ \ )" << "\n";
     std::cout << rows[6] << R"( | |\__ \| (_) | | (_| (_) | |\/| | |\/| |/ _ \ | .` || |) | _||   / )" << "\n";
-    std::cout << rows[7] << R"(|___|___/ \___/   \___\___/|_|  |_|_|  |_/_/ \_\|_|\_||___/|___|_|_\ )" << "\n\n" << reset;
+    std::cout << rows[7] << R"(|___|___/ \___/    \___\___/|_|  |_|_|  |_/_/ \_\|_|\_||___/|___|_|_\ )" << "\n\n" << reset;
 }
 
-
-// Function to print submenu1
+/**
+ * @brief Displays the ISO management submenu and handles user input for file operations.
+ * * Provides options for mounting, unmounting, deleting, moving, copying, or writing ISOs.
+ * * @param updateHasRun Indicates if the file list needs a refresh.
+ * @param isAtISOList Atomic flag used to track terminal state for background processes.
+ * @param isImportRunning Tracks if an import process is currently active.
+ * @param newISOFound Signals if a new ISO has been discovered during background scans.
+ */
 void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
-	
     while (true) {
-		// Calls prevent_clear_screen and tab completion
-		rl_bind_key('\f', prevent_readline_keybindings);
-		rl_bind_key('\t', prevent_readline_keybindings);
-		
-		isAtISOList.store(false);
-		
+        rl_bind_key('\f', prevent_readline_keybindings);
+        rl_bind_key('\t', prevent_readline_keybindings);
+        
+        isAtISOList.store(false);
         clearScrollBuffer();
 
-		// Print the menu using the dynamic color
-		std::cout << color << "+-------------------------+\n";
-		std::cout << "|↵ Manage ISO             |\n";
-		std::cout << "+-------------------------+\n";
-		std::cout << "|1. Mount                 |\n";
-		std::cout << "+-------------------------+\n";
-		std::cout << "|2. Umount                |\n";
-		std::cout << "+-------------------------+\n";
-		std::cout << "|3. Delete                |\n";
-		std::cout << "+-------------------------+\n";
-		std::cout << "|4. Move                  |\n";
-		std::cout << "+-------------------------+\n";
-		std::cout << "|5. Copy                  |\n";
-		std::cout << "+-------------------------+\n";
-		std::cout << "|6. Write                 |\n";
-		std::cout << "+-------------------------+" << reset << std::endl;
-        std::cout << "\n";
+        std::cout << color << "+-------------------------+\n"
+                  << "|↵ Manage ISO             |\n"
+                  << "+-------------------------+\n"
+                  << "|1. Mount                 |\n"
+                  << "+-------------------------+\n"
+                  << "|2. Umount                |\n"
+                  << "+-------------------------+\n"
+                  << "|3. Delete                |\n"
+                  << "+-------------------------+\n"
+                  << "|4. Move                  |\n"
+                  << "+-------------------------+\n"
+                  << "|5. Copy                  |\n"
+                  << "+-------------------------+\n"
+                  << "|6. Write                 |\n"
+                  << "+-------------------------+" << reset << std::endl << "\n";
         
         const ListTheme* theme = getActiveTheme();
-		const bool isOriginal = (globalTheme == "original");
-		char* rawInput = readline(("\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
-		
-        // Use std::unique_ptr to manage memory for input
-		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
-
-        // Check for EOF (Ctrl+D) or NULL input before processing
-        if (!input.get()) {
-            break; // Exit the loop on EOF
-        }
-
-        std::string mainInputString(input.get());
-        std::string choice(mainInputString);
+        const bool isOriginal = (globalTheme == "original");
+        char* rawInput = readline(("\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
+        
+        std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
         if (!input.get() || std::strlen(input.get()) == 0) {
-			break; // Exit the submenu if input is empty or NULL
-		}
+            break; 
+        }
 
-          std::string submenu_choice(mainInputString);
-         // Check if the input length is exactly 1
-        if (submenu_choice.empty() || submenu_choice.length() == 1) {
-		switch (submenu_choice[0]) {
-        case '1':
-			clearScrollBuffer();
-            selectForIsoFiles("mount", updateHasRun, isAtISOList, isImportRunning, newISOFound);
-            clearScrollBuffer();
-            break;
-        case '2':
-			clearScrollBuffer();
-            selectForIsoFiles("umount", updateHasRun, isAtISOList, isImportRunning, newISOFound);
-            clearScrollBuffer();
-            break;
-        case '3':
-			clearScrollBuffer();
-            selectForIsoFiles("rm", updateHasRun, isAtISOList, isImportRunning, newISOFound);
-            clearScrollBuffer();
-            break;
-        case '4':
-			clearScrollBuffer();
-            selectForIsoFiles("mv", updateHasRun, isAtISOList, isImportRunning, newISOFound);
-
-            clearScrollBuffer();
-            break;
-        case '5':
-			clearScrollBuffer();
-            selectForIsoFiles("cp", updateHasRun, isAtISOList, isImportRunning, newISOFound);
-            clearScrollBuffer();
-            break;
-        case '6':
-			clearScrollBuffer();
-            selectForIsoFiles("write", updateHasRun, isAtISOList, isImportRunning, newISOFound);
-            clearScrollBuffer();
-            break;
-			}
-		}
+        std::string choice(input.get());
+        if (choice.length() == 1) {
+            switch (choice[0]) {
+                case '1':
+                    clearScrollBuffer();
+                    selectForIsoFiles("mount", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    clearScrollBuffer();
+                    break;
+                case '2':
+                    clearScrollBuffer();
+                    selectForIsoFiles("umount", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    clearScrollBuffer();
+                    break;
+                case '3':
+                    clearScrollBuffer();
+                    selectForIsoFiles("rm", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    clearScrollBuffer();
+                    break;
+                case '4':
+                    clearScrollBuffer();
+                    selectForIsoFiles("mv", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    clearScrollBuffer();
+                    break;
+                case '5':
+                    clearScrollBuffer();
+                    selectForIsoFiles("cp", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    clearScrollBuffer();
+                    break;
+                case '6':
+                    clearScrollBuffer();
+                    selectForIsoFiles("write", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    clearScrollBuffer();
+                    break;
+            }
+        }
     }
 }
 
-
-// Function to print submenu2
+/**
+ * @brief Displays the conversion submenu for transforming non-ISO disk images into ISO format.
+ * * Supports .CCD, .MDF, and .NRG image formats using C++ implementations of conversion tools.
+ * * @param newISOFound Atomic flag to notify main thread of newly created ISO files.
+ * @param isImportRunning Tracks background import state to prevent menu collisions.
+ */
 void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning) {
-	
-	while (true) {
-		// Calls prevent_clear_screen and tab completion
-		rl_bind_key('\f', prevent_readline_keybindings);
-		rl_bind_key('\t', prevent_readline_keybindings);
-		
-		clearScrollBuffer();
-		
-		std::cout << color << "+-------------------------+\n";
-		std::cout << "|↵ Convert2ISO            |\n";
-		std::cout << "+-------------------------+\n";
-		std::cout << "|1. CCD2ISO++             |\n";
-		std::cout << "+-------------------------+\n";
-		std::cout << "|2. MDF2ISO++             |\n";
-		std::cout << "+-------------------------+\n";
-		std::cout << "|3. NRG2ISO++             |\n";
-		std::cout << "+-------------------------+" << reset << std::endl;
-        std::cout << "\n";
+    while (true) {
+        rl_bind_key('\f', prevent_readline_keybindings);
+        rl_bind_key('\t', prevent_readline_keybindings);
+        
+        clearScrollBuffer();
+        
+        std::cout << color << "+-------------------------+\n"
+                  << "|↵ Convert2ISO            |\n"
+                  << "+-------------------------+\n"
+                  << "|1. CCD2ISO++             |\n"
+                  << "+-------------------------+\n"
+                  << "|2. MDF2ISO++             |\n"
+                  << "+-------------------------+\n"
+                  << "|3. NRG2ISO++             |\n"
+                  << "+-------------------------+" << reset << std::endl << "\n";
         
         const ListTheme* theme = getActiveTheme();
-		const bool isOriginal = (globalTheme == "original");
-		char* rawInput = readline(("\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
+        const bool isOriginal = (globalTheme == "original");
+        char* rawInput = readline(("\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
 
-        // Use std::unique_ptr to manage memory for input
-		std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
-
-        // Check for EOF (Ctrl+D) or NULL input before processing
-        if (!input.get()) {
-            break; // Exit the loop on EOF
-        }
-
-        std::string mainInputString(input.get());
-        std::string choice(mainInputString);
-
+        std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
         if (!input.get() || std::strlen(input.get()) == 0) {
-			break; // Exit the submenu if input is empty or NULL
-		}
+            break; 
+        }
 
-          std::string submenu_choice(mainInputString);
-          std::string operation;
-         // Check if the input length is exactly 1
-		 if (submenu_choice.empty() || submenu_choice.length() == 1){
-         switch (submenu_choice[0]) {
-             case '1':
-				operation = "bin";
-					promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
-                clearScrollBuffer();
-                break;
-             case '2':
-				operation = "mdf";
-					promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
-                clearScrollBuffer();
-                break;
-             case '3':
-				operation = "nrg";
-					promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
-                clearScrollBuffer();
-                break;
-			}
-		}
-	}
+        std::string choice(input.get());
+        std::string operation;
+        if (choice.length() == 1) {
+            switch (choice[0]) {
+                case '1':
+                    operation = "bin";
+                    promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
+                    clearScrollBuffer();
+                    break;
+                case '2':
+                    operation = "mdf";
+                    promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
+                    clearScrollBuffer();
+                    break;
+                case '3':
+                    operation = "nrg";
+                    promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
+                    clearScrollBuffer();
+                    break;
+            }
+        }
+    }
 }
 
-
-// Function to print menu
+/**
+ * @brief Prints the primary application menu options.
+ */
 void printMenu() {
-
-	std::cout << color << "+-------------------------+\n";
-	std::cout << "|       Menu Options      |\n";
-	std::cout << "+-------------------------+\n";
-	std::cout << "|1. ManageISO             |\n";
-	std::cout << "+-------------------------+\n";
-	std::cout << "|2. Convert2ISO           |\n";
-	std::cout << "+-------------------------+\n";
-	std::cout << "|3. ImportISO             |\n";
-	std::cout << "+-------------------------+\n";
-	std::cout << "|4. Exit                  |\n";
-	std::cout << "+-------------------------+";
-	std::cout << "\n";
+    std::cout << color << "+-------------------------+\n"
+              << "|       Menu Options      |\n"
+              << "+-------------------------+\n"
+              << "|1. ManageISO             |\n"
+              << "+-------------------------+\n"
+              << "|2. Convert2ISO           |\n"
+              << "+-------------------------+\n"
+              << "|3. ImportISO             |\n"
+              << "+-------------------------+\n"
+              << "|4. Exit                  |\n"
+              << "+-------------------------+" << "\n";
 }
 
-
-// GENERAL STUFF
-
-
-// Function to clear the message after a timeout
+/**
+ * @brief Threaded worker that clears temporary status messages from the terminal after a delay.
+ * * It ensures that messages don't persist indefinitely and triggers a UI redraw if 
+ * the user is currently at the main menu.
+ * * @param timeoutSeconds Duration to wait before clearing.
+ * @param isAtMain Tracks if the user is currently viewing the main menu.
+ * @param isImportRunning Prevents clearing if an active import is printing logs.
+ * @param messageActive Flag indicating a temporary message is currently visible.
+ */
 void clearMessageAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtMain, std::atomic<bool>& isImportRunning, std::atomic<bool>& messageActive) {
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
@@ -224,23 +208,25 @@ void clearMessageAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtMain, s
         if (!isImportRunning.load()) {
             if (messageActive.load() && isAtMain.load()) {
                 clearScrollBuffer();
-                
                 print_ascii();
-                
                 printMenu();
                 std::cout << "\n";
                 rl_on_new_line(); 
                 rl_redisplay();
-
                 messageActive.store(false);
             }
-            break; // Exit the loop once the message is cleared
+            break; 
         }
     }
 }
 
-
-// Function to clear scrollbuffer
+/**
+ * @brief Clears the terminal screen and resets the scrollback buffer.
+ * * Uses ANSI escape sequences: 
+ * - \033[3J: Clear scrollback
+ * - \033[2J: Clear entire screen
+ * - \033[H: Move cursor to home position
+ */
 void clearScrollBuffer() {
-        std::cout << "\033[3J\033[2J\033[H\033[0m" << std::flush;
+    std::cout << "\033[3J\033[2J\033[H\033[0m" << std::flush;
 }

@@ -2,84 +2,95 @@
 
 #include "../headers.h"
 
-
-// Function to disable (Ctrl+D)
+/**
+ * @brief Disables EOF (Ctrl+D) processing in the terminal.
+ * @details Modifies the termios control characters to disable VEOF. 
+ * This prevents the program from receiving an EOF signal which usually 
+ * terminates a shell or input loop.
+ */
 void disable_ctrl_d() {
     struct termios term;
-    
-    // Get current terminal attributes
-    tcgetattr(STDIN_FILENO, &term);
-    
-    // Disable EOF (Ctrl+D) processing
-    term.c_cc[VEOF] = _POSIX_VDISABLE;
-    
-    // Apply the modified settings
-    tcsetattr(STDIN_FILENO, TCSANOW, &term);
+    if (tcgetattr(STDIN_FILENO, &term) == 0) {
+        term.c_cc[VEOF] = _POSIX_VDISABLE;
+        tcsetattr(STDIN_FILENO, TCSANOW, &term);
+    }
 }
 
-
-// Function to specifically re-enable Ctrl+D
+/**
+ * @brief Re-enables EOF (Ctrl+D) processing.
+ * @details Restores VEOF to the standard ASCII 4 (End of Transmission).
+ */
 void enable_ctrl_d() {
     struct termios term;
-    
-    // Get current terminal attributes
-    tcgetattr(STDIN_FILENO, &term);
-    
-    // Re-enable EOF (Ctrl+D) - typically ASCII 4 (EOT)
-    term.c_cc[VEOF] = 4;  // Default value for most systems
-    
-    // Apply the modified settings
-    tcsetattr(STDIN_FILENO, TCSANOW, &term);
+    if (tcgetattr(STDIN_FILENO, &term) == 0) {
+        term.c_cc[VEOF] = 4; // Standard default for most Unix systems
+        tcsetattr(STDIN_FILENO, TCSANOW, &term);
+    }
 }
 
-
-// Function to flush input buffer
+/**
+ * @brief Discards any unread data in the terminal input buffer.
+ */
 void flushStdin() {
     tcflush(STDIN_FILENO, TCIFLUSH);
 }
 
-
-// Function to disable input during processing
+/**
+ * @brief Disables canonical mode and echoing.
+ * @details Used during heavy processing or custom UI rendering to prevent 
+ * user keystrokes from appearing on the screen or being buffered as line input.
+ */
 void disableInput() {
     struct termios term;
-    tcgetattr(STDIN_FILENO, &term);
-    term.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &term);
+    if (tcgetattr(STDIN_FILENO, &term) == 0) {
+        term.c_lflag &= ~(ICANON | ECHO);
+        tcsetattr(STDIN_FILENO, TCSANOW, &term);
+    }
 }
 
-
-// Function to restore normal input
+/**
+ * @brief Restores standard canonical input and echoing.
+ */
 void restoreInput() {
     struct termios term;
-    tcgetattr(STDIN_FILENO, &term);
-    term.c_lflag |= ICANON | ECHO;
-    tcsetattr(STDIN_FILENO, TCSANOW, &term);
+    if (tcgetattr(STDIN_FILENO, &term) == 0) {
+        term.c_lflag |= ICANON | ECHO;
+        tcsetattr(STDIN_FILENO, TCSANOW, &term);
+    }
 }
 
-
-// Function to ignore Ctrl+C
+/**
+ * @brief Configures the environment to ignore SIGINT (Ctrl+C).
+ * @details Specifically instructs GNU Readline to stop catching signals 
+ * and sets the system-wide SIGINT handler to SIG_IGN.
+ */
 void setupReadlineToIgnoreCtrlC() {
-    // Prevent readline from catching/interrupting signals
+    // Prevent readline from overriding our signal logic
     rl_catch_signals = 0;
 
-    // Configure SIGINT (Ctrl+C) to be ignored
     struct sigaction sa_ignore;
-    sa_ignore.sa_handler = SIG_IGN;   // Ignore signal
-    sigemptyset(&sa_ignore.sa_mask);  // Clear signal mask
-    sa_ignore.sa_flags = 0;           // No special flags
+    sa_ignore.sa_handler = SIG_IGN;
+    sigemptyset(&sa_ignore.sa_mask);
+    sa_ignore.sa_flags = 0;
     sigaction(SIGINT, &sa_ignore, nullptr);
 }
 
-
-// Signal handler for SIGINT (Ctrl+C)
+/**
+ * @brief Internal handler for cancellation signals.
+ * @param signal The signal number caught (expected SIGINT).
+ */
 void signalHandlerCancellations(int signal) {
     if (signal == SIGINT) {
+        // Atomic flag used by worker threads to stop processing
         g_operationCancelled = true;
     }
 }
 
-
-// Setup signal handling
+/**
+ * @brief Sets up a handler to catch Ctrl+C for graceful cancellation.
+ * @details Instead of terminating, the program sets a global flag 
+ * allowing current tasks to finish or clean up before returning.
+ */
 void setupSignalHandlerCancellations() {
     struct sigaction sa;
     sa.sa_handler = signalHandlerCancellations;
@@ -88,12 +99,17 @@ void setupSignalHandlerCancellations() {
     sigaction(SIGINT, &sa, nullptr);
 }
 
-
-// Function to handle termination signals
+/**
+ * @brief Global termination signal handler.
+ * @details Handles fatal signals or exits by cleaning up UI buffers 
+ * and releasing filesystem locks before terminating.
+ * @param signum The signal number triggering the exit.
+ */
 void signalHandler(int signum) {
-
+    // Ensure the terminal isn't left in a messy state
     clearScrollBuffer();
-    // Perform cleanup before exiting
+
+    // Release global lock if held
     if (lockFileDescriptor != -1) {
         close(lockFileDescriptor);
     }

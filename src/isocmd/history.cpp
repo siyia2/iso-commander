@@ -3,25 +3,27 @@
 #include "../headers.h"
 #include "../themes.h"
 
-
-// Function to check if folder path history is empty
+/**
+ * @brief Validates if a folder path history file is effectively empty.
+ * * Performs checks for file existence, size, and content validity. A file is 
+ * considered empty if it contains only whitespace or lacks any entries 
+ * starting with a forward slash.
+ * * @param filePath The filesystem path to the history file.
+ * @return true If the file is missing, size zero, or contains no valid paths.
+ * @return false If the file contains at least one valid path entry.
+ */
 bool isHistoryFileEmpty(const std::string& filePath) {
-    // Check if the file exists
     struct stat fileInfo;
     if (stat(filePath.c_str(), &fileInfo) != 0) {
-        // File doesn't exist, consider it as empty
         return true;
     }
 
-    // Check if the file size is 0
     if (fileInfo.st_size == 0) {
         return true;
     }
 
-    // Open the file and check its content
     std::ifstream file(filePath);
     if (!file.is_open()) {
-        // Unable to open the file, consider it as empty
         return true;
     }
 
@@ -30,7 +32,6 @@ bool isHistoryFileEmpty(const std::string& filePath) {
     std::string line;
 
     while (std::getline(file, line)) {
-        // Check if the line contains non-whitespace characters
         for (char ch : line) {
             if (!std::isspace(static_cast<unsigned char>(ch))) {
                 hasNonWhitespace = true;
@@ -38,101 +39,97 @@ bool isHistoryFileEmpty(const std::string& filePath) {
             }
         }
 
-        // Check if the line starts with '/'
         if (!line.empty() && line[0] == '/') {
             hasEntryStartingWithSlash = true;
         }
     }
 
-    // If the file has no non-whitespace characters, it's empty
-    if (!hasNonWhitespace) {
+    if (!hasNonWhitespace || !hasEntryStartingWithSlash) {
         return true;
     }
 
-    // If the file has no entries starting with '/', it's considered empty
-    if (!hasEntryStartingWithSlash) {
-        return true;
-    }
-
-    // Otherwise, the file is not empty
     return false;
 }
 
-
-// Function to load history for readline
+/**
+ * @brief Loads history from a file into the GNU Readline buffer.
+ * * Swaps the current history context based on whether the user is filtering 
+ * or navigating. Uses advisory file locking (flock) to ensure thread-safe 
+ * and process-safe reads.
+ * * @param filterHistory Boolean toggle; true for filter history, false for path history.
+ */
 void loadHistory(bool& filterHistory) {
-    // 1. Wipe current session memory so we don't mix "Filter" history with "Path" history
     clear_history();
-    std::string targetFilePath = !filterHistory ? 
-        historyFilePath : filterHistoryFilePath;
-    // 2. Check if file exists before trying to lock/open
+    std::string targetFilePath = !filterHistory ? historyFilePath : filterHistoryFilePath;
+
     if (!std::filesystem::exists(targetFilePath)) {
         return;
     }
-    // 3. Open file descriptor for flock
+
     int fd = open(targetFilePath.c_str(), O_RDONLY);
     if (fd == -1) return;
-    // Acquire a shared lock (multiple readers allowed, prevents writing)
+
     if (flock(fd, LOCK_SH) == -1) {
         close(fd);
         return;
     }
-    // 4. Read file into Readline buffer via the locked fd
+
     FILE* f = fdopen(fd, "r");
     if (f) {
         char buf[4096];
         while (fgets(buf, sizeof(buf), f)) {
             std::string line(buf);
-            // Strip trailing newline
             if (!line.empty() && line.back() == '\n')
                 line.pop_back();
             if (!line.empty()) {
                 add_history(line.c_str());
             }
         }
-        // 5. Cleanup — fclose also closes fd, so only unlock before fclose
         flock(fd, LOCK_UN);
         fclose(f);
     } else {
-        // 5. Cleanup (fdopen failed)
         flock(fd, LOCK_UN);
         close(fd);
     }
 }
-// Function to save history from readline
+
+/**
+ * @brief Saves the current Readline history to a persistent file.
+ * * Performs deduplication (keeping only the most recent unique entries) 
+ * and truncates the file to the maximum allowed lines. Employs exclusive 
+ * file locking (flock) during the write process.
+ * * @param filterHistory Boolean toggle; determines which database file to write to.
+ */
 void saveHistory(bool& filterHistory) {
-    std::string targetFilePath = !filterHistory ? 
-        historyFilePath : filterHistoryFilePath;
-    // 1. Get the correct limit
-    size_t maxLines = !filterHistory ? 
-        MAX_HISTORY_LINES : MAX_HISTORY_PATTERN_LINES;
-    // 2. stifle_history caps future additions but does not retroactively truncate
-    // the existing in-memory list, so the manual loop below handles the limit instead.
+    std::string targetFilePath = !filterHistory ? historyFilePath : filterHistoryFilePath;
+    size_t maxLines = !filterHistory ? MAX_HISTORY_LINES : MAX_HISTORY_PATTERN_LINES;
+
     std::filesystem::path dirPath = std::filesystem::path(targetFilePath).parent_path();
     if (!dirPath.empty() && !std::filesystem::exists(dirPath)) {
         std::filesystem::create_directories(dirPath);
     }
-    // 3. Open the file ONCE. Use the file descriptor to create the stream.
-    // We don't use O_TRUNC yet so we don't kill the file if the write fails.
+
     int fd = open(targetFilePath.c_str(), O_WRONLY | O_CREAT, 0644);
     if (fd == -1) return;
+
     if (flock(fd, LOCK_EX) == -1) {
         close(fd);
         return;
     }
-    // Now truncate manually since we have the lock
+
     if (ftruncate(fd, 0) == -1) {
         flock(fd, LOCK_UN);
         close(fd);
         return;
     }
+
     HIST_ENTRY **histList = history_list();
     if (histList) {
         std::vector<std::string> finalLines;
         std::unordered_set<std::string> seen;
         int count = 0;
         while (histList[count]) count++;
-        // Process backwards for uniqueness and limit
+
         for (int i = count - 1; i >= 0; i--) {
             if (!histList[i] || !histList[i]->line) continue;
             std::string line(histList[i]->line);
@@ -143,33 +140,35 @@ void saveHistory(bool& filterHistory) {
             }
             if (finalLines.size() >= maxLines) break;
         }
+
         std::reverse(finalLines.begin(), finalLines.end());
-        // Write to the file descriptor via the locked fd
+
         FILE* f = fdopen(fd, "w");
         if (f) {
             for (const auto& line : finalLines) {
                 fprintf(f, "%s\n", line.c_str());
             }
             fflush(f);
-            // Cleanup — fclose also closes fd, so only unlock before fclose
             flock(fd, LOCK_UN);
             fclose(f);
         } else {
-            // fdopen failed, clean up manually
             flock(fd, LOCK_UN);
             close(fd);
         }
     } else {
-        // No history to write, clean up
         flock(fd, LOCK_UN);
         close(fd);
     }
 }
 
-
-// Function to clear path and filter history
+/**
+ * @brief Clears the specified history database file and the current session history.
+ * * Handles user commands to wipe either path or filter databases. 
+ * Re-routes output based on the active theme for error/success messaging.
+ * * @param inputSearch The command string (e.g., "!clr_paths" or "!clr_filter").
+ */
 void clearHistory(const std::string& inputSearch) {
-    signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+    signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
     const ListTheme* theme = getActiveTheme();
@@ -186,7 +185,6 @@ void clearHistory(const std::string& inputSearch) {
         filePath = basePath + "iso_commander_filter_database.txt";
         historyType = "FilterTerm";
     } else {
-        // Use theme->secondary (Error) and theme->warning (Highlight)
         std::cerr << "\n" << (isOrig ? originalColors::red : theme->secondary) << "Invalid command: " 
                   << (isOrig ? originalColors::yellow : theme->warning) << "'" << inputSearch << "'" 
                   << (isOrig ? originalColors::red : theme->secondary) << ".\033[J" << std::endl;
@@ -201,7 +199,6 @@ void clearHistory(const std::string& inputSearch) {
                   << (isOrig ? originalColors::red : theme->secondary) << ". File missing or inaccessible.\033[J" << std::endl;
     } else {
         ofs.close();
-        // Use theme->accent (Success)
         std::cout << "\n" << (isOrig ? originalColors::green : theme->accent) 
                   << historyType << " database cleared successfully.\033[J" << std::endl;
         clear_history();
