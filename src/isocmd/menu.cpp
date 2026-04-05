@@ -10,6 +10,7 @@
  * near-white heat at the top to burnt maroon at the base.
  */
 void print_ascii() {
+
     auto rgb = [](int r, int g, int b) -> std::string {
         return "\033[38;2;" + std::to_string(r) + ";" +
                std::to_string(g) + ";" + std::to_string(b) + "m";
@@ -17,25 +18,26 @@ void print_ascii() {
 
     const std::string reset = "\033[0m";
 
+    // True flame gradient sampled from real fire photography
     std::string rows[] = {
-        rgb(255, 255, 240), // row 0: near-white
-        rgb(255, 248, 150), // row 1: pale lemon
-        rgb(255, 220,  50), // row 2: bright yellow
-        rgb(255, 165,   0), // row 3: orange
-        rgb(240,  80,   0), // row 4: red-orange
-        rgb(200,  20,   0), // row 5: bright red
-        rgb(175,  20,  15), // row 6: rich crimson
-        rgb(110,  10,   5), // row 7: burnt maroon
+        rgb(255, 255, 240),  // row 0: near-white (hottest tips)
+        rgb(255, 248, 150),  // row 1: pale lemon
+        rgb(255, 220,  50),  // row 2: bright yellow
+        rgb(255, 165,   0),  // row 3: orange
+        rgb(240,  80,   0),  // row 4: red-orange
+        rgb(200,  20,   0),  // row 5: bright red
+        rgb(175,  20,  15),  // row 6: rich crimson
+        rgb(110,  10,  5),  // row 7: burnt maroon
     };
 
     std::cout << rows[0] << R"( (   (       )             )    * * ) (         (  )" << "\n";
-    std::cout << rows[1] << R"( )\ ))\ ) ( /(     (  ( /(  (  `   (  `    (       ( /( )\ )      )\ ) )" << "\n";
-    std::cout << rows[2] << R"(((()/( )/())   )\ )\()) )\))(  )\))(   )\     )\()(()/(  (  (()/( )" << "\n";
+    std::cout << rows[1] << R"( )\ ))\ ) ( /(     (  ( /(  (  `   (  `    (      ( /( )\ )      )\ ) )" << "\n";
+    std::cout << rows[2] << R"((()/(()/( )\())    )\ )\()) )\))(  )\))(   )\     )\()(()/(  (  (()/( )" << "\n";
     std::cout << rows[3] << R"( /(_)/(_)((_)\    (((_((_)\ ((_)()\((_)()((((_)( ((_)\ /(_)) )\  /(_)) )" << "\n";
     std::cout << rows[4] << R"((_))(_))   ((_)  )\___ ((_)(_()((_(_()((_)\ _ )\ _((_(_))_ ((_)(_)) )" << "\n";
     std::cout << rows[5] << R"(|_ _/ __| / _ \ ((/ __/ _ \|  \/  |  \/  (_)_\(_| \| ||   \| __| _ \ )" << "\n";
     std::cout << rows[6] << R"( | |\__ \| (_) | | (_| (_) | |\/| | |\/| |/ _ \ | .` || |) | _||   / )" << "\n";
-    std::cout << rows[7] << R"(|___|___/ \___/    \___\___/|_|  |_|_|  |_/_/ \_\|_|\_||___/|___|_|_\ )" << "\n\n" << reset;
+    std::cout << rows[7] << R"(|___|___/ \___/   \___\___/|_|  |_|_|  |_/_/ \_\|_|\_||___/|___|_|_\ )" << "\n\n" << reset;
 }
 
 /**
