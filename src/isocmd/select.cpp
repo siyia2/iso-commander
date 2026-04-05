@@ -308,14 +308,23 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         
         
         std::cout << "\033[1A\033[K";
-        
+
         const ListTheme* theme = getActiveTheme();
 		const bool isOriginal = (globalTheme == "original");
-		std::string prompt = (isFiltered ? "\001\033[1;96m\002F⊳ \001" : "\001")
-                   + std::string(isOriginal ? "\033[1;92m" : theme->accent) + "\002ISO\001"
-                   + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002 ↵ for \001"
-                   + operationColor + "\002" + operation 
-                   + "\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
+        
+        std::string colorIso    = isOriginal ? "\033[1;92m" : std::string(theme->accent);
+		std::string colorMuted  = isOriginal ? "\033[1;94m" : std::string(theme->muted);
+		std::string colorFilter = isOriginal ? "\033[1;96m" : std::string(theme->accent);
+		std::string colorReset  = "\033[0;1m";
+
+		// The prompt construction remains the same
+		std::string prompt = 
+			(isFiltered ? ("\001" + colorFilter + "\002F⊳ \001") : "\001")
+			+ colorIso    + "\002ISO\001"
+			+ colorMuted  + "\002 ↵ for \001"
+			+ operationColor + "\002" + operation + "\001" 
+			+ colorMuted  + "\002, ? ↵ for help, < ↵ to return:\001" 
+			+ colorReset  + "\002 ";
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         
@@ -461,13 +470,22 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 		const ListTheme* theme = getActiveTheme();
 		const bool isOriginal = (globalTheme == "original");
 
-		std::string prompt = (isFiltered ? "\001\033[1;96m\002F⊳ \001" : "\001")
-                   + std::string(isOriginal ? "\033[1;38;5;208m" : theme->highlight) + "\002"
-                   + fileExtensionWithOutDots + "\001"
-                   + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002 ↵ for \001"
-                   + std::string(isOriginal ? "\033[1;92m" : theme->accent) + "\002ISO \001" // Added space here
-                   + "\033[1;38;5;208m\002conversion\001" // Force orange for conversion
-                   + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002, ? ↵ for help, < ↵ to return:\001\033[0;1m\002 ";
+		// Define theme-aware color strings
+		std::string colorIso       = isOriginal ? "\033[1;92m" : std::string(theme->accent);
+		std::string colorMuted     = isOriginal ? "\033[1;94m" : std::string(theme->muted);
+		std::string colorFilter    = isOriginal ? "\033[1;96m" : std::string(theme->accent);
+		std::string colorHighlight = isOriginal ? "\033[1;38;5;208m" : std::string(theme->highlight);
+		std::string colorReset     = "\033[0;1m";
+
+		// Build the prompt using the mapped colors
+		std::string prompt = 
+			(isFiltered ? ("\001" + colorFilter + "\002F⊳ \001") : "\001")
+			+ colorHighlight + "\002" + fileExtensionWithOutDots + "\001"
+			+ colorMuted     + "\002 ↵ for \001"
+			+ colorIso       + "\002ISO \001"
+			+ colorHighlight + "\002 conversion \001" 
+			+ colorMuted     + "\002, ? ↵ for help, < ↵ to return:\001" 
+			+ colorReset     + "\002 ";
         
         // Get user input
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);

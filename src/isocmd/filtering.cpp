@@ -486,13 +486,20 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
 	const ListTheme* theme = getActiveTheme();
 	const bool isOriginal = (globalTheme == "original");
 
-	// Use theme color for the connectors/standard text
-	std::string primaryCol = isOriginal ? "\033[1;94m" : std::string(theme->muted);
+	// Define theme-aware colors
+	std::string colorPrimary = isOriginal ? "\033[1;94m" : std::string(theme->muted);
+	std::string colorFilter  = isOriginal ? "\033[1;96m" : std::string(theme->accent); 
+	std::string colorReset   = "\033[0;1m";
+
+	// The operationColor should ideally be passed in or defined similarly:
+	// std::string operationColor = isOriginal ? "\033[1;92m" : std::string(theme->highlight);
 
 	const std::string prompt =
-		"\001\033[1;96m\002FilterTerms\001" + primaryCol + "\002 ↵ for \001" +
-		operationColor + "\002" + operation +
-		"\001" + primaryCol + "\002, or ↵ to return: \001\033[0;1m\002";
+		"\001" + colorFilter + "\002FilterTerms\001" 
+		+ colorPrimary + "\002 ↵ for \001" 
+		+ operationColor + "\002" + operation + "\001" 
+		+ colorPrimary + "\002, or ↵ to return: \001" 
+		+ colorReset + "\002 ";
 
     auto onEmptyInput = [&]() {
         clear_history();
@@ -530,16 +537,18 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
     const ListTheme* theme = getActiveTheme();
 	const bool isOriginal = (globalTheme == "original");
 
-	// Determine the primary color (muted)
-	std::string primaryCol = isOriginal ? "\033[1;94m" : std::string(theme->muted);
-
-	// Determine the extension color (orange if original, theme accent if not)
-	std::string extCol = isOriginal ? "\033[1;38;5;208m" : std::string(theme->accent);
+	// Define theme-aware colors
+	std::string colorMuted   = isOriginal ? "\033[1;94m" : std::string(theme->muted);
+	std::string colorExt     = isOriginal ? "\033[1;38;5;208m" : std::string(theme->highlight);
+	std::string colorFilter  = isOriginal ? "\033[1;96m" : std::string(theme->accent);
+	std::string colorReset   = "\033[0;1m";
 
 	const std::string prompt =
-		"\001\033[1;96m\002FilterTerms\001" + primaryCol + "\002 ↵ for \001" + 
-		extCol + "\002" + fileExtensionWithOutDots + "\001" + 
-		primaryCol + "\002, or ↵ to return: \001\033[0;1m\002";
+		"\001" + colorFilter + "\002FilterTerms\001" 
+		+ colorMuted + "\002 ↵ for \001" 
+		+ colorExt   + "\002" + fileExtensionWithOutDots + "\001" 
+		+ colorMuted + "\002, or ↵ to return: \001" 
+		+ colorReset + "\002 ";
 
     // Signal the caller to re-sort after a successful filter, since the
     // filtered subset may arrive in a different order than the original list.
