@@ -248,7 +248,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
 
-    size_t underscorePos = inputSearch.find('_');
+    size_t underscorePos = inputSearch.find(':');
     if (underscorePos != std::string::npos) {
         std::string valueStr = inputSearch.substr(underscorePos + 1);
         
@@ -264,15 +264,16 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
                 ITEMS_PER_PAGE = val;
                 if (val > 0) {
                     std::cout << "\n\033[0;1mPagination status updated: Max entries per page set to \033[1;93m" 
-                              << val << "\033[1;97m.\033[0m" << std::endl;
+                              << val << "\033[1;97m.\033[J\033[0m" << std::endl;
                 } else {
-                    std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m." << std::endl;
+                    std::cout << "\n\033[0;1mPagination status updated: \033[1;91mDisabled\033[0;1m.\033[J" << std::endl;
                 }
             } else {
-                std::cerr << "\n\033[1;91mError: Unable to access configuration file.\n";
+                std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                  << configPath << "'\033[1;91m.\033[J\033[0;1m\n";
             }
         } else {
-            std::cout << "\n\033[1;31mError: Invalid number (0-1000 required)\033[0m\n";
+            std::cout << "\n\033[1;31mError: Invalid number (0-1000 required)\033[J\033[0m\n";
         }
     }
     
@@ -287,6 +288,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
 void updateFilenamesOnly(const std::string& configPath, const std::string& inputSearch) {
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
+    
 
     if (inputSearch == "*flno:on" || inputSearch == "*flno:off") {
         bool isEnabling = (inputSearch == "*flno:on");
@@ -300,12 +302,13 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
             displayConfig::toggleNamesOnly = isEnabling;
             std::cout << "\n\033[0;1mFilename-only lists have been "
                       << (isEnabling ? "\033[1;92menabled" : "\033[1;91mdisabled")
-                      << "\033[0;1m.\033[0m\n";
+                      << "\033[0;1m.\033[J\033[0;1m\n";
         } else {
-            std::cerr << "\n\033[1;91mError: Unable to access configuration file.\n";
+            std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                  << configPath << "'\033[1;91m.\033[J\033[0;1m\n";
         }
     } else {
-        std::cerr << "\n\033[1;31mError: Invalid command format.\033[0;1m\n";
+        std::cerr << "\n\033[1;31mError: Invalid command format.\033[J\033[0;1m\n";
     }
 
     std::cout << color << "\n↵ to continue..." << reset;
@@ -358,20 +361,21 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
 				
 				// Custom feedback for Menu Color
 				std::cout << "\n\033[0;1mMenu color set to: \033[1;92m" 
-						  << value << "\033[0;1m.\033[0m\n";
+						  << value << "\033[0;1m.\033[J\033[0m\n";
 			} 
 			else if (key == "ui_theme") {
 				globalListTheme = value;
 				
 				// Keep existing feedback for Theme
 				std::cout << "\n\033[0;1mUI theme set to: \033[1;92m" 
-						  << value << "\033[0;1m.\033[0m\n";
+						  << value << "\033[0;1m.\033[J\033[0m\n";
 			}
 		} else {
-			std::cerr << "\n\033[1;91mError: Unable to access configuration file.\n";
+			std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                  << configPath << "'\033[1;91m.\033[J\033[0;1m\n";
 		}
     } else {
-        std::cerr << "\n\033[1;31mError: Invalid command or unsupported value.\033[0;1m\n";
+        std::cerr << "\n\033[1;31mError: Invalid command or unsupported value.\033[J\033[0;1m\n";
     }
 
     std::cout << color << "\n↵ to continue..." << reset;
@@ -453,13 +457,14 @@ void setDisplayMode(const std::string& inputSearch) {
 
         if (writeConfig(configPath, g_configCache)) {
             if (!updatedLabels.empty()) {
-                std::cout << "\n\033[0;1mDisplay mode set to \033[1;92m" << newValue << "\033[0;1m for:\033[0m\n";
+                std::cout << "\n\033[0;1mDisplay mode set to \033[1;92m" << newValue << "\033[0;1m for:\033[J\033[0m\n";
                 for (const auto& label : updatedLabels) {
                     std::cout << "  - " << label << "\033[0m\n";
                 }
             }
         } else {
-            std::cerr << "\n\033[1;91mError: Unable to access configuration file.\n";
+            std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                  << configPath << "'\033[1;91m.\033[J\033[0;1m\n";
         }
     }
 
@@ -521,7 +526,8 @@ void displayConfigurationOptions(const std::string& configPath) {
 
     std::ifstream configFile(configPath);
     if (!configFile.is_open()) {
-        std::cerr << "\n\033[1;31mError: Could not open configuration for reading.\033[0m\n";
+        std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
+                  << configPath << "'\033[1;91m.\033[0;1m\n";
         return;
     }
 

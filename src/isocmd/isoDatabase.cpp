@@ -609,10 +609,10 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
     if (writeConfig(configPath, g_configCache)) {
         std::cout << "\n\033[0;1mAutomatic background updates have been "
                   << (isEnabling ? "\033[1;92menabled" : "\033[1;91mdisabled")
-                  << "\033[0;1m.\033[0m\n";
+                  << "\033[0;1m.\033[J\033[0m\n";
     } else {
         std::cerr << "\n\033[1;91mError: Unable to access configuration file: \033[1;93m'"
-                  << configPath << "'\033[0m\n";
+                  << configPath << "'\033[1;91m.\033[J\033[0m\n";
     }
 
     std::cout << color << "\n↵ to continue..." << reset;

@@ -329,7 +329,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
          (nrgFilesCache.empty() && modeNrg)) && list) {
         
         // Notify the user that no files of the specified type are stored in RAM
-        std::cout << "\n\033[1;93mNo " << fileExtension << " entries stored in RAM.\033[1m\n";
+        std::cout << "\n\033[1;93mNo " << fileExtension << " entries stored in RAM.\033[J\033[1m\n";
         std::cout << color << "\n↵ to continue..." << reset; 
         
         // Wait for the user to press Enter before continuing
@@ -412,9 +412,9 @@ void clearRamCache(bool& modeMdf, bool& modeNrg) {
 
     // Display appropriate messages
     if (cacheIsEmpty && (!transformationCacheWasCleared || !originalCacheWasCleared)) {
-        std::cout << "\n\033[1;93m" << cacheType << " buffer is empty. Nothing to clear.\033[0;1m\n";
+        std::cout << "\n\033[1;93m" << cacheType << " buffer is empty. Nothing to clear.\033[J\033[0;1m\n";
     } else {
-        std::cout << "\n\033[1;92m" << cacheType << " buffer cleared.\033[0;1m\n";
+        std::cout << "\n\033[1;92m" << cacheType << " buffer cleared.\033[J\033[0;1m\n";
     }
 
     std::cout << color << "\n↵ to continue..." << reset; 
