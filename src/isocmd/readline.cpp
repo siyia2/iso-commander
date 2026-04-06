@@ -63,6 +63,8 @@ char** my_special_completion_entry(const char* text, int start, int end) {
     (void)end;
 
     if (text[0] == '!' || text[0] == '?' || text[0] == '*') {
+		// This stops Readline from adding a space after the match
+        rl_completion_append_character = '\0';
         return rl_completion_matches(text, command_generator);
     }
 
