@@ -84,7 +84,7 @@ struct originalColors {
     static constexpr std::string_view orange     = "\033[1;38;2;255;120;0m";
     static constexpr std::string_view brown      = "\033[1;38;2;165;75;25m";
     static constexpr std::string_view darkCyan   = "\033[1;38;2;0;160;160m";
-    static constexpr std::string_view purple     = "\033[1;38;2;140;50;210m";
+    static constexpr std::string_view purple     = "\033[1;38;2;140;70;200m";
     static constexpr std::string_view dimGray    = "\033[1;38;2;100;100;100m";
     
     static constexpr std::string_view bgNavy     = "\033[1;48;2;0;0;175m";
