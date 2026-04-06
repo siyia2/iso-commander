@@ -596,8 +596,14 @@ void displayConfigurationOptions(const std::string& configPath) {
         printConfigError(configPath);
         return;
     }
-
-    auto [label, accent, warning, error] = resolveTheme();
+	
+	const ListTheme* theme = getActiveTheme();
+	const bool isOriginal = (globalTheme == "original");
+	
+    std::string_view accent = isOriginal ? originalColors::cyan : theme->accent;
+    std::string_view warning = isOriginal ? originalColors::yellow : theme->warning;
+    std::string_view label = isOriginal ? originalColors::green : theme->muted;
+       
 	std::cout << "\n" << accent << "==== Current Configuration ====\033[0;1m\n\n";
 
 	std::string line; 
