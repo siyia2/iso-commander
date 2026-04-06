@@ -38,17 +38,17 @@ struct VerboseMessageFormatter {
 		auto appendError = [&](std::string_view tag) {
 			buf.append(errLabel).append("Failed to unmount: ")
 			   .append(errPath).append("'").append(path).append("'")
-			   .append(originalColors::reset)
+			   .append(originalColors::boldAlt)
 
 			   .append(tagStyle) 
 			   .append(" {").append(tag).append("}")
-			   .append(originalColors::reset);
+			   .append(originalColors::boldAlt);
 		};
 
 		if (messageType == "success") {
 			buf.append(okLabel).append("Unmounted: ")
 			   .append(okPath).append("'").append(path).append("'")
-			   .append(originalColors::reset).append(".");
+			   .append(originalColors::boldAlt).append(".");
 		}
 		else if (messageType == "root_error") {
 			appendError("needsRoot");

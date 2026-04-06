@@ -47,16 +47,16 @@ struct VerbosityFormatter {
 
         outputBuffer.append(labelColor).append("ISO: ")
                     .append(fileColor).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(originalColors::reset)
+                    .append(originalColors::boldAlt)
                     .append(labelColor).append(" mnt@: ")
                     .append(mountColor).append("'").append(mntDir).append("/").append(mntFile).append("'")
-                    .append(originalColors::reset).append(originalColors::boldAlt).append(".");
+                    .append(originalColors::boldAlt).append(originalColors::boldAlt).append(".");
 
         if (!fsType.empty()) {
             outputBuffer.append(" ").append(metaColor).append("{").append(fsType).append("}");
         }
 
-        outputBuffer.append(originalColors::reset);
+        outputBuffer.append(originalColors::boldAlt);
         return outputBuffer;
     }
 
@@ -69,9 +69,9 @@ struct VerbosityFormatter {
 
         outputBuffer.append(errLabel).append("Failed to mnt: ")
                     .append(errFile).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(originalColors::reset)
+                    .append(originalColors::boldAlt)
                     .append(errLabel).append(". {").append(errorCode).append("}")
-                    .append(originalColors::reset);
+                    .append(originalColors::boldAlt);
         return outputBuffer;
     }
 
@@ -84,9 +84,9 @@ struct VerbosityFormatter {
 
         outputBuffer.append(errLabel).append("Failed to mnt: ")
                     .append(errFile).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(originalColors::reset)
+                    .append(originalColors::boldAlt)
                     .append(errLabel).append(". ").append(errorDetail)
-                    .append(originalColors::reset);
+                    .append(originalColors::boldAlt);
         return outputBuffer;
     }
 
@@ -104,7 +104,7 @@ struct VerbosityFormatter {
                     .append(skipLabel).append(" alr mnt@: ")
                     .append(mountColor).append("'").append(mntDir).append("/").append(mntFile).append("'")
                     .append(skipLabel).append(".")
-                    .append(originalColors::reset);
+                    .append(originalColors::boldAlt);
         return outputBuffer;
     }
 
@@ -117,7 +117,7 @@ struct VerbosityFormatter {
 
         outputBuffer.append(errLabel).append("Failed to mnt: ")
                     .append(errFile).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(originalColors::reset)
+                    .append(originalColors::boldAlt)
                     .append(errLabel).append(". ");
 
         if (errorType == "clx")             outputBuffer.append("Operation was cancelled");
@@ -127,7 +127,7 @@ struct VerbosityFormatter {
         else if (!mountTarget.empty())      outputBuffer.append("Already mounted at ").append(mountTarget);
         else                                outputBuffer.append(errorType);
 
-        outputBuffer.append(originalColors::reset);
+        outputBuffer.append(originalColors::boldAlt);
         return outputBuffer;
     }
 
@@ -142,7 +142,7 @@ struct VerbosityFormatter {
         outputBuffer.append(skipLabel).append("ISO: ")
                     .append(fileColor).append("'").append(getPath(isoDir, isoFile)).append("'")
                     .append(skipLabel).append(" skipped.")
-                    .append(originalColors::reset);
+                    .append(originalColors::boldAlt);
         return outputBuffer;
     }
 
