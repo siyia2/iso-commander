@@ -72,17 +72,14 @@ struct originalColors {
 	static constexpr std::string_view boldAlt 	 = "\033[0;1;38;2;215;215;215m";
     static constexpr std::string_view dim        = "\033[0;38;2;130;130;130m";
 
-    // Standard Palette (Bold + RGB)
-    static constexpr std::string_view red        = "\033[1;38;2;255;85;85m";
+    static constexpr std::string_view red        = "\033[1;38;2;255;40;40m";
     
-    // FIX: Shifted from (80, 250, 123) to a more saturated, vibrant Kelly Green
     static constexpr std::string_view green      = "\033[1;38;2;0;255;100m"; 
     
     static constexpr std::string_view yellow     = "\033[1;38;2;255;255;0m";
     static constexpr std::string_view blue       = "\033[1;38;2;0;150;255m";
     
-    // FIX: Shifted from (255, 0, 255) to a deeper, punchier Magenta/Fuchsia
-    static constexpr std::string_view magenta    = "\033[1;38;2;255;0;210m"; 
+    static constexpr std::string_view magenta    = "\033[1;38;2;255;0;255m"; 
 
     static constexpr std::string_view cyan       = "\033[1;38;2;103;233;235m";
     static constexpr std::string_view orange     = "\033[1;38;2;255;140;0m";
@@ -94,7 +91,7 @@ struct originalColors {
     static constexpr std::string_view bgNavy     = "\033[1;48;2;0;0;175m";
 
     // Readline-wrapped variants
-    static constexpr std::string_view rl_red     = "\001\033[1;38;2;255;85;85m\002";
+    static constexpr std::string_view rl_red     = "\001\033[1;38;2;255;40;40m\002";
     static constexpr std::string_view rl_blue    = "\001\033[1;38;2;0;150;255m\002";
     static constexpr std::string_view rl_green   = "\001\033[1;38;2;0;255;100m\002";
     static constexpr std::string_view rl_orange  = "\001\033[1;38;2;255;140;0m\002";

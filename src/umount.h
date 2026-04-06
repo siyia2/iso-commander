@@ -24,45 +24,44 @@ struct VerboseMessageFormatter {
      * @return A styled string ready for terminal output.
      */
     std::string format(const std::string& messageType, const std::string& path) {
-        std::string buf;
-        buf.reserve(256);
+		std::string buf;
+		buf.reserve(256);
 
-        // Determine styling based on theme state
-        std::string_view errLabel = isOriginal ? originalColors::red      : theme->secondary;
-        std::string_view errPath  = isOriginal ? originalColors::yellow   : theme->warning;
-        std::string_view okLabel  = isOriginal ? originalColors::boldAlt  : theme->muted;
-        std::string_view okPath   = isOriginal ? originalColors::green    : theme->primary;
-        
-        // New: Theme the tag based on the theme's 'accent' or 'muted' property
-        // (Adjust 'theme->muted' to whatever property fits your ListTheme best)
-        std::string_view tagStyle = isOriginal ? originalColors::boldAlt : theme->muted;
-        
-        // Helper for the repeating error structure
-        auto appendError = [&](std::string_view tag) {
-            buf.append(errLabel).append("Failed to unmount: ")
-               .append(errPath).append("'").append(path).append("'")
-               .append(originalColors::reset).append(tagStyle) // Use the dynamic style here
-               .append(" {").append(tag).append("}")
-               .append(originalColors::reset);
-        };
+		// Styling definitions
+		std::string_view errLabel = isOriginal ? originalColors::red      : theme->secondary;
+		std::string_view errPath  = isOriginal ? originalColors::yellow   : theme->warning;
+		std::string_view okLabel  = isOriginal ? originalColors::boldAlt  : theme->muted;
+		std::string_view okPath   = isOriginal ? originalColors::green    : theme->primary;
+		
+		std::string_view tagStyle = isOriginal ? originalColors::red      : theme->muted;
+		
+		auto appendError = [&](std::string_view tag) {
+			buf.append(errLabel).append("Failed to unmount: ")
+			   .append(errPath).append("'").append(path).append("'")
+			   .append(originalColors::reset)
 
-        if (messageType == "success") {
-            buf.append(okLabel).append("Unmounted: ")
-               .append(okPath).append("'").append(path).append("'")
-               .append(originalColors::reset).append(".");
-        }
-        else if (messageType == "root_error") {
-            appendError("needsRoot");
-        }
-        else if (messageType == "error") {
-            appendError("notAnISO");
-        }
-        else if (messageType == "cancel") {
-            appendError("cxl");
-        }
+			   .append(tagStyle) 
+			   .append(" {").append(tag).append("}")
+			   .append(originalColors::reset);
+		};
 
-        return buf;
-    }
+		if (messageType == "success") {
+			buf.append(okLabel).append("Unmounted: ")
+			   .append(okPath).append("'").append(path).append("'")
+			   .append(originalColors::reset).append(".");
+		}
+		else if (messageType == "root_error") {
+			appendError("needsRoot");
+		}
+		else if (messageType == "error") {
+			appendError("notAnISO");
+		}
+		else if (messageType == "cancel") {
+			appendError("cxl");
+		}
+
+		return buf;
+	}
 };
 
 #endif // UMOUNT_H
