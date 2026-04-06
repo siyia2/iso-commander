@@ -13,9 +13,9 @@
 inline std::string skin = "white"; 
 
 /**
- * @brief Global reset sequence for terminal formatting.
+ * @brief Global reset sequence for skin terminal formatting.
  */
-inline std::string reset = "\033[0;1m";
+inline std::string reset = "\033[0;1;38;2;215;215;215m";
 
 /**
  * @brief Canonical list of all supported configuration settings with validation.
@@ -67,7 +67,7 @@ struct ListTheme {
  * Format: \033[1;38;2;R;G;Bm
  */
 struct originalColors {
-    static constexpr std::string_view reset      = "\033[0m";
+    static constexpr std::string_view resetPlain = "\033[0m";
     static constexpr std::string_view bold       = "\033[1m";
 	static constexpr std::string_view boldAlt 	 = "\033[0;1;38;2;215;215;215m";
     static constexpr std::string_view dim        = "\033[0;38;2;130;130;130m";
@@ -97,6 +97,7 @@ struct originalColors {
     static constexpr std::string_view rl_orange  = "\001\033[1;38;2;255;140;0m\002";
     static constexpr std::string_view rl_yellow  = "\001\033[1;38;2;255;255;0m\002";
     static constexpr std::string_view rl_cyan    = "\001\033[1;38;2;103;233;235m\002";
+    static constexpr std::string_view rl_boldAlt = "\001\033[0;1;38;2;215;215;215m\002";
     // Readline-wrapped RGB Bold White (215, 215, 215)
 	static constexpr std::string_view rl_reset = "\001\033[0;1;38;2;215;215;215m\002";
 };
