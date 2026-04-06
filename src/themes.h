@@ -68,7 +68,6 @@ struct ListTheme {
  */
 struct originalColors {
     static constexpr std::string_view resetPlain = "\033[0m";
-    static constexpr std::string_view bold       = "\033[1m";
 	static constexpr std::string_view boldAlt 	 = "\033[0;1;38;2;215;215;215m";
     static constexpr std::string_view dim        = "\033[0;38;2;130;130;130m";
 

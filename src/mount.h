@@ -27,7 +27,7 @@ struct VerbosityFormatter {
     VerbosityFormatter()
         : theme(getActiveTheme()), 
           isOriginal(globalTheme == "original"),
-          labelColor(isOriginal ? originalColors::bold   : theme->muted),
+          labelColor(isOriginal ? originalColors::boldAlt   : theme->muted),
           fileColor (isOriginal ? originalColors::green  : theme->primary),
           mountColor(isOriginal ? originalColors::blue   : theme->accent),
           errLabel  (isOriginal ? originalColors::red    : theme->secondary),
