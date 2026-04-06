@@ -604,7 +604,7 @@ void displayConfigurationOptions(const std::string& configPath) {
     std::string_view warning = isOriginal ? originalColors::yellow : theme->warning;
     std::string_view label = isOriginal ? originalColors::green : theme->muted;
        
-	std::cout << "\n" << accent << "==== Current Configuration ====\033[0;1m\n\n";
+	std::cout << "\n" << accent << "==== Current Configuration ====\n\n" << originalColors::boldAlt;
 
 	std::string line; 
 	int lineNumber = 1;

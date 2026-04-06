@@ -530,7 +530,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "\n" << (isOrig ? originalColors::red : theme->secondary) << "Error: Unable to access configuration file: "
                   << (isOrig ? originalColors::yellow : theme->warning) << "'" << configPath << "'" 
-                  << (isOrig ? originalColors::red : theme->secondary) << ".\033[0;1m\n";
+                  << (isOrig ? originalColors::red : theme->secondary) << ".\n" << originalColors::boldAlt;
     }
 
     std::cout << color << "\n↵ to return..." << reset;
