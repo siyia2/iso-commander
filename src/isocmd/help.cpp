@@ -116,7 +116,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
                                      "   • 'mv' to multiple destinations uses cp and remove (slower)");
     } else {
         // 3. Cleanup/Display (Conversion specific)
-        printSection(tc, std::string(originalColors::blue) + "| ✓ Special Commands starting with '!', '?', or '*' support Tab completion |", "");
+        printSection(tc, std::string(originalColors::cyan) + "| Tab completion: Supports !, ?, and * command prefixes |", "");
 
         std::string displayCmds = "   " + std::string(originalColors::boldAlt) + "•" + std::string(originalColors::yellow) + " !clr / !clr_paths / !clr_filter" + std::string(originalColors::boldAlt) + " : Clear corresponding databases\n";
         
@@ -166,9 +166,9 @@ void helpMappings() {
         "   • Multiple : Separate with ';' (e.g., '1>/dev/sdc;2>/dev/sdd')");
 
     printSection(tc, "3. Tips:",
-        "   • AutoComplete INDEX>DEVICE mappings with Tab\n"
+        "   • Tab-complete INDEX>DEVICE pairs for faster mapping\n"
         "   • Partitions are not eligible for write, only raw devices\n"
-        "   • USB detection relies on kernel removable attribute");
+        "   • USB detection relies on '/sys/class/block/sd*/removable' kernel value");
 
     endHelp();
 }
