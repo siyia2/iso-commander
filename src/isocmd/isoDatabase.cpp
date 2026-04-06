@@ -487,7 +487,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
 
     std::string_view headerCol = isOrig ? originalColors::cyan : theme->accent;
     std::string_view labelCol  = isOrig ? originalColors::green : theme->muted;
-    std::string_view dataCol   = isOrig ? originalColors::cyan : theme->accent;
+    std::string_view dataCol   = isOrig ? originalColors::boldAlt : theme->accent;
     std::string_view warnCol   = isOrig ? originalColors::orange : theme->warning;
     std::string_view resetCol  = originalColors::boldAlt;
 
