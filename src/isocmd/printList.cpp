@@ -63,7 +63,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     std::string_view accentColor = isOriginal ? originalColors::darkCyan : theme->accent;
     std::string_view headColor   = isOriginal ? originalColors::brown    : theme->muted; 
     std::string_view numColor    = isOriginal ? originalColors::yellow   : theme->warning; 
-    std::string_view isoColor    = isOriginal ? originalColors::purple   : theme->accent; 
+    std::string_view isoColor    = isOriginal ? originalColors::magenta   : theme->accent; 
     std::string_view imgColor    = isOriginal ? originalColors::orange   : theme->highlight; 
     std::string_view mntColor    = isOriginal ? originalColors::blue     : theme->secondary; 
     std::string_view squareColor = originalColors::dimGray;
