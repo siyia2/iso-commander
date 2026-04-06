@@ -263,12 +263,14 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     size_t currentPage = 0;
     size_t originalPage = currentPage;
 
-    std::string operationColor = operation == "rm" ? "\001\033[1;91m\002" :
-                                 operation == "cp" ? "\001\033[1;92m\002" : 
-                                 operation == "mv" ? "\001\033[1;93m\002" :
-                                 operation == "mount" ? "\001\033[1;92m\002" : 
-                                 operation == "write" ? "\001\033[1;93m\002" :
-                                 operation == "umount" ? "\001\033[1;93m\002" : "\001\033[0;1;38;2;215;215;215m\002";
+    std::string operationColor = std::string(
+		operation == "rm"     ? originalColors::red    :
+		operation == "cp"     ? originalColors::green  :
+		operation == "mv"     ? originalColors::yellow :
+		operation == "mount"  ? originalColors::green  :
+		operation == "write"  ? originalColors::yellow :
+		operation == "umount" ? originalColors::yellow : originalColors::rl_reset
+	);
                                  
     bool isMount = (operation == "mount");
     bool isUnmount = (operation == "umount");

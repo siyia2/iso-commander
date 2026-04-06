@@ -47,7 +47,7 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
         selectedFiles.push_back(files[index - 1]);
     }
     
-    std::string operationColor = isUnmount ? "\033[1;93m" : "\033[1;92m";
+    std::string operationColor = std::string(isUnmount ? originalColors::yellow : originalColors::green);
     std::string operationName = isUnmount ? "umount" : "mount";
     
     std::cout << originalColors::boldAlt << "\n Processing" 
@@ -57,7 +57,7 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
           << originalColors::red << "Ctrl+c" 
           << originalColors::bold << ":cancel)\n";
     
-    std::string coloredProcess = operationColor + operationName + "\033[0;1;38;2;255;255;255m";
+    std::string coloredProcess = std::string(operationColor) + operationName + std::string(originalColors::boldAlt);;
     
     ThreadPool& pool = getStaticThreadPool();
     const size_t poolSize = pool.threadCount();
@@ -207,7 +207,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     bool isCopy   = (process == "cp");
     
     std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
-    std::string operationColor       = isDelete ? "\033[1;91m" : (isCopy ? "\033[1;92m" : "\033[1;93m");
+    std::string operationColor = std::string(isDelete ? originalColors::red : (isCopy ? originalColors::green : originalColors::yellow));
 
     tokenizeInput(input, isoFiles, uniqueErrorMessages, processedIndices);
 
