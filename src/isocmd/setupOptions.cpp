@@ -39,10 +39,10 @@ static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
             return v == "green" || v == "cyan" || v == "white" || 
                    v == "purple" || v == "amber" || v == "rose"; 
         }},
-    {"theme", "original", "List and prompt color theme (original/classic/high_contrast/neon/ocean/sunset/forest/midnight/mono/retro/crimson/dracula)", "",
+    {"theme", "original", "List and prompt color theme (original/classic/high_contrast/neon/ocean/sunset/forest/midnight/mono/retro/crimson/dracula/tokyo)", "",
         [](const std::string& v){
             static const std::unordered_set<std::string> valid = {
-                "original","classic","high_contrast","neon","ocean",
+                "original","classic","high_contrast","neon","ocean","tokyo",
                 "sunset","forest","midnight","mono","retro","crimson","dracula"
             };
             return valid.count(v) > 0;

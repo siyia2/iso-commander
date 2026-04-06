@@ -25,7 +25,7 @@ const char* special_cmds[] = {
     "*theme:original", "*theme:classic", "*theme:high_contrast", 
     "*theme:neon", "*theme:ocean", "*theme:sunset", 
     "*theme:forest", "*theme:midnight", "*theme:mono", 
-    "*theme:retro", "*theme:crimson", "*theme:dracula",
+    "*theme:retro", "*theme:crimson", "*theme:dracula", "*theme:tokyo",
     NULL
 };
 
