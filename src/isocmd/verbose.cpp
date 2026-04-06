@@ -32,8 +32,7 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
             for (const auto& item : vec) {
 				if (isError) {
 					// Red for the error message, then reset to your high-fidelity bold
-					std::cerr << originalColors::red << item << originalColors::boldAlt 
-							  << originalColors::bold << "\n";
+					std::cerr << originalColors::red << item << originalColors::boldAlt  << "\n";
 				} else {
 					std::cout << item << "\n";
 				}
@@ -327,7 +326,7 @@ void verboseSearchResults(const std::string& fileExtension, std::unordered_set<s
     std::string_view warnLabel = isOriginal ? originalColors::yellow : theme->warning;
     std::string_view extColor  = isOriginal ? originalColors::orange : theme->highlight;
     std::string_view lsColor   = isOriginal ? originalColors::blue   : theme->primary;
-    std::string_view boldLabel = isOriginal ? originalColors::bold   : theme->muted;
+    std::string_view boldLabel = isOriginal ? originalColors::boldAlt   : theme->muted;
 
     auto end_time = std::chrono::high_resolution_clock::now();
 

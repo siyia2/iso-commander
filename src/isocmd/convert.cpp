@@ -43,7 +43,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
     std::string_view errLabel     = isOriginal ? originalColors::red      : theme->secondary;
     std::string_view errPath      = isOriginal ? originalColors::yellow   : theme->warning;
     std::string_view missingLabel = isOriginal ? originalColors::purple   : theme->secondary;
-    std::string_view okLabel      = isOriginal ? originalColors::bold      : theme->muted;
+    std::string_view okLabel      = isOriginal ? originalColors::boldAlt      : theme->muted;
     std::string_view okPath       = isOriginal ? originalColors::green    : theme->primary;
     std::string_view skipLabel    = isOriginal ? originalColors::yellow   : theme->warning;
     std::string_view skipPath     = isOriginal ? originalColors::green    : theme->primary;

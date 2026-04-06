@@ -27,7 +27,7 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
             std::string entry;
             entry.reserve(isoDir.length() + filename.length() + 64);
 
-            entry += originalColors::bold;
+            entry += originalColors::boldAlt;
             entry += "-> ";
 
             if (!displayConfig::toggleNamesOnly) {

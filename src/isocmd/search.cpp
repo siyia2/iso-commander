@@ -361,7 +361,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
     if (isEmpty && list) {
         std::cout << "\n" << (isOriginal ? originalColors::yellow : theme->warning) 
                   << "No " << fileExtension << " entries stored in RAM.\033[J" 
-                  << originalColors::bold << "\n";
+                  << originalColors::boldAlt << "\n";
 
         std::cout << color << "\n↵ to continue..." << reset; 
         

@@ -181,7 +181,6 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             
             // Readline prompt using originalColors::blue for the "original" look
             const std::string prompt = "\001" + std::string(isOrig ? originalColors::blue : theme->muted) + "\002" +
-                                       "\001" + std::string(originalColors::bold) + "\002" +
                                        "Display verbose output? (y/n): " + 
                                        "\001" + std::string(originalColors::boldAlt) + "\002";
                                        

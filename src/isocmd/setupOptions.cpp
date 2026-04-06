@@ -109,7 +109,7 @@ static ThemeColors resolveTheme() {
 
     if (isOrig) {
         return {
-            originalColors::bold,   ///< label: Standard bold white/reset
+            originalColors::boldAlt,   ///< label: Standard bold white/reset
             originalColors::green,  ///< accent: Vibrant Kelly Green
             originalColors::yellow, ///< warning: Pure Yellow
             originalColors::red     ///< error: Bright Red

@@ -151,7 +151,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
         output.append(bracketBg).append("Pending for [")
               .append(procText).append("proc")
-              .append(originalColors::boldAlt).append(originalColors::bold).append(bracketBg).append("]: ");
+              .append(originalColors::boldAlt).append(bracketBg).append("]: ");
 
         std::string_view pColor = (listType != "IMAGE_FILES") ? isoColor : imgColor;
 

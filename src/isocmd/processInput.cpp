@@ -53,9 +53,9 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     std::cout << originalColors::boldAlt << "\n Processing" 
           << (selectedFiles.size() > 1 ? " tasks" : " task") 
           << " for " << operationColor << operationName 
-          << originalColors::bold << "... (" 
+          << originalColors::boldAlt << "... (" 
           << originalColors::red << "Ctrl+c" 
-          << originalColors::bold << ":cancel)\n";
+          << originalColors::boldAlt << ":cancel)\n";
     
     std::string coloredProcess = std::string(operationColor) + operationName + std::string(originalColors::boldAlt);;
     
@@ -254,16 +254,16 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
         totalTasks *= destCount;
     }
     
-    std::cout << "\n" << originalColors::bold << " Processing " 
+    std::cout << "\n" << originalColors::boldAlt << " Processing " 
           << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process 
-          << originalColors::bold << "... (" 
+          << originalColors::boldAlt << "... (" 
           << originalColors::red << "Ctrl+c" 
-          << originalColors::bold << ":cancel)\n";
+          << originalColors::boldAlt << ":cancel)\n";
              
     std::string coloredProcess = 
-    isDelete ? std::string(originalColors::red)    + process + std::string(originalColors::bold) :
-    isMove   ? std::string(originalColors::yellow) + process + std::string(originalColors::bold) :
-    isCopy   ? std::string(originalColors::green)  + process + std::string(originalColors::bold) :
+    isDelete ? std::string(originalColors::red)    + process + std::string(originalColors::boldAlt) :
+    isMove   ? std::string(originalColors::yellow) + process + std::string(originalColors::boldAlt) :
+    isCopy   ? std::string(originalColors::green)  + process + std::string(originalColors::boldAlt) :
     process;
     
     std::atomic<bool> isProcessingComplete(false);
@@ -422,17 +422,17 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 	std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
 
 	// Explicitly wrap the string_view members in std::string() to allow concatenation
-	std::string operation = modeMdf ? (std::string(originalColors::orange) + "MDF"     + std::string(originalColors::bold) + suffix) :
-							modeNrg ? (std::string(originalColors::orange) + "NRG"     + std::string(originalColors::bold) + suffix) :
-									  (std::string(originalColors::orange) + "BIN/IMG" + std::string(originalColors::bold) + suffix);
+	std::string operation = modeMdf ? (std::string(originalColors::orange) + "MDF"     + std::string(originalColors::boldAlt) + suffix) :
+							modeNrg ? (std::string(originalColors::orange) + "NRG"     + std::string(originalColors::boldAlt) + suffix) :
+									  (std::string(originalColors::orange) + "BIN/IMG" + std::string(originalColors::boldAlt) + suffix);
 
 	clearScrollBuffer();
 
 	// For std::cout, you don't need the string cast because it handles string_view natively
-	std::cout << "\n" << originalColors::bold << " Processing " 
-			  << operation << originalColors::bold << "... (" 
+	std::cout << "\n" << originalColors::boldAlt << " Processing " 
+			  << operation << originalColors::boldAlt << "... (" 
 			  << originalColors::red << "Ctrl+c" 
-			  << originalColors::bold << ":cancel)\n";
+			  << originalColors::boldAlt << ":cancel)\n";
 			  
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
