@@ -28,7 +28,7 @@ inline std::string getskin() {
     if (skin == "purple")  return "\033[1;38;2;189;147;249m";
     if (skin == "amber")   return "\033[1;38;2;255;176;0m";
     if (skin == "rose")    return "\033[1;38;2;255;121;198m";
-    if (skin == "white")   return "\033[1;38;5;250m";
+    if (skin == "white")   return "\033[1;38;2;215;215;215m"; // Brighter Silver/Grey RGB
     return "\033[0m";
 }
 
@@ -57,30 +57,51 @@ struct ListTheme {
 };
 
 /**
- * @brief Container for the original legacy terminal color specifications.
- * @details Includes standard 16-color ANSI codes and Readline-wrapped variants 
- * for proper prompt width calculation.
+ * @brief Container for modern 24-bit RGB terminal color specifications (Bold).
+ * @details Uses True Color escape sequences with the bold attribute included.
+ * Format: \033[1;38;2;R;G;Bm
+ */
+/**
+ * @brief Container for modern 24-bit RGB terminal color specifications (Bold).
+ * @details Uses True Color escape sequences with the bold attribute included.
+ * Format: \033[1;38;2;R;G;Bm
  */
 struct originalColors {
     static constexpr std::string_view reset      = "\033[0m";
     static constexpr std::string_view bold       = "\033[1m";
-    static constexpr std::string_view boldAlt    = "\033[0;1m";
-    static constexpr std::string_view dim        = "\033[0;2m";
+	static constexpr std::string_view boldAlt 	 = "\033[0;1;38;2;255;255;255m";
+    static constexpr std::string_view dim        = "\033[2m";
 
-    static constexpr std::string_view red        = "\033[1;91m";
-    static constexpr std::string_view green      = "\033[1;92m";
-    static constexpr std::string_view yellow     = "\033[1;93m";
-    static constexpr std::string_view blue       = "\033[1;94m";
-    static constexpr std::string_view magenta    = "\033[95;1m";
-    static constexpr std::string_view orange     = "\033[1;38;5;208m";
-    static constexpr std::string_view brown      = "\033[1;38;5;94m";
-    static constexpr std::string_view darkCyan   = "\033[38;5;37;1m";
-    static constexpr std::string_view purple     = "\033[1;35m";
-    static constexpr std::string_view dimGray    = "\033[38;5;240m";
+    // Standard Palette (Bold + RGB)
+    static constexpr std::string_view red        = "\033[1;38;2;255;85;85m";
+    
+    // FIX: Shifted from (80, 250, 123) to a more saturated, vibrant Kelly Green
+    static constexpr std::string_view green      = "\033[1;38;2;0;255;100m"; 
+    
+    static constexpr std::string_view yellow     = "\033[1;38;2;255;255;0m";
+    static constexpr std::string_view blue       = "\033[1;38;2;0;100;255m";
+    
+    // FIX: Shifted from (255, 0, 255) to a deeper, punchier Magenta/Fuchsia
+    static constexpr std::string_view magenta    = "\033[1;38;2;255;0;210m"; 
 
-    static constexpr std::string_view rl_red     = "\001\033[1;91m\002";
-    static constexpr std::string_view rl_yellow  = "\001\033[1;93m\002";
-    static constexpr std::string_view rl_reset   = "\001\033[0m\002";
+    static constexpr std::string_view cyan       = "\033[1;38;2;103;233;235m";
+    static constexpr std::string_view orange     = "\033[1;38;2;255;140;0m";
+    static constexpr std::string_view brown      = "\033[1;38;2;165;75;25m";
+    static constexpr std::string_view darkCyan   = "\033[1;38;2;0;160;160m";
+    static constexpr std::string_view purple     = "\033[1;38;2;189;147;249m";
+    static constexpr std::string_view dimGray    = "\033[1;38;2;100;100;100m";
+    
+    static constexpr std::string_view bgNavy     = "\033[1;48;2;0;0;175m";
+
+    // Readline-wrapped variants
+    static constexpr std::string_view rl_red     = "\001\033[1;38;2;255;85;85m\002";
+    static constexpr std::string_view rl_blue    = "\001\033[1;38;2;0;100;255m\002";
+    static constexpr std::string_view rl_green   = "\001\033[1;38;2;0;255;100m\002";
+    static constexpr std::string_view rl_orange  = "\001\033[1;38;2;255;140;0m\002";
+    static constexpr std::string_view rl_yellow  = "\001\033[1;38;2;255;255;0m\002";
+    static constexpr std::string_view rl_cyan    = "\001\033[1;38;2;103;233;235m\002";
+    // Readline-wrapped RGB Bold White (255, 255, 255)
+	static constexpr std::string_view rl_reset = "\001\033[0;1;38;2;255;255;255m\002";
 };
 
 // --- Theme Instances ---
