@@ -491,20 +491,39 @@ void setDisplayMode(const std::string& inputSearch) {
 
         const std::string& key = it->second;
         g_configCache[key] = newValue;
-
-        if      (key == "mount_list")       { displayConfig::toggleFullListMount       = isFull; updatedLabels.push_back("\033[1;92mmount"); }
-        else if (key == "umount_list")      { displayConfig::toggleFullListUmount      = isFull; updatedLabels.push_back("\033[1;93munmount"); }
-        else if (key == "cp_mv_rm_list")    { displayConfig::toggleFullListCpMvRm      = isFull; updatedLabels.push_back("\033[1;92mcporiginalColors::boldAlt/\033[1;93mmvoriginalColors::boldAlt/\033[1;91mrm"); }
-        else if (key == "conversion_lists") { displayConfig::toggleFullListConversions = isFull; updatedLabels.push_back("\033[1;38;5;208mconversions"); }
-        else if (key == "write_list")       { displayConfig::toggleFullListWrite       = isFull; updatedLabels.push_back("\033[1;33mwrite"); }
+		if (key == "mount_list") {
+			displayConfig::toggleFullListMount = isFull;
+			updatedLabels.push_back(std::string(originalColors::green) + "mount");
+		}
+		else if (key == "umount_list") {
+			displayConfig::toggleFullListUmount = isFull;
+			updatedLabels.push_back(std::string(originalColors::yellow) + "unmount");
+		}
+		else if (key == "cp_mv_rm_list") {
+			displayConfig::toggleFullListCpMvRm = isFull;
+			// Combining multiple views into one string
+			updatedLabels.push_back(
+				std::string(originalColors::green)  + "cp"+ std::string(originalColors::boldAlt) +"/" + 
+				std::string(originalColors::yellow) + "mv"+ std::string(originalColors::boldAlt) + "/" + 
+				std::string(originalColors::red)    + "rm"
+			);
+		}
+		else if (key == "conversion_lists") {
+			displayConfig::toggleFullListConversions = isFull;
+			updatedLabels.push_back(std::string(originalColors::orange) + "conversions");
+		}
+		else if (key == "write_list") {
+			displayConfig::toggleFullListWrite = isFull;
+			updatedLabels.push_back(std::string(originalColors::yellow) + "write");
+		}
     }
 
     if (flushCache(configPath) && !updatedLabels.empty()) {
         auto [label, accent, warning, error] = resolveTheme();
         std::cout << "\n" << label << "Display mode set to "
-                  << accent << newValue << label << " for:\033[JoriginalColors::boldAlt\n";
+                  << accent << newValue << label << " for:\033[J\n" << originalColors::boldAlt;
         for (const auto& lbl : updatedLabels)
-            std::cout << "  " << label << "- originalColors::boldAlt" << lbl << "\n";
+            std::cout << "  " << label << "- " << originalColors::boldAlt << lbl << "\n";
     }
 
     pauseForInput();
