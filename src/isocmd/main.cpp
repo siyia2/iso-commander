@@ -61,7 +61,7 @@ int main(int argc, char *argv[]) {
     fl.l_len = 0;
 
     if (fcntl(lockFileDescriptor, F_SETLK, &fl) == -1) {
-        std::cerr << originalColors::yellow << "Another instance of isocmd is already running. If not run \'rm /tmp/isocmd.lock\'.\n\033[0m";
+        std::cerr << originalColors::yellow << "Another instance of isocmd is already running. If not run \'rm /tmp/isocmd.lock\'.\n" << originalColors::resetPlain;
         close(lockFileDescriptor);
         return 1;
     }
@@ -167,6 +167,7 @@ int main(int argc, char *argv[]) {
     }
 
     // --- Cleanup ---
+    std::cout << originalColors::resetPlain << std::flush;
     close(lockFileDescriptor);
     unlink(lockFile);
     return 0;
