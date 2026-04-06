@@ -136,7 +136,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         std::string configCmds = std::string(originalColors::boldAlt) +
             "   A. Pagination     : " + std::string(originalColors::purple) + "'*pagination:{number}' (0 to disable)\n" + std::string(originalColors::boldAlt) +
             "   B. List Modes     : " + std::string(originalColors::purple) + "'*fl_m', '*cl_u' (fl=full | cl=compact, m → mount , u → umount, o → cp_mv_rm, c → conversion)\n" + std::string(originalColors::boldAlt) +
-            "   C. Filenames Only : " + std::string(originalColors::purple) + "'*flno:on' or '*flno:off'\n" + std::string(originalColors::boldAlt) +
+            "   C. Filenames Only : " + std::string(originalColors::purple) + "'*flno:on' or '*flno:off' " + std::string(originalColors::yellow) + "(on overrides List Modes, umount excluded)\n" + std::string(originalColors::boldAlt) +
             "   D. Appearance     : " + std::string(originalColors::purple) + "'*skin:{color}' or '*theme:{name}'";
         
         if (import2ISO) {
