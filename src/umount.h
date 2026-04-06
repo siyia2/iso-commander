@@ -14,54 +14,58 @@ struct VerboseMessageFormatter {
     const ListTheme* theme;
     const bool isOriginal;
 
+    // --- Cached Styling ---
+    std::string_view errLabel; // "Failed to unmount:"
+    std::string_view errPath;  // The file path in error
+    std::string_view errDesc;  // The error tag {needsRoot, etc}
+    std::string_view okLabel;  // "Unmounted:"
+    std::string_view okPath;   // The successful path
+
     VerboseMessageFormatter()
-        : theme(getActiveTheme()), isOriginal(globalTheme == "original") {}
+        : theme(getActiveTheme()), 
+          isOriginal(globalTheme == "original"),
+          errLabel(isOriginal ? originalColors::red     : theme->secondary),
+          errPath (isOriginal ? originalColors::yellow  : theme->warning),
+          errDesc (isOriginal ? originalColors::boldAlt : theme->muted), // Distinct color for tags
+          okLabel (isOriginal ? originalColors::boldAlt : theme->muted),
+          okPath  (isOriginal ? originalColors::green   : theme->primary) 
+    {}
 
     /**
      * @brief Generates a formatted string based on the status of an unmount attempt.
-     * @param messageType The category of the result (e.g., "success", "error").
-     * @param path The filesystem path being processed.
-     * @return A styled string ready for terminal output.
      */
     std::string format(const std::string& messageType, const std::string& path) {
-		std::string buf;
-		buf.reserve(256);
+        std::string buf;
+        buf.reserve(256);
 
-		// Styling definitions
-		std::string_view errLabel = isOriginal ? originalColors::red      : theme->secondary;
-		std::string_view errPath  = isOriginal ? originalColors::yellow   : theme->warning;
-		std::string_view okLabel  = isOriginal ? originalColors::boldAlt  : theme->muted;
-		std::string_view okPath   = isOriginal ? originalColors::green    : theme->primary;
-		
-		std::string_view tagStyle = isOriginal ? originalColors::red      : theme->muted;
-		
-		auto appendError = [&](std::string_view tag) {
-			buf.append(errLabel).append("Failed to unmount: ")
-			   .append(errPath).append("'").append(path).append("'")
-			   .append(originalColors::boldAlt)
+        // Helper to append errors with the separated description color
+        auto appendError = [&](std::string_view tag) {
+            buf.append(errLabel).append("Failed to unmount: ")
+               .append(errPath).append("'").append(path).append("'")
+               .append(errLabel).append(".") // Keeps the dot in the label color
+               .append(" ")
+               .append(errDesc).append("{").append(tag).append("}") // Uses new desc color
+               .append(originalColors::boldAlt);
+        };
 
-			   .append(tagStyle) 
-			   .append(" {").append(tag).append("}")
-			   .append(originalColors::boldAlt);
-		};
+        if (messageType == "success") {
+            buf.append(okLabel).append("Unmounted: ")
+               .append(okPath).append("'").append(path).append("'")
+               .append(okLabel).append(".")
+               .append(originalColors::boldAlt);
+        }
+        else if (messageType == "root_error") {
+            appendError("needsRoot");
+        }
+        else if (messageType == "error") {
+            appendError("notAnISO");
+        }
+        else if (messageType == "cancel") {
+            appendError("cxl");
+        }
 
-		if (messageType == "success") {
-			buf.append(okLabel).append("Unmounted: ")
-			   .append(okPath).append("'").append(path).append("'")
-			   .append(originalColors::boldAlt).append(".");
-		}
-		else if (messageType == "root_error") {
-			appendError("needsRoot");
-		}
-		else if (messageType == "error") {
-			appendError("notAnISO");
-		}
-		else if (messageType == "cancel") {
-			appendError("cxl");
-		}
-
-		return buf;
-	}
+        return buf;
+    }
 };
 
 #endif // UMOUNT_H

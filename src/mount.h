@@ -20,19 +20,21 @@ struct VerbosityFormatter {
     std::string_view labelColor;
     std::string_view fileColor;
     std::string_view mountColor;
-    std::string_view errLabel;
-    std::string_view errFile;
+    std::string_view errLabel;  // Prefix: "Failed to mnt:"
+    std::string_view errFile;   // The filename in the error string
+    std::string_view errDesc;   // The specific error reason/type
     std::string_view metaColor; // For fsType and metadata
 
     VerbosityFormatter()
         : theme(getActiveTheme()), 
           isOriginal(globalTheme == "original"),
-          labelColor(isOriginal ? originalColors::boldAlt   : theme->muted),
-          fileColor (isOriginal ? originalColors::green  : theme->primary),
-          mountColor(isOriginal ? originalColors::blue   : theme->accent),
-          errLabel  (isOriginal ? originalColors::red    : theme->secondary),
-          errFile   (isOriginal ? originalColors::yellow : theme->warning),
-          metaColor (isOriginal ? originalColors::boldAlt : theme->muted) 
+          labelColor(isOriginal ? originalColors::boldAlt  : theme->muted),
+          fileColor (isOriginal ? originalColors::green    : theme->primary),
+          mountColor(isOriginal ? originalColors::blue     : theme->accent),
+          errLabel  (isOriginal ? originalColors::red      : theme->secondary),
+          errFile   (isOriginal ? originalColors::yellow   : theme->warning),
+          errDesc   (isOriginal ? originalColors::boldAlt  : theme->muted),
+          metaColor (isOriginal ? originalColors::boldAlt  : theme->muted) 
     {
         outputBuffer.reserve(512);
     }
@@ -47,10 +49,8 @@ struct VerbosityFormatter {
 
         outputBuffer.append(labelColor).append("ISO: ")
                     .append(fileColor).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(originalColors::boldAlt)
                     .append(labelColor).append(" mnt@: ")
-                    .append(mountColor).append("'").append(mntDir).append("/").append(mntFile).append("'")
-                    .append(originalColors::boldAlt).append(originalColors::boldAlt).append(".");
+                    .append(mountColor).append("'").append(mntDir).append("/").append(mntFile).append("'");
 
         if (!fsType.empty()) {
             outputBuffer.append(" ").append(metaColor).append("{").append(fsType).append("}");
@@ -69,8 +69,8 @@ struct VerbosityFormatter {
 
         outputBuffer.append(errLabel).append("Failed to mnt: ")
                     .append(errFile).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(originalColors::boldAlt)
-                    .append(errLabel).append(". {").append(errorCode).append("}")
+                    .append(errLabel).append(". ")
+                    .append(errDesc).append("{").append(errorCode).append("}")
                     .append(originalColors::boldAlt);
         return outputBuffer;
     }
@@ -84,8 +84,8 @@ struct VerbosityFormatter {
 
         outputBuffer.append(errLabel).append("Failed to mnt: ")
                     .append(errFile).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(originalColors::boldAlt)
-                    .append(errLabel).append(". ").append(errorDetail)
+                    .append(errLabel).append(". ")
+                    .append(errDesc).append(errorDetail)
                     .append(originalColors::boldAlt);
         return outputBuffer;
     }
@@ -103,7 +103,6 @@ struct VerbosityFormatter {
                     .append(fileColor).append("'").append(getPath(isoDir, isoFile)).append("'")
                     .append(skipLabel).append(" alr mnt@: ")
                     .append(mountColor).append("'").append(mntDir).append("/").append(mntFile).append("'")
-                    .append(skipLabel).append(".")
                     .append(originalColors::boldAlt);
         return outputBuffer;
     }
@@ -117,8 +116,8 @@ struct VerbosityFormatter {
 
         outputBuffer.append(errLabel).append("Failed to mnt: ")
                     .append(errFile).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(originalColors::boldAlt)
-                    .append(errLabel).append(". ");
+                    .append(errLabel).append(". ")
+                    .append(errDesc); // Apply description color here
 
         if (errorType == "clx")             outputBuffer.append("Operation was cancelled");
         else if (errorType == "needsRoot")  outputBuffer.append("Root privileges required for mounting");
