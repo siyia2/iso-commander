@@ -15,22 +15,22 @@ struct VerboseMessageFormatter {
     const bool isOriginal;
 
     // --- Cached Styling ---
-    std::string_view errLabel; // "Failed to unmount:"
-    std::string_view errPath;  // The file path in error
-    std::string_view errDesc;  // The error tag {needsRoot, etc}
-    std::string_view okLabel;  // "Unmounted:"
-    std::string_view okPath;   // The successful path
+    std::string_view errLabel; 
+    std::string_view errPath;  
+    std::string_view errDesc;  
+    std::string_view okLabel;  
+    std::string_view okPath;   
 
     VerboseMessageFormatter()
         : theme(getActiveTheme()), 
           isOriginal(globalTheme == "original"),
           errLabel(isOriginal ? originalColors::red     : theme->secondary),
           errPath (isOriginal ? originalColors::yellow  : theme->warning),
-          errDesc (isOriginal ? originalColors::boldAlt : theme->muted), // Distinct color for tags
+          errDesc (isOriginal ? originalColors::boldAlt : theme->muted),
           okLabel (isOriginal ? originalColors::boldAlt : theme->muted),
           okPath  (isOriginal ? originalColors::green   : theme->primary) 
     {}
-
+	
     /**
      * @brief Generates a formatted string based on the status of an unmount attempt.
      */
@@ -38,19 +38,20 @@ struct VerboseMessageFormatter {
         std::string buf;
         buf.reserve(256);
 
-        // Helper to append errors with the separated description color
         auto appendError = [&](std::string_view tag) {
             buf.append(errLabel).append("Failed to unmount: ")
-               .append(errPath).append("'").append(path).append("'")
-               .append(errLabel).append(".") // Keeps the dot in the label color
+               .append(errPath).append("'").append(path)
+               .append(errPath).append("'")
+               .append(errLabel).append(".")
                .append(" ")
-               .append(errDesc).append("{").append(tag).append("}") // Uses new desc color
+               .append(errDesc).append("{").append(tag).append("}") 
                .append(originalColors::boldAlt);
         };
 
         if (messageType == "success") {
             buf.append(okLabel).append("Unmounted: ")
-               .append(okPath).append("'").append(path).append("'")
+               .append(okPath).append("'").append(path)
+               .append(okPath).append("'")
                .append(okLabel).append(".")
                .append(originalColors::boldAlt);
         }
