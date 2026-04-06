@@ -67,6 +67,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     std::string_view imgColor    = isOriginal ? originalColors::orange   : theme->highlight; 
     std::string_view mntColor    = isOriginal ? originalColors::blue     : theme->secondary; 
     std::string_view squareColor = originalColors::dimGray;
+    std::string_view origPendingColor = originalColors::bgNavy;
 
     std::string output;
     output.reserve(((endIndex - startIndex) * 128) + 1024);
@@ -145,7 +146,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     if (hasPendingProcess && !pendingIndices.empty()) {
         output.append("\n");
 
-        std::string_view bracketBg = isOriginal ? "\033[0;1;48;5;19m" : theme->background;
+        std::string_view bracketBg = isOriginal ? origPendingColor : theme->background;
         std::string_view procText   = isOriginal ? originalColors::green     : theme->accent;
 
         output.append(bracketBg).append("Pending for [")

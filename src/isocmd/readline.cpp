@@ -81,11 +81,18 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     const ListTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
-    const char* labelCol = isOrig ? "\033[1;38;5;130m" : theme->muted.data();
-    const char* hintCol  = isOrig ? "\033[1;93m" : theme->accent.data();
-    const char* dirCol   = isOrig ? "\033[1;34m" : theme->accent.data();
-    const char* fileCol  = "\033[0m"; 
-    const char* resetCol = "\033[0;1m";
+    // labelCol: Uses brown (replaced 130m)
+    // hintCol: Uses yellow (replaced 93m)
+    // dirCol: Uses blue (replaced 34m)
+    const char* labelCol = isOrig ? originalColors::brown.data()  : theme->muted.data();
+    const char* hintCol  = isOrig ? originalColors::yellow.data() : theme->accent.data();
+    const char* dirCol   = isOrig ? originalColors::blue.data()   : theme->accent.data();
+    
+    // fileCol: Standard reset to default
+    // resetCol: Uses your 24-bit Bold White
+    const char* fileCol  = originalColors::reset.data(); 
+    const char* resetCol = originalColors::boldAlt.data();
+
 
     const char* current_prefix = matches[0]; 
     if (strcmp(last_common_prefix, current_prefix) != 0) {

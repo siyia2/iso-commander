@@ -263,12 +263,12 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     size_t currentPage = 0;
     size_t originalPage = currentPage;
 
-    std::string operationColor = operation == "rm" ? "\033[1;91m" :
-                                 operation == "cp" ? "\033[1;92m" : 
-                                 operation == "mv" ? "\033[1;93m" :
-                                 operation == "mount" ? "\033[1;92m" : 
-                                 operation == "write" ? "\033[1;93m" :
-                                 operation == "umount" ? "\033[1;93m" : "\033[1;95m";
+    std::string operationColor = operation == "rm" ? "\001\033[1;91m\002" :
+                                 operation == "cp" ? "\001\033[1;92m\002" : 
+                                 operation == "mv" ? "\001\033[1;93m\002" :
+                                 operation == "mount" ? "\001\033[1;92m\002" : 
+                                 operation == "write" ? "\001\033[1;93m\002" :
+                                 operation == "umount" ? "\001\033[1;93m\002" : "\001\033[0;1;38;2;255;255;255m\002";
                                  
     bool isMount = (operation == "mount");
     bool isUnmount = (operation == "umount");
@@ -313,21 +313,34 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         
         std::cout << "\033[1A\033[K";
 
-        const ListTheme* theme = getActiveTheme();
-        const bool isOriginal = (globalTheme == "original");
-        
-        std::string colorIso    = isOriginal ? "\033[1;92m" : std::string(theme->accent);
-        std::string colorMuted  = isOriginal ? "\033[1;94m" : std::string(theme->muted);
-        std::string colorFilter = isOriginal ? "\033[1;96m" : std::string(theme->accent);
-        std::string colorReset  = "\033[0;1m";
+        // Helper to wrap raw ANSI strings for readline
+		auto wrap = [](std::string_view s) -> std::string {
+			return "\001" + std::string(s) + "\002";
+		};
 
-        std::string prompt = 
-            (isFiltered ? ("\001" + colorFilter + "\002F⊳ \001") : "\001")
-            + colorIso    + "\002ISO\001"
-            + colorMuted  + "\002 ↵ for \001"
-            + operationColor + "\002" + operation + "\001" 
-            + colorMuted  + "\002, ? ↵ for help, < ↵ to return:\001" 
-            + colorReset  + "\002 ";
+		const ListTheme* theme = getActiveTheme();
+		const bool isOriginal = (globalTheme == "original");
+
+		// Wrap themed colors, keep originalColors::rl_ as-is
+		std::string colorIso    = isOriginal ? std::string(originalColors::rl_green) : wrap(theme->accent);
+		std::string colorMuted  = isOriginal ? std::string(originalColors::rl_blue)  : wrap(theme->muted);
+		std::string colorFilter = isOriginal ? std::string(originalColors::rl_cyan)  : wrap(theme->accent);
+		std::string colorReset  = isOriginal ? std::string(originalColors::rl_reset) : wrap(originalColors::boldAlt);
+
+		// operationColor usually comes from a raw theme member, so wrap it
+		std::string safeOpColor = wrap(operationColor);
+
+		// Build the prompt
+		// Prefix calculation now uses the safely wrapped colorFilter
+		std::string prefix = isFiltered ? (colorFilter + "F⊳ ") : "";
+
+		std::string prompt = 
+			prefix + 
+			colorIso       + "ISO" + 
+			colorMuted     + " ↵ for " + 
+			safeOpColor    + operation + 
+			colorMuted     + ", ? ↵ for help, < ↵ to return: " + 
+			colorReset;
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
         
@@ -450,23 +463,32 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         std::cout << "\n\n";
         std::cout << "\033[1A\033[K";
         
-        const ListTheme* theme = getActiveTheme();
-        const bool isOriginal = (globalTheme == "original");
+        // Helper to wrap raw ANSI strings for readline
+		auto wrap = [](std::string_view s) -> std::string {
+			return "\001" + std::string(s) + "\002";
+		};
 
-        std::string colorIso        = isOriginal ? "\033[1;92m" : std::string(theme->accent);
-        std::string colorMuted      = isOriginal ? "\033[1;94m" : std::string(theme->muted);
-        std::string colorFilter     = isOriginal ? "\033[1;96m" : std::string(theme->accent);
-        std::string colorHighlight = isOriginal ? "\033[1;38;5;208m" : std::string(theme->highlight);
-        std::string colorReset      = "\033[0;1m";
+		const ListTheme* theme = getActiveTheme();
+		const bool isOriginal = (globalTheme == "original");
 
-        std::string prompt = 
-            (isFiltered ? ("\001" + colorFilter + "\002F⊳ \001") : "\001")
-            + colorHighlight + "\002" + fileExtensionWithOutDots + "\001"
-            + colorMuted     + "\002 ↵ for \001"
-            + colorIso       + "\002ISO\001"
-            + colorHighlight + "\002 conversion \001" 
-            + colorMuted     + "\002, ? ↵ for help, < ↵ to return:\001" 
-            + colorReset     + "\002 ";
+		// Wrap themed colors, keep originalColors::rl_ as-is
+		std::string colorIso       = isOriginal ? std::string(originalColors::rl_green)  : wrap(theme->accent);
+		std::string colorMuted     = isOriginal ? std::string(originalColors::rl_blue)   : wrap(theme->muted);
+		std::string colorFilter    = isOriginal ? std::string(originalColors::rl_cyan)   : wrap(theme->accent);
+		std::string colorHighlight = isOriginal ? std::string(originalColors::rl_orange) : wrap(theme->highlight);
+		std::string colorReset     = isOriginal ? std::string(originalColors::rl_reset)  : wrap(originalColors::boldAlt);
+
+		// Construct prefix based on filter state
+		std::string prefix = isFiltered ? (colorFilter + "F⊳ ") : "";
+
+		std::string prompt = 
+			prefix + 
+			colorHighlight + fileExtensionWithOutDots + 
+			colorMuted     + " ↵ for " + 
+			colorIso       + "ISO" + 
+			colorHighlight + " conversion " + 
+			colorMuted     + ", ? ↵ for help, < ↵ to return: " + 
+			colorReset;
         
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
         

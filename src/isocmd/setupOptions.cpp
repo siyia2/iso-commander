@@ -106,11 +106,21 @@ struct ThemeColors {
 static ThemeColors resolveTheme() {
     const ListTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
+
+    if (isOrig) {
+        return {
+            originalColors::bold,   ///< label: Standard bold white/reset
+            originalColors::green,  ///< accent: Vibrant Kelly Green
+            originalColors::yellow, ///< warning: Pure Yellow
+            originalColors::red     ///< error: Bright Red
+        };
+    }
+
     return {
-        isOrig ? "\033[0;1m"   : theme->muted,
-        isOrig ? "\033[1;92m"  : theme->accent,
-        isOrig ? "\033[1;93m"  : theme->warning,
-        isOrig ? "\033[1;91m"  : theme->secondary,
+        theme->muted,               ///< Neutral label / muted text
+        theme->accent,              ///< Success / enable / positive highlight
+        theme->warning,             ///< Value / numeric highlight
+        theme->secondary            ///< Error / disable / negative highlight
     };
 }
 
@@ -122,7 +132,7 @@ static void printConfigError(const std::string& configPath) {
     std::cerr << "\n" << error
               << "Error: Unable to access configuration file: "
               << warning << "'" << configPath << "'"
-              << error << ".\033[J\033[0;1m\n";
+              << error << ".\033[JoriginalColors::boldAlt\n";
 }
 
 /**
@@ -316,7 +326,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     size_t colonPos = inputSearch.find(':');
     if (colonPos == std::string::npos) {
         auto [label, accent, warning, error] = resolveTheme();
-        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\033[0m\n";
+        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[JoriginalColors::boldAlt\n";
         pauseForInput();
         return;
     }
@@ -324,7 +334,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     std::string valueStr = inputSearch.substr(colonPos + 1);
     if (!isNum(valueStr, 0, 1000)) {
         auto [label, accent, warning, error] = resolveTheme();
-        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\033[0m\n";
+        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[JoriginalColors::boldAlt\n";
         pauseForInput();
         return;
     }
@@ -337,10 +347,10 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
         auto [label, accent, warning, error] = resolveTheme();
         if (val > 0) {
             std::cout << "\n" << label << "Pagination status updated: Max entries per page set to "
-                      << warning << val << label << ".\033[J\033[0m\n";
+                      << warning << val << label << ".\033[JoriginalColors::boldAlt\n";
         } else {
             std::cout << "\n" << label << "Pagination status updated: "
-                      << error << "Disabled" << label << ".\033[J\033[0m\n";
+                      << error << "Disabled" << label << ".\033[JoriginalColors::boldAlt\n";
         }
     }
 
@@ -357,7 +367,7 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
 
     if (inputSearch != "*flno:on" && inputSearch != "*flno:off") {
         auto [label, accent, warning, error] = resolveTheme();
-        std::cerr << "\n" << error << "Error: Invalid command format.\033[J\033[0;1m\n";
+        std::cerr << "\n" << error << "Error: Invalid command format.\033[JoriginalColors::boldAlt\n";
         pauseForInput();
         return;
     }
@@ -372,7 +382,7 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
         std::cout << "\n" << label << "Filename-only lists have been "
                   << (isEnabling ? accent : error)
                   << (isEnabling ? "enabled" : "disabled")
-                  << label << ".\033[J\033[0;1m\n";
+                  << label << ".\033[JoriginalColors::boldAlt\n";
     }
 
     pauseForInput();
@@ -406,7 +416,7 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
 
     if (!isValid) {
         auto [label, accent, warning, error] = resolveTheme();
-        std::cerr << "\n" << error << "Error: Invalid command or unsupported value.\033[J\033[0;1m\n";
+        std::cerr << "\n" << error << "Error: Invalid command or unsupported value.\033[JoriginalColors::boldAlt\n";
         pauseForInput();
         return;
     }
@@ -425,7 +435,7 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
         auto [label, accent, warning, error] = resolveTheme();
         std::string_view settingLabel = (key == "skin") ? "Skin color" : "UI theme";
         std::cout << "\n" << label << settingLabel << " set to: "
-                  << accent << value << label << ".\033[J\033[0m\n";
+                  << accent << value << label << ".\033[JoriginalColors::boldAlt\n";
     }
 
     pauseForInput();
@@ -484,7 +494,7 @@ void setDisplayMode(const std::string& inputSearch) {
 
         if      (key == "mount_list")       { displayConfig::toggleFullListMount       = isFull; updatedLabels.push_back("\033[1;92mmount"); }
         else if (key == "umount_list")      { displayConfig::toggleFullListUmount      = isFull; updatedLabels.push_back("\033[1;93munmount"); }
-        else if (key == "cp_mv_rm_list")    { displayConfig::toggleFullListCpMvRm      = isFull; updatedLabels.push_back("\033[1;92mcp\033[0;1m/\033[1;93mmv\033[0;1m/\033[1;91mrm"); }
+        else if (key == "cp_mv_rm_list")    { displayConfig::toggleFullListCpMvRm      = isFull; updatedLabels.push_back("\033[1;92mcporiginalColors::boldAlt/\033[1;93mmvoriginalColors::boldAlt/\033[1;91mrm"); }
         else if (key == "conversion_lists") { displayConfig::toggleFullListConversions = isFull; updatedLabels.push_back("\033[1;38;5;208mconversions"); }
         else if (key == "write_list")       { displayConfig::toggleFullListWrite       = isFull; updatedLabels.push_back("\033[1;33mwrite"); }
     }
@@ -492,9 +502,9 @@ void setDisplayMode(const std::string& inputSearch) {
     if (flushCache(configPath) && !updatedLabels.empty()) {
         auto [label, accent, warning, error] = resolveTheme();
         std::cout << "\n" << label << "Display mode set to "
-                  << accent << newValue << label << " for:\033[J\033[0m\n";
+                  << accent << newValue << label << " for:\033[JoriginalColors::boldAlt\n";
         for (const auto& lbl : updatedLabels)
-            std::cout << "  " << label << "- \033[0m" << lbl << "\n";
+            std::cout << "  " << label << "- originalColors::boldAlt" << lbl << "\n";
     }
 
     pauseForInput();
@@ -537,12 +547,12 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
                     applyThreadCapsAndHistoryLimits(g_configCache);
                     std::cout << "\n" << accent << it->second
                               << label  << " updated to: "
-                              << warning << valueStr << "\033[0m\n";
+                              << warning << valueStr << "originalColors::boldAlt\n";
                 }
             } else {
                 std::cout << "\n" << error << "Error: Value "
                           << warning << "'" << valueStr << "'"
-                          << error  << " is out of range or invalid.\033[0m\n";
+                          << error  << " is out of range or invalid.originalColors::boldAlt\n";
             }
         }
     }
@@ -569,21 +579,25 @@ void displayConfigurationOptions(const std::string& configPath) {
     }
 
     auto [label, accent, warning, error] = resolveTheme();
-    std::cout << "\n" << accent << "==== Current Configuration ====\033[0;1m\n\n";
+	std::cout << "\n" << accent << "==== Current Configuration ====\033[0;1m\n\n";
 
-    std::string line; 
-    int lineNumber = 1;
-    
-    while (std::getline(configFile, line)) {
-        std::string trimmed = trim(line);
-        if (!trimmed.empty() && trimmed[0] != '#') {
-            std::cout << label << lineNumber++ << ". "
-                      << "\033[1;97m" << trimmed << "\033[0m\n";
-        }
-    }
-    configFile.close();
+	std::string line; 
+	int lineNumber = 1;
 
-    std::cout << "\n\033[1;93mPath: \033[1;97m" << configPath 
-              << color << "\n\n↵ to return..." << reset;
+	while (std::getline(configFile, line)) {
+		std::string trimmed = trim(line);
+		if (!trimmed.empty() && trimmed[0] != '#') {
+			// label: resolved via resolveTheme (usually originalColors::bold)
+			// boldAlt: your 255;255;255 white variant
+			// reset: standard 0m reset
+			std::cout << label << lineNumber++ << ". "
+					  << originalColors::boldAlt << trimmed << originalColors::reset << "\n";
+		}
+	}
+	configFile.close();
+
+	// Using warning (Yellow) and boldAlt (White) for the footer
+	std::cout << "\n" << warning << "Path: " << originalColors::boldAlt << configPath 
+          << color << "\n\n↵ to return..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }

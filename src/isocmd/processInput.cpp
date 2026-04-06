@@ -50,10 +50,14 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     std::string operationColor = isUnmount ? "\033[1;93m" : "\033[1;92m";
     std::string operationName = isUnmount ? "umount" : "mount";
     
-    std::cout << "\n\033[0;1m Processing" << (selectedFiles.size() > 1 ? " tasks" : " task") 
-              << " for " << operationColor << operationName << "\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
+    std::cout << originalColors::boldAlt << "\n Processing" 
+          << (selectedFiles.size() > 1 ? " tasks" : " task") 
+          << " for " << operationColor << operationName 
+          << originalColors::bold << "... (" 
+          << originalColors::red << "Ctrl+c" 
+          << originalColors::bold << ":cancel)\n";
     
-    std::string coloredProcess = operationColor + operationName + "\033[0;1m";
+    std::string coloredProcess = operationColor + operationName + "\033[0;1;38;2;255;255;255m";
     
     ThreadPool& pool = getStaticThreadPool();
     const size_t poolSize = pool.threadCount();
@@ -250,13 +254,16 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
         totalTasks *= destCount;
     }
     
-    std::cout << "\n\033[0;1m Processing " << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process <<
-               "\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
+    std::cout << "\n" << originalColors::bold << " Processing " 
+          << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process 
+          << originalColors::bold << "... (" 
+          << originalColors::red << "Ctrl+c" 
+          << originalColors::bold << ":cancel)\n";
              
     std::string coloredProcess = 
-    isDelete ? std::string("\033[1;91m") + process + "\033[0;1m" :
-    isMove   ? std::string("\033[1;93m") + process + "\033[0;1m" :
-    isCopy   ? std::string("\033[1;92m") + process + "\033[0;1m" :
+    isDelete ? std::string(originalColors::red)    + process + std::string(originalColors::bold) :
+    isMove   ? std::string(originalColors::yellow) + process + std::string(originalColors::bold) :
+    isCopy   ? std::string(originalColors::green)  + process + std::string(originalColors::bold) :
     process;
     
     std::atomic<bool> isProcessingComplete(false);
@@ -411,13 +418,22 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     size_t totalTasks = filesToProcess.size();
     size_t totalBytes = calculateSizeForConverted(filesToProcess, modeNrg, modeMdf);
 
-    std::string operation = modeMdf ? (std::string("\033[1;38;5;208mMDF\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion")) :
-                       modeNrg ? (std::string("\033[1;38;5;208mNRG\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion")) :
-                                 (std::string("\033[1;38;5;208mBIN/IMG\033[0;1m") + (totalTasks > 1 ? " conversions" : " conversion"));
-                     
-    clearScrollBuffer();
-    std::cout << "\n\033[0;1m Processing \001\033[1;38;5;208m\002" << operation << "\033[0;1m... (\033[1;91mCtrl+c\033[0;1m:cancel)\n";
+	// Define the suffix once
+	std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
 
+	// Explicitly wrap the string_view members in std::string() to allow concatenation
+	std::string operation = modeMdf ? (std::string(originalColors::orange) + "MDF"     + std::string(originalColors::bold) + suffix) :
+							modeNrg ? (std::string(originalColors::orange) + "NRG"     + std::string(originalColors::bold) + suffix) :
+									  (std::string(originalColors::orange) + "BIN/IMG" + std::string(originalColors::bold) + suffix);
+
+	clearScrollBuffer();
+
+	// For std::cout, you don't need the string cast because it handles string_view natively
+	std::cout << "\n" << originalColors::bold << " Processing " 
+			  << operation << originalColors::bold << "... (" 
+			  << originalColors::red << "Ctrl+c" 
+			  << originalColors::bold << ":cancel)\n";
+			  
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
     std::atomic<size_t> failedTasks(0);

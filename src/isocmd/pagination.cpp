@@ -112,10 +112,11 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
     const bool isOriginal = (globalTheme == "original");
     const ListTheme* theme = getActiveTheme();
 
-    std::string_view labelCol = isOriginal ? "\033[1;38;5;94m" : theme->muted;
-    std::string_view valueCol = isOriginal ? "\033[38;5;37;1m" : theme->accent;
-    std::string_view totalCol = isOriginal ? "\033[1;93m"      : theme->accent;
-    std::string_view resetCol = "\033[0;1m";
+    // Map to originalColors RGB values
+    std::string_view labelCol = isOriginal ? originalColors::orange  : theme->muted;
+    std::string_view valueCol = isOriginal ? originalColors::cyan    : theme->accent;
+    std::string_view totalCol = isOriginal ? originalColors::yellow  : theme->accent;
+    std::string_view resetCol = originalColors::boldAlt; 
 
     bool disablePagination = (ITEMS_PER_PAGE <= 0 || entries.size() <= ITEMS_PER_PAGE);
     size_t totalPages = disablePagination ? 1 : ((entries.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
@@ -150,6 +151,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
         }
 
         if (!disablePagination && totalPages > 1) {
+            // RESTORED: Everything on this line uses labelCol until the very end
             pageContent << "\n" << labelCol << "Pagination: ";
             if (currentPage > 0)                pageContent << "[p] ↵ Previous | ";
             if (currentPage < totalPages - 1)  pageContent << "[n] ↵ Next | ";

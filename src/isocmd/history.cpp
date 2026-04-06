@@ -203,6 +203,6 @@ void clearHistory(const std::string& inputSearch) {
                   << historyType << " database cleared successfully.\033[J" << std::endl;
         clear_history();
     }
-    std::cout << color << "\n\033[1;32m↵ to continue..." << reset;
+    std::cout << color << "\n↵ to continue..." << reset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }

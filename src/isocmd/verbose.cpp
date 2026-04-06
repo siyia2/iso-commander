@@ -30,12 +30,14 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
             std::cout << "\n";
             
             for (const auto& item : vec) {
-                if (isError) {
-                    std::cerr << "\033[1;91m" << item << "\033[0m\033[1m\n";
-                } else {
-                    std::cout << item << "\n";
-                }
-            }
+				if (isError) {
+					// Red for the error message, then reset to your high-fidelity bold
+					std::cerr << originalColors::red << item << originalColors::reset 
+							  << originalColors::bold << "\n";
+				} else {
+					std::cout << item << "\n";
+				}
+			}
         }
     };
 
@@ -285,7 +287,7 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
     const bool isOriginal  = (globalTheme == "original");
 
     std::string_view boldLabel = isOriginal ? originalColors::boldAlt : theme->muted;
-    std::string_view errLabel  = isOriginal ? "\033[31m"              : theme->secondary;
+	std::string_view errLabel  = isOriginal ? originalColors::red     : theme->secondary;
 
     if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
         std::cout << "\r" << boldLabel << "Total files processed: 0" << std::flush;

@@ -78,12 +78,10 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         const char* units[] = {" B", " KB", " MB", " GB"};
         int unit = 0;
         double size = bytes;
-        
         while (size >= 1024 && unit < 3) {
             size /= 1024;
             unit++;
         }
-        
         ss << std::fixed << std::setprecision(2) << size << units[unit];
         return ss.str();
     };
@@ -106,9 +104,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             overallProgress = std::max(bytesProgress, tasksProgress);
         }
         
-        if (isFinal) {
-            overallProgress = 1.0;
-        }
+        if (isFinal) overallProgress = 1.0;
         
         int barWidth = isFinal ? finalBarWidth : processingBarWidth;
         int progressPos = static_cast<int>(barWidth * overallProgress);
@@ -121,7 +117,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         
         std::stringstream ss;
         
-        ss << "\r\033[2K[";
+        // Use boldAlt for the standard bar text to match \033[0;1m
+        ss << "\r\033[2K" << originalColors::boldAlt << "[";
         for (int i = 0; i < barWidth; ++i) {
             ss << (i < progressPos ? "=" : (i == progressPos && !isFinal ? ">" : " "));
         }
@@ -131,18 +128,13 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         
         if (bytesTrackingEnabled) {
             int percentPos = barWidth + 3;
-            
             ss << "\n\r\033[2K";
-            for (int i = 0; i < percentPos; i++) {
-                ss << " ";
-            }
+            for (int i = 0; i < percentPos; i++) ss << " ";
             ss << "Processed: " << formatSize(static_cast<double>(completedBytesValue)) 
                << "/" << totalBytesFormatted;
 
             ss << "\n\r\033[2K";
-            for (int i = 0; i < percentPos; i++) {
-                ss << " ";
-            }
+            for (int i = 0; i < percentPos; i++) ss << " ";
             ss << "Speed: " << formatSize(speed) << "/s";
         }
         
@@ -163,40 +155,41 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         if (isComplete->load(std::memory_order_acquire) && !enterPressed) {
             signal(SIGINT, SIG_IGN);
             
-            if (bytesTrackingEnabled) {
-                std::cout << "\033[1J\033[3A";
-            } else {
-                std::cout << "\033[1J\033[1A";
-            }
+            if (bytesTrackingEnabled) std::cout << "\033[1J\033[3A";
+            else std::cout << "\033[1J\033[1A";
             
             const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
             const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
             
-            std::cout << "\r\033[2K\033[0;1m Status: " << operation << "\033[0;1m → " 
+            // Status line using originalColors mappings
+            std::cout << "\r\033[2K" << originalColors::boldAlt << " Status: " << operation << originalColors::boldAlt << " → " 
                       << (!g_operationCancelled.load() 
                           ? (failedTasksValue > 0 
                              ? (completedTasksValue > 0 
-                                 ? "\033[1;93mPARTIAL"
-                                 : "\033[1;91mFAILED")
-                             : "\033[1;92mCOMPLETED")
-                          : "\033[1;33mINTERRUPTED")
-                      << "\033[0;1m" << std::endl;
+                                ? std::string(originalColors::yellow) + "PARTIAL"
+                                : std::string(originalColors::red) + "FAILED")
+                             : std::string(originalColors::green) + "COMPLETED")
+                          : std::string(originalColors::orange) + "INTERRUPTED")
+                      << originalColors::boldAlt << std::endl;
             
             std::cout << renderProgressBar(true);
             
             disableReadlineForConfirmation();
-            
             enterPressed = true;
             std::cout << "\n\n";
-            
             restoreInput(&oldt, oldf);
             
-            const std::string prompt = "\001" + std::string(isOrig ? "\033[1;94m" : theme->muted) + 
-                                       "\002Display verbose output? (y/n):\001\033[0;1m\002 ";
+            // Readline prompt using originalColors::blue for the "original" look
+            const std::string prompt = "\001" + std::string(isOrig ? originalColors::blue : theme->muted) + "\002" +
+                                       "\001" + std::string(originalColors::bold) + "\002" +
+                                       "Display verbose output? (y/n): " + 
+                                       "\001" + std::string(originalColors::boldAlt) + "\002";
+                                       
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
             
             if (input.get()) {
-                *verbose = (std::string(input.get()) == "y" || std::string(input.get()) == "Y");
+                std::string res = input.get();
+                *verbose = (res == "y" || res == "Y");
             }
             
             restoreReadline();

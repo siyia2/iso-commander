@@ -473,19 +473,28 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
         displayConfig::toggleFullListUmount
     };
 
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalTheme == "original");
+    // Helper to wrap raw ANSI strings for readline
+	auto wrap = [](std::string_view s) -> std::string {
+		return "\001" + std::string(s) + "\002";
+	};
 
-    std::string colorPrimary = isOriginal ? "\033[1;94m" : std::string(theme->muted);
-    std::string colorFilter  = isOriginal ? "\033[1;96m" : std::string(theme->accent); 
-    std::string colorReset   = "\033[0;1m";
+	const ListTheme* theme = getActiveTheme();
+	const bool isOriginal = (globalTheme == "original");
 
-    const std::string prompt =
-        "\001" + colorFilter + "\002FilterTerms\001" 
-        + colorPrimary + "\002 ↵ for \001" 
-        + operationColor + "\002" + operation + "\001" 
-        + colorPrimary + "\002, or ↵ to return: \001" 
-        + colorReset + "\002";
+	// Use pre-wrapped originalColors or wrap the raw theme members
+	std::string colorPrimary = isOriginal ? std::string(originalColors::rl_blue) : wrap(theme->muted);
+	std::string colorFilter  = isOriginal ? std::string(originalColors::rl_cyan) : wrap(theme->accent);
+	std::string colorReset   = isOriginal ? std::string(originalColors::rl_reset) : wrap(originalColors::boldAlt);
+
+	// Assuming operationColor comes from the raw theme, it needs wrapping
+	std::string safeOpColor = wrap(operationColor);
+
+	const std::string prompt =
+		colorFilter  + "FilterTerms" +
+		colorPrimary + " ↵ for " +
+		safeOpColor  + operation +
+		colorPrimary + ", or ↵ to return: " +
+		colorReset;
 
     auto onEmptyInput = [&]() {
         clear_history();
@@ -526,23 +535,29 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
         currentPage
     };
 
-    const bool isInteractive   = (mainInputString == "/");
-    const std::string quickPat = isInteractive ? "" : mainInputString.substr(1);
+    // Helper to wrap raw ANSI strings for readline
+	auto wrap = [](std::string_view s) -> std::string {
+		return "\001" + std::string(s) + "\002";
+	};
 
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalTheme == "original");
+	const bool isInteractive = (mainInputString == "/");
+	const std::string quickPat = isInteractive ? "" : mainInputString.substr(1);
 
-    std::string colorMuted   = isOriginal ? "\033[1;94m" : std::string(theme->muted);
-    std::string colorExt     = isOriginal ? "\033[1;38;5;208m" : std::string(theme->highlight);
-    std::string colorFilter  = isOriginal ? "\033[1;96m" : std::string(theme->accent);
-    std::string colorReset   = "\033[0;1m";
+	const ListTheme* theme = getActiveTheme();
+	const bool isOriginal = (globalTheme == "original");
 
-    const std::string prompt =
-        "\001" + colorFilter + "\002FilterTerms\001" 
-        + colorMuted + "\002 ↵ for \001" 
-        + colorExt   + "\002" + fileExtensionWithOutDots + "\001" 
-        + colorMuted + "\002, or ↵ to return: \001" 
-        + colorReset + "\002";
+	// Wrap themed colors, but keep originalColors::rl_ variants as-is
+	std::string colorMuted  = isOriginal ? std::string(originalColors::rl_blue)   : wrap(theme->muted);
+	std::string colorExt    = isOriginal ? std::string(originalColors::rl_orange) : wrap(theme->highlight);
+	std::string colorFilter = isOriginal ? std::string(originalColors::rl_cyan)   : wrap(theme->accent);
+	std::string colorReset  = isOriginal ? std::string(originalColors::rl_reset)  : wrap(originalColors::boldAlt);
 
-    runFilterLoop(prompt, quickPat, ctx, [&] { need2Sort = true; });
-}
+	const std::string prompt = 
+		colorFilter + "FilterTerms" + 
+		colorMuted  + " ↵ for " + 
+		colorExt    + fileExtensionWithOutDots + 
+		colorMuted  + ", or ↵ to return: " + 
+		colorReset;
+
+		runFilterLoop(prompt, quickPat, ctx, [&] { need2Sort = true; });
+	}
