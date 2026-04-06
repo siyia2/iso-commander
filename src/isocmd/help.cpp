@@ -75,7 +75,7 @@ void helpSelections() {
     printSection(tc, "2. Selecting Items:", std::string(originalColors::boldAlt) +
         "   • Single/Multiple : " + std::string(originalColors::purple) + "'1' or '1 5 6'\n" + std::string(originalColors::boldAlt) +
         "   • Range/Combine   : " + std::string(originalColors::purple) + "'1-3' or '1-3 5 7-9'\n" + std::string(originalColors::boldAlt) +
-        "   • Pending/All     : " + std::string(originalColors::purple) + "'1-3 5;' or '00' " + std::string(originalColors::yellow) +"(00 is mount/umount only)");
+        "   • Pending/All     : " + std::string(originalColors::purple) + "'1-3 5;' or '00' " + std::string(originalColors::yellow) +"('00' is mount/umount only)");
 
     printSection(tc, "3. Special Commands:",
         "   " + std::string(originalColors::boldAlt) + "• " + std::string(originalColors::blue) + "'~' / '*' " + std::string(originalColors::boldAlt) + "   : Toggle Compact/Full or Filename-only lists\n" + std::string(originalColors::boldAlt) +
@@ -135,8 +135,8 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         // 4. Configuration
         std::string configCmds = std::string(originalColors::boldAlt) +
             "   A. Pagination     : " + std::string(originalColors::purple) + "'*pagination:{number}' (0 to disable)\n" + std::string(originalColors::boldAlt) +
-            "   B. List Modes     : " + std::string(originalColors::purple) + "'*fl_m', '*cl_u' (fl=full | cl=compact, m → mount , u → umount, o → cp_mv_rm, c → conversion)\n" + std::string(originalColors::boldAlt) +
-            "   C. Filenames Only : " + std::string(originalColors::purple) + "'*flno:on' or '*flno:off' " + std::string(originalColors::yellow) + "(on overrides List Modes, umount excluded)\n" + std::string(originalColors::boldAlt) +
+            "   B. List Modes     : " + std::string(originalColors::purple) + "'*fl_m' or '*cl_u' or multiple → fl_muc (fl → full | cl → compact)\n                         (m → mount , u → umount, o → cp_mv_rm, c → conversion)\n" + std::string(originalColors::boldAlt) +
+            "   C. Filenames Only : " + std::string(originalColors::purple) + "'*flno:on' or '*flno:off' " + std::string(originalColors::yellow) + "(:on overrides List Modes, umount excluded)\n" + std::string(originalColors::boldAlt) +
             "   D. Appearance     : " + std::string(originalColors::purple) + "'*skin:{color}' or '*theme:{name}'";
         
         if (import2ISO) {
