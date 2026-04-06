@@ -435,7 +435,7 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
         auto [label, accent, warning, error] = resolveTheme();
         std::string_view settingLabel = (key == "skin") ? "Skin color" : "UI theme";
         std::cout << "\n" << label << settingLabel << " set to: "
-                  << accent << value << label << ".\033[JoriginalColors::boldAlt\n";
+                  << accent << value << label << ".\033[J\n" << originalColors::boldAlt;
     }
 
     pauseForInput();

@@ -102,11 +102,11 @@ int main(int argc, char *argv[]) {
         // --- Status Message Handling ---
         static bool messagePrinted = false;
         if (search && !isHistoryFileEmpty(historyFilePath) && isImportRunning.load()) {
-            std::cout << "\033[2m[Auto-Update: running in the background...]\033[0m\n";
+            std::cout << originalColors::dim << "\033[0;38;2;130;130;130m[Auto-Update: running in the background...]\033[0m\n";
             messageActive.store(true);
             std::thread(clearMessageAfterTimeout, 1, std::ref(isAtMain), std::ref(isImportRunning), std::ref(messageActive)).detach();
         } else if ((search && !messagePrinted) && (isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
-            std::cout << "\033[2m[Auto-Update: no stored folder paths to scan...]\033[0m\n";
+            std::cout << originalColors::dim << "[Auto-Update: no stored folder paths to scan...]\033[0m\n";
             messagePrinted = true;
             messageActive.store(true);
             std::thread(clearMessageAfterTimeout, 4, std::ref(isAtMain), std::ref(isImportRunning), std::ref(messageActive)).detach();
@@ -118,7 +118,7 @@ int main(int argc, char *argv[]) {
         // --- User Input Processing ---
         const ListTheme* theme = getActiveTheme();
         const bool isOriginal = (globalTheme == "original");
-        char* rawInput = readline(("\n\001" + std::string(isOriginal ? "\033[1;94m" : theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
+        char* rawInput = readline(("\n\001" + std::string(isOriginal ? originalColors::blue : theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
         if (!input.get()) {
