@@ -134,13 +134,13 @@ void helpSearches(bool isCpMv, bool import2ISO) {
 
         // 4. Configuration
         std::string configCmds = std::string(originalColors::boldAlt) +
-            "   A. Pagination      : " + std::string(originalColors::purple) + "'*pagination:{number}' (0 to disable)\n" + std::string(originalColors::boldAlt) +
-            "   B. List Modes      : " + std::string(originalColors::purple) + "'*fl_m', '*cl_u' (fl=full | cl=compact, m → mount , u → umount, o → cp_mv_rm, c → conversion)\n" + std::string(originalColors::boldAlt) +
-            "   C. Filenames Only  : " + std::string(originalColors::purple) + "'*flno:on' or '*flno:off'\n" + std::string(originalColors::boldAlt) +
-            "   D. Appearance      : " + std::string(originalColors::purple) + "'*skin:{color}' or '*theme:{name}'";
+            "   A. Pagination     : " + std::string(originalColors::purple) + "'*pagination:{number}' (0 to disable)\n" + std::string(originalColors::boldAlt) +
+            "   B. List Modes     : " + std::string(originalColors::purple) + "'*fl_m', '*cl_u' (fl=full | cl=compact, m → mount , u → umount, o → cp_mv_rm, c → conversion)\n" + std::string(originalColors::boldAlt) +
+            "   C. Filenames Only : " + std::string(originalColors::purple) + "'*flno:on' or '*flno:off'\n" + std::string(originalColors::boldAlt) +
+            "   D. Appearance     : " + std::string(originalColors::purple) + "'*skin:{color}' or '*theme:{name}'";
         
         if (import2ISO) {
-            configCmds += std::string(originalColors::boldAlt) + "\n   E. Auto-Update     : " + std::string(originalColors::purple) + "'*auto:on' or '*auto:off'";
+            configCmds += std::string(originalColors::boldAlt) + "\n   E. Auto-Update    : " + std::string(originalColors::purple) + "'*auto:on' or '*auto:off'";
         }
 
         printSection(tc, std::string(originalColors::orange) + "4. Configuration Commands (Persistent):", configCmds);
