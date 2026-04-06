@@ -3,203 +3,172 @@
 #include "../headers.h"
 #include "../themes.h"
 
+namespace {
+
 /**
- * @brief Retrieves the current theme object and checks if the active theme is the 'original' preset.
- * * @param[out] theme Reference to a pointer that will hold the active ListTheme.
- * @param[out] isOriginal Reference to a boolean set to true if the theme is "original".
+ * @brief Resolves a color for the current theme using string_view to avoid copies.
  */
-void getThemeState(const ListTheme*& theme, bool& isOriginal) {
-    theme = getActiveTheme();
-    isOriginal = (globalTheme == "original");
+inline std::string_view resolveColor(const ListTheme* theme,
+                                     bool isOriginal,
+                                     std::string_view originalColor) noexcept {
+    return isOriginal ? originalColor : std::string_view(theme->accent);
 }
 
 /**
- * @brief Displays an interactive help guide detailing how to select and filter items within lists.
- * * Covers hotkeys (Ctrl+d, Ctrl+u), index selection syntax (ranges, multiple items, pending markers), 
- * and special list commands like pagination and filtering.
+ * @brief Aggregates resolved theme colors used by all help screens.
  */
-void helpSelections() {
-    const ListTheme* theme;
-    bool isOriginal;
-    getThemeState(theme, isOriginal);
+struct ThemeColors {
+    const ListTheme* theme = getActiveTheme();
+    bool isOriginal = (globalTheme == "original");
+    std::string_view title = resolveColor(theme, isOriginal, originalColors::cyan);
+    std::string_view head  = resolveColor(theme, isOriginal, originalColors::green);
+};
 
+/**
+ * @brief Standardizes help screen initialization and header rendering.
+ */
+void setupHelp(std::string_view title, const ThemeColors& tc) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
     clearScrollBuffer();
-    
-    // Use Cyan for title and Green for headers in original mode
-    std::string titleC  = isOriginal ? std::string(originalColors::cyan) : std::string(theme->accent);
-    std::string headC   = isOriginal ? std::string(originalColors::green) : std::string(theme->accent);
-    std::string yellowC = std::string(originalColors::yellow);
-    std::string blueC   = std::string(originalColors::blue);
+    std::cout << "\n" << tc.title << "===== " << title << " =====" 
+              << originalColors::boldAlt << "\n" << std::endl;
+}
 
-    std::cout << "\n" << titleC << "===== Help Guide For Lists =====" << originalColors::boldAlt << "\n" << std::endl;
-    
-    std::cout << headC << "1. Hotkeys:" << originalColors::boldAlt << "\n"
-              << "   • Quick Return:" << yellowC << " Ctrl+d " << originalColors::boldAlt << "\n"
-              << "   • Clear Line:" << yellowC << " Ctrl+u " << originalColors::boldAlt << "\n" << std::endl;
-    
-    std::cout << headC << "2. Selecting Items:" << originalColors::boldAlt << "\n"
-              << "   • Single item: Enter a number (e.g., '1')\n"
-              << "   • Multiple items: Separate with spaces (e.g., '1 5 6')\n"
-              << "   • Range of items: Use a hyphen (e.g., '1-3')\n"
-              << "   • Combine methods: '1-3 5 7-9'\n"
-              << "   • Mark as pending: '1-3 5 7-9;'\n"
-              << "   • Select all: Enter '00' (for mount/umount only)\n" << std::endl;
-    
-    std::cout << headC << "3. Special Commands:" << originalColors::boldAlt << "\n"
-              << "   • Enter " << blueC << "'~'" << originalColors::boldAlt << " - Switch between compact and full list\n"
-              << "   • Enter " << blueC << "'*'" << originalColors::boldAlt << " - Toggle filename-only lists (requires unfiltered, 'umount' excluded)\n"
-              << "   • Enter " << blueC << "'/'" << originalColors::boldAlt << " - Filter the current list based on search terms (e.g., 'term' or 'term1;term2')\n"
-              << "   • Enter " << blueC << "'/term1;term2'" << originalColors::boldAlt << " - Directly filter the list for items containing 'term1' or 'term2'\n"
-              << "   • Enter " << blueC << "'n'" << originalColors::boldAlt << " - Go to next page if pages > 1\n"
-              << "   • Enter " << blueC << "'p'" << originalColors::boldAlt << " - Go to previous page if pages > 1\n"
-              << "   • Enter " << blueC << "'g<num>'" << originalColors::boldAlt << " - Go to page if pages > 1 (e.g., 'g3')\n"
-              << "   • Enter " << blueC << "'proc'" << originalColors::boldAlt << " - Process pending items\n"
-              << "   • Enter " << blueC << "'clr'" << originalColors::boldAlt << " - Clear pending items\n" << std::endl;
-              
-    std::cout << headC << "4. Tips:" << originalColors::boldAlt << "\n"
-              << "   • Indexes correspond only to their generated list" << originalColors::boldAlt << "\n"
-              << "   • Indexes^ refer to the original unfiltered list" << originalColors::boldAlt << "\n\n"
-              << "   • Filtering is adaptive, incremental, and unconstrained by pagination" << originalColors::boldAlt << "\n"
-              << "   • If filtering has no matches, no message or list update is issued\n" << std::endl;
-              
+/**
+ * @brief Handles the standard return prompt for all help screens.
+ */
+void endHelp() {
     std::cout << color << "↵ to return..." << originalColors::boldAlt;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+/**
+ * @brief Helper to print a themed section header and its bulleted content.
+ */
+void printSection(const ThemeColors& tc, std::string_view head, const std::string& body) {
+    std::cout << tc.head << head << originalColors::boldAlt << "\n";
+    if (!body.empty()) {
+        std::cout << body << "\n" << std::endl;
+    } else {
+        std::cout << std::endl; // Just one extra line for spacing if no body
+    }
+}
+
+} // namespace
+
+// ---------------------------------------------------------------------------
+// Public help functions
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Displays an interactive help guide detailing how to select and filter items within lists.
+ */
+void helpSelections() {
+    const ThemeColors tc;
+    setupHelp("Help Guide For Lists", tc);
+
+    printSection(tc, "1. Hotkeys:", std::string(originalColors::boldAlt) +
+        "   • Quick Return : " + std::string(originalColors::yellow) + "Ctrl+d\n" + std::string(originalColors::boldAlt) +
+        "   • Clear Line   : " + std::string(originalColors::yellow) + "Ctrl+u");
+
+    printSection(tc, "2. Selecting Items:", std::string(originalColors::boldAlt) +
+        "   • Single/Multiple : " + std::string(originalColors::purple) + "'1' or '1 5 6'\n" + std::string(originalColors::boldAlt) +
+        "   • Range/Combine   : " + std::string(originalColors::purple) + "'1-3' or '1-3 5 7-9'\n" + std::string(originalColors::boldAlt) +
+        "   • Pending/All     : " + std::string(originalColors::purple) + "'1-3 5;' or '00' " + std::string(originalColors::yellow) +"(00 is mount/umount only)");
+
+    printSection(tc, "3. Special Commands:",
+        "   " + std::string(originalColors::boldAlt) + "• " + std::string(originalColors::blue) + "'~' / '*' " + std::string(originalColors::boldAlt) + "   : Toggle Compact/Full or Filename-only lists\n" + std::string(originalColors::boldAlt) +
+        "   " + std::string(originalColors::boldAlt) + "• " + std::string(originalColors::blue) + "'/' / '/t' " + std::string(originalColors::boldAlt) + "  : Filter list / Direct filter (e.g., '/term1;term2')\n" + std::string(originalColors::boldAlt) +
+        "   " + std::string(originalColors::boldAlt) + "• " + std::string(originalColors::blue) + "'n'/'p'/'g' " + std::string(originalColors::boldAlt) + " : Pagination (Next, Previous, Go to page)\n" + std::string(originalColors::boldAlt) +
+        "   " + std::string(originalColors::boldAlt) + "• " + std::string(originalColors::blue) + "'proc'/'clr' " + std::string(originalColors::boldAlt) + ": Process or Clear pending items");
+
+    printSection(tc, "4. Tips:",
+        "   • Indexes correspond only to their generated list\n"
+        "   • Indexes^ refer to the original unfiltered list\n"
+        "   • Filtering is adaptive, incremental, and unconstrained by pagination");
+
+    endHelp();
 }
 
 /**
  * @brief Displays a help guide for directory-related prompts (Copy/Move and ISO Conversion).
- * * Provides instructions on entering paths, using overwrite flags, clearing databases, 
- * and persistent configuration commands (pagination, display modes, themes, and skins).
- * * @param isCpMv Boolean flag indicating if the help is for Copy/Move operations.
- * @param import2ISO Boolean flag indicating if the help is for the Import2ISO tool.
  */
 void helpSearches(bool isCpMv, bool import2ISO) {
-    const ListTheme* theme;
-    bool isOriginal;
-    getThemeState(theme, isOriginal);
+    const ThemeColors tc;
+    std::string titleStr = isCpMv ? "Cp/Mv FolderPath" : (import2ISO ? "Import2ISO FolderPath" : "Convert2ISO FolderPath");
+    setupHelp("Help Guide For " + titleStr + " Prompt", tc);
 
-    std::signal(SIGINT, SIG_IGN);
-    disable_ctrl_d();
-    clearScrollBuffer();
-    
-    std::string titleC  = isOriginal ? std::string(originalColors::cyan) : std::string(theme->accent);
-    std::string headC   = isOriginal ? std::string(originalColors::green) : std::string(theme->accent);
-    std::string yellowC = std::string(originalColors::yellow);
-    std::string blueC   = std::string(originalColors::blue);
-    std::string orangeC = std::string(originalColors::orange);
-    std::string purpleC = std::string(originalColors::purple);
+    // 1. Hotkeys
+    std::string keys = std::string(originalColors::boldAlt) + "   • Quick Return  : " + std::string(originalColors::yellow) + "Ctrl+d\n";
+    if (!isCpMv) keys += std::string(originalColors::boldAlt) + "   • Cancel Search : " + std::string(originalColors::yellow) + "Ctrl+c\n";
+    keys += std::string(originalColors::boldAlt) + "   • Clear Line    : " + std::string(originalColors::yellow) + "Ctrl+u";
+    printSection(tc, "1. Hotkeys:", keys);
 
-    std::cout << "\n" << titleC << "===== Help Guide For " 
-          << (isCpMv ? "Cp/Mv FolderPath" : (import2ISO ? "Import2ISO FolderPath" : "Convert2ISO FolderPath")) 
-          << " Prompt =====" << originalColors::boldAlt << "\n" << std::endl;
-    
-    std::cout << headC << "1. Hotkeys:" << originalColors::boldAlt << "\n"
-               << "     • Quick Return: " << yellowC << " Ctrl+d " << originalColors::boldAlt << "\n"
-               << (!isCpMv ? "     • Cancel Search: " + yellowC + " Ctrl+c " + std::string(originalColors::boldAlt) + "\n" : "")
-               << "     • Clear Line:   " << yellowC << " Ctrl+u " << originalColors::boldAlt << "\n" << std::endl;
-               
-    std::cout << headC << "2. Selecting FolderPaths:" << originalColors::boldAlt << "\n"
-              << "     • Single directory: Enter a directory (e.g., '/directory/')\n"
-              << "     • Multiple directories: Separate with ; (e.g., '/directory1/;/directory2/')" << (isCpMv ? "" : "\n") << std::endl;
-    
+    // 2. Selecting FolderPaths
+    printSection(tc, "2. Selecting FolderPaths:",
+        std::string("   • Single/Multiple : '/dir/' or '/dir1/;/dir2/'") +
+        (isCpMv ? "\n   • Overwrite       : Append -o (e.g., '/dir/ -o')" : ""));
+
     if (isCpMv) {
-        std::cout << "     • Overwrite files for cp/mv: Append -o (e.g., '/directory/ -o' or '/directory1/;/directory2/ -o')\n" << std::endl;
+        // 3. Tips (Cp/Mv specific)
+        printSection(tc, "3. Tips:", "   • 'mv' to a single destination on the same device is instant\n"
+                                     "   • 'mv' to multiple destinations uses cp and remove (slower)");
+    } else {
+        // 3. Cleanup/Display (Conversion specific)
+        printSection(tc, std::string(originalColors::blue) + "| ✓ Special Commands starting with '!', '?', or '*' support Tab completion |", "");
+
+        std::string displayCmds = "   " + std::string(originalColors::boldAlt) + "•" + std::string(originalColors::yellow) + " !clr / !clr_paths / !clr_filter" + std::string(originalColors::boldAlt) + " : Clear corresponding databases\n";
         
-        std::cout << headC << "2. Tips:" << originalColors::boldAlt << "\n"
-        << "     • Performing mv to a single destination path on the same device is instant\n"
-        << "     • Performing mv to multiple destination paths uses cp and fs::remove (slower)\n" << std::endl;
-    }
-    
-    if (!isCpMv) {
-        std::cout << headC << "| ✓ Special Commands starting with '!', '?', or '*' are supported by Tab completion |\n\n";
-        std::cout << headC << "3. Special Cleanup Commands:" << originalColors::boldAlt << "\n";
+        displayCmds += "   " + std::string(originalColors::boldAlt) + "•" + std::string(originalColors::blue) + " ";
+        
+        // Aligned spacing for both conditions
         if (!import2ISO) {
-            std::cout << "     • Enter " << yellowC << "'!clr'" << originalColors::boldAlt << "        - Clear the corresponding buffer\n";
+            displayCmds += "ls / ?config / ?stats           " + std::string(originalColors::boldAlt) + ": Display cached image entries/config/stats";
+        } else {
+            // Added extra spaces to compensate for the missing "ls / " string (5 chars)
+            displayCmds += "?config / ?stats                " + std::string(originalColors::boldAlt) + ": Display config/stats";
         }
+
+        printSection(tc, "3. Cleanup/Display Commands:", displayCmds);
+
+        // 4. Configuration
+        std::string configCmds = std::string(originalColors::boldAlt) +
+            "   A. Pagination      : " + std::string(originalColors::purple) + "'*pagination:{number}' (0 to disable)\n" + std::string(originalColors::boldAlt) +
+            "   B. List Modes      : " + std::string(originalColors::purple) + "'*fl_m', '*cl_u' (fl=full | cl=compact, m → mount , u → umount, o → cp_mv_rm, c → conversion)\n" + std::string(originalColors::boldAlt) +
+            "   C. Filenames Only  : " + std::string(originalColors::purple) + "'*flno:on' or '*flno:off'\n" + std::string(originalColors::boldAlt) +
+            "   D. Appearance      : " + std::string(originalColors::purple) + "'*skin:{color}' or '*theme:{name}'";
+        
         if (import2ISO) {
-            std::cout << "     • Enter " << yellowC << "'!clr'" << originalColors::boldAlt << "       - Clear ISO database\n";
+            configCmds += std::string(originalColors::boldAlt) + "\n   E. Auto-Update     : " + std::string(originalColors::purple) + "'*auto:on' or '*auto:off'";
         }
-        std::cout << "     • Enter " << yellowC << "'!clr_paths'" << originalColors::boldAlt << "  - Clear FolderPath database\n"
-                  << "     • Enter " << yellowC << "'!clr_filter'" << originalColors::boldAlt << " - Clear FilterTerm database\n" << std::endl;
 
-        std::cout << headC << "4. Special Display Commands:" << originalColors::boldAlt << "\n";
-        if (!import2ISO) {
-            std::cout << "     • Enter " << blueC << "'ls'" << originalColors::boldAlt << "           - List corresponding cached entries\n";
-        }
-            std::cout << "     • Enter " << blueC << "'?config'" << originalColors::boldAlt << "      - Display current configuration\n";
-            std::cout << "     • Enter " << blueC << "'?stats'" << originalColors::boldAlt << "       - Display application statistics\n" << std::endl;
-                    
-        std::cout << headC << "5. Configuration Commands (persistent - saved to config file):" << originalColors::boldAlt << "\n\n";
-        
-        std::cout << "    " << orangeC << "A. Set Max Items/Page (default: 25):" << originalColors::boldAlt << "\n"
-          << "        • Enter " << purpleC << "'*pagination:{number}'" << originalColors::boldAlt << " (e.g., " << purpleC << "'*pagination:50'" << originalColors::boldAlt << ")\n"
-          << "        • Disable: " << purpleC << "{number}" << originalColors::boldAlt << " == 0 (e.g., " << purpleC << "'*pagination:0'" << originalColors::boldAlt << ")\n" << std::endl;
-                     
-        std::cout << orangeC << "    B. Set Default Display Modes (fl = full list, cl = compact list | default: cl, unmount → fl):" << originalColors::boldAlt << "\n"
-                <<  "        • Mount list:        Enter " << purpleC << "'*fl_m'" << originalColors::boldAlt << " or " << purpleC << "'*cl_m'\n"
-                <<  "        • Umount list:       Enter " << purpleC << "'*fl_u'" << originalColors::boldAlt << " or " << purpleC << "'*cl_u'\n"
-                <<  "        • cp/mv/rm list:     Enter " << purpleC << "'*fl_o'" << originalColors::boldAlt << " or " << purpleC << "'*cl_o'\n"
-                <<  "        • Write list:        Enter " << purpleC << "'*fl_w'" << originalColors::boldAlt << " or " << purpleC << "'*cl_w'\n"
-                <<  "        • Conversion lists: Enter " << purpleC << "'*fl_c'" << originalColors::boldAlt << " or " << purpleC << "'*cl_c'\n"
-                <<  "        • Combine settings: Use multiple letters after " << purpleC << "'*fl_'" << originalColors::boldAlt << " or " << purpleC << "'*cl_'" << originalColors::boldAlt << " (e.g., " << purpleC << "'*cl_mu'" << originalColors::boldAlt << ")\n"
-              << std::endl;
-
-        std::cout << orangeC << "    C. Filename-only Lists (default: on):" << originalColors::boldAlt << "\n"
-                  << "        • Enter " << purpleC << "'*flno:on'" << originalColors::boldAlt << " or " << purpleC << "'*flno:off'" << originalColors::boldAlt << " - Enable/Disable filename-only lists\n\n";
-
-        std::cout << orangeC << "    D. Skin Color (default: white):" << originalColors::boldAlt << "\n"
-                  << "        • Enter " << purpleC << "'*skin:{color}'" << originalColors::boldAlt << " - Valid: green, cyan, white, purple, amber, rose\n\n";
-
-        std::cout << orangeC << "    E. UI Theme (default: original):" << originalColors::boldAlt << "\n"
-                  << "        • Enter " << purpleC << "'*theme:{name}'" << originalColors::boldAlt << " - Valid: original, classic, high_contrast, neon, etc.\n\n";
-              
-        if (import2ISO) { 
-            std::cout << "    " << orangeC << "F. Auto-Update ISO Database (default: off):" << originalColors::boldAlt << "\n"
-            << "        • Enter " << purpleC << "'*auto:on'" << originalColors::boldAlt << " or " << purpleC << "'*auto:off'" << originalColors::boldAlt << " - Enable/Disable background imports\n\n";
-        }
+        printSection(tc, std::string(originalColors::orange) + "4. Configuration Commands (Persistent):", configCmds);
     }
-    
-    std::cout << color << "↵ to return..." << originalColors::boldAlt;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+    endHelp();
 }
 
 /**
  * @brief Displays a help guide for ISO-to-Device mappings.
- * * Explains the syntax for mapping an ISO index to a raw block device (e.g., '1>/dev/sdc'), 
- * multiple mapping logic, and provides technical tips regarding kernel-level USB detection.
  */
 void helpMappings() {
-    const ListTheme* theme;
-    bool isOriginal;
-    getThemeState(theme, isOriginal);
+    const ThemeColors tc;
+    setupHelp("Help Guide For Mappings", tc);
 
-    signal(SIGINT, SIG_IGN);
-    disable_ctrl_d();
-    clearScrollBuffer();
-    
-    std::string titleC  = isOriginal ? std::string(originalColors::cyan) : std::string(theme->accent);
-    std::string headC   = isOriginal ? std::string(originalColors::green) : std::string(theme->accent);
-    std::string yellowC = std::string(originalColors::yellow);
+    printSection(tc, "1. Hotkeys:",
+        std::string(originalColors::boldAlt) + "   • Quick Return : " + std::string(originalColors::yellow) + "Ctrl+d\n" + std::string(originalColors::boldAlt) +
+        "   • Clear Line   :   " + std::string(originalColors::yellow) + "Ctrl+u\n" + std::string(originalColors::boldAlt) +
+        "   • Declutter    :    " + std::string(originalColors::yellow) + "Ctrl+l");
 
-    std::cout << "\n" << titleC << "===== Help Guide For Mappings =====" << originalColors::boldAlt << "\n" << std::endl;
-    
-    std::cout << headC << "1. Hotkeys:" << originalColors::boldAlt << "\n"
-              << "   • Quick Return:" << yellowC << " Ctrl+d " << originalColors::boldAlt << "\n"
-              << "   • Clear Line:" << yellowC << " Ctrl+u " << originalColors::boldAlt << "\n"
-              << "   • Declutter Screen:" << yellowC << " Ctrl+l " << originalColors::boldAlt << "\n" << std::endl;
-    
-    std::cout << headC << "2. Selecting Mappings:" << originalColors::boldAlt << "\n"
-              << "   • Mapping = NewISOIndex>RemovableUSBDevice\n"
-              << "   • Single mapping: Enter a mapping (e.g., '1>/dev/sdc')\n"
-              << "   • Multiple mappings: Separate with ; (e.g., '1>/dev/sdc;2>/dev/sdd')\n" << std::endl;
-    
-    std::cout << headC << "3. Tips:" << originalColors::boldAlt << "\n"
-              << "   • AutoComplete INDEX>DEVICE mappings with Tab" << originalColors::boldAlt << "\n"
-              << "   • Partitions are not eligible for write, only raw devices (e.g., '/dev/sdc')\n"
-              << "   • USB detection relies on '/sys/class/block/sd*/removable' kernel value\n" << std::endl;
-               
-    std::cout << color << "↵ to return..." << originalColors::boldAlt;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    printSection(tc, "2. Selecting Mappings:",
+        "   • Syntax   : Index>Device (e.g., '1>/dev/sdc')\n"
+        "   • Multiple : Separate with ';' (e.g., '1>/dev/sdc;2>/dev/sdd')");
+
+    printSection(tc, "3. Tips:",
+        "   • AutoComplete INDEX>DEVICE mappings with Tab\n"
+        "   • Partitions are not eligible for write, only raw devices\n"
+        "   • USB detection relies on kernel removable attribute");
+
+    endHelp();
 }
