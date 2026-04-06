@@ -268,7 +268,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                                  operation == "mv" ? "\001\033[1;93m\002" :
                                  operation == "mount" ? "\001\033[1;92m\002" : 
                                  operation == "write" ? "\001\033[1;93m\002" :
-                                 operation == "umount" ? "\001\033[1;93m\002" : "\001\033[0;1;38;2;255;255;255m\002";
+                                 operation == "umount" ? "\001\033[1;93m\002" : "\001\033[0;1;38;2;215;215;215m\002";
                                  
     bool isMount = (operation == "mount");
     bool isUnmount = (operation == "umount");
