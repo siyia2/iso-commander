@@ -68,6 +68,8 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     std::string_view mntColor    = isOriginal ? originalColors::blue     : theme->secondary; 
     std::string_view squareColor = originalColors::dimGray;
     std::string_view origPendingColor = originalColors::bgNavy;
+    std::string_view indexA = isOriginal ? originalColors::red   : theme->secondary;
+	std::string_view indexB = isOriginal ? originalColors::green : theme->accent;
 
     std::string output;
     output.reserve(((endIndex - startIndex) * 128) + 1024);
@@ -96,10 +98,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     // --- Main Item Loop ---
     for (size_t i = startIndex; i < endIndex; ++i) {
         // Alternating sequence colors for better row readability
-        // Check if we are using the OriginalTheme to apply the Red/Green logic
-		const std::string_view seqColor = (theme == &OriginalTheme) 
-			? ((i % 2 == 0) ? originalColors::red : originalColors::green)
-			: ((i % 2 == 0) ? theme->secondary   : theme->accent);;
+        const std::string_view seqColor = (i % 2 == 0) ? indexA : indexB;
         std::string_view idxStr = ib1.format(i + 1);
         
         output.append(seqColor);
