@@ -845,7 +845,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         prompt.append("\001").append(headCol).append("\002FolderPaths")
               .append("\001").append(textCol).append("\002 ↵ to scan for \001")
               .append("\001").append(extCol).append("\002").append(fileExtension)
-              .append("\001").append(textCol).append("\002 entries into \001")
+              .append("\001").append(textCol).append("\002 entries and cache them into \001")
               .append("\001").append(ramCol).append("\002RAM\001")
               .append("\001").append(textCol).append("\002, ? ↵ help, ↵ return:\n\001")
               .append(originalColors::boldAlt).append("\002");

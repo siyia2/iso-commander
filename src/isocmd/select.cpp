@@ -474,7 +474,6 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 		const bool isOriginal = (globalTheme == "original");
 
 		// Wrap themed colors, keep originalColors::rl_ as-is
-		std::string colorIso       = isOriginal ? std::string(originalColors::rl_green)  : wrap(theme->accent);
 		std::string colorMuted     = isOriginal ? std::string(originalColors::rl_blue)   : wrap(theme->muted);
 		std::string colorFilter    = isOriginal ? std::string(originalColors::rl_cyan)   : wrap(theme->accent);
 		std::string colorHighlight = isOriginal ? std::string(originalColors::rl_orange) : wrap(theme->highlight);
@@ -487,8 +486,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 			prefix + 
 			colorHighlight + fileExtensionWithOutDots + 
 			colorMuted     + " ↵ for " + 
-			colorIso       + "ISO" + 
-			colorHighlight + " conversion " + 
+			colorHighlight + "conversion" + 
 			colorMuted     + ", ? ↵ for help, < ↵ to return: " + 
 			colorReset;
         
