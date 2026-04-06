@@ -612,9 +612,6 @@ void displayConfigurationOptions(const std::string& configPath) {
 	while (std::getline(configFile, line)) {
 		std::string trimmed = trim(line);
 		if (!trimmed.empty() && trimmed[0] != '#') {
-			// label: resolved via resolveTheme (usually originalColors::bold)
-			// boldAlt: your 255;255;255 white variant
-			// reset: standard 0m reset
 			std::cout << label << lineNumber++ << ". "
 					  << originalColors::boldAlt << trimmed << originalColors::boldAlt << "\n";
 		}
