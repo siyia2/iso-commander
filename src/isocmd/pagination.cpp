@@ -113,7 +113,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
     const ListTheme* theme = getActiveTheme();
 
     // Map to originalColors RGB values
-    std::string_view labelCol = isOriginal ? originalColors::orange  : theme->muted;
+    std::string_view labelCol = isOriginal ? originalColors::brown  : theme->muted;
     std::string_view valueCol = isOriginal ? originalColors::cyan    : theme->accent;
     std::string_view totalCol = isOriginal ? originalColors::yellow  : theme->accent;
     std::string_view resetCol = originalColors::boldAlt; 
