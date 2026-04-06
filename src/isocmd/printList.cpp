@@ -96,7 +96,10 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     // --- Main Item Loop ---
     for (size_t i = startIndex; i < endIndex; ++i) {
         // Alternating sequence colors for better row readability
-        const std::string_view seqColor = (i % 2 == 0) ? theme->secondary : theme->accent;
+        // Check if we are using the OriginalTheme to apply the Red/Green logic
+		const std::string_view seqColor = (theme == &OriginalTheme) 
+			? ((i % 2 == 0) ? originalColors::red : originalColors::green)
+			: ((i % 2 == 0) ? theme->secondary   : theme->accent);;
         std::string_view idxStr = ib1.format(i + 1);
         
         output.append(seqColor);
