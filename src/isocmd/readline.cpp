@@ -52,57 +52,18 @@ char* command_generator(const char* text, int state) {
 }
 
 /**
- * @brief Custom Readline completion entry point for special command triggers.
- *
- * Intercepts the completion process when the current word starts with '!', '?', or '*'.
- * It manages the Readline state to prevent infinite loops by verifying if a completion 
- * is already uniquely present in the line buffer.
- *
- * @param text  The partial word currently being completed.
- * @param start The index of the start of @p text in @ref rl_line_buffer.
- * @param end   The index of the end of @p text in @ref rl_line_buffer.
- *
- * @return char** An array of matching strings, or @c nullptr if no matches are found 
- * or if the word is already fully completed.
- *
- * @note Sets @ref rl_attempted_completion_over to 1 to bypass default filename completion.
- * @note Sets @ref rl_completion_append_character to @c '\0' to suppress trailing spaces.
+ * @brief Dispatches completion requests to the command generator if triggers are detected.
+ * @param text The partial text.
+ * @param start Start index in line buffer.
+ * @param end End index in line buffer.
+ * @return Array of matches or nullptr.
  */
 char** my_special_completion_entry(const char* text, int start, int end) {
     (void)start;
     (void)end;
 
-    rl_attempted_completion_over = 1;
-
     if (text[0] == '!' || text[0] == '?' || text[0] == '*') {
-        std::string current_word(text);
-        bool already_completed = false;
-        
-        for (int i = 0; special_cmds[i] != nullptr; ++i) {
-            if (current_word == special_cmds[i]) {
-                already_completed = true;
-                break;
-            }
-        }
-
-        if (!already_completed) {
-            return rl_completion_matches(text, [](const char* text, int state) -> char* {
-                static int list_index, len;
-                if (!state) {
-                    list_index = 0;
-                    len = strlen(text);
-                    rl_completion_append_character = '\0';
-                }
-
-                const char* name;
-                while ((name = special_cmds[list_index++])) {
-                    if (strncmp(name, text, len) == 0) {
-                        return strdup(name);
-                    }
-                }
-                return (char*)nullptr;
-            });
-        }
+        return rl_completion_matches(text, command_generator);
     }
 
     return nullptr; 
