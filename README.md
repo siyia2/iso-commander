@@ -25,6 +25,7 @@ For best experience execute with: `sudo isocmd`.
 * Comprehensive command history.
 * Advanced progress tracking.
 * Optional non-interactive mode.
+* Full RGB color support.
 
 
 ⚡ High-Performance Architecture:
