@@ -69,7 +69,7 @@ struct ListTheme {
 struct originalColors {
     static constexpr std::string_view reset      = "\033[0m";
     static constexpr std::string_view bold       = "\033[1m";
-	static constexpr std::string_view boldAlt 	 = "\033[0;1;38;2;255;255;255m";
+	static constexpr std::string_view boldAlt 	 = "\033[0;1;38;2;215;215;215m";
     static constexpr std::string_view dim        = "\033[2m";
 
     // Standard Palette (Bold + RGB)
@@ -100,8 +100,8 @@ struct originalColors {
     static constexpr std::string_view rl_orange  = "\001\033[1;38;2;255;140;0m\002";
     static constexpr std::string_view rl_yellow  = "\001\033[1;38;2;255;255;0m\002";
     static constexpr std::string_view rl_cyan    = "\001\033[1;38;2;103;233;235m\002";
-    // Readline-wrapped RGB Bold White (255, 255, 255)
-	static constexpr std::string_view rl_reset = "\001\033[0;1;38;2;255;255;255m\002";
+    // Readline-wrapped RGB Bold White (215, 215, 215)
+	static constexpr std::string_view rl_reset = "\001\033[0;1;38;2;215;215;215m\002";
 };
 
 // --- Theme Instances ---
