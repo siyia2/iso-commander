@@ -800,15 +800,19 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             deviceSizeStrs[prog.device] = formatFileSize(deviceSizes[prog.device]);
         }
     }
+    
+    const ListTheme* theme = getActiveTheme();
+	const bool isOriginal = (globalTheme == "original");
 	
 	auto displayAllProgress = [&]() {
-		// Explicitly using originalColors RGB values for a fixed look
-		const std::string fileCol   = std::string(originalColors::magenta);
-		const std::string deviceCol = std::string(originalColors::yellow);
-		const std::string sizeCol   = std::string(originalColors::purple);
-		const std::string speedCol  = std::string(originalColors::boldAlt);
-		
-		// Status colors
+
+		// Non-status colors: theme roles or original fallback
+		const std::string_view fileCol   = isOriginal ? originalColors::magenta : theme->primary;
+		const std::string_view deviceCol = isOriginal ? originalColors::yellow  : theme->secondary;
+		const std::string_view sizeCol   = isOriginal ? originalColors::purple  : theme->accent;
+		const std::string_view speedCol  = isOriginal ? originalColors::boldAlt : theme->highlight;
+
+		// Status colors remain fixed regardless of theme
 		constexpr std::string_view doneCol = originalColors::green;
 		constexpr std::string_view failCol = originalColors::red;
 		constexpr std::string_view cxlCol  = originalColors::yellow;
@@ -818,8 +822,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 			const auto& prog = progressData[i];
 			std::string currentSize = formatFileSize(prog.bytesWritten.load());
 
-			// \033[K clears the line to prevent ghosting from previous progress numbers
-			std::cout << "\033[K" 
+			std::cout << "\033[K"
 					  << fileCol << prog.filename << " " << bold << " → {"
 					  << deviceCol << prog.device << bold << " <"
 					  << deviceNames[prog.device] << "> (" << sizeCol
@@ -827,10 +830,9 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
 			if (prog.completed)                   std::cout << doneCol << "DONE";
 			else if (prog.failed)                 std::cout << failCol << "FAIL";
-			else if (g_operationCancelled.load()) std::cout << cxlCol << "CXL";
+			else if (g_operationCancelled.load()) std::cout << cxlCol  << "CXL";
 			else                                  std::cout << prog.progress << "%";
 
-			// Progress bar status: [Current / Total] Speed
 			std::cout << bold << " [" << currentSize << "/" << sizeCol << prog.totalSize << bold << "] "
 					  << speedCol << formatSpeed(prog.speed) << bold << "\n";
 		}
@@ -893,7 +895,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 						? std::string(originalColors::yellow) + "PARTIAL"
 						: std::string(originalColors::red)    + "FAILED")
 					 : std::string(originalColors::green)  + "COMPLETED")
-				  : std::string(originalColors::orange) + "INTERRUPTED") // Using orange for Interrupt
+				  : std::string(originalColors::yellow) + "INTERRUPTED")
 			  << originalColors::boldAlt << std::endl;
 
 	std::cout << "\033[u"; // Restore cursor position (Keep raw ANSI)
