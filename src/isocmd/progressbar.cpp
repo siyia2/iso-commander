@@ -169,7 +169,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                                 ? std::string(originalColors::yellow) + "PARTIAL"
                                 : std::string(originalColors::red) + "FAILED")
                              : std::string(originalColors::green) + "COMPLETED")
-                          : std::string(originalColors::orange) + "INTERRUPTED")
+                          : std::string(originalColors::yellow) + "INTERRUPTED")
                       << originalColors::boldAlt << std::endl;
             
             std::cout << renderProgressBar(true);
