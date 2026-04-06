@@ -61,7 +61,10 @@ int main(int argc, char *argv[]) {
     fl.l_len = 0;
 
     if (fcntl(lockFileDescriptor, F_SETLK, &fl) == -1) {
-        std::cerr << originalColors::yellow << "Another instance of isocmd is already running. If not run \'rm /tmp/isocmd.lock\'." << originalColors::resetPlain << "\n\n";
+        std::cerr << originalColors::red << "error: " 
+          << originalColors::yellow << "failed to setup transaction (unable to lock database)\n"
+          << "  " << originalColors::boldAlt << "if you're sure isocmd isn't already running, you can remove '/tmp/isocmd.lock'\n" 
+          << originalColors::resetPlain << std::endl;
         close(lockFileDescriptor);
         return 1;
     }
