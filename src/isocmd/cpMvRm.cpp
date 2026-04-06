@@ -58,11 +58,11 @@ static std::string validateLinuxPath(const std::string& path) {
     const bool isOriginal  = (globalTheme == "original");
 
     std::string errLabel = isOriginal
-        ? std::string(originalColors::rl_red)
-        : "\001" + std::string(theme->secondary) + "\002";
+        ? std::string(originalColors::red)
+        :  std::string(theme->secondary);
     std::string errPath  = isOriginal
-        ? std::string(originalColors::rl_yellow)
-        : "\001" + std::string(theme->warning) + "\002";
+        ? std::string(originalColors::yellow)
+        : std::string(theme->warning);
 
     auto makeError = [&](const std::string& msg) -> std::string {
         return msg + std::string(originalColors::rl_reset);
