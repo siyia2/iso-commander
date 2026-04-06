@@ -102,7 +102,9 @@ struct originalColors {
 
 // --- Theme Instances ---
 
-inline ListTheme OriginalTheme = {"\033[1;38;2;135;95;0m",    "\033[1;38;2;255;0;0m",      "\033[1;38;2;0;255;0m",      "\033[1;38;2;142;142;142m", "\033[1;38;2;255;255;0m",    "\033[1;48;2;142;142;142m", "\033[1;38;2;255;175;0m"};
+// Dummy holder for originalTheme, since the original theme uses a complex combination from original colors above
+inline ListTheme OriginalTheme = {"","","","","","",""};
+																				// primary, secondary, accent, muted, highlight, background, warning
 inline ListTheme ClassicTheme  = {"\033[1;38;2;135;95;0m",    "\033[1;38;2;255;0;0m",      "\033[1;38;2;255;0;255m",    "\033[1;38;2;148;148;148m", "\033[1;38;2;255;255;0m",    "\033[1;48;2;148;148;148m", "\033[1;38;2;255;135;0m"};
 inline ListTheme HighContrast  = {"\033[1;38;2;255;255;255m", "\033[1;38;2;255;255;0m",    "\033[1;38;2;0;255;255m",    "\033[1;38;2;188;188;188m", "\033[1;38;2;0;255;0m",      "\033[1;48;2;188;188;188m", "\033[1;38;2;255;135;0m"};
 inline ListTheme NeonTheme     = {"\033[1;38;2;255;0;175m",    "\033[1;38;2;0;175;255m",    "\033[1;38;2;95;255;0m",     "\033[1;38;2;98;98;98m",     "\033[1;38;2;255;255;0m",    "\033[1;48;2;98;98;98m",     "\033[1;38;2;255;175;0m"};
