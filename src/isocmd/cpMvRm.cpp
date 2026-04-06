@@ -38,7 +38,7 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
 
             entry += (isOriginal ? originalColors::magenta : theme->accent);
             entry.append(filename);
-            entry += originalColors::reset;
+            entry += originalColors::boldAlt;
             entry += '\n';
 
             entries.push_back(std::move(entry));
@@ -388,9 +388,9 @@ std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful, const 
         msg.reserve(128);
         msg.append(errLabel).append("Error ").append(verb).append(": ")
            .append(errPath).append("'").append(displaySrc).append("'")
-           .append(originalColors::reset).append(errLabel).append(" to '").append(destDirProcessed).append("/': ")
+           .append(originalColors::boldAlt).append(errLabel).append(" to '").append(destDirProcessed).append("/': ")
            .append(errorDetail).append(".")
-           .append(originalColors::reset).append(originalColors::boldAlt);
+           .append(originalColors::boldAlt).append(originalColors::boldAlt);
         verboseErrors.push_back(std::move(msg));
         failedTasks->fetch_add(1, std::memory_order_acq_rel);
         operationSuccessful.store(false);
@@ -400,9 +400,9 @@ std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful, const 
         msg.reserve(128);
         msg.append(okLabel).append(pastVerb).append(": ")
            .append(okPath).append("'").append(displaySrc).append("'")
-           .append(originalColors::reset).append(okLabel).append(" to ")
+           .append(originalColors::boldAlt).append(okLabel).append(" to ")
            .append(destPath).append("'").append(destDirProcessed).append("/").append(destFile).append("'")
-           .append(originalColors::reset).append(originalColors::boldAlt).append(".");
+           .append(originalColors::boldAlt).append(originalColors::boldAlt).append(".");
         verboseIsos.push_back(std::move(msg));
         completedTasks->fetch_add(1, std::memory_order_acq_rel);
     }
@@ -430,8 +430,8 @@ std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, 
         msg.reserve(128);
         msg.append(errLabel).append("Error deleting: ")
            .append(errPath).append("'").append(displaySrc).append("'")
-           .append(originalColors::reset).append(errLabel).append(": Cancelled.")
-           .append(originalColors::reset).append(originalColors::boldAlt);
+           .append(originalColors::boldAlt).append(errLabel).append(": Cancelled.")
+           .append(originalColors::boldAlt).append(originalColors::boldAlt);
         verboseErrors.push_back(std::move(msg));
         failedTasks->fetch_add(1, std::memory_order_acq_rel);
         operationSuccessful.store(false);
@@ -446,8 +446,8 @@ std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, 
         msg.reserve(128);
         msg.append(okLabel).append("Deleted: ")
            .append(okPath).append("'").append(displaySrc).append("'")
-           .append(originalColors::reset).append(okLabel).append(".")
-           .append(originalColors::reset);
+           .append(originalColors::boldAlt).append(okLabel).append(".")
+           .append(originalColors::boldAlt);
         verboseIsos.push_back(std::move(msg));
         completedTasks->fetch_add(1, std::memory_order_acq_rel);
     } else {
@@ -455,8 +455,8 @@ std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, 
         msg.reserve(128);
         msg.append(errLabel).append("Error deleting: ")
            .append(errPath).append("'").append(displaySrc).append("'")
-           .append(originalColors::reset).append(errLabel).append(": ").append(ec.message()).append(".")
-           .append(originalColors::reset).append(originalColors::boldAlt);
+           .append(originalColors::boldAlt).append(errLabel).append(": ").append(ec.message()).append(".")
+           .append(originalColors::boldAlt).append(originalColors::boldAlt);
         verboseErrors.push_back(std::move(msg));
         failedTasks->fetch_add(1, std::memory_order_acq_rel);
         operationSuccessful.store(false);
@@ -506,8 +506,8 @@ const std::function<void(const fs::path&)>& changeOwnership) {
             msg.reserve(128);
             msg.append(errLabel).append("Move completed but failed to remove source file: ")
                .append(errPath).append("'").append(displaySrc).append("'")
-               .append(originalColors::reset).append(errLabel).append(" - ").append(deleteEc.message())
-               .append(originalColors::reset);
+               .append(originalColors::boldAlt).append(errLabel).append(" - ").append(deleteEc.message())
+               .append(originalColors::boldAlt);
             verboseErrors.push_back(std::move(msg));
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
             batchInsertMessages();

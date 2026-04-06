@@ -32,7 +32,7 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
             for (const auto& item : vec) {
 				if (isError) {
 					// Red for the error message, then reset to your high-fidelity bold
-					std::cerr << originalColors::red << item << originalColors::reset 
+					std::cerr << originalColors::red << item << originalColors::boldAlt 
 							  << originalColors::bold << "\n";
 				} else {
 					std::cout << item << "\n";
@@ -130,50 +130,50 @@ void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, 
     if (errorType == "same_file") {
         errorMsg.append(errLabel).append("Cannot ").append(operation).append(" file to itself: ")
                 .append(errPath).append("'").append(srcDir).append("/").append(srcFile).append("'")
-                .append(originalColors::reset).append(errLabel).append(".")
-                .append(originalColors::reset);
+                .append(originalColors::boldAlt).append(errLabel).append(".")
+                .append(originalColors::boldAlt);
     }
     else if (errorType == "invalid_dest") {
         errorMsg.append(errLabel).append("Error ").append(operation).append(": ")
                 .append(errPath).append("'").append(displaySrc).append("'")
-                .append(originalColors::reset).append(errLabel).append(" to '").append(destDir).append("': ").append(errorDetail).append(".")
-                .append(originalColors::reset).append(originalColors::boldAlt);
+                .append(originalColors::boldAlt).append(errLabel).append(" to '").append(destDir).append("': ").append(errorDetail).append(".")
+                .append(originalColors::boldAlt).append(originalColors::boldAlt);
     }
     else if (errorType == "source_missing") {
         errorMsg.append(errLabel).append("Source file no longer exists: ")
                 .append(errPath).append("'").append(displaySrc).append("'")
-                .append(originalColors::reset).append(errLabel).append(".")
-                .append(originalColors::reset).append(originalColors::boldAlt);
+                .append(originalColors::boldAlt).append(errLabel).append(".")
+                .append(originalColors::boldAlt).append(originalColors::boldAlt);
     }
     else if (errorType == "overwrite_failed") {
         errorMsg.append(errLabel).append("Failed to overwrite: ")
                 .append(errPath).append("'").append(destDir).append("/").append(srcFile).append("'")
-                .append(originalColors::reset).append(errLabel).append(" - ").append(errorDetail).append(".")
-                .append(originalColors::reset).append(originalColors::boldAlt);
+                .append(originalColors::boldAlt).append(errLabel).append(" - ").append(errorDetail).append(".")
+                .append(originalColors::boldAlt).append(originalColors::boldAlt);
     }
     else if (errorType == "file_exists") {
         errorMsg.append(errLabel).append("Error ").append(operation).append(": ")
                 .append(errPath).append("'").append(displaySrc).append("'")
-                .append(originalColors::reset).append(errLabel).append(" to '").append(destDir).append("/': File exists (")
+                .append(originalColors::boldAlt).append(errLabel).append(" to '").append(destDir).append("/': File exists (")
                 .append(errPath).append("enable overwrites")
-                .append(originalColors::reset).append(errLabel).append(").")
-                .append(originalColors::reset).append(originalColors::boldAlt);
+                .append(originalColors::boldAlt).append(errLabel).append(").")
+                .append(originalColors::boldAlt).append(originalColors::boldAlt);
     }
     else if (errorType == "remove_after_move") {
         errorMsg.append(errLabel).append("Move completed but failed to remove source file: ")
                 .append(errPath).append("'").append(displaySrc).append("'")
-                .append(originalColors::reset).append(errLabel).append(" - ").append(errorDetail)
-                .append(originalColors::reset);
+                .append(originalColors::boldAlt).append(errLabel).append(" - ").append(errorDetail)
+                .append(originalColors::boldAlt);
     }
     else if (errorType == "missing_file") {
         errorMsg.append(missingLabel).append("Missing: ")
                 .append(errPath).append("'").append(displaySrc).append("'")
-                .append(originalColors::reset).append(missingLabel).append(".")
-                .append(originalColors::reset).append(originalColors::boldAlt);
+                .append(originalColors::boldAlt).append(missingLabel).append(".")
+                .append(originalColors::boldAlt).append(originalColors::boldAlt);
     }
     else {
         errorMsg.append(errLabel).append("Error: ").append(errorDetail)
-                .append(originalColors::reset).append(originalColors::boldAlt);
+                .append(originalColors::boldAlt).append(originalColors::boldAlt);
     }
 
     verboseErrors.push_back(std::move(errorMsg));

@@ -485,11 +485,11 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
     const ListTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
-    std::string_view headerCol = isOrig ? "\033[1;94m" : theme->accent;
-    std::string_view labelCol  = isOrig ? "\033[1;92m" : theme->muted;
-    std::string_view dataCol   = "\033[1;97m";
-    std::string_view warnCol   = "\033[1;38;5;208m";
-    std::string_view resetCol  = "\033[0m";
+    std::string_view headerCol = isOrig ? originalColors::cyan : theme->accent;
+    std::string_view labelCol  = isOrig ? originalColors::green : theme->muted;
+    std::string_view dataCol   = isOrig ? originalColors::cyan : theme->accent;
+    std::string_view warnCol   = isOrig ? originalColors::orange : theme->warning;
+    std::string_view resetCol  = originalColors::boldAlt;
 
     try {
         for (const auto& path : {databaseFilePath, historyFilePath, filterHistoryFilePath}) {
@@ -528,9 +528,9 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
                   << warnCol << "NRG → RAM: " << dataCol << nrgFilesCache.size() << "\n";
 
     } catch (const std::filesystem::filesystem_error& e) {
-        std::cerr << "\n" << (isOrig ? "\033[1;91m" : theme->secondary) << "Error: Unable to access configuration file: "
-                  << (isOrig ? "\033[1;93m" : theme->warning) << "'" << configPath << "'" 
-                  << (isOrig ? "\033[1;91m" : theme->secondary) << ".\033[0;1m\n";
+        std::cerr << "\n" << (isOrig ? originalColors::red : theme->secondary) << "Error: Unable to access configuration file: "
+                  << (isOrig ? originalColors::yellow : theme->warning) << "'" << configPath << "'" 
+                  << (isOrig ? originalColors::red : theme->secondary) << ".\033[0;1m\n";
     }
 
     std::cout << color << "\n↵ to return..." << reset;
@@ -564,19 +564,19 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
 
     if (writeConfig(configPath, g_configCache)) {
         std::string_view statusCol = isEnabling ? 
-            (isOrig ? "\033[1;92m" : theme->accent) : 
-            (isOrig ? "\033[1;91m" : theme->secondary);
+            (isOrig ? originalColors::green : theme->accent) : 
+            (isOrig ? originalColors::red : theme->secondary);
             
-        std::string_view labelCol = isOrig ? "\033[0;1m" : theme->muted;
+        std::string_view labelCol = isOrig ? originalColors::boldAlt : theme->muted;
 
         std::cout << "\n" << labelCol << "Automatic background updates have been "
                   << statusCol << (isEnabling ? "enabled" : "disabled")
                   << labelCol << ".\033[J\033[0m\n";
     } else {
-        std::cerr << "\n" << (isOrig ? "\033[1;91m" : theme->secondary) 
+        std::cerr << "\n" << (isOrig ? originalColors::red : theme->secondary) 
                   << "Error: Unable to access configuration file: " 
-                  << (isOrig ? "\033[1;93m" : theme->warning) << "'" << configPath << "'" 
-                  << (isOrig ? "\033[1;91m" : theme->secondary) << ".\033[J\033[0m\n";
+                  << (isOrig ? originalColors::yellow : theme->warning) << "'" << configPath << "'" 
+                  << (isOrig ? originalColors::red : theme->secondary) << ".\033[J\033[0m\n";
     }
 
     std::cout << color << "\n↵ to continue..." << reset;
@@ -611,12 +611,12 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     } else if (inputSearch == "!clr") {
         std::ofstream ofs(databaseFilePath, std::ofstream::out | std::ofstream::trunc);
         if (!ofs) {
-            std::cerr << "\n" << (isOrig ? "\033[1;91m" : theme->secondary) 
+            std::cerr << "\n" << (isOrig ? originalColors::red : theme->secondary) 
                       << "Error clearing ISO database: " 
-                      << (isOrig ? "\033[1;93m" : theme->warning) << "'" << databaseFilePath << "'" 
-                      << (isOrig ? "\033[1;91m" : theme->secondary) << ". File missing or inaccessible.\033[J" << std::endl;
+                      << (isOrig ? originalColors::yellow : theme->warning) << "'" << databaseFilePath << "'" 
+                      << (isOrig ? originalColors::red : theme->secondary) << ". File missing or inaccessible.\033[J" << std::endl;
             
-            std::cout << "\n" << (isOrig ? "\033[1;32m" : theme->muted) << "↵ to continue..." << originalColors::reset;
+            std::cout << "\n" << (isOrig ? originalColors::green : theme->muted) << "↵ to continue..." << originalColors::boldAlt;
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         } else {
             ofs.close();
@@ -633,7 +633,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
                 ++it;
             }
             
-            std::cout << "\n" << (isOrig ? "\033[1;92m" : theme->accent) 
+            std::cout << "\n" << (isOrig ? originalColors::green : theme->accent) 
                       << "ISO database cleared successfully." << "\033[J" << std::endl;
             
             std::cout << color << "\n↵ to continue..." << reset; 

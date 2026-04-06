@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../headers.h"
+#include "../themes.h"
 
 /**
  * @brief Checks if a string has a leading zero.
@@ -119,12 +120,12 @@ void tokenizeInput(const std::string& input,
         if (items.empty()) return std::string();
         
         std::ostringstream oss;
-        oss << "\033[1;91m" << (items.size() > 1 ? plural : singular) << ": '";
+        oss << originalColors::red << (items.size() > 1 ? plural : singular) << ": '";
         for (auto it = items.begin(); it != items.end(); ++it) {
             if (it != items.begin()) oss << " ";
             oss << *it;
         }
-        oss << "'.\033[0;1m";
+        oss << "'. " << originalColors::boldAlt;
         return oss.str();
     };
 

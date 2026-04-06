@@ -212,7 +212,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
         const bool isOrig = (globalTheme == "original");
 
         std::cerr << "\n" << (isOrig ? originalColors::red : theme->secondary) 
-                  << "Unable to access ISO database: " << e.what() << originalColors::reset << std::endl;
+                  << "Unable to access ISO database: " << e.what() << originalColors::boldAlt << std::endl;
         
         std::cout << color << "\n↵ to continue..." << reset; 
 
@@ -588,7 +588,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
     {
         std::lock_guard<std::mutex> lock(couNtMutex);
         std::cout << "\r" << (isOriginal ? originalColors::boldAlt : theme->accent) 
-                  << "Total files processed: " << totalFiles << originalColors::reset;
+                  << "Total files processed: " << totalFiles << originalColors::boldAlt;
     }
     
     return localFileNames;
@@ -789,7 +789,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
 
     const auto configIt = fileTypeMap.find(fileTypeChoice);
     if (configIt == fileTypeMap.end()) {
-        std::cout << originalColors::red << "Invalid file type choice. Supported types: BIN/IMG, MDF, NRG" << originalColors::reset << "\n";
+        std::cout << originalColors::red << "Invalid file type choice. Supported types: BIN/IMG, MDF, NRG" << originalColors::boldAlt << "\n";
         return;
     }
 
@@ -892,7 +892,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         } catch (const std::exception& e) {
             std::cerr << "\n\n" << (isOriginal ? originalColors::red : theme->secondary) 
                       << "Unable to access local database: " << e.what() 
-                      << originalColors::reset << std::endl;
+                      << originalColors::boldAlt << std::endl;
         }
 
         verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths,

@@ -74,7 +74,11 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
         
         const ListTheme* theme = getActiveTheme();
         const bool isOriginal = (globalTheme == "original");
-        char* rawInput = readline(("\001" + std::string(isOriginal ? originalColors::blue : theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
+        char* rawInput = readline(("\001" + 
+									std::string(isOriginal ? originalColors::blue : theme->muted) + 
+									"\002Choose an option: " + 
+									std::string(originalColors::boldAlt) + 
+									" ").c_str());
         
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
@@ -145,7 +149,11 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
         
         const ListTheme* theme = getActiveTheme();
         const bool isOriginal = (globalTheme == "original");
-        char* rawInput = readline(("\001" + std::string(isOriginal ? originalColors::blue : theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
+        char* rawInput = readline(("\001" + 
+									std::string(isOriginal ? originalColors::blue : theme->muted) + 
+									"\002Choose an option:" + 
+									std::string(originalColors::boldAlt) + 
+									" ").c_str());
 
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 

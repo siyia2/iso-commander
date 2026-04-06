@@ -38,7 +38,7 @@ static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessage
 
     if (displayConfig::toggleFullListUmount) {
 		formattedDir = std::get<0>(dirParts) + formattedDir 
-					   + std::string(squareColor) + std::get<2>(dirParts) + "\033[0m";
+					   + std::string(squareColor) + std::get<2>(dirParts) + std::string(originalColors::boldAlt);
 	}
     return fmt.format(messageKey, formattedDir);
 }

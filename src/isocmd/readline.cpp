@@ -90,7 +90,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     
     // fileCol: Standard reset to default
     // resetCol: Uses your 24-bit Bold White
-    const char* fileCol  = originalColors::reset.data(); 
+    const char* fileCol  = originalColors::boldAlt.data(); 
     const char* resetCol = originalColors::boldAlt.data();
 
 

@@ -591,7 +591,7 @@ void displayConfigurationOptions(const std::string& configPath) {
 			// boldAlt: your 255;255;255 white variant
 			// reset: standard 0m reset
 			std::cout << label << lineNumber++ << ". "
-					  << originalColors::boldAlt << trimmed << originalColors::reset << "\n";
+					  << originalColors::boldAlt << trimmed << originalColors::boldAlt << "\n";
 		}
 	}
 	configFile.close();

@@ -10,7 +10,7 @@
  * * @param version A string representing the semantic version (e.g., "6.3.5").
  */
 void printVersionNumber(const std::string& version) {    
-    std::cout << "\x1B[1mIso Commander v" << version << "\x1B[0m\n";
+    std::cout << originalColors::boldAlt << "Iso Commander v" << version << originalColors::resetPlain << "\n";
 }
 
 /**
@@ -102,11 +102,11 @@ int main(int argc, char *argv[]) {
         // --- Status Message Handling ---
         static bool messagePrinted = false;
         if (search && !isHistoryFileEmpty(historyFilePath) && isImportRunning.load()) {
-            std::cout << originalColors::dim << "\033[0;38;2;130;130;130m[Auto-Update: running in the background...]\033[0m\n";
+            std::cout << originalColors::dim << "[Auto-Update: running in the background...]\n" << originalColors::resetPlain;
             messageActive.store(true);
             std::thread(clearMessageAfterTimeout, 1, std::ref(isAtMain), std::ref(isImportRunning), std::ref(messageActive)).detach();
         } else if ((search && !messagePrinted) && (isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
-            std::cout << originalColors::dim << "[Auto-Update: no stored folder paths to scan...]\033[0m\n";
+            std::cout << originalColors::dim << "[Auto-Update: no stored folder paths to scan...]\n" << originalColors::resetPlain;
             messagePrinted = true;
             messageActive.store(true);
             std::thread(clearMessageAfterTimeout, 4, std::ref(isAtMain), std::ref(isImportRunning), std::ref(messageActive)).detach();
@@ -118,7 +118,11 @@ int main(int argc, char *argv[]) {
         // --- User Input Processing ---
         const ListTheme* theme = getActiveTheme();
         const bool isOriginal = (globalTheme == "original");
-        char* rawInput = readline(("\n\001" + std::string(isOriginal ? originalColors::blue : theme->muted) + "\002Choose an option:\001\033[0;1m\002 ").c_str());
+        char* rawInput = readline(("\n\001" + 
+									std::string(isOriginal ? originalColors::blue : theme->muted) + 
+									"\002Choose an option:" + 
+									std::string(originalColors::boldAlt) + 
+									" ").c_str());
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
         if (!input.get()) {

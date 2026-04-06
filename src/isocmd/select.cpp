@@ -65,7 +65,7 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
         
         std::cout << "\n" << (isOrig ? originalColors::yellow : theme->warning) 
                   << "No ISO available for " << operation << "." 
-                  << originalColors::reset << "\n\n";
+                  << originalColors::boldAlt << "\n\n";
         
         std::cout << color << "↵ to continue..." << reset; 
 
@@ -269,7 +269,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 		operation == "mv"     ? originalColors::yellow :
 		operation == "mount"  ? originalColors::green  :
 		operation == "write"  ? originalColors::yellow :
-		operation == "umount" ? originalColors::yellow : originalColors::rl_reset
+		operation == "umount" ? originalColors::yellow : originalColors::rl_boldAlt
 	);
                                  
     bool isMount = (operation == "mount");
@@ -327,7 +327,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 		std::string colorIso    = isOriginal ? std::string(originalColors::rl_green) : wrap(theme->accent);
 		std::string colorMuted  = isOriginal ? std::string(originalColors::rl_blue)  : wrap(theme->muted);
 		std::string colorFilter = isOriginal ? std::string(originalColors::rl_cyan)  : wrap(theme->accent);
-		std::string colorReset  = isOriginal ? std::string(originalColors::rl_reset) : wrap(originalColors::boldAlt);
+		std::string colorReset  = isOriginal ? std::string(originalColors::rl_boldAlt) : wrap(originalColors::boldAlt);
 
 		// operationColor usually comes from a raw theme member, so wrap it
 		std::string safeOpColor = wrap(operationColor);
@@ -478,7 +478,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 		std::string colorMuted     = isOriginal ? std::string(originalColors::rl_blue)   : wrap(theme->muted);
 		std::string colorFilter    = isOriginal ? std::string(originalColors::rl_cyan)   : wrap(theme->accent);
 		std::string colorHighlight = isOriginal ? std::string(originalColors::rl_orange) : wrap(theme->highlight);
-		std::string colorReset     = isOriginal ? std::string(originalColors::rl_reset)  : wrap(originalColors::boldAlt);
+		std::string colorReset     = isOriginal ? std::string(originalColors::rl_boldAlt)  : wrap(originalColors::boldAlt);
 
 		// Construct prefix based on filter state
 		std::string prefix = isFiltered ? (colorFilter + "F⊳ ") : "";

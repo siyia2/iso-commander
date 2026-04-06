@@ -322,7 +322,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
     std::string_view errPath    = isOriginal ? originalColors::yellow : theme->warning;
     std::string_view warnLabel  = isOriginal ? originalColors::yellow : theme->warning;
     std::string_view infoLabel  = isOriginal ? originalColors::green  : theme->primary;
-    std::string_view reset      = originalColors::reset;
+    std::string_view reset      = originalColors::boldAlt;
     std::string_view bold       = originalColors::boldAlt;
 
     std::vector<std::string> validationErrors;
@@ -529,7 +529,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 				  << originalColors::boldAlt << "\n";
 
 		// Assuming you have 'reset' in that struct too
-		std::cout << originalColors::red << "\n↵ to try again..." << originalColors::reset; 
+		std::cout << originalColors::red << "\n↵ to try again..." << originalColors::boldAlt; 
 		
 		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 		return {};
@@ -546,7 +546,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 		const bool isOriginal = (globalTheme == "original");
 
 		// Use your centralized struct for these resets
-		static constexpr std::string_view reset = originalColors::reset;
+		static constexpr std::string_view reset = originalColors::boldAlt;
 		static constexpr std::string_view boldReset = originalColors::boldAlt;
 
 		// Mapping legacy codes to your new RGB struct
@@ -685,7 +685,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 			}
 			
 			// Using red for the retry prompt
-			std::cout << originalColors::red << "\n↵ to try again..." << originalColors::reset;
+			std::cout << originalColors::red << "\n↵ to try again..." << originalColors::boldAlt;
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 			continue;
 		}
@@ -710,8 +710,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 					  << " " << originalColors::boldAlt << "<" << driveName << "> (" 
 					  << originalColors::purple << deviceSizeStr 
 					  << originalColors::boldAlt << ")} ← {" << fileCol
-					  << iso.filename << originalColors::reset << " (" << sizeCol
-					  << iso.sizeStr << originalColors::reset << ")}\n";
+					  << iso.filename << originalColors::boldAlt << " (" << sizeCol
+					  << iso.sizeStr << originalColors::boldAlt << ")}\n";
 		}
 
 		disableReadlineForConfirmation();
@@ -986,7 +986,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     disable_ctrl_d();
 
     // Replaced 'color' and 'reset' with your RGB boldAlt and reset
-    std::cout << originalColors::boldAlt << "\n↵ to continue..." << originalColors::reset;
+    std::cout << originalColors::boldAlt << "\n↵ to continue..." << originalColors::boldAlt;
     
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }

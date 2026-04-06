@@ -87,7 +87,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
             msg.reserve(128);
             msg.append(missingLabel).append("Missing file: ")
                .append(errPath).append("'").append(displayPath).append("'")
-               .append(originalColors::reset).append(originalColors::boldAlt).append(".");
+               .append(originalColors::boldAlt).append(originalColors::boldAlt).append(".");
             localFailedMsgs.push_back(std::move(msg));
 
             auto& cache = modeNrg ? nrgFilesCache : (modeMdf ? mdfMdsFilesCache : binImgFilesCache);
@@ -104,8 +104,8 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
             msg.reserve(128);
             msg.append(errLabel).append("The specified file ")
                .append(errPath).append("'").append(displayPath).append("'")
-               .append(originalColors::reset).append(errLabel).append(" cannot be read. Check permissions.")
-               .append(originalColors::reset).append(originalColors::boldAlt);
+               .append(originalColors::boldAlt).append(errLabel).append(" cannot be read. Check permissions.")
+               .append(originalColors::boldAlt).append(originalColors::boldAlt);
             localFailedMsgs.push_back(std::move(msg));
 
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -119,8 +119,8 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
             msg.reserve(128);
             msg.append(skipLabel).append("ISO already exists for: ")
                .append(skipPath).append("'").append(displayPath).append("'")
-               .append(originalColors::reset).append(skipLabel).append(". Skipped conversion.")
-               .append(originalColors::reset).append(originalColors::boldAlt);
+               .append(originalColors::boldAlt).append(skipLabel).append(". Skipped conversion.")
+               .append(originalColors::boldAlt).append(originalColors::boldAlt);
             localSkippedMsgs.push_back(std::move(msg));
 
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -148,7 +148,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
             msg.reserve(128);
             msg.append(okLabel).append(fileType).append(" file converted to ISO: ")
                .append(okPath).append("'").append(outDir).append("/").append(outName).append("'")
-               .append(originalColors::reset).append(originalColors::boldAlt).append(".");
+               .append(originalColors::boldAlt).append(originalColors::boldAlt).append(".");
             localSuccessMsgs.push_back(std::move(msg));
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
         } else {
@@ -157,9 +157,9 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
             msg.reserve(128);
             msg.append(errLabel).append("Conversion of ")
                .append(errPath).append("'").append(displayPath).append("'")
-               .append(originalColors::reset).append(errLabel).append(" ")
+               .append(originalColors::boldAlt).append(errLabel).append(" ")
                .append(g_operationCancelled.load() ? "cancelled" : "failed").append(".")
-               .append(originalColors::reset).append(originalColors::boldAlt);
+               .append(originalColors::boldAlt).append(originalColors::boldAlt);
             localFailedMsgs.push_back(std::move(msg));
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }

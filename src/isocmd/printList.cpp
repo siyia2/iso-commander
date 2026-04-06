@@ -131,7 +131,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                 output.append(isoColor).append(pathPart);
             }
         }
-        output.append(originalColors::reset).append("\n");
+        output.append(originalColors::boldAlt).append("\n");
     }
 
     // --- Footer / Navigation ---
@@ -151,7 +151,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
         output.append(bracketBg).append("Pending for [")
               .append(procText).append("proc")
-              .append(originalColors::reset).append(originalColors::bold).append(bracketBg).append("]: ");
+              .append(originalColors::boldAlt).append(originalColors::bold).append(bracketBg).append("]: ");
 
         std::string_view pColor = (listType != "IMAGE_FILES") ? isoColor : imgColor;
 
@@ -160,7 +160,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             output.append(pendingIndices[i]);
             if (i < pendingIndices.size() - 1) output.push_back(' ');
         }
-        output.append(originalColors::reset).append(isOriginal ? originalColors::boldAlt : "").append("\n");
+        output.append(originalColors::boldAlt).append(isOriginal ? originalColors::boldAlt : "").append("\n");
     }
 
     std::cout.write(output.data(), output.size());
