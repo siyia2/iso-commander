@@ -75,7 +75,7 @@ void helpSelections() {
     printSection(tc, "2. Selecting Items:", std::string(originalColors::boldAlt) +
         "   • Single/Multiple : " + std::string(originalColors::purple) + "'1' or '1 5 6'\n" + std::string(originalColors::boldAlt) +
         "   • Range/Combine   : " + std::string(originalColors::purple) + "'1-3' or '1-3 5 7-9'\n" + std::string(originalColors::boldAlt) +
-        "   • Pending/All     : " + std::string(originalColors::purple) + "'1-3 5;' or '00' " + std::string(originalColors::yellow) +"('00' is mount/umount only)");
+        "   • Pending/All     : " + std::string(originalColors::purple) + "'1-3 5;' or '00' " + std::string(originalColors::yellow) +"('00' for mount/umount only)");
 
     printSection(tc, "3. Special Commands:",
         "   " + std::string(originalColors::boldAlt) + "• " + std::string(originalColors::blue) + "'~' / '*' " + std::string(originalColors::boldAlt) + "   : Toggle Compact/Full or Filename-only lists\n" + std::string(originalColors::boldAlt) +
