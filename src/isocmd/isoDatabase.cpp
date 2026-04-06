@@ -485,7 +485,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
     const ListTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
-    std::string_view headerCol = isOrig ? originalColors::cyan : theme->accent;
+    std::string_view headerCol = isOrig ? originalColors::blue : theme->accent;
     std::string_view labelCol  = isOrig ? originalColors::green : theme->muted;
     std::string_view dataCol   = isOrig ? originalColors::boldAlt : theme->accent;
     std::string_view warnCol   = isOrig ? originalColors::orange : theme->warning;
@@ -518,7 +518,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
         
         std::cout << "\n" << headerCol << "=== Buffered Entries ===" << resetCol << "\n";
         
-        std::cout << (isOrig ? "\033[1;96m" : theme->accent) << "\nSTR → RAM: " << dataCol 
+        std::cout << (isOrig ? originalColors::cyan : theme->accent) << "\nSTR → RAM: " << dataCol 
                   << (transformationCache.size() + cachedParsesForUmount.size()) << "\n";
         
         std::cout << "\n" << labelCol << "ISO → RAM: " << dataCol << globalIsoFileList.size() << "\n";
