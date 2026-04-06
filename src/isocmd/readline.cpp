@@ -71,9 +71,15 @@ char** my_special_completion_entry(const char* text, int start, int end) {
 
 /**
  * @brief Custom hook for GNU Readline to display completions with pagination and color themes.
- * @param matches Array of completion matches.
- * @param num_matches Total number of matches found.
- * @param max_length Length of the longest match string.
+ *
+ * @param matches  Array of completion matches in Readline format: matches[0] is the
+ *                 common prefix of all completions (used for pagination state tracking,
+ *                 not displayed), and matches[1..num_matches] are the actual completion
+ *                 candidates.
+ * @param num_matches  Total number of completion candidates (excluding matches[0]).
+ * @param max_length   Length of the longest match string as provided by Readline.
+ *                     Unused by this implementation — column widths are computed
+ *                     directly from the match array.
  */
 void customListingsFunction(char **matches, int num_matches, int max_length) {
     (void)max_length;
@@ -81,39 +87,32 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     const ListTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
-    // labelCol: Uses brown (replaced 130m)
-    // hintCol: Uses yellow (replaced 93m)
-    // dirCol: Uses blue (replaced 34m)
     const char* labelCol = isOrig ? originalColors::brown.data()  : theme->muted.data();
     const char* hintCol  = isOrig ? originalColors::yellow.data() : theme->accent.data();
     const char* dirCol   = isOrig ? originalColors::blue.data()   : theme->accent.data();
-    
-    // fileCol: Standard reset to default
-    // resetCol: Uses your 24-bit Bold White
-    const char* fileCol  = originalColors::boldAlt.data(); 
+    const char* fileCol  = originalColors::boldAlt.data();
     const char* resetCol = originalColors::boldAlt.data();
 
-
-    const char* current_prefix = matches[0]; 
+    const char* current_prefix = matches[0];
     if (strcmp(last_common_prefix, current_prefix) != 0) {
         current_page = 0;
         strncpy(last_common_prefix, current_prefix, sizeof(last_common_prefix) - 1);
         last_common_prefix[sizeof(last_common_prefix) - 1] = '\0';
     }
 
-    printf("\033[s"); 
-    std::cout << "\033[J"; 
+    printf("\033[s");
+    std::cout << "\033[J";
     printf("\n");
 
     int total_pages = 1;
-    int start_index = 1; 
+    int start_index = 1;
     int items_to_display;
 
     if (ITEMS_PER_PAGE <= 0) {
         items_to_display = num_matches;
     } else {
         total_pages = ((size_t)num_matches + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
-        if (current_page >= total_pages) current_page = 0; 
+        if (current_page >= total_pages) current_page = 0;
         start_index = current_page * (int)ITEMS_PER_PAGE + 1;
         int remaining = num_matches - (start_index - 1);
         items_to_display = (remaining > (int)ITEMS_PER_PAGE) ? (int)ITEMS_PER_PAGE : remaining;
@@ -147,7 +146,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
 
     int num_columns = (items_to_display <= 4) ? 1 : 3;
     const int column_spacing = 4;
-    int column_width = (num_columns < 3) ? ((max_item_length + 2 > 60) ? 60 : max_item_length + 2) 
+    int column_width = (num_columns < 3) ? ((max_item_length + 2 > 60) ? 60 : max_item_length + 2)
                                          : ((max_item_length < 38) ? max_item_length + 2 : 40);
     const int total_column_width = column_width + column_spacing;
     int rows = (items_to_display + num_columns - 1) / num_columns;
@@ -184,32 +183,49 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
                 bool is_dir = isDirectory(full_path);
                 std::string formatted;
 
+                // Capture the truncated string so we know the true rendered width,
+                // rather than using strlen(relative_path) which reflects the pre-truncation length.
                 if (is_dir) {
-                    formatted = std::string(dirCol) + smartTruncate(relative_path, column_width - 1) + "/" + resetCol;
+                    std::string truncated = smartTruncate(relative_path, column_width - 1);
+                    formatted = std::string(dirCol) + truncated + "/" + resetCol;
+                    
+                    if (col < num_columns - 1 && page_offset < items_to_display - 1) {
+                        // Rendered width = truncated chars + 1 for "/"
+                        int displayed_length = (int)truncated.length() + 1;
+                        // Clamp padding to >= 0 to guard against any unexpected overflow.
+                        int padding = std::max(0, total_column_width - displayed_length);
+                        printf("%s", formatted.c_str());
+                        for (int i = 0; i < padding; i++) printf(" ");
+                        continue;
+                    }
                 } else {
-                    formatted = std::string(fileCol) + smartTruncate(relative_path, column_width) + resetCol;
+                    std::string truncated = smartTruncate(relative_path, column_width);
+                    formatted = std::string(fileCol) + truncated + resetCol;
+
+                    if (col < num_columns - 1 && page_offset < items_to_display - 1) {
+                        // Rendered width = truncated chars exactly
+                        int displayed_length = (int)truncated.length();
+                        // Clamp padding to >= 0 to guard against any unexpected overflow.
+                        int padding = std::max(0, total_column_width - displayed_length);
+                        printf("%s", formatted.c_str());
+                        for (int i = 0; i < padding; i++) printf(" ");
+                        continue;
+                    }
                 }
 
                 printf("%s", formatted.c_str());
-
-                if (col < num_columns - 1 && page_offset < items_to_display - 1) {
-                    int visible_length = (int)strlen(relative_path) + (is_dir ? 1 : 0);
-                    int displayed_length = std::min(visible_length, column_width);
-                    int padding = total_column_width - displayed_length;
-                    for (int i = 0; i < padding; i++) printf(" ");
-                }
             }
         }
-        printf("\033[0m\n"); 
+        printf("\033[0m\n");
     }
 
     if (ITEMS_PER_PAGE > 0 && (size_t)num_matches > ITEMS_PER_PAGE) {
         printf("\n%s[%d/%d matches — press %sTab%s for next page]%s\n",
-               labelCol, start_index + items_to_display - 1, num_matches, 
+               labelCol, start_index + items_to_display - 1, num_matches,
                hintCol, labelCol, resetCol);
     }
 
-    printf("\033[u"); 
+    printf("\033[u");
 }
 
 CompleterData g_completerData = {nullptr, nullptr};
