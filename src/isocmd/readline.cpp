@@ -145,7 +145,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
         if (item_length > max_item_length) max_item_length = item_length;
     }
 
-    int num_columns = (items_to_display <= 2) ? items_to_display : 3;
+    int num_columns = (items_to_display <= 4) ? 1 : 3;
     const int column_spacing = 4;
     int column_width = (num_columns < 3) ? ((max_item_length + 2 > 60) ? 60 : max_item_length + 2) 
                                          : ((max_item_length < 38) ? max_item_length + 2 : 40);
