@@ -132,7 +132,7 @@ static void printConfigError(const std::string& configPath) {
     std::cerr << "\n" << error
               << "Error: Unable to access configuration file: "
               << warning << "'" << configPath << "'"
-              << error << ".\033[JoriginalColors::boldAlt\n";
+              << error << ".\033[J\n" << originalColors::boldAlt;
 }
 
 /**
@@ -326,7 +326,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     size_t colonPos = inputSearch.find(':');
     if (colonPos == std::string::npos) {
         auto [label, accent, warning, error] = resolveTheme();
-        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[JoriginalColors::boldAlt\n";
+        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\n" << originalColors::boldAlt;
         pauseForInput();
         return;
     }
@@ -334,7 +334,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     std::string valueStr = inputSearch.substr(colonPos + 1);
     if (!isNum(valueStr, 0, 1000)) {
         auto [label, accent, warning, error] = resolveTheme();
-        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[JoriginalColors::boldAlt\n";
+        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\n" << originalColors::boldAlt;
         pauseForInput();
         return;
     }
@@ -347,10 +347,10 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
         auto [label, accent, warning, error] = resolveTheme();
         if (val > 0) {
             std::cout << "\n" << label << "Pagination status updated: Max entries per page set to "
-                      << warning << val << label << ".\033[JoriginalColors::boldAlt\n";
+                      << warning << val << label << ".\033[J\n" << originalColors::boldAlt;
         } else {
             std::cout << "\n" << label << "Pagination status updated: "
-                      << error << "Disabled" << label << ".\033[JoriginalColors::boldAlt\n";
+                      << error << "Disabled" << label << ".\033[J\n" << originalColors::boldAlt;
         }
     }
 
@@ -367,7 +367,7 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
 
     if (inputSearch != "*flno:on" && inputSearch != "*flno:off") {
         auto [label, accent, warning, error] = resolveTheme();
-        std::cerr << "\n" << error << "Error: Invalid command format.\033[JoriginalColors::boldAlt\n";
+        std::cerr << "\n" << error << "Error: Invalid command format.\033[J\n" << originalColors::boldAlt;
         pauseForInput();
         return;
     }
@@ -382,7 +382,7 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
         std::cout << "\n" << label << "Filename-only lists have been "
                   << (isEnabling ? accent : error)
                   << (isEnabling ? "enabled" : "disabled")
-                  << label << ".\033[JoriginalColors::boldAlt\n";
+                  << label << ".\033[J\n" << originalColors::boldAlt;
     }
 
     pauseForInput();
@@ -416,7 +416,7 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
 
     if (!isValid) {
         auto [label, accent, warning, error] = resolveTheme();
-        std::cerr << "\n" << error << "Error: Invalid command or unsupported value.\033[JoriginalColors::boldAlt\n";
+        std::cerr << "\n" << error << "Error: Invalid command or unsupported value.\033[J\n" << originalColors::boldAlt;
         pauseForInput();
         return;
     }
