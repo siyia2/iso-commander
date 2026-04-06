@@ -121,7 +121,7 @@ int main(int argc, char *argv[]) {
         char* rawInput = readline(("\n\001" + 
 									std::string(isOriginal ? originalColors::blue : theme->muted) + 
 									"\002Choose an option:" + 
-									std::string(originalColors::boldAlt) + 
+									std::string(originalColors::rl_boldAlt) + 
 									" ").c_str());
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
