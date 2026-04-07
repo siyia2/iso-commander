@@ -57,10 +57,7 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
             currentPage = originalPage;
             pendingIndices.clear();
             hasPendingProcess = false;
-            if (isFiltered) {
-                filteringStack.clear();
-                isFiltered = false;
-            }
+        
             sortFilesCaseInsensitive(globalIsoFileList);
         }
 
@@ -71,6 +68,7 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
 
         if (umountMvRmBreak) {
             filteringStack.clear();
+            filteredFiles.clear();
             isFiltered = false;
         }
 
