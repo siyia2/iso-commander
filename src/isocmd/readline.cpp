@@ -90,7 +90,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     const char* labelCol = isOrig ? originalColors::brown.data()  : theme->muted.data();
     const char* hintCol  = isOrig ? originalColors::yellow.data() : theme->accent.data();
     const char* dirCol   = isOrig ? originalColors::blue.data()   : theme->accent.data();
-    const char* fileCol  = originalColors::boldAlt.data();
+    const char* fileCol  = originalColors::resetPlain.data();
     const char* resetCol = originalColors::boldAlt.data();
 
     const char* current_prefix = matches[0];
