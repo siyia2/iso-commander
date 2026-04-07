@@ -50,32 +50,34 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     const bool disablePagination = (ITEMS_PER_PAGE == 0 || totalItems <= ITEMS_PER_PAGE);
     const size_t totalPages = disablePagination ? 1 : (totalItems + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
     
-    // Ensure the page stays within bounds after deletions/filtering
+    // Bounds check
     size_t effectivePage = (disablePagination) ? 0 : (currentPage >= totalPages ? totalPages - 1 : currentPage);
     const size_t startIndex = disablePagination ? 0 : (effectivePage * ITEMS_PER_PAGE);
     const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + ITEMS_PER_PAGE, totalItems);
 
+    // --- Performance: Pre-calculate Gutter Width ---
     IntBuf<> ib1, ib2, ib3, ib4; 
-    const size_t maxDigits = ib1.format(totalItems).length();
+    // Use endIndex for maxDigits so the list doesn't have a massive empty gap on page 1
+    const size_t maxDigits = ib1.format(endIndex).length();
     const bool isIsoWithAutoUpdate = (isImportRunning.load() && listType == "ISO_FILES" && !isFiltered && !globalIsoFileList.empty());
 
     // --- Color Mapping ---
     std::string_view accentColor = isOriginal ? originalColors::darkCyan : theme->accent;
     std::string_view headColor   = isOriginal ? originalColors::brown    : theme->muted; 
     std::string_view numColor    = isOriginal ? originalColors::yellow   : theme->warning; 
-    std::string_view isoColor    = isOriginal ? originalColors::magenta   : theme->accent; 
+    std::string_view isoColor    = isOriginal ? originalColors::magenta  : theme->accent; 
     std::string_view imgColor    = isOriginal ? originalColors::orange   : theme->highlight; 
     std::string_view mntColor    = isOriginal ? originalColors::blue     : theme->secondary; 
     std::string_view squareColor = originalColors::dimGray;
-    std::string_view origPendingColor = originalColors::bgNavy;
-    std::string_view indexA = isOriginal ? originalColors::red   : theme->secondary;
-	std::string_view indexB = isOriginal ? originalColors::green : theme->accent;
+    std::string_view indexA      = isOriginal ? originalColors::red      : theme->secondary;
+    std::string_view indexB      = isOriginal ? originalColors::green    : theme->accent;
 
+    // --- Output Buffering ---
     std::string output;
     output.reserve(((endIndex - startIndex) * 128) + 1024);
     output += '\n';
 
-    // --- Header / Pagination Info ---
+    // --- Header ---
     if (!disablePagination) {
         output.append(headColor).append("Page ")
               .append(accentColor).append(ib1.format(effectivePage + 1))
@@ -91,22 +93,23 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append(originalColors::boldAlt).append("\n\n");
     } 
     else if (isIsoWithAutoUpdate) {
-        output.append(originalColors::dim).append("[Auto-Update: List restructures if newISOFound]");
-        output.append(originalColors::boldAlt).append("\n\n");
+        output.append(originalColors::dim).append("[Auto-Update: List restructures if newISOFound]\n\n");
     }
 
     // --- Main Item Loop ---
     for (size_t i = startIndex; i < endIndex; ++i) {
-        // Alternating sequence colors for better row readability
         const std::string_view seqColor = (i % 2 == 0) ? indexA : indexB;
         std::string_view idxStr = ib1.format(i + 1);
         
         output.append(seqColor);
-        // Right-align index numbers based on total digit count
-        for (size_t p = 0; p < (maxDigits - idxStr.length()); ++p) output.push_back(' ');
+        
+        // Performance Fix: Efficient right-alignment padding
+        if (idxStr.length() < maxDigits) {
+            output.append(maxDigits - idxStr.length(), ' ');
+        }
         output.append(idxStr);
 
-        // Show original indices if filtering is active (useful for complex operations)
+        // Filter indices logic
         if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
             output.append(":").append(originalColors::boldAlt).append(squareColor); 
             output.append(ib2.format(filteringStack.back().originalIndices[i] + 1));
@@ -116,6 +119,8 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         }
 
         const std::string& item = items[i];
+        
+        // Optimization: Use boolean flags for type checking outside the loop or cache them
         if (listType == "ISO_FILES" || listType == "IMAGE_FILES") {
             auto [dir, fname] = extractDirectoryAndFilename(item, listSubType);
             if (!displayConfig::toggleNamesOnly) {
@@ -136,7 +141,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append(originalColors::boldAlt).append("\n");
     }
 
-    // --- Footer / Navigation ---
+    // --- Footer ---
     if (!disablePagination) {
         output.append("\n").append(headColor).append("Pagination: ");
         if (effectivePage > 0) output.append("[p] ↵ Previous | ");
@@ -144,26 +149,25 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append("[g<num>] ↵ Go to | ").append(originalColors::boldAlt).append("\n");
     }
 
-    // --- Pending Processes block ---
+    // --- Pending Processes ---
     if (hasPendingProcess && !pendingIndices.empty()) {
         output.append("\n");
-
-        std::string_view bracketBg = isOriginal ? origPendingColor : theme->background;
-        std::string_view procText   = isOriginal ? originalColors::green     : theme->accent;
+        std::string_view bracketBg = isOriginal ? originalColors::bgNavy : theme->background;
+        std::string_view procText   = isOriginal ? originalColors::green  : theme->accent;
 
         output.append(bracketBg).append("Pending for [")
               .append(procText).append("proc")
               .append(originalColors::boldAlt).append(bracketBg).append("]: ");
 
         std::string_view pColor = (listType != "IMAGE_FILES") ? isoColor : imgColor;
-
         output.append(pColor);
         for (size_t i = 0; i < pendingIndices.size(); ++i) {
             output.append(pendingIndices[i]);
             if (i < pendingIndices.size() - 1) output.push_back(' ');
         }
-        output.append(originalColors::boldAlt).append(isOriginal ? originalColors::boldAlt : "").append("\n");
+        output.append(originalColors::boldAlt).append("\n");
     }
 
+    // Atomic write to stdout
     std::cout.write(output.data(), output.size());
 }
