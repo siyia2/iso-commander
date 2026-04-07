@@ -513,6 +513,22 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         rl_bind_keyseq("\033[A", rl_get_previous_history);
         rl_bind_keyseq("\033[B", rl_get_next_history);
     };
+    
+	const ListTheme* theme = getActiveTheme();
+	const bool isOriginal = (globalTheme == "original");
+
+	// Use your centralized struct for these resets
+	static constexpr std::string_view reset = originalColors::boldAlt;
+	static constexpr std::string_view boldReset = originalColors::boldAlt;
+
+	// Mapping legacy codes to your new RGB struct
+	std::string headerCol = isOriginal ? std::string(originalColors::green)   : std::string(theme->accent);
+	std::string indexCol  = isOriginal ? std::string(originalColors::yellow)  : std::string(theme->secondary);
+	std::string pathCol   = isOriginal ? std::string(originalColors::boldAlt) : std::string(theme->muted);
+	std::string fileCol   = isOriginal ? std::string(originalColors::magenta) : std::string(theme->accent);
+	std::string sizeCol   = isOriginal ? std::string(originalColors::purple)  : std::string(theme->highlight);
+	
+	std::string warnCol   = isOriginal ? std::string(originalColors::red)     : std::string(theme->warning);
 
     while (true) {
         setupReadline();
@@ -520,17 +536,15 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         disable_ctrl_d();
         clearScrollBuffer();
         
-        if ((selectedIsos.size() > ITEMS_PER_PAGE) && !(ITEMS_PER_PAGE <= 0)) {
-		std::cout << "\n" << originalColors::red << "ISO selections for " 
-				  << originalColors::yellow << "write" 
-				  << originalColors::red << " cannot exceed the current pagination limit of " 
-				  << originalColors::yellow << ITEMS_PER_PAGE 
-				  << originalColors::red << "!" 
-				  << originalColors::boldAlt << "\n";
+        if ((selectedIsos.size() > ITEMS_PER_PAGE) && (ITEMS_PER_PAGE > 0)) {
+            std::cout << "\n" << warnCol  << "ISO selections for " 
+                              << indexCol << "write" 
+                              << warnCol  << " cannot exceed the current pagination limit of " 
+                              << indexCol << ITEMS_PER_PAGE 
+                              << warnCol  << "!" 
+                              << originalColors::boldAlt << "\n";
 
-		// Assuming you have 'reset' in that struct too
-		std::cout << originalColors::red << "\n↵ to try again..." << originalColors::boldAlt; 
-		
+		std::cout << color << "\n↵ to try again..." << reset;
 		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 		return {};
 	}
@@ -541,20 +555,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::sort(sortedIsos.begin(), sortedIsos.end(), [](const IsoInfo& a, const IsoInfo& b) {
             return a.size > b.size;
         });
-
-		const ListTheme* theme = getActiveTheme();
-		const bool isOriginal = (globalTheme == "original");
-
-		// Use your centralized struct for these resets
-		static constexpr std::string_view reset = originalColors::boldAlt;
-		static constexpr std::string_view boldReset = originalColors::boldAlt;
-
-		// Mapping legacy codes to your new RGB struct
-		std::string headerCol = isOriginal ? std::string(originalColors::green)   : std::string(theme->accent);
-		std::string indexCol  = isOriginal ? std::string(originalColors::yellow)  : std::string(theme->secondary);
-		std::string pathCol   = isOriginal ? std::string(originalColors::boldAlt) : std::string(theme->muted);
-		std::string fileCol   = isOriginal ? std::string(originalColors::magenta) : std::string(theme->accent);
-		std::string sizeCol   = isOriginal ? std::string(originalColors::purple)  : std::string(theme->highlight);
 
 		std::ostringstream devicePromptStream;
 		devicePromptStream << "\n" << boldReset << "Selected " << headerCol << "ISO" << boldReset << ":\n\n";
@@ -807,9 +807,9 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 	auto displayAllProgress = [&]() {
 
 		// Non-status colors: theme roles or original fallback
-		const std::string_view fileCol   = isOriginal ? originalColors::magenta : theme->primary;
+		const std::string_view fileCol   = isOriginal ? originalColors::magenta : theme->accent;
 		const std::string_view deviceCol = isOriginal ? originalColors::yellow  : theme->secondary;
-		const std::string_view sizeCol   = isOriginal ? originalColors::purple  : theme->accent;
+		const std::string_view sizeCol   = isOriginal ? originalColors::purple  : theme->primary;
 		const std::string_view speedCol  = isOriginal ? originalColors::boldAlt : theme->highlight;
 
 		// Status colors remain fixed regardless of theme
