@@ -173,7 +173,8 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         std::cout << color << "\n↵ to return..." << reset;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
-        isoDirs.shrink_to_fit();
+        std::vector<std::string>().swap(lastSortedDirs);
+		lastIsoCount = 0;
         std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>>().swap(cachedParsesForUmount);
 
         return false;
