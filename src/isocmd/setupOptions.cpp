@@ -344,6 +344,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     g_configCache["pagination"] = valueStr;
 
     if (flushCache(configPath)) {
+		ITEMS_PER_PAGE = static_cast<size_t>(val);
         auto [label, accent, warning, error] = resolveTheme();
         if (val > 0) {
             std::cout << "\n" << label << "Pagination status updated: Max entries per page set to "
