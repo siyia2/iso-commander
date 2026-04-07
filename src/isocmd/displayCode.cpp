@@ -20,9 +20,10 @@ namespace displayConfig {
 
 /**
  * @brief Loads ISO files from the database and updates the display.
- * * Synchronizes the global ISO list with the database file if modifications are detected
+ * Reloads the global ISO list from the database when the dirty flag is set,
  * and handles UI state updates including filtering and pagination.
- * * @param filteredFiles Reference to the vector of currently filtered files.
+ *
+ * @param filteredFiles Reference to the vector of currently filtered files.
  * @param isFiltered Boolean flag indicating if a filter is active.
  * @param listSubType String representing the sub-category of the list.
  * @param umountMvRmBreak Flag to force a break/refresh in the UI state.
@@ -102,9 +103,11 @@ const std::string MOUNTED_ISO_PATH = "/mnt";
 
 /**
  * @brief Scans and displays currently mounted ISO directories.
- * * Checks for directories matching the 'iso_' pattern in the mount path and uses 
- * hashing to determine if the directory list requires a re-sort/refresh.
- * * @param isoDirs Vector to store found mount paths.
+ * Checks for directories matching the 'iso_' pattern in the mount path and uses
+ * stat()-based change detection to determine if the directory list requires a re-sort/refresh.
+ * Rescans only when directory metadata changes, and resets state only when iso_ contents differ.
+ *
+ * @param isoDirs Vector to store found mount paths.
  * @param filteredFiles Reference to filtered results.
  * @param isFiltered Filter state.
  * @param umountMvRmBreak UI refresh flag.
@@ -118,70 +121,76 @@ const std::string MOUNTED_ISO_PATH = "/mnt";
 bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
-    
-    static size_t previousHash = 0;
-    static std::vector<std::string> lastSortedDirs;
-    std::vector<std::string> newIsoDirs;
 
-    for (const auto& entry : std::filesystem::directory_iterator(MOUNTED_ISO_PATH)) {
-        if (entry.is_directory()) {
-            auto filename = entry.path().filename().string();
-            if (filename.find("iso_") == 0) { 
-                newIsoDirs.push_back(entry.path().string());
+    static struct stat lastDirStat{};
+    static std::vector<std::string> lastSortedDirs;
+    static size_t lastIsoCount = 0;
+
+    struct stat currentDirStat{};
+    bool metaChanged = false;
+
+    if (stat(MOUNTED_ISO_PATH.c_str(), &currentDirStat) != 0) {
+        // MOUNTED_ISO_PATH missing or inaccessible — treat as empty
+        lastSortedDirs.clear();
+        lastIsoCount = 0;
+        lastDirStat = {};
+    } else {
+        metaChanged = (currentDirStat.st_mtime != lastDirStat.st_mtime ||
+                       currentDirStat.st_nlink != lastDirStat.st_nlink);
+        if (metaChanged) {
+            std::vector<std::string> newIsoDirs;
+            std::error_code ec;
+            for (const auto& entry : std::filesystem::directory_iterator(MOUNTED_ISO_PATH, ec)) {
+                if (ec) break;
+                if (entry.is_directory()) {
+                    auto filename = entry.path().filename().string();
+                    if (filename.find("iso_") == 0)
+                        newIsoDirs.push_back(entry.path().string());
+                }
+            }
+            sortFilesCaseInsensitive(newIsoDirs);
+            lastDirStat = currentDirStat;
+
+            if (newIsoDirs.size() != lastIsoCount || newIsoDirs != lastSortedDirs) {
+                lastSortedDirs = std::move(newIsoDirs);
+                lastIsoCount   = lastSortedDirs.size();
+                pendingIndices.clear();
+                hasPendingProcess = false;
             }
         }
     }
 
-    size_t currentHash = 0;
-    for (const auto& path : newIsoDirs) {
-        currentHash += std::hash<std::string>{}(path);
+    isoDirs = lastSortedDirs;
+
+    if (isoDirs.empty()) {
+        clearScrollBuffer();
+
+        const ListTheme* theme = getActiveTheme();
+        const bool isOriginal  = (globalTheme == "original");
+
+        const std::string_view warnColor = isOriginal ? originalColors::yellow : theme->warning;
+        const std::string_view reset     = originalColors::boldAlt;
+
+        std::cerr << "\n" << warnColor << "No paths matching the '/mnt/iso_{name}' pattern found." << reset << "\n";
+        std::cout << color << "\n↵ to return..." << reset;
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+        isoDirs.shrink_to_fit();
+        std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>>().swap(cachedParsesForUmount);
+
+        return false;
     }
-    currentHash += newIsoDirs.size();
 
-    if (currentHash != previousHash) {
-        sortFilesCaseInsensitive(newIsoDirs);
-        lastSortedDirs = newIsoDirs;
-        previousHash = currentHash;
-        pendingIndices.clear();
-        hasPendingProcess = false;
-    } else {
-        newIsoDirs = lastSortedDirs;
-    }
-
-    isoDirs = std::move(newIsoDirs);
-
-	if (isoDirs.empty()) {
-		clearScrollBuffer();
-		
-		const ListTheme* theme = getActiveTheme();
-        const bool isOriginal = (globalTheme == "original");
-		
-		// Determine colors using ternary operators
-		const std::string_view warnColor   = isOriginal ? originalColors::yellow : theme->warning;
-		const std::string_view reset       = originalColors::boldAlt;
-
-		std::cerr << "\n" << warnColor << "No paths matching the '/mnt/iso_{name}' pattern found." << reset << "\n";
-		std::cout << color << "\n↵ to return..." << reset;
-
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-		// Clear memory resources
-		std::vector<std::string>().swap(isoDirs); 
-		std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>>().swap(cachedParsesForUmount);
-		
-		return false;
-	}
-	
     clearScrollBuffer();
 
     if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {
         originalPage = currentPage;
         filteringStack.clear();
-        isFiltered = false; 
+        isFiltered = false;
         filteredFiles.clear();
     }
-    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
 
+    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
     return true;
 }
 
