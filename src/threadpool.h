@@ -253,7 +253,15 @@ public:
 inline ThreadPool& getStaticThreadPool() {
     static ThreadPool instance([] {
         constexpr size_t MAX_USEFUL_THREADS = 32;
-        return std::min({static_cast<size_t>(maxThreads), MAX_USEFUL_THREADS});
+        
+        // 1. Get the requested threads
+        size_t requested = static_cast<size_t>(maxThreads);
+        
+        // 2. Clamp between 1 and 32
+        // This ensures n is NEVER 0, preventing the throw/abort
+        size_t final_count = std::clamp(requested, size_t(1), MAX_USEFUL_THREADS);
+        
+        return final_count;
     }());
     return instance;
 }
