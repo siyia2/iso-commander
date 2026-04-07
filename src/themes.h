@@ -3,10 +3,6 @@
 #ifndef THEMES_H
 #define THEMES_H
 
-#include <string>
-#include <string_view>
-#include <unordered_map>
-
 /**
  * @brief Current active skin name.
  */
