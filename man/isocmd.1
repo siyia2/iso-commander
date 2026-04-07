@@ -98,7 +98,9 @@ Iso Commander uses a multi-threaded architecture to optimize I/O-heavy operation
 .TS
 tab(@);
 lb l.
-max_thread_cap@Global maximum concurrent threads (Default: 32)
+max_thread_cap@Maximum allowed concurrent threads (Default: 32)
+@Tasks exceeding this limit are queued in the thread pool.
+
 threads_for_cp_mv@Copy/move tasks (Default: 8)
 threads_for_conversions@ISO conversions (Default: 8)
 threads_for_mount@Mounting tasks (Default: 16)
