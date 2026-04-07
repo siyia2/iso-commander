@@ -101,28 +101,25 @@ Sub-limits draw from this pool; tasks queue if the pool is full.
 .TS
 tab(@);
 lb l.
-combined_thread_cap@Global thread pool limit (Default: 32).
-T{
-.br
-T}
-thread_cap_for_cp_mv@Max concurrent copy/move tasks (Default: 8).
-thread_cap_for_conversions@Max concurrent ISO conversions (Default: 8).
-thread_cap_for_mount@Max concurrent mounting tasks (Default: 16).
-thread_cap_for_umount@Max concurrent unmounting tasks (Default: 32).
-thread_cap_for_database_cleanup@Max concurrent database maintenance tasks (Default: 16).
-thread_cap_for_rm@Max concurrent file removal tasks (Default: 32).
-thread_cap_for_list_sorting@Max concurrent UI list sorting tasks (Default: 4).
-thread_cap_for_list_filtering@Max concurrent UI list filtering tasks (Default: 4).
+combined_thread_cap@Global thread pool limit (Default: 32)
+thread_cap_for_cp_mv@Max concurrent copy/move tasks (Default: 8)
+thread_cap_for_conversions@Max concurrent ISO conversions (Default: 8)
+thread_cap_for_mount@Max concurrent mounting tasks (Default: 16)
+thread_cap_for_umount@Max concurrent unmounting tasks (Default: 32)
+thread_cap_for_database_cleanup@Max concurrent database maintenance tasks (Default: 16)
+thread_cap_for_rm@Max concurrent file removal tasks (Default: 32)
+thread_cap_for_list_sorting@Max concurrent UI list sorting tasks (Default: 4)
+thread_cap_for_list_filtering@Max concurrent UI list filtering tasks (Default: 4)
 .TE
 
 .SH FILES
-.B Note: If run with sudo or as the root user, the following paths will be relative to /root/ instead of the current user's home directory.
+.I Note: If run with sudo, these paths are relative to /root/ instead of the user's home directory.
 .TP
 .I ~/.config/isocmd/config
 Primary configuration file.
 .TP
 .I ~/.local/share/isocmd/database/iso_commander_database.txt
-The main ISO metadata database.
+Main ISO metadata database.
 .TP
 .I ~/.local/share/isocmd/database/iso_commander_path_database.txt
 Persistent history of accessed folder paths.
