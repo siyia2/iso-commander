@@ -146,12 +146,6 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
             return;
         }
         
-        const size_t numThreads = std::min({
-            validPaths.size(),
-            static_cast<size_t>(maxThreads),
-            static_cast<size_t>(MAX_USEFUL_THREADS)
-        });
-        
         {
             auto& pool = getStaticThreadPool();
             std::vector<std::future<void>> futures;
