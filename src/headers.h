@@ -101,6 +101,7 @@ inline int MAX_HISTORY_PATTERN_LINES = 50;
 inline constexpr uintmax_t maxDatabaseSize     = 1024 * 1024 * 1; // e.g., 1MB
 
 // State Management
+inline std::atomic<bool> isoListDirty{true}; // true = force load iso list on first call
 inline std::atomic<bool> g_operationCancelled{false};
 inline bool needSortingAfterflno			   = false;
 inline size_t ITEMS_PER_PAGE                   = 25;
