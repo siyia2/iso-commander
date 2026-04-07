@@ -62,7 +62,8 @@ static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {"write_list", "compact", "Display mode for write operations (full/compact)", "", isDisplay},
     {"conversion_lists", "compact", "Display mode for conversion operations (full/compact)", "", isDisplay},
 
-    {"max_thread_cap", "32", "Global maximum concurrent threads allowed", "Thread Configuration", [](const std::string& v){ return isNum(v, 1, 256); }},
+    {"max_thread_cap", "32", "Maximum allowed concurrent threads, tasks exceeding this limit are queued in the thread pool",
+		 "Thread Configuration", [](const std::string& v){ return isNum(v, 1, 256); }},
     {"threads_for_cp_mv", "8", "Threads allocated for copy/move tasks", "", [](const std::string& v){ return isNum(v, 1, 128); }},
     {"threads_for_conversions", "8", "Threads allocated for ISO file conversions", "", [](const std::string& v){ return isNum(v, 1, 128); }},
     {"threads_for_mount", "16", "Threads allocated for mounting tasks", "", [](const std::string& v){ return isNum(v, 1, 128); }},
