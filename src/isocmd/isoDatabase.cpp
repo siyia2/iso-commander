@@ -289,7 +289,6 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
     
-    // FIX: Get the safe singleton instance instead of creating a local one
     auto& pool = getStaticThreadPool();
     std::vector<std::future<void>> futures;
     

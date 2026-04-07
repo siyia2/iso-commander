@@ -517,11 +517,9 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 	const ListTheme* theme = getActiveTheme();
 	const bool isOriginal = (globalTheme == "original");
 
-	// Use your centralized struct for these resets
 	static constexpr std::string_view reset = originalColors::boldAlt;
 	static constexpr std::string_view boldReset = originalColors::boldAlt;
 
-	// Mapping legacy codes to your new RGB struct
 	std::string headerCol = isOriginal ? std::string(originalColors::green)   : std::string(theme->accent);
 	std::string indexCol  = isOriginal ? std::string(originalColors::yellow)  : std::string(theme->secondary);
 	std::string pathCol   = isOriginal ? std::string(originalColors::boldAlt) : std::string(theme->muted);
@@ -635,7 +633,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 		std::string highlightCol = isOriginal ? std::string(originalColors::rl_yellow) : wrap(theme->secondary); 
 		std::string resetCol     = wrap(originalColors::boldAlt);
 
-		// The stream becomes much cleaner without the manual \001/\002 noise
 		devicePromptStream << "\n" << labelCol   << "Mappings" 
 						   << primaryCol         << " ↵ as " 
 						   << highlightCol       << "INDEX>DEVICE" 
@@ -988,7 +985,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     disable_ctrl_d();
 
     // Replaced 'color' and 'reset' with your RGB boldAlt and reset
-    std::cout << originalColors::boldAlt << "\n↵ to continue..." << originalColors::boldAlt;
+    std::cout << color << "\n↵ to continue..." << reset;
     
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
