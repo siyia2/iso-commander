@@ -62,16 +62,15 @@ static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {"write_list", "compact", "Display mode for write operations (full/compact)", "", isDisplay},
     {"conversion_lists", "compact", "Display mode for conversion operations (full/compact)", "", isDisplay},
 
-    {"max_thread_cap", "32", "Maximum allowed concurrent threads, tasks exceeding this limit are queued in the thread pool",
-		 "Thread Configuration", [](const std::string& v){ return isNum(v, 1, 256); }},
-    {"threads_for_cp_mv", "8", "Threads allocated for copy/move tasks", "", [](const std::string& v){ return isNum(v, 1, 128); }},
-    {"threads_for_conversions", "8", "Threads allocated for ISO file conversions", "", [](const std::string& v){ return isNum(v, 1, 128); }},
-    {"threads_for_mount", "16", "Threads allocated for mounting tasks", "", [](const std::string& v){ return isNum(v, 1, 128); }},
-    {"threads_for_umount", "32", "Threads allocated for unmounting tasks", "", [](const std::string& v){ return isNum(v, 1, 128); }},
-    {"threads_for_database_cleanup", "16", "Threads allocated for DB maintenance", "", [](const std::string& v){ return isNum(v, 1, 128); }},
-    {"threads_for_rm", "32", "Threads allocated for removal tasks", "", [](const std::string& v){ return isNum(v, 1, 128); }},
-    {"threads_for_list_sorting", "4", "Threads allocated for UI list sorting", "", [](const std::string& v){ return isNum(v, 1, 64); }},
-    {"threads_for_list_filtering", "4", "Threads allocated for UI list filtering", "", [](const std::string& v){ return isNum(v, 1, 64); }},
+    {"combined_thread_cap", "32", "Global thread pool limit; excess tasks are queued", "Thread Configuration", [](const std::string& v){ return isNum(v, 1, 256); }},
+    {"thread_cap_for_cp_mv", "8", "Max concurrent copy/move tasks using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
+    {"thread_cap_for_conversions", "8", "Max concurrent ISO conversions using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
+    {"thread_cap_for_mount", "16", "Max concurrent mounting tasks using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
+    {"thread_cap_for_umount", "32", "Max concurrent unmounting tasks using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
+    {"thread_cap_for_database_cleanup", "16", "Max concurrent DB maintenance tasks using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
+    {"thread_cap_for_rm", "32", "Max concurrent removal tasks using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
+    {"thread_cap_for_list_sorting", "4", "Max concurrent UI list sorting using the global pool", "", [](const std::string& v){ return isNum(v, 1, 64); }},
+    {"thread_cap_for_list_filtering", "4", "Max concurrent UI list filtering using the global pool", "", [](const std::string& v){ return isNum(v, 1, 64); }},
 };
 
 // ---------------------------------------------------------------------------
@@ -238,15 +237,15 @@ static void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::str
     
     MAX_HISTORY_LINES         = getVal("folder_path_history_lines",    30);
     MAX_HISTORY_PATTERN_LINES = getVal("filter_history_lines",         15);
-    MAX_USEFUL_THREADS        = getVal("max_thread_cap",               32);
-    CPMV_THREAD_CAP           = getVal("threads_for_cp_mv",             8);
-    CONV_THREAD_CAP           = getVal("threads_for_conversions",       8);
-    MOUNT_THREAD_CAP          = getVal("threads_for_mount",            16);
-    CLEAN_THREAD_CAP          = getVal("threads_for_database_cleanup", 16);
-    UMOUNT_THREAD_CAP         = getVal("threads_for_umount",           32); 
-    RM_THREAD_CAP             = getVal("threads_for_rm",               32);
-    SORT_THREAD_CAP           = getVal("threads_for_list_sorting",      4);
-    FILTER_THREAD_CAP         = getVal("threads_for_list_filtering",    4);
+    MAX_USEFUL_THREADS        = getVal("combined_thread_cap",               32);
+    CPMV_THREAD_CAP           = getVal("thread_cap_for_cp_mv",             8);
+    CONV_THREAD_CAP           = getVal("thread_cap_for_conversions",       8);
+    MOUNT_THREAD_CAP          = getVal("thread_cap_for_mount",            16);
+    CLEAN_THREAD_CAP          = getVal("thread_cap_for_database_cleanup", 16);
+    UMOUNT_THREAD_CAP         = getVal("thread_cap_for_umount",           32); 
+    RM_THREAD_CAP             = getVal("thread_cap_for_rm",               32);
+    SORT_THREAD_CAP           = getVal("thread_cap_for_list_sorting",      4);
+    FILTER_THREAD_CAP         = getVal("thread_cap_for_list_filtering",    4);
 }
 
 // ---------------------------------------------------------------------------
@@ -540,9 +539,9 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
 
     static const std::unordered_map<std::string, std::string> keyMap = {
         {"filterhist", "filter_history_lines"}, {"pathhist", "folder_path_history_lines"},
-        {"max", "max_thread_cap"}, {"mount", "threads_for_mount"}, {"umount", "threads_for_umount"},
-        {"conv", "threads_for_conversions"}, {"cpmv", "threads_for_cp_mv"}, {"rm", "threads_for_rm"},
-        {"clean", "threads_for_database_cleanup"}, {"sort", "threads_for_list_sorting"}, {"filter", "threads_for_list_filtering"}
+        {"max", "combined_thread_cap"}, {"mount", "thread_cap_for_mount"}, {"umount", "thread_cap_for_umount"},
+        {"conv", "thread_cap_for_conversions"}, {"cpmv", "thread_cap_for_cp_mv"}, {"rm", "thread_cap_for_rm"},
+        {"clean", "thread_cap_for_database_cleanup"}, {"sort", "thread_cap_for_list_sorting"}, {"filter", "thread_cap_for_list_filtering"}
     };
 
     size_t eqPos = inputSearch.find('=');
