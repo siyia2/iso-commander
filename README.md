@@ -11,6 +11,7 @@ High performance `ISO` manager written in pure C++. `ISOs` are mounted under `/m
 For best experience execute with: `sudo isocmd`.
 
 Configuration file location: `/root/.config/isocmd/config` || `~/.config/isocmd/config`.
+
 Database folder location: `/root/.local/share/isocmd/database/` || `~/.local/share/isocmd/database/`.
 
 ## ✨ Features
