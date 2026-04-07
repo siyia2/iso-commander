@@ -105,8 +105,8 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
                 retained.push_back(std::move(cache[i]));
             }
         }
-
         anyRemoved = true;
+        
 
         std::string buf;
         buf.reserve(totalBufferSize);
@@ -119,7 +119,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
 
         ssize_t written = ::write(fd, buf.data(), buf.size());
         if (written == -1 || static_cast<size_t>(written) != buf.size()) return;
-
+		isoListDirty.store(true);
         fdGuard.release();
         flock(fd, LOCK_UN);
         close(fd);
@@ -460,6 +460,7 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
     close(fd);
 
     newISOFound.store(localNewISOFound);
+    if (success) isoListDirty.store(true);
 
     return success;
 }

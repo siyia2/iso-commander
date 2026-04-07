@@ -35,30 +35,10 @@ namespace displayConfig {
  */
 bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
 size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
-
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    static std::mutex lastModifiedMutex;
-    static std::filesystem::file_time_type lastModifiedTime;
-
-    bool needToReload = false;
-
-    {
-        std::lock_guard<std::mutex> lock(lastModifiedMutex);
-        if (std::filesystem::exists(databaseFilePath)) {
-            std::filesystem::file_time_type currentModifiedTime =
-                std::filesystem::last_write_time(databaseFilePath);
-            if (lastModifiedTime == std::filesystem::file_time_type{} ||
-                currentModifiedTime > lastModifiedTime) {
-                needToReload = true;
-            }
-            lastModifiedTime = currentModifiedTime;
-        } else {
-            needToReload = true;
-            lastModifiedTime = std::filesystem::file_time_type{};
-        }
-    }
+    bool needToReload = isoListDirty.exchange(false);
 
     clearScrollBuffer();
 
@@ -76,15 +56,13 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
             currentPage = originalPage;
             pendingIndices.clear();
             hasPendingProcess = false;
-
             if (isFiltered) {
                 filteringStack.clear();
                 isFiltered = false;
             }
-
             sortFilesCaseInsensitive(globalIsoFileList);
         }
-        
+
         if (needSortingAfterflno) {
             sortFilesCaseInsensitive(globalIsoFileList);
             needSortingAfterflno = false;
@@ -102,19 +80,17 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     }
 
     if (isEmpty) {
-		
-		const ListTheme* theme = getActiveTheme();
+        const ListTheme* theme = getActiveTheme();
         const bool isOriginal = (globalTheme == "original");
-		
-		const std::string_view warnColor   = isOriginal ? originalColors::yellow  : theme->warning;
-		const std::string_view reset       = originalColors::boldAlt;
 
-		std::cout << "\n" << warnColor << "ISO Cache is empty. Choose 'ImportISO' from the Main Menu Options." << reset << "\n";
-		std::cout << color << "\n↵ to return..." << reset;
+        const std::string_view warnColor = isOriginal ? originalColors::yellow : theme->warning;
+        const std::string_view reset     = originalColors::boldAlt;
 
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		return false;
-	}
+        std::cout << "\n" << warnColor << "ISO Cache is empty. Choose 'ImportISO' from the Main Menu Options." << reset << "\n";
+        std::cout << color << "\n↵ to return..." << reset;
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        return false;
+    }
 
     return true;
 }
