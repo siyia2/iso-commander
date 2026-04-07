@@ -278,26 +278,24 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     
     std::vector<std::string> finalPaths = hierarchicalPathReduction(paths);
     
+    if (finalPaths.empty()) {
+        isImportRunning.store(false);
+        return;
+    }
+
     std::vector<std::string> allIsoFiles;
     std::atomic<size_t> totalFiles{0};
     std::unordered_set<std::string> uniqueErrorMessages;
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
     
-    const size_t hwThreads  = static_cast<size_t>(maxThreads);
-    const size_t ioMultiple = 2;
-    const size_t ioCap      = MAX_USEFUL_THREADS;
-    const size_t numThreads = std::min({
-            finalPaths.size(),
-            static_cast<size_t>(hwThreads * ioMultiple),
-            static_cast<size_t>(ioCap)
-    });
-    
-    ThreadPool pool(numThreads);
+    // FIX: Get the safe singleton instance instead of creating a local one
+    auto& pool = getStaticThreadPool();
     std::vector<std::future<void>> futures;
     
     for (const auto& path : finalPaths) {
         if (isValidDirectory(path)) {
+            // Use the singleton pool
             futures.emplace_back(pool.enqueue([&, path]() {
                 traverse(path, allIsoFiles, uniqueErrorMessages,
                          totalFiles, processMutex, traverseErrorMutex,
@@ -306,8 +304,11 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
         }
     }
     
+    // Wait for all traversal tasks to complete
     for (auto& future : futures) {
-        future.wait();
+        if (future.valid()) {
+            future.wait();
+        }
     }
     
     saveToDatabase(allIsoFiles, newISOFound);

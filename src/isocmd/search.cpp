@@ -153,7 +153,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
         });
         
         {
-            ThreadPool pool(numThreads);
+            auto& pool = getStaticThreadPool();
             std::vector<std::future<void>> futures;
             std::mutex processMutex;
             std::mutex traverseErrorMutex;
@@ -643,21 +643,17 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
         uniquePaths.push_back(path);
     }
     
-    unsigned int numThreads = std::min({
-		static_cast<unsigned int>(uniquePaths.size()),
-		static_cast<unsigned int>(maxThreads),
-		static_cast<unsigned int>(MAX_USEFUL_THREADS)
-	});
-	
-    if (numThreads == 0) {
+    // We no longer need to calculate numThreads or check for 0.
+    // The singleton handles the safety floor and capacity for us.
+    if (uniquePaths.empty()) {
         flushStdin();
         restoreInput();
         return *currentCache;
     }
     
     {
-
-        ThreadPool pool(numThreads);
+        //Use the static pool
+        auto& pool = getStaticThreadPool();
     
         for (const auto& path : uniquePaths) {
             threadFutures.push_back(pool.enqueue([path, &mode, &callback, &processedErrorsFind]() -> std::unordered_set<std::string> {
@@ -666,10 +662,14 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
         }
     
         for (auto& future : threadFutures) {
-            std::unordered_set<std::string> threadResult = future.get();
-            fileNames.insert(threadResult.begin(), threadResult.end());
+            if (future.valid()) {
+                std::unordered_set<std::string> threadResult = future.get();
+                fileNames.insert(threadResult.begin(), threadResult.end());
+            }
+            // If the user cancelled via the signal handler, we can stop waiting
+            if (g_operationCancelled.load()) break;
         }
-    } // The thread pool is automatically cleaned up here.
+    } 
     
     verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
     
