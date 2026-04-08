@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: Unlicense */
+
 #ifndef CHDCONFIG_H
 #define CHDCONFIG_H
 
