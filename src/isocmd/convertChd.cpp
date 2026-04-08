@@ -151,6 +151,6 @@ void convertToCHD(const std::vector<std::string>& isoFiles,
     if (!successOuts.empty()) {
         bool pFlag = false, fHistory = false;
         int mDepth = 0;
-        refreshForDatabase(result, pFlag, mDepth, fHistory, newCHDFound);
+        refreshChdForDatabase(result, pFlag, mDepth, fHistory, newCHDFound);
     }
 }
