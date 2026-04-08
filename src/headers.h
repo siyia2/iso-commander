@@ -206,6 +206,15 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
                   std::atomic<size_t>* completedTasks, 
                   std::atomic<size_t>* failedTasks, std::atomic<bool>& newCHDFound);
                   bool convertIsoToChd(const std::string& inputPath, const std::string& outputPath);
+                  
+                  void traverseChd(const std::filesystem::path& path, std::vector<std::string>& chdFiles, 
+                std::unordered_set<std::string>& uniqueErrorMessages, 
+                std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, 
+                std::mutex& traverseErrorsMutex, int maxDepth, bool promptFlag);
+                
+                void refreshChdForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newCHDFound);
+                void submenu3(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound);
+                
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound);
 void tokenizeInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<int>& processedIndices);
 void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet, std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& errorSet, int verboseLevel);
