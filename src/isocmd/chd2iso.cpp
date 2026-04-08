@@ -52,11 +52,7 @@ bool convertIsoToChd(const std::string& inputPath, const std::string& outputPath
     std::string lineAccumulator;
     bool cancelled = false;
 
-    // Only print lines that contain "100.0%"
-    auto verboseFilter = [](const std::string& line) -> bool {
-        return line.find("100.0%") != std::string::npos;
-    };
-
+    // Read and discard all chdman output – nothing printed
     while (true) {
         if (g_operationCancelled.load() && !cancelled) {
             kill(pid, SIGTERM);
@@ -68,15 +64,10 @@ bool convertIsoToChd(const std::string& inputPath, const std::string& outputPath
         if (bytesRead > 0) {
             if (!cancelled) {
                 lineAccumulator.append(buffer, bytesRead);
-                
+                // Clear accumulated lines without printing
                 size_t pos;
                 while ((pos = lineAccumulator.find_first_of("\n\r")) != std::string::npos) {
-                    std::string line = lineAccumulator.substr(0, pos);
                     lineAccumulator.erase(0, pos + 1);
-
-                    if (!line.empty() && verboseFilter(line)) {
-                        std::cout << "[chdman] " << line << std::endl;
-                    }
                 }
             }
         } else if (bytesRead == 0) {
