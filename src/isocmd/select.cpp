@@ -285,8 +285,9 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     size_t originalPage  = currentPage;
 
     // Determine mode context
-    bool isChdOp = operation.starts_with("chd2iso");
-    std::vector<std::string>* activeGlobalList = isChdOp ? &globalChdFileList : &globalIsoFileList;
+    bool isChdOp      = operation.starts_with("chd2iso");
+    bool isChdFromIso = (operation == "chd2iso");  // no underscore: operates on ISO list
+    std::vector<std::string>* activeGlobalList = (isChdOp && !isChdFromIso) ? &globalChdFileList : &globalIsoFileList;
 
     std::string operationColor = std::string(
         operation == "rm"         ? originalColors::red        :
@@ -317,7 +318,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         if (!isFiltered) originalPage = currentPage;
 
         if (!isUnmount) {
-            if (isChdOp) {
+            if (isChdOp && !isChdFromIso) {
                 removeNonExistentChdPathsFromDatabase(globalChdFileList);
                 isAtISOList.store(false);
             } else {
@@ -328,7 +329,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
         if (needsClrScrn) {
             if (!isUnmount) {
-                bool success = isChdOp 
+                bool success = (isChdOp && !isChdFromIso)
                     ? loadAndDisplayChd(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, 
                                         pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning)
                     : loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, 
@@ -350,11 +351,10 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                         std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), 
                         std::ref(pendingIndices), std::ref(hasPendingProcess), 
                         std::ref(currentPage), std::ref(originalPage), 
-                        isChdOp ? std::ref(newCHDFound) : std::ref(newISOFound)).detach();
+                        (isChdOp && !isChdFromIso) ? std::ref(newCHDFound) : std::ref(newISOFound)).detach();
         }
 
         // --- Exact Cursor Position Fix ---
-        // This clears the padding from loadAndDisplay and brings the prompt back up one line
         std::cout << "\033[1A\033[K";
 
         // --- Prompt Construction ---
@@ -446,7 +446,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         if (pendingExecuted) continue;
 
         if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn,
-                                  filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage))
+                                  filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage, isAtISOList))
             continue;
 
         bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn);
