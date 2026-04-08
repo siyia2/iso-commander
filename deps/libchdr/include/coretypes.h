@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: Unlicense */
+
 #ifndef CORETYPES_H
 #define CORETYPES_H
 
