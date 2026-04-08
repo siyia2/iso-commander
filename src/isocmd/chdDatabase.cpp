@@ -1,6 +1,8 @@
 
 #include "../headers.h"
 #include "../threadpool.h"
+#include "../themes.h"
+#include "../readline.h"
 
 // Local ISO Database mutex
 namespace {
@@ -300,4 +302,369 @@ bool saveChdToDatabase(std::vector<std::string> globalChdFileList, std::atomic<b
     if (success) chdListDirty.store(true); 
 
     return success;
+}
+
+int countDifferentChdEntries(const std::vector<std::string>& allChdFiles, const std::vector<std::string>& globalChdFileList) {
+    // Using string_view for the set to avoid re-allocating strings already in memory
+    std::unordered_set<std::string_view> globalSet;
+    globalSet.reserve(globalChdFileList.size());
+
+    // Populate the set with existing CHD entries
+    for (const auto& file : globalChdFileList) {
+        globalSet.insert(file);
+    }
+
+    int count = 0;
+    // Check how many files in the newly scanned list are not in the current database
+    for (const auto& file : allChdFiles) {
+        if (globalSet.find(file) == globalSet.end()) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+void verboseChdForDatabase(std::vector<std::string>& allChdFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& filterHistory, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newCHDFound) {
+    signal(SIGINT, SIG_IGN);
+    disable_ctrl_d();
+
+    const ListTheme* theme = getActiveTheme();
+    const bool isOriginal  = (globalTheme == "original");
+
+    // Theme-based color mapping
+    std::string_view errLabel    = isOriginal ? originalColors::red       : theme->secondary;
+    std::string_view warnLabel   = isOriginal ? originalColors::yellow    : theme->warning;
+    std::string_view okLabel     = isOriginal ? originalColors::green     : theme->accent;
+    std::string_view importColor = isOriginal ? originalColors::magenta   : theme->highlight;
+    std::string_view boldLabel   = isOriginal ? originalColors::boldAlt   : theme->muted;
+
+    // Load current CHD list to compare entries for the final "count"
+    loadChdFromDatabase(globalChdFileList);
+
+    auto printInvalidPaths = [&]() {
+        if (invalidPaths.empty()) return;
+        if (totalFiles == 0 && validPaths.empty()) {
+            std::cout << "\r" << boldLabel << "Total files processed: 0\n" << std::flush;
+        }
+        std::cout << "\n" << boldLabel << "Invalid paths omitted from CHD search: " << errLabel;
+        for (auto it = invalidPaths.begin(); it != invalidPaths.end();) {
+            std::cout << "'" << *it << "'" << (++it != invalidPaths.end() ? " " : "");
+        }
+        std::cout << boldLabel << ".\n";
+    };
+
+    auto printErrorMessages = [&]() {
+        if (uniqueErrorMessages.empty()) return;
+        for (const auto& error : uniqueErrorMessages) std::cout << error;
+        std::cout << "\n";
+    };
+
+    if (promptFlag && (!uniqueErrorMessages.empty() || !invalidPaths.empty())) {
+        printInvalidPaths();
+        printErrorMessages();
+    }
+
+    // Attempt to save new CHD entries to the database
+    const bool saveSuccess = g_operationCancelled ? false : saveChdToDatabase(allChdFiles, newCHDFound);
+    const auto end_time = std::chrono::high_resolution_clock::now();
+
+    if (!promptFlag) return;
+
+    const double total_elapsed = std::chrono::duration<double>(end_time - start_time).count();
+    std::cout << boldLabel << "\nTotal time taken: " << std::fixed << std::setprecision(1)
+              << total_elapsed << " seconds\n";
+
+    // Status logic adapted for CHD naming
+    if (g_operationCancelled) {
+        std::cout << "\n" << okLabel << "CHD Database Refresh: [" << warnLabel << "Cancelled" << okLabel << "]" << boldLabel << "\n";
+    } else if (!allChdFiles.empty() && newCHDFound.load() && !saveSuccess) {
+        std::cout << "\n" << errLabel << "CHD Database Refresh failed: [" << warnLabel << "Unable to access database file" << errLabel << "]" << boldLabel << "\n";
+    } else if (validPaths.empty()) {
+        std::cout << "\n" << errLabel << "CHD Database refresh failed: [" << warnLabel << "Lack of valid paths" << errLabel << "]" << boldLabel << "\n";
+    } else if (!allChdFiles.empty() && !newCHDFound.load() && !saveSuccess) {
+        std::cout << "\n" << okLabel << "CHD Database Refresh: [" << warnLabel << "No new CHD found" << okLabel << "]" << boldLabel << "\n";
+    } else if (allChdFiles.empty()) {
+        std::cout << "\n" << okLabel << "CHD Database Refresh: [" << warnLabel << "No CHD found" << okLabel << "]" << boldLabel << "\n";
+    } else if (!allChdFiles.empty() && saveSuccess && newCHDFound.load()) {
+        // Calculate the actual number of new entries added to the list
+        int result = countDifferentChdEntries(allChdFiles, globalChdFileList);
+        std::cout << "\n" << okLabel << "CHD Database Refresh: [" << importColor << result << " CHD imported" << okLabel << "]" << boldLabel << "\n";
+    }
+
+    std::cout << color << "\n↵ to continue..." << reset; 
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    
+    // Recurse back to CHD refresh menu
+    std::string initialDir = ""; 
+    refreshChdForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newCHDFound);
+}
+
+
+void refreshChdForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newCHDFound) {
+    try {
+        enable_ctrl_d();
+        setupSignalHandlerCancellations();
+        resetReadlinePagination();
+        rl_attempted_completion_function = my_special_completion_entry;
+        g_operationCancelled.store(false);
+        
+        const ListTheme* theme = getActiveTheme();
+        const bool isOrig = (globalTheme == "original");
+
+        std::string input = initialDir;
+        if (input.empty()) {
+            if (promptFlag) clearScrollBuffer();
+            loadHistory(filterHistory);
+
+            rl_bind_key('\f', clear_screen_and_buffer);
+            rl_bind_key('\t', rl_complete);
+            
+            std::string_view primary = isOrig ? originalColors::green : theme->accent;
+            std::string_view secondary = isOrig ? originalColors::blue : theme->muted;
+
+            // Prompt specifically tailored for CHD files
+            std::string prompt;
+            prompt.reserve(512);
+            prompt.append("\001").append(primary).append("\002FolderPaths")
+                  .append("\001").append(secondary).append("\002 ↵ to scan for ")
+                  .append("\001").append(primary).append("\002.chd")
+                  .append("\001").append(secondary).append("\002 entries and import into ")
+                  .append("\001").append(primary).append("\002local CHD")
+                  .append("\001").append(secondary).append("\002 database, ? ↵ help, ↵ return:\n")
+                  .append("\001").append(originalColors::boldAlt).append("\002");
+
+            char* rawSearchQuery = readline(prompt.c_str());
+            if (!rawSearchQuery) {
+                input.clear();
+            } else {
+                std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+                input = trimWhitespace(searchQuery.get());
+                
+                if (input == "?") {
+                    bool isCpMv = false, import2ISO = false; // Note: import2ISO false implies CHD/Other
+                    helpSearches(isCpMv, import2ISO);
+                    std::string dummy = "";
+                    return refreshChdForDatabase(dummy, promptFlag, maxDepth, filterHistory, newCHDFound);
+                }
+                
+                if (input.starts_with("*") || input.starts_with("?") || input.starts_with("!") || isValidInput(input)) {
+                    // Note: You may need a databaseChdSwitches if the logic differs significantly
+                    databaseSwitches(input, promptFlag, maxDepth, filterHistory, newCHDFound);
+                    return;
+                }
+                
+                if (!input.empty() && promptFlag) {
+                    add_history(input.c_str());
+                    std::cout << "\n";
+                }
+            }
+        }
+
+        if (input.find_first_not_of(" \t\n\r") == std::string::npos) return;
+        
+        std::unordered_set<std::string> uniquePaths;
+        std::vector<std::string> validPaths;
+        std::unordered_set<std::string> invalidPaths;
+        std::unordered_set<std::string> uniqueErrorMessages;
+        std::vector<std::string> allChdFiles;
+        std::atomic<size_t> totalFiles{0};
+
+        if (promptFlag) {
+            std::cout << "\033[3H\033[J\n";
+            disableInput();
+        }
+
+        auto start_time = std::chrono::high_resolution_clock::now();
+        std::istringstream iss(input);
+        std::string path;
+
+        while (std::getline(iss, path, ';')) {
+            if (!isValidDirectory(path)) {
+                if (promptFlag) {
+                    std::string errCol = isOrig ? std::string(originalColors::red) : std::string(theme->secondary);
+                    invalidPaths.insert(errCol + path);
+                }
+                continue;
+            }
+
+            if (uniquePaths.insert(path).second) {
+                validPaths.push_back(path);
+            }
+        }
+        
+        if (validPaths.empty()) {
+            if (promptFlag) {
+                flushStdin();
+                restoreInput();
+                resetReadlinePagination();
+                if (!invalidPaths.empty()) {
+                    verboseChdForDatabase(allChdFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newCHDFound);
+                }
+            }  
+            return;
+        }
+        
+        {
+            auto& pool = getStaticThreadPool();
+            std::vector<std::future<void>> futures;
+            std::mutex processMutex;
+            std::mutex traverseErrorMutex;
+
+            for (const auto& validPath : validPaths) {
+                futures.emplace_back(
+                    pool.enqueue([validPath, &allChdFiles, &uniqueErrorMessages, &totalFiles, 
+                                  &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
+                        // Traverse specifically looking for .chd files
+                        traverseChd(validPath, allChdFiles, uniqueErrorMessages, totalFiles, 
+                                   processMutex, traverseErrorMutex, maxDepth, promptFlag);
+                    })
+                );
+            }
+
+            for (auto& future : futures) {
+                future.wait();
+                if (g_operationCancelled.load()) break;
+            }
+        }
+        
+        if (!g_operationCancelled.load()) {
+            std::unordered_set<std::string> uniqueFiles(allChdFiles.begin(), allChdFiles.end());
+            allChdFiles.assign(uniqueFiles.begin(), uniqueFiles.end());
+        }
+        
+        if (promptFlag) {
+            flushStdin();
+            restoreInput();
+            resetReadlinePagination();
+                
+            std::cout << "\r" << (isOrig ? originalColors::boldAlt : theme->accent) 
+                      << "Total CHD files processed: " << totalFiles;
+            
+            if (!invalidPaths.empty() || !validPaths.empty()) {
+                std::cout << "\n";
+            }
+
+            if (validPaths.empty()) {
+                input = "";
+                clear_history();
+                std::cout << "\033[1A\033[K";
+            }
+            if (!validPaths.empty() && !input.empty()) {
+                saveHistory(filterHistory);
+                clear_history();
+            }
+            verboseChdForDatabase(allChdFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newCHDFound);
+        } else {
+            if (!g_operationCancelled.load()) {
+                // Save specifically to the CHD database
+                saveChdToDatabase(allChdFiles, newCHDFound);
+            }
+        }
+    } catch (const std::exception& e) {
+        const ListTheme* theme = getActiveTheme();
+        const bool isOrig = (globalTheme == "original");
+
+        std::cerr << "\n" << (isOrig ? originalColors::red : theme->secondary) 
+                  << "Unable to access CHD database: " << e.what() << originalColors::boldAlt << std::endl;
+        
+        std::cout << color << "\n↵ to continue..." << reset; 
+
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        std::string dummyDir = "";
+        refreshChdForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newCHDFound);
+    }
+}
+
+void traverseChd(const std::filesystem::path& path, std::vector<std::string>& chdFiles, 
+                std::unordered_set<std::string>& uniqueErrorMessages, 
+                std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, 
+                std::mutex& traverseErrorsMutex, int maxDepth, bool promptFlag) {
+    
+    const size_t BATCH_SIZE = 100; 
+    std::vector<std::string> localChdFiles; 
+    std::atomic<bool> g_CancelledMessageAdded{false}; 
+    
+    const ListTheme* theme = getActiveTheme();
+    const bool isOriginal = (globalTheme == "original");
+
+    g_operationCancelled.store(false);
+
+    // Case-insensitive extension comparison
+    auto iequals = [](const std::string_view& a, const std::string_view& b) {
+        return std::equal(a.begin(), a.end(), b.begin(), b.end(),
+                          [](unsigned char a, unsigned char b) {
+                              return std::tolower(a) == std::tolower(b);
+                          });
+    };
+
+    try {
+        auto options = std::filesystem::directory_options::none;
+        for (auto it = std::filesystem::recursive_directory_iterator(path, options); 
+             it != std::filesystem::recursive_directory_iterator(); ++it) {
+            
+            // Check for user cancellation (SIGINT)
+            if (g_operationCancelled.load()) {
+                if (!g_CancelledMessageAdded.exchange(true)) {
+                    std::lock_guard<std::mutex> lock(traverseErrorsMutex);
+                    uniqueErrorMessages.clear(); 
+                    
+                    std::string warnCol = std::string(isOriginal ? originalColors::yellow : theme->warning);
+                    std::string msg = "\n" + warnCol + "CHD search interrupted by user." + std::string(originalColors::boldAlt);
+                    uniqueErrorMessages.insert(msg);
+                }
+                break;
+            }
+
+            // Depth control
+            if (maxDepth >= 0 && it.depth() > maxDepth) {
+                it.disable_recursion_pending(); 
+                continue;
+            }
+
+            const auto& entry = *it; 
+
+            // Update UI progress if prompt is enabled
+            if (promptFlag && entry.is_regular_file()) {
+                totalFiles.fetch_add(1, std::memory_order_acq_rel); 
+                if (totalFiles % 100 == 0) { 
+                    std::lock_guard<std::mutex> lock(couNtMutex); 
+                    std::cout << "\r" << (isOriginal ? originalColors::boldAlt : theme->accent) 
+                              << "Total files processed: " << totalFiles << std::flush;
+                }
+            }
+
+            if (!entry.is_regular_file()) continue;
+
+            const auto& filePath = entry.path(); 
+
+            // Filter specifically for .chd extension
+            if (!iequals(filePath.extension().string(), ".chd")) continue;
+
+            localChdFiles.push_back(filePath.string());
+
+            // Batch insertion to minimize mutex contention
+            if (localChdFiles.size() >= BATCH_SIZE) {
+                std::lock_guard<std::mutex> lock(traverseFilesMutex); 
+                chdFiles.insert(chdFiles.end(), localChdFiles.begin(), localChdFiles.end()); 
+                localChdFiles.clear(); 
+            }
+        }
+
+        // Finalize remaining files in the local buffer
+        if (!localChdFiles.empty()) {
+            std::lock_guard<std::mutex> lock(traverseFilesMutex);
+            chdFiles.insert(chdFiles.end(), localChdFiles.begin(), localChdFiles.end());
+        }
+
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::string errCol = std::string(isOriginal ? originalColors::red : theme->secondary);
+        std::string formattedError = "\n" + errCol + "Error: " + path.string() + " - " + 
+                                     e.what() + std::string(originalColors::boldAlt);
+        
+        if (promptFlag) {
+            std::lock_guard<std::mutex> errorLock(traverseErrorsMutex); 
+            uniqueErrorMessages.insert(formattedError); 
+        }
+    }
 }

@@ -49,15 +49,17 @@ void submenu3(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
         clearScrollBuffer();
         
         std::cout << color << "+-------------------------+\n"
-                  << "|↵ Convert2ISO            |\n"
+                  << "|↵ ManageCHD              |\n"
                   << "+-------------------------+\n"
                   << "|1. ISO2CHD               |\n"
                   << "+-------------------------+\n"
-                  << "|2. Move                  |\n"
+                  << "|2. Delete                |\n"
                   << "+-------------------------+\n"
-                  << "|3. Copy                  |\n"
+                  << "|3. Move                  |\n"
                   << "+-------------------------+\n"
-                  << "|3. Delete                |\n"
+                  << "|4. Copy                  |\n"
+                  << "+-------------------------+\n"
+                  << "|5. ImportCHD             |\n"
                   << "+-------------------------+" << reset << std::endl << "\n";
                   
                   
@@ -75,13 +77,34 @@ void submenu3(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
         if (!input.get() || std::strlen(input.get()) == 0) {
             break; 
         }
+		
+		int maxDepth= -1;
+		bool filterHistory = false;
+		bool promptFlag = true;
+		std::string initialDir = "";
 
+		std::string_view errLabel    = isOriginal ? originalColors::red       : theme->secondary;
+		std::string_view warnLabel   = isOriginal ? originalColors::yellow    : theme->warning;
+		std::string_view okLabel     = isOriginal ? originalColors::purple     : theme->accent;
+    
         std::string choice(input.get());
         std::string operation;
         if (choice.length() == 1) {
             switch (choice[0]) {
                 case '1':
-                    clearScrollBuffer();
+                clearScrollBuffer();
+                // Check if chdman exists in the system PATH
+				// 'command -v' is the standard Linux way to check for executables
+				if (std::system("command -v chdman > /dev/null 2>&1") != 0) {
+					std::cerr << errLabel << "\n[ERROR]: '" << okLabel << "chdman" << errLabel <<"' was not found on this system." << std::endl;
+					std::cerr << warnLabel << "Please install "<< okLabel << "mame-tools" << warnLabel << " and try again..." << std::endl;
+					
+					std::cout << color << "\n↵ to return..." << reset;
+					
+					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+					break; // Exit the case and return to the main loop
+				}
+                    
                     selectForIsoFiles("chd2iso", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     clearScrollBuffer();     
                     break;
@@ -99,6 +122,11 @@ void submenu3(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
                     case '4':
 					clearScrollBuffer();
                     selectForIsoFiles("chd2iso", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
+                    clearScrollBuffer();
+                    break;
+                    case '5':
+					clearScrollBuffer();
+                    refreshChdForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
                     clearScrollBuffer();
                     break;
             }
@@ -137,8 +165,6 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
                   << "|5. Copy                  |\n"
                   << "+-------------------------+\n"
                   << "|6. Write                 |\n"
-                  << "+-------------------------+\n"
-                  << "|7. ISO2CHD               |\n"
                   << "+-------------------------+" << reset << std::endl << "\n";
         
         const ListTheme* theme = getActiveTheme();
@@ -262,15 +288,17 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
  */
 void printMenu() {
     std::cout << color << "+-------------------------+\n"
-              << "|       Menu Options      |\n"
+              << "|       Menu Options       |\n"
               << "+-------------------------+\n"
               << "|1. ManageISO             |\n"
               << "+-------------------------+\n"
               << "|2. Convert2ISO           |\n"
               << "+-------------------------+\n"
-              << "|3. ImportISO             |\n"
+              << "|3. Convert2CHD           |\n"
               << "+-------------------------+\n"
-              << "|4. Exit                  |\n"
+              << "|4. ImportISO             |\n"
+              << "+-------------------------+\n"
+              << "|5. Exit                  |\n"
               << "+-------------------------+" << "\n";
 }
 

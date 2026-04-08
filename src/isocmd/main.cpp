@@ -154,13 +154,18 @@ int main(int argc, char *argv[]) {
                 case '3':
                     isAtMain.store(false);
                     isAtISOList.store(false);
+                    submenu3(updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
+                    break;
+                case '4':
+                    isAtMain.store(false);
+                    isAtISOList.store(false);
                     promptFlag = true;
                     filterHistory = false;
                     maxDepth = -1;
                     refreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
                     clearScrollBuffer();
                     break;
-                case '4':
+                case '5':
                     exitProgram = true;
                     clearScrollBuffer();
                     break;
