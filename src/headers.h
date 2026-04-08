@@ -199,9 +199,9 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
                                
                                void convertToCHD(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& successOuts, 
                   std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, 
-                  std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, 
+                  std::atomic<size_t>* completedTasks, 
                   std::atomic<size_t>* failedTasks, std::atomic<bool>& newCHDFound);
-                  bool convertIsoToChd(const std::string& inputPath, const std::string& outputPath, std::atomic<size_t>* completedBytes);
+                  bool convertIsoToChd(const std::string& inputPath, const std::string& outputPath);
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound);
 void tokenizeInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<int>& processedIndices);
 void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet, std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& errorSet, int verboseLevel);
