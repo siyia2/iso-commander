@@ -470,11 +470,11 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 
 
 void processInputCHD(const std::string& input, std::vector<std::string>& fileList,
-                               std::unordered_set<std::string>& processedErrors,
-                               std::unordered_set<std::string>& successOuts,
-                               std::unordered_set<std::string>& skippedOuts,
-                               std::unordered_set<std::string>& failedOuts,
-                               bool& verbose, bool& needsClrScrn, std::atomic<bool>& newCHDFound) {
+                     std::unordered_set<std::string>& processedErrors,
+                     std::unordered_set<std::string>& successOuts,
+                     std::unordered_set<std::string>& skippedOuts,
+                     std::unordered_set<std::string>& failedOuts,
+                     bool& verbose, bool& needsClrScrn, std::atomic<bool>& newCHDFound) {
 
     setupSignalHandlerCancellations();
     const ListTheme* theme = getActiveTheme();
@@ -519,11 +519,10 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
     }
 
     const size_t totalTasks = filesToProcess.size();
-    const size_t totalBytes = calculateSizeForConverted(filesToProcess, false, false);
 
     const std::string suffix    = (totalTasks > 1 ? " conversions" : " conversion");
-	const std::string operation = std::string(originalColors::orange) + "ISO"
-                            + std::string(originalColors::boldAlt) + suffix;
+    const std::string operation = std::string(originalColors::orange) + "ISO"
+                                  + std::string(originalColors::boldAlt) + suffix;
 
     clearScrollBuffer();
     std::cout << "\n" << originalColors::boldAlt << " Processing "
@@ -531,13 +530,25 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
               << originalColors::red << "Ctrl+c"
               << originalColors::boldAlt << ":cancel)\n";
 
-    std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
     std::atomic<size_t> failedTasks(0);
     std::atomic<bool>   isProcessingComplete(false);
 
-    std::thread progressThread(displayProgressBarWithSize, &completedBytes,
-        totalBytes, &completedTasks, &failedTasks, totalTasks, &isProcessingComplete, &verbose, operation);
+    // Optional: keep a simple task‑progress display instead of the byte bar.
+    // If you want no progress display at all, remove this thread and its join.
+    std::thread progressThread([&]() {
+        while (!isProcessingComplete.load()) {
+            size_t done = completedTasks.load();
+            size_t fail = failedTasks.load();
+            // Print a simple status line (you can customise or omit)
+            std::cout << "\r\033[K" << "Tasks: " << done << "/" << totalTasks
+                      << " completed, " << fail << " failed" << std::flush;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        // Final line
+        std::cout << "\r\033[K" << "Tasks: " << completedTasks.load() << "/" << totalTasks
+                  << " completed, " << failedTasks.load() << " failed\n";
+    });
 
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
@@ -551,9 +562,10 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
         futures.emplace_back(pool.enqueue(
             [isoFilesInChunk = std::move(isoFilesInChunk),
              &successOuts, &skippedOuts, &failedOuts,
-             &completedBytes, &completedTasks, &failedTasks, &newCHDFound]() {
+             &completedTasks, &failedTasks, &newCHDFound]() {
+                // Note: completedBytes argument removed
                 convertToCHD(isoFilesInChunk, successOuts, skippedOuts, failedOuts,
-                    &completedBytes, &completedTasks, &failedTasks, newCHDFound);
+                             &completedTasks, &failedTasks, newCHDFound);
             }
         ));
     }
@@ -561,6 +573,10 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
     for (auto& future : futures) {
         future.wait();
     }
+    
+    std::cout << color << "↵ to continue..." << reset;
+
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
     isProcessingComplete.store(true);
     signal(SIGINT, SIG_IGN);

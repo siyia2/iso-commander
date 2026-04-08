@@ -7,10 +7,13 @@
 /**
  * @brief Orchestrates the conversion of ISO files to CHD format.
  */
-void convertToCHD(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& successOuts, 
-                  std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, 
-                  std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, 
-                  std::atomic<size_t>* failedTasks, std::atomic<bool>& newCHDFound) {
+void convertToCHD(const std::vector<std::string>& isoFiles,
+                  std::unordered_set<std::string>& successOuts,
+                  std::unordered_set<std::string>& skippedOuts,
+                  std::unordered_set<std::string>& failedOuts,
+                  std::atomic<size_t>* completedTasks,
+                  std::atomic<size_t>* failedTasks,
+                  std::atomic<bool>& newCHDFound) {
 
     namespace fs = std::filesystem;
     const size_t BATCH_SIZE = 50;
@@ -18,15 +21,16 @@ void convertToCHD(const std::vector<std::string>& isoFiles, std::unordered_set<s
     const ListTheme* theme = getActiveTheme();
     const bool isOriginal  = (globalTheme == "original");
 
-    // UI Coloring Setup
+    // UI colour setup (unchanged)
     std::string_view errLabel      = isOriginal ? originalColors::red      : theme->secondary;
     std::string_view errPath       = isOriginal ? originalColors::yellow   : theme->warning;
-    std::string_view missingLabel  = isOriginal ? originalColors::purple    : theme->secondary;
-    std::string_view okLabel       = isOriginal ? originalColors::boldAlt   : theme->muted;
-    std::string_view okPath        = isOriginal ? originalColors::green     : theme->primary;
-    std::string_view skipLabel     = isOriginal ? originalColors::yellow    : theme->warning;
-    std::string_view skipPath      = isOriginal ? originalColors::green     : theme->primary;
+    std::string_view missingLabel  = isOriginal ? originalColors::purple   : theme->secondary;
+    std::string_view okLabel       = isOriginal ? originalColors::boldAlt  : theme->muted;
+    std::string_view okPath        = isOriginal ? originalColors::green    : theme->primary;
+    std::string_view skipLabel     = isOriginal ? originalColors::yellow   : theme->warning;
+    std::string_view skipPath      = isOriginal ? originalColors::green    : theme->primary;
 
+    // Collect unique directories (unchanged)
     std::unordered_set<std::string> uniqueDirectories;
     for (const auto& filePath : isoFiles) {
         fs::path path(filePath);
@@ -34,7 +38,6 @@ void convertToCHD(const std::vector<std::string>& isoFiles, std::unordered_set<s
             uniqueDirectories.insert(path.parent_path().string());
         }
     }
-
     std::string result = std::accumulate(uniqueDirectories.begin(), uniqueDirectories.end(), std::string(),
         [](const std::string& a, const std::string& b) { return a.empty() ? b : a + ";" + b; });
 
@@ -45,12 +48,16 @@ void convertToCHD(const std::vector<std::string>& isoFiles, std::unordered_set<s
     std::vector<std::string> localSuccessMsgs, localFailedMsgs, localSkippedMsgs;
 
     auto batchInsertMessages = [&]() {
-        if (localSuccessMsgs.size() >= BATCH_SIZE || localFailedMsgs.size() >= BATCH_SIZE || localSkippedMsgs.size() >= BATCH_SIZE) {
+        if (localSuccessMsgs.size() >= BATCH_SIZE ||
+            localFailedMsgs.size()  >= BATCH_SIZE ||
+            localSkippedMsgs.size() >= BATCH_SIZE) {
             std::lock_guard<std::mutex> lock(globalSetsMutex);
             successOuts.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
-            failedOuts.insert(localFailedMsgs.begin(),  localFailedMsgs.end());
+            failedOuts.insert(localFailedMsgs.begin(),   localFailedMsgs.end());
             skippedOuts.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
-            localSuccessMsgs.clear(); localFailedMsgs.clear(); localSkippedMsgs.clear();
+            localSuccessMsgs.clear();
+            localFailedMsgs.clear();
+            localSkippedMsgs.clear();
         }
     };
 
@@ -58,7 +65,7 @@ void convertToCHD(const std::vector<std::string>& isoFiles, std::unordered_set<s
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
         const std::string displayPath  = (!displayConfig::toggleNamesOnly ? directory + "/" : "") + fileNameOnly;
 
-        // 1. Basic Existence Check
+        // 1. Existence check
         if (!fs::exists(inputPath)) {
             std::string msg;
             msg.reserve(128);
@@ -71,7 +78,7 @@ void convertToCHD(const std::vector<std::string>& isoFiles, std::unordered_set<s
             continue;
         }
 
-        // 2. Read Permission Check
+        // 2. Read permission check
         std::ifstream file(inputPath, std::ios::binary);
         if (!file.good()) {
             std::string msg;
@@ -86,9 +93,9 @@ void convertToCHD(const std::vector<std::string>& isoFiles, std::unordered_set<s
         }
         file.close();
 
-        // 3. Output Path and Skip Logic
+        // 3. Skip if output already exists
         std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".chd";
-        if (fileExists(outputPath)) {
+        if (fs::exists(outputPath)) {
             std::string msg;
             msg.reserve(128);
             msg.append(skipLabel).append("CHD already exists: ")
@@ -100,14 +107,13 @@ void convertToCHD(const std::vector<std::string>& isoFiles, std::unordered_set<s
             continue;
         }
 
-        // 4. Conversion Logic using libchdr wrapper
-        // Note: You need to implement convertIsoToChd in your ccd2iso_...cpp file 
-        // using the chd_create/chd_write functions from your library.
-        bool conversionSuccess = convertIsoToChd(inputPath, outputPath, completedBytes);
+        // 4. Perform conversion (no byte tracking)
+        bool conversionSuccess = convertIsoToChd(inputPath, outputPath);
 
         auto [outDir, outName] = extractDirectoryAndFilename(outputPath, "conversions");
 
         if (conversionSuccess) {
+            // Set ownership if needed
             [[maybe_unused]] int ret = chown(outputPath.c_str(), real_uid, real_gid);
 
             std::string msg;
@@ -118,7 +124,10 @@ void convertToCHD(const std::vector<std::string>& isoFiles, std::unordered_set<s
             localSuccessMsgs.push_back(std::move(msg));
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
         } else {
-            if (fs::exists(outputPath)) fs::remove(outputPath);
+            // Clean up partial output on failure
+            if (fs::exists(outputPath)) {
+                fs::remove(outputPath);
+            }
             std::string msg;
             msg.reserve(128);
             msg.append(errLabel).append("Conversion failed for ")
@@ -131,16 +140,17 @@ void convertToCHD(const std::vector<std::string>& isoFiles, std::unordered_set<s
         batchInsertMessages();
     }
 
-    // Final Sync
+    // Final flush to global sets
     {
         std::lock_guard<std::mutex> lock(globalSetsMutex);
         successOuts.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
-        failedOuts.insert(localFailedMsgs.begin(),  localFailedMsgs.end());
+        failedOuts.insert(localFailedMsgs.begin(),   localFailedMsgs.end());
         skippedOuts.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
     }
 
     if (!successOuts.empty()) {
-        bool pFlag = false, fHistory = false; int mDepth = 0;
+        bool pFlag = false, fHistory = false;
+        int mDepth = 0;
         refreshForDatabase(result, pFlag, mDepth, fHistory, newCHDFound);
     }
 }
