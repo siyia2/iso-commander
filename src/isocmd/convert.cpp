@@ -35,7 +35,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
                   std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
 
     namespace fs = std::filesystem;
-    const size_t BATCH_SIZE = 1000;
+    const size_t BATCH_SIZE = 50;
 
     const ListTheme* theme = getActiveTheme();
     const bool isOriginal  = (globalTheme == "original");
