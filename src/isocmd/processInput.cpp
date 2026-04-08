@@ -474,55 +474,40 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
                      std::unordered_set<std::string>& successOuts,
                      std::unordered_set<std::string>& skippedOuts,
                      std::unordered_set<std::string>& failedOuts, 
-                     bool& needsClrScrn, std::atomic<bool>& newCHDFound) {
-						 
-						 
-	disableInput();
-    setupSignalHandlerCancellations();
+                     std::atomic<bool>& newCHDFound) {
+
     const ListTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
     g_operationCancelled.store(false);
     std::unordered_set<int> processedIndices;
 
-    if (!(input.empty() || std::all_of(input.begin(), input.end(), isspace))) {
-        tokenizeInput(input, fileList, processedErrors, processedIndices);
-    } else return;
+    // 1. Validate input first – no terminal changes yet
+    if (input.empty() || std::all_of(input.begin(), input.end(), isspace)) {
+        return;  // nothing to do
+    }
+
+    tokenizeInput(input, fileList, processedErrors, processedIndices);
 
     if (processedIndices.empty()) {
-        clearScrollBuffer();
-        std::cout << "\n" << (isOrig ? originalColors::red : theme->secondary)
-                  << "No valid input provided." << originalColors::boldAlt << "\n";
-        std::cout << color << "\n↵ to continue..." << reset;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        needsClrScrn = true;
-        return;
+        return;  // no valid indices – exit cleanly, terminal unchanged
     }
 
-    ThreadPool& pool           = getStaticThreadPool();
-    const size_t poolSize      = pool.threadCount();
-    const size_t numThreads    = std::max(size_t(2), std::min({processedIndices.size(), CONV_THREAD_CAP, poolSize}));
+    // 2. Now we have work – disable input and proceed
+    disableInput();
+    setupSignalHandlerCancellations();
 
-    std::vector<std::vector<size_t>> indexChunks;
-    const size_t totalFiles    = processedIndices.size();
-    const size_t filesPerChunk = (totalFiles + numThreads - 1) / numThreads;
+    ThreadPool& pool = getStaticThreadPool();
 
-    auto it = processedIndices.begin();
-    for (size_t i = 0; i < totalFiles; i += filesPerChunk) {
-        auto chunkEnd = std::next(it, std::min(filesPerChunk, static_cast<size_t>(std::distance(it, processedIndices.end()))));
-        indexChunks.emplace_back(it, chunkEnd);
-        it = chunkEnd;
-    }
-
+    // Build list of files to process (preserve order)
     std::vector<std::string> filesToProcess;
-    filesToProcess.reserve(totalFiles);
+    filesToProcess.reserve(processedIndices.size());
     for (const auto& index : processedIndices) {
         filesToProcess.push_back(fileList[index - 1]);
     }
 
     const size_t totalTasks = filesToProcess.size();
-
-    const std::string suffix    = (totalTasks > 1 ? " conversions" : " conversion");
+    const std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
     const std::string operation = std::string(originalColors::purple) + "CHD"
                                   + std::string(originalColors::boldAlt) + suffix;
 
@@ -531,42 +516,40 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
 
     std::atomic<size_t> completedTasks(0);
     std::atomic<size_t> failedTasks(0);
-    std::atomic<bool>   isProcessingComplete(false);
+    std::atomic<bool> isProcessingComplete(false);
 
+    // Submit each file as a separate task
     std::vector<std::future<void>> futures;
-    futures.reserve(indexChunks.size());
+    futures.reserve(totalTasks);
 
-    for (const auto& chunk : indexChunks) {
-        std::vector<std::string> isoFilesInChunk;
-        isoFilesInChunk.reserve(chunk.size());
-        std::transform(chunk.begin(), chunk.end(), std::back_inserter(isoFilesInChunk),
-            [&fileList](size_t index) { return fileList[index - 1]; });
-
+    for (const auto& isoFile : filesToProcess) {
         futures.emplace_back(pool.enqueue(
-            [isoFilesInChunk = std::move(isoFilesInChunk),
-             &successOuts, &skippedOuts, &failedOuts,
+            [isoFile, &successOuts, &skippedOuts, &failedOuts,
              &completedTasks, &failedTasks, &newCHDFound]() {
-                convertToCHD(isoFilesInChunk, successOuts, skippedOuts, failedOuts,
+                // Convert a single file by passing a vector with one element
+                std::vector<std::string> singleFile = { isoFile };
+                convertToCHD(singleFile, successOuts, skippedOuts, failedOuts,
                              &completedTasks, &failedTasks, newCHDFound);
             }
         ));
     }
 
+    // Wait for all conversions to finish
     for (auto& future : futures) {
         future.wait();
     }
-    
+
     // Print final summary after all conversions
-	std::cout << "\n\033[K"  // Clear any leftover progress line
-			  << "Tasks: " << completedTasks.load() << "/" << totalTasks
-			  << " completed, " << failedTasks.load() << " failed\n";
-  
-	flushStdin();
-	restoreInput();
-	
-	 if (g_operationCancelled.load()) {
+    std::cout << "\n\033[K"  // Clear any leftover progress line
+              << "Tasks: " << completedTasks.load() << "/" << totalTasks
+              << " completed, " << failedTasks.load() << " failed\n";
+
+    flushStdin();
+    restoreInput();
+
+    if (g_operationCancelled.load()) {
         std::cout << (isOrig ? originalColors::red : theme->muted) << "\n[info]" << originalColors::purple << " chd2iso" 
-        << (isOrig ? originalColors::red : theme->muted) << " → " << originalColors::yellow << "INTERRUPTED" << std::endl;
+                  << (isOrig ? originalColors::red : theme->muted) << " → " << originalColors::yellow << "INTERRUPTED" << std::endl;
     }
 
     std::cout << color << "\n↵ to continue..." << reset;

@@ -62,7 +62,7 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
 	if (!isUnmount) {
 		// Evaluating the atomic state directly in the expression
 		if ((isAtISOList.load() && globalIsoFileList.empty()) || 
-			(!isAtISOList.load() && globalChdFileList.empty())) {
+			(!isAtISOList.load() && globalChdFileList.empty() && !isChd)) {
 			
 			clearScrollBuffer();
 			needsClrScrn = true;
@@ -147,7 +147,7 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
                                                      (operation == "chd2iso" ? globalIsoFileList : globalChdFileList);
         processInputCHD(inputString, const_cast<std::vector<std::string>&>(activeList),
                         uniqueErrorMessages, operationFiles, skippedMessages, operationFails,
-                        needsClrScrn, newCHDFound);
+                        newCHDFound);
 
     } else {
         // File operations: cp, mv, rm — also chd2iso_cp, chd2iso_mv, chd2iso_rm
