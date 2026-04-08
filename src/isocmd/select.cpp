@@ -264,22 +264,18 @@ void refreshListAfterAutoUpdate(int timeoutS, std::atomic<bool>& isAtISOList, st
  * system operations.
  */
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, 
-                       std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, 
-                       std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound) {
+                    std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, 
+                    std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound) {
 
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
 
     std::unordered_set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
     std::vector<std::string> filteredFiles;
-    static std::vector<std::string> isoDirs;
+    static std::vector<std::string> isoDirs; 
 
     std::vector<std::string> pendingIndices;
     bool hasPendingProcess = false;
-
-    globalIsoFileList.reserve(100);
-    filteredFiles.reserve(100);
-    isoDirs.reserve(100);
 
     bool isFiltered      = false;
     bool needsClrScrn    = true;
@@ -288,20 +284,27 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     size_t currentPage   = 0;
     size_t originalPage  = currentPage;
 
+    // 1. Determine if we are in CHD mode based on operation
+    bool isChdOp = operation.starts_with("chd2iso");
+
+    // 2. Setup Pointer to the correct global vector
+    // This maintains both original paths while letting this function work with either.
+    std::vector<std::string>* activeGlobalList = isChdOp ? &globalChdFileList : &globalIsoFileList;
+
     std::string operationColor = std::string(
-        operation == "rm"      ? originalColors::red      :
-        operation == "cp"      ? originalColors::green    :
-        operation == "mv"      ? originalColors::yellow   :
-        operation == "mount"   ? originalColors::green    :
-        operation == "write"   ? originalColors::yellow   :
-        operation == "chd2iso" ? originalColors::purple   :
-        operation == "umount"  ? originalColors::yellow   : originalColors::rl_boldAlt
+        operation == "rm"         ? originalColors::red        :
+        operation == "cp"         ? originalColors::green      :
+        operation == "mv"         ? originalColors::yellow     :
+        operation == "mount"      ? originalColors::green      :
+        operation == "write"      ? originalColors::yellow     :
+        isChdOp                   ? originalColors::purple     : // CHD operations
+        operation == "umount"     ? originalColors::yellow     : originalColors::rl_boldAlt
     );
 
     bool isMount      = (operation == "mount");
     bool isUnmount    = (operation == "umount");
     bool write        = (operation == "write");
-    bool isChd        = (operation == "chd2iso");
+    bool isChd        = isChdOp; 
     bool isConversion = false;
 
     std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
@@ -311,21 +314,29 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         setupSignalHandlerCancellations();
         g_operationCancelled.store(false);
         resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
-        filterHistory = false;
-        clear_history();
-
+        
         if (!isFiltered) originalPage = currentPage;
 
+        // 3. Context-Sensitive Database Cleanup
         if (!isUnmount) {
-            removeNonExistentPathsFromDatabase(globalIsoFileList);
-            isAtISOList.store(true);
+            if (isChdOp) {
+                removeNonExistentChdPathsFromDatabase(globalChdFileList);
+                isAtISOList.store(false); // We are browsing CHDs
+            } else {
+                removeNonExistentPathsFromDatabase(globalIsoFileList);
+                isAtISOList.store(true);  // We are browsing ISOs
+            }
         }
 
         if (needsClrScrn) {
             if (!isUnmount) {
-                if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, 
-                                       pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning))
-                    break;
+                // Call the appropriate display function
+                bool success = isChdOp 
+                    ? loadAndDisplayChd(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, 
+                                        pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning)
+                    : loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, 
+                                        pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning);
+                if (!success) break;
             } else {
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, 
                                                pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning))
@@ -335,42 +346,36 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             umountMvRmBreak = false;
         }
 
-        if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
+        // 4. Handle auto-update threading based on mode
+        if (updateHasRun.load() && !isUnmount && !activeGlobalList->empty()) {
             std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList),
                         std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
                         std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), 
                         std::ref(pendingIndices), std::ref(hasPendingProcess), 
-                        std::ref(currentPage), std::ref(originalPage), std::ref(newISOFound)).detach();
+                        std::ref(currentPage), std::ref(originalPage), 
+                        isChdOp ? std::ref(newCHDFound) : std::ref(newISOFound)).detach();
         }
 
-        std::cout << "\033[1A\033[K";
-
-        auto wrap = [](std::string_view s) -> std::string {
-            return "\001" + std::string(s) + "\002";
-        };
-
+        // 5. Dynamic Prompt Building
         const ListTheme* theme  = getActiveTheme();
         const bool isOriginal   = (globalTheme == "original");
+        
+        // Label logic: Display "CHD" or "ISO"
+        std::string modeLabel   = isChdOp ? "CHD" : "ISO";
+        std::string modeColor   = isChdOp 
+            ? (isOriginal ? std::string(originalColors::rl_purple) : "\001" + std::string(theme->highlight) + "\002")
+            : (isOriginal ? std::string(originalColors::rl_green)  : "\001" + std::string(theme->accent)    + "\002");
 
-        std::string colorIso    = isOriginal ? std::string(originalColors::rl_green)   : wrap(theme->accent);
-        std::string colorMuted  = isOriginal ? std::string(originalColors::rl_blue)    : wrap(theme->muted);
-        std::string colorFilter = isOriginal ? std::string(originalColors::rl_cyan)    : wrap(theme->accent);
-        std::string colorReset  = isOriginal ? std::string(originalColors::rl_boldAlt) : wrap(originalColors::boldAlt);
-        std::string safeOpColor = wrap(operationColor);
-
-        std::string prefix = isFiltered ? (colorFilter + "F⊳ ") : "";
-        std::string prompt =
-            prefix        +
-            colorIso      + "ISO"           +
-            colorMuted    + " ↵ for "       +
-            safeOpColor   + operation       +
-            colorMuted    + ", ? ↵ for help, < ↵ to return: " +
-            colorReset;
+        std::string colorMuted  = isOriginal ? std::string(originalColors::rl_blue)    : "\001" + std::string(theme->muted) + "\002";
+        std::string colorReset  = isOriginal ? std::string(originalColors::rl_boldAlt) : "\001" + std::string(originalColors::boldAlt) + "\002";
+        
+        std::string prompt = (isFiltered ? "\001" + std::string(originalColors::rl_cyan) + "\002F⊳ " : "") +
+                             modeColor + modeLabel + 
+                             colorMuted + " ↵ for \001" + operationColor + "\002" + operation + 
+                             colorMuted + ", ? ↵ for help, < ↵ to return: " + colorReset;
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-
         if (!input.get()) break;
-
         std::string inputString(input.get());
 
         if (inputString == "<") {
@@ -381,57 +386,34 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 needsClrScrn = true;
                 continue;
             } else {
-                currentPage = 0;
                 return;
             }
         }
 
-        if (inputString == "proc" && pendingIndices.empty()) {
-            hasPendingProcess = false;
-            continue;
-        }
-
-        if (inputString == "clr") {
-            pendingIndices.clear();
-            hasPendingProcess = false;
-            needsClrScrn      = true;
-            continue;
-        }
-
-        if (input && input[0] == ';') {
-            needsClrScrn = false;
-            continue;
-        }
-
+        // 6. Use the Pointer for pagination logic
         const std::vector<std::string>& currentList = isFiltered ? filteredFiles : 
-                                                      (isUnmount ? isoDirs : globalIsoFileList);
-        size_t totalPages = (ITEMS_PER_PAGE != 0) 
-                          ? ((currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
+                                                      (isUnmount ? isoDirs : *activeGlobalList);
+                                                      
+        size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
         bool need2Sort = false;
 
-        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, 
-                                isFiltered, needsClrScrn, isMount, isUnmount, write, isConversion, 
-                                need2Sort, isAtISOList);
-        if (validCommand) continue;
-
-        if (inputString.empty()) {
-            needsClrScrn = false;
-            continue;
-        }
-
-        bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, 
-                                   isMount, isUnmount, write, isChd, isFiltered, filteredFiles, isoDirs, 
-                                   operationFiles, skippedMessages, operationFails, uniqueErrorMessages,
-                                   needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-                                   filterHistory, newISOFound, newCHDFound);
-        if (pendingExecuted) continue;
-
-        if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn,
-                                  filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage))
+        if (processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, 
+                                            isMount, isUnmount, write, isConversion, need2Sort, isAtISOList))
             continue;
 
-        bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn);
-        if (pendingHandled) continue;
+        // 7. Pass context to handling functions
+        if (handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isMount, isUnmount, write, 
+                                 isChd, isFiltered, filteredFiles, isoDirs, operationFiles, skippedMessages, 
+                                 operationFails, uniqueErrorMessages, needsClrScrn, operation, isAtISOList, 
+                                 umountMvRmBreak, filterHistory, newISOFound, newCHDFound))
+            continue;
+
+        if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn, filterHistory, 
+                                  operation, operationColor, isoDirs, isUnmount, currentPage))
+            continue;
+
+        if (handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn))
+            continue;
 
         processOperationForSelectedIsoFiles(inputString, isMount, isUnmount, write, isChd, isFiltered,
                                             filteredFiles, isoDirs, operationFiles, operationFails,

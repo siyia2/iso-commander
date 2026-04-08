@@ -110,18 +110,18 @@ void submenu3(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
                     break;
                 case '2':
 					clearScrollBuffer();
-                    selectForIsoFiles("chd2iso", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
+                    selectForIsoFiles("chd2iso_rm", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     clearScrollBuffer();
                     break;
                     
                     case '3':
 					clearScrollBuffer();
-                    selectForIsoFiles("chd2iso", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
+                    selectForIsoFiles("chd2iso_mv", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     clearScrollBuffer();
                     break;
                     case '4':
 					clearScrollBuffer();
-                    selectForIsoFiles("chd2iso", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
+                    selectForIsoFiles("chd2iso_cp", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     clearScrollBuffer();
                     break;
                     case '5':

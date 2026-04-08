@@ -50,16 +50,20 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     const bool disablePagination = (ITEMS_PER_PAGE == 0 || totalItems <= ITEMS_PER_PAGE);
     const size_t totalPages = disablePagination ? 1 : (totalItems + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
     
-    // Bounds check
     size_t effectivePage = (disablePagination) ? 0 : (currentPage >= totalPages ? totalPages - 1 : currentPage);
     const size_t startIndex = disablePagination ? 0 : (effectivePage * ITEMS_PER_PAGE);
     const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + ITEMS_PER_PAGE, totalItems);
 
     // --- Performance: Pre-calculate Gutter Width ---
     IntBuf<> ib1, ib2, ib3, ib4; 
-    // Use endIndex for maxDigits so the list doesn't have a massive empty gap on page 1
     const size_t maxDigits = ib1.format(endIndex).length();
-    const bool isIsoWithAutoUpdate = (isImportRunning.load() && listType == "ISO_FILES" && !isFiltered && !globalIsoFileList.empty());
+
+    // Check for active imports based on list type
+    bool isIsoList = (listType == "ISO_FILES");
+    bool isChdList = (listType == "CHD_FILES");
+    const bool isWithAutoUpdate = isImportRunning.load() && !isFiltered && 
+                                  ((isIsoList && !globalIsoFileList.empty()) || 
+                                   (isChdList && !globalChdFileList.empty()));
 
     // --- Color Mapping ---
     std::string_view accentColor = isOriginal ? originalColors::darkCyan : theme->accent;
@@ -67,6 +71,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     std::string_view numColor    = isOriginal ? originalColors::yellow   : theme->warning; 
     std::string_view isoColor    = isOriginal ? originalColors::magenta  : theme->accent; 
     std::string_view imgColor    = isOriginal ? originalColors::orange   : theme->highlight; 
+    std::string_view chdColor    = isOriginal ? originalColors::purple   : theme->highlight; // CHD Color
     std::string_view mntColor    = isOriginal ? originalColors::blue     : theme->secondary; 
     std::string_view squareColor = originalColors::dimGray;
     std::string_view indexA      = isOriginal ? originalColors::red      : theme->secondary;
@@ -87,13 +92,15 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
               .append("-").append(ib4.format(endIndex)).append(headColor).append(")/").append(numColor)
               .append(ib1.format(totalItems)).append(headColor).append(")");
         
-        if (isIsoWithAutoUpdate) {
-            output.append(originalColors::dim).append("\n\n[Auto-Update: List restructures if newISOFound]");
+        if (isWithAutoUpdate) {
+            std::string label = isIsoList ? "newISOFound" : "newCHDFound";
+            output.append(originalColors::dim).append("\n\n[Auto-Update: List restructures if ").append(label).append("]");
         }
         output.append(originalColors::boldAlt).append("\n\n");
     } 
-    else if (isIsoWithAutoUpdate) {
-        output.append(originalColors::dim).append("[Auto-Update: List restructures if newISOFound]\n\n");
+    else if (isWithAutoUpdate) {
+        std::string label = isIsoList ? "newISOFound" : "newCHDFound";
+        output.append(originalColors::dim).append("[Auto-Update: List restructures if ").append(label).append("]\n\n");
     }
 
     // --- Main Item Loop ---
@@ -102,14 +109,11 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         std::string_view idxStr = ib1.format(i + 1);
         
         output.append(seqColor);
-        
-        // Performance Fix: Efficient right-alignment padding
         if (idxStr.length() < maxDigits) {
             output.append(maxDigits - idxStr.length(), ' ');
         }
         output.append(idxStr);
 
-        // Filter indices logic
         if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
             output.append(":").append(originalColors::boldAlt).append(squareColor); 
             output.append(ib2.format(filteringStack.back().originalIndices[i] + 1));
@@ -120,13 +124,17 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
         const std::string& item = items[i];
         
-        // Optimization: Use boolean flags for type checking outside the loop or cache them
-        if (listType == "ISO_FILES" || listType == "IMAGE_FILES") {
+        // --- Context Sensitive Rendering ---
+        if (listType == "ISO_FILES" || listType == "IMAGE_FILES" || listType == "CHD_FILES") {
             auto [dir, fname] = extractDirectoryAndFilename(item, listSubType);
             if (!displayConfig::toggleNamesOnly) {
                 output.append(isOriginal ? originalColors::boldAlt : theme->muted).append(dir).append(originalColors::boldAlt).append("/");
             }
-            output.append(listType == "ISO_FILES" ? isoColor : imgColor).append(fname);
+            
+            // Choose color based on type
+            std::string_view fileColor = (listType == "ISO_FILES") ? isoColor : 
+                                         (listType == "IMAGE_FILES") ? imgColor : chdColor;
+            output.append(fileColor).append(fname);
         } 
         else if (listType == "MOUNTED_ISOS") {
             auto [dirPart, pathPart, hashPart] = parseMountPointComponents(item);
@@ -159,7 +167,9 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
               .append(procText).append("proc")
               .append(originalColors::boldAlt).append(bracketBg).append("]: ");
 
-        std::string_view pColor = (listType != "IMAGE_FILES") ? isoColor : imgColor;
+        // Color coordination for pending list
+        std::string_view pColor = (listType == "IMAGE_FILES") ? imgColor : 
+                                  (listType == "CHD_FILES") ? chdColor : isoColor;
         output.append(pColor);
         for (size_t i = 0; i < pendingIndices.size(); ++i) {
             output.append(pendingIndices[i]);
@@ -168,6 +178,5 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append(originalColors::boldAlt).append("\n");
     }
 
-    // Atomic write to stdout
     std::cout.write(output.data(), output.size());
 }
