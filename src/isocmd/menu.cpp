@@ -41,7 +41,7 @@ void print_ascii() {
 }
 
 
-void submenu3(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
+void submenu3(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound) {
     while (true) {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
@@ -82,23 +82,23 @@ void submenu3(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
             switch (choice[0]) {
                 case '1':
                     clearScrollBuffer();
-                    selectForIsoFiles("chd", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    selectForIsoFiles("chd2iso", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     clearScrollBuffer();     
                     break;
                 case '2':
 					clearScrollBuffer();
-                    selectForIsoFiles("chd", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    selectForIsoFiles("chd2iso", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     clearScrollBuffer();
                     break;
                     
                     case '3':
 					clearScrollBuffer();
-                    selectForIsoFiles("chd", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    selectForIsoFiles("chd2iso", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     clearScrollBuffer();
                     break;
                     case '4':
 					clearScrollBuffer();
-                    selectForIsoFiles("chd", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    selectForIsoFiles("chd2iso", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     clearScrollBuffer();
                     break;
             }
@@ -115,7 +115,7 @@ void submenu3(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
  * @param isImportRunning Tracks if an import process is currently active.
  * @param newISOFound Signals if a new ISO has been discovered during background scans.
  */
-void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
+void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound) {
     while (true) {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
@@ -160,36 +160,36 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
             switch (choice[0]) {
                 case '1':
                     clearScrollBuffer();
-                    selectForIsoFiles("mount", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    selectForIsoFiles("mount", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     clearScrollBuffer();
                     break;
                 case '2':
                     clearScrollBuffer();
-                    selectForIsoFiles("umount", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    selectForIsoFiles("umount", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     clearScrollBuffer();
                     break;
                 case '3':
                     clearScrollBuffer();
-                    selectForIsoFiles("rm", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    selectForIsoFiles("rm", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     clearScrollBuffer();
                     break;
                 case '4':
                     clearScrollBuffer();
-                    selectForIsoFiles("mv", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    selectForIsoFiles("mv", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     clearScrollBuffer();
                     break;
                 case '5':
                     clearScrollBuffer();
-                    selectForIsoFiles("cp", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    selectForIsoFiles("cp", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     clearScrollBuffer();
                     break;
                 case '6':
                     clearScrollBuffer();
-                    selectForIsoFiles("write", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    selectForIsoFiles("write", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     clearScrollBuffer();
                     break;
                  case '7':
-                    submenu3(updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    submenu3(updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     break;
             }
         }

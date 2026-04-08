@@ -32,6 +32,7 @@ int main(int argc, char *argv[]) {
     std::atomic<bool> isAtISOList{false};
     std::atomic<bool> updateHasRun{false};
     std::atomic<bool> newISOFound{false};
+    std::atomic<bool> newCHDFound{false};
     
     globalIsoFileList.reserve(100);
     setupReadlineToIgnoreCtrlC();
@@ -138,7 +139,7 @@ int main(int argc, char *argv[]) {
         if (choice == "1") {
             isAtMain.store(false);
             isAtISOList.store(false);
-            submenu1(updateHasRun, isAtISOList, isImportRunning, newISOFound);
+            submenu1(updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
         } else if (choice.length() == 1) {
             bool promptFlag;
             bool filterHistory;
