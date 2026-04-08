@@ -475,7 +475,9 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
                      std::unordered_set<std::string>& skippedOuts,
                      std::unordered_set<std::string>& failedOuts,
                      bool& verbose, bool& needsClrScrn, std::atomic<bool>& newCHDFound) {
-
+						 
+						 
+	disableInput();
     setupSignalHandlerCancellations();
     const ListTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
@@ -558,16 +560,16 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
     }
     
     // Print final summary after all conversions
-std::cout << "\n\033[K"  // Clear any leftover progress line
-          << "Tasks: " << completedTasks.load() << "/" << totalTasks
-          << " completed, " << failedTasks.load() << " failed\n";
+	std::cout << "\n\033[K"  // Clear any leftover progress line
+			  << "Tasks: " << completedTasks.load() << "/" << totalTasks
+			  << " completed, " << failedTasks.load() << " failed\n";
+  
+	flushStdin();
+	restoreInput();
 
-std::cout << color << "↵ to continue..." << reset;
-std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    
-    std::cout << color << "↵ to continue..." << reset;
+    std::cout << color << "\n↵ to continue..." << reset;
 
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
     isProcessingComplete.store(true);
     signal(SIGINT, SIG_IGN);
