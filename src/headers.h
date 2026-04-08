@@ -34,8 +34,6 @@
 #include <sys/stat.h>
 #include <termios.h>
 
-// CHDR Library
-#include <libchdr/chd.h>
 
 //==============================
 // GLOBAL NAMESPACE ALIASES
@@ -131,6 +129,7 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
 bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg);
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
 bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config);
+bool fileExists(const std::string& fullPath);
 
 //------------------
 // Integer Functions
@@ -143,7 +142,7 @@ int clear_screen_and_buffer(int, int);
 // Void Functions (UI)
 //------------------
 void printMenu();
-void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound);
+void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound);
 void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning);
 void print_ascii();
 void helpSelections();
@@ -191,7 +190,19 @@ void clearMessageAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtMain, s
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname);
 void processInputForMountOrUmount(const std::string& input, const std::vector<std::string>& files, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& operationBreak, bool& verbose, bool isUnmount);
 void processInputForCpMvRm(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& filterHistory, bool& verbose, std::atomic<bool>& newISOFound);
-void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound);
+void processInputCHD(const std::string& input, std::vector<std::string>& fileList,
+                               std::unordered_set<std::string>& processedErrors,
+                               std::unordered_set<std::string>& successOuts,
+                               std::unordered_set<std::string>& skippedOuts,
+                               std::unordered_set<std::string>& failedOuts,
+                               bool& verbose, bool& needsClrScrn, std::atomic<bool>& newCHDFound);
+                               
+                               void convertToCHD(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& successOuts, 
+                  std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, 
+                  std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, 
+                  std::atomic<size_t>* failedTasks, std::atomic<bool>& newCHDFound);
+                  bool convertIsoToChd(const std::string& inputPath, const std::string& outputPath, std::atomic<size_t>* completedBytes);
+void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound);
 void tokenizeInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<int>& processedIndices);
 void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet, std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& errorSet, int verboseLevel);
 void resetVerboseSets(std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts);
