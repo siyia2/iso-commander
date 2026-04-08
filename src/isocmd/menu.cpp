@@ -40,6 +40,73 @@ void print_ascii() {
     std::cout << rows[7] << R"(|___|___/ \___/   \___\___/|_|  |_|_|  |_/_/ \_\|_|\_||___/|___|_|_\ )" << "\n\n" << reset;
 }
 
+
+void submenu3(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
+    while (true) {
+        rl_bind_key('\f', prevent_readline_keybindings);
+        rl_bind_key('\t', prevent_readline_keybindings);
+        
+        clearScrollBuffer();
+        
+        std::cout << color << "+-------------------------+\n"
+                  << "|↵ Convert2ISO            |\n"
+                  << "+-------------------------+\n"
+                  << "|1. ISO2CHD               |\n"
+                  << "+-------------------------+\n"
+                  << "|2. Move                  |\n"
+                  << "+-------------------------+\n"
+                  << "|3. Copy                  |\n"
+                  << "+-------------------------+\n"
+                  << "|3. Delete                |\n"
+                  << "+-------------------------+" << reset << std::endl << "\n";
+                  
+                  
+        
+        const ListTheme* theme = getActiveTheme();
+        const bool isOriginal = (globalTheme == "original");
+        char* rawInput = readline(("\001" + 
+									std::string(isOriginal ? originalColors::blue : theme->muted) + 
+									"\002Choose an option:" + 
+									std::string(originalColors::rl_boldAlt) + 
+									" ").c_str());
+
+        std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
+
+        if (!input.get() || std::strlen(input.get()) == 0) {
+            break; 
+        }
+
+        std::string choice(input.get());
+        std::string operation;
+        if (choice.length() == 1) {
+            switch (choice[0]) {
+                case '1':
+                    clearScrollBuffer();
+                    selectForIsoFiles("chd", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    clearScrollBuffer();     
+                    break;
+                case '2':
+					clearScrollBuffer();
+                    selectForIsoFiles("chd", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    clearScrollBuffer();
+                    break;
+                    
+                    case '3':
+					clearScrollBuffer();
+                    selectForIsoFiles("chd", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    clearScrollBuffer();
+                    break;
+                    case '4':
+					clearScrollBuffer();
+                    selectForIsoFiles("chd", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    clearScrollBuffer();
+                    break;
+            }
+        }
+    }
+}
+
+
 /**
  * @brief Displays the ISO management submenu and handles user input for file operations.
  * * Provides options for mounting, unmounting, deleting, moving, copying, or writing ISOs.
@@ -70,6 +137,8 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
                   << "|5. Copy                  |\n"
                   << "+-------------------------+\n"
                   << "|6. Write                 |\n"
+                  << "+-------------------------+\n"
+                  << "|7. ISO2CHD               |\n"
                   << "+-------------------------+" << reset << std::endl << "\n";
         
         const ListTheme* theme = getActiveTheme();
@@ -118,6 +187,9 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
                     clearScrollBuffer();
                     selectForIsoFiles("write", updateHasRun, isAtISOList, isImportRunning, newISOFound);
                     clearScrollBuffer();
+                    break;
+                 case '7':
+                    submenu3(updateHasRun, isAtISOList, isImportRunning, newISOFound);
                     break;
             }
         }
