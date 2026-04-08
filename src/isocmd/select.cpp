@@ -388,7 +388,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         const ListTheme* theme  = getActiveTheme();
         const bool isOriginal   = (globalTheme == "original");
 
-        std::string modeLabel   = isChdOp ? "CHD" : "ISO";
+        std::string modeLabel = (isChdOp && operation != "chd2iso") ? "CHD" : "ISO";
         std::string modeColor   = isChdOp 
             ? (isOriginal ? wrap(originalColors::rl_purple) : wrap(theme->accent))
             : (isOriginal ? wrap(originalColors::rl_green)  : wrap(theme->accent));
