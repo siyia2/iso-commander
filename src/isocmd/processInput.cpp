@@ -534,22 +534,6 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
     std::atomic<size_t> failedTasks(0);
     std::atomic<bool>   isProcessingComplete(false);
 
-    // Optional: keep a simple task‑progress display instead of the byte bar.
-    // If you want no progress display at all, remove this thread and its join.
-    std::thread progressThread([&]() {
-        while (!isProcessingComplete.load()) {
-            size_t done = completedTasks.load();
-            size_t fail = failedTasks.load();
-            // Print a simple status line (you can customise or omit)
-            std::cout << "\r\033[K" << "Tasks: " << done << "/" << totalTasks
-                      << " completed, " << fail << " failed" << std::flush;
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-        // Final line
-        std::cout << "\r\033[K" << "Tasks: " << completedTasks.load() << "/" << totalTasks
-                  << " completed, " << failedTasks.load() << " failed\n";
-    });
-
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
 
@@ -563,7 +547,6 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
             [isoFilesInChunk = std::move(isoFilesInChunk),
              &successOuts, &skippedOuts, &failedOuts,
              &completedTasks, &failedTasks, &newCHDFound]() {
-                // Note: completedBytes argument removed
                 convertToCHD(isoFilesInChunk, successOuts, skippedOuts, failedOuts,
                              &completedTasks, &failedTasks, newCHDFound);
             }
@@ -574,12 +557,19 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
         future.wait();
     }
     
+    // Print final summary after all conversions
+std::cout << "\n\033[K"  // Clear any leftover progress line
+          << "Tasks: " << completedTasks.load() << "/" << totalTasks
+          << " completed, " << failedTasks.load() << " failed\n";
+
+std::cout << color << "↵ to continue..." << reset;
+std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    
     std::cout << color << "↵ to continue..." << reset;
 
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
     isProcessingComplete.store(true);
     signal(SIGINT, SIG_IGN);
-    progressThread.join();
 }
 
