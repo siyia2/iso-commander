@@ -1,7 +1,13 @@
 CXX = g++
-CXXFLAGS = -O3 -Wall -Wextra -flto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti
-LIBS = -lreadline -lncurses
-LDFLAGS = -lreadline -flto -lncurses -ffunction-sections -fdata-sections -fno-plt -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
+CXXFLAGS = -std=c++20 -O3 -Wall -Wextra -flto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti
+LIBS = -lreadline -lmount ./deps/libchdr-static.a
+LDFLAGS = -lreadline -lmount  -flto -ffunction-sections -fdata-sections -fno-plt -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
+
+# Flags for static builds
+#CXX = g++
+#CXXFLAGS = -std=c++20 -O3 -Wall -Wextra -flto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti
+#LIBS = -static -L/usr/lib -lreadline -lmount ./deps/libchdr-static.a -lncurses -lblkid -leconf -lintl -flto -ffunction-sections -fdata-sections -fno-plt
+#LDFLAGS = -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
 
 # Use the number of available processors from nproc
 NUM_PROCESSORS := $(shell nproc)
@@ -12,7 +18,11 @@ MAKEFLAGS = -j$(NUM_PROCESSORS)
 SRC_DIR = $(CURDIR)/src
 OBJ_DIR = $(CURDIR)/obj
 INSTALL_DIR = $(CURDIR)/bin
-SRC_FILES = isocmd/main_general.cpp isocmd/cache.cpp isocmd/filtering.cpp isocmd/mount.cpp isocmd/umount.cpp conversion_tools/conversion_tools.cpp cp_mv_rm/cp_mv_rm.cpp
+SRC_FILES = isocmd/main.cpp isocmd/history.cpp  isocmd/verbose.cpp isocmd/isoDatabase.cpp isocmd/filtering.cpp isocmd/mount.cpp isocmd/umount.cpp isocmd/cpMvRm.cpp\
+ isocmd/convert.cpp isocmd/ccd2iso_mdf2iso_nrg2iso.cpp isocmd/write2usb.cpp isocmd/stringManipulation.cpp isocmd/signalsAndTermios.cpp isocmd/select.cpp\
+ isocmd/search.cpp isocmd/readline.cpp isocmd/progressbar.cpp isocmd/processInput.cpp isocmd/pagination.cpp isocmd/naturalSort.cpp isocmd/cmdAutomation.cpp\
+ isocmd/printList.cpp isocmd/displayCode.cpp isocmd/setupOptions.cpp isocmd/help.cpp isocmd/tokenize.cpp isocmd/menu.cpp isocmd/chOwnership.cpp
+ 
 OBJ_FILES = $(patsubst %.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
 
 all: isocmd
