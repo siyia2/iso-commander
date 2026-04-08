@@ -1,13 +1,19 @@
+# --- Standard Build Flags ---
 CXX = g++
-CXXFLAGS = -std=c++20 -O3 -Wall -Wextra -flto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti
-LIBS = -lreadline -lmount ./deps/libchdr-static.a
-LDFLAGS = -lreadline -lmount  -flto -ffunction-sections -fdata-sections -fno-plt -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
+# Point to the BASE include directory (the one containing the libchdr/ subfolder)
+CXXFLAGS = -std=c++20 -O3 -Wall -Wextra -flto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti -I./deps/libchdr/include
 
-# Flags for static builds
-#CXX = g++
-#CXXFLAGS = -std=c++20 -O3 -Wall -Wextra -flto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti
-#LIBS = -static -L/usr/lib -lreadline -lmount ./deps/libchdr-static.a -lncurses -lblkid -leconf -lintl -flto -ffunction-sections -fdata-sections -fno-plt
-#LDFLAGS = -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
+# Added -lz and -llzma (REQUIRED for libchdr to actually work)
+LIBS = -lreadline -lmount ./deps/libchdr/libchdr-static.a -lz -llzma
+LDFLAGS = -lreadline -lmount -flto -ffunction-sections -fdata-sections -fno-plt -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
+
+# --- Static Build Flags ---
+# When building static, you must manually list every sub-dependency
+# Order: High-level lib -> Low-level system libs
+#LIBS = -static ./deps/libchdr/libchdr-static.a -lreadline -lncursesw -lmount -lblkid -leconf -lintl -lz -llzma -lpthread
+#STATIC_LDFLAGS = -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
+
+# To use the static flags later, you would swap LIBS for STATIC_LIBS
 
 # Use the number of available processors from nproc
 NUM_PROCESSORS := $(shell nproc)
