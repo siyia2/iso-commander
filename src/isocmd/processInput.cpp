@@ -523,14 +523,11 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
     const size_t totalTasks = filesToProcess.size();
 
     const std::string suffix    = (totalTasks > 1 ? " conversions" : " conversion");
-    const std::string operation = std::string(originalColors::orange) + "ISO"
+    const std::string operation = std::string(originalColors::purple) + "CHD"
                                   + std::string(originalColors::boldAlt) + suffix;
 
     clearScrollBuffer();
-    std::cout << "\n" << originalColors::boldAlt << " Processing "
-              << operation << originalColors::boldAlt << "... ("
-              << originalColors::red << "Ctrl+c"
-              << originalColors::boldAlt << ":cancel)\n";
+    std::cout << "\n" << originalColors::boldAlt;
 
     std::atomic<size_t> completedTasks(0);
     std::atomic<size_t> failedTasks(0);
@@ -566,6 +563,11 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
   
 	flushStdin();
 	restoreInput();
+	
+	 if (g_operationCancelled.load()) {
+        std::cout << (isOrig ? originalColors::red : theme->muted) << "\n[info]" << originalColors::purple << " chd2iso" 
+        << (isOrig ? originalColors::red : theme->muted) << " → " << originalColors::yellow << "INTERRUPTED" << std::endl;
+    }
 
     std::cout << color << "\n↵ to continue..." << reset;
 
