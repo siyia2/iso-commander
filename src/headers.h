@@ -34,6 +34,9 @@
 #include <sys/stat.h>
 #include <termios.h>
 
+// CHDR Library
+#include <libchdr/chd.h>
+
 //==============================
 // GLOBAL NAMESPACE ALIASES
 //==============================
