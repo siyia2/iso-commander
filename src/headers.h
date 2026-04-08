@@ -77,6 +77,7 @@ inline std::mutex couNtMutex;
 
 // Data Caches
 inline std::vector<std::string> globalIsoFileList;
+inline std::vector<std::string> globalChdFileList;
 inline std::unordered_map<std::string, std::string> transformationCache;
 inline std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> cachedParsesForUmount;
 inline std::vector<std::string> binImgFilesCache;
@@ -88,6 +89,7 @@ inline std::string g_cachedPath;
 // File Paths
 inline const std::string databaseDirectory = std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.local/share/isocmd/database/";
 inline const std::string databaseFilename  = "iso_commander_database.txt";
+inline const std::string databaseCHDFilename  = "iso_commander_chd_database.txt";
 inline const std::string databaseFilePath  = databaseDirectory + databaseFilename;
 inline const std::string historyFilePath = databaseDirectory + "iso_commander_path_database.txt";
 inline const std::string filterHistoryFilePath = databaseDirectory + "iso_commander_filter_database.txt";
@@ -103,6 +105,7 @@ inline constexpr uintmax_t maxDatabaseSize     = 1024 * 1024 * 1; // e.g., 1MB
 
 // State Management
 inline std::atomic<bool> isoListDirty{true}; // true = force load iso list on first call
+inline std::atomic<bool> chdListDirty{true};
 inline std::atomic<bool> g_operationCancelled{false};
 inline bool needSortingAfterflno			   = false;
 inline size_t ITEMS_PER_PAGE                   = 25;
