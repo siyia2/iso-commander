@@ -214,6 +214,11 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
                 
                 void refreshChdForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newCHDFound);
                 void submenu3(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound);
+                void removeNonExistentChdPathsFromDatabase(std::vector<std::string>& globalChdFileList);
+bool loadAndDisplayChd(std::vector<std::string>& filteredFiles, bool& isFiltered, 
+                       const std::string& listSubType, bool& umountMvRmBreak, 
+                       std::vector<std::string>& pendingIndices, bool& hasPendingProcess, 
+                       size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning);
                 
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound);
 void tokenizeInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<int>& processedIndices);

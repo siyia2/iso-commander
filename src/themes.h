@@ -91,6 +91,7 @@ struct originalColors {
     static constexpr std::string_view rl_orange  = "\001\033[1;38;2;255;120;0m\002";
     static constexpr std::string_view rl_yellow  = "\001\033[1;38;2;255;255;0m\002";
     static constexpr std::string_view rl_cyan    = "\001\033[1;38;2;103;233;235m\002";
+    static constexpr std::string_view rl_purple     = "\001\033[1;38;2;140;70;200m\002";
     static constexpr std::string_view rl_boldAlt = "\001\033[0;1;38;2;215;215;215m\002";
     // Readline-wrapped RGB Bold White (215, 215, 215)
 	static constexpr std::string_view rl_reset = "\001\033[0;1;38;2;215;215;215m\002";
