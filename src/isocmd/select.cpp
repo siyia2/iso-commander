@@ -27,7 +27,7 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
                                  std::unordered_set<std::string>& skippedMessages,
                                  const std::string& operation, bool& verbose, bool isMount,
                                  bool isChd, bool& isFiltered, bool& umountMvRmBreak, bool isUnmount,
-                                 bool& needsClrScrn) {
+                                 bool& needsClrScrn, std::atomic<bool>& isAtISOList) {
 
     const ListTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
@@ -59,18 +59,27 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
         needsClrScrn = true;
     }
 
-    if (!isUnmount && globalIsoFileList.empty()) {
-        clearScrollBuffer();
-        needsClrScrn = true;
+	if (!isUnmount) {
+		// Evaluating the atomic state directly in the expression
+		if ((isAtISOList.load() && globalIsoFileList.empty()) || 
+			(!isAtISOList.load() && globalChdFileList.empty())) {
+			
+			clearScrollBuffer();
+			needsClrScrn = true;
 
-        std::cout << "\n" << (isOrig ? originalColors::yellow : theme->warning)
-                  << "No ISO available for " << operation << "."
-                  << originalColors::boldAlt << "\n\n";
+			// Note: We have to call .load() again here to decide what to print
+			std::string fileType = isAtISOList.load() ? "ISO" : "CHD";
 
-        std::cout << color << "↵ to continue..." << reset;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
-    }
+			std::cout << "\n" << (isOrig ? originalColors::yellow : theme->warning)
+					  << "No " << fileType << " available for " << operation << "."
+					  << originalColors::boldAlt << "\n\n";
+
+			std::cout << color << "↵ to continue..." << reset;
+			
+			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+			return;
+		}
+	}
 }
 
 /**
@@ -110,6 +119,13 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
     needsClrScrn = true;
     bool verbose = false;
 
+    // Detect suffixed CHD file operations (chd2iso_cp, chd2iso_mv, chd2iso_rm)
+    bool isChdFileOp = operation.starts_with("chd2iso_");
+    std::string actualOp = operation;
+    if (isChdFileOp) {
+        actualOp = operation.substr(8);  // "cp", "mv", or "rm"
+    }
+
     if (isMount || isUnmount) {
         isAtISOList.store(false);
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles :
@@ -124,22 +140,29 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
         writeToUsb(inputString, activeList, uniqueErrorMessages);
 
-    } else if (isChd) {
+    } else if (isChd && !isChdFileOp) {
+        // Pure CHD‑to‑ISO conversion (no suffix)
         isAtISOList.store(false);
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles :
+                                                     (operation == "chd2iso" ? globalIsoFileList : globalChdFileList);
         processInputCHD(inputString, const_cast<std::vector<std::string>&>(activeList),
                         uniqueErrorMessages, operationFiles, skippedMessages, operationFails,
                         needsClrScrn, newCHDFound);
 
     } else {
+        // File operations: cp, mv, rm — also chd2iso_cp, chd2iso_mv, chd2iso_rm
         isAtISOList.store(false);
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-        processInputForCpMvRm(inputString, activeList, operation, operationFiles, operationFails,
-                             uniqueErrorMessages, umountMvRmBreak, filterHistory, verbose, newISOFound);
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles :
+                                                     (isChdFileOp ? globalChdFileList : globalIsoFileList);
+        processInputForCpMvRm(inputString, activeList, actualOp, operationFiles, operationFails,
+                             uniqueErrorMessages, umountMvRmBreak, filterHistory, verbose,
+                             isChdFileOp ? newCHDFound : newISOFound);
     }
 
+    // Pass isChd flag only for actual conversions (not for suffixed file ops)
     handleSelectIsoFilesResults(uniqueErrorMessages, operationFiles, operationFails, skippedMessages,
-                            operation, verbose, isMount, isChd, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn);
+                            operation, verbose, isMount, (isChd && !isChdFileOp), isFiltered,
+                            umountMvRmBreak, isUnmount, needsClrScrn, isAtISOList);
 }
 
 /**
