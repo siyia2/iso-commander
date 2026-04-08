@@ -12,13 +12,17 @@ void removeNonExistentChdPathsFromDatabase(std::vector<std::string>& globalChdFi
     std::vector<std::string> retained;
     bool anyRemoved = false;
     
+    // Construct the path specifically for the CHD database
+    std::filesystem::path chdPath = databaseDirectory;
+    chdPath /= databaseCHDFilename;
+
     {
         std::lock_guard<std::mutex> fileLock(dbFileMutex);
 
-        // Assume databaseFilePath is defined similarly to your ISO path
-        int fd = open(databaseFilePath.c_str(), O_RDWR, 0644);
+        int fd = open(chdPath.c_str(), O_RDWR, 0644);
         if (fd == -1) {
             if (errno == ENOENT) {
+                // If database is missing, clear the runtime list
                 std::lock_guard<std::mutex> lock(updateListMutex);
                 globalChdFileList.clear();
             }
@@ -39,14 +43,14 @@ void removeNonExistentChdPathsFromDatabase(std::vector<std::string>& globalChdFi
         FILE* file = fdopen(dupFd, "r");
         if (!file) { close(dupFd); return; }
 
-        // 1. Read current CHD cache from disk
+        // 1. Load CHD cache into memory
         std::vector<std::string> cache;
         char* linePtr = nullptr;
         size_t len    = 0;
         while (getline(&linePtr, &len, file) != -1) {
             std::string line(linePtr);
             if (!line.empty() && line.back() == '\n') line.pop_back();
-            if (!line.empty() && line.back() == '\r') line.pop_back(); // Handle CRLF
+            if (!line.empty() && line.back() == '\r') line.pop_back(); 
             if (!line.empty()) cache.push_back(std::move(line));
         }
         free(linePtr);
@@ -54,7 +58,7 @@ void removeNonExistentChdPathsFromDatabase(std::vector<std::string>& globalChdFi
 
         if (cache.empty()) return;
 
-        // 2. Parallel existence check
+        // 2. Multithreaded validation of CHD file paths
         ThreadPool& pool = getStaticThreadPool();
         std::vector<int> pathExists(cache.size(), 0);
         std::atomic<size_t> existingCount{0};
@@ -77,6 +81,7 @@ void removeNonExistentChdPathsFromDatabase(std::vector<std::string>& globalChdFi
             futures.emplace_back(
                 pool.enqueue([&cache, &pathExists, &existingCount, start, end] {
                     for (size_t j = start; j < end; ++j) {
+                        // CHD files are often on external storage; access() is fast for this
                         if (access(cache[j].c_str(), F_OK) == 0) {
                             pathExists[j] = 1;
                             existingCount.fetch_add(1, std::memory_order_relaxed);
@@ -87,10 +92,10 @@ void removeNonExistentChdPathsFromDatabase(std::vector<std::string>& globalChdFi
 
         for (auto& f : futures) f.get();
 
-        // 3. If everything still exists, no work to do
+        // 3. Exit if no stale entries were found
         if (existingCount == cache.size()) return;
 
-        // 4. Filter and rebuild buffer
+        // 4. Prepare updated buffer
         const size_t surviving = existingCount.load();
         retained.reserve(surviving);
         size_t totalBufferSize = 0;
@@ -109,23 +114,87 @@ void removeNonExistentChdPathsFromDatabase(std::vector<std::string>& globalChdFi
             buf += '\n';
         }
 
-        // 5. Rewrite file
+        // 5. Atomic-style overwrite of the CHD text database
         if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) return;
 
         ssize_t written = ::write(fd, buf.data(), buf.size());
         if (written == -1 || static_cast<size_t>(written) != buf.size()) return;
 
-        chdListDirty.store(true); // Notify CHD UI to refresh
+        // Mark CHD list as dirty for the UI/Browser
+        chdListDirty.store(true); 
+        
         fdGuard.release();
         flock(fd, LOCK_UN);
         close(fd);
     }
 
-    // 6. Update the global list safely
+    // 6. Final synchronization with the global CHD vector
     if (anyRemoved) {
         std::lock_guard<std::mutex> lock(updateListMutex);
         globalChdFileList = std::move(retained);
     }
+}
+
+void loadChdFromDatabase(std::vector<std::string>& outChdList) {
+    // Construct the path for the CHD database
+    std::filesystem::path chdPath = databaseDirectory;
+    chdPath /= databaseCHDFilename;
+
+    std::lock_guard<std::mutex> fileLock(dbFileMutex);
+    
+    // 1. Open specifically for the CHD database file
+    int fd = open(chdPath.c_str(), O_RDONLY);
+    if (fd == -1) return;
+    
+    // 2. Apply Shared Lock (allows multiple simultaneous readers)
+    // This prevents reading while a write/cleanup is in progress
+    if (flock(fd, LOCK_SH) == -1) {
+        close(fd);
+        return;
+    }
+    
+    // 3. Check file size and validity
+    struct stat fileStat;
+    if (fstat(fd, &fileStat) == -1 || fileStat.st_size == 0) {
+        flock(fd, LOCK_UN);
+        close(fd);
+        outChdList.clear();
+        return;
+    }
+    
+    // 4. Read the entire file into a local buffer for fast parsing
+    std::vector<char> buffer(fileStat.st_size);
+    ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
+    
+    // Release file resources as soon as the read is complete
+    flock(fd, LOCK_UN);
+    close(fd);
+    
+    if (bytesRead <= 0 || bytesRead > fileStat.st_size) return;
+    
+    // 5. Parse lines from the buffer
+    std::vector<std::string> loadedChds;
+    char* start = buffer.data();
+    char* end = buffer.data() + bytesRead;
+    
+    while (start < end) {
+        char* lineEnd = std::find(start, end, '\n');
+        std::string line(start, lineEnd);
+        
+        // Clean up potential Windows-style carriage returns (\r\n)
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        
+        if (!line.empty()) {
+            loadedChds.push_back(std::move(line));
+        }
+        
+        start = (lineEnd < end) ? lineEnd + 1 : end;
+    }
+
+    // 6. Move the local list into the output vector (O(1) operation)
+    outChdList = std::move(loadedChds);
 }
 
 bool saveChdToDatabase(std::vector<std::string> globalChdFileList, std::atomic<bool>& newCHDFound) {

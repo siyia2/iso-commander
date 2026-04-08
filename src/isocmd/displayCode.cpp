@@ -94,6 +94,74 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     return true;
 }
 
+bool loadAndDisplayChd(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
+size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
+    
+    // 1. Signal handling and terminal setup
+    signal(SIGINT, SIG_IGN);
+    disable_ctrl_d();
+
+    // 2. Check if the CHD-specific list needs a refresh
+    bool needToReload = chdListDirty.exchange(false);
+
+    clearScrollBuffer();
+
+    // 3. Load from the CHD text database if dirty
+    std::vector<std::string> freshList;
+    if (needToReload) {
+        loadChdFromDatabase(freshList);
+    }
+
+    bool isEmpty = false;
+    {
+        std::lock_guard<std::mutex> lock(updateListMutex);
+
+        if (needToReload) {
+            globalChdFileList = std::move(freshList);
+            currentPage = originalPage;
+            pendingIndices.clear();
+            hasPendingProcess = false;
+        
+            sortFilesCaseInsensitive(globalChdFileList);
+        }
+
+        // Handle sorting flag if your app uses a global sorting trigger
+        if (needSortingAfterflno) {
+            sortFilesCaseInsensitive(globalChdFileList);
+            needSortingAfterflno = false;
+        }
+
+        // Handle resets/breaks (e.g., after an unmount or deletion)
+        if (umountMvRmBreak) {
+            filteringStack.clear();
+            filteredFiles.clear();
+            isFiltered = false;
+        }
+
+        // 4. Render the list using the CHD global vector
+        printList(isFiltered ? filteredFiles : globalChdFileList, "CHD_FILES", listSubType,
+                  pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
+
+        isEmpty = globalChdFileList.empty();
+    }
+
+    // 5. User feedback for empty CHD database
+    if (isEmpty) {
+        const ListTheme* theme = getActiveTheme();
+        const bool isOriginal = (globalTheme == "original");
+
+        const std::string_view warnColor = isOriginal ? originalColors::yellow : theme->warning;
+        const std::string_view reset     = originalColors::boldAlt;
+
+        std::cout << "\n" << warnColor << "CHD Cache is empty. Choose 'ImportCHD' from the Main Menu Options." << reset << "\n";
+        std::cout << color << "\n↵ to return..." << reset;
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        return false;
+    }
+
+    return true;
+}
+
 /**
  * @brief Base path where ISO files are mounted.
  */

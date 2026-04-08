@@ -473,8 +473,8 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
                      std::unordered_set<std::string>& processedErrors,
                      std::unordered_set<std::string>& successOuts,
                      std::unordered_set<std::string>& skippedOuts,
-                     std::unordered_set<std::string>& failedOuts,
-                     bool& verbose, bool& needsClrScrn, std::atomic<bool>& newCHDFound) {
+                     std::unordered_set<std::string>& failedOuts, 
+                     bool& needsClrScrn, std::atomic<bool>& newCHDFound) {
 						 
 						 
 	disableInput();

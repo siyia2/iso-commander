@@ -129,7 +129,7 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
         processInputCHD(inputString, const_cast<std::vector<std::string>&>(activeList),
                         uniqueErrorMessages, operationFiles, skippedMessages, operationFails,
-                        verbose, needsClrScrn, newCHDFound);
+                        needsClrScrn, newCHDFound);
 
     } else {
         isAtISOList.store(false);
