@@ -128,7 +128,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 bool isValidDirectory(const std::string& path);
 bool saveToDatabase(const std::vector<std::string> globalIsoFileList, std::atomic<bool>& newISOFound);
 bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning);
-bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage);
+bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage, std::atomic<bool>& isAtISOList);
 bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg);
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
 bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config);
@@ -195,32 +195,46 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
 void processInputForMountOrUmount(const std::string& input, const std::vector<std::string>& files, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& operationBreak, bool& verbose, bool isUnmount);
 void processInputForCpMvRm(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& filterHistory, bool& verbose, std::atomic<bool>& newISOFound);
 void processInputCHD(const std::string& input, std::vector<std::string>& fileList,
-                               std::unordered_set<std::string>& processedErrors,
-                               std::unordered_set<std::string>& successOuts,
-                               std::unordered_set<std::string>& skippedOuts,
-                               std::unordered_set<std::string>& failedOuts,
-                               bool& needsClrScrn, std::atomic<bool>& newCHDFound);
+                     std::unordered_set<std::string>& processedErrors,
+                     std::unordered_set<std::string>& successOuts,
+                     std::unordered_set<std::string>& skippedOuts,
+                     std::unordered_set<std::string>& failedOuts, 
+                     bool& needsClrScrn, std::atomic<bool>& newCHDFound);
                                
-                               void convertToCHD(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& successOuts, 
-                  std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, 
-                  std::atomic<size_t>* completedTasks, 
-                  std::atomic<size_t>* failedTasks, std::atomic<bool>& newCHDFound);
+                               void convertToCHD(const std::vector<std::string>& isoFiles,
+                  std::unordered_set<std::string>& successOuts,
+                  std::unordered_set<std::string>& skippedOuts,
+                  std::unordered_set<std::string>& failedOuts,
+                  std::atomic<size_t>* completedTasks,
+                  std::atomic<size_t>* failedTasks,
+                  std::atomic<bool>& newCHDFound);
                   bool convertIsoToChd(const std::string& inputPath, const std::string& outputPath);
                   
                   void traverseChd(const std::filesystem::path& path, std::vector<std::string>& chdFiles, 
                 std::unordered_set<std::string>& uniqueErrorMessages, 
                 std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex, 
                 std::mutex& traverseErrorsMutex, int maxDepth, bool promptFlag);
-                
-                void refreshChdForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newCHDFound);
+                bool loadAndDisplayChd(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
+size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning);
+void refreshChdForDatabase(
+    std::string& path,
+    bool promptFlag,
+    int maxDepth,
+    bool filterHistory,
+    std::atomic<bool>& newCHDFound
+);
                 void submenu3(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound);
                 void removeNonExistentChdPathsFromDatabase(std::vector<std::string>& globalChdFileList);
 bool loadAndDisplayChd(std::vector<std::string>& filteredFiles, bool& isFiltered, 
                        const std::string& listSubType, bool& umountMvRmBreak, 
                        std::vector<std::string>& pendingIndices, bool& hasPendingProcess, 
                        size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning);
+                       void loadChdFromDatabase(std::vector<std::string>& outChdList);
+                       bool saveChdToDatabase(std::vector<std::string> globalChdFileList, std::atomic<bool>& newCHDFound);
                 
-void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound);
+void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, 
+                       std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, 
+                       std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound);
 void tokenizeInput(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<int>& processedIndices);
 void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet, std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& errorSet, int verboseLevel);
 void resetVerboseSets(std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts);
