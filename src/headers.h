@@ -159,6 +159,7 @@ void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages);
 void setDisplayMode(const std::string& inputSearch);
 void updateFilenamesOnly(const std::string& configPath, const std::string& inputSearch);
 void syncCache(const std::string& filePath);
+void loadChdFromDatabase(std::vector<std::string>& outChdList);
 void updateUIAppearance(const std::string& configPath, const std::string& inputSearch);
 
 //------------------
@@ -198,7 +199,7 @@ void processInputCHD(const std::string& input, std::vector<std::string>& fileLis
                                std::unordered_set<std::string>& successOuts,
                                std::unordered_set<std::string>& skippedOuts,
                                std::unordered_set<std::string>& failedOuts,
-                               bool& verbose, bool& needsClrScrn, std::atomic<bool>& newCHDFound);
+                               bool& needsClrScrn, std::atomic<bool>& newCHDFound);
                                
                                void convertToCHD(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& successOuts, 
                   std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, 
