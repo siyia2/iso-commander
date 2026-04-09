@@ -27,7 +27,7 @@ BLKID_STATIC = /usr/lib/libblkid.a
 ECONF_STATIC = /usr/lib/libeconf.a
 INTL_STATIC = /usr/lib/libintl.a
 
-CXXFLAGS_STAT = $(CXXFLAGS_COMMON)   # -I already via deps
+CXXFLAGS_STAT = $(CXXFLAGS_COMMON) -I./deps/libchdr/include   # <-- FIXED: added include path
 LIBS_STAT = $(CHD_STATIC) \
             $(LZMA_STATIC) $(ZLIB_STATIC) $(ZSTD_STATIC) \
             $(READLINE_STATIC) $(NCURSES_STATIC) $(MOUNT_STATIC) $(BLKID_STATIC) \
