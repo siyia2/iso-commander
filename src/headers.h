@@ -235,7 +235,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
                   std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, 
                   std::atomic<bool>& newISOFound);
 void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning);
-void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning);
+void promptSearchBinImgChdMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning);
 void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning);
 void processInputForConversions(const std::string& input, std::vector<std::string>& fileList, 
                                const bool& modeMdf, const bool& modeNrg, const bool& modeChd,   // <-- added modeChd
