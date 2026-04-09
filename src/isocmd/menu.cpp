@@ -142,9 +142,11 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
                   << "+-------------------------+\n"
                   << "|1. CCD2ISO++             |\n"
                   << "+-------------------------+\n"
-                  << "|2. MDF2ISO++             |\n"
+                  << "|2. CHD2ISO++             |\n"
                   << "+-------------------------+\n"
-                  << "|3. NRG2ISO++             |\n"
+                  << "|3. MDF2ISO++             |\n"
+                  << "+-------------------------+\n"
+                  << "|4. NRG2ISO++             |\n"
                   << "+-------------------------+" << reset << std::endl << "\n";
         
         const ListTheme* theme = getActiveTheme();
@@ -171,11 +173,16 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
                     clearScrollBuffer();
                     break;
                 case '2':
-                    operation = "mdf";
+                    operation = "chd";
                     promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
                     clearScrollBuffer();
                     break;
                 case '3':
+                    operation = "mdf";
+                    promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
+                    clearScrollBuffer();
+                    break;
+                case '4':
                     operation = "nrg";
                     promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
                     clearScrollBuffer();
