@@ -5,6 +5,8 @@
 #include "../mdf.h"
 #include "../ccd.h"
 #include "../themes.h"
+#include "../chd.h"
+#include <chd.h>
 
 /**
  * @file operations.cpp
@@ -352,6 +354,38 @@ size_t calculateSizeForConverted(const std::vector<std::string>& filesToProcess,
     return totalBytes;
 }
 
+size_t getChdUncompressedSize(const std::string& chdPath) {
+    chd_file* rawChd = nullptr;
+    chd_error err = chd_open(chdPath.c_str(), CHD_OPEN_READ, nullptr, &rawChd);
+    if (err != CHDERR_NONE) return 0;
+    ChdFilePtr chd(rawChd);
+    const chd_header* header = chd_get_header(chd.get());
+    if (!header) return 0;
+
+    // Determine user data size per sector (2048 for ISO)
+    uint32_t userDataSize = 2048;
+    uint32_t rawSectorSize = (header->hunkbytes % 2352 == 0) ? 2352 : 2048;
+    uint32_t sectorsPerHunk = header->hunkbytes / rawSectorSize;
+    uint64_t totalSectors = static_cast<uint64_t>(header->totalhunks) * sectorsPerHunk;
+    return totalSectors * userDataSize;
+}
+
+size_t calculateSizeForConverted(const std::vector<std::string>& files, bool modeNrg, bool modeMdf, bool modeChd) {
+    size_t total = 0;
+    for (const auto& f : files) {
+        if (modeChd && f.size() >= 4 && f.substr(f.size()-4) == ".chd") {
+            total += getChdUncompressedSize(f);
+        } else if (modeMdf || modeNrg) {
+            // existing logic for MDF/NRG (maybe use file size as approximation)
+            total += fs::file_size(f);
+        } else {
+            // BIN/IMG: use file size
+            total += fs::file_size(f);
+        }
+    }
+    return total;
+}
+
 /**
  * @brief Processes user selection for converting multi-track images (BIN/MDF/NRG) to standard ISO.
  * * @param input Raw user selection string.
@@ -367,7 +401,7 @@ size_t calculateSizeForConverted(const std::vector<std::string>& filesToProcess,
  * @param newISOFound Atomic flag to signal new ISO availability.
  */
 void processInputForConversions(const std::string& input, std::vector<std::string>& fileList, 
-                               const bool& modeMdf, const bool& modeNrg, 
+                               const bool& modeMdf, const bool& modeNrg, const bool& modeChd,   // <-- added modeChd
                                std::unordered_set<std::string>& processedErrors, 
                                std::unordered_set<std::string>& successOuts, 
                                std::unordered_set<std::string>& skippedOuts, 
@@ -416,24 +450,25 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     }
 
     size_t totalTasks = filesToProcess.size();
-    size_t totalBytes = calculateSizeForConverted(filesToProcess, modeNrg, modeMdf);
+    size_t totalBytes = calculateSizeForConverted(filesToProcess, modeNrg, modeMdf, modeChd);  // <-- pass modeChd
 
-	// Define the suffix once
-	std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
+    // Define the suffix once
+    std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
 
-	// Explicitly wrap the string_view members in std::string() to allow concatenation
-	std::string operation = modeMdf ? (std::string(originalColors::orange) + "MDF"     + std::string(originalColors::boldAlt) + suffix) :
-							modeNrg ? (std::string(originalColors::orange) + "NRG"     + std::string(originalColors::boldAlt) + suffix) :
-									  (std::string(originalColors::orange) + "BIN/IMG" + std::string(originalColors::boldAlt) + suffix);
+    // Build operation string
+    std::string operation;
+    if (modeMdf) operation = std::string(originalColors::orange) + "MDF" + std::string(originalColors::boldAlt) + suffix;
+    else if (modeNrg) operation = std::string(originalColors::orange) + "NRG" + std::string(originalColors::boldAlt) + suffix;
+    else if (modeChd) operation = std::string(originalColors::orange) + "CHD" + std::string(originalColors::boldAlt) + suffix;
+    else operation = std::string(originalColors::orange) + "BIN/IMG" + std::string(originalColors::boldAlt) + suffix;
 
-	clearScrollBuffer();
+    clearScrollBuffer();
 
-	// For std::cout, you don't need the string cast because it handles string_view natively
-	std::cout << "\n" << originalColors::boldAlt << " Processing " 
-			  << operation << originalColors::boldAlt << "... (" 
-			  << originalColors::red << "Ctrl+c" 
-			  << originalColors::boldAlt << ":cancel)\n";
-			  
+    std::cout << "\n" << originalColors::boldAlt << " Processing " 
+              << operation << originalColors::boldAlt << "... (" 
+              << originalColors::red << "Ctrl+c" 
+              << originalColors::boldAlt << ":cancel)\n";
+              
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
     std::atomic<size_t> failedTasks(0);
@@ -453,9 +488,11 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 
         futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), 
             &fileList, &successOuts, &skippedOuts, &failedOuts, 
-            modeMdf, modeNrg, &completedBytes, &completedTasks, &failedTasks, &newISOFound]() {
+            modeMdf, modeNrg, modeChd,   // <-- pass modeChd
+            &completedBytes, &completedTasks, &failedTasks, &newISOFound]() {
             convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, 
-                modeMdf, modeNrg, &completedBytes, &completedTasks, &failedTasks, newISOFound);
+                modeMdf, modeNrg, modeChd,   // <-- pass modeChd
+                &completedBytes, &completedTasks, &failedTasks, newISOFound);
         }));
     }
 
@@ -467,96 +504,3 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     signal(SIGINT, SIG_IGN);  
     progressThread.join();
 }
-
-
-void processInputCHD(const std::string& input, std::vector<std::string>& fileList,
-                     std::unordered_set<std::string>& processedErrors,
-                     std::unordered_set<std::string>& successOuts,
-                     std::unordered_set<std::string>& skippedOuts,
-                     std::unordered_set<std::string>& failedOuts, 
-                     std::atomic<bool>& newCHDFound) {
-
-    const ListTheme* theme = getActiveTheme();
-    const bool isOrig = (globalTheme == "original");
-
-    g_operationCancelled.store(false);
-    std::unordered_set<int> processedIndices;
-
-    // 1. Validate input first – no terminal changes yet
-    if (input.empty() || std::all_of(input.begin(), input.end(), isspace)) {
-        return;  // nothing to do
-    }
-
-    tokenizeInput(input, fileList, processedErrors, processedIndices);
-
-    if (processedIndices.empty()) {
-        return;  // no valid indices – exit cleanly, terminal unchanged
-    }
-
-    // 2. Now we have work – disable input and proceed
-    disableInput();
-    setupSignalHandlerCancellations();
-
-    ThreadPool& pool = getStaticThreadPool();
-
-    // Build list of files to process (preserve order)
-    std::vector<std::string> filesToProcess;
-    filesToProcess.reserve(processedIndices.size());
-    for (const auto& index : processedIndices) {
-        filesToProcess.push_back(fileList[index - 1]);
-    }
-
-    const size_t totalTasks = filesToProcess.size();
-    const std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
-    const std::string operation = std::string(originalColors::purple) + "CHD"
-                                  + std::string(originalColors::boldAlt) + suffix;
-
-    clearScrollBuffer();
-    std::cout << "\n" << originalColors::boldAlt;
-
-    std::atomic<size_t> completedTasks(0);
-    std::atomic<size_t> failedTasks(0);
-    std::atomic<bool> isProcessingComplete(false);
-
-    // Submit each file as a separate task
-    std::vector<std::future<void>> futures;
-    futures.reserve(totalTasks);
-
-    for (const auto& isoFile : filesToProcess) {
-        futures.emplace_back(pool.enqueue(
-            [isoFile, &successOuts, &skippedOuts, &failedOuts,
-             &completedTasks, &failedTasks, &newCHDFound]() {
-                // Convert a single file by passing a vector with one element
-                std::vector<std::string> singleFile = { isoFile };
-                convertToCHD(singleFile, successOuts, skippedOuts, failedOuts,
-                             &completedTasks, &failedTasks, newCHDFound);
-            }
-        ));
-    }
-
-    // Wait for all conversions to finish
-    for (auto& future : futures) {
-        future.wait();
-    }
-
-    // Print final summary after all conversions
-    std::cout << "\n\033[K"  // Clear any leftover progress line
-              << "Tasks: " << completedTasks.load() << "/" << totalTasks
-              << " completed, " << failedTasks.load() << " failed\n";
-
-    flushStdin();
-    restoreInput();
-
-    if (g_operationCancelled.load()) {
-        std::cout << (isOrig ? originalColors::red : theme->muted) << "\n[info]" << originalColors::purple << " chd2iso" 
-                  << (isOrig ? originalColors::red : theme->muted) << " → " << originalColors::yellow << "INTERRUPTED" << std::endl;
-    }
-
-    std::cout << color << "\n↵ to continue..." << reset;
-
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-
-    isProcessingComplete.store(true);
-    signal(SIGINT, SIG_IGN);
-}
-

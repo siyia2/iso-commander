@@ -339,7 +339,9 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 void ramCacheList(std::vector<std::string>& files, bool& list, const std::string& fileExtension, 
                   const std::vector<std::string>& binImgFilesCache, 
                   const std::vector<std::string>& mdfMdsFilesCache, 
-                  const std::vector<std::string>& nrgFilesCache, bool modeMdf, bool modeNrg) {
+                  const std::vector<std::string>& nrgFilesCache,
+                  const std::vector<std::string>& chdFilesCache,   // <-- added
+                  bool modeMdf, bool modeNrg, bool modeChd) {      // <-- added modeChd
     
     signal(SIGINT, SIG_IGN);        
     disable_ctrl_d();
@@ -348,9 +350,15 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
     const bool isOriginal = (globalTheme == "original");
 
     bool isEmpty = false;
-    if (!modeMdf && !modeNrg) isEmpty = binImgFilesCache.empty();
-    else if (modeMdf)         isEmpty = mdfMdsFilesCache.empty();
-    else if (modeNrg)         isEmpty = nrgFilesCache.empty();
+    if (modeChd) {
+        isEmpty = chdFilesCache.empty();
+    } else if (modeMdf) {
+        isEmpty = mdfMdsFilesCache.empty();
+    } else if (modeNrg) {
+        isEmpty = nrgFilesCache.empty();
+    } else {
+        isEmpty = binImgFilesCache.empty();
+    }
 
     if (isEmpty && list) {
         std::cout << "\n" << (isOriginal ? originalColors::yellow : theme->warning) 
@@ -367,14 +375,14 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
         return;
         
     } else if (list) {
-        if (!modeMdf && !modeNrg) {
-            files = binImgFilesCache;
-        } 
-        else if (modeMdf) {
+        if (modeChd) {
+            files = chdFilesCache;
+        } else if (modeMdf) {
             files = mdfMdsFilesCache;
-        } 
-        else if (modeNrg) {
+        } else if (modeNrg) {
             files = nrgFilesCache;
+        } else {
+            files = binImgFilesCache;
         }
     }
 }
@@ -388,8 +396,8 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
  * @param modeMdf If true, clear MDF cache
  * @param modeNrg If true, clear NRG cache
  */
-void clearRamCache(bool& modeMdf, bool& modeNrg) {
-    signal(SIGINT, SIG_IGN);        // Ignore Ctrl+C
+void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd) {
+    signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
     
     const ListTheme* theme = getActiveTheme();
@@ -399,11 +407,11 @@ void clearRamCache(bool& modeMdf, bool& modeNrg) {
     std::string cacheType;
     bool cacheIsEmpty = false;
 
-    if (!modeMdf && !modeNrg) {
-        extensions = {".bin", ".img"};
-        cacheType = "BIN/IMG";
-        cacheIsEmpty = binImgFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(binImgFilesCache);
+    if (modeChd) {
+        extensions = {".chd"};
+        cacheType = "CHD";
+        cacheIsEmpty = chdFilesCache.empty();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(chdFilesCache);
     } else if (modeMdf) {
         extensions = {".mdf"};
         cacheType = "MDF";
@@ -414,6 +422,11 @@ void clearRamCache(bool& modeMdf, bool& modeNrg) {
         cacheType = "NRG";
         cacheIsEmpty = nrgFilesCache.empty();
         if (!cacheIsEmpty) std::vector<std::string>().swap(nrgFilesCache);
+    } else {
+        extensions = {".bin", ".img"};
+        cacheType = "BIN/IMG";
+        cacheIsEmpty = binImgFilesCache.empty();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(binImgFilesCache);
     }
 
     bool transformationCacheWasCleared = false;
@@ -463,14 +476,15 @@ void clearRamCache(bool& modeMdf, bool& modeNrg) {
  * @param blacklistNrg If true, only allow .nrg files
  * @return true if the file passes the blacklist filter, false otherwise
  */
-bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg) {
+bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg, const bool& blacklistChd) {
     const std::string filenameLower = entry.filename().string();
     const std::string ext = entry.extension().string();
     std::string extLower = ext;
     toLowerInPlace(extLower);
 
-    if (!blacklistMdf && !blacklistNrg) {
-        if (!((extLower == ".bin" || extLower == ".img"))) {
+    // Determine which extension(s) are allowed
+    if (blacklistChd) {
+        if (extLower != ".chd") {
             return false;
         }
     } 
@@ -483,8 +497,14 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
         if (extLower != ".nrg") {
             return false;
         }
+    } 
+    else { // default BIN/IMG mode
+        if (!(extLower == ".bin" || extLower == ".img")) {
+            return false;
+        }
     }
 
+    // Optional keyword blacklisting (currently empty)
     std::unordered_set<std::string> blacklistKeywords = {};
     
     std::string filenameLowerNoExt = filenameLower;
@@ -527,6 +547,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
     try {
         bool blacklistMdf = (mode == "mdf");
         bool blacklistNrg = (mode == "nrg");
+        bool blacklistChd = (mode == "chd");   // <-- added CHD mode
         
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (g_operationCancelled.load()) {
@@ -535,7 +556,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                     processedErrorsFind.clear();
                     localFileNames.clear();
                     
-                    std::string type = (blacklistMdf) ? "MDF" : (blacklistNrg) ? "NRG" : "BIN/IMG";
+                    std::string type = (blacklistMdf) ? "MDF" : (blacklistNrg) ? "NRG" : (blacklistChd) ? "CHD" : "BIN/IMG";
                     
                     std::string warnCol = std::string(isOriginal ? originalColors::yellow : theme->warning);
                     
@@ -554,7 +575,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                               << "Total files processed: " << totalFiles << std::flush;
                 }
                 
-                if (blacklist(entry, blacklistMdf, blacklistNrg)) {
+                if (blacklist(entry, blacklistMdf, blacklistNrg, blacklistChd)) {   // <-- extended blacklist
                     std::string fileName = entry.path().string();
                     {
                         std::lock_guard<std::mutex> lock(globalSetsMutex);
@@ -563,6 +584,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                         if (mode == "nrg") isInCache = (std::find(nrgFilesCache.begin(), nrgFilesCache.end(), fileName) != nrgFilesCache.end());
                         else if (mode == "mdf") isInCache = (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) != mdfMdsFilesCache.end());
                         else if (mode == "bin") isInCache = (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) != binImgFilesCache.end());
+                        else if (mode == "chd") isInCache = (std::find(chdFilesCache.begin(), chdFilesCache.end(), fileName) != chdFilesCache.end());   // <-- CHD cache check
                         
                         if (!isInCache && localFileNames.insert(fileName).second) {
                             callback(fileName, entry.path().parent_path().string());
@@ -620,6 +642,9 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
     } else if (mode == "nrg") {
         currentCacheOld = nrgFilesCache.size();
         currentCache = &nrgFilesCache;
+    } else if (mode == "chd") {   // <-- added CHD branch
+        currentCacheOld = chdFilesCache.size();
+        currentCache = &chdFilesCache;
     } else {
         restoreInput();
         return {};
@@ -704,7 +729,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
  * @param isImportRunning Atomic flag indicating if import is in progress
  * @return true if a special command was handled and caller should continue, false otherwise
  */
-bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input, const std::string& configPath, bool modeMdf, bool modeNrg, const std::string& fileExtension, 
+bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input, const std::string& configPath, bool modeMdf, bool modeNrg, bool modeChd, const std::string& fileExtension, 
 std::vector<std::string>& files, const std::string& fileType, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {
     
     if (input == "?stats") {
@@ -745,12 +770,12 @@ std::vector<std::string>& files, const std::string& fileType, std::atomic<bool>&
         return true;
     }
     if (input == "!clr") {
-        clearRamCache(modeMdf, modeNrg);
+        clearRamCache(modeMdf, modeNrg, modeChd);
         return true;
     }
     if (input == "ls") {
         list = true;
-        ramCacheList(files, list, fileExtension, binImgFilesCache, mdfMdsFilesCache, nrgFilesCache, modeMdf, modeNrg);
+        ramCacheList(files, list, fileExtension, binImgFilesCache, mdfMdsFilesCache, nrgFilesCache, chdFilesCache, modeMdf, modeNrg, modeChd);
         if (!files.empty())
             selectForImageFiles(fileType, files, newISOFound, list, isImportRunning);
         return true;
@@ -779,11 +804,12 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         {"img", {".bin/.img", "BIN/IMG"}},
         {"mdf", {".mdf",      "MDF"    }},
         {"nrg", {".nrg",      "NRG"    }},
+        {"chd", {".chd",      "CHD"    }},   // <-- added CHD entry
     };
 
     const auto configIt = fileTypeMap.find(fileTypeChoice);
     if (configIt == fileTypeMap.end()) {
-        std::cout << originalColors::red << "Invalid file type choice. Supported types: BIN/IMG, MDF, NRG" << originalColors::boldAlt << "\n";
+        std::cout << originalColors::red << "Invalid file type choice. Supported types: BIN/IMG, MDF, NRG, CHD" << originalColors::boldAlt << "\n";
         return;
     }
 
@@ -791,12 +817,14 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
     const std::string& fileExtension = configIt->second.extension;
     const bool modeMdf = (fileType == "mdf");
     const bool modeNrg = (fileType == "nrg");
+    const bool modeChd = (fileType == "chd");   // <-- added CHD mode
 
     std::vector<std::string> files;
     files.reserve(100);
     binImgFilesCache.reserve(100);
     mdfMdsFilesCache.reserve(100);
     nrgFilesCache.reserve(100);
+    chdFilesCache.reserve(100);   // <-- reserve for CHD cache
 
     auto initIterationState = [&]() {
         enable_ctrl_d();
@@ -851,7 +879,9 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         const std::string inputSearch = trimWhitespace(mainSearch.get());
 
         bool list = false;
-        if (dispatchSpecialCommandForBinImgMdfNrgSearch(inputSearch, configPath, modeMdf, modeNrg,
+        // The helper `dispatchSpecialCommandForBinImgMdfNrgSearch` should also handle CHD
+        // (you may need to update that function as well – but for now we just pass the new flags)
+        if (dispatchSpecialCommandForBinImgMdfNrgSearch(inputSearch, configPath, modeMdf, modeNrg, modeChd,
                                    fileExtension, files, fileType,
                                    newISOFound, list, isImportRunning))
             continue;
@@ -874,6 +904,7 @@ void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<boo
         bool newFilesFound = false;
         const auto start_time = std::chrono::high_resolution_clock::now();
 
+        // The findFiles function must be extended to handle CHD (scan for .chd)
         files = findFiles(directoryPaths, fileNames, currentCacheOld, fileType,
                           [&](const std::string&, const std::string&) { newFilesFound = true; },
                           directoryPaths, invalidDirectoryPaths, processedErrorsFind);

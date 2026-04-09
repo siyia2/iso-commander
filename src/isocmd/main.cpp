@@ -32,7 +32,6 @@ int main(int argc, char *argv[]) {
     std::atomic<bool> isAtISOList{false};
     std::atomic<bool> updateHasRun{false};
     std::atomic<bool> newISOFound{false};
-    std::atomic<bool> newCHDFound{false};
     
     globalIsoFileList.reserve(100);
     setupReadlineToIgnoreCtrlC();
@@ -139,7 +138,7 @@ int main(int argc, char *argv[]) {
         if (choice == "1") {
             isAtMain.store(false);
             isAtISOList.store(false);
-            submenu1(updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
+            submenu1(updateHasRun, isAtISOList, isImportRunning, newISOFound);
         } else if (choice.length() == 1) {
             bool promptFlag;
             bool filterHistory;
@@ -154,18 +153,13 @@ int main(int argc, char *argv[]) {
                 case '3':
                     isAtMain.store(false);
                     isAtISOList.store(false);
-                    submenu3(updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
-                    break;
-                case '4':
-                    isAtMain.store(false);
-                    isAtISOList.store(false);
                     promptFlag = true;
                     filterHistory = false;
                     maxDepth = -1;
                     refreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
                     clearScrollBuffer();
                     break;
-                case '5':
+                case '4':
                     exitProgram = true;
                     clearScrollBuffer();
                     break;

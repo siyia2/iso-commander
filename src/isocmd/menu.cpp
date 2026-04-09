@@ -40,101 +40,6 @@ void print_ascii() {
     std::cout << rows[7] << R"(|___|___/ \___/   \___\___/|_|  |_|_|  |_/_/ \_\|_|\_||___/|___|_|_\ )" << "\n\n" << reset;
 }
 
-
-void submenu3(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound) {
-    while (true) {
-        rl_bind_key('\f', prevent_readline_keybindings);
-        rl_bind_key('\t', prevent_readline_keybindings);
-        
-        clearScrollBuffer();
-        
-        std::cout << color << "+-------------------------+\n"
-                  << "|↵ ManageCHD              |\n"
-                  << "+-------------------------+\n"
-                  << "|1. ISO2CHD               |\n"
-                  << "+-------------------------+\n"
-                  << "|2. Delete                |\n"
-                  << "+-------------------------+\n"
-                  << "|3. Move                  |\n"
-                  << "+-------------------------+\n"
-                  << "|4. Copy                  |\n"
-                  << "+-------------------------+\n"
-                  << "|5. ImportCHD             |\n"
-                  << "+-------------------------+" << reset << std::endl << "\n";
-                  
-                  
-        
-        const ListTheme* theme = getActiveTheme();
-        const bool isOriginal = (globalTheme == "original");
-        char* rawInput = readline(("\001" + 
-									std::string(isOriginal ? originalColors::blue : theme->muted) + 
-									"\002Choose an option:" + 
-									std::string(originalColors::rl_boldAlt) + 
-									" ").c_str());
-
-        std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
-
-        if (!input.get() || std::strlen(input.get()) == 0) {
-            break; 
-        }
-		
-		int maxDepth= -1;
-		bool filterHistory = false;
-		bool promptFlag = true;
-		std::string initialDir = "";
-
-		std::string_view errLabel    = isOriginal ? originalColors::red       : theme->secondary;
-		std::string_view warnLabel   = isOriginal ? originalColors::yellow    : theme->warning;
-		std::string_view okLabel     = isOriginal ? originalColors::purple     : theme->accent;
-    
-        std::string choice(input.get());
-        std::string operation;
-        if (choice.length() == 1) {
-            switch (choice[0]) {
-                case '1':
-                clearScrollBuffer();
-                // Check if chdman exists in the system PATH
-				// 'command -v' is the standard Linux way to check for executables
-				if (std::system("command -v chdman > /dev/null 2>&1") != 0) {
-					std::cerr << errLabel << "\n[ERROR]: '" << okLabel << "chdman" << errLabel <<"' was not found on this system." << std::endl;
-					std::cerr << warnLabel << "Please install "<< okLabel << "mame-tools" << warnLabel << " and try again..." << std::endl;
-					
-					std::cout << color << "\n↵ to return..." << reset;
-					
-					std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-					break; // Exit the case and return to the main loop
-				}
-                    
-                    selectForIsoFiles("chd2iso", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
-                    clearScrollBuffer();     
-                    break;
-                case '2':
-					clearScrollBuffer();
-                    selectForIsoFiles("chd2iso_rm", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
-                    clearScrollBuffer();
-                    break;
-                    
-                    case '3':
-					clearScrollBuffer();
-                    selectForIsoFiles("chd2iso_mv", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
-                    clearScrollBuffer();
-                    break;
-                    case '4':
-					clearScrollBuffer();
-                    selectForIsoFiles("chd2iso_cp", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
-                    clearScrollBuffer();
-                    break;
-                    case '5':
-					clearScrollBuffer();
-                    refreshChdForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
-                    clearScrollBuffer();
-                    break;
-            }
-        }
-    }
-}
-
-
 /**
  * @brief Displays the ISO management submenu and handles user input for file operations.
  * * Provides options for mounting, unmounting, deleting, moving, copying, or writing ISOs.
@@ -143,7 +48,7 @@ void submenu3(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
  * @param isImportRunning Tracks if an import process is currently active.
  * @param newISOFound Signals if a new ISO has been discovered during background scans.
  */
-void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& newCHDFound) {
+void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     while (true) {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
@@ -186,36 +91,33 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
             switch (choice[0]) {
                 case '1':
                     clearScrollBuffer();
-                    selectForIsoFiles("mount", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
+                    selectForIsoFiles("mount", updateHasRun, isAtISOList, isImportRunning, newISOFound);
                     clearScrollBuffer();
                     break;
                 case '2':
                     clearScrollBuffer();
-                    selectForIsoFiles("umount", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
+                    selectForIsoFiles("umount", updateHasRun, isAtISOList, isImportRunning, newISOFound);
                     clearScrollBuffer();
                     break;
                 case '3':
                     clearScrollBuffer();
-                    selectForIsoFiles("rm", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
+                    selectForIsoFiles("rm", updateHasRun, isAtISOList, isImportRunning, newISOFound);
                     clearScrollBuffer();
                     break;
                 case '4':
                     clearScrollBuffer();
-                    selectForIsoFiles("mv", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
+                    selectForIsoFiles("mv", updateHasRun, isAtISOList, isImportRunning, newISOFound);
                     clearScrollBuffer();
                     break;
                 case '5':
                     clearScrollBuffer();
-                    selectForIsoFiles("cp", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
+                    selectForIsoFiles("cp", updateHasRun, isAtISOList, isImportRunning, newISOFound);
                     clearScrollBuffer();
                     break;
                 case '6':
                     clearScrollBuffer();
-                    selectForIsoFiles("write", updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
+                    selectForIsoFiles("write", updateHasRun, isAtISOList, isImportRunning, newISOFound);
                     clearScrollBuffer();
-                    break;
-                 case '7':
-                    submenu3(updateHasRun, isAtISOList, isImportRunning, newISOFound, newCHDFound);
                     break;
             }
         }
@@ -288,17 +190,15 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
  */
 void printMenu() {
     std::cout << color << "+-------------------------+\n"
-              << "|       Menu Options       |\n"
+              << "|       Menu Options      |\n"
               << "+-------------------------+\n"
               << "|1. ManageISO             |\n"
               << "+-------------------------+\n"
               << "|2. Convert2ISO           |\n"
               << "+-------------------------+\n"
-              << "|3. Convert2CHD           |\n"
+              << "|3. ImportISO             |\n"
               << "+-------------------------+\n"
-              << "|4. ImportISO             |\n"
-              << "+-------------------------+\n"
-              << "|5. Exit                  |\n"
+              << "|4. Exit                  |\n"
               << "+-------------------------+" << "\n";
 }
 

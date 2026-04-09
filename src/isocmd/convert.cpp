@@ -31,8 +31,10 @@ bool fileExists(const std::string& fullPath) {
  */
 void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, 
                   std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, 
-                  const bool& modeMdf, const bool& modeNrg, std::atomic<size_t>* completedBytes, 
-                  std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
+                  const bool& modeMdf, const bool& modeNrg, const bool& modeChd,   // <-- added modeChd
+                  std::atomic<size_t>* completedBytes, 
+                  std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, 
+                  std::atomic<bool>& newISOFound) {
 
     namespace fs = std::filesystem;
     const size_t BATCH_SIZE = 50;
@@ -65,9 +67,6 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 
     std::vector<std::string> localSuccessMsgs, localFailedMsgs, localSkippedMsgs;
 
-    /**
-     * @brief Internal helper to flush local message batches into global thread-safe sets.
-     */
     auto batchInsertMessages = [&]() {
         if (localSuccessMsgs.size() >= BATCH_SIZE || localFailedMsgs.size() >= BATCH_SIZE || localSkippedMsgs.size() >= BATCH_SIZE) {
             std::lock_guard<std::mutex> lock(globalSetsMutex);
@@ -129,9 +128,15 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
         }
 
         bool conversionSuccess = false;
-        if (modeMdf)            conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
-        else if (modeNrg)       conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
-        else                    conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
+        if (modeMdf) {
+            conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
+        } else if (modeNrg) {
+            conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
+        } else if (modeChd) {
+            conversionSuccess = convertChdToIso(inputPath, outputPath, completedBytes);
+        } else {
+            conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
+        }
 
         auto [outDir, outName] = extractDirectoryAndFilename(outputPath, "conversions");
 
@@ -143,7 +148,8 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
             std::string_view fileType = fileNameLower.ends_with(".bin") ? "BIN" :
                                         fileNameLower.ends_with(".img") ? "IMG" :
                                         fileNameLower.ends_with(".mdf") ? "MDF" :
-                                        fileNameLower.ends_with(".nrg") ? "NRG" : "Image";
+                                        fileNameLower.ends_with(".nrg") ? "NRG" :
+                                        fileNameLower.ends_with(".chd") ? "CHD" : "Image";   // <-- added CHD detection
             std::string msg;
             msg.reserve(128);
             msg.append(okLabel).append(fileType).append(" file converted to ISO: ")

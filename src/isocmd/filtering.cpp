@@ -453,21 +453,14 @@ const std::function<void()>& onEmptyInput = nullptr)
  * @param currentPage Reference to current page number
  * @return true if input was handled as a filter command
  */
-bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, 
-                           bool& isFiltered, bool& needsClrScrn, bool& filterHistory, 
-                           const std::string& operation, const std::string& operationColor, 
-                           const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage, std::atomic<bool>& isAtISOList)
+bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation,
+const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage)
 {
     if (inputString != "/" && (inputString.empty() || inputString[0] != '/'))
         return false;
 
-    // --- CONTEXT FIX ---
-    // Instead of hardcoding globalIsoFileList, we check the atomic state.
-    // This ensures CHD filtering stays in the CHD list and ISO stays in ISO.
-    const std::vector<std::string>& globalSource = isAtISOList.load() ? globalIsoFileList : globalChdFileList;
-
     const std::vector<std::string>& baseSource =
-        isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalSource);
+        isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
 
     FilterContext ctx {
         filteredFiles,
@@ -481,24 +474,27 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
     };
 
     // Helper to wrap raw ANSI strings for readline
-    auto wrap = [](std::string_view s) -> std::string {
-        return "\001" + std::string(s) + "\002";
-    };
+	auto wrap = [](std::string_view s) -> std::string {
+		return "\001" + std::string(s) + "\002";
+	};
 
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalTheme == "original");
+	const ListTheme* theme = getActiveTheme();
+	const bool isOriginal = (globalTheme == "original");
 
-    std::string colorPrimary = isOriginal ? std::string(originalColors::rl_blue) : wrap(theme->muted);
-    std::string colorFilter  = isOriginal ? std::string(originalColors::rl_cyan) : wrap(theme->accent);
-    std::string colorReset   = isOriginal ? std::string(originalColors::rl_reset) : wrap(originalColors::boldAlt);
-    std::string safeOpColor  = wrap(operationColor);
+	// Use pre-wrapped originalColors or wrap the raw theme members
+	std::string colorPrimary = isOriginal ? std::string(originalColors::rl_blue) : wrap(theme->muted);
+	std::string colorFilter  = isOriginal ? std::string(originalColors::rl_cyan) : wrap(theme->accent);
+	std::string colorReset   = isOriginal ? std::string(originalColors::rl_reset) : wrap(originalColors::boldAlt);
 
-    const std::string prompt =
-        colorFilter  + "FilterTerms" +
-        colorPrimary + " ↵ for " +
-        safeOpColor  + operation +
-        colorPrimary + ", or ↵ to return: " +
-        colorReset;
+	// Assuming operationColor comes from the raw theme, it needs wrapping
+	std::string safeOpColor = wrap(operationColor);
+
+	const std::string prompt =
+		colorFilter  + "FilterTerms" +
+		colorPrimary + " ↵ for " +
+		safeOpColor  + operation +
+		colorPrimary + ", or ↵ to return: " +
+		colorReset;
 
     auto onEmptyInput = [&]() {
         clear_history();

@@ -1,87 +1,104 @@
-
 #include "../headers.h"
-#include <sys/wait.h>
+#include "../chd.h"
 
 /**
- * @brief Converts an ISO to CHD using libchdr.
- * Uses a hunk-based approach for compression.
+ * Convert a CHD disc image (CD/DVD) to a raw ISO 9660 image.
+ *
+ * @param chdPath      Path to the input .chd file.
+ * @param isoPath      Path where the output .iso file will be written.
+ * @param completedBytes Optional atomic counter updated with written bytes (2048‑byte sectors).
+ * @return true on success, false on error or cancellation.
  */
-#include <iostream>
-#include <string>
-#include <vector>
-#include <unistd.h>
-#include <sys/wait.h>
-#include <fcntl.h>
-#include <atomic>
-bool convertIsoToChd(const std::string& inputPath, const std::string& outputPath) {
-    std::cout << "Converting: " << inputPath << " -> " << outputPath << std::endl;
-
-    int pipefds[2];
-    if (pipe(pipefds) == -1) return false;
-
-    pid_t pid = fork();
-    if (pid == -1) {
-        close(pipefds[0]);
-        close(pipefds[1]);
+bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
+                     std::atomic<size_t>* completedBytes) {
+    // Early cancellation check
+    if (g_operationCancelled.load()) {
+        g_operationCancelled.store(true);
         return false;
     }
 
-    if (pid == 0) {
-        close(pipefds[0]);
-        dup2(pipefds[1], STDOUT_FILENO);
-        dup2(pipefds[1], STDERR_FILENO);
-        close(pipefds[1]);
+    // 1. Open CHD file using libchdr
+    chd_file* rawChd = nullptr;
+    chd_error err = chd_open(chdPath.c_str(), CHD_OPEN_READ, nullptr, &rawChd);
+    if (err != CHDERR_NONE) {
+        return false;
+    }
+    ChdFilePtr chd(rawChd);
 
-        char* args[] = {
-            (char*)"chdman", (char*)"createcd", 
-            (char*)"-i", const_cast<char*>(inputPath.c_str()), 
-            (char*)"-o", const_cast<char*>(outputPath.c_str()), 
-            (char*)"-c", (char*)"cdzl", nullptr
-        };
-        
-        execvp("chdman", args);
-        _exit(1);
+    // 2. Get CHD header information
+    const chd_header* header = chd_get_header(chd.get());
+    if (!header) {
+        return false;
     }
 
-    close(pipefds[1]);
-    
-    int flags = fcntl(pipefds[0], F_GETFL, 0);
-    fcntl(pipefds[0], F_SETFL, flags | O_NONBLOCK);
+    // 3. Determine sector layout
+    const uint32_t hunkSize = header->hunkbytes;
+    uint32_t rawSectorSize = 0;
+    uint32_t userDataOffset = 0;
+    const uint32_t userDataSize = 2048;   // ISO 9660 sector size
 
-    char buffer[4096];
-    std::string lineAccumulator;
-    bool cancelled = false;
+    if (hunkSize % 2352 == 0) {
+        rawSectorSize = 2352;          // CD‑ROM raw sector
+        userDataOffset = 16;           // skip sync + header to get user data
+    } else if (hunkSize % 2048 == 0) {
+        rawSectorSize = 2048;          // already pure data
+        userDataOffset = 0;
+    } else {
+        return false;                  // unsupported sector size
+    }
 
-    // Read and discard all chdman output – nothing printed
-    while (true) {
-        if (g_operationCancelled.load() && !cancelled) {
-            kill(pid, SIGTERM);
-            cancelled = true;
+    const uint32_t sectorsPerHunk = hunkSize / rawSectorSize;
+
+    // 4. Prepare output ISO file
+    if (g_operationCancelled.load()) {
+        g_operationCancelled.store(true);
+        return false;
+    }
+
+    std::ofstream isoFile(isoPath, std::ios::binary);
+    if (!isoFile.is_open()) {
+        return false;
+    }
+
+    // 5. Allocate buffers
+    std::vector<uint8_t> hunkBuffer(hunkSize);
+    std::vector<uint8_t> sectorBuffer(userDataSize);
+
+    // 6. Progress initialisation
+    if (completedBytes) {
+        completedBytes->store(0);
+    }
+
+    // 7. Main conversion loop
+    for (uint32_t hunk = 0; hunk < header->totalhunks; ++hunk) {
+        if (g_operationCancelled.load()) {
+            isoFile.close();
+            std::error_code ec;
+            std::filesystem::remove(isoPath, ec);
+            g_operationCancelled.store(true);
+            return false;
         }
 
-        ssize_t bytesRead = read(pipefds[0], buffer, sizeof(buffer));
+        // Read the whole hunk (decompressed by libchdr)
+        err = chd_read(chd.get(), hunk, hunkBuffer.data());
+        if (err != CHDERR_NONE) {
+            return false;
+        }
 
-        if (bytesRead > 0) {
-            if (!cancelled) {
-                lineAccumulator.append(buffer, bytesRead);
-                // Clear accumulated lines without printing
-                size_t pos;
-                while ((pos = lineAccumulator.find_first_of("\n\r")) != std::string::npos) {
-                    lineAccumulator.erase(0, pos + 1);
-                }
+        // Process each sector inside this hunk
+        for (uint32_t s = 0; s < sectorsPerHunk; ++s) {
+            const uint8_t* rawSector = hunkBuffer.data() + s * rawSectorSize;
+            std::memcpy(sectorBuffer.data(), rawSector + userDataOffset, userDataSize);
+
+            if (!isoFile.write(reinterpret_cast<const char*>(sectorBuffer.data()), userDataSize)) {
+                return false;
             }
-        } else if (bytesRead == 0) {
-            break;
-        } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            break;
-        }
 
-        usleep(10000);
+            if (completedBytes) {
+                completedBytes->fetch_add(userDataSize, std::memory_order_relaxed);
+            }
+        }
     }
 
-    close(pipefds[0]);
-    int status;
-    waitpid(pid, &status, 0);
-
-    return !cancelled && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    return true;
 }
