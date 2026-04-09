@@ -445,11 +445,10 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     size_t totalTasks = filesToProcess.size();
     std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
 
-    std::string operation;
-    if (modeMdf)      operation = originalColors::orange + "MDF" + originalColors::boldAlt + suffix;
-    else if (modeNrg) operation = originalColors::orange + "NRG" + originalColors::boldAlt + suffix;
-    else if (modeChd) operation = originalColors::orange + "CHD" + originalColors::boldAlt + suffix;
-    else              operation = originalColors::orange + "BIN/IMG" + originalColors::boldAlt + suffix;
+    std::string operation = modeMdf ? std::string(originalColors::orange) + "MDF"     + std::string(originalColors::boldAlt) + suffix :
+                        modeNrg ? std::string(originalColors::orange) + "NRG"     + std::string(originalColors::boldAlt) + suffix :
+                        modeChd ? std::string(originalColors::orange) + "CHD"     + std::string(originalColors::boldAlt) + suffix :
+                                  std::string(originalColors::orange) + "BIN/IMG" + std::string(originalColors::boldAlt) + suffix;
 
     clearScrollBuffer();
 
