@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+/* Copyright Aaron Giles */
+/* See chd.h for full license text */
+
 #ifndef CORETYPES_H
 #define CORETYPES_H
 
