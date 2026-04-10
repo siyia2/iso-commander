@@ -130,9 +130,6 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
 bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg);
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
 bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config);
-bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
-                     std::atomic<size_t>* completedBytes);
-                     size_t getChdUncompressedSize(const std::string& chdPath);
 
 //------------------
 // Integer Functions
@@ -228,23 +225,11 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
 //------------------
 // Conversion Functions
 //------------------
-void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, 
-                  std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, 
-                  const bool& modeMdf, const bool& modeNrg, const bool& modeChd,   // <-- added modeChd
-                  std::atomic<size_t>* completedBytes, 
-                  std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, 
-                  std::atomic<bool>& newISOFound);
+void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, const bool& modeMdf, const bool& modeNrg, const bool& modeChd, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound);
 void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning);
 void promptSearchBinImgChdMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning);
 void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning);
-void processInputForConversions(const std::string& input, std::vector<std::string>& fileList, 
-                               const bool& modeMdf, const bool& modeNrg, const bool& modeChd,   // <-- added modeChd
-                               std::unordered_set<std::string>& processedErrors, 
-                               std::unordered_set<std::string>& successOuts, 
-                               std::unordered_set<std::string>& skippedOuts, 
-                               std::unordered_set<std::string>& failedOuts, 
-                               bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound);
-
+void processInputForConversions(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, const bool& modeChd, std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound);
 //------------------
 // Return Type Functions
 //------------------
@@ -263,6 +248,9 @@ std::tuple<std::string, std::string, std::string> parseMountPointComponents(std:
 
 // CCD2ISO
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
+
+// CHD2ISO
+bool convertChdToIso(const std::string& chdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
 
 // MDF2ISO
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
