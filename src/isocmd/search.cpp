@@ -318,13 +318,13 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 }
 
 //=============================================================================
-// Image Section (BIN/IMG/MDF/NRG/CHD)
+// Image Section (BIN/IMG/CHD/DAA/MDF/NRG)
 //=============================================================================
 
 /**
  * @brief Prepares and optionally displays the contents of a disc image RAM cache.
  *
- * Copies the active cache (BIN/IMG, MDF, NRG, or CHD) into the output vector
+ * Copies the active cache (BIN/IMG, MDF, NRG, CHD, or DAA) into the output vector
  * when listing is enabled. If the cache is empty, prints a status message
  * and waits for user input.
  *
@@ -338,9 +338,11 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
  * @param mdfMdsFilesCache Snapshot of MDF cache
  * @param nrgFilesCache Snapshot of NRG cache
  * @param chdFilesCache Snapshot of CHD cache
+ * @param daaFilesCache Snapshot of DAA cache
  * @param modeMdf Select MDF cache mode
  * @param modeNrg Select NRG cache mode
  * @param modeChd Select CHD cache mode
+ * @param modeDaa Select DAA cache mode
  */
 void ramCacheList(std::vector<std::string>& files, bool& list, const std::string& fileExtension, 
                   const std::vector<std::string>& binImgFilesCache, 
@@ -403,6 +405,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
  *
  * Clears one cache at a time based on the selected mode:
  * - CHD
+ * - DAA
  * - MDF
  * - NRG
  * - BIN/IMG (default)
@@ -415,6 +418,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
  * @param modeMdf Select MDF cache mode (mutually exclusive)
  * @param modeNrg Select NRG cache mode (mutually exclusive)
  * @param modeChd Select CHD cache mode (mutually exclusive)
+ * @param modeDaa Select DAA cache mode (mutually exclusive)
  */
 void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
     signal(SIGINT, SIG_IGN);
@@ -500,6 +504,7 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
  * - MDF
  * - NRG
  * - CHD
+ * - DAA
  *
  * Optionally supports keyword-based exclusion (currently unused).
  *
@@ -557,7 +562,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
  * @brief Recursively scans a single directory for disc image files as part of a parallel search system.
  *
  * Traverses the directory tree and filters files based on the specified mode
- * (BIN/IMG, MDF, NRG, or CHD). Applies cache checks and blacklist filtering
+ * (BIN/IMG, MDF, NRG, CHD, or DAA). Applies cache checks and blacklist filtering
  * before invoking a callback for newly discovered files.
  *
  * Supports cancellation handling, progress reporting, and error aggregation
@@ -661,7 +666,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
  * @brief Discovers disc image files across multiple directories using a thread pool.
  *
  * Submits directory scan tasks to a shared static thread pool, where each task
- * processes a directory and returns discovered BIN/IMG/MDF/NRG/CHD files.
+ * processes a directory and returns discovered BIN/IMG/MDF/NRG/CHD/DAA files.
  *
  * Results are aggregated, deduplicated, and merged into the appropriate RAM cache.
  * Supports cancellation via global operation flag and signal handling.
@@ -757,7 +762,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
 }
 
 /**
- * @brief Dispatches special command inputs during BIN/IMG/MDF/NRG/CHD search UI interaction.
+ * @brief Dispatches special command inputs during BIN/IMG/MDF/NRG/CHD/DAA search UI interaction.
  *
  * Acts as a command router for the search interface, handling configuration changes,
  * UI settings, pagination control, cache operations, help output, and display mode switching.
@@ -832,7 +837,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input, const
  * @brief Interactive search and caching controller for disc image files.
  *
  * Provides a terminal-based interface for scanning user-provided directories
- * for BIN/IMG, MDF, NRG, and CHD image files. Supports multi-path input,
+ * for BIN/IMG, MDF, NRG, CHD, and DAA image files. Supports multi-path input,
  * directory validation, history management, and special command dispatch.
  *
  * Discovered files are cached in memory and forwarded to the file selection

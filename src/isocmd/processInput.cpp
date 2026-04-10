@@ -317,7 +317,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
  *
  * This function parses the user-provided input string (e.g., "1-5,7,9"), identifies
  * the corresponding files from the master list, and orchestrates multi‑threaded
- * conversion of supported image types (BIN/CCD, MDF, NRG, CHD) to standard ISO.
+ * conversion of supported image types (BIN/CCD, MDF, NRG, CHD, DAA) to standard ISO.
  *
  * The function includes an inline size estimation pass to provide an accurate
  * progress bar during conversion. Estimation logic varies by input format:
@@ -326,12 +326,15 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
  * - **BIN/CCD**: Assumes 2352‑byte raw sectors with 2048 bytes of user data.
  * - **CHD**: Opens the CHD file, inspects the header, and calculates total sectors
  *   multiplied by 2048 bytes (ISO user data per sector).
+ * - **DAA**: Calls `getDaaIsoSize()` to query the uncompressed ISO size from the
+ *   DAA archive header without extracting the entire file.
  *
  * @param input          Raw user selection string (e.g., "1,3-5").
  * @param fileList       Master vector of all non‑ISO image paths.
  * @param modeMdf        If `true`, treat input files as Alcohol 120% MDF images.
  * @param modeNrg        If `true`, treat input files as Nero NRG images.
  * @param modeChd        If `true`, treat input files as MAME CHD compressed images.
+ * @param modeDaa        If `true`, treat input files as PowerISO DAA compressed images.
  * @param processedErrors Set to record any parsing errors (invalid indices/patterns).
  * @param successOuts    Set populated with paths of successfully converted ISOs.
  * @param skippedOuts    Set populated with paths skipped due to cancellation or errors.
