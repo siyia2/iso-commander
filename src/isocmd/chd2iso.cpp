@@ -74,7 +74,7 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
     std::ofstream isoFile(isoPath, std::ios::binary);
     if (!isoFile.is_open()) return false;
 
-    size_t outBufSize = 1024 * 1024;
+    size_t outBufSize = 4 * 1024 * 1024;
     std::vector<char> outBuffer(outBufSize);
     isoFile.rdbuf()->pubsetbuf(outBuffer.data(), outBufSize);
 
