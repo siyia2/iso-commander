@@ -6,7 +6,6 @@
 #define CHD_COMMON_H
 
 #include <chd.h>
-#include <memory>
 
 struct ChdFileDeleter {
     void operator()(chd_file* f) const noexcept {
