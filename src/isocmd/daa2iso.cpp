@@ -23,15 +23,7 @@
 #define _LARGEFILE64_SOURCE
 #define _FILE_OFFSET_BITS 64
 
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <cstdint>
-#include <cctype>
-#include <cerrno>
-#include <atomic>
-#include <string>
-#include <filesystem>
+#include "../headers.h"
 
 // Use 64-bit file I/O on Linux
 #define off_t   off64_t
@@ -882,12 +874,6 @@ static bool daa_fail(DaaContext &ctx) {
     if (!ctx.outputPath.empty()) fs::remove(ctx.outputPath);
     return false;
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  Global cancellation flag (set by external code)
-// ═══════════════════════════════════════════════════════════════════════════
-
-std::atomic<bool> g_operationCancelled = false;
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Public API
