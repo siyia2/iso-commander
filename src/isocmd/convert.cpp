@@ -80,7 +80,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
             msg.reserve(128);
             msg.append(missingLabel).append("Missing file: ")
                .append(errPath).append("'").append(displayPath).append("'")
-               .append(originalColors::boldAlt).append(originalColors::boldAlt).append(".");
+               .append(originalColors::boldAlt).append(missingLabel).append(".");
             localFailedMsgs.push_back(std::move(msg));
 
             auto& cache = modeNrg ? nrgFilesCache : (modeMdf ? mdfMdsFilesCache : binImgFilesCache);
@@ -148,7 +148,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
             msg.reserve(128);
             msg.append(okLabel).append(fileType).append(" file converted to ISO: ")
                .append(okPath).append("'").append(outDir).append("/").append(outName).append("'")
-               .append(originalColors::boldAlt).append(originalColors::boldAlt).append(".");
+               .append(originalColors::boldAlt).append(okLabel).append(".");
             localSuccessMsgs.push_back(std::move(msg));
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
         } else {
