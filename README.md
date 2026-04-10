@@ -17,7 +17,6 @@ Database folder location: `/root/.local/share/isocmd/database/` || `~/.local/sha
 ## ✨ Features
 
 💾 Smart ISO Storage & Retrieval:
-
 * Minimizes disk thrashing.
 * Optimizes file access performance.
 * Optional automatic imports to database.
@@ -30,6 +29,7 @@ Database folder location: `/root/.local/share/isocmd/database/` || `~/.local/sha
 * Advanced progress tracking.
 * Optional non-interactive mode.
 * Full RGB color support.
+* Single self contained binary for exec.
 
 
 ⚡ High-Performance Architecture:
