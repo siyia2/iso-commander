@@ -14,25 +14,21 @@ bool fileExists(const std::string& fullPath) {
 }
 
 /**
- * @brief Orchestrates the conversion of multiple disk image files to ISO format.
- * * This function handles batch processing of BIN, IMG, MDF, and NRG files. It manages
- * UI theme coloring, file existence checks, readability validation, skip logic for 
- * existing outputs, and multi-threaded safe message logging.
- * * @param imageFiles Vector of input file paths to convert.
- * @param successOuts Set to store successful conversion messages.
- * @param skippedOuts Set to store skipped conversion messages.
- * @param failedOuts Set to store failed or error messages.
- * @param modeMdf Set to true if processing MDF files.
- * @param modeNrg Set to true if processing NRG files.
- * @param completedBytes Pointer to atomic counter for total bytes processed.
- * @param completedTasks Pointer to atomic counter for successfully finished tasks.
- * @param failedTasks Pointer to atomic counter for tasks that encountered errors.
- * @param newISOFound Atomic flag set to true if the database needs a refresh.
+ * @brief Batch converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD) to ISO format.
+ *
+ * Handles per-file validation (existence and basic readability), skips existing outputs,
+ * selects the appropriate conversion backend based on mode flags, and aggregates
+ * success/failed/skipped messages in a thread-safe manner.
+ *
+ * Also updates file ownership for outputs, removes invalid cache entries, and triggers
+ * a database refresh if new ISO files are successfully created.
  */
 void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, 
                   std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, 
-                  const bool& modeMdf, const bool& modeNrg, std::atomic<size_t>* completedBytes, 
-                  std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
+                  const bool& modeMdf, const bool& modeNrg, const bool& modeChd,   // <-- added modeChd
+                  std::atomic<size_t>* completedBytes, 
+                  std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, 
+                  std::atomic<bool>& newISOFound) {
 
     namespace fs = std::filesystem;
     const size_t BATCH_SIZE = 50;
@@ -65,9 +61,6 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 
     std::vector<std::string> localSuccessMsgs, localFailedMsgs, localSkippedMsgs;
 
-    /**
-     * @brief Internal helper to flush local message batches into global thread-safe sets.
-     */
     auto batchInsertMessages = [&]() {
         if (localSuccessMsgs.size() >= BATCH_SIZE || localFailedMsgs.size() >= BATCH_SIZE || localSkippedMsgs.size() >= BATCH_SIZE) {
             std::lock_guard<std::mutex> lock(globalSetsMutex);
@@ -129,9 +122,15 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
         }
 
         bool conversionSuccess = false;
-        if (modeMdf)            conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
-        else if (modeNrg)       conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
-        else                    conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
+        if (modeMdf) {
+            conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
+        } else if (modeNrg) {
+            conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
+        } else if (modeChd) {
+            conversionSuccess = convertChdToIso(inputPath, outputPath, completedBytes);
+        } else {
+            conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
+        }
 
         auto [outDir, outName] = extractDirectoryAndFilename(outputPath, "conversions");
 
@@ -143,7 +142,8 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
             std::string_view fileType = fileNameLower.ends_with(".bin") ? "BIN" :
                                         fileNameLower.ends_with(".img") ? "IMG" :
                                         fileNameLower.ends_with(".mdf") ? "MDF" :
-                                        fileNameLower.ends_with(".nrg") ? "NRG" : "Image";
+                                        fileNameLower.ends_with(".nrg") ? "NRG" :
+                                        fileNameLower.ends_with(".chd") ? "CHD" : "Image";   // <-- added CHD detection
             std::string msg;
             msg.reserve(128);
             msg.append(okLabel).append(fileType).append(" file converted to ISO: ")
