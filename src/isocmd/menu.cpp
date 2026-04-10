@@ -138,17 +138,13 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
         clearScrollBuffer();
         
         std::cout << color << "+-------------------------+\n"
-                  << "|↵ Convert2ISO            |                         |\n| (For Data CD/DVD Only)  |\n| (Breaks-emu-compat)     |\n"
+                  << "|↵ Convert2ISO            |\n"
                   << "+-------------------------+\n"
                   << "|1. CCD2ISO++             |\n"
                   << "+-------------------------+\n"
-                  << "|2. CHD2ISO++             |\n"
+                  << "|2. MDF2ISO++             |\n"
                   << "+-------------------------+\n"
-                  << "|3. DAA2ISO++             |\n"
-                  << "+-------------------------+\n"
-                  << "|4. MDF2ISO++             |\n"
-                  << "+-------------------------+\n"
-                  << "|5. NRG2ISO++             |\n"
+                  << "|3. NRG2ISO++             |\n"
                   << "+-------------------------+" << reset << std::endl << "\n";
         
         const ListTheme* theme = getActiveTheme();
@@ -171,27 +167,17 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
             switch (choice[0]) {
                 case '1':
                     operation = "bin";
-                    promptSearchBinImgChdMdfNrg(operation, newISOFound, isImportRunning);
+                    promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
                     clearScrollBuffer();
                     break;
                 case '2':
-                    operation = "chd";
-                    promptSearchBinImgChdMdfNrg(operation, newISOFound, isImportRunning);
+                    operation = "mdf";
+                    promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
                     clearScrollBuffer();
                     break;
                 case '3':
-                    operation = "mdf";
-                    promptSearchBinImgChdMdfNrg(operation, newISOFound, isImportRunning);
-                    clearScrollBuffer();
-                    break;
-                case '4':
-                    operation = "daa";
-                    promptSearchBinImgChdMdfNrg(operation, newISOFound, isImportRunning);
-                    clearScrollBuffer();
-                    break;
-                case '5':
                     operation = "nrg";
-                    promptSearchBinImgChdMdfNrg(operation, newISOFound, isImportRunning);
+                    promptSearchBinImgMdfNrg(operation, newISOFound, isImportRunning);
                     clearScrollBuffer();
                     break;
             }
