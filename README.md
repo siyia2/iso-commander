@@ -77,7 +77,7 @@ Database folder location: `/root/.local/share/isocmd/database/` || `~/.local/sha
 * Special thanks to Aaron Giles for original libchd.
 * Special thanks to rtissera for creating libchdr from libchd MAME.
 
-*libchd liscense: BSD-3-Clause license
+* libchd liscense: BSD-3-Clause license
 * libchdr liscense: BSD-3-Clause license
 
 Special thanks to the original authors of the conversion tools:
