@@ -5,6 +5,7 @@
 #include "../mdf.h"
 #include "../ccd.h"
 #include "../themes.h"
+#include "../daa2iso.h"
 #include "../chd.h"
 #include <chd.h>
 
@@ -316,7 +317,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
  *
  * This function parses the user-provided input string (e.g., "1-5,7,9"), identifies
  * the corresponding files from the master list, and orchestrates multi‑threaded
- * conversion of supported image types (BIN/CCD, MDF, NRG, CHD) to standard ISO.
+ * conversion of supported image types (BIN/CCD, MDF, NRG, CHD, DAA) to standard ISO.
  *
  * The function includes an inline size estimation pass to provide an accurate
  * progress bar during conversion. Estimation logic varies by input format:
@@ -325,12 +326,15 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
  * - **BIN/CCD**: Assumes 2352‑byte raw sectors with 2048 bytes of user data.
  * - **CHD**: Opens the CHD file, inspects the header, and calculates total sectors
  *   multiplied by 2048 bytes (ISO user data per sector).
+ * - **DAA**: Calls `getDaaIsoSize()` to query the uncompressed ISO size from the
+ *   DAA archive header without extracting the entire file.
  *
  * @param input          Raw user selection string (e.g., "1,3-5").
  * @param fileList       Master vector of all non‑ISO image paths.
  * @param modeMdf        If `true`, treat input files as Alcohol 120% MDF images.
  * @param modeNrg        If `true`, treat input files as Nero NRG images.
  * @param modeChd        If `true`, treat input files as MAME CHD compressed images.
+ * @param modeDaa        If `true`, treat input files as PowerISO DAA compressed images.
  * @param processedErrors Set to record any parsing errors (invalid indices/patterns).
  * @param successOuts    Set populated with paths of successfully converted ISOs.
  * @param skippedOuts    Set populated with paths skipped due to cancellation or errors.
@@ -344,6 +348,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
  */
 void processInputForConversions(const std::string& input, std::vector<std::string>& fileList,
                                const bool& modeMdf, const bool& modeNrg, const bool& modeChd,
+                               const bool& modeDaa,          // <-- new DAA flag
                                std::unordered_set<std::string>& processedErrors,
                                std::unordered_set<std::string>& successOuts,
                                std::unordered_set<std::string>& skippedOuts,
@@ -392,11 +397,14 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
         filesToProcess.push_back(fileList[index - 1]);
     }
 
-    // ========== INLINE SIZE CALCULATION (ALL FORMATS) ==========
+    // ========== INLINE SIZE CALCULATION (ALL FORMATS INCLUDING DAA) ==========
     size_t totalBytes = 0;
     for (const auto& file : filesToProcess) {
+        std::string ext = file.substr(file.find_last_of(".") + 1);
+        toLowerInPlace(ext);
+
         // CHD mode
-        if (modeChd && file.size() >= 4 && file.substr(file.size() - 4) == ".chd") {
+        if (modeChd && ext == "chd") {
             chd_file* rawChd = nullptr;
             chd_error err = chd_open(file.c_str(), CHD_OPEN_READ, nullptr, &rawChd);
             if (err == CHDERR_NONE && rawChd) {
@@ -412,7 +420,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
             }
         }
         // NRG mode
-        else if (modeNrg) {
+        else if (modeNrg && ext == "nrg") {
             std::ifstream nrg(file, std::ios::binary | std::ios::ate);
             if (nrg) {
                 size_t sz = nrg.tellg();
@@ -420,7 +428,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
             }
         }
         // MDF mode
-        else if (modeMdf) {
+        else if (modeMdf && ext == "mdf") {
             std::ifstream mdf(file, std::ios::binary);
             if (mdf) {
                 MdfTypeInfo info;
@@ -431,24 +439,33 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
                 totalBytes += sectors * info.sector_data;
             }
         }
-        // BIN/IMG (CCD) mode
-        else {
+        // DAA mode
+        else if (modeDaa && ext == "daa") {
+            uint64_t isoSize = getDaaIsoSize(file);
+            if (isoSize > 0) totalBytes += isoSize;
+        }
+        // BIN/IMG (CCD) mode – default
+        else if (!modeMdf && !modeNrg && !modeChd && !modeDaa &&
+                 (ext == "bin" || ext == "img" || ext == "ccd")) {
             std::ifstream ccd(file, std::ios::binary | std::ios::ate);
             if (ccd) {
                 size_t fileSize = ccd.tellg();
                 totalBytes += (fileSize / sizeof(CcdSector)) * DATA_SIZE;
             }
         }
+        // If none matched, skip (should not happen)
     }
     // ===========================================================
 
     size_t totalTasks = filesToProcess.size();
     std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
 
-    std::string operation = modeMdf ? std::string(originalColors::orange) + "MDF"     + std::string(originalColors::boldAlt) + suffix :
-                        modeNrg ? std::string(originalColors::orange) + "NRG"     + std::string(originalColors::boldAlt) + suffix :
-                        modeChd ? std::string(originalColors::orange) + "CHD"     + std::string(originalColors::boldAlt) + suffix :
-                                  std::string(originalColors::orange) + "BIN/IMG" + std::string(originalColors::boldAlt) + suffix;
+    std::string operation;
+    if (modeMdf)      operation = std::string(originalColors::orange) + "MDF"     + std::string(originalColors::boldAlt) + suffix;
+    else if (modeNrg) operation = std::string(originalColors::orange) + "NRG"     + std::string(originalColors::boldAlt) + suffix;
+    else if (modeChd) operation = std::string(originalColors::orange) + "CHD"     + std::string(originalColors::boldAlt) + suffix;
+    else if (modeDaa) operation = std::string(originalColors::orange) + "DAA"     + std::string(originalColors::boldAlt) + suffix;
+    else              operation = std::string(originalColors::orange) + "BIN/IMG" + std::string(originalColors::boldAlt) + suffix;
 
     clearScrollBuffer();
 
@@ -475,11 +492,11 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
             [&fileList](size_t index) { return fileList[index - 1]; });
 
         futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk),
-            &fileList, &successOuts, &skippedOuts, &failedOuts,
-            modeMdf, modeNrg, modeChd,
+            &successOuts, &skippedOuts, &failedOuts,
+            modeMdf, modeNrg, modeChd, modeDaa,   // <-- pass DAA flag
             &completedBytes, &completedTasks, &failedTasks, &newISOFound]() {
             convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
-                modeMdf, modeNrg, modeChd,
+                modeMdf, modeNrg, modeChd, modeDaa,   // <-- added DAA flag
                 &completedBytes, &completedTasks, &failedTasks, newISOFound);
         }));
     }
