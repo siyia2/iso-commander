@@ -1,10 +1,10 @@
 .TH ISOCMD 1 "April 2026" "Iso Commander 6.3.8" "Iso-Commander Manual"
 
 .SH NAME
-Iso Commander (isocmd) \- Command-line utility for managing .iso files and converting image formats.
+Iso Commander (isocmd) \- A single binary command-line utility for managing .iso files and converting image formats.
 
 .SH DESCRIPTION
-Iso Commander (isocmd) is a command-line utility for managing .iso files and converting various image formats to .iso using asynchronous I/O operations and multi-threaded processing.
+Iso Commander (isocmd) is a single binary command-line utility for managing .iso files and converting various image formats to .iso using asynchronous I/O operations and multi-threaded processing.
 
 .SH NON-INTERACTIVE COMMANDS
 .TP
@@ -47,7 +47,9 @@ Mount, Umount, Delete, Move, Copy, and Write ISO files. Note that Write retains 
 
 .TP
 .B Convert2ISO
-Converts .bin, .img, chd, .mdf, and .nrg files to .iso. Ported from original C tools (mdf2iso, nrg2iso, ccd2iso) and libchdr library.
+Ported from original C tools (ccd2iso(bin/img), mdf2iso(mdf), nrg2iso(nrg), daa2iso(daa)) and utilizing libchdr(chd).
+.br
+Converts .bin, .img, .chd, .daa, .mdf, and .nrg files to .iso.
 
 .TP
 .B ImportISO
