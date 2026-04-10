@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+/* Copyright Aaron Giles */
+/* See chd.h for full license text */
+
 #ifndef CHD_COMMON_H
 #define CHD_COMMON_H
 
