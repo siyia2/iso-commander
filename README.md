@@ -74,6 +74,12 @@ Database folder location: `/root/.local/share/isocmd/database/` || `~/.local/sha
 * On ArchLinux `iso-commander` is available from the `AUR`.
 
 ## 🏆 Credits
+Special thanks to Aaron Giles for original libchd.
+Special thanks to rtissera for creating libchdr from libchd MAME.
+
+libchdr liscense:
+BSD-3-Clause license
+
 Special thanks to the original authors of the conversion tools:
 
 * Salvatore Santagati (mdf2iso).
