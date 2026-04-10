@@ -318,7 +318,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 }
 
 //=============================================================================
-// Image Section (BIN/IMG/MDF/NRG)
+// Image Section (BIN/IMG/MDF/NRG/CHD)
 //=============================================================================
 
 /**
