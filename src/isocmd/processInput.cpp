@@ -5,6 +5,8 @@
 #include "../mdf.h"
 #include "../ccd.h"
 #include "../themes.h"
+#include "../chd.h"
+#include <chd.h>
 
 /**
  * @file operations.cpp
@@ -310,84 +312,58 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
 }
 
 /**
- * @brief Predicts the output size of converted files based on the input format.
- * * @param filesToProcess Vector of image file paths.
- * @param modeNrg True if input is Nero NRG.
- * @param modeMdf True if input is Alcohol 120% MDF.
- * @return Total expected size in bytes.
+ * @brief Processes user input to convert multiple disk image files to ISO format.
+ *
+ * This function parses the user-provided input string (e.g., "1-5,7,9"), identifies
+ * the corresponding files from the master list, and orchestrates multi‑threaded
+ * conversion of supported image types (BIN/CCD, MDF, NRG, CHD) to standard ISO.
+ *
+ * The function includes an inline size estimation pass to provide an accurate
+ * progress bar during conversion. Estimation logic varies by input format:
+ * - **NRG**: Excludes a 300 KiB (307200 byte) header.
+ * - **MDF**: Reads sector geometry via `MdfTypeInfo` and computes user data bytes.
+ * - **BIN/CCD**: Assumes 2352‑byte raw sectors with 2048 bytes of user data.
+ * - **CHD**: Opens the CHD file, inspects the header, and calculates total sectors
+ *   multiplied by 2048 bytes (ISO user data per sector).
+ *
+ * @param input          Raw user selection string (e.g., "1,3-5").
+ * @param fileList       Master vector of all non‑ISO image paths.
+ * @param modeMdf        If `true`, treat input files as Alcohol 120% MDF images.
+ * @param modeNrg        If `true`, treat input files as Nero NRG images.
+ * @param modeChd        If `true`, treat input files as MAME CHD compressed images.
+ * @param processedErrors Set to record any parsing errors (invalid indices/patterns).
+ * @param successOuts    Set populated with paths of successfully converted ISOs.
+ * @param skippedOuts    Set populated with paths skipped due to cancellation or errors.
+ * @param failedOuts     Set populated with paths that failed conversion.
+ * @param verbose        If `true`, extra progress details are displayed.
+ * @param needsClrScrn   Reference flag set to `true` if the terminal should be cleared.
+ * @param newISOFound    Atomic flag set to `true` when at least one new ISO is created.
+ *
+ * @note The function manages a thread pool and displays a live progress bar.
+ *       Cancellation via SIGINT (Ctrl+C) is handled gracefully.
  */
-size_t calculateSizeForConverted(const std::vector<std::string>& filesToProcess, bool modeNrg, bool modeMdf) {
-    size_t totalBytes = 0;
-
-    if (modeNrg) {
-        for (const auto& file : filesToProcess) {
-            std::ifstream nrgFile(file, std::ios::binary);
-            if (nrgFile) {
-                nrgFile.seekg(0, std::ios::end);
-                size_t nrgFileSize = nrgFile.tellg();
-                totalBytes += (nrgFileSize - 307200);
-            }
-        }
-    } else if (modeMdf) {
-        for (const auto& file : filesToProcess) {
-            std::ifstream mdfFile(file, std::ios::binary);
-            if (mdfFile) {
-                MdfTypeInfo mdfInfo;
-                if (!mdfInfo.determineMdfType(mdfFile)) continue;
-                mdfFile.seekg(0, std::ios::end);
-                size_t fileSize = mdfFile.tellg();
-                size_t numSectors = fileSize / mdfInfo.sector_size;
-                totalBytes += numSectors * mdfInfo.sector_data;
-            }
-        }
-    } else {
-        for (const auto& file : filesToProcess) {
-            std::ifstream ccdFile(file, std::ios::binary | std::ios::ate);
-            if (ccdFile) {
-                size_t fileSize = ccdFile.tellg();
-                totalBytes += (fileSize / sizeof(CcdSector)) * DATA_SIZE;
-            }
-        }
-    }
-    return totalBytes;
-}
-
-/**
- * @brief Processes user selection for converting multi-track images (BIN/MDF/NRG) to standard ISO.
- * * @param input Raw user selection string.
- * @param fileList Master list of non-ISO images.
- * @param modeMdf MDF mode toggle.
- * @param modeNrg NRG mode toggle.
- * @param processedErrors Set for error reporting.
- * @param successOuts Set for successful conversions.
- * @param skippedOuts Set for skipped items.
- * @param failedOuts Set for failed items.
- * @param verbose Verbosity toggle.
- * @param needsClrScrn Flag to trigger screen refresh.
- * @param newISOFound Atomic flag to signal new ISO availability.
- */
-void processInputForConversions(const std::string& input, std::vector<std::string>& fileList, 
-                               const bool& modeMdf, const bool& modeNrg, 
-                               std::unordered_set<std::string>& processedErrors, 
-                               std::unordered_set<std::string>& successOuts, 
-                               std::unordered_set<std::string>& skippedOuts, 
-                               std::unordered_set<std::string>& failedOuts, 
-                               bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound) {
-    
+void processInputForConversions(const std::string& input, std::vector<std::string>& fileList,
+                               const bool& modeMdf, const bool& modeNrg, const bool& modeChd,
+                               std::unordered_set<std::string>& processedErrors,
+                               std::unordered_set<std::string>& successOuts,
+                               std::unordered_set<std::string>& skippedOuts,
+                               std::unordered_set<std::string>& failedOuts,
+                               bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound)
+{
     setupSignalHandlerCancellations();
     const ListTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
     g_operationCancelled.store(false);
     std::unordered_set<int> processedIndices;
-    
-    if (!(input.empty() || std::all_of(input.begin(), input.end(), isspace))){
+
+    if (!(input.empty() || std::all_of(input.begin(), input.end(), isspace))) {
         tokenizeInput(input, fileList, processedErrors, processedIndices);
     } else return;
-    
+
     if (processedIndices.empty()) {
         clearScrollBuffer();
-        std::cout << "\n" << (isOrig ? originalColors::red : theme->secondary) 
+        std::cout << "\n" << (isOrig ? originalColors::red : theme->secondary)
                   << "No valid input provided." << originalColors::boldAlt << "\n";
         std::cout << color << "\n↵ to continue..." << reset;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -398,7 +374,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     ThreadPool& pool = getStaticThreadPool();
     const size_t poolSize = pool.threadCount();
     const size_t numThreads = std::max(size_t(2), std::min({processedIndices.size(), CONV_THREAD_CAP, poolSize}));
-    
+
     std::vector<std::vector<size_t>> indexChunks;
     const size_t totalFiles = processedIndices.size();
     const size_t filesPerChunk = (totalFiles + numThreads - 1) / numThreads;
@@ -409,38 +385,85 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
         indexChunks.emplace_back(it, chunkEnd);
         it = chunkEnd;
     }
-    
+
     std::vector<std::string> filesToProcess;
+    filesToProcess.reserve(processedIndices.size());
     for (const auto& index : processedIndices) {
         filesToProcess.push_back(fileList[index - 1]);
     }
 
+    // ========== INLINE SIZE CALCULATION (ALL FORMATS) ==========
+    size_t totalBytes = 0;
+    for (const auto& file : filesToProcess) {
+        // CHD mode
+        if (modeChd && file.size() >= 4 && file.substr(file.size() - 4) == ".chd") {
+            chd_file* rawChd = nullptr;
+            chd_error err = chd_open(file.c_str(), CHD_OPEN_READ, nullptr, &rawChd);
+            if (err == CHDERR_NONE && rawChd) {
+                const chd_header* header = chd_get_header(rawChd);
+                if (header) {
+                    uint32_t userDataSize = 2048;
+                    uint32_t rawSectorSize = (header->hunkbytes % 2352 == 0) ? 2352 : 2048;
+                    uint32_t sectorsPerHunk = header->hunkbytes / rawSectorSize;
+                    uint64_t totalSectors = static_cast<uint64_t>(header->totalhunks) * sectorsPerHunk;
+                    totalBytes += totalSectors * userDataSize;
+                }
+                chd_close(rawChd);
+            }
+        }
+        // NRG mode
+        else if (modeNrg) {
+            std::ifstream nrg(file, std::ios::binary | std::ios::ate);
+            if (nrg) {
+                size_t sz = nrg.tellg();
+                totalBytes += (sz > 307200) ? (sz - 307200) : 0;
+            }
+        }
+        // MDF mode
+        else if (modeMdf) {
+            std::ifstream mdf(file, std::ios::binary);
+            if (mdf) {
+                MdfTypeInfo info;
+                if (!info.determineMdfType(mdf)) continue;
+                mdf.seekg(0, std::ios::end);
+                size_t fileSize = mdf.tellg();
+                size_t sectors = fileSize / info.sector_size;
+                totalBytes += sectors * info.sector_data;
+            }
+        }
+        // BIN/IMG (CCD) mode
+        else {
+            std::ifstream ccd(file, std::ios::binary | std::ios::ate);
+            if (ccd) {
+                size_t fileSize = ccd.tellg();
+                totalBytes += (fileSize / sizeof(CcdSector)) * DATA_SIZE;
+            }
+        }
+    }
+    // ===========================================================
+
     size_t totalTasks = filesToProcess.size();
-    size_t totalBytes = calculateSizeForConverted(filesToProcess, modeNrg, modeMdf);
+    std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
 
-	// Define the suffix once
-	std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
+    std::string operation = modeMdf ? std::string(originalColors::orange) + "MDF"     + std::string(originalColors::boldAlt) + suffix :
+                        modeNrg ? std::string(originalColors::orange) + "NRG"     + std::string(originalColors::boldAlt) + suffix :
+                        modeChd ? std::string(originalColors::orange) + "CHD"     + std::string(originalColors::boldAlt) + suffix :
+                                  std::string(originalColors::orange) + "BIN/IMG" + std::string(originalColors::boldAlt) + suffix;
 
-	// Explicitly wrap the string_view members in std::string() to allow concatenation
-	std::string operation = modeMdf ? (std::string(originalColors::orange) + "MDF"     + std::string(originalColors::boldAlt) + suffix) :
-							modeNrg ? (std::string(originalColors::orange) + "NRG"     + std::string(originalColors::boldAlt) + suffix) :
-									  (std::string(originalColors::orange) + "BIN/IMG" + std::string(originalColors::boldAlt) + suffix);
+    clearScrollBuffer();
 
-	clearScrollBuffer();
+    std::cout << "\n" << originalColors::boldAlt << " Processing "
+              << operation << originalColors::boldAlt << "... ("
+              << originalColors::red << "Ctrl+c"
+              << originalColors::boldAlt << ":cancel)\n";
 
-	// For std::cout, you don't need the string cast because it handles string_view natively
-	std::cout << "\n" << originalColors::boldAlt << " Processing " 
-			  << operation << originalColors::boldAlt << "... (" 
-			  << originalColors::red << "Ctrl+c" 
-			  << originalColors::boldAlt << ":cancel)\n";
-			  
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
     std::atomic<size_t> failedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
 
-    std::thread progressThread(displayProgressBarWithSize, &completedBytes, 
-        totalBytes, &completedTasks, &failedTasks, totalTasks, &isProcessingComplete, &verbose, std::string(operation));
+    std::thread progressThread(displayProgressBarWithSize, &completedBytes,
+        totalBytes, &completedTasks, &failedTasks, totalTasks, &isProcessingComplete, &verbose, operation);
 
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
@@ -451,11 +474,13 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
         std::transform(chunk.begin(), chunk.end(), std::back_inserter(imageFilesInChunk),
             [&fileList](size_t index) { return fileList[index - 1]; });
 
-        futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk), 
-            &fileList, &successOuts, &skippedOuts, &failedOuts, 
-            modeMdf, modeNrg, &completedBytes, &completedTasks, &failedTasks, &newISOFound]() {
-            convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts, 
-                modeMdf, modeNrg, &completedBytes, &completedTasks, &failedTasks, newISOFound);
+        futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk),
+            &fileList, &successOuts, &skippedOuts, &failedOuts,
+            modeMdf, modeNrg, modeChd,
+            &completedBytes, &completedTasks, &failedTasks, &newISOFound]() {
+            convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
+                modeMdf, modeNrg, modeChd,
+                &completedBytes, &completedTasks, &failedTasks, newISOFound);
         }));
     }
 
@@ -464,6 +489,6 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     }
 
     isProcessingComplete.store(true);
-    signal(SIGINT, SIG_IGN);  
+    signal(SIGINT, SIG_IGN);
     progressThread.join();
 }

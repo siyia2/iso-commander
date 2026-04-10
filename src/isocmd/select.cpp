@@ -419,9 +419,14 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 }
 
 /**
- * @brief The main menu loop for converting various disk image formats (BIN, MDF, NRG) to ISO.
- * * Provides a specialized interface for selecting raw image files and passing them
- * to conversion utilities.
+ * @brief Interactive file selection and conversion controller for disk image formats.
+ *
+ * Provides a terminal-based interface for browsing, filtering, and selecting
+ * BIN/IMG, MDF, NRG, and CHD image files. Supports pagination, batch selection,
+ * and command-based input for triggering conversions.
+ *
+ * Handles user interaction, cache restoration, pending selection processing,
+ * and dispatches selected files to the appropriate conversion utilities.
  */
 void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {
 
@@ -440,14 +445,25 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
     bool filterHistory = false;
     bool need2Sort = true;
 
-    std::string fileExtension = (fileType == "bin" || fileType == "img") ? ".bin/.img" 
-                               : (fileType == "mdf") ? ".mdf" : ".nrg"; 
-    
+    // Determine file extension string for display and cache
+    std::string fileExtension;
     std::string fileExtensionWithOutDots;
-    for (char c : fileExtension) {
-        if (c != '.') {
-            fileExtensionWithOutDots += toupper(c);
-        }
+    if (fileType == "bin" || fileType == "img") {
+        fileExtension = ".bin/.img";
+        fileExtensionWithOutDots = "BIN/IMG";
+    } else if (fileType == "mdf") {
+        fileExtension = ".mdf";
+        fileExtensionWithOutDots = "MDF";
+    } else if (fileType == "nrg") {
+        fileExtension = ".nrg";
+        fileExtensionWithOutDots = "NRG";
+    } else if (fileType == "chd") {
+        fileExtension = ".chd";
+        fileExtensionWithOutDots = "CHD";
+    } else {
+        // fallback (should not happen)
+        fileExtension = "";
+        fileExtensionWithOutDots = "FILES";
     }
     
     while (true) {
@@ -466,29 +482,29 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         std::cout << "\033[1A\033[K";
         
         // Helper to wrap raw ANSI strings for readline
-		auto wrap = [](std::string_view s) -> std::string {
-			return "\001" + std::string(s) + "\002";
-		};
+        auto wrap = [](std::string_view s) -> std::string {
+            return "\001" + std::string(s) + "\002";
+        };
 
-		const ListTheme* theme = getActiveTheme();
-		const bool isOriginal = (globalTheme == "original");
+        const ListTheme* theme = getActiveTheme();
+        const bool isOriginal = (globalTheme == "original");
 
-		// Wrap themed colors, keep originalColors::rl_ as-is
-		std::string colorMuted     = isOriginal ? std::string(originalColors::rl_blue)   : wrap(theme->muted);
-		std::string colorFilter    = isOriginal ? std::string(originalColors::rl_cyan)   : wrap(theme->accent);
-		std::string colorHighlight = isOriginal ? std::string(originalColors::rl_orange) : wrap(theme->highlight);
-		std::string colorReset     = isOriginal ? std::string(originalColors::rl_boldAlt)  : wrap(originalColors::boldAlt);
+        // Wrap themed colors, keep originalColors::rl_ as-is
+        std::string colorMuted     = isOriginal ? std::string(originalColors::rl_blue)   : wrap(theme->muted);
+        std::string colorFilter    = isOriginal ? std::string(originalColors::rl_cyan)   : wrap(theme->accent);
+        std::string colorHighlight = isOriginal ? std::string(originalColors::rl_orange) : wrap(theme->highlight);
+        std::string colorReset     = isOriginal ? std::string(originalColors::rl_boldAlt)  : wrap(originalColors::boldAlt);
 
-		// Construct prefix based on filter state
-		std::string prefix = isFiltered ? (colorFilter + "F⊳ ") : "";
+        // Construct prefix based on filter state
+        std::string prefix = isFiltered ? (colorFilter + "F⊳ ") : "";
 
-		std::string prompt = 
-			prefix + 
-			colorHighlight + fileExtensionWithOutDots + 
-			colorMuted     + " ↵ for " + 
-			colorHighlight + "conversion" + 
-			colorMuted     + ", ? ↵ for help, < ↵ to return: " + 
-			colorReset;
+        std::string prompt = 
+            prefix + 
+            colorHighlight + fileExtensionWithOutDots + 
+            colorMuted     + " ↵ for " + 
+            colorHighlight + "conversion" + 
+            colorMuted     + ", ? ↵ for help, < ↵ to return: " + 
+            colorReset;
         
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
         
@@ -499,8 +515,16 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         if (inputString == "<") {
             clearScrollBuffer();
             if (isFiltered) {
-                files = (fileType == "bin" || fileType == "img") ? binImgFilesCache :
-                        (fileType == "mdf" ? mdfMdsFilesCache : nrgFilesCache);
+                // Restore original file list from the appropriate cache
+                if (fileType == "bin" || fileType == "img") {
+                    files = binImgFilesCache;
+                } else if (fileType == "mdf") {
+                    files = mdfMdsFilesCache;
+                } else if (fileType == "nrg") {
+                    files = nrgFilesCache;
+                } else if (fileType == "chd") {
+                    files = chdFilesCache;   // you need to define this cache globally
+                }
                 needsClrScrn = true;
                 isFiltered = false; 
                 filteringStack.clear();
@@ -554,8 +578,13 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                 }
             }
             
-            processInputForConversions(combinedIndices, files, (fileType == "mdf"), (fileType == "nrg"), 
-                        processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsClrScrn, newISOFound);
+            // Call processInputForConversions with the correct mode flags
+            processInputForConversions(combinedIndices, files, 
+                                       (fileType == "mdf"),   // modeMdf
+                                       (fileType == "nrg"),   // modeNrg
+                                       (fileType == "chd"),   // modeChd  <-- added
+                                       processedErrors, successOuts, skippedOuts, failedOuts, 
+                                       verbose, needsClrScrn, newISOFound);
             
             needsClrScrn = true;
             if (verbose) {
@@ -574,8 +603,12 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             }
         }
         else {
-            processInputForConversions(inputString, files, (fileType == "mdf"), (fileType == "nrg"), 
-                         processedErrors, successOuts, skippedOuts, failedOuts, verbose, needsClrScrn, newISOFound);
+            processInputForConversions(inputString, files, 
+                                       (fileType == "mdf"),   // modeMdf
+                                       (fileType == "nrg"),   // modeNrg
+                                       (fileType == "chd"),   // modeChd  <-- added
+                                       processedErrors, successOuts, skippedOuts, failedOuts, 
+                                       verbose, needsClrScrn, newISOFound);
             needsClrScrn = true;
             if (verbose) {
                 verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3);
