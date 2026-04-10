@@ -843,30 +843,47 @@ static FILE *ctx_next_volume(DaaContext &ctx) {
     if (!fd) throw DaaError("cannot open next volume");
 
     daa_t daa;
-    if (fread(&daa, 1, sizeof(daa), fd) != sizeof(daa)) { fclose(fd); throw DaaError("volume header read error"); }
+    if (fread(&daa, 1, sizeof(daa), fd) != sizeof(daa)) { 
+        fclose(fd); throw DaaError("volume header read error"); 
+    }
     swap_daa_if_be(&daa, ctx.endian);
     if (strncmp((char*)daa.sign,"DAA VOL",16) && strncmp((char*)daa.sign,"GBI VOL",16)) {
         fclose(fd); throw DaaError("wrong DAA VOL signature");
     }
-    if (fseek(fd, daa.size_offset, SEEK_SET)) { fclose(fd); throw DaaError("fseek on volume"); }
+    if (fseek(fd, daa.size_offset, SEEK_SET)) { 
+        fclose(fd); throw DaaError("fseek on volume"); 
+    }
     ctx.multinum++;
     return fd;
 }
 
 static void ctx_read(DaaContext &ctx, void *data, unsigned size) {
+    if (size == 0) return;
     unsigned len = (unsigned)fread(data, 1, size, ctx.fdi);
     if (len == size) return;
+    
     if (!ctx.multi) throw DaaError("incomplete input file");
+    
     fclose(ctx.fdi);
     ctx.fdi = ctx_next_volume(ctx);
+    // Recurse to read remainder from next volume
     ctx_read(ctx, (u8*)data + len, size - len);
 }
 
 static void ctx_alloc(u8 **data, unsigned wantsize, unsigned *currsize) {
-    if (wantsize <= *currsize) return;
-    *data = (u8*)realloc(*data, wantsize);
-    if (!*data) throw DaaError("out of memory");
-    *currsize = wantsize;
+    // FIX: Add 16 bytes of safety padding. Bit-readers/LZMA often peek 
+    // past the current byte. Padding prevents ASan heap-buffer-overflow.
+    unsigned actual_wantsize = wantsize + 16;
+    if (actual_wantsize <= *currsize && *data) return;
+
+    u8 *tmp = (u8*)realloc(*data, actual_wantsize);
+    if (!tmp) throw DaaError("out of memory");
+    
+    // Clear the padding area to ensure deterministic behavior when peeking
+    memset(tmp + wantsize, 0, 16);
+    
+    *data = tmp;
+    *currsize = actual_wantsize;
 }
 
 static bool daa_fail(DaaContext &ctx) {
@@ -885,16 +902,14 @@ bool convertDaaToIso(const std::string &inputFile,
 {
     if (g_operationCancelled.load()) return false;
 
-    // Reset global bit-reader state for this conversion
     reset_bit_reader();
-    tinf_init();  // idempotent, but ensures tables are built
+    tinf_init();
 
     DaaContext ctx;
     ctx.outputPath    = outputFile;
     ctx.completedBytes = completedBytes;
     if (completedBytes) *completedBytes = 0;
 
-    // Host endianness detection (0 = little-endian, no swap needed)
     { int e = 1; ctx.endian = (*(char*)&e) ? 0 : 1; }
 
     ctx.fdi = fopen(inputFile.c_str(), "rb");
@@ -913,8 +928,7 @@ bool convertDaaToIso(const std::string &inputFile,
         else if (!strncmp((char*)daa.sign,"GBI",16))
             ctx.daagbi = TYPE_GBI;
         else {
-            if (!strncmp((char*)daa.sign,"DAA VOL",16) ||
-                !strncmp((char*)daa.sign,"GBI VOL",16))
+            if (!strncmp((char*)daa.sign,"DAA VOL",16) || !strncmp((char*)daa.sign,"GBI VOL",16))
                 throw DaaError("must choose the first DAA file, not a volume");
             throw DaaError("unknown DAA signature");
         }
@@ -932,7 +946,8 @@ bool convertDaaToIso(const std::string &inputFile,
 
         if (daa.version == 0x100) {
             daas_mem = daa.data_offset - daa.size_offset;
-            daa_data = (daa_data_t*)malloc(daas_mem);
+            // FIX: Padding for v1.0 table
+            daa_data = (daa_data_t*)malloc(daas_mem + 16);
             if (!daa_data) throw DaaError("out of memory (daa_data)");
             daas = daas_mem / 3;
         } else {
@@ -948,16 +963,23 @@ bool convertDaaToIso(const std::string &inputFile,
                 for (bitsize=0; len>(unsigned)bittype; bitsize++, len>>=1);
             }
             daas_mem = daa.data_offset - daa.size_offset;
-            daas     = (daas_mem << 3) / (unsigned)(bittype + bitsize);
-            daas_mem = (((unsigned)(bitsize + bittype) * daas) + 7) >> 3;
+            
+            // FIX: Better math for chunk count to avoid off-by-one errors
+            u32 bits_per_entry = (u32)(bittype + bitsize);
+            if (bits_per_entry == 0) throw DaaError("invalid header bits");
+            daas = (u32)(((u64)daas_mem << 3) / bits_per_entry);
 
             if (ver110_y & 0x4000) {
                 daas_mem += 0x10000;
                 daa_dataz = *(u32*)(daa.hdata + 1);
                 swap32_if_be(&daa_dataz, ctx.endian);
             }
-            daa_data = (daa_data_t*)malloc(daas_mem);
+            
+            // FIX: Padding (16 bytes) and zeroing prevents the bit-reader 
+            // from hitting a redzone when reading the final chunk's bits.
+            daa_data = (daa_data_t*)malloc(daas_mem + 16);
             if (!daa_data) throw DaaError("out of memory (daa_data v110)");
+            memset(daa_data, 0, daas_mem + 16);
 
             dolamebits   = (ver110_y & 0x20000)   ? 1 : 0;
             dolame       = (ver110_y & 0x8000000)  ? 1 : 0;
@@ -980,7 +1002,6 @@ bool convertDaaToIso(const std::string &inputFile,
             case 3: ctx.swapped_btype[0]=1; ctx.swapped_btype[1]=0; ctx.swapped_btype[2]=2; break;
         }
 
-        // Pre-data records
         while ((u64)ftell(ctx.fdi) < daa.size_offset) {
             u32 rec_type, rec_len;
             ctx_read(ctx, &rec_type, 4); swap32_if_be(&rec_type, ctx.endian);
@@ -990,7 +1011,6 @@ bool convertDaaToIso(const std::string &inputFile,
             if (fseek(ctx.fdi, rec_len - 8, SEEK_CUR)) throw DaaError("fseek on pre-data record");
         }
 
-        // Multi-volume detection
         {
             fseek(ctx.fdi, 0, SEEK_END);
             u64 tot = (u64)ftell(ctx.fdi);
@@ -1011,17 +1031,18 @@ bool convertDaaToIso(const std::string &inputFile,
             }
         }
 
-        // Read index table
         if (fseek(ctx.fdi, daa.size_offset, SEEK_SET)) throw DaaError("fseek to size_offset");
 
         if (daa_dataz) {
             ctx_alloc(&ctx.in, daa_dataz, &ctx.insz);
             ctx_read(ctx, ctx.in, daa_dataz);
             unsigned destLen = daas_mem;
-            if (tinf_uncompress(daa_data, &destLen, ctx.in, daa_dataz, ctx.swapped_btype) != TINF_OK)
+            if (tinf_uncompress((u8*)daa_data, &destLen, ctx.in, daa_dataz, ctx.swapped_btype) != TINF_OK)
                 throw DaaError("failed to decompress index table");
-            daas     = (destLen << 3) / (unsigned)(bittype + bitsize);
-            daas_mem = (((unsigned)(bitsize + bittype) * daas) + 7) >> 3;
+            
+            // Recalculate chunks based on decompressed size
+            u32 bits_per_entry = (u32)(bittype + bitsize);
+            daas = (u32)(((u64)destLen << 3) / bits_per_entry);
         } else {
             ctx_read(ctx, daa_data, daas_mem);
         }
@@ -1031,9 +1052,8 @@ bool convertDaaToIso(const std::string &inputFile,
 
         if (fseek(ctx.fdi, daa.data_offset, SEEK_SET)) throw DaaError("fseek to data_offset");
 
-        // Main decompression loop
         ctx_alloc(&ctx.out_buf, daa.chunksize, &ctx.outsz);
-        u64  tot       = 0;
+        u64  tot        = 0;
         u32  last_chunk = daas - 1;
 
         for (u32 i = 0; i < daas; i++) {
@@ -1055,14 +1075,17 @@ bool convertDaaToIso(const std::string &inputFile,
                 if (len >= daa.chunksize) ztype = -1;
             }
 
+            // Safety limit to avoid huge allocations from corrupt/malicious headers
+            if (len > 0x1000000) throw DaaError("excessive chunk length");
+
             ctx_alloc(&ctx.in, len, &ctx.insz);
             ctx_read(ctx, ctx.in, len);
 
             u32 outlen;
             switch (ztype) {
                 case -1:
-                    outlen = daa.chunksize;
-                    memcpy(ctx.out_buf, ctx.in, len);
+                    outlen = (len < daa.chunksize) ? len : daa.chunksize;
+                    memcpy(ctx.out_buf, ctx.in, outlen);
                     break;
                 case 0:
                     LzmaDec_Init(&ctx.lzma);
@@ -1086,11 +1109,11 @@ bool convertDaaToIso(const std::string &inputFile,
                     outlen = (u32)(daa.isosize - tot);
             } else {
                 if (outlen != daa.chunksize)
-                    throw DaaError("chunk size mismatch after decompression");
+                    throw DaaError("chunk size mismatch");
             }
 
             if (fwrite(ctx.out_buf, 1, outlen, ctx.fdo) != outlen)
-                throw DaaError("write failed – check disk space");
+                throw DaaError("write failed");
 
             tot += outlen;
             if (completedBytes)
