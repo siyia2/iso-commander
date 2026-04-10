@@ -768,7 +768,7 @@ std::vector<std::string>& files, const std::string& fileType, std::atomic<bool>&
  * @param newISOFound Atomic flag set to true if new ISO files were discovered
  * @param isImportRunning Atomic flag indicating if import is in progress
  */
-void promptSearchBinImgChdMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning) {
+void promptSearchBinImgMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning) {
     struct FileTypeConfig {
         std::string extension;
         std::string name;
