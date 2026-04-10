@@ -1,19 +1,40 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /*
  * daa2iso.cpp  –  Convert PowerISO DAA / gBurner GBI disk images to ISO
  *
  * Original reverse-engineering and algorithms by Luigi Auriemma (aluigi.org)
  * C++ Linux port + library API (no Windows deps, no encryption/password) – 2026
  *
- * License: GPL-2.0 (same as the original work)
+ * License: GPL-2.0 or
+    (at your option) any later version (same as the original work)
  *
- * Build as command-line tool:
- *   g++ -O2 -std=c++17 -o daa2iso daa2iso.cpp
  *
  * Use as library: include this file or link against it.
  *   bool convertDaaToIso(const std::string& inputFile,
  *                        const std::string& outputFile,
  *                        std::atomic<size_t>* completedBytes);
  */
+
+/*
+    Copyright 2007,2008,2009 Luigi Auriemma
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
+
+    http://www.gnu.org/licenses/gpl-2.0.txt
+*/
 
 // ─── large-file support ────────────────────────────────────────────────────
 #define _LARGE_FILES
@@ -866,20 +887,17 @@ static void ctx_read(DaaContext &ctx, void *data, unsigned size) {
     
     fclose(ctx.fdi);
     ctx.fdi = ctx_next_volume(ctx);
-    // Recurse to read remainder from next volume
     ctx_read(ctx, (u8*)data + len, size - len);
 }
 
 static void ctx_alloc(u8 **data, unsigned wantsize, unsigned *currsize) {
-    // FIX: Add 16 bytes of safety padding. Bit-readers/LZMA often peek 
-    // past the current byte. Padding prevents ASan heap-buffer-overflow.
+
     unsigned actual_wantsize = wantsize + 16;
     if (actual_wantsize <= *currsize && *data) return;
 
     u8 *tmp = (u8*)realloc(*data, actual_wantsize);
     if (!tmp) throw DaaError("out of memory");
     
-    // Clear the padding area to ensure deterministic behavior when peeking
     memset(tmp + wantsize, 0, 16);
     
     *data = tmp;
@@ -946,7 +964,6 @@ bool convertDaaToIso(const std::string &inputFile,
 
         if (daa.version == 0x100) {
             daas_mem = daa.data_offset - daa.size_offset;
-            // FIX: Padding for v1.0 table
             daa_data = (daa_data_t*)malloc(daas_mem + 16);
             if (!daa_data) throw DaaError("out of memory (daa_data)");
             daas = daas_mem / 3;
@@ -963,8 +980,7 @@ bool convertDaaToIso(const std::string &inputFile,
                 for (bitsize=0; len>(unsigned)bittype; bitsize++, len>>=1);
             }
             daas_mem = daa.data_offset - daa.size_offset;
-            
-            // FIX: Better math for chunk count to avoid off-by-one errors
+
             u32 bits_per_entry = (u32)(bittype + bitsize);
             if (bits_per_entry == 0) throw DaaError("invalid header bits");
             daas = (u32)(((u64)daas_mem << 3) / bits_per_entry);
@@ -974,9 +990,7 @@ bool convertDaaToIso(const std::string &inputFile,
                 daa_dataz = *(u32*)(daa.hdata + 1);
                 swap32_if_be(&daa_dataz, ctx.endian);
             }
-            
-            // FIX: Padding (16 bytes) and zeroing prevents the bit-reader 
-            // from hitting a redzone when reading the final chunk's bits.
+
             daa_data = (daa_data_t*)malloc(daas_mem + 16);
             if (!daa_data) throw DaaError("out of memory (daa_data v110)");
             memset(daa_data, 0, daas_mem + 16);
