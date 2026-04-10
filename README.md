@@ -62,7 +62,7 @@ Database folder location: `/root/.local/share/isocmd/database/` || `~/.local/sha
 * Copy/Move ISO
 * Delete ISO
 * Write ISO to Removable USB Drives
-* Convert (.bin/.img/.chd/.mdf/.nrg) to ISO
+* Convert (.bin/.img/.chd/.daa/.mdf/.nrg) to ISO
 
 ## Make dependencies
 - Archlinux: `readline util-linux`.
@@ -84,8 +84,10 @@ Special thanks to the original authors of the conversion tools:
 * Salvatore Santagati (mdf2iso).
 * Grégory Kokanosky (nrg2iso).
 * Danny Kurniawan and Kerry Harris (ccd2iso).
+* Luigi Auriemma (daa2iso).
 
 Original Licenses:
 - ccd2iso -> GPL2 or later
 - mdf2iso -> GPL2 or later
+- daa2iso -> GPL2 or later
 - nrg2iso -> GPL3 or later (as of 2021)
