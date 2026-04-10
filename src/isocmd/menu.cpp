@@ -138,7 +138,7 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
         clearScrollBuffer();
         
         std::cout << color << "+-------------------------+\n"
-                  << "|↵ Convert2ISO            |\n| (breaks-emu-compat)     |\n"
+                  << "|↵ Convert2ISO            |                         |\n| (For Data CD/DVD Only)  |\n| (Breaks-emu-compat)     |\n"
                   << "+-------------------------+\n"
                   << "|1. CCD2ISO++             |\n"
                   << "+-------------------------+\n"
