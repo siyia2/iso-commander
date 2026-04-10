@@ -229,9 +229,12 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
     : (!isFiltered && !nrgFilesCache.empty() && fileType == "nrg" &&
        (nrgFilesCache.size() != files.size() || !std::equal(nrgFilesCache.begin(), nrgFilesCache.end(), files.begin())))
         ? (need2Sort = true, nrgFilesCache)
-    : (!isFiltered && !chdFilesCache.empty() && fileType == "chd" &&   // <-- added CHD branch
+    : (!isFiltered && !chdFilesCache.empty() && fileType == "chd" &&
        (chdFilesCache.size() != files.size() || !std::equal(chdFilesCache.begin(), chdFilesCache.end(), files.begin())))
         ? (need2Sort = true, chdFilesCache)
+    : (!isFiltered && !daaFilesCache.empty() && fileType == "daa" &&               // <-- DAA branch
+       (daaFilesCache.size() != files.size() || !std::equal(daaFilesCache.begin(), daaFilesCache.end(), files.begin())))
+        ? (need2Sort = true, daaFilesCache)
     : files;
             
     if (!list || (list && needSortingAfterflno)) {
@@ -246,9 +249,12 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
             } else if (fileType == "nrg") {
                 std::lock_guard<std::mutex> lock(nrgCacheMutex);
                 sortFilesCaseInsensitive(nrgFilesCache);
-            } else if (fileType == "chd") {   // <-- added CHD sorting
+            } else if (fileType == "chd") {
                 std::lock_guard<std::mutex> lock(chdCacheMutex);
                 sortFilesCaseInsensitive(chdFilesCache);
+            } else if (fileType == "daa") {                                         // <-- DAA sorting
+                std::lock_guard<std::mutex> lock(daaCacheMutex);
+                sortFilesCaseInsensitive(daaFilesCache);
             }
         }
         needSortingAfterflno = false;

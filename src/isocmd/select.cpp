@@ -460,6 +460,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
     } else if (fileType == "chd") {
         fileExtension = ".chd";
         fileExtensionWithOutDots = "CHD";
+    } else if (fileType == "daa") {                     // <-- DAA branch
+        fileExtension = ".daa";
+        fileExtensionWithOutDots = "DAA";
     } else {
         // fallback (should not happen)
         fileExtension = "";
@@ -523,7 +526,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                 } else if (fileType == "nrg") {
                     files = nrgFilesCache;
                 } else if (fileType == "chd") {
-                    files = chdFilesCache;   // you need to define this cache globally
+                    files = chdFilesCache;
+                } else if (fileType == "daa") {          // <-- DAA cache restore
+                    files = daaFilesCache;
                 }
                 needsClrScrn = true;
                 isFiltered = false; 
@@ -578,11 +583,12 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                 }
             }
             
-            // Call processInputForConversions with the correct mode flags
+            // Call processInputForConversions with the correct mode flags (now with DAA)
             processInputForConversions(combinedIndices, files, 
                                        (fileType == "mdf"),   // modeMdf
                                        (fileType == "nrg"),   // modeNrg
-                                       (fileType == "chd"),   // modeChd  <-- added
+                                       (fileType == "chd"),   // modeChd
+                                       (fileType == "daa"),   // modeDaa  <-- added
                                        processedErrors, successOuts, skippedOuts, failedOuts, 
                                        verbose, needsClrScrn, newISOFound);
             
@@ -603,10 +609,12 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             }
         }
         else {
+            // Direct conversion without pending list (now with DAA)
             processInputForConversions(inputString, files, 
                                        (fileType == "mdf"),   // modeMdf
                                        (fileType == "nrg"),   // modeNrg
-                                       (fileType == "chd"),   // modeChd  <-- added
+                                       (fileType == "chd"),   // modeChd
+                                       (fileType == "daa"),   // modeDaa  <-- added
                                        processedErrors, successOuts, skippedOuts, failedOuts, 
                                        verbose, needsClrScrn, newISOFound);
             needsClrScrn = true;
