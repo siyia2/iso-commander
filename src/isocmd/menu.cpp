@@ -180,12 +180,12 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
                     clearScrollBuffer();
                     break;
                 case '3':
-                    operation = "daa";
+                    operation = "mdf";
                     promptSearchBinImgChdMdfNrg(operation, newISOFound, isImportRunning);
                     clearScrollBuffer();
                     break;
                 case '4':
-                    operation = "mdf";
+                    operation = "daa";
                     promptSearchBinImgChdMdfNrg(operation, newISOFound, isImportRunning);
                     clearScrollBuffer();
                     break;

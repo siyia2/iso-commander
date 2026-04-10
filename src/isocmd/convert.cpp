@@ -14,42 +14,25 @@ bool fileExists(const std::string& fullPath) {
 }
 
 /**
- * @brief Batch converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD, DAA) to ISO format.
- *
- * Handles per-file validation (existence and basic readability), skips existing outputs,
- * selects the appropriate conversion backend based on mode flags, and aggregates
- * success/failed/skipped messages in a thread-safe manner.
- *
- * Special handling is included for DAA multi-part archives: filenames with patterns
- * like `foo.part01.daa` or `foo.part001.daa` are stripped of the `.partNN[N]`
- * suffix to output to `foo.iso` rather than `foo.part01.iso`.
- *
- * Also updates file ownership for outputs, removes invalid cache entries, and triggers
- * a database refresh if new ISO files are successfully created.
- *
- * @param imageFiles     Vector of image file paths to convert.
- * @param successOuts    Set populated with success messages for completed conversions.
- * @param skippedOuts    Set populated with skip messages (e.g., output ISO already exists).
- * @param failedOuts     Set populated with failure messages (e.g., missing file, read error).
- * @param modeMdf        If `true`, use MDF-to-ISO conversion backend.
- * @param modeNrg        If `true`, use NRG-to-ISO conversion backend.
- * @param modeChd        If `true`, use CHD-to-ISO conversion backend.
- * @param modeDaa        If `true`, use DAA-to-ISO conversion backend (handles multi-part archives).
- * @param completedBytes Atomic counter for bytes processed (used by progress bar).
- * @param completedTasks Atomic counter for tasks successfully completed.
- * @param failedTasks    Atomic counter for tasks that failed or were cancelled.
- * @param newISOFound    Atomic flag set to `true` if at least one ISO was successfully created.
- *
- * @note Messages are batched (50 at a time) to reduce lock contention.
- *       The function is thread-safe and designed to be called from multiple worker threads.
- *       On conversion failure, any partially created output ISO is automatically removed.
+ * @brief Orchestrates the conversion of multiple disk image files to ISO format.
+ * * This function handles batch processing of BIN, IMG, MDF, and NRG files. It manages
+ * UI theme coloring, file existence checks, readability validation, skip logic for 
+ * existing outputs, and multi-threaded safe message logging.
+ * * @param imageFiles Vector of input file paths to convert.
+ * @param successOuts Set to store successful conversion messages.
+ * @param skippedOuts Set to store skipped conversion messages.
+ * @param failedOuts Set to store failed or error messages.
+ * @param modeMdf Set to true if processing MDF files.
+ * @param modeNrg Set to true if processing NRG files.
+ * @param completedBytes Pointer to atomic counter for total bytes processed.
+ * @param completedTasks Pointer to atomic counter for successfully finished tasks.
+ * @param failedTasks Pointer to atomic counter for tasks that encountered errors.
+ * @param newISOFound Atomic flag set to true if the database needs a refresh.
  */
 void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, 
                   std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, 
-                  const bool& modeMdf, const bool& modeNrg, const bool& modeChd, const bool& modeDaa,
-                  std::atomic<size_t>* completedBytes, 
-                  std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, 
-                  std::atomic<bool>& newISOFound) {
+                  const bool& modeMdf, const bool& modeNrg, std::atomic<size_t>* completedBytes, 
+                  std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound) {
 
     namespace fs = std::filesystem;
     const size_t BATCH_SIZE = 50;
@@ -82,6 +65,9 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
 
     std::vector<std::string> localSuccessMsgs, localFailedMsgs, localSkippedMsgs;
 
+    /**
+     * @brief Internal helper to flush local message batches into global thread-safe sets.
+     */
     auto batchInsertMessages = [&]() {
         if (localSuccessMsgs.size() >= BATCH_SIZE || localFailedMsgs.size() >= BATCH_SIZE || localSkippedMsgs.size() >= BATCH_SIZE) {
             std::lock_guard<std::mutex> lock(globalSetsMutex);
@@ -128,29 +114,6 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
         }
 
         std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
-        // DAA multi-part files (foo.part01.daa / foo.part001.daa) should output
-        // to foo.iso, not foo.part01.iso — strip the .partNN[N] suffix if present.
-        if (modeDaa) {
-            fs::path p(inputPath);
-            std::string stem = p.stem().string(); // already stripped ".daa"
-            // Check for .partNNN (3-digit) suffix first, then .partNN (2-digit)
-            for (int digits : {3, 2}) {
-                std::string prefix = ".part";
-                size_t suffixLen = prefix.size() + digits;
-                if (stem.size() > suffixLen) {
-                    std::string candidate = stem.substr(stem.size() - suffixLen);
-                    if (candidate.substr(0, prefix.size()) == prefix) {
-                        std::string numPart = candidate.substr(prefix.size());
-                        if (std::all_of(numPart.begin(), numPart.end(), ::isdigit)) {
-                            stem = stem.substr(0, stem.size() - suffixLen);
-                            break;
-                        }
-                    }
-                }
-            }
-            outputPath = (p.parent_path() / (stem + ".iso")).string();
-        }
-
         if (fileExists(outputPath)) {
             std::string msg;
             msg.reserve(128);
@@ -166,17 +129,9 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
         }
 
         bool conversionSuccess = false;
-        if (modeMdf) {
-            conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
-        } else if (modeNrg) {
-            conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
-        } else if (modeChd) {
-            conversionSuccess = convertChdToIso(inputPath, outputPath, completedBytes);
-        } else if (modeDaa) {
-            conversionSuccess = convertDaaToIso(inputPath, outputPath, completedBytes);
-        } else {
-            conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
-        }
+        if (modeMdf)            conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
+        else if (modeNrg)       conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
+        else                    conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
 
         auto [outDir, outName] = extractDirectoryAndFilename(outputPath, "conversions");
 
@@ -188,9 +143,7 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
             std::string_view fileType = fileNameLower.ends_with(".bin") ? "BIN" :
                                         fileNameLower.ends_with(".img") ? "IMG" :
                                         fileNameLower.ends_with(".mdf") ? "MDF" :
-                                        fileNameLower.ends_with(".nrg") ? "NRG" :
-                                        fileNameLower.ends_with(".chd") ? "CHD" :
-                                        fileNameLower.ends_with(".daa") ? "DAA" : "Image";
+                                        fileNameLower.ends_with(".nrg") ? "NRG" : "Image";
             std::string msg;
             msg.reserve(128);
             msg.append(okLabel).append(fileType).append(" file converted to ISO: ")
