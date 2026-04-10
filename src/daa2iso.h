@@ -1,0 +1,156 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/*
+    Copyright 2007,2008,2009 Luigi Auriemma
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
+
+    http://www.gnu.org/licenses/gpl-2.0.txt
+*/
+
+#ifndef DAA2ISO_H
+#define DAA2ISO_H
+
+/**
+ * @brief DAA file header structure (packed to 4 bytes)
+ * 
+ * This structure represents the header of a DAA (Direct Access Archive) file.
+ * The header contains metadata about the compressed disk image including
+ * its original ISO size, compression parameters, and validation data.
+ * 
+ * @note The #pragma pack(4) ensures the structure is byte-aligned to 4-byte
+ *       boundaries for consistent cross-platform layout.
+ */
+#pragma pack(4)
+struct daa_t {
+    uint8_t  sign[16];       /**< File signature ("DAA" or "GBI") */
+    uint32_t size_offset;    /**< Offset to size information */
+    uint32_t version;        /**< DAA format version */
+    uint32_t data_offset;    /**< Offset to compressed data */
+    uint32_t b1;             /**< Compression parameter 1 */
+    uint32_t b0;             /**< Compression parameter 0 */
+    uint32_t chunksize;      /**< Size of compression chunks */
+    uint64_t isosize;        /**< Original uncompressed ISO size */
+    uint64_t daasize;        /**< Compressed DAA file size */
+    uint8_t  hdata[16];      /**< Header data (reserved) */
+    uint32_t crc;            /**< CRC32 checksum of the header */
+};
+#pragma pack()
+
+/**
+ * @brief Swap byte order of a 32-bit integer if big-endian
+ * 
+ * @param n Pointer to the 32-bit integer to swap (modified in-place)
+ * @param endian Non-zero if the source is big-endian and swap is needed,
+ *               zero to leave unchanged
+ */
+inline void swap32_if_be(uint32_t* n, int endian) {
+    if (!endian) return;
+    uint32_t t = *n;
+    *n = ((t & 0xff000000) >> 24) | ((t & 0x00ff0000) >> 8) |
+         ((t & 0x0000ff00) << 8)  | ((t & 0x000000ff) << 24);
+}
+
+/**
+ * @brief Swap byte order of a 64-bit integer if big-endian
+ * 
+ * @param n Pointer to the 64-bit integer to swap (modified in-place)
+ * @param endian Non-zero if the source is big-endian and swap is needed,
+ *               zero to leave unchanged
+ */
+inline void swap64_if_be(uint64_t* n, int endian) {
+    if (!endian) return;
+    uint64_t t = *n;
+    *n = ((t & 0xff00000000000000ULL) >> 56) |
+         ((t & 0x00ff000000000000ULL) >> 40) |
+         ((t & 0x0000ff0000000000ULL) >> 24) |
+         ((t & 0x000000ff00000000ULL) >> 8)  |
+         ((t & 0x00000000ff000000ULL) << 8)  |
+         ((t & 0x0000000000ff0000ULL) << 24) |
+         ((t & 0x000000000000ff00ULL) << 40) |
+         ((t & 0x00000000000000ffULL) << 56);
+}
+
+/**
+ * @brief Perform endianness conversion on entire DAA header structure
+ * 
+ * This function swaps all multi-byte fields in a daa_t structure
+ * from big-endian to little-endian (or vice versa).
+ * 
+ * @param d Pointer to the DAA header structure to convert (modified in-place)
+ * @param endian Non-zero to perform byte swapping, zero to leave unchanged
+ * 
+ * @note Typically used when reading DAA files created on big-endian systems
+ *       from little-endian systems, or vice versa.
+ */
+inline void swap_daa_if_be(daa_t* d, int endian) {
+    if (!endian) return;
+    swap32_if_be(&d->size_offset, 1);
+    swap32_if_be(&d->version, 1);
+    swap32_if_be(&d->data_offset, 1);
+    swap32_if_be(&d->b1, 1);
+    swap32_if_be(&d->b0, 1);
+    swap32_if_be(&d->chunksize, 1);
+    swap64_if_be(&d->isosize, 1);
+    swap64_if_be(&d->daasize, 1);
+    swap32_if_be(&d->crc, 1);
+}
+
+/**
+ * @brief Get the uncompressed ISO size from a DAA file
+ * 
+ * Reads the DAA file header and extracts the original ISO image size
+ * before compression. This is useful for pre-allocating buffers or
+ * verifying available disk space before extraction.
+ * 
+ * @param path Path to the DAA file (UTF-8 encoded on applicable platforms)
+ * @return Uncompressed ISO size in bytes, or 0 if:
+ *         - File cannot be opened
+ *         - Read operation fails
+ *         - DAA signature is invalid (not "DAA" or "GBI")
+ * 
+ * @note The function automatically handles endianness detection and
+ *       byte-swapping based on the host platform.
+ * 
+ * @warning The returned size is the claimed size from the DAA header;
+ *          no validation is performed against actual compressed data.
+ * 
+ * @see daa_t::isosize
+ */
+static uint64_t getDaaIsoSize(const std::string& path) {
+    FILE* f = fopen(path.c_str(), "rb");
+    if (!f) return 0;
+
+    daa_t daa;
+    if (fread(&daa, 1, sizeof(daa), f) != sizeof(daa)) {
+        fclose(f);
+        return 0;
+    }
+    fclose(f);
+
+    // Determine host endianness (0 = little-endian, no swap)
+    int endian = 1;
+    if (*(char*)&endian) endian = 0;
+    swap_daa_if_be(&daa, endian);
+
+    // Check signature (basic validation)
+    if (strncmp((char*)daa.sign, "DAA", 16) != 0 &&
+        strncmp((char*)daa.sign, "GBI", 16) != 0) {
+        return 0;
+    }
+    return daa.isosize;
+}
+
+#endif // DAA2ISO_H
