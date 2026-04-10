@@ -419,9 +419,14 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 }
 
 /**
- * @brief The main menu loop for converting various disk image formats (BIN, MDF, NRG) to ISO.
- * * Provides a specialized interface for selecting raw image files and passing them
- * to conversion utilities.
+ * @brief Interactive file selection and conversion controller for disk image formats.
+ *
+ * Provides a terminal-based interface for browsing, filtering, and selecting
+ * BIN/IMG, MDF, NRG, and CHD image files. Supports pagination, batch selection,
+ * and command-based input for triggering conversions.
+ *
+ * Handles user interaction, cache restoration, pending selection processing,
+ * and dispatches selected files to the appropriate conversion utilities.
  */
 void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {
 

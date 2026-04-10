@@ -14,20 +14,14 @@ bool fileExists(const std::string& fullPath) {
 }
 
 /**
- * @brief Orchestrates the conversion of multiple disk image files to ISO format.
- * * This function handles batch processing of BIN, IMG, MDF, and NRG files. It manages
- * UI theme coloring, file existence checks, readability validation, skip logic for 
- * existing outputs, and multi-threaded safe message logging.
- * * @param imageFiles Vector of input file paths to convert.
- * @param successOuts Set to store successful conversion messages.
- * @param skippedOuts Set to store skipped conversion messages.
- * @param failedOuts Set to store failed or error messages.
- * @param modeMdf Set to true if processing MDF files.
- * @param modeNrg Set to true if processing NRG files.
- * @param completedBytes Pointer to atomic counter for total bytes processed.
- * @param completedTasks Pointer to atomic counter for successfully finished tasks.
- * @param failedTasks Pointer to atomic counter for tasks that encountered errors.
- * @param newISOFound Atomic flag set to true if the database needs a refresh.
+ * @brief Batch converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD) to ISO format.
+ *
+ * Handles per-file validation (existence and basic readability), skips existing outputs,
+ * selects the appropriate conversion backend based on mode flags, and aggregates
+ * success/failed/skipped messages in a thread-safe manner.
+ *
+ * Also updates file ownership for outputs, removes invalid cache entries, and triggers
+ * a database refresh if new ISO files are successfully created.
  */
 void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, 
                   std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, 

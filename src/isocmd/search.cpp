@@ -322,19 +322,25 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 //=============================================================================
 
 /**
- * @brief Lists the contents of RAM cache for disc image files
- * 
- * Displays all files currently stored in the specified RAM cache (BIN/IMG, MDF, or NRG)
- * and provides an interactive selection interface.
- * 
- * @param files Output vector to populate with cached file paths
- * @param list Flag indicating whether to list the cache contents
- * @param fileExtension File extension string for display purposes
- * @param binImgFilesCache Reference to BIN/IMG cache vector
- * @param mdfMdsFilesCache Reference to MDF cache vector
- * @param nrgFilesCache Reference to NRG cache vector
- * @param modeMdf If true, operate on MDF cache mode
- * @param modeNrg If true, operate on NRG cache mode
+ * @brief Prepares and optionally displays the contents of a disc image RAM cache.
+ *
+ * Copies the active cache (BIN/IMG, MDF, NRG, or CHD) into the output vector
+ * when listing is enabled. If the cache is empty, prints a status message
+ * and waits for user input.
+ *
+ * Also performs terminal state handling (signal ignoring, input control,
+ * and scroll buffer clearing).
+ *
+ * @param files Output vector populated with cached file paths when available
+ * @param list Enables display/listing mode and user interaction behavior
+ * @param fileExtension Display-only string used in status messages
+ * @param binImgFilesCache Snapshot of BIN/IMG cache
+ * @param mdfMdsFilesCache Snapshot of MDF cache
+ * @param nrgFilesCache Snapshot of NRG cache
+ * @param chdFilesCache Snapshot of CHD cache
+ * @param modeMdf Select MDF cache mode
+ * @param modeNrg Select NRG cache mode
+ * @param modeChd Select CHD cache mode
  */
 void ramCacheList(std::vector<std::string>& files, bool& list, const std::string& fileExtension, 
                   const std::vector<std::string>& binImgFilesCache, 
@@ -388,13 +394,22 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
 }
 
 /**
- * @brief Clears the RAM cache for disc image files
- * 
- * Removes all entries from the specified RAM cache (BIN/IMG, MDF, or NRG) and
- * also clears associated transformation cache entries.
- * 
- * @param modeMdf If true, clear MDF cache
- * @param modeNrg If true, clear NRG cache
+ * @brief Clears the active disc image file cache and related transformation entries.
+ *
+ * Clears one cache at a time based on the selected mode:
+ * - CHD
+ * - MDF
+ * - NRG
+ * - BIN/IMG (default)
+ *
+ * Also removes matching entries from the transformation cache based on file extension.
+ *
+ * Additionally performs terminal/UI state handling (signal reset, input control)
+ * and prints a status message to the user.
+ *
+ * @param modeMdf Select MDF cache mode (mutually exclusive)
+ * @param modeNrg Select NRG cache mode (mutually exclusive)
+ * @param modeChd Select CHD cache mode (mutually exclusive)
  */
 void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd) {
     signal(SIGINT, SIG_IGN);
@@ -467,14 +482,18 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd) {
 }
 
 /**
- * @brief Applies blacklist filtering to disc image files
- * 
- * Checks if a file should be included based on its extension and blacklisted keywords.
- * 
- * @param entry Filesystem entry to check
- * @param blacklistMdf If true, only allow .mdf files
- * @param blacklistNrg If true, only allow .nrg files
- * @return true if the file passes the blacklist filter, false otherwise
+ * @brief Filters filesystem entries based on disc image mode.
+ *
+ * Acts as a mode-based extension filter that allows only one category of disc image
+ * files at a time:
+ * - BIN/IMG (default)
+ * - MDF
+ * - NRG
+ * - CHD
+ *
+ * Optionally supports keyword-based exclusion (currently unused).
+ *
+ * @return true if the file matches the active mode filter, false otherwise.
  */
 bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg, const bool& blacklistChd) {
     const std::string filenameLower = entry.filename().string();
@@ -520,16 +539,16 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 }
 
 /**
- * @brief Processes a batch of directory paths to find disc image files
- * 
- * Traverses a single directory path and collects all matching disc image files
- * based on the specified mode (BIN/IMG, MDF, or NRG).
- * 
- * @param path Directory path to traverse
- * @param mode File type mode ("bin", "mdf", or "nrg")
- * @param callback Callback function called for each discovered file
- * @param processedErrorsFind Set to store error messages encountered
- * @return Unordered set of discovered file paths
+ * @brief Recursively scans a single directory for disc image files as part of a parallel search system.
+ *
+ * Traverses the directory tree and filters files based on the specified mode
+ * (BIN/IMG, MDF, NRG, or CHD). Applies cache checks and blacklist filtering
+ * before invoking a callback for newly discovered files.
+ *
+ * Supports cancellation handling, progress reporting, and error aggregation
+ * for the parent search system.
+ *
+ * @return Set of newly discovered file paths from this directory.
  */
 std::unordered_set<std::string> processPaths(const std::string& path, const std::string& mode, 
                                             const std::function<void(const std::string&, const std::string&)>& callback, 
@@ -611,20 +630,15 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
 }
 
 /**
- * @brief Finds disc image files across multiple directories using multithreading
- * 
- * Spawns one thread per unique directory path to efficiently scan for disc image files
- * and updates the appropriate RAM cache with newly discovered files.
- * 
- * @param inputPaths Vector of directory paths to scan
- * @param fileNames Set to store discovered file names
- * @param currentCacheOld Reference to store previous cache size
- * @param mode File type mode ("bin", "mdf", or "nrg")
- * @param callback Callback function called for each discovered file
- * @param directoryPaths Vector of valid directory paths (output parameter)
- * @param invalidDirectoryPaths Set of invalid directory paths (output parameter)
- * @param processedErrorsFind Set to store error messages (output parameter)
- * @return Vector of all discovered file paths (including previously cached files)
+ * @brief Discovers disc image files across multiple directories using a thread pool.
+ *
+ * Submits directory scan tasks to a shared static thread pool, where each task
+ * processes a directory and returns discovered BIN/IMG/MDF/NRG/CHD files.
+ *
+ * Results are aggregated, deduplicated, and merged into the appropriate RAM cache.
+ * Supports cancellation via global operation flag and signal handling.
+ *
+ * @return Updated cache containing previously known and newly discovered files.
  */
 std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::unordered_set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, const std::vector<std::string>& directoryPaths, std::unordered_set<std::string>& invalidDirectoryPaths, std::unordered_set<std::string>& processedErrorsFind) {
     setupSignalHandlerCancellations();
@@ -712,22 +726,14 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
 }
 
 /**
- * @brief Dispatches special commands for BIN/IMG/MDF/NRG search operations
- * 
- * Handles various command-line commands including statistics display, configuration,
- * pagination settings, theme changes, and cache management.
- * 
- * @param input The command input string
- * @param configPath Path to configuration file
- * @param modeMdf If true, operating in MDF mode
- * @param modeNrg If true, operating in NRG mode
- * @param fileExtension File extension for display purposes
- * @param files Vector of file paths (modified by 'ls' command)
- * @param fileType Type of file being processed
- * @param newISOFound Atomic flag for new ISO discovery
- * @param list Flag indicating whether to list cache contents
- * @param isImportRunning Atomic flag indicating if import is in progress
- * @return true if a special command was handled and caller should continue, false otherwise
+ * @brief Dispatches special command inputs during BIN/IMG/MDF/NRG/CHD search UI interaction.
+ *
+ * Acts as a command router for the search interface, handling configuration changes,
+ * UI settings, pagination control, cache operations, help output, and display mode switching.
+ *
+ * Some commands trigger downstream actions such as cache listing and file selection workflows.
+ *
+ * @return true if the input was handled as a special command, otherwise false.
  */
 bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input, const std::string& configPath, bool modeMdf, bool modeNrg, bool modeChd, const std::string& fileExtension, 
 std::vector<std::string>& files, const std::string& fileType, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {
@@ -784,14 +790,14 @@ std::vector<std::string>& files, const std::string& fileType, std::atomic<bool>&
 }
 
 /**
- * @brief Prompts user to search for disc image files (BIN/IMG/MDF/NRG)
- * 
- * Provides an interactive interface for scanning directories for disc image files,
- * caching results in RAM, and selecting files for further operations.
- * 
- * @param fileTypeChoice User's choice of file type ("bin", "img", "mdf", or "nrg")
- * @param newISOFound Atomic flag set to true if new ISO files were discovered
- * @param isImportRunning Atomic flag indicating if import is in progress
+ * @brief Interactive search and caching controller for disc image files.
+ *
+ * Provides a terminal-based interface for scanning user-provided directories
+ * for BIN/IMG, MDF, NRG, and CHD image files. Supports multi-path input,
+ * directory validation, history management, and special command dispatch.
+ *
+ * Discovered files are cached in memory and forwarded to the file selection
+ * and conversion workflow when available.
  */
 void promptSearchBinImgChdMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning) {
     struct FileTypeConfig {

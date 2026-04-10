@@ -193,20 +193,27 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     return true;
 }
 
-/**
- * @brief Loads and displays non-ISO image files (BIN, IMG, MDF, NRG).
- * * Implements a caching mechanism to avoid redundant sorting and leverages specific 
- * mutexes for different image formats to ensure thread-safe updates.
- * * @param files Current list of files to display.
- * @param fileType Extension type of the files (e.g., "bin", "nrg").
- * @param need2Sort Boolean indicating if the list requires sorting.
- * @param isFiltered Filter state.
- * @param list Flag indicating if this is a fresh listing or an update.
- * @param pendingIndices Indices marked for conversion or processing.
- * @param hasPendingProcess Global processing flag.
- * @param currentPage Current page for the display.
- * @param isImportRunning Status of the importer.
- */
+ /**
+  * @brief Prepares and displays cached disc image file lists.
+  *
+  * Restores file lists from the appropriate format cache (BIN/IMG, MDF, NRG, CHD)
+  * when not filtered and when cache state differs from the current view.
+  *
+  * If required, sorts both the active file list and the corresponding cache,
+  * using format-specific mutex protection for thread-safe updates.
+  *
+  * Finally delegates rendering and interaction to the list display system.
+  *
+  * @param files Current working file list (may be replaced by cache)
+  * @param fileType File extension type ("bin", "img", "mdf", "nrg", "chd")
+  * @param need2Sort Flag indicating whether sorting is required
+  * @param isFiltered Filter state affecting cache restoration
+  * @param list Controls whether list refresh behavior is executed
+  * @param pendingIndices Files queued for processing or conversion
+  * @param hasPendingProcess Global processing state flag
+  * @param currentPage Pagination state for UI display
+  * @param isImportRunning Importer activity flag
+  */
 void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,
                               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning) {
     clearScrollBuffer();
