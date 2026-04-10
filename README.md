@@ -29,14 +29,13 @@ Database folder location: `/root/.local/share/isocmd/database/` || `~/.local/sha
 * Advanced progress tracking.
 * Optional non-interactive mode.
 * Full RGB color support.
-* Single self contained binary for exec.
 
 
 ⚡ High-Performance Architecture:
 
 * Native C++ implementation.
 * Direct libmount and umount2 system calls.
-* Zero external library dependencies for terminal control.
+* Single self-contained executable binary.
 
 
 🔀 Concurrent Processing:
