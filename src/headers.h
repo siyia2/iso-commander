@@ -73,6 +73,7 @@ inline std::mutex binImgCacheMutex;
 inline std::mutex mdfMdsCacheMutex;
 inline std::mutex nrgCacheMutex;
 inline std::mutex chdCacheMutex;
+inline std::mutex daaCacheMutex;
 inline std::mutex couNtMutex;
 
 // Data Caches
@@ -83,6 +84,7 @@ inline std::vector<std::string> binImgFilesCache;
 inline std::vector<std::string> mdfMdsFilesCache;
 inline std::vector<std::string> nrgFilesCache;
 inline std::vector<std::string> chdFilesCache;
+inline std::vector<std::string> daaFilesCache;
 inline std::map<std::string, std::string> g_configCache;
 inline std::string g_cachedPath;
 
@@ -225,11 +227,30 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
 //------------------
 // Conversion Functions
 //------------------
-void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, const bool& modeMdf, const bool& modeNrg, const bool& modeChd, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound);
-void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning);
+void convertToISO(const std::vector<std::string>& imageFiles,
+                  std::unordered_set<std::string>& successOuts,
+                  std::unordered_set<std::string>& skippedOuts,
+                  std::unordered_set<std::string>& failedOuts,
+                  const bool& modeMdf,
+                  const bool& modeNrg,
+                  const bool& modeChd,
+                  const bool& modeDaa,                     // <-- new DAA flag
+                  std::atomic<size_t>* completedBytes,
+                  std::atomic<size_t>* completedTasks,
+                  std::atomic<size_t>* failedTasks,
+                  std::atomic<bool>& newISOFound);
+void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,
+                              std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning);
 void promptSearchBinImgChdMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning);
 void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning);
-void processInputForConversions(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, const bool& modeChd, std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound);
+void processInputForConversions(const std::string& input, std::vector<std::string>& fileList,
+                               const bool& modeMdf, const bool& modeNrg, const bool& modeChd,
+                               const bool& modeDaa,          // <-- new DAA flag
+                               std::unordered_set<std::string>& processedErrors,
+                               std::unordered_set<std::string>& successOuts,
+                               std::unordered_set<std::string>& skippedOuts,
+                               std::unordered_set<std::string>& failedOuts,
+                               bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound);
 //------------------
 // Return Type Functions
 //------------------
@@ -251,6 +272,9 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
 
 // CHD2ISO
 bool convertChdToIso(const std::string& chdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
+
+//DAA2ISO
+bool convertDaaToIso(const std::string &inputFile, const std::string &outputFile, std::atomic<size_t> *completedBytes);
 
 // MDF2ISO
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
