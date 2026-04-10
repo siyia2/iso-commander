@@ -193,27 +193,27 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     return true;
 }
 
- /**
-  * @brief Prepares and displays cached disc image file lists.
-  *
-  * Restores file lists from the appropriate format cache (BIN/IMG, MDF, NRG, CHD)
-  * when not filtered and when cache state differs from the current view.
-  *
-  * If required, sorts both the active file list and the corresponding cache,
-  * using format-specific mutex protection for thread-safe updates.
-  *
-  * Finally delegates rendering and interaction to the list display system.
-  *
-  * @param files Current working file list (may be replaced by cache)
-  * @param fileType File extension type ("bin", "img", "mdf", "nrg", "chd")
-  * @param need2Sort Flag indicating whether sorting is required
-  * @param isFiltered Filter state affecting cache restoration
-  * @param list Controls whether list refresh behavior is executed
-  * @param pendingIndices Files queued for processing or conversion
-  * @param hasPendingProcess Global processing state flag
-  * @param currentPage Pagination state for UI display
-  * @param isImportRunning Importer activity flag
-  */
+/**
+ * @brief Prepares and displays cached disc image file lists.
+ *
+ * Restores file lists from the appropriate format cache (BIN/IMG, MDF, NRG, CHD, DAA)
+ * when not filtered and when cache state differs from the current view.
+ *
+ * If required, sorts both the active file list and the corresponding cache,
+ * using format-specific mutex protection for thread-safe updates.
+ *
+ * Finally delegates rendering and interaction to the list display system.
+ *
+ * @param files Current working file list (may be replaced by cache)
+ * @param fileType File extension type ("bin", "img", "mdf", "nrg", "chd", "daa")
+ * @param need2Sort Flag indicating whether sorting is required
+ * @param isFiltered Filter state affecting cache restoration
+ * @param list Controls whether list refresh behavior is executed
+ * @param pendingIndices Files queued for processing or conversion
+ * @param hasPendingProcess Global processing state flag
+ * @param currentPage Pagination state for UI display
+ * @param isImportRunning Importer activity flag
+ */
 void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,
                               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning) {
     clearScrollBuffer();
@@ -229,9 +229,12 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
     : (!isFiltered && !nrgFilesCache.empty() && fileType == "nrg" &&
        (nrgFilesCache.size() != files.size() || !std::equal(nrgFilesCache.begin(), nrgFilesCache.end(), files.begin())))
         ? (need2Sort = true, nrgFilesCache)
-    : (!isFiltered && !chdFilesCache.empty() && fileType == "chd" &&   // <-- added CHD branch
+    : (!isFiltered && !chdFilesCache.empty() && fileType == "chd" &&
        (chdFilesCache.size() != files.size() || !std::equal(chdFilesCache.begin(), chdFilesCache.end(), files.begin())))
         ? (need2Sort = true, chdFilesCache)
+    : (!isFiltered && !daaFilesCache.empty() && fileType == "daa" &&   // <-- added DAA branch
+       (daaFilesCache.size() != files.size() || !std::equal(daaFilesCache.begin(), daaFilesCache.end(), files.begin())))
+        ? (need2Sort = true, daaFilesCache)
     : files;
             
     if (!list || (list && needSortingAfterflno)) {
@@ -246,9 +249,12 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
             } else if (fileType == "nrg") {
                 std::lock_guard<std::mutex> lock(nrgCacheMutex);
                 sortFilesCaseInsensitive(nrgFilesCache);
-            } else if (fileType == "chd") {   // <-- added CHD sorting
+            } else if (fileType == "chd") {
                 std::lock_guard<std::mutex> lock(chdCacheMutex);
                 sortFilesCaseInsensitive(chdFilesCache);
+            } else if (fileType == "daa") {   // <-- added DAA sorting
+                std::lock_guard<std::mutex> lock(daaCacheMutex);
+                sortFilesCaseInsensitive(daaFilesCache);
             }
         }
         needSortingAfterflno = false;

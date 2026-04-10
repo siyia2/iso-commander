@@ -14,18 +14,39 @@ bool fileExists(const std::string& fullPath) {
 }
 
 /**
- * @brief Batch converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD) to ISO format.
+ * @brief Batch converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD, DAA) to ISO format.
  *
  * Handles per-file validation (existence and basic readability), skips existing outputs,
  * selects the appropriate conversion backend based on mode flags, and aggregates
  * success/failed/skipped messages in a thread-safe manner.
  *
+ * Special handling is included for DAA multi-part archives: filenames with patterns
+ * like `foo.part01.daa` or `foo.part001.daa` are stripped of the `.partNN[N]`
+ * suffix to output to `foo.iso` rather than `foo.part01.iso`.
+ *
  * Also updates file ownership for outputs, removes invalid cache entries, and triggers
  * a database refresh if new ISO files are successfully created.
+ *
+ * @param imageFiles     Vector of image file paths to convert.
+ * @param successOuts    Set populated with success messages for completed conversions.
+ * @param skippedOuts    Set populated with skip messages (e.g., output ISO already exists).
+ * @param failedOuts     Set populated with failure messages (e.g., missing file, read error).
+ * @param modeMdf        If `true`, use MDF-to-ISO conversion backend.
+ * @param modeNrg        If `true`, use NRG-to-ISO conversion backend.
+ * @param modeChd        If `true`, use CHD-to-ISO conversion backend.
+ * @param modeDaa        If `true`, use DAA-to-ISO conversion backend (handles multi-part archives).
+ * @param completedBytes Atomic counter for bytes processed (used by progress bar).
+ * @param completedTasks Atomic counter for tasks successfully completed.
+ * @param failedTasks    Atomic counter for tasks that failed or were cancelled.
+ * @param newISOFound    Atomic flag set to `true` if at least one ISO was successfully created.
+ *
+ * @note Messages are batched (50 at a time) to reduce lock contention.
+ *       The function is thread-safe and designed to be called from multiple worker threads.
+ *       On conversion failure, any partially created output ISO is automatically removed.
  */
 void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, 
                   std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, 
-                  const bool& modeMdf, const bool& modeNrg, const bool& modeChd,   // <-- added modeChd
+                  const bool& modeMdf, const bool& modeNrg, const bool& modeChd, const bool& modeDaa,
                   std::atomic<size_t>* completedBytes, 
                   std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, 
                   std::atomic<bool>& newISOFound) {
@@ -107,6 +128,29 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
         }
 
         std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
+        // DAA multi-part files (foo.part01.daa / foo.part001.daa) should output
+        // to foo.iso, not foo.part01.iso — strip the .partNN[N] suffix if present.
+        if (modeDaa) {
+            fs::path p(inputPath);
+            std::string stem = p.stem().string(); // already stripped ".daa"
+            // Check for .partNNN (3-digit) suffix first, then .partNN (2-digit)
+            for (int digits : {3, 2}) {
+                std::string prefix = ".part";
+                size_t suffixLen = prefix.size() + digits;
+                if (stem.size() > suffixLen) {
+                    std::string candidate = stem.substr(stem.size() - suffixLen);
+                    if (candidate.substr(0, prefix.size()) == prefix) {
+                        std::string numPart = candidate.substr(prefix.size());
+                        if (std::all_of(numPart.begin(), numPart.end(), ::isdigit)) {
+                            stem = stem.substr(0, stem.size() - suffixLen);
+                            break;
+                        }
+                    }
+                }
+            }
+            outputPath = (p.parent_path() / (stem + ".iso")).string();
+        }
+
         if (fileExists(outputPath)) {
             std::string msg;
             msg.reserve(128);
@@ -128,6 +172,8 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
             conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
         } else if (modeChd) {
             conversionSuccess = convertChdToIso(inputPath, outputPath, completedBytes);
+        } else if (modeDaa) {
+            conversionSuccess = convertDaaToIso(inputPath, outputPath, completedBytes);
         } else {
             conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
         }
@@ -143,7 +189,8 @@ void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set
                                         fileNameLower.ends_with(".img") ? "IMG" :
                                         fileNameLower.ends_with(".mdf") ? "MDF" :
                                         fileNameLower.ends_with(".nrg") ? "NRG" :
-                                        fileNameLower.ends_with(".chd") ? "CHD" : "Image";   // <-- added CHD detection
+                                        fileNameLower.ends_with(".chd") ? "CHD" :
+                                        fileNameLower.ends_with(".daa") ? "DAA" : "Image";
             std::string msg;
             msg.reserve(128);
             msg.append(okLabel).append(fileType).append(" file converted to ISO: ")

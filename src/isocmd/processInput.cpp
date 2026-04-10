@@ -4,6 +4,7 @@
 #include "../threadpool.h"
 #include "../mdf.h"
 #include "../ccd.h"
+#include "../daa.h"
 #include "../themes.h"
 #include "../chd.h"
 #include <chd.h>
@@ -316,7 +317,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
  *
  * This function parses the user-provided input string (e.g., "1-5,7,9"), identifies
  * the corresponding files from the master list, and orchestrates multi‑threaded
- * conversion of supported image types (BIN/CCD, MDF, NRG, CHD) to standard ISO.
+ * conversion of supported image types (BIN/CCD, MDF, NRG, CHD, DAA) to standard ISO.
  *
  * The function includes an inline size estimation pass to provide an accurate
  * progress bar during conversion. Estimation logic varies by input format:
@@ -325,12 +326,14 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
  * - **BIN/CCD**: Assumes 2352‑byte raw sectors with 2048 bytes of user data.
  * - **CHD**: Opens the CHD file, inspects the header, and calculates total sectors
  *   multiplied by 2048 bytes (ISO user data per sector).
+ * - **DAA**: Reads the DAA header to obtain the uncompressed ISO size (`iso_size`).
  *
  * @param input          Raw user selection string (e.g., "1,3-5").
  * @param fileList       Master vector of all non‑ISO image paths.
  * @param modeMdf        If `true`, treat input files as Alcohol 120% MDF images.
  * @param modeNrg        If `true`, treat input files as Nero NRG images.
  * @param modeChd        If `true`, treat input files as MAME CHD compressed images.
+ * @param modeDaa        If `true`, treat input files as PowerISO DAA compressed images.
  * @param processedErrors Set to record any parsing errors (invalid indices/patterns).
  * @param successOuts    Set populated with paths of successfully converted ISOs.
  * @param skippedOuts    Set populated with paths skipped due to cancellation or errors.
@@ -343,7 +346,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
  *       Cancellation via SIGINT (Ctrl+C) is handled gracefully.
  */
 void processInputForConversions(const std::string& input, std::vector<std::string>& fileList,
-                               const bool& modeMdf, const bool& modeNrg, const bool& modeChd,
+                               const bool& modeMdf, const bool& modeNrg, const bool& modeChd, const bool& modeDaa, // <-- added modeDaa
                                std::unordered_set<std::string>& processedErrors,
                                std::unordered_set<std::string>& successOuts,
                                std::unordered_set<std::string>& skippedOuts,
@@ -431,6 +434,17 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
                 totalBytes += sectors * info.sector_data;
             }
         }
+        // DAA mode                                                                 // <-- added DAA size estimation
+        else if (modeDaa) {
+            std::ifstream daa(file, std::ios::binary);
+            if (daa) {
+                DaaHeader hdr{};
+                daa.read(reinterpret_cast<char*>(&hdr), sizeof(hdr));
+                if (daa && hdr.iso_size > 0) {
+                    totalBytes += static_cast<size_t>(hdr.iso_size);
+                }
+            }
+        }
         // BIN/IMG (CCD) mode
         else {
             std::ifstream ccd(file, std::ios::binary | std::ios::ate);
@@ -448,6 +462,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     std::string operation = modeMdf ? std::string(originalColors::orange) + "MDF"     + std::string(originalColors::boldAlt) + suffix :
                         modeNrg ? std::string(originalColors::orange) + "NRG"     + std::string(originalColors::boldAlt) + suffix :
                         modeChd ? std::string(originalColors::orange) + "CHD"     + std::string(originalColors::boldAlt) + suffix :
+                        modeDaa ? std::string(originalColors::orange) + "DAA"     + std::string(originalColors::boldAlt) + suffix : // <-- added DAA label
                                   std::string(originalColors::orange) + "BIN/IMG" + std::string(originalColors::boldAlt) + suffix;
 
     clearScrollBuffer();
@@ -476,10 +491,10 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 
         futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk),
             &fileList, &successOuts, &skippedOuts, &failedOuts,
-            modeMdf, modeNrg, modeChd,
+            modeMdf, modeNrg, modeChd, modeDaa,                                   // <-- added modeDaa capture
             &completedBytes, &completedTasks, &failedTasks, &newISOFound]() {
             convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
-                modeMdf, modeNrg, modeChd,
+                modeMdf, modeNrg, modeChd, modeDaa,                               // <-- added modeDaa pass-through
                 &completedBytes, &completedTasks, &failedTasks, newISOFound);
         }));
     }
