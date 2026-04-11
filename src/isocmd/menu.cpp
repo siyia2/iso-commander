@@ -126,8 +126,11 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
 
 /**
  * @brief Displays the conversion submenu for transforming non-ISO disk images into ISO format.
- * * Supports .CCD, .MDF, and .NRG image formats using C++ implementations of conversion tools.
- * * @param newISOFound Atomic flag to notify main thread of newly created ISO files.
+ * 
+ * Supports .BIN/.IMG (with .CCD cuesheets), .MDF, .NRG, .CHD, and .DAA image formats
+ * using C++ implementations of conversion tools.
+ * 
+ * @param newISOFound Atomic flag to notify main thread of newly created ISO files.
  * @param isImportRunning Tracks background import state to prevent menu collisions.
  */
 void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning) {
