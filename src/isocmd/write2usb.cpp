@@ -7,9 +7,7 @@
 #include "../display.h"
 #include "../themes.h"
 
-
 std::vector<ProgressInfo> progressData; ///< Shared progress state for all active write tasks.
-
 
 /**
  * @brief Queries the size of a block device in bytes.
