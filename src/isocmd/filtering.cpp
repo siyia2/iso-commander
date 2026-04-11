@@ -458,6 +458,9 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
 {
     if (inputString != "/" && (inputString.empty() || inputString[0] != '/'))
         return false;
+        
+    if (inputString == "/;")
+		return false;
 
     const std::vector<std::string>& baseSource =
         isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
@@ -526,6 +529,8 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
     if (mainInputString.empty() ||
         (mainInputString != "/" && mainInputString[0] != '/'))
         return;
+    if (mainInputString == "/;")
+		return;
 
     FilterContext ctx {
         files,
