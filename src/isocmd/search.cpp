@@ -843,7 +843,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input, const
  * Discovered files are cached in memory and forwarded to the file selection
  * and conversion workflow when available.
  */
-void promptSearchBinImgChdMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning) {
+void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning) {
     struct FileTypeConfig {
         std::string extension;
         std::string name;

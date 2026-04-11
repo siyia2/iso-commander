@@ -171,27 +171,27 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
             switch (choice[0]) {
                 case '1':
                     operation = "bin";
-                    promptSearchBinImgChdMdfNrg(operation, newISOFound, isImportRunning);
+                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, isImportRunning);
                     clearScrollBuffer();
                     break;
                 case '2':
                     operation = "chd";
-                    promptSearchBinImgChdMdfNrg(operation, newISOFound, isImportRunning);
+                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, isImportRunning);
                     clearScrollBuffer();
                     break;
                 case '3':
                     operation = "daa";
-                    promptSearchBinImgChdMdfNrg(operation, newISOFound, isImportRunning);
+                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, isImportRunning);
                     clearScrollBuffer();
                     break;
                 case '4':
                     operation = "mdf";
-                    promptSearchBinImgChdMdfNrg(operation, newISOFound, isImportRunning);
+                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, isImportRunning);
                     clearScrollBuffer();
                     break;
                 case '5':
                     operation = "nrg";
-                    promptSearchBinImgChdMdfNrg(operation, newISOFound, isImportRunning);
+                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, isImportRunning);
                     clearScrollBuffer();
                     break;
             }
