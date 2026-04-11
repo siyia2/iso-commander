@@ -63,7 +63,9 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         processingBarWidth = 46;
         finalBarWidth = 30;
     } else if (operation.find("MDF") != std::string::npos || 
-               operation.find("NRG") != std::string::npos || 
+               operation.find("NRG") != std::string::npos ||
+               operation.find("CHD") != std::string::npos || 
+               operation.find("DAA") != std::string::npos || 
                operation.find("BIN/IMG") != std::string::npos) {
         processingBarWidth = 49;
         finalBarWidth = 40;
