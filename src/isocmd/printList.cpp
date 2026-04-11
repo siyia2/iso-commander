@@ -50,16 +50,22 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     const bool disablePagination = (ITEMS_PER_PAGE == 0 || totalItems <= ITEMS_PER_PAGE);
     const size_t totalPages = disablePagination ? 1 : (totalItems + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
     
-    // Bounds check
     size_t effectivePage = (disablePagination) ? 0 : (currentPage >= totalPages ? totalPages - 1 : currentPage);
     const size_t startIndex = disablePagination ? 0 : (effectivePage * ITEMS_PER_PAGE);
     const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + ITEMS_PER_PAGE, totalItems);
 
+    // --- Performance: Hoist Type-Checking & Config Flags ---
+    const bool isIsoMode     = (listType == "ISO_FILES");
+    const bool isImgMode     = (listType == "IMAGE_FILES");
+    const bool isMountedMode = (listType == "MOUNTED_ISOS");
+    const bool isFileMode    = (isIsoMode || isImgMode);
+    const bool showNamesOnly = displayConfig::toggleNamesOnly;
+    const bool showFullUmount = displayConfig::toggleFullListUmount;
+    
     // --- Performance: Pre-calculate Gutter Width ---
     IntBuf<> ib1, ib2, ib3, ib4; 
-    // Use endIndex for maxDigits so the list doesn't have a massive empty gap on page 1
     const size_t maxDigits = ib1.format(endIndex).length();
-    const bool isIsoWithAutoUpdate = (isImportRunning.load() && listType == "ISO_FILES" && !isFiltered && !globalIsoFileList.empty());
+    const bool isIsoWithAutoUpdate = (isImportRunning.load() && isIsoMode && !isFiltered && !globalIsoFileList.empty());
 
     // --- Color Mapping ---
     std::string_view accentColor = isOriginal ? originalColors::darkCyan : theme->accent;
@@ -71,6 +77,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     std::string_view squareColor = originalColors::dimGray;
     std::string_view indexA      = isOriginal ? originalColors::red      : theme->secondary;
     std::string_view indexB      = isOriginal ? originalColors::green    : theme->accent;
+    std::string_view dirColor    = isOriginal ? originalColors::boldAlt  : theme->muted;
 
     // --- Output Buffering ---
     std::string output;
@@ -103,7 +110,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         
         output.append(seqColor);
         
-        // Performance Fix: Efficient right-alignment padding
+        // Right-alignment padding
         if (idxStr.length() < maxDigits) {
             output.append(maxDigits - idxStr.length(), ' ');
         }
@@ -120,17 +127,16 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
         const std::string& item = items[i];
         
-        // Optimization: Use boolean flags for type checking outside the loop or cache them
-        if (listType == "ISO_FILES" || listType == "IMAGE_FILES") {
+        if (isFileMode) {
             auto [dir, fname] = extractDirectoryAndFilename(item, listSubType);
-            if (!displayConfig::toggleNamesOnly) {
-                output.append(isOriginal ? originalColors::boldAlt : theme->muted).append(dir).append(originalColors::boldAlt).append("/");
+            if (!showNamesOnly) {
+                output.append(dirColor).append(dir).append(originalColors::boldAlt).append("/");
             }
-            output.append(listType == "ISO_FILES" ? isoColor : imgColor).append(fname);
+            output.append(isIsoMode ? isoColor : imgColor).append(fname);
         } 
-        else if (listType == "MOUNTED_ISOS") {
+        else if (isMountedMode) {
             auto [dirPart, pathPart, hashPart] = parseMountPointComponents(item);
-            if (displayConfig::toggleFullListUmount) {
+            if (showFullUmount) {
                 output.append(mntColor).append(dirPart)
                       .append(isoColor).append(pathPart)
                       .append(squareColor).append(hashPart);
@@ -159,7 +165,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
               .append(procText).append("proc")
               .append(originalColors::boldAlt).append(bracketBg).append("]: ");
 
-        std::string_view pColor = (listType != "IMAGE_FILES") ? isoColor : imgColor;
+        std::string_view pColor = (!isImgMode) ? isoColor : imgColor;
         output.append(pColor);
         for (size_t i = 0; i < pendingIndices.size(); ++i) {
             output.append(pendingIndices[i]);
@@ -168,6 +174,5 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append(originalColors::boldAlt).append("\n");
     }
 
-    // Atomic write to stdout
     std::cout.write(output.data(), output.size());
 }
