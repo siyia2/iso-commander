@@ -413,7 +413,7 @@ const std::function<void()>& onEmptyInput = nullptr)
                 readline(promptText.c_str()), &std::free);
 
             if (!raw || raw.get()[0] == '\0' || strcmp(raw.get(), "/") == 0 || strcmp(raw.get(), ";") == 0
-    || raw.get()[0] == ';' || raw.get()[1] == ';' || std::count(raw.get(), raw.get() + strlen(raw.get()), '/') > 1) {
+			|| raw.get()[0] == ';' || raw.get()[1] == ';' || std::count(raw.get(), raw.get() + strlen(raw.get()), '/') > 1) {
                 handleEmpty();
                 break;
             }
