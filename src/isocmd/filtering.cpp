@@ -412,8 +412,10 @@ const std::function<void()>& onEmptyInput = nullptr)
             std::unique_ptr<char, decltype(&std::free)> raw(
                 readline(promptText.c_str()), &std::free);
 
-            if (!raw || raw.get()[0] == '\0' || strcmp(raw.get(), "/") == 0 || strcmp(raw.get(), ";") == 0
-			|| raw.get()[0] == ';' || raw.get()[1] == ';' || std::count(raw.get(), raw.get() + strlen(raw.get()), '/') > 1) {
+            if (!raw || raw.get()[0] == '\0' || strcmp(raw.get(), "/") == 0
+			|| raw.get()[0] == ';' || (raw.get()[0] == '/' && raw.get()[1] == ';')
+			|| std::count(raw.get(), raw.get() + strlen(raw.get()), '/') > 1
+			|| strstr(raw.get(), ";;") != nullptr) {
                 handleEmpty();
                 break;
             }
@@ -460,7 +462,7 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
     if (inputString != "/" && (inputString.empty() || inputString[0] != '/'))
         return false;
         
-    if (inputString == ";" || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos)
+    if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos)
 		return false;
 
     const std::vector<std::string>& baseSource =
@@ -530,7 +532,7 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
     if (mainInputString.empty() ||
         (mainInputString != "/" && mainInputString[0] != '/'))
         return;
-    if (mainInputString == ";" || (mainInputString[0] == '/' && mainInputString[1] == ';') || std::count(mainInputString.begin(), mainInputString.end(), '/') > 1 || mainInputString.find(";;") != std::string::npos)
+    if (mainInputString[0] == ';' || (mainInputString[0] == '/' && mainInputString[1] == ';') || std::count(mainInputString.begin(), mainInputString.end(), '/') > 1 || mainInputString.find(";;") != std::string::npos)
 		return;
 
     FilterContext ctx {

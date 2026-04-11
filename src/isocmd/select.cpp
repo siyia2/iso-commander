@@ -350,7 +350,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             
         std::string inputString(input.get());
         
-        if (inputString == ";" || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
+        if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
 			continue;
 		}       
         
@@ -564,7 +564,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
              needsClrScrn = false;
              continue;
         }
-        if (inputString == ";" || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
+        if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
 			std::cout << "\033[2A\033[K"; 
 			continue;
 		}        
