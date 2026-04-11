@@ -350,6 +350,10 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             
         std::string inputString(input.get());
         
+        if (inputString[1] == ';' || inputString[0] == ';' || std::count(inputString.begin(), inputString.end(), '/') > 1) {
+			continue;
+		}       
+        
         if (inputString == "<") {
             if (isFiltered) {
                 isFiltered = false;
@@ -560,7 +564,10 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
              needsClrScrn = false;
              continue;
         }
-        
+        if (inputString[1] == ';' || inputString[0] == ';' || std::count(inputString.begin(), inputString.end(), '/') > 1) {
+			std::cout << "\033[2A\033[K"; 
+			continue;
+		}        
         std::atomic<bool> isAtISOList{false};
         
         size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
