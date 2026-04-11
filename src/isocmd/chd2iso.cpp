@@ -3,7 +3,6 @@
 #include "../headers.h"
 #include "../chd.h"
 
-
 /**
  * @brief Converts a CHD (Compressed Hunks of Data) file to a raw ISO image.
  * 
