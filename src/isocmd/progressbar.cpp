@@ -130,8 +130,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             int percentPos = barWidth + 3;
             ss << "\n\r\033[2K";
             for (int i = 0; i < percentPos; i++) ss << " ";
-            ss << "Processed: " << formatSize(static_cast<double>(completedBytesValue)) 
-               << "/" << totalBytesFormatted;
+            ss << "Processed: " << (isFinal ? totalBytesFormatted : formatSize(static_cast<double>(completedBytesValue)))
+				<< "/" << totalBytesFormatted;
 
             ss << "\n\r\033[2K";
             for (int i = 0; i < percentPos; i++) ss << " ";

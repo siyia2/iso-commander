@@ -439,16 +439,17 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
         }
         // MDF mode
         else if (modeMdf && ext == "mdf") {
-            std::ifstream mdf(file, std::ios::binary);
-            if (mdf) {
-                MdfTypeInfo info;
-                if (!info.determineMdfType(mdf)) continue;
-                mdf.seekg(0, std::ios::end);
-                size_t fileSize = mdf.tellg();
-                size_t sectors = fileSize / info.sector_size;
-                totalBytes += sectors * info.sector_data;
-            }
-        }
+			std::ifstream mdf(file, std::ios::binary);
+			if (mdf) {
+				MdfTypeInfo info;
+				if (!info.determineMdfType(mdf)) continue;
+
+				mdf.seekg(0, std::ios::end);
+				size_t fileSize = static_cast<size_t>(mdf.tellg());
+				size_t sectors = fileSize / info.sector_size;
+				totalBytes += sectors * info.sector_data;
+			}
+		}
         // DAA mode
         else if (modeDaa && ext == "daa") {
             uint64_t isoSize = getDaaIsoSize(file);
