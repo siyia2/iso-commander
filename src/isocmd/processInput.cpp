@@ -404,21 +404,31 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
         toLowerInPlace(ext);
 
         // CHD mode
-        if (modeChd && ext == "chd") {
-            chd_file* rawChd = nullptr;
-            chd_error err = chd_open(file.c_str(), CHD_OPEN_READ, nullptr, &rawChd);
-            if (err == CHDERR_NONE && rawChd) {
-                const chd_header* header = chd_get_header(rawChd);
-                if (header) {
-                    uint32_t userDataSize = 2048;
-                    uint32_t rawSectorSize = (header->hunkbytes % 2352 == 0) ? 2352 : 2048;
-                    uint32_t sectorsPerHunk = header->hunkbytes / rawSectorSize;
-                    uint64_t totalSectors = static_cast<uint64_t>(header->totalhunks) * sectorsPerHunk;
-                    totalBytes += totalSectors * userDataSize;
-                }
-                chd_close(rawChd);
-            }
-        }
+		if (modeChd && ext == "chd") {
+			chd_file* rawChd = nullptr;
+			chd_error err = chd_open(file.c_str(), CHD_OPEN_READ, nullptr, &rawChd);
+			if (err == CHDERR_NONE && rawChd) {
+				const chd_header* header = chd_get_header(rawChd);
+				if (header) {
+					uint32_t hunkSize = header->hunkbytes;
+					uint32_t rawSectorSize = 0;
+
+					if      (hunkSize % 2448 == 0) rawSectorSize = 2448;
+					else if (hunkSize % 2352 == 0) rawSectorSize = 2352;
+					else if (hunkSize % 2048 == 0) rawSectorSize = 2048;
+
+					if (rawSectorSize != 0) {
+						// Mirrors convertChdToIso: always extracts 2048 user data bytes per sector
+						constexpr uint32_t userDataSize = 2048;
+						uint32_t sectorsPerHunk = hunkSize / rawSectorSize;
+						uint64_t totalSectors = static_cast<uint64_t>(header->totalhunks) * sectorsPerHunk;
+						totalBytes += totalSectors * userDataSize;
+					}
+					// else: unsupported hunk geometry, converter would also reject — skip
+				}
+				chd_close(rawChd);
+			}
+		}
         // NRG mode
         else if (modeNrg && ext == "nrg") {
             std::ifstream nrg(file, std::ios::binary | std::ios::ate);
