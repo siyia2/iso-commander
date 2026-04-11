@@ -412,7 +412,7 @@ const std::function<void()>& onEmptyInput = nullptr)
             std::unique_ptr<char, decltype(&std::free)> raw(
                 readline(promptText.c_str()), &std::free);
 
-            if (!raw || raw.get()[0] == '\0' || strcmp(raw.get(), "/") == 0) {
+            if (!raw || raw.get()[0] == '\0' || strcmp(raw.get(), "/") == 0 || strcmp(raw.get(), ";") == 0) {
                 handleEmpty();
                 break;
             }
