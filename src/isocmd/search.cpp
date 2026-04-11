@@ -711,9 +711,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
         }
         uniquePaths.push_back(path);
     }
-    
-    // We no longer need to calculate numThreads or check for 0.
-    // The singleton handles the safety floor and capacity for us.
+
     if (uniquePaths.empty()) {
         flushStdin();
         restoreInput();
