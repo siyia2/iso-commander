@@ -459,7 +459,7 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
     if (inputString != "/" && (inputString.empty() || inputString[0] != '/'))
         return false;
         
-    if (inputString == "/;")
+    if (inputString[0] == '/' && (inputString[1] == ';' || std::count(inputString.begin(), inputString.end(), '/') > 1))
 		return false;
 
     const std::vector<std::string>& baseSource =
@@ -529,7 +529,7 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
     if (mainInputString.empty() ||
         (mainInputString != "/" && mainInputString[0] != '/'))
         return;
-    if (mainInputString == "/;")
+    if (mainInputString[0] == '/' && (mainInputString[1] == ';' || std::count(mainInputString.begin(), mainInputString.end(), '/') > 1))
 		return;
 
     FilterContext ctx {
