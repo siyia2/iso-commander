@@ -567,12 +567,6 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, false, false, false, true, need2Sort, isAtISOList);
         
         if (validCommand) continue;
-                
-        if (rawInput.get()[0] == '\0') {
-            std::cout << "\033[2A\033[K";
-            needsClrScrn = false;
-            continue; 
-        }
         
         if (inputString == "proc" && hasPendingProcess && !pendingIndices.empty()) {
             std::string combinedIndices = "";
