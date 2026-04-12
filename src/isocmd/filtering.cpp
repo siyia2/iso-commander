@@ -526,13 +526,13 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
  * @param need2Sort Flag indicating if resorting is needed
  * @param currentPage Reference to current page number
  */
-void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn,
+void handleFilteringConvert2ISO(const std::string& inputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn,
 bool& filterHistory, bool& need2Sort, size_t& currentPage)
 {
-    if (mainInputString.empty() ||
-        (mainInputString != "/" && mainInputString[0] != '/'))
+    if (inputString.empty() ||
+        (inputString != "/" && inputString[0] != '/'))
         return;
-    if (mainInputString[0] == ';' || (mainInputString[0] == '/' && mainInputString[1] == ';') || std::count(mainInputString.begin(), mainInputString.end(), '/') > 1 || mainInputString.find(";;") != std::string::npos)
+    if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos)
 		return;
 
     FilterContext ctx {
@@ -548,8 +548,8 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
 		return "\001" + std::string(s) + "\002";
 	};
 
-	const bool isInteractive = (mainInputString == "/");
-	const std::string quickPat = isInteractive ? "" : mainInputString.substr(1);
+	const bool isInteractive = (inputString == "/");
+	const std::string quickPat = isInteractive ? "" : inputString.substr(1);
 
 	const ListTheme* theme = getActiveTheme();
 	const bool isOriginal = (globalTheme == "original");
@@ -566,6 +566,11 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
 		colorExt    + fileExtensionWithOutDots + 
 		colorMuted  + ", or ↵ to return: " + 
 		colorReset;
+		
+		auto onEmptyInput = [&]() {
+			clear_history();
+			needsClrScrn = isFiltered;
+		};
 
-		runFilterLoop(prompt, quickPat, ctx, [&] { need2Sort = true; });
+		runFilterLoop(prompt, quickPat, ctx, [&] { need2Sort = true; }, onEmptyInput);
 	}

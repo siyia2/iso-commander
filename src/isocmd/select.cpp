@@ -382,11 +382,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             needsClrScrn = true;
             continue;
         }
-        
-        if (input && input[0] == ';') {
-            needsClrScrn = false;
-            continue;
-        }
 
         const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
         size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
@@ -395,11 +390,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, isMount, isUnmount, write, isConversion, need2Sort, isAtISOList);
 
         if (validCommand) continue;
-        
-        if (inputString.empty()) {
-            needsClrScrn = false; 
-            continue; 
-        }
 
         bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isMount, isUnmount, write, isFiltered, 
                                                     filteredFiles, isoDirs, operationFiles, skippedMessages, operationFails, uniqueErrorMessages,
@@ -453,7 +443,6 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
     bool filterHistory = false;
     bool need2Sort = true;
 
-    // Determine file extension string for display and cache
     std::string fileExtension;
     std::string fileExtensionWithOutDots;
     if (fileType == "bin" || fileType == "img") {
@@ -468,11 +457,10 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
     } else if (fileType == "chd") {
         fileExtension = ".chd";
         fileExtensionWithOutDots = "CHD";
-    } else if (fileType == "daa") {                     // <-- DAA branch
+    } else if (fileType == "daa") {
         fileExtension = ".daa";
         fileExtensionWithOutDots = "DAA";
     } else {
-        // fallback (should not happen)
         fileExtension = "";
         fileExtensionWithOutDots = "FILES";
     }
@@ -487,12 +475,13 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         if (!isFiltered) originalPage = currentPage;
         
         clear_history();
-        if (needsClrScrn) loadAndDisplayImageFiles(files, fileType, need2Sort, isFiltered, list, pendingIndices, hasPendingProcess, currentPage, isImportRunning);
+        if (needsClrScrn) {
+			loadAndDisplayImageFiles(files, fileType, need2Sort, isFiltered, list, pendingIndices, hasPendingProcess, currentPage, isImportRunning);
+			std::cout << "\n\n";
+		}
+		
+		std::cout << "\033[1A\033[K";
         
-        std::cout << "\n\n";
-        std::cout << "\033[1A\033[K";
-        
-        // Helper to wrap raw ANSI strings for readline
         auto wrap = [](std::string_view s) -> std::string {
             return "\001" + std::string(s) + "\002";
         };
@@ -500,13 +489,11 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         const ListTheme* theme = getActiveTheme();
         const bool isOriginal = (globalTheme == "original");
 
-        // Wrap themed colors, keep originalColors::rl_ as-is
         std::string colorMuted     = isOriginal ? std::string(originalColors::rl_blue)   : wrap(theme->muted);
         std::string colorFilter    = isOriginal ? std::string(originalColors::rl_cyan)   : wrap(theme->accent);
         std::string colorHighlight = isOriginal ? std::string(originalColors::rl_orange) : wrap(theme->highlight);
         std::string colorReset     = isOriginal ? std::string(originalColors::rl_boldAlt)  : wrap(originalColors::boldAlt);
 
-        // Construct prefix based on filter state
         std::string prefix = isFiltered ? (colorFilter + "F⊳ ") : "";
 
         std::string prompt = 
@@ -526,7 +513,6 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         if (inputString == "<") {
             clearScrollBuffer();
             if (isFiltered) {
-                // Restore original file list from the appropriate cache
                 if (fileType == "bin" || fileType == "img") {
                     files = binImgFilesCache;
                 } else if (fileType == "mdf") {
@@ -535,7 +521,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                     files = nrgFilesCache;
                 } else if (fileType == "chd") {
                     files = chdFilesCache;
-                } else if (fileType == "daa") {          // <-- DAA cache restore
+                } else if (fileType == "daa") {
                     files = daaFilesCache;
                 }
                 needsClrScrn = true;
@@ -562,21 +548,16 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             needsClrScrn = true;
             continue;
         }
-        
-        if (rawInput && rawInput.get()[0] == ';') {
-             std::cout << "\033[2A\033[K"; 
-             needsClrScrn = false;
-             continue;
+
+        if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
+            continue;
         }
+
         if (rawInput.get()[0] == '\0') {
-            std::cout << "\033[2A\033[K";
             needsClrScrn = false;
             continue; 
         }
-        if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
-			std::cout << "\033[2A\033[K"; 
-			continue;
-		}        
+
         std::atomic<bool> isAtISOList{false};
         
         size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
@@ -593,12 +574,11 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                 }
             }
             
-            // Call processInputForConversions with the correct mode flags (now with DAA)
             processInputForConversions(combinedIndices, files, 
-                                       (fileType == "mdf"),   // modeMdf
-                                       (fileType == "nrg"),   // modeNrg
-                                       (fileType == "chd"),   // modeChd
-                                       (fileType == "daa"),   // modeDaa  <-- added
+                                       (fileType == "mdf"),
+                                       (fileType == "nrg"),
+                                       (fileType == "chd"),
+                                       (fileType == "daa"),
                                        processedErrors, successOuts, skippedOuts, failedOuts, 
                                        verbose, needsClrScrn, newISOFound);
             
@@ -619,12 +599,11 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             }
         }
         else {
-            // Direct conversion without pending list (now with DAA)
             processInputForConversions(inputString, files, 
-                                       (fileType == "mdf"),   // modeMdf
-                                       (fileType == "nrg"),   // modeNrg
-                                       (fileType == "chd"),   // modeChd
-                                       (fileType == "daa"),   // modeDaa  <-- added
+                                       (fileType == "mdf"),
+                                       (fileType == "nrg"),
+                                       (fileType == "chd"),
+                                       (fileType == "daa"),
                                        processedErrors, successOuts, skippedOuts, failedOuts, 
                                        verbose, needsClrScrn, newISOFound);
             needsClrScrn = true;
