@@ -226,7 +226,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     }
 
     // Trigger database refresh only if we have successes and not cancelled
-    if (!successOuts.empty() && !g_operationCancelled.load()) {
+    if (!successOuts.empty()) {
         bool pFlag = false, fHistory = false;
         int mDepth = 0;
         refreshForDatabase(result, pFlag, mDepth, fHistory, newISOFound);
