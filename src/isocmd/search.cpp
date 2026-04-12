@@ -49,7 +49,9 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
         setupSignalHandlerCancellations();
         resetReadlinePagination();
         rl_attempted_completion_function = my_special_completion_entry;
-        g_operationCancelled.store(false);
+        if (promptFlag) {
+			g_operationCancelled.store(false);
+		}
         
         const ListTheme* theme = getActiveTheme();
         const bool isOrig = (globalTheme == "original");
@@ -242,8 +244,9 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
     
     const ListTheme* theme = getActiveTheme();
     const bool isOriginal = (globalTheme == "original");
-
-    g_operationCancelled.store(false);
+	if (promptFlag) {
+		g_operationCancelled.store(false);
+	}
 
     auto iequals = [](const std::string_view& a, const std::string_view& b) {
         return std::equal(a.begin(), a.end(), b.begin(), b.end(),

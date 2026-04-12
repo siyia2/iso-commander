@@ -155,27 +155,30 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         }
         
         if (isComplete->load(std::memory_order_acquire) && !enterPressed) {
-            signal(SIGINT, SIG_IGN);
-            
-            if (bytesTrackingEnabled) std::cout << "\033[1J\033[3A";
-            else std::cout << "\033[1J\033[1A";
-            
-            std::atomic_thread_fence(std::memory_order_acq_rel);
-            
-            const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
-            const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
-            const bool wasCancelled = g_operationCancelled.load(std::memory_order_acquire);
-            
-            // Status line using originalColors mappings with loaded values
-            std::cout << "\r\033[2K" << originalColors::boldAlt << " Status: " << operation << originalColors::boldAlt << " → " 
-                      << (!wasCancelled 
-                          ? (failedTasksValue > 0 
-                             ? (completedTasksValue > 0 
-                                ? std::string(originalColors::yellow) + "PARTIAL"
-                                : std::string(originalColors::red) + "FAILED")
-                             : std::string(originalColors::green) + "COMPLETED")
-                          : std::string(originalColors::yellow) + "INTERRUPTED")
-                      << originalColors::boldAlt << std::endl;
+			signal(SIGINT, SIG_IGN);
+			
+			if (bytesTrackingEnabled) std::cout << "\033[1J\033[3A";
+			else std::cout << "\033[1J\033[1A";
+			
+			std::atomic_thread_fence(std::memory_order_acq_rel);
+			
+			const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
+			const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
+			
+			// Capture cancellation state exactly once at completion time
+			static bool cancellationState = g_operationCancelled.load(std::memory_order_acquire);
+			const bool wasCancelled = cancellationState;
+			
+			// Status line using originalColors mappings with loaded values
+			std::cout << "\r\033[2K" << originalColors::boldAlt << " Status: " << operation << originalColors::boldAlt << " → " 
+					  << (!wasCancelled 
+						  ? (failedTasksValue > 0 
+							 ? (completedTasksValue > 0 
+								? std::string(originalColors::yellow) + "PARTIAL"
+								: std::string(originalColors::red) + "FAILED")
+							 : std::string(originalColors::green) + "COMPLETED")
+						  : std::string(originalColors::yellow) + "INTERRUPTED")
+					  << originalColors::boldAlt << std::endl;
             
             // Render final progress bar with loaded state
             std::cout << renderProgressBar(true);

@@ -84,14 +84,14 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     };
 
     size_t processedCount = 0;
-    bool cancellationEverSeen = false;
+    bool cancelledEarly = false;
 
     for (size_t idx = 0; idx < imageFiles.size(); ++idx) {
         const std::string& inputPath = imageFiles[idx];
 
-        // Check for cancellation before any work
+        // Cancellation check before any work
         if (g_operationCancelled.load()) {
-            cancellationEverSeen = true;
+            cancelledEarly = true;
             break;
         }
 
@@ -113,7 +113,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                             (modeDaa ? daaFilesCache : binImgFilesCache)));
             cache.erase(std::remove(cache.begin(), cache.end(), inputPath), cache.end());
 
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);   // real failure
             batchInsertMessages();
             ++processedCount;
             continue;
@@ -130,7 +130,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                .append(originalColors::boldAlt).append(originalColors::boldAlt);
             localFailedMsgs.push_back(std::move(msg));
 
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);   // real failure
             batchInsertMessages();
             ++processedCount;
             continue;
@@ -153,34 +153,31 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             continue;
         }
 
-        // Check for cancellation before heavy conversion
+        // Cancellation check before heavy conversion
         if (g_operationCancelled.load()) {
-            cancellationEverSeen = true;
-            break;
+            cancelledEarly = true;
+            break;   // current file not processed; will be reported in post-loop as cancelled
         }
 
-        // Perform conversion — return value is the sole authority on why
-        // the converter stopped, immune to any external flag races
-        ConversionResult conversionResult;
-        if (modeMdf)
-            conversionResult = convertMdfToIso(inputPath, outputPath, completedBytes);
-        else if (modeNrg)
-            conversionResult = convertNrgToIso(inputPath, outputPath, completedBytes);
-        else if (modeChd)
-            conversionResult = convertChdToIso(inputPath, outputPath, completedBytes);
-        else if (modeDaa)
-            conversionResult = convertDaaToIso(inputPath, outputPath, completedBytes);
-        else
-            conversionResult = convertCcdToIso(inputPath, outputPath, completedBytes);
-
-        // Latch cancellation from the converter's own determination
-        if (conversionResult == ConversionResult::Cancelled) {
-            cancellationEverSeen = true;
+        // Perform conversion
+        bool conversionSuccess = false;
+        if (modeMdf) {
+            conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
+        } else if (modeNrg) {
+            conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
+        } else if (modeChd) {
+            conversionSuccess = convertChdToIso(inputPath, outputPath, completedBytes);
+        } else if (modeDaa) {
+            conversionSuccess = convertDaaToIso(inputPath, outputPath, completedBytes);
+        } else {
+            conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
         }
+
+        bool cancelledDuring = g_operationCancelled.load();
 
         auto [outDir, outName] = extractDirectoryAndFilename(outputPath, "conversions");
 
-        if (conversionResult == ConversionResult::Success) {
+        if (conversionSuccess) {
             [[maybe_unused]] int ret = chown(outputPath.c_str(), real_uid, real_gid);
 
             std::string fileNameLower = fileNameOnly;
@@ -200,6 +197,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             localSuccessMsgs.push_back(std::move(msg));
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
         } else {
+            // Clean up partial output
             if (fs::exists(outputPath))
                 fs::remove(outputPath);
 
@@ -207,27 +205,27 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             msg.reserve(128);
             msg.append(errLabel).append("Conversion of ")
                .append(errPath).append("'").append(displayPath).append("'")
-               .append(originalColors::boldAlt).append(errLabel).append(" ");
+               .append(originalColors::boldAlt).append(errLabel).append(" ")
+               .append(cancelledDuring ? "cancelled" : "failed").append(".")
+               .append(originalColors::boldAlt).append(originalColors::boldAlt);
+            localFailedMsgs.push_back(std::move(msg));
 
-            if (conversionResult == ConversionResult::Cancelled || cancellationEverSeen) {
-                msg.append("cancelled.");
-            } else {
-                msg.append("failed.");
+            // Increment failure counter only for real errors, not cancellation
+            if (!cancelledDuring) {
                 failedTasks->fetch_add(1, std::memory_order_acq_rel);
             }
-            msg.append(originalColors::boldAlt).append(originalColors::boldAlt);
-            localFailedMsgs.push_back(std::move(msg));
         }
         batchInsertMessages();
         ++processedCount;
 
-        if (cancellationEverSeen) {
+        if (cancelledDuring) {
+            cancelledEarly = true;
             break;
         }
     }
 
-    // Report all remaining files as cancelled (no failure counter)
-    if (cancellationEverSeen && processedCount < imageFiles.size()) {
+    // Post‑loop: report all remaining files as cancelled (no failure counter)
+    if (cancelledEarly && processedCount < imageFiles.size()) {
         for (size_t idx = processedCount; idx < imageFiles.size(); ++idx) {
             const std::string& inputPath = imageFiles[idx];
             auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
@@ -237,9 +235,11 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             msg.reserve(128);
             msg.append(errLabel).append("Conversion of ")
                .append(errPath).append("'").append(displayPath).append("'")
-               .append(originalColors::boldAlt).append(errLabel).append(" cancelled.")
+               .append(originalColors::boldAlt).append(errLabel).append(" cancelled (operation aborted).")
                .append(originalColors::boldAlt).append(originalColors::boldAlt);
             localFailedMsgs.push_back(std::move(msg));
+            // NO failedTasks increment for cancellations
+            batchInsertMessages();
         }
     }
 

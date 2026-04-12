@@ -37,71 +37,104 @@
 */
 
 
-ConversionResult convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
-    if (g_operationCancelled.load()) return ConversionResult::Cancelled;
-
+bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
+    if (g_operationCancelled.load()) {
+        g_operationCancelled.store(true);
+        return false;
+    }
+        
     std::ifstream mdfFile(mdfPath, std::ios::binary);
-    if (!mdfFile.is_open()) return ConversionResult::Failed;
-
+    if (!mdfFile.is_open()) {
+        return false;
+    }
+    
     mdfFile.seekg(32768);
     char buf[12];
-    if (!mdfFile.read(buf, 8) || std::memcmp("CD001", buf + 1, 5) == 0)
-        return ConversionResult::Failed;
-
-    if (g_operationCancelled.load()) return ConversionResult::Cancelled;
-
+    if (!mdfFile.read(buf, 8) || std::memcmp("CD001", buf + 1, 5) == 0) {
+        return false;
+    }
+    
+    if (g_operationCancelled.load()) {
+        g_operationCancelled.store(true);
+        return false;
+    }
+    
     std::ofstream isoFile(isoPath, std::ios::binary);
-    if (!isoFile.is_open()) return ConversionResult::Failed;
-
+    if (!isoFile.is_open()) {
+        return false;
+    }
+    
     size_t seek_ecc = 0, sector_size = 0, seek_head = 0, sector_data = 0;
-
+    
     mdfFile.seekg(0);
-    if (!mdfFile.read(buf, 12)) return ConversionResult::Failed;
-
+    if (!mdfFile.read(buf, 12)) {
+        return false;
+    }
+    
     if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
         mdfFile.seekg(2352);
-        if (!mdfFile.read(buf, 12)) return ConversionResult::Failed;
+        if (!mdfFile.read(buf, 12)) {
+            return false;
+        }
         if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
-            seek_ecc = 288; sector_size = 2352; sector_data = 2048; seek_head = 16;
+            seek_ecc = 288;
+            sector_size = 2352;
+            sector_data = 2048;
+            seek_head = 16;
         } else {
-            seek_ecc = 384; sector_size = 2448; sector_data = 2048; seek_head = 16;
+            seek_ecc = 384;
+            sector_size = 2448;
+            sector_data = 2048;
+            seek_head = 16;
         }
     } else {
-        seek_head = 0; sector_size = 2448; seek_ecc = 96; sector_data = 2352;
+        seek_head = 0;
+        sector_size = 2448;
+        seek_ecc = 96;
+        sector_data = 2352;
     }
-
+    
     mdfFile.seekg(0, std::ios::end);
     size_t source_length = static_cast<size_t>(mdfFile.tellg()) / sector_size;
     mdfFile.seekg(0, std::ios::beg);
-
+    
     std::vector<char> sectorBuffer(sector_data);
-
+    
     while (source_length > 0) {
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
-            return ConversionResult::Cancelled;
+            g_operationCancelled.store(true);
+            return false;
         }
-
+        
         mdfFile.seekg(static_cast<std::streamoff>(seek_head), std::ios::cur);
-        if (!mdfFile.read(sectorBuffer.data(), sector_data)) return ConversionResult::Failed;
+        
+        if (!mdfFile.read(sectorBuffer.data(), sector_data)) {
+            return false;
+        }
+        
         mdfFile.seekg(static_cast<std::streamoff>(seek_ecc), std::ios::cur);
-
+        
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
-            return ConversionResult::Cancelled;
+            g_operationCancelled.store(true);
+            return false;
         }
-
-        if (!isoFile.write(sectorBuffer.data(), sector_data)) return ConversionResult::Failed;
-
-        if (completedBytes)
+        
+        if (!isoFile.write(sectorBuffer.data(), sector_data)) {
+            return false;
+        }
+        
+        if (completedBytes) {
             completedBytes->fetch_add(sector_data, std::memory_order_relaxed);
-
+        }
+        
         --source_length;
     }
-
-    return ConversionResult::Success;
+    
+    return true;
 }
 
 
@@ -131,54 +164,67 @@ ConversionResult convertMdfToIso(const std::string& mdfPath, const std::string& 
  ***************************************************************************/
  
 
-ConversionResult convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
-    if (g_operationCancelled.load()) return ConversionResult::Cancelled;
-
+bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
+    if (g_operationCancelled.load()) {
+        g_operationCancelled.store(true);
+        return false;
+    }
+        
     std::ifstream ccdFile(ccdPath, std::ios::binary);
-    if (!ccdFile) return ConversionResult::Failed;
+    if (!ccdFile) return false;
     std::ofstream isoFile(isoPath, std::ios::binary);
-    if (!isoFile) return ConversionResult::Failed;
-
+    if (!isoFile) return false;
+        
     CcdSector sector;
     size_t sectorNum = 0;
-
+    
     while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
-            return ConversionResult::Cancelled;
+            g_operationCancelled.store(true);
+            return false;
         }
         size_t bytesWritten = 0;
-
+        
         switch (sector.sectheader.header.mode) {
-            case 1:
+            case 1: {
                 isoFile.write(reinterpret_cast<char*>(sector.content.mode1.data), DATA_SIZE);
                 bytesWritten = DATA_SIZE;
                 break;
-            case 2:
+            }
+            case 2: {
                 isoFile.write(reinterpret_cast<char*>(sector.content.mode2.data), DATA_SIZE);
                 bytesWritten = DATA_SIZE;
                 break;
+            }
             case 0xe2:
-                return ConversionResult::Success;
+                return true;
             default:
-                return ConversionResult::Failed;
+                return false;
         }
-
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
-            return ConversionResult::Cancelled;
+            g_operationCancelled.store(true);
+            return false;
         }
-
-        if (!isoFile || bytesWritten != DATA_SIZE) return ConversionResult::Failed;
-
-        if (completedBytes)
+        if (!isoFile || bytesWritten != DATA_SIZE) {
+            return false;
+        }
+        if (completedBytes) {
             completedBytes->fetch_add(bytesWritten, std::memory_order_relaxed);
-
+        }
+        if (g_operationCancelled.load()) {
+            isoFile.close();
+            fs::remove(isoPath);
+            g_operationCancelled.store(true);
+            return false;
+        }
+        
         sectorNum++;
     }
-    return ConversionResult::Success;
+    return true;
 }
 
 
@@ -204,60 +250,79 @@ ConversionResult convertCcdToIso(const std::string& ccdPath, const std::string& 
 */
 
 
-ConversionResult convertNrgToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<size_t>* completedBytes) {
-    if (g_operationCancelled.load()) return ConversionResult::Cancelled;
-
+bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<size_t>* completedBytes) {
+    if (g_operationCancelled.load()) {
+        g_operationCancelled.store(true);
+        return false;
+    }
+    
     std::ifstream nrgFile(inputFile, std::ios::binary);
-    if (!nrgFile) return ConversionResult::Failed;
-
+    if (!nrgFile) {
+        return false;
+    }
+    
+    nrgFile.seekg(0, std::ios::end);
+    nrgFile.seekg(0, std::ios::beg);
+    
     constexpr size_t ISO_CHECK_OFFSET = 16 * 2048;
     char isoBuf[8];
     nrgFile.seekg(ISO_CHECK_OFFSET);
     nrgFile.read(isoBuf, 8);
-
-    if (memcmp(isoBuf, "\x01" "CD001" "\x01\x00", 8) == 0)
-        return ConversionResult::Failed;
-
+    
+    if (memcmp(isoBuf, "\x01" "CD001" "\x01\x00", 8) == 0) {
+        return false;
+    }
+    
     nrgFile.clear();
     nrgFile.seekg(307200, std::ios::beg);
-
-    if (g_operationCancelled.load()) return ConversionResult::Cancelled;
-
+    
+    if (g_operationCancelled.load()) {
+        g_operationCancelled.store(true);
+        return false;
+    }
+    
     std::ofstream isoFile(outputFile, std::ios::binary);
-    if (!isoFile) return ConversionResult::Failed;
+    if (!isoFile) {
+        return false;
+    }
 
     constexpr size_t BUFFER_SIZE = 1024 * 1024;
     std::vector<char> buffer(BUFFER_SIZE);
-
+    
     while (nrgFile) {
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(outputFile);
-            return ConversionResult::Cancelled;
+            g_operationCancelled.store(true);
+            return false;
         }
-
+        
         nrgFile.read(buffer.data(), BUFFER_SIZE);
         std::streamsize bytesRead = nrgFile.gcount();
-
+        
         if (bytesRead > 0) {
             if (g_operationCancelled.load()) {
                 isoFile.close();
                 fs::remove(outputFile);
-                return ConversionResult::Cancelled;
+                g_operationCancelled.store(true);
+                return false;
             }
-
+            
             if (!isoFile.write(buffer.data(), bytesRead)) {
                 isoFile.close();
                 fs::remove(outputFile);
-                return ConversionResult::Failed;
+                return false;
             }
-
-            if (completedBytes)
+            
+            if (completedBytes) {
                 completedBytes->fetch_add(bytesRead, std::memory_order_relaxed);
+            }
         }
-
-        if (nrgFile.eof() || nrgFile.fail()) break;
+        
+        if (nrgFile.eof() || nrgFile.fail()) {
+            break;
+        }
     }
-
-    return ConversionResult::Success;
+    
+    return true;
 }

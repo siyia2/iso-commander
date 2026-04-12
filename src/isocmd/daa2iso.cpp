@@ -914,32 +914,32 @@ static bool daa_fail(DaaContext &ctx) {
 //  Public API
 // ═══════════════════════════════════════════════════════════════════════════
 
-ConversionResult convertDaaToIso(const std::string &inputFile,
+bool convertDaaToIso(const std::string &inputFile,
                      const std::string &outputFile,
                      std::atomic<size_t> *completedBytes)
 {
-    if (g_operationCancelled.load()) return ConversionResult::Cancelled;
-
+    if (g_operationCancelled.load()) return false;
+ 
     reset_bit_reader();
     tinf_init();
-
+ 
     DaaContext ctx;
     ctx.outputPath     = outputFile;
     ctx.completedBytes = completedBytes;
-
+ 
     { int e = 1; ctx.endian = (*(char*)&e) ? 0 : 1; }
-
+ 
     ctx.fdi = fopen(inputFile.c_str(), "rb");
-    if (!ctx.fdi) return ConversionResult::Failed;
-
+    if (!ctx.fdi) return false;
+ 
     ctx.fdo = fopen(outputFile.c_str(), "wb");
-    if (!ctx.fdo) return daa_fail(ctx) ? ConversionResult::Failed : ConversionResult::Failed;
-
+    if (!ctx.fdo) return daa_fail(ctx);
+ 
     try {
         daa_t daa;
         ctx_read(ctx, &daa, sizeof(daa));
         swap_daa_if_be(&daa, ctx.endian);
-
+ 
         if (!strncmp((char*)daa.sign,"DAA",16) || !strncmp((char*)daa.sign,"\xb8\xbd\xb6",3))
             ctx.daagbi = TYPE_DAA;
         else if (!strncmp((char*)daa.sign,"GBI",16))
@@ -949,18 +949,18 @@ ConversionResult convertDaaToIso(const std::string &inputFile,
                 throw DaaError("must choose the first DAA file, not a volume");
             throw DaaError("unknown DAA signature");
         }
-
+ 
         if ((daa.version != 0x100 && daa.version != 0x110) || daa.b1 != 1)
             throw DaaError("unsupported DAA version");
-
+ 
         LzmaDec_Construct(&ctx.lzma);
-
+ 
         daa_data_t *daa_data = nullptr;
         u32 daas = 0, daas_mem = 0, daa_dataz = 0;
         int ztype=1, bitpos=0, bitsize=0, bittype=0;
         int dolame=0, dolzma=0, dolamebits=0, lzma_filter=0, ver110_btype=0;
         u32 ver110_y = 0;
-
+ 
         if (daa.version == 0x100) {
             daas_mem = daa.data_offset - daa.size_offset;
             daa_data = (daa_data_t*)malloc(daas_mem + 16);
@@ -970,7 +970,7 @@ ConversionResult convertDaaToIso(const std::string &inputFile,
             ver110_y = daa.chunksize;
             daa.data_offset &= 0xffffff;
             daa.chunksize    = (daa.chunksize & 0xfff) << 14;
-
+ 
             bittype = daa.hdata[5] & 7;
             bitsize = daa.hdata[5] >> 3;
             if (bitsize) bitsize += 10;
@@ -979,42 +979,42 @@ ConversionResult convertDaaToIso(const std::string &inputFile,
                 for (bitsize=0; len>(unsigned)bittype; bitsize++, len>>=1);
             }
             daas_mem = daa.data_offset - daa.size_offset;
-
+ 
             u32 bits_per_entry = (u32)(bittype + bitsize);
             if (bits_per_entry == 0) throw DaaError("invalid header bits");
             daas = (u32)(((u64)daas_mem << 3) / bits_per_entry);
-
+ 
             if (ver110_y & 0x4000) {
                 daas_mem += 0x10000;
                 daa_dataz = *(u32*)(daa.hdata + 1);
                 swap32_if_be(&daa_dataz, ctx.endian);
             }
-
+ 
             daa_data = (daa_data_t*)malloc(daas_mem + 16);
             if (!daa_data) throw DaaError("out of memory (daa_data v110)");
             memset(daa_data, 0, daas_mem + 16);
-
+ 
             dolamebits   = (ver110_y & 0x20000)   ? 1 : 0;
             dolame       = (ver110_y & 0x8000000)  ? 1 : 0;
             dolzma       = (ver110_y & 0x100000)   ? 1 : 0;
-
+ 
             ver110_btype = (ver110_y >> 0x17) & 3;
             if (ctx.daagbi == TYPE_GBI) ver110_btype ^= 1;
-
+ 
             if (dolzma) {
                 lzma_filter = daa.hdata[6];
                 if (LzmaDec_Allocate(&ctx.lzma, daa.hdata + 7, LZMA_PROPS_SIZE, &g_Alloc) != SZ_OK)
                     throw DaaError("LZMA property allocation failed");
             }
         }
-
+ 
         switch (ver110_btype) {
             case 0: ctx.swapped_btype[0]=0; ctx.swapped_btype[1]=1; ctx.swapped_btype[2]=2; break;
             case 1: ctx.swapped_btype[0]=1; ctx.swapped_btype[1]=2; ctx.swapped_btype[2]=0; break;
             case 2: ctx.swapped_btype[0]=0; ctx.swapped_btype[1]=2; ctx.swapped_btype[2]=1; break;
             case 3: ctx.swapped_btype[0]=1; ctx.swapped_btype[1]=0; ctx.swapped_btype[2]=2; break;
         }
-
+ 
         while ((u64)ftell(ctx.fdi) < daa.size_offset) {
             u32 rec_type, rec_len;
             ctx_read(ctx, &rec_type, 4); swap32_if_be(&rec_type, ctx.endian);
@@ -1023,7 +1023,7 @@ ConversionResult convertDaaToIso(const std::string &inputFile,
             else if (rec_type == 3) throw DaaError("password-protected DAA not supported");
             if (fseek(ctx.fdi, rec_len - 8, SEEK_CUR)) throw DaaError("fseek on pre-data record");
         }
-
+ 
         {
             fseek(ctx.fdi, 0, SEEK_END);
             u64 tot = (u64)ftell(ctx.fdi);
@@ -1043,9 +1043,9 @@ ConversionResult convertDaaToIso(const std::string &inputFile,
                 ctx.multi_filename[plen] = '\0';
             }
         }
-
+ 
         if (fseek(ctx.fdi, daa.size_offset, SEEK_SET)) throw DaaError("fseek to size_offset");
-
+ 
         if (daa_dataz) {
             ctx_alloc(&ctx.in, daa_dataz, &ctx.insz);
             ctx_read(ctx, ctx.in, daa_dataz);
@@ -1057,23 +1057,22 @@ ConversionResult convertDaaToIso(const std::string &inputFile,
         } else {
             ctx_read(ctx, daa_data, daas_mem);
         }
-
+ 
         if (ctx.daagbi == TYPE_GBI) gburner_lame((u8*)daa_data, daas_mem, daa.crc & 0xff);
         if (dolame)                  poweriso_lame((u8*)daa_data, daas_mem, daa.isosize);
-
+ 
         if (fseek(ctx.fdi, daa.data_offset, SEEK_SET)) throw DaaError("fseek to data_offset");
-
+ 
         ctx_alloc(&ctx.out_buf, daa.chunksize, &ctx.outsz);
         u64  tot        = 0;
         u32  last_chunk = daas - 1;
-
+ 
         for (u32 i = 0; i < daas; i++) {
             if (g_operationCancelled.load()) {
                 free(daa_data);
-                daa_fail(ctx);
-                return ConversionResult::Cancelled;
+                return daa_fail(ctx);
             }
-
+ 
             u32 len;
             if (daa.version == 0x100) {
                 len   = ((u32)daa_data[i].n1<<16) | daa_data[i].n2 | ((u32)daa_data[i].n3<<8);
@@ -1086,12 +1085,12 @@ ConversionResult convertDaaToIso(const std::string &inputFile,
                 bitpos += bittype;
                 if (len >= daa.chunksize) ztype = -1;
             }
-
+ 
             if (len > 0x1000000) throw DaaError("excessive chunk length");
-
+ 
             ctx_alloc(&ctx.in, len, &ctx.insz);
             ctx_read(ctx, ctx.in, len);
-
+ 
             u32 outlen;
             switch (ztype) {
                 case -1:
@@ -1114,7 +1113,7 @@ ConversionResult convertDaaToIso(const std::string &inputFile,
                 default:
                     throw DaaError("unknown compression type");
             }
-
+ 
             if (i == last_chunk) {
                 if ((tot + outlen) > daa.isosize)
                     outlen = (u32)(daa.isosize - tot);
@@ -1122,25 +1121,24 @@ ConversionResult convertDaaToIso(const std::string &inputFile,
                 if (outlen != daa.chunksize)
                     throw DaaError("chunk size mismatch");
             }
-
+ 
             if (fwrite(ctx.out_buf, 1, outlen, ctx.fdo) != outlen)
                 throw DaaError("write failed");
-
+ 
             tot += outlen;
             if (completedBytes)
                 completedBytes->fetch_add(outlen, std::memory_order_relaxed);
         }
-
+ 
         if (tot != daa.isosize) throw DaaError("output size mismatch");
-
+ 
         free(daa_data);
         fclose(ctx.fdo); ctx.fdo = nullptr;
         fclose(ctx.fdi); ctx.fdi = nullptr;
-        return ConversionResult::Success;
-
+        return true;
+ 
     } catch (const DaaError &e) {
         fprintf(stderr, "\nError: %s\n", e.msg);
-        daa_fail(ctx);
-        return ConversionResult::Failed;
+        return daa_fail(ctx);
     }
 }
