@@ -61,7 +61,7 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
     const uint32_t userDataPerHunk = sectorsPerHunk * userDataSize;
     const uint64_t totalUserData = static_cast<uint64_t>(header->totalhunks) * userDataPerHunk;
 
-    // --- Detect user data offset (unchanged) ---
+    // --- Detect user data offset ---
     uint32_t userDataOffset = 0;
     if (rawSectorSize == 2048) {
         userDataOffset = 0;
