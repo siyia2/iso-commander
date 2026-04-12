@@ -37,7 +37,7 @@ void restoreInput(struct termios *oldt, int oldf) {
     tcsetattr(STDIN_FILENO, TCSANOW, oldt);
     fcntl(STDIN_FILENO, F_SETFL, oldf);
 }
-
+static std::mutex g_completionMutex;
 /**
  * @brief Displays a multi-line progress bar with byte tracking, task counts, and time elapsed.
  * @param completedBytes Atomic counter for bytes processed.
@@ -133,7 +133,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             ss << "\n\r\033[2K";
             for (int i = 0; i < percentPos; i++) ss << " ";
             ss << "Processed: " << (isFinal ? totalBytesFormatted : formatSize(static_cast<double>(completedBytesValue)))
-				<< "/" << totalBytesFormatted;
+               << "/" << totalBytesFormatted;
 
             ss << "\n\r\033[2K";
             for (int i = 0; i < percentPos; i++) ss << " ";
@@ -160,35 +160,15 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             if (bytesTrackingEnabled) std::cout << "\033[1J\033[3A";
             else std::cout << "\033[1J\033[1A";
             
-            // Full memory barrier to ensure all operations are synchronized
-            std::atomic_thread_fence(std::memory_order_seq_cst);
+            // Hybrid approach: Lightweight acq_rel fence for consistency without performance hit
+            std::atomic_thread_fence(std::memory_order_acq_rel);
             
-            // Brief pause to allow any pending updates to settle
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            // Single atomic loads - sufficient for progress bar accuracy
+            const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
+            const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
+            const bool wasCancelled = g_operationCancelled.load(std::memory_order_acquire);
             
-            // Load all states with memory ordering
-            size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
-            size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
-            bool wasCancelled = g_operationCancelled.load(std::memory_order_acquire);
-            
-            // Double-check after a tiny delay to catch any race conditions
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            
-            // Re-check all states to ensure they're final
-            size_t finalCompletedTasks = completedTasks->load(std::memory_order_acquire);
-            size_t finalFailedTasks = failedTasks->load(std::memory_order_acquire);
-            bool finalCancelled = g_operationCancelled.load(std::memory_order_acquire);
-            
-            // Use the most recent values if they changed
-            if (finalCancelled != wasCancelled || 
-                finalCompletedTasks != completedTasksValue || 
-                finalFailedTasks != failedTasksValue) {
-                completedTasksValue = finalCompletedTasks;
-                failedTasksValue = finalFailedTasks;
-                wasCancelled = finalCancelled;
-            }
-            
-            // Status line using originalColors mappings with verified values
+            // Status line using originalColors mappings with loaded values
             std::cout << "\r\033[2K" << originalColors::boldAlt << " Status: " << operation << originalColors::boldAlt << " → " 
                       << (!wasCancelled 
                           ? (failedTasksValue > 0 
@@ -199,7 +179,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                           : std::string(originalColors::yellow) + "INTERRUPTED")
                       << originalColors::boldAlt << std::endl;
             
-            // Render final progress bar with verified state
+            // Render final progress bar with loaded state
             std::cout << renderProgressBar(true);
             
             disableReadlineForConfirmation();
