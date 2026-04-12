@@ -47,11 +47,27 @@ Mount, Umount, Delete, Move, Copy, and Write ISO files. Note that Write retains 
 
 .TP
 .B Convert2ISO
-Ported from original C tools (ccd2iso(bin/img), mdf2iso(mdf), nrg2iso(nrg), daa2iso(daa)) and utilizing libchdr(chd).
+Ported from original C tools and utilizing libchdr.
 .br
 Converts .bin, .img, .chd, .daa, .mdf, and .nrg files to .iso.
-
+.br
+.sp
+.B ccd2iso
+(GPL-2.0 or later, Danny Kurniawan and Kerry Harris) \(em converts CloneCD .bin/.img disc images.
+.br
+.B mdf2iso
+(GPL-2.0 or later, Salvatore Santagati) \(em converts Alcohol 120% .mdf disc images.
+.br
+.B nrg2iso
+(GPL-3.0 or later, Grégory Kokanosky) \(em converts Nero Burning ROM .nrg disc images.
+.br
+.B daa2iso
+(GPL-2.0 or later, Luigi Auriemma) \(em converts PowerISO .daa disc images.
+.br
+.B libchdr
+(BSD-3-Clause, MAME project, Romain TISSERAND) \(em decodes Compressed Hunks of Data (.chd) images.
 .TP
+
 .B ImportISO
 Creates and updates a local ISO database. The database has a maximum file size limit of \fB1MB\fR.
 
