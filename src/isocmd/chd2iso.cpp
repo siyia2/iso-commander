@@ -38,23 +38,23 @@
  * 
  * @see g_operationCancelled Global cancellation flag.
  */
-bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
+ConversionResult convertChdToIso(const std::string& chdPath, const std::string& isoPath,
                      std::atomic<size_t>* completedBytes) {
-    if (g_operationCancelled.load()) return false;
+    if (g_operationCancelled.load()) return ConversionResult::Cancelled;
 
     chd_file* rawChd = nullptr;
     if (chd_open(chdPath.c_str(), CHD_OPEN_READ, nullptr, &rawChd) != CHDERR_NONE)
-        return false;
+        return ConversionResult::Failed;
     ChdFilePtr chd(rawChd);
     const chd_header* header = chd_get_header(chd.get());
-    if (!header) return false;
+    if (!header) return ConversionResult::Failed;
 
     uint32_t hunkSize = header->hunkbytes;
     uint32_t rawSectorSize = 0;
     if (hunkSize % 2448 == 0)      rawSectorSize = 2448;
     else if (hunkSize % 2352 == 0) rawSectorSize = 2352;
     else if (hunkSize % 2048 == 0) rawSectorSize = 2048;
-    else return false;
+    else return ConversionResult::Failed;
 
     uint32_t sectorsPerHunk = hunkSize / rawSectorSize;
     const uint32_t userDataSize = 2048;
@@ -94,9 +94,9 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
     // --- Decide strategy based on file size ---
     const uint64_t ONE_GB = 1ULL << 30;
     if (totalUserData <= ONE_GB) {
-        // ---------- SINGLE‑THREADED (original path) ----------
+        // ---------- SINGLE-THREADED ----------
         std::ofstream isoFile(isoPath, std::ios::binary);
-        if (!isoFile.is_open()) return false;
+        if (!isoFile.is_open()) return ConversionResult::Failed;
         std::vector<char> writeBuf(1024 * 1024);
         isoFile.rdbuf()->pubsetbuf(writeBuf.data(), writeBuf.size());
 
@@ -107,10 +107,13 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
             if (g_operationCancelled.load()) {
                 isoFile.close();
                 fs::remove(isoPath);
-                return false;
+                return ConversionResult::Cancelled;
             }
-            if (chd_read(chd.get(), hunk, hunkBuffer.data()) != CHDERR_NONE)
-                return false;
+            if (chd_read(chd.get(), hunk, hunkBuffer.data()) != CHDERR_NONE) {
+                isoFile.close();
+                fs::remove(isoPath);
+                return ConversionResult::Failed;
+            }
 
             uint8_t* dest = hunkUserData.data();
             for (uint32_t s = 0; s < sectorsPerHunk; ++s) {
@@ -122,29 +125,29 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
             if (completedBytes)
                 completedBytes->fetch_add(userDataPerHunk, std::memory_order_relaxed);
         }
-        return true;
+        return ConversionResult::Success;
     }
 
-    // ---------- LARGE FILE (>1GB) : 2‑THREAD PARALLEL with memory mapping ----------
-    // Pre‑allocate and memory‑map the output file
+    // ---------- LARGE FILE (>1GB) : 2-THREAD PARALLEL with memory mapping ----------
     int fd = ::open(isoPath.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644);
-    if (fd == -1) return false;
+    if (fd == -1) return ConversionResult::Failed;
     if (::ftruncate(fd, totalUserData) == -1) {
         ::close(fd);
         fs::remove(isoPath);
-        return false;
+        return ConversionResult::Failed;
     }
     void* mapped = ::mmap(nullptr, totalUserData, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     ::close(fd);
     if (mapped == MAP_FAILED) {
         fs::remove(isoPath);
-        return false;
+        return ConversionResult::Failed;
     }
     auto unmap = [&] { ::munmap(mapped, totalUserData); };
 
     const unsigned int numThreads = 2;
     std::vector<std::thread> threads;
-    std::atomic<bool> errorOccurred = false;
+    std::atomic<bool> errorOccurred{false};
+    std::atomic<bool> cancelOccurred{false};
 
     uint32_t totalHunks = header->totalhunks;
     uint32_t hunksPerThread = (totalHunks + numThreads - 1) / numThreads;
@@ -155,7 +158,6 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
         if (start >= end) continue;
 
         threads.emplace_back([&, start, end]() {
-            // Each thread opens its own CHD handle (libchdr is not thread‑safe otherwise)
             chd_file* threadChd = nullptr;
             if (chd_open(chdPath.c_str(), CHD_OPEN_READ, nullptr, &threadChd) != CHDERR_NONE) {
                 errorOccurred = true;
@@ -166,9 +168,9 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
             std::vector<uint8_t> hunkBuffer(hunkSize);
             std::vector<uint8_t> userDataBuffer(userDataPerHunk);
 
-            for (uint32_t hunk = start; hunk < end && !errorOccurred; ++hunk) {
+            for (uint32_t hunk = start; hunk < end && !errorOccurred && !cancelOccurred; ++hunk) {
                 if (g_operationCancelled.load()) {
-                    errorOccurred = true;
+                    cancelOccurred = true;
                     return;
                 }
                 if (chd_read(threadChd, hunk, hunkBuffer.data()) != CHDERR_NONE) {
@@ -194,9 +196,13 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
     }
     unmap();
 
-    if (errorOccurred || g_operationCancelled.load()) {
+    if (cancelOccurred || g_operationCancelled.load()) {
         fs::remove(isoPath);
-        return false;
+        return ConversionResult::Cancelled;
     }
-    return true;
+    if (errorOccurred) {
+        fs::remove(isoPath);
+        return ConversionResult::Failed;
+    }
+    return ConversionResult::Success;
 }
