@@ -37,7 +37,7 @@ void restoreInput(struct termios *oldt, int oldf) {
     tcsetattr(STDIN_FILENO, TCSANOW, oldt);
     fcntl(STDIN_FILENO, F_SETFL, oldf);
 }
-static std::mutex g_completionMutex;
+
 /**
  * @brief Displays a multi-line progress bar with byte tracking, task counts, and time elapsed.
  * @param completedBytes Atomic counter for bytes processed.
@@ -160,10 +160,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             if (bytesTrackingEnabled) std::cout << "\033[1J\033[3A";
             else std::cout << "\033[1J\033[1A";
             
-            // Hybrid approach: Lightweight acq_rel fence for consistency without performance hit
             std::atomic_thread_fence(std::memory_order_acq_rel);
             
-            // Single atomic loads - sufficient for progress bar accuracy
             const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
             const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
             const bool wasCancelled = g_operationCancelled.load(std::memory_order_acquire);
