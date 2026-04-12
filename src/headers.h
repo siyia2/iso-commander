@@ -253,22 +253,19 @@ std::tuple<std::string, std::string, std::string> parseMountPointComponents(std:
 // CONVERSION UTILITIES
 //==============================
 
-// Represents the outcome of a conversion operation using a dedicated three-state result instead of a bool
-enum class ConversionResult { Success, Failed, Cancelled };
-
 // CCD2ISO
-ConversionResult convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
+bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
 
 // CHD2ISO
-ConversionResult convertChdToIso(const std::string& chdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
+bool convertChdToIso(const std::string& chdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
 
 //DAA2ISO
-ConversionResult convertDaaToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<size_t>* completedBytes);
+bool convertDaaToIso(const std::string &inputFile, const std::string &outputFile, std::atomic<size_t> *completedBytes);
 
 // MDF2ISO
-ConversionResult convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
+bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
 
 // NRG2ISO
-ConversionResult convertNrgToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<size_t>* completedBytes);
+bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<size_t>* completedBytes);
 
 #endif // HEADERS_H
