@@ -160,12 +160,37 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             if (bytesTrackingEnabled) std::cout << "\033[1J\033[3A";
             else std::cout << "\033[1J\033[1A";
             
-            const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
-            const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
+            // Full memory barrier to ensure all operations are synchronized
+            std::atomic_thread_fence(std::memory_order_seq_cst);
             
-            // Status line using originalColors mappings
+            // Brief pause to allow any pending updates to settle
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            
+            // Load all states with memory ordering
+            size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
+            size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
+            bool wasCancelled = g_operationCancelled.load(std::memory_order_acquire);
+            
+            // Double-check after a tiny delay to catch any race conditions
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            
+            // Re-check all states to ensure they're final
+            size_t finalCompletedTasks = completedTasks->load(std::memory_order_acquire);
+            size_t finalFailedTasks = failedTasks->load(std::memory_order_acquire);
+            bool finalCancelled = g_operationCancelled.load(std::memory_order_acquire);
+            
+            // Use the most recent values if they changed
+            if (finalCancelled != wasCancelled || 
+                finalCompletedTasks != completedTasksValue || 
+                finalFailedTasks != failedTasksValue) {
+                completedTasksValue = finalCompletedTasks;
+                failedTasksValue = finalFailedTasks;
+                wasCancelled = finalCancelled;
+            }
+            
+            // Status line using originalColors mappings with verified values
             std::cout << "\r\033[2K" << originalColors::boldAlt << " Status: " << operation << originalColors::boldAlt << " → " 
-                      << (!g_operationCancelled.load() 
+                      << (!wasCancelled 
                           ? (failedTasksValue > 0 
                              ? (completedTasksValue > 0 
                                 ? std::string(originalColors::yellow) + "PARTIAL"
@@ -174,6 +199,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                           : std::string(originalColors::yellow) + "INTERRUPTED")
                       << originalColors::boldAlt << std::endl;
             
+            // Render final progress bar with verified state
             std::cout << renderProgressBar(true);
             
             disableReadlineForConfirmation();
