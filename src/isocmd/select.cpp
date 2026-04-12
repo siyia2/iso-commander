@@ -352,7 +352,11 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         
         if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
 			continue;
-		}       
+		}
+		if (input.get()[0] == '\0') {
+            needsClrScrn = false;
+            continue; 
+        }
         
         if (inputString == "<") {
             if (isFiltered) {
@@ -563,6 +567,11 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
              std::cout << "\033[2A\033[K"; 
              needsClrScrn = false;
              continue;
+        }
+        if (rawInput.get()[0] == '\0') {
+            std::cout << "\033[2A\033[K";
+            needsClrScrn = false;
+            continue; 
         }
         if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
 			std::cout << "\033[2A\033[K"; 
