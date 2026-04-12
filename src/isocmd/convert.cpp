@@ -225,7 +225,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
         skippedOuts.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
     }
 
-    // Trigger database refresh only if we have successes and not cancelled
+    // Trigger database refresh only if we have successes
     if (!successOuts.empty()) {
         bool pFlag = false, fHistory = false;
         int mDepth = 0;
