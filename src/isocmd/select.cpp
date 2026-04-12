@@ -420,7 +420,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
  * @brief Interactive file selection and conversion controller for disk image formats.
  *
  * Provides a terminal-based interface for browsing, filtering, and selecting
- * BIN/IMG, MDF, NRG, and CHD image files. Supports pagination, batch selection,
+ * BIN/IMG, MDF, NRG, CHD and DAA image files. Supports pagination, batch selection,
  * and command-based input for triggering conversions.
  *
  * Handles user interaction, cache restoration, pending selection processing,
