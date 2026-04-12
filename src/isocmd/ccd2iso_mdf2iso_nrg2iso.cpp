@@ -38,7 +38,6 @@
 
 
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
-    // Early cancellation check
     if (g_operationCancelled.load()) {
         g_operationCancelled.store(true);
         return false;
@@ -49,14 +48,12 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
         return false;
     }
     
-    // Check if file is valid MDF
     mdfFile.seekg(32768);
     char buf[12];
     if (!mdfFile.read(buf, 8) || std::memcmp("CD001", buf + 1, 5) == 0) {
-        return false; // Not an MDF file or unsupported format
+        return false;
     }
     
-    // Check cancellation before opening output file
     if (g_operationCancelled.load()) {
         g_operationCancelled.store(true);
         return false;
@@ -67,12 +64,6 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
         return false;
     }
     
-    // Enable internal buffering (by default standard buffer size is utilized)
-    // Optionally, you can set a custom buffer size like this:
-    // char buffer[65536]; // 64KB buffer
-    // isoFile.rdbuf()->pubsetbuf(buffer, sizeof(buffer));
-    
-    // Determine MDF format
     size_t seek_ecc = 0, sector_size = 0, seek_head = 0, sector_data = 0;
     
     mdfFile.seekg(0);
@@ -80,7 +71,6 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
         return false;
     }
     
-    // Determine MDF type based on sync patterns
     if (std::memcmp("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x00", buf, 12) == 0) {
         mdfFile.seekg(2352);
         if (!mdfFile.read(buf, 12)) {
@@ -104,22 +94,13 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
         sector_data = 2352;
     }
     
-    // Calculate the number of sectors
     mdfFile.seekg(0, std::ios::end);
     size_t source_length = static_cast<size_t>(mdfFile.tellg()) / sector_size;
     mdfFile.seekg(0, std::ios::beg);
     
-    // Initialize progress tracking
-    if (completedBytes) {
-        *completedBytes = 0;
-    }
-    
-    // Buffer for a single sector
     std::vector<char> sectorBuffer(sector_data);
     
-    // Main conversion loop with strategic cancellation checks
     while (source_length > 0) {
-        // Check cancellation at the start of each sector processing
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
@@ -127,18 +108,14 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
             return false;
         }
         
-        // Skip header
         mdfFile.seekg(static_cast<std::streamoff>(seek_head), std::ios::cur);
         
-        // Read sector data
         if (!mdfFile.read(sectorBuffer.data(), sector_data)) {
             return false;
         }
         
-        // Skip ECC data
         mdfFile.seekg(static_cast<std::streamoff>(seek_ecc), std::ios::cur);
         
-        // Check cancellation before writing
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
@@ -146,12 +123,10 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
             return false;
         }
         
-        // Write sector
         if (!isoFile.write(sectorBuffer.data(), sector_data)) {
             return false;
         }
         
-        // Update progress
         if (completedBytes) {
             completedBytes->fetch_add(sector_data, std::memory_order_relaxed);
         }
@@ -190,7 +165,6 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
  
 
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
-   // Early cancellation check
     if (g_operationCancelled.load()) {
         g_operationCancelled.store(true);
         return false;
@@ -200,17 +174,11 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
     if (!ccdFile) return false;
     std::ofstream isoFile(isoPath, std::ios::binary);
     if (!isoFile) return false;
-    
-    // Enable internal buffering (by default standard buffer size is utilized)
-    // Optionally, you can set a custom buffer size like this:
-    // char buffer[65536]; // 64KB buffer
-    // isoFile.rdbuf()->pubsetbuf(buffer, sizeof(buffer));
-    
+        
     CcdSector sector;
     size_t sectorNum = 0;
     
     while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
-        // Check cancellation at the start of the loop
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
@@ -231,27 +199,22 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
                 break;
             }
             case 0xe2:
-                // Found session marker
                 return true;
             default:
                 return false;
         }
-        // Check cancellation immediately after writing sector data
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
             g_operationCancelled.store(true);
             return false;
         }
-        // Validate write operation
         if (!isoFile || bytesWritten != DATA_SIZE) {
             return false;
         }
-        // Update progress
         if (completedBytes) {
             completedBytes->fetch_add(bytesWritten, std::memory_order_relaxed);
         }
-        // Check cancellation after updating progress
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
@@ -288,7 +251,6 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
 
 
 bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<size_t>* completedBytes) {
-    // Early cancellation check
     if (g_operationCancelled.load()) {
         g_operationCancelled.store(true);
         return false;
@@ -299,25 +261,21 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
         return false;
     }
     
-    // Get the size of the input file
     nrgFile.seekg(0, std::ios::end);
     nrgFile.seekg(0, std::ios::beg);
     
-    // Check if the file is already in ISO format (using the same logic as the C version)
     constexpr size_t ISO_CHECK_OFFSET = 16 * 2048;
     char isoBuf[8];
     nrgFile.seekg(ISO_CHECK_OFFSET);
     nrgFile.read(isoBuf, 8);
     
     if (memcmp(isoBuf, "\x01" "CD001" "\x01\x00", 8) == 0) {
-        return false;  // Already an ISO, no conversion needed
+        return false;
     }
     
-    // Reopen file for conversion
     nrgFile.clear();
-    nrgFile.seekg(307200, std::ios::beg);  // Skip the header section
+    nrgFile.seekg(307200, std::ios::beg);
     
-    // Check cancellation before opening output file
     if (g_operationCancelled.load()) {
         g_operationCancelled.store(true);
         return false;
@@ -327,19 +285,11 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
     if (!isoFile) {
         return false;
     }
-    
-    // Initialize completedBytes to 0 if provided
-    if (completedBytes) {
-        *completedBytes = 0;
-    }
-    
-    // Use the 1MB buffer size from the C version
+
     constexpr size_t BUFFER_SIZE = 1024 * 1024;
     std::vector<char> buffer(BUFFER_SIZE);
     
-    // Conversion loop with comprehensive cancellation checks
     while (nrgFile) {
-        // Check cancellation before reading
         if (g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(outputFile);
@@ -351,7 +301,6 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
         std::streamsize bytesRead = nrgFile.gcount();
         
         if (bytesRead > 0) {
-            // Check cancellation before writing
             if (g_operationCancelled.load()) {
                 isoFile.close();
                 fs::remove(outputFile);
@@ -365,13 +314,11 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
                 return false;
             }
             
-            // Update progress
             if (completedBytes) {
                 completedBytes->fetch_add(bytesRead, std::memory_order_relaxed);
             }
         }
         
-        // Break if we've reached EOF or an error occurred
         if (nrgFile.eof() || nrgFile.fail()) {
             break;
         }
