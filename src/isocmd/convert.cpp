@@ -237,7 +237,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             msg.reserve(128);
             msg.append(errLabel).append("Conversion of ")
                .append(errPath).append("'").append(displayPath).append("'")
-               .append(originalColors::boldAlt).append(errLabel).append(" cancelled (operation aborted).")
+               .append(originalColors::boldAlt).append(errLabel).append(" cancelled.")
                .append(originalColors::boldAlt).append(originalColors::boldAlt);
             localFailedMsgs.push_back(std::move(msg));
         }
