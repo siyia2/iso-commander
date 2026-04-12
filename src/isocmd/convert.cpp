@@ -30,7 +30,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                   const bool& modeMdf,
                   const bool& modeNrg,
                   const bool& modeChd,
-                  const bool& modeDaa,                     // <-- new DAA flag
+                  const bool& modeDaa,
                   std::atomic<size_t>* completedBytes,
                   std::atomic<size_t>* completedTasks,
                   std::atomic<size_t>* failedTasks,
@@ -85,6 +85,11 @@ void convertToISO(const std::vector<std::string>& imageFiles,
 
     // Iterate over each input file
     for (const std::string& inputPath : imageFiles) {
+        // ========== CANCELLATION CHECK #1 ==========
+        if (g_operationCancelled.load()) {
+            break;   // Stop processing any further files
+        }
+
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
         const std::string displayPath  = (!displayConfig::toggleNamesOnly ? directory + "/" : "") + fileNameOnly;
 
@@ -141,6 +146,11 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             continue;
         }
 
+        // ========== CANCELLATION CHECK #2 (before heavy conversion) ==========
+        if (g_operationCancelled.load()) {
+            break;
+        }
+
         // ----- Perform the conversion based on the selected mode -----
         bool conversionSuccess = false;
         if (modeMdf) {
@@ -154,6 +164,15 @@ void convertToISO(const std::vector<std::string>& imageFiles,
         } else {
             // Default: CCD / BIN / IMG
             conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
+        }
+
+        // ========== CANCELLATION CHECK #3 (after conversion) ==========
+        if (g_operationCancelled.load()) {
+            // If conversion was cancelled mid‑way, it should have returned false.
+            // Clean up partial output and exit the loop immediately.
+            if (fs::exists(outputPath))
+                fs::remove(outputPath);
+            break;   // abandon remaining files
         }
 
         // ----- Post‑conversion handling -----
@@ -206,8 +225,8 @@ void convertToISO(const std::vector<std::string>& imageFiles,
         skippedOuts.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
     }
 
-    // Trigger database refresh if any conversion succeeded
-    if (!successOuts.empty()) {
+    // Trigger database refresh only if we have successes and not cancelled
+    if (!successOuts.empty() && !g_operationCancelled.load()) {
         bool pFlag = false, fHistory = false;
         int mDepth = 0;
         refreshForDatabase(result, pFlag, mDepth, fHistory, newISOFound);
