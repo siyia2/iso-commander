@@ -87,7 +87,7 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
         }
     }
 
-    // --- CONVERSION LOOP (unchanged) ---
+    // --- CONVERSION LOOP ---
     const uint32_t userDataSize = 2048;
     std::ofstream isoFile(isoPath, std::ios::binary);
     if (!isoFile.is_open()) return false;
