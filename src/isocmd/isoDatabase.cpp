@@ -233,60 +233,30 @@ std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string
 }
 
 /**
- * @brief Adds directly specified ISO files to the database in parallel.
+ * @brief Passes successfully operated ISO file paths to the database.
  *
- * Accepts a semicolon‑separated list of file paths. Each path that exists
- * and is a regular file is added to the database after deduplication.
- * No directory scanning is performed. File validation occurs in parallel
- * using maxThreads.
+ * Accepts a semicolon-separated list of destination paths produced by a
+ * completed copy or move operation. Each non-empty path is collected and
+ * forwarded to saveToDatabase() in a single batch call.
  *
- * @param filePaths     Semicolon‑delimited string of ISO file paths.
+ * @param filePathsStr  Semicolon-delimited string of destination ISO paths.
  * @param newISOFound   Atomic flag set to @c true by saveToDatabase() if at
  *                      least one new ISO entry is added.
  *
- * @note Non‑existent or invalid paths are silently ignored.
+ * @note Paths are assumed valid — they were written successfully by the
+ *       preceding operation. No filesystem validation is performed.
  */
-void updateDatabaseAfterOperations(const std::string& filePathsStr, std::atomic<bool>& newISOFound) {
+void updateDatabaseAfterOperations(const std::string& filePathsStr, 
+                                    std::atomic<bool>& newISOFound) {
     std::vector<std::string> allIsoFiles;
-    std::unordered_set<std::string> seenPaths;
-    std::mutex fm;
     std::istringstream iss(filePathsStr);
     std::string path;
-    std::vector<std::string> validFilePaths;
 
-    // First, collect unique file paths
     while (std::getline(iss, path, ';')) {
-        if (!seenPaths.insert(path).second) continue;
-        if (fs::is_regular_file(path)) {
-            validFilePaths.emplace_back(path);
-        }
+        if (!path.empty())
+            allIsoFiles.push_back(std::move(path));
     }
 
-    // Process file validation/collection in parallel
-    std::vector<std::future<void>> futures;
-    std::atomic<size_t> nextIndex{0};
-    size_t totalFiles = validFilePaths.size();
-    
-    // Use maxThreads for parallel processing
-    for (size_t t = 0; t < maxThreads && t < totalFiles; ++t) {
-        futures.emplace_back(std::async(std::launch::async, 
-            [&validFilePaths, &allIsoFiles, &fm, &nextIndex, totalFiles]() {
-                while (true) {
-                    size_t idx = nextIndex.fetch_add(1);
-                    if (idx >= totalFiles) break;
-                    
-                    // Add the file path to the result set
-                    {
-                        std::lock_guard<std::mutex> lock(fm);
-                        allIsoFiles.push_back(validFilePaths[idx]);
-                    }
-                }
-            }
-        ));
-    }
-    
-    for (auto& f : futures) f.wait();
-    
     if (!allIsoFiles.empty())
         saveToDatabase(allIsoFiles, newISOFound);
 }
