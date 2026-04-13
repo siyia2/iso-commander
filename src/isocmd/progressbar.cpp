@@ -168,8 +168,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 			const size_t failedTasksValue = failedTasks->load(std::memory_order_acquire);
 			
 			// Capture cancellation state exactly once at completion time
-			static bool cancellationState = g_operationCancelled.load(std::memory_order_acquire);
-			const bool wasCancelled = cancellationState;
+			const bool wasCancelled = g_operationCancelled.load(std::memory_order_acquire);
 			
 			// Status line using originalColors mappings with loaded values
 			std::cout << "\r\033[2K" << originalColors::boldAlt << " Status: " << operation << originalColors::boldAlt << " → " 
