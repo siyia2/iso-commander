@@ -187,10 +187,12 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
 
 /**
  * @brief Handles bulk copy, move, or remove operations with threading and progress visualization.
- * * This function orchestrates the lifecycle of filesystem operations (cp, mv, rm) on selected 
+ *
+ * This function orchestrates the lifecycle of filesystem operations (cp, mv, rm) on selected 
  * image files. It handles everything from user confirmation and destination selection to 
  * multi-threaded execution and database synchronization.
- * * @section Workflow Lifecycle
+ *
+ * @section Workflow Lifecycle
  * 1. **Input Parsing**: Tokenizes the user string to map selections to the master ISO list.
  * 2. **Pre-Processing & Validation**: 
  * - Determines thread caps based on operation type (e.g., `RM_THREAD_CAP` vs `CPMV_THREAD_CAP`).
@@ -204,11 +206,13 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
  * - Distributes file chunks into a static thread pool for parallel execution via `handleIsoFileOperation`.
  * 5. **Post-Processing & Cleanup**:
  * - Disables signal handlers and joins the progress thread.
- * - **Database Sync**: If files were moved or copied, a detached thread is launched to 
- * update the database for the affected directories without blocking the UI.
+ * - **Database Sync**: If files were moved or copied, a **synchronous** update is triggered
+ * for the affected directories. This ensures the database is fully indexed before 
+ * returning control to the user.
  * - **State Management**: Marks the global `isoListDirty` flag as true if any tasks 
  * succeeded, ensuring the UI refreshes the file list.
- * * @param input Raw user input (e.g., "1-3, 5").
+ *
+ * @param input Raw user input (e.g., "1-3, 5").
  * @param isoFiles Master list of files.
  * @param process Operation type ("cp", "mv", or "rm").
  * @param operationIsos Set to track successfully modified items.
@@ -218,8 +222,10 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
  * @param filterHistory Flag indicating if the view is filtered.
  * @param verbose Detailed output toggle for progress updates.
  * @param newISOFound Atomic flag for filesystem changes.
- * * @note Cancellation via SIGINT (Ctrl+C) is caught during the execution phase, allowing 
- * partial batches to complete while preventing new tasks from starting.
+ *
+ * @note Cancellation via SIGINT (Ctrl+C) is caught during the execution phase, allowing 
+ * partial batches to complete while preventing new tasks from starting. Database 
+ * synchronization is performed on the main thread after all tasks finish.
  */
 void processInputForCpMvRm(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& filterHistory, bool& verbose, std::atomic<bool>& newISOFound) {
     setupSignalHandlerCancellations();
