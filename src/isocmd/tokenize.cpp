@@ -113,30 +113,40 @@ void tokenizeInput(const std::string& input,
     }
 
     /**
-     * @brief Formats error categories with appropriate pluralization and ANSI colors.
-     */
-    auto formatCategory = [](const std::string& singular, const std::string& plural,
-                             const std::unordered_set<std::string>& items) {
-        if (items.empty()) return std::string();
-        
-        std::ostringstream oss;
-        oss << originalColors::red << (items.size() > 1 ? plural : singular) << ": '";
-        for (auto it = items.begin(); it != items.end(); ++it) {
-            if (it != items.begin()) oss << " ";
-            oss << *it;
-        }
-        oss << "'. " << originalColors::boldAlt;
-        return oss.str();
-    };
+	* @brief Formats error categories with appropriate pluralization and ANSI colors.
+	*/
+	auto formatCategory = [](std::string_view color, std::string_view singular, 
+							 std::string_view plural, const auto& container) {
+		if (container.empty()) return std::string();
 
-    // Populate the error set with formatted messages
-    if (!invalidInputs.empty()) {
-        uniqueErrorMessages.insert(formatCategory("Invalid input", "Invalid inputs", invalidInputs));
-    }
-    if (!invalidIndices.empty()) {
-        uniqueErrorMessages.insert(formatCategory("Invalid index", "Invalid indexes", invalidIndices));
-    }
-    if (!invalidRanges.empty()) {
-        uniqueErrorMessages.insert(formatCategory("Invalid range", "Invalid ranges", invalidRanges));
-    }
+		std::ostringstream oss;
+		// Use the specific singular or plural strings passed in
+		oss << color << (container.size() > 1 ? plural : singular) << ": '";
+
+		bool first = true;
+		for (const auto& item : container) {
+			if (!first) oss << ", ";
+			oss << item;
+			first = false;
+		}
+		oss << "'" << originalColors::boldAlt; 
+		return oss.str();
+	};
+
+	const ListTheme* theme = getActiveTheme();
+	const bool isOriginal  = (globalTheme == "original");
+
+	std::string_view errorLabel = isOriginal ? originalColors::red : theme->secondary;
+
+	if (!invalidInputs.empty()) {
+		uniqueErrorMessages.insert(formatCategory(errorLabel, "Invalid input", "Invalid inputs", invalidInputs));
+	}
+
+	if (!invalidIndices.empty()) {
+		uniqueErrorMessages.insert(formatCategory(errorLabel, "Invalid index", "Invalid indexes", invalidIndices));
+	}
+
+	if (!invalidRanges.empty()) {
+		uniqueErrorMessages.insert(formatCategory(errorLabel, "Invalid range", "Invalid ranges", invalidRanges));
+	}
 }
