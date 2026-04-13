@@ -445,21 +445,27 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
     std::string fileExtension;
     std::string fileExtensionWithOutDots;
+    std::string operation;
     if (fileType == "bin" || fileType == "img") {
         fileExtension = ".bin/.img";
+        operation = "ccd2iso";
         fileExtensionWithOutDots = "BIN/IMG";
     } else if (fileType == "mdf") {
         fileExtension = ".mdf";
         fileExtensionWithOutDots = "MDF";
+        operation = "mdf2iso";
     } else if (fileType == "nrg") {
         fileExtension = ".nrg";
         fileExtensionWithOutDots = "NRG";
+        operation = "nrg2iso";
     } else if (fileType == "chd") {
         fileExtension = ".chd";
         fileExtensionWithOutDots = "CHD";
+        operation = "chd2iso";
     } else if (fileType == "daa") {
         fileExtension = ".daa";
         fileExtensionWithOutDots = "DAA";
+        operation = "daa2iso";
     } else {
         fileExtension = "";
         fileExtensionWithOutDots = "FILES";
@@ -500,7 +506,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             prefix + 
             colorHighlight + fileExtensionWithOutDots + 
             colorMuted     + " ↵ for " + 
-            colorHighlight + "convert2iso" + 
+            colorHighlight + operation + 
             colorMuted     + ", ? ↵ for help, < ↵ to return: " + 
             colorReset;
         
@@ -590,7 +596,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         }       
 
         if (inputString == "/" || (!inputString.empty() && inputString[0] == '/')) {
-            handleFilteringConvert2ISO(inputString, files, fileExtensionWithOutDots, isFiltered, needsClrScrn, filterHistory, need2Sort, currentPage);
+            handleFilteringConvert2ISO(inputString, files, operation, isFiltered, needsClrScrn, filterHistory, need2Sort, currentPage);
             continue;
         }
         else if (inputString.find(';') != std::string::npos) {

@@ -526,7 +526,7 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
  * @param need2Sort Flag indicating if resorting is needed
  * @param currentPage Reference to current page number
  */
-void handleFilteringConvert2ISO(const std::string& inputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn,
+void handleFilteringConvert2ISO(const std::string& inputString, std::vector<std::string>& files, const std::string& operation, bool& isFiltered, bool& needsClrScrn,
 bool& filterHistory, bool& need2Sort, size_t& currentPage)
 {
     if (inputString.empty() ||
@@ -563,7 +563,7 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
 	const std::string prompt = 
 		colorFilter + "FilterTerms" + 
 		colorMuted  + " ↵ for " + 
-		colorExt    + fileExtensionWithOutDots + 
+		colorExt    + operation + 
 		colorMuted  + ", or ↵ to return: " + 
 		colorReset;
 		
