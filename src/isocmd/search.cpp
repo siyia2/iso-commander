@@ -70,7 +70,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
             prompt.append("\001").append(primary).append("\002FolderPaths")
                   .append("\001").append(secondary).append("\002 ↵ to scan for ")
                   .append("\001").append(primary).append("\002.iso")
-                  .append("\001").append(secondary).append("\002 entries and import into ")
+                  .append("\001").append(secondary).append("\002 entries and import into the")
                   .append("\001").append(primary).append("\002local")
                   .append("\001").append(secondary).append("\002 database, ? ↵ help, ↵ return:\n")
                   .append("\001").append(originalColors::boldAlt).append("\002");
