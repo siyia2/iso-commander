@@ -303,11 +303,11 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     signal(SIGINT, SIG_IGN);  
     progressThread.join();
     
-    if (!isDelete) {
-        bool promptFlag = false;
-        int maxDepth = 0;
-        refreshForDatabase(userDestDir, promptFlag, maxDepth, filterHistory, newISOFound);
-    }
+    if (!isDelete && completedTasks.load() > 0) {
+		std::thread([userDestDir, &newISOFound]() {
+			updateDatabaseAfterOperations(userDestDir, newISOFound);
+		}).detach();
+	}
 
     clear_history();
 }
@@ -535,10 +535,10 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
         futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk),
             &successOuts, &skippedOuts, &failedOuts,
             modeMdf, modeNrg, modeChd, modeDaa,   // <-- pass DAA flag
-            &completedBytes, &completedTasks, &failedTasks, &newISOFound]() {
+            &completedBytes, &completedTasks, &failedTasks]() {
             convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
                 modeMdf, modeNrg, modeChd, modeDaa,   // <-- added DAA flag
-                &completedBytes, &completedTasks, &failedTasks, newISOFound);
+                &completedBytes, &completedTasks, &failedTasks);
         }));
     }
 
@@ -549,4 +549,22 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     isProcessingComplete.store(true);
     signal(SIGINT, SIG_IGN);
     progressThread.join();
+    
+    if (!successOuts.empty()) {
+        // Build directory list from the files that were actually processed
+        std::unordered_set<std::string> uniqueDirectories;
+        for (const auto& file : filesToProcess) {
+            fs::path p(file);
+            if (p.has_parent_path())
+                uniqueDirectories.insert(p.parent_path().string());
+        }
+        std::string result = std::accumulate(uniqueDirectories.begin(), uniqueDirectories.end(), std::string(),
+            [](const std::string& a, const std::string& b) {
+                return a.empty() ? b : a + ";" + b;
+            });
+
+        std::thread([result, &newISOFound]() {
+            updateDatabaseAfterOperations(result, newISOFound);
+        }).detach();
+    }
 }

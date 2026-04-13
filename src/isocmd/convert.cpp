@@ -13,6 +13,7 @@ bool fileExists(const std::string& fullPath) {
     return std::filesystem::exists(fullPath);
 }
 
+
 /**
  * @brief Batch converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD) to ISO format.
  *
@@ -33,8 +34,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                   const bool& modeDaa,
                   std::atomic<size_t>* completedBytes,
                   std::atomic<size_t>* completedTasks,
-                  std::atomic<size_t>* failedTasks,
-                  std::atomic<bool>& newISOFound) {
+                  std::atomic<size_t>* failedTasks) {
 
     namespace fs = std::filesystem;
     const size_t BATCH_SIZE = 50;
@@ -50,18 +50,6 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     std::string_view skipLabel    = isOriginal ? originalColors::yellow   : theme->warning;
     std::string_view skipPath     = isOriginal ? originalColors::green    : theme->primary;
 
-    std::unordered_set<std::string> uniqueDirectories;
-    for (const auto& filePath : imageFiles) {
-        fs::path path(filePath);
-        if (path.has_parent_path())
-            uniqueDirectories.insert(path.parent_path().string());
-    }
-    
-    std::string result = std::accumulate(uniqueDirectories.begin(), uniqueDirectories.end(), std::string(),
-        [](const std::string& a, const std::string& b) {
-            return a.empty() ? b : a + ";" + b;
-        });
-
     uid_t real_uid; gid_t real_gid;
     std::string real_username, real_groupname;
     getRealUserId(real_uid, real_gid, real_username, real_groupname);
@@ -69,6 +57,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     std::vector<std::string> localSuccessMsgs, localFailedMsgs, localSkippedMsgs;
 
     auto batchInsertMessages = [&]() {
+		
         std::lock_guard<std::mutex> lock(globalSetsMutex);
         if (!localSuccessMsgs.empty()) {
             successOuts.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
@@ -100,7 +89,8 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                .append(errPath).append("'").append(displayPath).append("'")
                .append(originalColors::boldAlt).append(missingLabel).append(".");
             localFailedMsgs.push_back(std::move(msg));
-
+			
+			std::lock_guard<std::mutex> lock(globalSetsMutex);
             auto& cache = modeNrg ? nrgFilesCache :
                           (modeMdf ? mdfMdsFilesCache :
                            (modeChd ? chdFilesCache :
@@ -189,15 +179,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             localFailedMsgs.push_back(std::move(msg));
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }
-        batchInsertMessages();
     }
-
-    // Final flush
+    
     batchInsertMessages();
-
-    if (!successOuts.empty()) {
-        bool pFlag = false, fHistory = false;
-        int mDepth = 0;
-        refreshForDatabase(result, pFlag, mDepth, fHistory, newISOFound);
-    }
 }

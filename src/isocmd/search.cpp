@@ -49,9 +49,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
         setupSignalHandlerCancellations();
         resetReadlinePagination();
         rl_attempted_completion_function = my_special_completion_entry;
-        if (promptFlag) {
-			g_operationCancelled.store(false);
-		}
+		g_operationCancelled.store(false);
         
         const ListTheme* theme = getActiveTheme();
         const bool isOrig = (globalTheme == "original");
@@ -72,7 +70,7 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
             prompt.append("\001").append(primary).append("\002FolderPaths")
                   .append("\001").append(secondary).append("\002 ↵ to scan for ")
                   .append("\001").append(primary).append("\002.iso")
-                  .append("\001").append(secondary).append("\002 entries and import them into the ")
+                  .append("\001").append(secondary).append("\002 entries and import into ")
                   .append("\001").append(primary).append("\002local")
                   .append("\001").append(secondary).append("\002 database, ? ↵ help, ↵ return:\n")
                   .append("\001").append(originalColors::boldAlt).append("\002");
@@ -244,9 +242,8 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
     
     const ListTheme* theme = getActiveTheme();
     const bool isOriginal = (globalTheme == "original");
-	if (promptFlag) {
-		g_operationCancelled.store(false);
-	}
+	
+	g_operationCancelled.store(false);
 
     auto iequals = [](const std::string_view& a, const std::string_view& b) {
         return std::equal(a.begin(), a.end(), b.begin(), b.end(),
