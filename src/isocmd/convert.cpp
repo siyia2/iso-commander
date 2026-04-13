@@ -14,7 +14,7 @@ bool fileExists(const std::string& fullPath) {
 }
 
 /**
- * @brief Batch converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD, DAA) to ISO format.
+ * @brief Batch converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD) to ISO format.
  *
  * Handles per-file validation (existence and basic readability), skips existing outputs,
  * selects the appropriate conversion backend based on mode flags, and aggregates
@@ -50,13 +50,13 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     std::string_view skipLabel    = isOriginal ? originalColors::yellow   : theme->warning;
     std::string_view skipPath     = isOriginal ? originalColors::green    : theme->primary;
 
-    // Collect unique directories for later database refresh
     std::unordered_set<std::string> uniqueDirectories;
     for (const auto& filePath : imageFiles) {
         fs::path path(filePath);
         if (path.has_parent_path())
             uniqueDirectories.insert(path.parent_path().string());
     }
+    
     std::string result = std::accumulate(uniqueDirectories.begin(), uniqueDirectories.end(), std::string(),
         [](const std::string& a, const std::string& b) {
             return a.empty() ? b : a + ";" + b;
@@ -66,42 +66,33 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     std::string real_username, real_groupname;
     getRealUserId(real_uid, real_gid, real_username, real_groupname);
 
-    // Local buffers for batch insertion
     std::vector<std::string> localSuccessMsgs, localFailedMsgs, localSkippedMsgs;
 
-    // --- Thread-Safe Batch Inserter ---
     auto batchInsertMessages = [&]() {
         std::lock_guard<std::mutex> lock(globalSetsMutex);
-        if (localSuccessMsgs.size() >= BATCH_SIZE ||
-            localFailedMsgs.size()  >= BATCH_SIZE ||
-            localSkippedMsgs.size() >= BATCH_SIZE) {
-            
+        if (!localSuccessMsgs.empty()) {
             successOuts.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
-            failedOuts.insert(localFailedMsgs.begin(),   localFailedMsgs.end());
-            skippedOuts.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
-            
             localSuccessMsgs.clear();
+        }
+        if (!localFailedMsgs.empty()) {
+            failedOuts.insert(localFailedMsgs.begin(), localFailedMsgs.end());
             localFailedMsgs.clear();
+        }
+        if (!localSkippedMsgs.empty()) {
+            skippedOuts.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
             localSkippedMsgs.clear();
         }
     };
 
-    size_t processedCount = 0;
-    bool cancelledEarly = false;
-
-    for (size_t idx = 0; idx < imageFiles.size(); ++idx) {
-        const std::string& inputPath = imageFiles[idx];
-
-        // Cancellation check before any work
-        if (g_operationCancelled.load()) {
-            cancelledEarly = true;
-            break;
+    for (const std::string& inputPath : imageFiles) {
+        // --- COOPERATIVE CHECK ---
+        if (g_operationCancelled.load(std::memory_order_relaxed)) {
+            break; 
         }
 
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
         const std::string displayPath  = (!displayConfig::toggleNamesOnly ? directory + "/" : "") + fileNameOnly;
 
-        // Missing file
         if (!fs::exists(inputPath)) {
             std::string msg;
             msg.reserve(128);
@@ -116,13 +107,11 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                             (modeDaa ? daaFilesCache : binImgFilesCache)));
             cache.erase(std::remove(cache.begin(), cache.end(), inputPath), cache.end());
 
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);   // real failure
-            batchInsertMessages();
-            ++processedCount;
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            if (localFailedMsgs.size() >= BATCH_SIZE) batchInsertMessages();
             continue;
         }
 
-        // Readability
         std::ifstream file(inputPath);
         if (!file.good()) {
             std::string msg;
@@ -133,13 +122,11 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                .append(originalColors::boldAlt).append(originalColors::boldAlt);
             localFailedMsgs.push_back(std::move(msg));
 
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);   // real failure
-            batchInsertMessages();
-            ++processedCount;
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            if (localFailedMsgs.size() >= BATCH_SIZE) batchInsertMessages();
             continue;
         }
 
-        // Output already exists
         std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
         if (fileExists(outputPath)) {
             std::string msg;
@@ -151,32 +138,20 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             localSkippedMsgs.push_back(std::move(msg));
 
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
-            batchInsertMessages();
-            ++processedCount;
+            if (localSkippedMsgs.size() >= BATCH_SIZE) batchInsertMessages();
             continue;
         }
 
-        // Cancellation check before heavy conversion
-        if (g_operationCancelled.load()) {
-            cancelledEarly = true;
-            break;   // current file not processed; will be reported in post-loop as cancelled
-        }
+        // --- SECOND COOPERATIVE CHECK (Before heavy call) ---
+        if (g_operationCancelled.load(std::memory_order_relaxed)) break;
 
-        // Perform conversion
         bool conversionSuccess = false;
-        if (modeMdf) {
-            conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
-        } else if (modeNrg) {
-            conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
-        } else if (modeChd) {
-            conversionSuccess = convertChdToIso(inputPath, outputPath, completedBytes);
-        } else if (modeDaa) {
-            conversionSuccess = convertDaaToIso(inputPath, outputPath, completedBytes);
-        } else {
-            conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
-        }
-
-        bool cancelledDuring = g_operationCancelled.load();
+        // Pass g_operationCancelled to these functions if they support it!
+        if (modeMdf)       conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
+        else if (modeNrg)  conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
+        else if (modeChd)  conversionSuccess = convertChdToIso(inputPath, outputPath, completedBytes);
+        else if (modeDaa)  conversionSuccess = convertDaaToIso(inputPath, outputPath, completedBytes);
+        else               conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
 
         auto [outDir, outName] = extractDirectoryAndFilename(outputPath, "conversions");
 
@@ -200,61 +175,26 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             localSuccessMsgs.push_back(std::move(msg));
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
         } else {
-            // Clean up partial output
-            if (fs::exists(outputPath))
-                fs::remove(outputPath);
+            if (fs::exists(outputPath)) fs::remove(outputPath);
 
+            bool isCancelled = g_operationCancelled.load(std::memory_order_relaxed);
             std::string msg;
             msg.reserve(128);
             msg.append(errLabel).append("Conversion of ")
                .append(errPath).append("'").append(displayPath).append("'")
                .append(originalColors::boldAlt).append(errLabel).append(" ")
-               .append(cancelledDuring ? "cancelled" : "failed").append(".")
+               .append(isCancelled ? "cancelled" : "failed").append(".")
                .append(originalColors::boldAlt).append(originalColors::boldAlt);
+            
             localFailedMsgs.push_back(std::move(msg));
-
-            // Increment failure counter only for real errors, not cancellation
-            if (!cancelledDuring) {
-                failedTasks->fetch_add(1, std::memory_order_acq_rel);
-            }
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }
         batchInsertMessages();
-        ++processedCount;
-
-        if (cancelledDuring) {
-            cancelledEarly = true;
-            break;
-        }
     }
 
-    // Post‑loop: report all remaining files as cancelled (no failure counter)
-    if (cancelledEarly && processedCount < imageFiles.size()) {
-        for (size_t idx = processedCount; idx < imageFiles.size(); ++idx) {
-            const std::string& inputPath = imageFiles[idx];
-            auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
-            const std::string displayPath = (!displayConfig::toggleNamesOnly ? directory + "/" : "") + fileNameOnly;
+    // Final flush
+    batchInsertMessages();
 
-            std::string msg;
-            msg.reserve(128);
-            msg.append(errLabel).append("Conversion of ")
-               .append(errPath).append("'").append(displayPath).append("'")
-               .append(originalColors::boldAlt).append(errLabel).append(" cancelled.")
-               .append(originalColors::boldAlt).append(originalColors::boldAlt);
-            localFailedMsgs.push_back(std::move(msg));
-            // NO failedTasks increment for cancellations
-            batchInsertMessages();
-        }
-    }
-
-    // Flush remaining messages
-    {
-        std::lock_guard<std::mutex> lock(globalSetsMutex);
-        successOuts.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
-        failedOuts.insert(localFailedMsgs.begin(),  localFailedMsgs.end());
-        skippedOuts.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
-    }
-
-    // Trigger database refresh only if we have successes
     if (!successOuts.empty()) {
         bool pFlag = false, fHistory = false;
         int mDepth = 0;
