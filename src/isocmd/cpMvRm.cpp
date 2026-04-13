@@ -556,10 +556,39 @@ std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful,
  * @brief High-level handler that iterates through ISO files to perform CP, MV, or RM.
  * @details Manages thread-safe updates to reporting sets and handles ownership changes 
  * for newly created files.
+ *
+ * This function is designed to be called from thread pool workers. It:
+ * - Processes multiple destination directories (semicolon-separated in userDestDir)
+ * - Batches success/error messages (every 50 entries) to reduce mutex contention
+ * - Changes ownership of new files to the real user (via chown)
+ * - Handles three operation types:
+ *   - Delete: Calls performDeleteOperation (no database recording)
+ *   - Move: Single or multi-destination move with source cleanup
+ *   - Copy: Single or multi-destination copy
+ * - Records successful destination paths for database indexing
+ *
+ * @param isoFiles       Files to operate on in this chunk
+ * @param isoFilesCopy   Master file list (for existence validation)
+ * @param operationIsos  Set tracking successfully processed items
+ * @param operationErrors Set tracking errors with themed messages
+ * @param userDestDir    Semicolon-separated destination directories
+ * @param isMove         True for move operation
+ * @param isCopy         True for copy operation  
+ * @param isDelete       True for delete operation
+ * @param completedBytes Atomic counter for progress bar (bytes processed)
+ * @param completedTasks Atomic counter for successful operations
+ * @param failedTasks    Atomic counter for failed operations
+ * @param overwriteExisting If true, replace existing files at destination
+ * @param successfulDestPaths Vector to collect successful destination paths (optional)
+ * @param destPathsMutex Mutex protecting successfulDestPaths
+ *
+ * @note For multi-destination moves, the source file is only removed after ALL
+ *       copies succeed, and at least one copy was successful.
+ * @note Ownership is restored using the real user ID from sudo/setuid context.
  */
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& operationIsos,
-std::unordered_set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes,
-std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool overwriteExisting) {
+std::unordered_set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks,
+std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::string>* successfulDestPaths,std::mutex* destPathsMutex) {
 
     std::atomic<bool> operationSuccessful(true);
 
@@ -662,17 +691,36 @@ std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool over
                         srcPath, destPath, srcDir, srcFile, destDirProcessed, destFile,
                         completedBytes, completedTasks, failedTasks, verboseIsos, verboseErrors,
                         operationSuccessful, batchInsertMessages, changeOwnership);
-                    if (success) atLeastOneCopySucceeded = true;
+                    if (success) {
+                        atLeastOneCopySucceeded = true;
+                        // Record successful destination for multi‑dest move (each copy)
+                        if (successfulDestPaths && destPathsMutex) {
+                            std::lock_guard<std::mutex> lock(*destPathsMutex);
+                            successfulDestPaths->push_back(destPath.string());
+                        }
+                    }
                 } else if (isMove) {
                     success = performMoveOperation(
                         srcPath, destPath, srcDir, srcFile, destDirProcessed, destFile,
                         fileSize, completedBytes, completedTasks, failedTasks, verboseIsos, verboseErrors,
                         operationSuccessful, batchInsertMessages, changeOwnership);
-                } else {
+                    if (success) {
+                        if (successfulDestPaths && destPathsMutex) {
+                            std::lock_guard<std::mutex> lock(*destPathsMutex);
+                            successfulDestPaths->push_back(destPath.string());
+                        }
+                    }
+                } else {  // isCopy
                     success = performCopyOperation(
                         srcPath, destPath, srcDir, srcFile, destDirProcessed, destFile,
                         completedBytes, completedTasks, failedTasks, verboseIsos, verboseErrors,
                         operationSuccessful, batchInsertMessages, changeOwnership);
+                    if (success) {
+                        if (successfulDestPaths && destPathsMutex) {
+                            std::lock_guard<std::mutex> lock(*destPathsMutex);
+                            successfulDestPaths->push_back(destPath.string());
+                        }
+                    }
                 }
             }
 

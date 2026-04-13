@@ -233,60 +233,64 @@ std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string
 }
 
 /**
- * @brief Updates the ISO database after file operations by scanning directories or indexing files directly.
+ * @brief Adds directly specified ISO files to the database in parallel.
  *
- * Parses a semicolon-delimited string of paths. Directory paths are traversed in
- * parallel to collect ISO files; regular file paths are added directly to the
- * collection, bypassing directory scanning entirely. Concurrency for directory
- * traversal is capped at @p maxThreads by processing in batches. All discovered
- * files are deduplicated before being persisted to the database.
+ * Accepts a semicolon‑separated list of file paths. Each path that exists
+ * and is a regular file is added to the database after deduplication.
+ * No directory scanning is performed. File validation occurs in parallel
+ * using maxThreads.
  *
- * @param directories  Semicolon-delimited list of paths to process. Each entry
- *                     may be either a directory path (traversed recursively) or
- *                     a regular file path (added directly without scanning).
- * @param newISOFound  Atomic flag set to @c true by @p saveToDatabase if at
- *                     least one new ISO entry is added to the database.
+ * @param filePaths     Semicolon‑delimited string of ISO file paths.
+ * @param newISOFound   Atomic flag set to @c true by saveToDatabase() if at
+ *                      least one new ISO entry is added.
  *
- * @note Thread safety: @p allIsoFiles and @p errors are protected by dedicated
- *       mutexes during parallel traversal.
- * @note Batch size is controlled by the global variable @p maxThreads.
- *       Invalid, inaccessible, or non-ISO paths are silently skipped.
+ * @note Non‑existent or invalid paths are silently ignored.
  */
-void updateDatabaseAfterOperations(const std::string& directories, std::atomic<bool>& newISOFound) {
+void updateDatabaseAfterOperations(const std::string& filePathsStr, std::atomic<bool>& newISOFound) {
     std::vector<std::string> allIsoFiles;
-    std::unordered_set<std::string> errors;
-    std::atomic<size_t> total{0};
-    std::mutex fm, em;
-    std::istringstream iss(directories);
-    std::string path;
-    std::vector<std::string> validDirs;
     std::unordered_set<std::string> seenPaths;
+    std::mutex fm;
+    std::istringstream iss(filePathsStr);
+    std::string path;
+    std::vector<std::string> validFilePaths;
 
+    // First, collect unique file paths
     while (std::getline(iss, path, ';')) {
         if (!seenPaths.insert(path).second) continue;
-        if (isValidDirectory(path)) {
-            validDirs.emplace_back(path);
-        } else if (fs::is_regular_file(path)) {
-            // It's a direct file path, add it straight to allIsoFiles
-            allIsoFiles.emplace_back(path);
+        if (fs::is_regular_file(path)) {
+            validFilePaths.emplace_back(path);
         }
     }
 
-    for (size_t i = 0; i < validDirs.size(); i += maxThreads) {
-        std::vector<std::future<void>> futures;
-        size_t batchEnd = std::min(i + maxThreads, validDirs.size());
-        for (size_t j = i; j < batchEnd; ++j) {
-            futures.emplace_back(std::async(std::launch::async,
-                [&validDirs, j, &allIsoFiles, &errors, &total, &fm, &em]() {
-                    traverse(validDirs[j], allIsoFiles, errors, total, fm, em, 0, false);
+    // Process file validation/collection in parallel
+    std::vector<std::future<void>> futures;
+    std::atomic<size_t> nextIndex{0};
+    size_t totalFiles = validFilePaths.size();
+    
+    // Use maxThreads for parallel processing
+    for (size_t t = 0; t < maxThreads && t < totalFiles; ++t) {
+        futures.emplace_back(std::async(std::launch::async, 
+            [&validFilePaths, &allIsoFiles, &fm, &nextIndex, totalFiles]() {
+                while (true) {
+                    size_t idx = nextIndex.fetch_add(1);
+                    if (idx >= totalFiles) break;
+                    
+                    // Add the file path to the result set
+                    {
+                        std::lock_guard<std::mutex> lock(fm);
+                        allIsoFiles.push_back(validFilePaths[idx]);
+                    }
                 }
-            ));
-        }
-        for (auto& f : futures) f.wait();
+            }
+        ));
     }
+    
+    for (auto& f : futures) f.wait();
 
+    // Remove duplicates (though we already did, but keeping for safety)
     std::unordered_set<std::string> unique(allIsoFiles.begin(), allIsoFiles.end());
     allIsoFiles.assign(unique.begin(), unique.end());
+    
     if (!allIsoFiles.empty())
         saveToDatabase(allIsoFiles, newISOFound);
 }

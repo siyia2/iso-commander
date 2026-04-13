@@ -228,6 +228,9 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
 void processInputForCpMvRm(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& filterHistory, bool& verbose, std::atomic<bool>& newISOFound) {
     setupSignalHandlerCancellations();
     
+    std::vector<std::string> successfulDestPaths;
+	std::mutex destPathsMutex;
+    
     bool overwriteExisting = false;
     std::string userDestDir;
     std::unordered_set<int> processedIndices;
@@ -314,10 +317,12 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
         futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), 
                                              &isoFiles, &operationIsos, &operationErrors, &userDestDir, 
                                              isMove, isCopy, isDelete, &completedBytes, &completedTasks, 
-                                             &failedTasks, &overwriteExisting]() {
-            handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors, 
-                                   userDestDir, isMove, isCopy, isDelete, 
-                                   &completedBytes, &completedTasks, &failedTasks, overwriteExisting);
+                                             &failedTasks, &overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
+								handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors,
+										   userDestDir, isMove, isCopy, isDelete,
+										   &completedBytes, &completedTasks, &failedTasks,
+										   overwriteExisting,
+										   &successfulDestPaths, &destPathsMutex);
         }));
     }
 
@@ -331,7 +336,15 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     progressThread.join();
     
     if (completedTasks.load() > 0 && !isDelete) {
-		updateDatabaseAfterOperations(processedUserDestDir, newISOFound);
+		std::string exactPaths;
+		for (const auto& destPath : successfulDestPaths) {
+			if (!exactPaths.empty()) exactPaths += ';';
+			exactPaths += destPath;
+		}
+		
+		if (!exactPaths.empty()) {
+			updateDatabaseAfterOperations(exactPaths, newISOFound);
+		}
 	}
     clear_history();
 }
@@ -489,6 +502,10 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
                                std::unordered_set<std::string>& failedOuts,
                                bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound)
 {
+	
+	std::vector<std::string> successfulOutputPaths;
+	std::mutex outPathsMutex;
+	
     setupSignalHandlerCancellations();
     const ListTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
@@ -570,13 +587,15 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
             [&fileList](size_t index) { return fileList[index - 1]; });
 
         futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk),
-            &successOuts, &skippedOuts, &failedOuts,
-            modeMdf, modeNrg, modeChd, modeDaa,   // <-- pass DAA flag
-            &completedBytes, &completedTasks, &failedTasks]() {
-            convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
-                modeMdf, modeNrg, modeChd, modeDaa,   // <-- added DAA flag
-                &completedBytes, &completedTasks, &failedTasks);
-        }));
+			&successOuts, &skippedOuts, &failedOuts,
+			modeMdf, modeNrg, modeChd, modeDaa,
+			&completedBytes, &completedTasks, &failedTasks,
+			&successfulOutputPaths, &outPathsMutex]() {
+		convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
+			modeMdf, modeNrg, modeChd, modeDaa,
+			&completedBytes, &completedTasks, &failedTasks,
+			&successfulOutputPaths, &outPathsMutex);
+		}));
     }
 
     for (auto& future : futures) {
@@ -587,13 +606,12 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     signal(SIGINT, SIG_IGN);
     progressThread.join();
     
-	if (!successOuts.empty()) {
-		std::string result;
-		for (const auto& file : filesToProcess) {
-			fs::path isoPath = fs::path(file).parent_path() / (fs::path(file).stem().string() + ".iso");
-			if (!result.empty()) result += ';';
-			result += isoPath.string();
+	if (!successfulOutputPaths.empty()) {
+		std::string exactPaths;
+		for (const auto& outPath : successfulOutputPaths) {
+			if (!exactPaths.empty()) exactPaths += ';';
+			exactPaths += outPath;
 		}
-		updateDatabaseAfterOperations(result, newISOFound);
+		updateDatabaseAfterOperations(exactPaths, newISOFound);
 	}
 }

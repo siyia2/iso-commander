@@ -21,8 +21,8 @@ bool fileExists(const std::string& fullPath) {
  * selects the appropriate conversion backend based on mode flags, and aggregates
  * success/failed/skipped messages in a thread-safe manner.
  *
- * Also updates file ownership for outputs, removes invalid cache entries, and triggers
- * a database refresh if new ISO files are successfully created.
+ * Also updates file ownership for outputs, removes invalid cache entries, and
+ * collects successful output paths for later database indexing by the caller.
  */
 void convertToISO(const std::vector<std::string>& imageFiles,
                   std::unordered_set<std::string>& successOuts,
@@ -34,7 +34,9 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                   const bool& modeDaa,
                   std::atomic<size_t>* completedBytes,
                   std::atomic<size_t>* completedTasks,
-                  std::atomic<size_t>* failedTasks) {
+                  std::atomic<size_t>* failedTasks,
+                  std::vector<std::string>* successfulOutputPaths,   // new
+                  std::mutex* outPathsMutex) {                       // new
 
     namespace fs = std::filesystem;
     const size_t BATCH_SIZE = 50;
@@ -139,6 +141,12 @@ void convertToISO(const std::vector<std::string>& imageFiles,
 
         if (conversionSuccess) {
             [[maybe_unused]] int ret = chown(outputPath.c_str(), real_uid, real_gid);
+
+            // Record the successful output path
+            if (successfulOutputPaths && outPathsMutex) {
+                std::lock_guard<std::mutex> lock(*outPathsMutex);
+                successfulOutputPaths->push_back(outputPath);
+            }
 
             std::string fileNameLower = fileNameOnly;
             toLowerInPlace(fileNameLower);
