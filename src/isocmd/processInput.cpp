@@ -586,19 +586,15 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     signal(SIGINT, SIG_IGN);
     progressThread.join();
     
-if (!successOuts.empty()) {
-    std::string result;
-    std::unordered_set<std::string> seenPaths;
-    for (const auto& file : filesToProcess) {
-        fs::path isoPath = fs::path(file).parent_path() / (fs::path(file).stem().string() + ".iso");
-        std::string isoStr = isoPath.string();
-        if (seenPaths.insert(isoStr).second) {
-            if (!result.empty()) result += ';';
-            result += isoStr;
-        }
-    }
-    std::thread([result, &newISOFound]() {
-        updateDatabaseAfterOperations(result, newISOFound);
-    }).detach();
-}
+	if (!successOuts.empty()) {
+		std::string result;
+		for (const auto& file : filesToProcess) {
+			fs::path isoPath = fs::path(file).parent_path() / (fs::path(file).stem().string() + ".iso");
+			if (!result.empty()) result += ';';
+			result += isoPath.string();
+		}
+		std::thread([result, &newISOFound]() {
+			updateDatabaseAfterOperations(result, newISOFound);
+		}).detach();
+	}
 }
