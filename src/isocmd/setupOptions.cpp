@@ -59,7 +59,7 @@ static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {"mount_list", "compact", "Display mode for mount operations (full/compact)", "Display Modes", isDisplay},
     {"umount_list", "full", "Display mode for unmount operations (full/compact)", "", isDisplay},
     {"cp_mv_rm_list", "compact", "Display mode for file operations (full/compact)", "", isDisplay},
-    {"write_list", "compact", "Display mode for write operations (full/compact)", "", isDisplay},
+    {"write2usb_list", "compact", "Display mode for write2usb operations (full/compact)", "", isDisplay},
     {"convert2iso_lists", "compact", "Display mode for convert2iso operations (full/compact)", "", isDisplay},
 
     {"combined_thread_cap", "32", "Global thread pool limit; excess tasks are queued", "Thread Configuration", [](const std::string& v){ return isNum(v, 1, 256); }},
@@ -298,7 +298,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     displayConfig::toggleFullListMount       = (g_configCache["mount_list"]       == "full");
     displayConfig::toggleFullListUmount      = (g_configCache["umount_list"]      == "full");
     displayConfig::toggleFullListCpMvRm      = (g_configCache["cp_mv_rm_list"]    == "full");
-    displayConfig::toggleFullListWrite       = (g_configCache["write_list"]       == "full");
+    displayConfig::toggleFullListWrite2usb       = (g_configCache["write2usb_list"]       == "full");
     displayConfig::toggleFullListConvert2iso = (g_configCache["convert2iso_lists"] == "full");
     displayConfig::toggleNamesOnly           = (g_configCache["filenames_only"]   == "on");
  
@@ -444,7 +444,7 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
 
 const std::unordered_map<char, std::string> settingMap = {
     {'m', "mount_list"}, {'u', "umount_list"}, {'o', "cp_mv_rm_list"},
-    {'c', "convert2iso_lists"}, {'w', "write_list"}
+    {'c', "convert2iso_lists"}, {'w', "write2usb_list"}
 };
 
 /**
@@ -513,9 +513,9 @@ void setDisplayMode(const std::string& inputSearch) {
 			displayConfig::toggleFullListConvert2iso = isFull;
 			updatedLabels.push_back(std::string(originalColors::orange) + "convert2iso");
 		}
-		else if (key == "write_list") {
-			displayConfig::toggleFullListWrite = isFull;
-			updatedLabels.push_back(std::string(originalColors::yellow) + "write");
+		else if (key == "write2usb_list") {
+			displayConfig::toggleFullListWrite2usb = isFull;
+			updatedLabels.push_back(std::string(originalColors::yellow) + "write2usb");
 		}
     }
 

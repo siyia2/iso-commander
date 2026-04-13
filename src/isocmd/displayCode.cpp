@@ -13,7 +13,7 @@ namespace displayConfig {
     bool toggleFullListMount = false;
     bool toggleFullListUmount = true;
     bool toggleFullListCpMvRm = false;
-    bool toggleFullListWrite = false;
+    bool toggleFullListWrite2usb = false;
     bool toggleFullListConvert2iso = false;
     bool toggleNamesOnly = false;
 }

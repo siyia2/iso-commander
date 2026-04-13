@@ -777,7 +777,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     std::cout << "\n" << originalColors::boldAlt << "Processing " 
           << (totalTasks > 1 ? "tasks" : "task") << " for " 
-          << originalColors::yellow << "write" << originalColors::boldAlt 
+          << originalColors::yellow << "write2usb" << originalColors::boldAlt 
           << " operation... (" << originalColors::red << "Ctrl+c" 
           << originalColors::boldAlt << ":cancel)\n\n";
     std::cout << "\033[s";
@@ -881,7 +881,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     size_t completedTasksValue = completedTasks.load();
 
 	// Using RGB Yellow for the "write" operation label
-	std::string operation = std::string(originalColors::yellow) + "write" + std::string(originalColors::boldAlt);
+	std::string operation = std::string(originalColors::yellow) + "write2usb" + std::string(originalColors::boldAlt);
 
 	std::cout << "\r" << originalColors::boldAlt << "Status: " << operation << " → " 
 			  << (!g_operationCancelled.load() 

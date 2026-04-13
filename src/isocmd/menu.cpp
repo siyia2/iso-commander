@@ -69,7 +69,7 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
                   << "+-------------------------+\n"
                   << "|5. Copy                  |\n"
                   << "+-------------------------+\n"
-                  << "|6. Write                 |\n"
+                  << "|6. Write2USB             |\n"
                   << "+-------------------------+" << reset << std::endl << "\n";
         
         const ListTheme* theme = getActiveTheme();
@@ -116,7 +116,7 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
                     break;
                 case '6':
                     clearScrollBuffer();
-                    selectForIsoFiles("write", updateHasRun, isAtISOList, isImportRunning, newISOFound);
+                    selectForIsoFiles("write2usb", updateHasRun, isAtISOList, isImportRunning, newISOFound);
                     clearScrollBuffer();
                     break;
             }

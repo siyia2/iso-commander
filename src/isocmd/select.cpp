@@ -268,16 +268,16 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 		operation == "cp"     ? originalColors::green  :
 		operation == "mv"     ? originalColors::yellow :
 		operation == "mount"  ? originalColors::green  :
-		operation == "write"  ? originalColors::yellow :
+		operation == "write2usb"  ? originalColors::yellow :
 		operation == "umount" ? originalColors::yellow : originalColors::rl_boldAlt
 	);
                                  
     bool isMount = (operation == "mount");
     bool isUnmount = (operation == "umount");
-    bool write = (operation == "write");
+    bool write = (operation == "write2usb");
     bool isConversion = false;
     
-    std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
+    std::string listSubtype = isMount ? "mount" : (write ? "write2usb" : "cp_mv_rm");
     
     while (true) {
         enable_ctrl_d();

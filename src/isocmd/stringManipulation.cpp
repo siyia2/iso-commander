@@ -40,7 +40,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
     bool showFull = (displayConfig::toggleFullListMount && location == "mount") ||
                     (displayConfig::toggleFullListCpMvRm && location == "cp_mv_rm") ||
                     (displayConfig::toggleFullListConvert2iso && location == "convert2iso") ||
-                    (displayConfig::toggleFullListWrite && location == "write");
+                    (displayConfig::toggleFullListWrite2usb && location == "write2usb");
 
     if (showFull) {
         return {std::string(originalDir), std::move(filename)};

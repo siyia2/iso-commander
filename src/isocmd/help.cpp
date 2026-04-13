@@ -135,7 +135,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         // 4. Configuration
         std::string configCmds = std::string(originalColors::boldAlt) +
             "   A. Pagination     : " + std::string(originalColors::purple) + "'*pagination:{number}' (0 to disable)\n" + std::string(originalColors::boldAlt) +
-            "   B. List Modes     : " + std::string(originalColors::purple) + "'*fl_m' or '*cl_m', multiple → *fl_moucw (fl → full | cl → compact)\n                         (m → mount , u → umount, o → cp_mv_rm, w → write, c → convert2iso)\n" + std::string(originalColors::boldAlt) +
+            "   B. List Modes     : " + std::string(originalColors::purple) + "'*fl_m' or '*cl_m', multiple → *fl_moucw (fl → full | cl → compact)\n                         (m → mount , u → umount, o → cp_mv_rm, w → write2usb, c → convert2iso)\n" + std::string(originalColors::boldAlt) +
             "   C. Filenames Only : " + std::string(originalColors::purple) + "'*flno:on' or '*flno:off' " + std::string(originalColors::yellow) + "(:on overrides List Modes, umount excluded)\n" + std::string(originalColors::boldAlt) +
             "   D. Appearance     : " + std::string(originalColors::purple) + "'*skin:{color}' or '*theme:{name}'";
         
@@ -167,7 +167,7 @@ void helpMappings() {
 
     printSection(tc, "3. Tips:",
         "   • Tab-complete INDEX>DEVICE pairs for faster mapping\n"
-        "   • Partitions are not eligible for write, only raw devices\n"
+        "   • Partitions are not eligible for write2usb, only raw devices\n"
         "   • USB detection relies on '/sys/class/block/sd*/removable' kernel value");
 
     endHelp();
