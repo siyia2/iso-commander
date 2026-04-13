@@ -83,7 +83,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             msg.reserve(128);
             msg.append(missingLabel).append("Convert2ISO: ")
                .append(errPath).append("'").append(displayPath).append("'")
-               .append(missingLabel).append(": missing file.");
+               .append(missingLabel).append(": Missing file.");
             localFailedMsgs.push_back(std::move(msg));
 
             {
@@ -106,7 +106,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             msg.reserve(128);
             msg.append(errLabel).append("Convert2ISO: ")
                .append(errPath).append("'").append(displayPath).append("'")
-               .append(errLabel).append(": cannot be read, check permissions.");
+               .append(errLabel).append(": Cannot be read, check permissions.");
             localFailedMsgs.push_back(std::move(msg));
 
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -166,7 +166,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             msg.reserve(128);
             msg.append(errLabel).append("Convert2ISO: ")
                .append(errPath).append("'").append(displayPath).append("'")
-               .append(errLabel).append(": ").append(isCancelled ? "cancelled." : "failed.");
+               .append(errLabel).append(": ").append(isCancelled ? "Cancelled." : "Failed.");
             localFailedMsgs.push_back(std::move(msg));
 
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
