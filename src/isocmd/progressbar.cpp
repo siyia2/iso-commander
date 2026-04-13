@@ -67,8 +67,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                operation.find("CHD") != std::string::npos || 
                operation.find("DAA") != std::string::npos || 
                operation.find("BIN/IMG") != std::string::npos) {
-        processingBarWidth = 49;
-        finalBarWidth = 40;
+        processingBarWidth = 55;
+        finalBarWidth = 46;
     }
     
     bool enterPressed = false;
@@ -169,8 +169,20 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 			static bool cancellationState = g_operationCancelled.load(std::memory_order_acquire);
 			const bool wasCancelled = cancellationState;
 			
-			// Status line using originalColors mappings with loaded values
-			std::cout << "\r\033[2K" << originalColors::boldAlt << " Status: " << operation << originalColors::boldAlt << " → " 
+			auto getOperationLabel = [](const std::string& op) -> std::string {
+				if (op.find("MDF")     != std::string::npos) return "MDF2ISO";
+				if (op.find("NRG")     != std::string::npos) return "NRG2ISO";
+				if (op.find("CHD")     != std::string::npos) return "CHD2ISO";
+				if (op.find("DAA")     != std::string::npos) return "DAA2ISO";
+				if (op.find("BIN/IMG") != std::string::npos) return "(BIN/IMG)2ISO";
+				return op;
+			};
+
+			const bool isConversion = (getOperationLabel(operation) != operation);
+
+			std::cout << "\r\033[2K" << originalColors::boldAlt << " Status: "
+					  << (isConversion ? originalColors::orange : originalColors::boldAlt)
+					  << getOperationLabel(operation) << originalColors::boldAlt << " → "
 					  << (!wasCancelled 
 						  ? (failedTasksValue > 0 
 							 ? (completedTasksValue > 0 

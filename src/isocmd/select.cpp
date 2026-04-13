@@ -500,7 +500,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             prefix + 
             colorHighlight + fileExtensionWithOutDots + 
             colorMuted     + " ↵ for " + 
-            colorHighlight + "conversion" + 
+            colorHighlight + "convert2iso" + 
             colorMuted     + ", ? ↵ for help, < ↵ to return: " + 
             colorReset;
         

@@ -92,7 +92,7 @@ void helpSelections() {
 }
 
 /**
- * @brief Displays a help guide for directory-related prompts (Copy/Move and ISO Conversion).
+ * @brief Displays a help guide for directory-related prompts (Copy/Move and ISO convert2iso).
  */
 void helpSearches(bool isCpMv, bool import2ISO) {
     const ThemeColors tc;
@@ -115,7 +115,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         printSection(tc, "3. Tips:", "   • 'mv' to a single destination on the same device is instant\n"
                                      "   • 'mv' to multiple destinations uses cp and remove (slower)");
     } else {
-        // 3. Cleanup/Display (Conversion specific)
+        // 3. Cleanup/Display (convert2iso specific)
         printSection(tc, std::string(originalColors::cyan) + "| Tab completion: Supports !, ?, and * command prefixes |", "");
 
         std::string displayCmds = "   " + std::string(originalColors::boldAlt) + "•" + std::string(originalColors::yellow) + " !clr / !clr_paths / !clr_filter" + std::string(originalColors::boldAlt) + " : Clear corresponding databases\n";
@@ -135,7 +135,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         // 4. Configuration
         std::string configCmds = std::string(originalColors::boldAlt) +
             "   A. Pagination     : " + std::string(originalColors::purple) + "'*pagination:{number}' (0 to disable)\n" + std::string(originalColors::boldAlt) +
-            "   B. List Modes     : " + std::string(originalColors::purple) + "'*fl_m' or '*cl_m', multiple → *fl_moucw (fl → full | cl → compact)\n                         (m → mount , u → umount, o → cp_mv_rm, w → write, c → conversion)\n" + std::string(originalColors::boldAlt) +
+            "   B. List Modes     : " + std::string(originalColors::purple) + "'*fl_m' or '*cl_m', multiple → *fl_moucw (fl → full | cl → compact)\n                         (m → mount , u → umount, o → cp_mv_rm, w → write, c → convert2iso)\n" + std::string(originalColors::boldAlt) +
             "   C. Filenames Only : " + std::string(originalColors::purple) + "'*flno:on' or '*flno:off' " + std::string(originalColors::yellow) + "(:on overrides List Modes, umount excluded)\n" + std::string(originalColors::boldAlt) +
             "   D. Appearance     : " + std::string(originalColors::purple) + "'*skin:{color}' or '*theme:{name}'";
         

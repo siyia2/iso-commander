@@ -60,11 +60,11 @@ static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {"umount_list", "full", "Display mode for unmount operations (full/compact)", "", isDisplay},
     {"cp_mv_rm_list", "compact", "Display mode for file operations (full/compact)", "", isDisplay},
     {"write_list", "compact", "Display mode for write operations (full/compact)", "", isDisplay},
-    {"conversion_lists", "compact", "Display mode for conversion operations (full/compact)", "", isDisplay},
+    {"convert2iso_lists", "compact", "Display mode for convert2iso operations (full/compact)", "", isDisplay},
 
     {"combined_thread_cap", "32", "Global thread pool limit; excess tasks are queued", "Thread Configuration", [](const std::string& v){ return isNum(v, 1, 256); }},
     {"thread_cap_for_cp_mv", "8", "Max concurrent copy/move tasks using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
-    {"thread_cap_for_conversions", "8", "Max concurrent ISO conversions using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
+    {"thread_cap_for_convert2iso", "8", "Max concurrent ISO conversions using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
     {"thread_cap_for_mount", "16", "Max concurrent mounting tasks using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
     {"thread_cap_for_umount", "32", "Max concurrent unmounting tasks using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
     {"thread_cap_for_database_cleanup", "16", "Max concurrent DB maintenance tasks using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
@@ -239,7 +239,7 @@ static void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::str
     MAX_HISTORY_PATTERN_LINES = getVal("filter_history_lines",         15);
     MAX_USEFUL_THREADS        = getVal("combined_thread_cap",               32);
     CPMV_THREAD_CAP           = getVal("thread_cap_for_cp_mv",             8);
-    CONV_THREAD_CAP           = getVal("thread_cap_for_conversions",       8);
+    CONV_THREAD_CAP           = getVal("thread_cap_for_convert2iso",       8);
     MOUNT_THREAD_CAP          = getVal("thread_cap_for_mount",            16);
     CLEAN_THREAD_CAP          = getVal("thread_cap_for_database_cleanup", 16);
     UMOUNT_THREAD_CAP         = getVal("thread_cap_for_umount",           32); 
@@ -299,7 +299,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     displayConfig::toggleFullListUmount      = (g_configCache["umount_list"]      == "full");
     displayConfig::toggleFullListCpMvRm      = (g_configCache["cp_mv_rm_list"]    == "full");
     displayConfig::toggleFullListWrite       = (g_configCache["write_list"]       == "full");
-    displayConfig::toggleFullListConversions = (g_configCache["conversion_lists"] == "full");
+    displayConfig::toggleFullListConvert2iso = (g_configCache["convert2iso_lists"] == "full");
     displayConfig::toggleNamesOnly           = (g_configCache["filenames_only"]   == "on");
  
     skin        = g_configCache["skin"];
@@ -444,7 +444,7 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
 
 const std::unordered_map<char, std::string> settingMap = {
     {'m', "mount_list"}, {'u', "umount_list"}, {'o', "cp_mv_rm_list"},
-    {'c', "conversion_lists"}, {'w', "write_list"}
+    {'c', "convert2iso_lists"}, {'w', "write_list"}
 };
 
 /**
@@ -509,9 +509,9 @@ void setDisplayMode(const std::string& inputSearch) {
 				std::string(originalColors::red)    + "rm"
 			);
 		}
-		else if (key == "conversion_lists") {
-			displayConfig::toggleFullListConversions = isFull;
-			updatedLabels.push_back(std::string(originalColors::orange) + "conversions");
+		else if (key == "convert2iso_lists") {
+			displayConfig::toggleFullListConvert2iso = isFull;
+			updatedLabels.push_back(std::string(originalColors::orange) + "convert2iso");
 		}
 		else if (key == "write_list") {
 			displayConfig::toggleFullListWrite = isFull;
@@ -541,7 +541,7 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
     static const std::unordered_map<std::string, std::string> keyMap = {
         {"filterhist", "filter_history_lines"}, {"pathhist", "folder_path_history_lines"},
         {"max", "combined_thread_cap"}, {"mount", "thread_cap_for_mount"}, {"umount", "thread_cap_for_umount"},
-        {"conv", "thread_cap_for_conversions"}, {"cpmv", "thread_cap_for_cp_mv"}, {"rm", "thread_cap_for_rm"},
+        {"conv", "thread_cap_for_convert2iso"}, {"cpmv", "thread_cap_for_cp_mv"}, {"rm", "thread_cap_for_rm"},
         {"clean", "thread_cap_for_database_cleanup"}, {"sort", "thread_cap_for_list_sorting"}, {"filter", "thread_cap_for_list_filtering"}
     };
 

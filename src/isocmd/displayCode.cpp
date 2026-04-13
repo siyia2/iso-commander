@@ -14,7 +14,7 @@ namespace displayConfig {
     bool toggleFullListUmount = true;
     bool toggleFullListCpMvRm = false;
     bool toggleFullListWrite = false;
-    bool toggleFullListConversions = false;
+    bool toggleFullListConvert2iso = false;
     bool toggleNamesOnly = false;
 }
 
@@ -209,7 +209,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
  * @param need2Sort Flag indicating whether sorting is required
  * @param isFiltered Filter state affecting cache restoration
  * @param list Controls whether list refresh behavior is executed
- * @param pendingIndices Files queued for processing or conversion
+ * @param pendingIndices Files queued for processing or convert2iso
  * @param hasPendingProcess Global processing state flag
  * @param currentPage Pagination state for UI display
  * @param isImportRunning Importer activity flag
@@ -261,5 +261,5 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
         need2Sort = false;
     }
     
-    printList(files, "IMAGE_FILES", "conversions", pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
+    printList(files, "IMAGE_FILES", "convert2iso", pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
 }
