@@ -332,8 +332,12 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     signal(SIGINT, SIG_IGN);  
     progressThread.join();
     
-    if (!isDelete && completedTasks.load() > 0) {
-		updateDatabaseAfterOperations(processedUserDestDir, newISOFound);
+    if (completedTasks.load() > 0) {
+        if (!isDelete) {
+            updateDatabaseAfterOperations(processedUserDestDir, newISOFound);
+		} else {
+            isoListDirty.store(true);
+		}
 	}
     clear_history();
 }
