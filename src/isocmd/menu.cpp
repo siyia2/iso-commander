@@ -57,7 +57,7 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
         clearScrollBuffer();
 
         std::cout << color << "+-------------------------+\n"
-                  << "|↵ Manage ISO             |\n"
+                  << "|↵ Manage ISO              |\n"
                   << "+-------------------------+\n"
                   << "|1. Mount                 |\n"
                   << "+-------------------------+\n"
@@ -140,8 +140,8 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
         
         clearScrollBuffer();
         
-        std::cout << color << "+-------------------------+\n"
-                  << "|↵ Convert2ISO (DataOnly) |     \n| ! Breaks Emu-Compat     |\n"
+        std::cout << color << "+-------------------------+  \n"
+                  << "|↵ Convert2ISO (DataOnly)  |     \n| ! Breaks Emu-Compat      |\n"
                   << "+-------------------------+\n"
                   << "|1. CCD2ISO++             |\n"
                   << "+-------------------------+\n"
@@ -207,7 +207,7 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
  */
 void printMenu() {
     std::cout << color << "+-------------------------+\n"
-              << "|       Menu Options      |\n"
+              << "|       Menu Options       |\n"
               << "+-------------------------+\n"
               << "|1. ManageISO             |\n"
               << "+-------------------------+\n"
