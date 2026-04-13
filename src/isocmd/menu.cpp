@@ -141,7 +141,7 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
         clearScrollBuffer();
         
         std::cout << color << "+-------------------------+  \n"
-                  << "|↵ Convert2ISO (DataOnly)  |     \n| ! Breaks Emu-Compat      |\n"
+                  << "|↵ Convert2ISO             |\n"
                   << "+-------------------------+\n"
                   << "|1. CCD2ISO++             |\n"
                   << "+-------------------------+\n"
