@@ -589,20 +589,17 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     progressThread.join();
     
     if (!successOuts.empty()) {
-        // Build directory list from the files that were actually processed
-        std::unordered_set<std::string> uniqueDirectories;
-        for (const auto& file : filesToProcess) {
-            fs::path p(file);
-            if (p.has_parent_path())
-                uniqueDirectories.insert(p.parent_path().string());
-        }
-        std::string result = std::accumulate(uniqueDirectories.begin(), uniqueDirectories.end(), std::string(),
-            [](const std::string& a, const std::string& b) {
-                return a.empty() ? b : a + ";" + b;
-            });
+		std::string result;
+		for (const auto& file : filesToProcess) {
+			fs::path p(file);
+			if (p.has_parent_path()) {
+				if (!result.empty()) result += ';';
+				result += p.parent_path().string();
+			}
+		}
 
-        std::thread([result, &newISOFound]() {
-            updateDatabaseAfterOperations(result, newISOFound);
-        }).detach();
-    }
+		std::thread([result, &newISOFound]() {
+			updateDatabaseAfterOperations(result, newISOFound);
+		}).detach();
+	}
 }

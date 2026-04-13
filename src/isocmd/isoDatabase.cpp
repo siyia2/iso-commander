@@ -257,22 +257,20 @@ void updateDatabaseAfterOperations(const std::string& directories, std::atomic<b
     std::istringstream iss(directories);
     std::string path;
 
-    // Collect valid paths first
     std::vector<std::string> validPaths;
+    std::unordered_set<std::string> seenPaths;
     while (std::getline(iss, path, ';')) {
-        if (isValidDirectory(path))
+        if (isValidDirectory(path) && seenPaths.insert(path).second)
             validPaths.emplace_back(path);
     }
 
-    // Process in batches of maxThreads
     for (size_t i = 0; i < validPaths.size(); i += maxThreads) {
         std::vector<std::future<void>> futures;
         size_t batchEnd = std::min(i + maxThreads, validPaths.size());
-
         for (size_t j = i; j < batchEnd; ++j) {
             futures.emplace_back(std::async(std::launch::async,
                 [&validPaths, j, &allIsoFiles, &errors, &total, &fm, &em]() {
-                    traverse(validPaths[j], allIsoFiles, errors, total, fm, em, 0, false);
+                    traverse(validPaths[j], allIsoFiles, errors, total, fm, em, 0,false);
                 }
             ));
         }
