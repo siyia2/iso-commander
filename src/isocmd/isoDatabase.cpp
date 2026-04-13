@@ -286,10 +286,6 @@ void updateDatabaseAfterOperations(const std::string& filePathsStr, std::atomic<
     }
     
     for (auto& f : futures) f.wait();
-
-    // Remove duplicates (though we already did, but keeping for safety)
-    std::unordered_set<std::string> unique(allIsoFiles.begin(), allIsoFiles.end());
-    allIsoFiles.assign(unique.begin(), unique.end());
     
     if (!allIsoFiles.empty())
         saveToDatabase(allIsoFiles, newISOFound);
