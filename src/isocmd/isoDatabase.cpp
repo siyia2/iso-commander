@@ -390,47 +390,42 @@ void loadFromDatabase(std::vector<std::string>& outList) {
 }
 
 /**
- * @brief Saves ISO cache to database file
- * 
- * Merges new ISO files with existing cache, respects maximum size limit,
- * and updates the atomic flag if new files were found.
- * 
- * @param globalIsoFileList Vector of ISO file paths to save
- * @param newISOFound Atomic flag to set if new ISOs were added
- * @return true if save operation succeeded, false otherwise
+ * @brief Saves new ISO file paths to the database, merging with existing entries.
+ *
+ * Deduplicates incoming paths against the existing cache, appends new entries,
+ * and trims to maxDatabaseSize if needed. Rewrites the entire database file
+ * atomically under an exclusive lock.
+ *
+ * @param globalIsoFileList  Const reference to vector of ISO file paths to add.
+ * @param newISOFound        Set to true if at least one new entry was added,
+ *                           false if all paths already existed in the cache.
+ * @return true  if new entries were written successfully.
+ * @return false if no new entries were found, or if an I/O error occurred.
  */
-bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool>& newISOFound) {
+bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atomic<bool>& newISOFound) {
     std::filesystem::path cachePath = databaseDirectory;
     cachePath /= databaseFilename;
-
     if (!std::filesystem::exists(databaseDirectory) && !std::filesystem::create_directories(databaseDirectory)) {
         return false;
     }
     if (!std::filesystem::is_directory(databaseDirectory)) {
         return false;
     }
-
     std::lock_guard<std::mutex> fileLock(dbFileMutex);
-
     int fd = open(cachePath.c_str(), O_RDWR | O_CREAT, 0644);
     if (fd == -1) return false;
-
     if (flock(fd, LOCK_EX) == -1) {
         close(fd);
         return false;
     }
-
     std::vector<std::string> existingCache;
-
     struct stat fileStat;
     if (fstat(fd, &fileStat) == 0 && fileStat.st_size > 0) {
         std::vector<char> buffer(fileStat.st_size);
         ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
-
         if (bytesRead > 0 && bytesRead <= fileStat.st_size) {
             char* start = buffer.data();
             char* end = buffer.data() + bytesRead;
-
             while (start < end) {
                 char* lineEnd = std::find(start, end, '\n');
                 std::string line(start, lineEnd);
@@ -444,54 +439,44 @@ bool saveToDatabase(std::vector<std::string> globalIsoFileList, std::atomic<bool
             }
         }
     }
-
     std::unordered_set<std::string> existingSet(existingCache.begin(), existingCache.end());
-
     std::vector<std::string> newEntries;
     bool localNewISOFound = false;
-
     for (const auto& iso : globalIsoFileList) {
         if (existingSet.find(iso) == existingSet.end()) {
             newEntries.push_back(iso);
             localNewISOFound = true;
         }
     }
-
     if (newEntries.empty()) {
         newISOFound.store(false);
         flock(fd, LOCK_UN);
         close(fd);
         return false;
     }
-
     std::vector<std::string> combinedCache = existingCache;
     combinedCache.insert(combinedCache.end(), newEntries.begin(), newEntries.end());
     if (combinedCache.size() > maxDatabaseSize) {
         combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - maxDatabaseSize));
     }
-
     if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) {
         flock(fd, LOCK_UN);
         close(fd);
         return false;
     }
-
-    bool success = true;
-    for (const auto& entry : combinedCache) {
-        std::string line = entry + "\n";
-        if (::write(fd, line.data(), line.size()) == -1) {
-            success = false;
-            break;
-        }
+    std::string output;
+    for (const auto& entry : combinedCache)
+        output += entry + "\n";
+    if (::write(fd, output.data(), output.size()) == -1) {
+        flock(fd, LOCK_UN);
+        close(fd);
+        return false;
     }
-
     flock(fd, LOCK_UN);
     close(fd);
-
     newISOFound.store(localNewISOFound);
-    if (success) isoListDirty.store(true);
-
-    return success;
+    isoListDirty.store(true);
+    return true;
 }
 
 /**
