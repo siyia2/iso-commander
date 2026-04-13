@@ -543,7 +543,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     else if (modeNrg) operation = std::string(originalColors::orange) + "NRG2ISO"     + std::string(originalColors::boldAlt) + suffix;
     else if (modeChd) operation = std::string(originalColors::orange) + "CHD2ISO"     + std::string(originalColors::boldAlt) + suffix;
     else if (modeDaa) operation = std::string(originalColors::orange) + "DAA2ISO"     + std::string(originalColors::boldAlt) + suffix;
-    else              operation = std::string(originalColors::orange) + "BIN/IMG2ISO" + std::string(originalColors::boldAlt) + suffix;
+    else              operation = std::string(originalColors::orange) + "(BIN/IMG)2ISO" + std::string(originalColors::boldAlt) + suffix;
 
     clearScrollBuffer();
 
