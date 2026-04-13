@@ -209,8 +209,6 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
  * - **Database Sync**: If files were moved or copied, a **synchronous** update is triggered
  * for the affected directories. This ensures the database is fully indexed before 
  * returning control to the user.
- * - **State Management**: Marks the global `isoListDirty` flag as true if any tasks 
- * succeeded, ensuring the UI refreshes the file list.
  *
  * @param input Raw user input (e.g., "1-3, 5").
  * @param isoFiles Master list of files.
@@ -447,20 +445,23 @@ static size_t calculateTotalBytesForConversions(
  * - **NRG**: Excludes a 300 KiB (307200 byte) header.
  * - **MDF**: Reads sector geometry via `MdfTypeInfo` and computes user data bytes.
  * - **BIN/CCD**: Assumes 2352‑byte raw sectors with 2048 bytes of user data.
- * - **CHD**: Opens the CHD file, inspects the header, and calculates total sectors 
- * multiplied by 2048 bytes (ISO user data per sector).
- * - **DAA**: Calls `getDaaIsoSize()` to query the uncompressed ISO size from the 
- * DAA archive header without extracting the entire file.
- * * @section multi_threading Multi-Threading and Progress
- * Tasks are distributed across a static thread pool by splitting the selection into 
- * chunks. A dedicated background thread manages a real-time progress bar that tracks 
+ * - **CHD**: Opens the CHD file, inspects the header, and calculates total sectors
+ *   multiplied by 2048 bytes (ISO user data per sector).
+ * - **DAA**: Calls `getDaaIsoSize()` to query the uncompressed ISO size from the
+ *   DAA archive header without extracting the entire file.
+ *
+ * @section multi_threading Multi-Threading and Progress
+ * Tasks are distributed across a static thread pool by splitting the selection into
+ * chunks. A dedicated background thread manages a real-time progress bar that tracks
  * both byte-level progress and task completion/failure counts.
- * * @section post_processing Post-Conversion Sync
- * Upon completion of all threads, the function joins the progress display and performs 
- * a cleanup of signal handlers. If any conversions were successful, it identifies the 
- * unique parent directories of the processed files and launches a detached background 
- * thread to synchronize the local database, ensuring newly created ISOs are indexed 
- * without blocking the main UI.
+ *
+ * @section post_processing Post-Conversion Sync
+ * Upon completion of all threads, the function joins the progress display and performs
+ * a cleanup of signal handlers. If any conversions were successful, it constructs the
+ * exact expected ISO output paths (same stem as input, `.iso` extension) and calls
+ * `updateDatabaseAfterOperations` directly — bypassing directory traversal entirely —
+ * to index only the newly created files. This avoids costly scans of large directories
+ * and ensures the database is updated synchronously before returning.
  *
  * @param input         Raw user selection string (e.g., "1,3-5").
  * @param fileList      Master vector of all non‑ISO image paths.
@@ -469,15 +470,15 @@ static size_t calculateTotalBytesForConversions(
  * @param modeChd       If `true`, treat input files as MAME CHD compressed images.
  * @param modeDaa       If `true`, treat input files as PowerISO DAA compressed images.
  * @param processedErrors Set to record any parsing errors (invalid indices/patterns).
- * @param successOuts   Set populated with paths of successfully converted ISOs.
- * @param skippedOuts   Set populated with paths skipped due to cancellation or errors.
- * @param failedOuts    Set populated with paths that failed conversion.
+ * @param successOuts   Set populated with themed messages of successfully converted ISOs.
+ * @param skippedOuts   Set populated with themed messages of skipped files.
+ * @param failedOuts    Set populated with themed messages of failed conversions.
  * @param verbose       If `true`, extra progress details are displayed.
  * @param needsClrScrn  Reference flag set to `true` if the terminal should be cleared.
- * @param newISOFound   Atomic flag set to `true` when at least one new ISO is created.
+ * @param newISOFound   Atomic flag set to `true` when at least one new ISO is indexed.
  *
- * @note Cancellation via SIGINT (Ctrl+C) is handled gracefully, though database 
- * updates only trigger if at least one file was successfully output.
+ * @note Cancellation via SIGINT (Ctrl+C) is handled gracefully; database updates
+ *       only trigger if at least one file was successfully converted.
  */
 void processInputForConversions(const std::string& input, std::vector<std::string>& fileList,
                                const bool& modeMdf, const bool& modeNrg, const bool& modeChd,
@@ -593,8 +594,6 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 			if (!result.empty()) result += ';';
 			result += isoPath.string();
 		}
-		std::thread([result, &newISOFound]() {
-			updateDatabaseAfterOperations(result, newISOFound);
-		}).detach();
+		updateDatabaseAfterOperations(result, newISOFound);
 	}
 }
