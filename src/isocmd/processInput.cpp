@@ -335,8 +335,6 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     if (completedTasks.load() > 0) {
         if (!isDelete) {
             updateDatabaseAfterOperations(processedUserDestDir, newISOFound);
-		} else {
-            isoListDirty.store(true);
 		}
 	}
     clear_history();
