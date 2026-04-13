@@ -21,8 +21,8 @@ namespace displayConfig {
     /** @brief Toggle to show the full list during write operations. */
     extern bool toggleFullListWrite;
     
-    /** @brief Toggle to show the full list during image conversions. */
-    extern bool toggleFullListConversions;
+    /** @brief Toggle to show the full list during image convert2isos. */
+    extern bool toggleFullListConvert2iso;
     
     /** @brief Toggle to display only filenames, hiding full directory paths. */
     extern bool toggleNamesOnly;
