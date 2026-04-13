@@ -717,5 +717,5 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
         setDisplayMode(inputSearch);
     }
 
-    refreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
+    refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
 }

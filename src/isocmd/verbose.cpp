@@ -271,8 +271,7 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
 
     std::cout << color << "\n↵ to continue..." << reset; 
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    std::string initialDir = ""; 
-    refreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
+    refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
 }
 
 /**

@@ -156,7 +156,7 @@ int main(int argc, char *argv[]) {
                     promptFlag = true;
                     filterHistory = false;
                     maxDepth = -1;
-                    refreshForDatabase(initialDir, promptFlag, maxDepth, filterHistory, newISOFound);
+                    refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
                     clearScrollBuffer();
                     break;
                 case '4':

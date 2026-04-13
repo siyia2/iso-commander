@@ -38,71 +38,64 @@ bool isValidDirectory(const std::string& path) {
  * It supports both interactive mode (with user prompts) and non-interactive mode.
  * 
  * @param initialDir Initial directory path to scan (if empty, prompts user)
- * @param promptFlag If true, runs in interactive mode with user prompts
  * @param maxDepth Maximum directory depth to traverse (-1 for unlimited)
  * @param filterHistory Whether to filter command history
  * @param newISOFound Atomic flag set to true if new ISO files were discovered
  */
-void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
+void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
     try {
         enable_ctrl_d();
         setupSignalHandlerCancellations();
         resetReadlinePagination();
         rl_attempted_completion_function = my_special_completion_entry;
-		g_operationCancelled.store(false);
+        g_operationCancelled.store(false);
         
         const ListTheme* theme = getActiveTheme();
         const bool isOrig = (globalTheme == "original");
 
-        std::string input = initialDir;
-        if (input.empty()) {
-            if (promptFlag) clearScrollBuffer();
-            loadHistory(filterHistory);
+        clearScrollBuffer();
+        loadHistory(filterHistory);
 
-            rl_bind_key('\f', clear_screen_and_buffer);
-            rl_bind_key('\t', rl_complete);
-            
-            std::string_view primary = isOrig ? originalColors::green : theme->accent;
-            std::string_view secondary = isOrig ? originalColors::blue : theme->muted;
+        rl_bind_key('\f', clear_screen_and_buffer);
+        rl_bind_key('\t', rl_complete);
+        
+        std::string_view primary = isOrig ? originalColors::green : theme->accent;
+        std::string_view secondary = isOrig ? originalColors::blue : theme->muted;
 
-            std::string prompt;
-            prompt.reserve(512);
-            prompt.append("\001").append(primary).append("\002FolderPaths")
-                  .append("\001").append(secondary).append("\002 ↵ to scan for ")
-                  .append("\001").append(primary).append("\002.iso")
-                  .append("\001").append(secondary).append("\002 entries and import them into the ")
-                  .append("\001").append(primary).append("\002local")
-                  .append("\001").append(secondary).append("\002 database, ? ↵ help, ↵ return:\n")
-                  .append("\001").append(originalColors::boldAlt).append("\002");
+        std::string prompt;
+        prompt.reserve(512);
+        prompt.append("\001").append(primary).append("\002FolderPaths")
+              .append("\001").append(secondary).append("\002 ↵ to scan for ")
+              .append("\001").append(primary).append("\002.iso")
+              .append("\001").append(secondary).append("\002 entries and import them into the ")
+              .append("\001").append(primary).append("\002local")
+              .append("\001").append(secondary).append("\002 database, ? ↵ help, ↵ return:\n")
+              .append("\001").append(originalColors::boldAlt).append("\002");
 
-            char* rawSearchQuery = readline(prompt.c_str());
-            if (!rawSearchQuery) {
-                input.clear();
-            } else {
-                std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
-                input = trimWhitespace(searchQuery.get());
-                
-                if (input == "?") {
-                    bool isCpMv = false, import2ISO = true;
-                    helpSearches(isCpMv, import2ISO);
-                    std::string dummy = "";
-                    return refreshForDatabase(dummy, promptFlag, maxDepth, filterHistory, newISOFound);
-                }
-                
-                if (input.starts_with("*") || input.starts_with("?") || input.starts_with("!") || isValidInput(input)) {
-                    databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
-                    return;
-                }
-                
-                if (!input.empty() && promptFlag) {
-                    add_history(input.c_str());
-                    std::cout << "\n";
-                }
-            }
+        char* rawSearchQuery = readline(prompt.c_str());
+        if (!rawSearchQuery) return;
+
+        std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+        std::string input = trimWhitespace(searchQuery.get());
+
+        if (input == "?") {
+            bool isCpMv = false, import2ISO = true;
+            helpSearches(isCpMv, import2ISO);
+            return refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
+        }
+
+        if (input.starts_with("*") || input.starts_with("?") || input.starts_with("!") || isValidInput(input)) {
+            databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
+            return;
+        }
+
+        if (!input.empty()) {
+            add_history(input.c_str());
+            std::cout << "\n";
         }
 
         if (input.find_first_not_of(" \t\n\r") == std::string::npos) return;
-        
+
         std::unordered_set<std::string> uniquePaths;
         std::vector<std::string> validPaths;
         std::unordered_set<std::string> invalidPaths;
@@ -110,10 +103,8 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
         std::vector<std::string> allIsoFiles;
         std::atomic<size_t> totalFiles{0};
 
-        if (promptFlag) {
-            std::cout << "\033[3H\033[J\n";
-            disableInput();
-        }
+        std::cout << "\033[3H\033[J\n";
+        disableInput();
 
         auto start_time = std::chrono::high_resolution_clock::now();
         std::istringstream iss(input);
@@ -121,11 +112,8 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
 
         while (std::getline(iss, path, ';')) {
             if (!isValidDirectory(path)) {
-                if (promptFlag) {
-                    // Colorize the invalid path with the theme's secondary (error) color
-                    std::string errCol = isOrig ? std::string(originalColors::red) : std::string(theme->secondary);
-                    invalidPaths.insert(errCol + path);
-                }
+				std::string errCol = isOrig ? std::string(originalColors::red) : std::string(theme->secondary);
+				invalidPaths.insert(errCol + path);
                 continue;
             }
 
@@ -135,14 +123,12 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
         }
         
         if (validPaths.empty()) {
-            if (promptFlag) {
-                flushStdin();
-                restoreInput();
-                resetReadlinePagination();
-                if (!invalidPaths.empty()) {
-                    verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
-                }
-            }  
+			flushStdin();
+			restoreInput();
+			resetReadlinePagination();
+			if (!invalidPaths.empty()) {
+				verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
+			}
             return;
         }
         
@@ -173,34 +159,31 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
             allIsoFiles.assign(uniqueFiles.begin(), uniqueFiles.end());
         }
         
-        if (promptFlag) {
-            flushStdin();
-            restoreInput();
-            resetReadlinePagination();
-                
-            // Use theme accent for the final progress count
-            std::cout << "\r" << (isOrig ? originalColors::boldAlt : theme->accent) 
-                      << "Total files processed: " << totalFiles;
+        flushStdin();
+        restoreInput();
+        resetReadlinePagination();
             
-            if (!invalidPaths.empty() || !validPaths.empty()) {
-                std::cout << "\n";
-            }
-
-            if (validPaths.empty()) {
-                input = "";
-                clear_history();
-                std::cout << "\033[1A\033[K";
-            }
-            if (!validPaths.empty() && !input.empty()) {
-                saveHistory(filterHistory);
-                clear_history();
-            }
-            verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
-        } else {
-            if (!g_operationCancelled.load()) {
-                saveToDatabase(allIsoFiles, newISOFound);
-            }
+        std::cout << "\r" << (isOrig ? originalColors::boldAlt : theme->accent) 
+                  << "Total files processed: " << totalFiles;
+        
+        if (!invalidPaths.empty() || !validPaths.empty()) {
+            std::cout << "\n";
         }
+
+        if (validPaths.empty()) {
+            input = "";
+            clear_history();
+            std::cout << "\033[1A\033[K";
+        }
+        if (!validPaths.empty() && !input.empty()) {
+            saveHistory(filterHistory);
+            clear_history();
+        }
+        verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
+        if (!g_operationCancelled.load()) {
+            saveToDatabase(allIsoFiles, newISOFound);
+        }
+
     } catch (const std::exception& e) {
         const ListTheme* theme = getActiveTheme();
         const bool isOrig = (globalTheme == "original");
@@ -211,11 +194,9 @@ void refreshForDatabase(std::string& initialDir, bool promptFlag, int maxDepth, 
         std::cout << color << "\n↵ to continue..." << reset; 
 
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        std::string dummyDir = "";
-        refreshForDatabase(dummyDir, promptFlag, maxDepth, filterHistory, newISOFound);
+        refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
     }
 }
-
 /**
  * @brief Recursively traverses a directory to find ISO files
  * 
