@@ -39,7 +39,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
     // Check if we should return the full, un-shortened path
     bool showFull = (displayConfig::toggleFullListMount && location == "mount") ||
                     (displayConfig::toggleFullListCpMvRm && location == "cp_mv_rm") ||
-                    (displayConfig::toggleFullListConvert2iso && location == "conversions") ||
+                    (displayConfig::toggleFullListConvert2iso && location == "convert2iso") ||
                     (displayConfig::toggleFullListWrite && location == "write");
 
     if (showFull) {
