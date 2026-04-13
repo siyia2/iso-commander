@@ -233,21 +233,24 @@ std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string
 }
 
 /**
- * @brief Updates the ISO database by scanning directories after mount/unmount operations.
+ * @brief Updates the ISO database after file operations by scanning directories or indexing files directly.
  *
- * Traverses all valid directories parsed from a semicolon-delimited string,
- * collecting ISO file paths in parallel. Concurrency is capped at @p maxThreads
- * by processing paths in batches. Discovered files are deduplicated before
- * being persisted to the database.
+ * Parses a semicolon-delimited string of paths. Directory paths are traversed in
+ * parallel to collect ISO files; regular file paths are added directly to the
+ * collection, bypassing directory scanning entirely. Concurrency for directory
+ * traversal is capped at @p maxThreads by processing in batches. All discovered
+ * files are deduplicated before being persisted to the database.
  *
- * @param directories  Semicolon-delimited list of directory paths to scan.
+ * @param directories  Semicolon-delimited list of paths to process. Each entry
+ *                     may be either a directory path (traversed recursively) or
+ *                     a regular file path (added directly without scanning).
  * @param newISOFound  Atomic flag set to @c true by @p saveToDatabase if at
  *                     least one new ISO entry is added to the database.
  *
  * @note Thread safety: @p allIsoFiles and @p errors are protected by dedicated
  *       mutexes during parallel traversal.
  * @note Batch size is controlled by the global variable @p maxThreads.
- *       Invalid or inaccessible directories are silently skipped.
+ *       Invalid, inaccessible, or non-ISO paths are silently skipped.
  */
 void updateDatabaseAfterOperations(const std::string& directories, std::atomic<bool>& newISOFound) {
     std::vector<std::string> allIsoFiles;
@@ -256,21 +259,26 @@ void updateDatabaseAfterOperations(const std::string& directories, std::atomic<b
     std::mutex fm, em;
     std::istringstream iss(directories);
     std::string path;
-
-    std::vector<std::string> validPaths;
+    std::vector<std::string> validDirs;
     std::unordered_set<std::string> seenPaths;
+
     while (std::getline(iss, path, ';')) {
-        if (isValidDirectory(path) && seenPaths.insert(path).second)
-            validPaths.emplace_back(path);
+        if (!seenPaths.insert(path).second) continue;
+        if (isValidDirectory(path)) {
+            validDirs.emplace_back(path);
+        } else if (fs::is_regular_file(path)) {
+            // It's a direct file path, add it straight to allIsoFiles
+            allIsoFiles.emplace_back(path);
+        }
     }
 
-    for (size_t i = 0; i < validPaths.size(); i += maxThreads) {
+    for (size_t i = 0; i < validDirs.size(); i += maxThreads) {
         std::vector<std::future<void>> futures;
-        size_t batchEnd = std::min(i + maxThreads, validPaths.size());
+        size_t batchEnd = std::min(i + maxThreads, validDirs.size());
         for (size_t j = i; j < batchEnd; ++j) {
             futures.emplace_back(std::async(std::launch::async,
-                [&validPaths, j, &allIsoFiles, &errors, &total, &fm, &em]() {
-                    traverse(validPaths[j], allIsoFiles, errors, total, fm, em, 0,false);
+                [&validDirs, j, &allIsoFiles, &errors, &total, &fm, &em]() {
+                    traverse(validDirs[j], allIsoFiles, errors, total, fm, em, 0, false);
                 }
             ));
         }
