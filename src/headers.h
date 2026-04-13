@@ -186,6 +186,7 @@ void clearScrollBuffer();
 //------------------
 // Void Functions (File Operations)
 //------------------
+void updateDatabaseAfterOperations(const std::string& directories, std::atomic<bool>& newISOFound);
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
 void updatePagination(const std::string& inputSearch, const std::string& configPath);
 void clearMessageAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtMain, std::atomic<bool>& isImportRunning, std::atomic<bool>& messageActive);
@@ -220,7 +221,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound);
 void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList);
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool overwriteExisting);
-void handleFilteringConvert2ISO(const std::string& inputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort, size_t& currentPage);
+void handleFilteringConvert2ISO(const std::string& mainInputString, std::vector<std::string>& files, const std::string& fileExtensionWithOutDots, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, bool& need2Sort, size_t& currentPage);
 void toLowerInPlace(std::string& str);
 void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages);
 
@@ -229,7 +230,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
 //------------------
 void convertToISO(const std::vector<std::string>& imageFiles, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, 
 std::unordered_set<std::string>& failedOuts, const bool& modeMdf, const bool& modeNrg, const bool& modeChd, const bool& modeDaa, std::atomic<size_t>* completedBytes,
-std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, std::atomic<bool>& newISOFound);
+std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks);
 void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list, std::vector<std::string>& pendingIndices, 
 bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning);
 void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning);
