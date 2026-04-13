@@ -57,7 +57,6 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     std::vector<std::string> localSuccessMsgs, localFailedMsgs, localSkippedMsgs;
 
     auto batchInsertMessages = [&]() {
-		
         std::lock_guard<std::mutex> lock(globalSetsMutex);
         if (!localSuccessMsgs.empty()) {
             successOuts.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
@@ -74,10 +73,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     };
 
     for (const std::string& inputPath : imageFiles) {
-        // --- COOPERATIVE CHECK ---
-        if (g_operationCancelled.load(std::memory_order_relaxed)) {
-            break; 
-        }
+        if (g_operationCancelled.load(std::memory_order_relaxed)) break;
 
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
         const std::string displayPath  = (!displayConfig::toggleNamesOnly ? directory + "/" : "") + fileNameOnly;
@@ -85,17 +81,19 @@ void convertToISO(const std::vector<std::string>& imageFiles,
         if (!fs::exists(inputPath)) {
             std::string msg;
             msg.reserve(128);
-            msg.append(missingLabel).append("Missing file: ")
+            msg.append(missingLabel).append("Convert2ISO: ")
                .append(errPath).append("'").append(displayPath).append("'")
-               .append(originalColors::boldAlt).append(missingLabel).append(".");
+               .append(missingLabel).append(": missing file.");
             localFailedMsgs.push_back(std::move(msg));
-			
-			std::lock_guard<std::mutex> lock(globalSetsMutex);
-            auto& cache = modeNrg ? nrgFilesCache :
-                          (modeMdf ? mdfMdsFilesCache :
-                           (modeChd ? chdFilesCache :
-                            (modeDaa ? daaFilesCache : binImgFilesCache)));
-            cache.erase(std::remove(cache.begin(), cache.end(), inputPath), cache.end());
+
+            {
+                std::lock_guard<std::mutex> lock(globalSetsMutex);
+                auto& cache = modeNrg ? nrgFilesCache :
+                              (modeMdf ? mdfMdsFilesCache :
+                               (modeChd ? chdFilesCache :
+                                (modeDaa ? daaFilesCache : binImgFilesCache)));
+                cache.erase(std::remove(cache.begin(), cache.end(), inputPath), cache.end());
+            }
 
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
             if (localFailedMsgs.size() >= BATCH_SIZE) batchInsertMessages();
@@ -106,10 +104,9 @@ void convertToISO(const std::vector<std::string>& imageFiles,
         if (!file.good()) {
             std::string msg;
             msg.reserve(128);
-            msg.append(errLabel).append("The specified file ")
+            msg.append(errLabel).append("Convert2ISO: ")
                .append(errPath).append("'").append(displayPath).append("'")
-               .append(originalColors::boldAlt).append(errLabel).append(" cannot be read. Check permissions.")
-               .append(originalColors::boldAlt).append(originalColors::boldAlt);
+               .append(errLabel).append(": cannot be read, check permissions.");
             localFailedMsgs.push_back(std::move(msg));
 
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -121,10 +118,9 @@ void convertToISO(const std::vector<std::string>& imageFiles,
         if (fileExists(outputPath)) {
             std::string msg;
             msg.reserve(128);
-            msg.append(skipLabel).append("ISO already exists for: ")
+            msg.append(skipLabel).append("Convert2ISO: ")
                .append(skipPath).append("'").append(displayPath).append("'")
-               .append(originalColors::boldAlt).append(skipLabel).append(". Skipped conversion.")
-               .append(originalColors::boldAlt).append(originalColors::boldAlt);
+               .append(skipLabel).append(": ISO already exists, skipped.");
             localSkippedMsgs.push_back(std::move(msg));
 
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -132,18 +128,14 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             continue;
         }
 
-        // --- SECOND COOPERATIVE CHECK (Before heavy call) ---
         if (g_operationCancelled.load(std::memory_order_relaxed)) break;
 
         bool conversionSuccess = false;
-        // Pass g_operationCancelled to these functions if they support it!
         if (modeMdf)       conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
         else if (modeNrg)  conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
         else if (modeChd)  conversionSuccess = convertChdToIso(inputPath, outputPath, completedBytes);
         else if (modeDaa)  conversionSuccess = convertDaaToIso(inputPath, outputPath, completedBytes);
         else               conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
-
-        auto [outDir, outName] = extractDirectoryAndFilename(outputPath, "conversions");
 
         if (conversionSuccess) {
             [[maybe_unused]] int ret = chown(outputPath.c_str(), real_uid, real_gid);
@@ -159,27 +151,28 @@ void convertToISO(const std::vector<std::string>& imageFiles,
 
             std::string msg;
             msg.reserve(128);
-            msg.append(okLabel).append(fileType).append(" file converted to ISO: ")
-               .append(okPath).append("'").append(outDir).append("/").append(outName).append("'")
-               .append(originalColors::boldAlt).append(okLabel).append(".");
+            msg.append(okLabel).append("Convert2ISO: ")
+               .append(okPath).append("'").append(displayPath).append("'")
+               .append(okLabel).append(": ").append(fileType).append(" → ISO.");
             localSuccessMsgs.push_back(std::move(msg));
+
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
+            if (localSuccessMsgs.size() >= BATCH_SIZE) batchInsertMessages();
         } else {
             if (fs::exists(outputPath)) fs::remove(outputPath);
 
             bool isCancelled = g_operationCancelled.load(std::memory_order_relaxed);
             std::string msg;
             msg.reserve(128);
-            msg.append(errLabel).append("Conversion of ")
+            msg.append(errLabel).append("Convert2ISO: ")
                .append(errPath).append("'").append(displayPath).append("'")
-               .append(originalColors::boldAlt).append(errLabel).append(" ")
-               .append(isCancelled ? "cancelled" : "failed").append(".")
-               .append(originalColors::boldAlt).append(originalColors::boldAlt);
-            
+               .append(errLabel).append(": ").append(isCancelled ? "cancelled." : "failed.");
             localFailedMsgs.push_back(std::move(msg));
+
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
+            if (localFailedMsgs.size() >= BATCH_SIZE) batchInsertMessages();
         }
     }
-    
+
     batchInsertMessages();
 }
