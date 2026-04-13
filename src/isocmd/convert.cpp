@@ -69,14 +69,17 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     // Local buffers for batch insertion
     std::vector<std::string> localSuccessMsgs, localFailedMsgs, localSkippedMsgs;
 
+    // --- Thread-Safe Batch Inserter ---
     auto batchInsertMessages = [&]() {
+        std::lock_guard<std::mutex> lock(globalSetsMutex);
         if (localSuccessMsgs.size() >= BATCH_SIZE ||
             localFailedMsgs.size()  >= BATCH_SIZE ||
             localSkippedMsgs.size() >= BATCH_SIZE) {
-            std::lock_guard<std::mutex> lock(globalSetsMutex);
+            
             successOuts.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
-            failedOuts.insert(localFailedMsgs.begin(),  localFailedMsgs.end());
+            failedOuts.insert(localFailedMsgs.begin(),   localFailedMsgs.end());
             skippedOuts.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
+            
             localSuccessMsgs.clear();
             localFailedMsgs.clear();
             localSkippedMsgs.clear();
@@ -235,7 +238,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             msg.reserve(128);
             msg.append(errLabel).append("Conversion of ")
                .append(errPath).append("'").append(displayPath).append("'")
-               .append(originalColors::boldAlt).append(errLabel).append(" cancelled (operation aborted).")
+               .append(originalColors::boldAlt).append(errLabel).append(" cancelled.")
                .append(originalColors::boldAlt).append(originalColors::boldAlt);
             localFailedMsgs.push_back(std::move(msg));
             // NO failedTasks increment for cancellations
