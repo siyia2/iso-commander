@@ -69,7 +69,7 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
                   << "+-------------------------+\n"
                   << "|5. Copy                  |\n"
                   << "+-------------------------+\n"
-                  << "|6. Write2USB             |\n"
+                  << "|6. Write                 |\n"
                   << "+-------------------------+" << reset << std::endl << "\n";
         
         const ListTheme* theme = getActiveTheme();
