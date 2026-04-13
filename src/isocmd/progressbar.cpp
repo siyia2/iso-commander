@@ -62,11 +62,11 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         operation.find("umount") != std::string::npos) {
         processingBarWidth = 46;
         finalBarWidth = 30;
-    } else if (operation.find("MDF") != std::string::npos || 
-               operation.find("NRG") != std::string::npos ||
-               operation.find("CHD") != std::string::npos || 
-               operation.find("DAA") != std::string::npos || 
-               operation.find("BIN/IMG") != std::string::npos) {
+    } else if (operation.find("MDF2ISO") != std::string::npos || 
+               operation.find("NRG2ISO") != std::string::npos ||
+               operation.find("CHD2ISO") != std::string::npos || 
+               operation.find("DAA2ISO") != std::string::npos || 
+               operation.find("(BIN/IMG)2ISO") != std::string::npos) {
         processingBarWidth = 53;
         finalBarWidth = 40;
     }
@@ -169,20 +169,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 			static bool cancellationState = g_operationCancelled.load(std::memory_order_acquire);
 			const bool wasCancelled = cancellationState;
 			
-			auto getOperationLabel = [](const std::string& op) -> std::string {
-				if (op.find("MDF")     != std::string::npos) return "MDF2ISO";
-				if (op.find("NRG")     != std::string::npos) return "NRG2ISO";
-				if (op.find("CHD")     != std::string::npos) return "CHD2ISO";
-				if (op.find("DAA")     != std::string::npos) return "DAA2ISO";
-				if (op.find("BIN/IMG") != std::string::npos) return "(BIN/IMG)2ISO";
-				return op;
-			};
-
-			const bool isConversion = (getOperationLabel(operation) != operation);
-
-			std::cout << "\r\033[2K" << originalColors::boldAlt << " Status: "
-					  << (isConversion ? originalColors::orange : originalColors::boldAlt)
-					  << getOperationLabel(operation) << originalColors::boldAlt << " → "
+			// Status line using originalColors mappings with loaded values
+			std::cout << "\r\033[2K" << originalColors::boldAlt << " Status: " << operation << originalColors::boldAlt << " → " 
 					  << (!wasCancelled 
 						  ? (failedTasksValue > 0 
 							 ? (completedTasksValue > 0 
