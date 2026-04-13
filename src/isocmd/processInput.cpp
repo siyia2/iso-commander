@@ -187,16 +187,39 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
 
 /**
  * @brief Handles bulk copy, move, or remove operations with threading and progress visualization.
- * * @param input Raw user input.
+ * * This function orchestrates the lifecycle of filesystem operations (cp, mv, rm) on selected 
+ * image files. It handles everything from user confirmation and destination selection to 
+ * multi-threaded execution and database synchronization.
+ * * @section Workflow Lifecycle
+ * 1. **Input Parsing**: Tokenizes the user string to map selections to the master ISO list.
+ * 2. **Pre-Processing & Validation**: 
+ * - Determines thread caps based on operation type (e.g., `RM_THREAD_CAP` vs `CPMV_THREAD_CAP`).
+ * - Invokes `userDestDirCpMv` to handle UI interactions, such as selecting destination 
+ * folders or confirming permanent deletion.
+ * 3. **Progress Estimation**: Calculates total byte size and task count. For copies/moves to 
+ * multiple destinations, these metrics are scaled accordingly to ensure the progress bar 
+ * reflects the true workload.
+ * 4. **Execution**:
+ * - Spawns a dedicated thread for the live progress bar.
+ * - Distributes file chunks into a static thread pool for parallel execution via `handleIsoFileOperation`.
+ * 5. **Post-Processing & Cleanup**:
+ * - Disables signal handlers and joins the progress thread.
+ * - **Database Sync**: If files were moved or copied, a detached thread is launched to 
+ * update the database for the affected directories without blocking the UI.
+ * - **State Management**: Marks the global `isoListDirty` flag as true if any tasks 
+ * succeeded, ensuring the UI refreshes the file list.
+ * * @param input Raw user input (e.g., "1-3, 5").
  * @param isoFiles Master list of files.
  * @param process Operation type ("cp", "mv", or "rm").
  * @param operationIsos Set to track successfully modified items.
  * @param operationErrors Set to track failed items.
  * @param uniqueErrorMessages Set for unique UI error reporting.
- * @param umountMvRmBreak Flag for outer loop control.
+ * @param umountMvRmBreak Flag for outer loop control; set to false if no tasks are completed.
  * @param filterHistory Flag indicating if the view is filtered.
- * @param verbose Detailed output toggle.
+ * @param verbose Detailed output toggle for progress updates.
  * @param newISOFound Atomic flag for filesystem changes.
+ * * @note Cancellation via SIGINT (Ctrl+C) is caught during the execution phase, allowing 
+ * partial batches to complete while preventing new tasks from starting.
  */
 void processInputForCpMvRm(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& filterHistory, bool& verbose, std::atomic<bool>& newISOFound) {
     setupSignalHandlerCancellations();
@@ -425,27 +448,37 @@ static size_t calculateTotalBytesForConversions(
  * - **NRG**: Excludes a 300 KiB (307200 byte) header.
  * - **MDF**: Reads sector geometry via `MdfTypeInfo` and computes user data bytes.
  * - **BIN/CCD**: Assumes 2352‑byte raw sectors with 2048 bytes of user data.
- * - **CHD**: Opens the CHD file, inspects the header, and calculates total sectors
- *   multiplied by 2048 bytes (ISO user data per sector).
- * - **DAA**: Calls `getDaaIsoSize()` to query the uncompressed ISO size from the
- *   DAA archive header without extracting the entire file.
+ * - **CHD**: Opens the CHD file, inspects the header, and calculates total sectors 
+ * multiplied by 2048 bytes (ISO user data per sector).
+ * - **DAA**: Calls `getDaaIsoSize()` to query the uncompressed ISO size from the 
+ * DAA archive header without extracting the entire file.
+ * * @section multi_threading Multi-Threading and Progress
+ * Tasks are distributed across a static thread pool by splitting the selection into 
+ * chunks. A dedicated background thread manages a real-time progress bar that tracks 
+ * both byte-level progress and task completion/failure counts.
+ * * @section post_processing Post-Conversion Sync
+ * Upon completion of all threads, the function joins the progress display and performs 
+ * a cleanup of signal handlers. If any conversions were successful, it identifies the 
+ * unique parent directories of the processed files and launches a detached background 
+ * thread to synchronize the local database, ensuring newly created ISOs are indexed 
+ * without blocking the main UI.
  *
- * @param input          Raw user selection string (e.g., "1,3-5").
- * @param fileList       Master vector of all non‑ISO image paths.
- * @param modeMdf        If `true`, treat input files as Alcohol 120% MDF images.
- * @param modeNrg        If `true`, treat input files as Nero NRG images.
- * @param modeChd        If `true`, treat input files as MAME CHD compressed images.
- * @param modeDaa        If `true`, treat input files as PowerISO DAA compressed images.
+ * @param input         Raw user selection string (e.g., "1,3-5").
+ * @param fileList      Master vector of all non‑ISO image paths.
+ * @param modeMdf       If `true`, treat input files as Alcohol 120% MDF images.
+ * @param modeNrg       If `true`, treat input files as Nero NRG images.
+ * @param modeChd       If `true`, treat input files as MAME CHD compressed images.
+ * @param modeDaa       If `true`, treat input files as PowerISO DAA compressed images.
  * @param processedErrors Set to record any parsing errors (invalid indices/patterns).
- * @param successOuts    Set populated with paths of successfully converted ISOs.
- * @param skippedOuts    Set populated with paths skipped due to cancellation or errors.
- * @param failedOuts     Set populated with paths that failed conversion.
- * @param verbose        If `true`, extra progress details are displayed.
- * @param needsClrScrn   Reference flag set to `true` if the terminal should be cleared.
- * @param newISOFound    Atomic flag set to `true` when at least one new ISO is created.
+ * @param successOuts   Set populated with paths of successfully converted ISOs.
+ * @param skippedOuts   Set populated with paths skipped due to cancellation or errors.
+ * @param failedOuts    Set populated with paths that failed conversion.
+ * @param verbose       If `true`, extra progress details are displayed.
+ * @param needsClrScrn  Reference flag set to `true` if the terminal should be cleared.
+ * @param newISOFound   Atomic flag set to `true` when at least one new ISO is created.
  *
- * @note The function manages a thread pool and displays a live progress bar.
- *       Cancellation via SIGINT (Ctrl+C) is handled gracefully.
+ * @note Cancellation via SIGINT (Ctrl+C) is handled gracefully, though database 
+ * updates only trigger if at least one file was successfully output.
  */
 void processInputForConversions(const std::string& input, std::vector<std::string>& fileList,
                                const bool& modeMdf, const bool& modeNrg, const bool& modeChd,
