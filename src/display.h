@@ -19,7 +19,7 @@ namespace displayConfig {
     extern bool toggleFullListCpMvRm;
     
     /** @brief Toggle to show the full list during write operations. */
-    extern bool toggleFullListWrite;
+    extern bool toggleFullListWrite2usb;
     
     /** @brief Toggle to show the full list during image convert2isos. */
     extern bool toggleFullListConvert2iso;
