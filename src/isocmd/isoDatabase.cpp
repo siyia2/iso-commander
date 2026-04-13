@@ -233,59 +233,51 @@ std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string
 }
 
 /**
- * @brief Asynchronously scans directories and imports discovered ISO files into the database
+ * @brief Updates the ISO database by scanning directories after mount/unmount operations.
  *
- * Performs a parallel traversal of the provided semicolon-separated directory
- * paths, collecting all discovered .iso files and persisting them to the local
- * database. Intended as a lightweight post-operation replacement for
- * refreshForDatabase() in contexts where interactive prompting is not needed
- * and reentrancy into the static thread pool must be avoided (e.g. when called
- * from within an active pool task).
+ * Traverses all valid directories parsed from a semicolon-delimited string,
+ * collecting ISO file paths in parallel. Concurrency is capped at @p maxThreads
+ * by processing paths in batches. Discovered files are deduplicated before
+ * being persisted to the database.
  *
- * Each directory is traversed concurrently via std::async. Results are
- * deduplicated before being passed to saveToDatabase(). The function is
- * typically invoked from a detached std::thread at the call site so the
- * calling operation returns immediately without blocking on the scan.
+ * @param directories  Semicolon-delimited list of directory paths to scan.
+ * @param newISOFound  Atomic flag set to @c true by @p saveToDatabase if at
+ *                     least one new ISO entry is added to the database.
  *
- * @param directories Semicolon-separated list of absolute directory paths to
- *                    scan (e.g. "/mnt/iso;/home/user/images"). Invalid or
- *                    non-existent paths are silently skipped.
- * @param newISOFound Atomic flag set by saveToDatabase() when at least one
- *                    previously unknown ISO is added to the database. Must
- *                    outlive the detached thread at the call site — if
- *                    lifetime cannot be guaranteed, promote to
- *                    std::shared_ptr<std::atomic<bool>> and capture by value.
- *
- * @note This function is synchronous internally — it waits for all traversal
- *       futures before calling saveToDatabase(). The async/detached behaviour
- *       is the responsibility of the call site.
- * @note Unlike refreshForDatabase(), this function performs no readline
- *       interaction, history management, progress output, or signal handler
- *       setup. It is intentionally minimal.
- * @note g_operationCancelled is intentionally not checked inside this function.
- *       The decision to invoke it must be made at the call site (e.g. by
- *       checking completedTasks > 0 or !successOuts.empty()) so that files
- *       completed before a cancellation are still indexed.
+ * @note Thread safety: @p allIsoFiles and @p errors are protected by dedicated
+ *       mutexes during parallel traversal.
+ * @note Batch size is controlled by the global variable @p maxThreads.
+ *       Invalid or inaccessible directories are silently skipped.
  */
 void updateDatabaseAfterOperations(const std::string& directories, std::atomic<bool>& newISOFound) {
     std::vector<std::string> allIsoFiles;
     std::unordered_set<std::string> errors;
     std::atomic<size_t> total{0};
     std::mutex fm, em;
-    std::vector<std::future<void>> futures;
     std::istringstream iss(directories);
     std::string path;
 
+    // Collect valid paths first
+    std::vector<std::string> validPaths;
     while (std::getline(iss, path, ';')) {
-        if (!isValidDirectory(path)) continue;
-        futures.emplace_back(std::async(std::launch::async,
-            [path, &allIsoFiles, &errors, &total, &fm, &em]() {
-                traverse(path, allIsoFiles, errors, total, fm, em, 0, false);
-            }
-        ));
+        if (isValidDirectory(path))
+            validPaths.emplace_back(path);
     }
 
-    for (auto& f : futures) f.wait();
+    // Process in batches of maxThreads
+    for (size_t i = 0; i < validPaths.size(); i += maxThreads) {
+        std::vector<std::future<void>> futures;
+        size_t batchEnd = std::min(i + maxThreads, validPaths.size());
+
+        for (size_t j = i; j < batchEnd; ++j) {
+            futures.emplace_back(std::async(std::launch::async,
+                [&validPaths, j, &allIsoFiles, &errors, &total, &fm, &em]() {
+                    traverse(validPaths[j], allIsoFiles, errors, total, fm, em, 0, false);
+                }
+            ));
+        }
+        for (auto& f : futures) f.wait();
+    }
 
     std::unordered_set<std::string> unique(allIsoFiles.begin(), allIsoFiles.end());
     allIsoFiles.assign(unique.begin(), unique.end());
