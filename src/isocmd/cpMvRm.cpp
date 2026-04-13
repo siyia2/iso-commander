@@ -217,7 +217,6 @@ bool& overwriteExisting) {
             auto setupEnv = [&]() {
                 enable_ctrl_d();
                 setupSignalHandlerCancellations();
-                g_operationCancelled.store(false);
                 rl_bind_key('\f', clear_screen_and_buffer);
                 rl_bind_key('\t', rl_complete);
                 if (!isCopy) umountMvRmBreak = true;
