@@ -118,7 +118,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         // 3. Cleanup/Display (convert2iso specific)
         printSection(tc, std::string(originalColors::cyan) + "| Tab completion: Supports !, ?, and * command prefixes |", "");
 
-        std::string displayCmds = "   " + std::string(originalColors::boldAlt) + "•" + std::string(originalColors::yellow) + " !clr / !clr_paths / !clr_filter" + std::string(originalColors::boldAlt) + " : Clear corresponding databases\n";
+        std::string displayCmds = "   " + std::string(originalColors::boldAlt) + "•" + std::string(originalColors::yellow) + " !clr / !clr_paths / !clr_filter" + std::string(originalColors::boldAlt) + " : Clear corresponding cache/database\n";
         
         displayCmds += "   " + std::string(originalColors::boldAlt) + "•" + std::string(originalColors::blue) + " ";
         
