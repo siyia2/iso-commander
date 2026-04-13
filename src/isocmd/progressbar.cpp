@@ -65,15 +65,13 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         operation.find("umount") != std::string::npos) {
         processingBarWidth = 46;
         finalBarWidth = 30;
-    } else if (operation.find("MDF2ISO") != std::string::npos ||
-               operation.find("NRG2ISO") != std::string::npos ||
-               operation.find("CHD2ISO") != std::string::npos ||
-               operation.find("DAA2ISO") != std::string::npos) {
+    } else if (operation.find("mdf2iso") != std::string::npos ||
+               operation.find("nrg2iso") != std::string::npos ||
+               operation.find("chd2iso") != std::string::npos ||
+               operation.find("daa2iso") != std::string::npos || 
+               operation.find("ccd2iso") != std::string::npos) {
         processingBarWidth = 49;
         finalBarWidth = 41;
-    } else if (operation.find("(BIN/IMG)2ISO") != std::string::npos) {
-        processingBarWidth = 55;
-        finalBarWidth = 47;
     }
 
     auto startTime = std::chrono::high_resolution_clock::now();

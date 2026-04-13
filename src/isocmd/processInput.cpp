@@ -542,11 +542,11 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
 
     std::string operation;
-    if (modeMdf)      operation = std::string(originalColors::orange) + "MDF2ISO"     + std::string(originalColors::boldAlt) + suffix;
-    else if (modeNrg) operation = std::string(originalColors::orange) + "NRG2ISO"     + std::string(originalColors::boldAlt) + suffix;
-    else if (modeChd) operation = std::string(originalColors::orange) + "CHD2ISO"     + std::string(originalColors::boldAlt) + suffix;
-    else if (modeDaa) operation = std::string(originalColors::orange) + "DAA2ISO"     + std::string(originalColors::boldAlt) + suffix;
-    else              operation = std::string(originalColors::orange) + "(BIN/IMG)2ISO" + std::string(originalColors::boldAlt) + suffix;
+    if (modeMdf)      operation = std::string(originalColors::orange) + "mdf2iso"     + std::string(originalColors::boldAlt) + suffix;
+    else if (modeNrg) operation = std::string(originalColors::orange) + "nrg2iso"     + std::string(originalColors::boldAlt) + suffix;
+    else if (modeChd) operation = std::string(originalColors::orange) + "chd2iso"     + std::string(originalColors::boldAlt) + suffix;
+    else if (modeDaa) operation = std::string(originalColors::orange) + "daa2iso"     + std::string(originalColors::boldAlt) + suffix;
+    else              operation = std::string(originalColors::orange) + "ccd2iso" + std::string(originalColors::boldAlt) + suffix;
 
     clearScrollBuffer();
 
