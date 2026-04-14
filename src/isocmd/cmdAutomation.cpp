@@ -96,7 +96,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                 } else if (fs::is_directory(path)) {
                     disableInput();
                     if (!silentMode) {
-                        std::cout << "Scanning directory " << path << " ("<< (maxDepth == 0 ? "surface scan" : "max depth: " + (maxDepth < 0 ? "unlimited" : std::to_string(maxDepth))) << ")...\n";
+                        std::cout << originalColors::boldAlt << "Scanning directory " << path << " ("<< (maxDepth == 0 ? "surface scan" : "max depth: " + (maxDepth < 0 ? "unlimited" : std::to_string(maxDepth))) << ")...\n";
                     }
 
                     std::function<void(const fs::path&, int)> scanDir;
@@ -184,7 +184,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
         if (args.size() <= 1 || (args.size() == 2 && (args[0] == "all"))) {
             disableInput();
-            if (!silentMode) std::cout << "Scanning /mnt for ISO mount points (surface scan)...\n";
+            if (!silentMode) std::cout << originalColors::boldAlt << "Scanning /mnt for ISO mount points (surface scan)...\n";
             try {
                 for (const auto& entry : fs::directory_iterator("/mnt")) {
                     if (g_operationCancelled.load()) {
@@ -268,7 +268,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             return hasErrors ? 1 : 0;
         }
 
-        if (!silentMode) std::cout << "\nLocated " << mountPointsToUnmount.size() << " mount point" << (mountPointsToUnmount.size() == 1 ? "" : "s") << "; Attempting to unmount...\n";
+        if (!silentMode) std::cout << originalColors::boldAlt << "\nLocated " << mountPointsToUnmount.size() << " mount point" << (mountPointsToUnmount.size() == 1 ? "" : "s") << "; Attempting to unmount...\n";
         std::unordered_set<std::string> unmountedFiles;
         std::unordered_set<std::string> unmountedErrors;
         std::atomic<size_t> completedTasks{0};
