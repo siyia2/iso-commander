@@ -143,20 +143,17 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
 		}
 
 		// ----- Subpath filtering now works on already‑normalized paths -----
+		
+		// Sort normalized input
+		std::sort(validPaths.begin(), validPaths.end());
+
 		std::vector<std::string> filteredPaths;
 		for (const auto& p : validPaths) {
-			bool isSubpath = false;
-			for (const auto& other : validPaths) {
-				if (p != other) {
-					// No need to re‑normalize – both p and other are normalized already
-					if (p.starts_with(other + "/")) {
-						isSubpath = true;
-						break;
-					}
-				}
-			}
-			if (!isSubpath)
+			// Because the list is sorted lexicographically, any parent directory
+			// of p will be the most recently added path in filteredPaths.
+			if (filteredPaths.empty() || !p.starts_with(filteredPaths.back() + "/")) {
 				filteredPaths.push_back(p);
+			}
 		}
 		validPaths = std::move(filteredPaths);
 
