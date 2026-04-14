@@ -170,6 +170,35 @@ std::string getHomeDirectory() {
 }
 
 /**
+ * @brief Passes successfully operated ISO file paths to the database.
+ *
+ * Accepts a semicolon-separated list of destination paths produced by a
+ * completed copy or move operation. Each non-empty path is collected and
+ * forwarded to saveToDatabase() in a single batch call.
+ *
+ * @param filePathsStr  Semicolon-delimited string of destination ISO paths.
+ * @param newISOFound   Atomic flag set to @c true by saveToDatabase() if at
+ *                      least one new ISO entry is added.
+ *
+ * @note Paths are assumed valid — they were written successfully by the
+ *       preceding operation. No filesystem validation is performed.
+ */
+void updateDatabaseAfterOperations(const std::string& filePathsStr, 
+                                    std::atomic<bool>& newISOFound) {
+    std::vector<std::string> allIsoFiles;
+    std::istringstream iss(filePathsStr);
+    std::string path;
+
+    while (std::getline(iss, path, ';')) {
+        if (!path.empty())
+            allIsoFiles.push_back(std::move(path));
+    }
+
+    if (!allIsoFiles.empty())
+        saveToDatabase(allIsoFiles, newISOFound);
+}
+
+/**
  * @brief Reduces hierarchical paths by grouping related directories
  * 
  * This function groups paths by their first 3 directory levels and reduces
@@ -230,35 +259,6 @@ std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string
     }
     
     return result;
-}
-
-/**
- * @brief Passes successfully operated ISO file paths to the database.
- *
- * Accepts a semicolon-separated list of destination paths produced by a
- * completed copy or move operation. Each non-empty path is collected and
- * forwarded to saveToDatabase() in a single batch call.
- *
- * @param filePathsStr  Semicolon-delimited string of destination ISO paths.
- * @param newISOFound   Atomic flag set to @c true by saveToDatabase() if at
- *                      least one new ISO entry is added.
- *
- * @note Paths are assumed valid — they were written successfully by the
- *       preceding operation. No filesystem validation is performed.
- */
-void updateDatabaseAfterOperations(const std::string& filePathsStr, 
-                                    std::atomic<bool>& newISOFound) {
-    std::vector<std::string> allIsoFiles;
-    std::istringstream iss(filePathsStr);
-    std::string path;
-
-    while (std::getline(iss, path, ';')) {
-        if (!path.empty())
-            allIsoFiles.push_back(std::move(path));
-    }
-
-    if (!allIsoFiles.empty())
-        saveToDatabase(allIsoFiles, newISOFound);
 }
 
 /**
