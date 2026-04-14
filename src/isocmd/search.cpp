@@ -119,6 +119,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
         std::string path;
 
         while (std::getline(iss, path, ';')) {
+            path = trimWhitespace(path);
             if (!isValidDirectory(path)) {
                 std::string errCol = isOrig ? std::string(originalColors::red) : std::string(theme->secondary);
                 invalidPaths.insert(errCol + path);
@@ -130,19 +131,31 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
             }
         }
 
-        // Remove any path that is a subpath of another valid path
-        validPaths.erase(
-            std::remove_if(validPaths.begin(), validPaths.end(),
-                [&validPaths](const std::string& p) {
-                    for (const auto& other : validPaths) {
-                        if (p != other &&
-                            fs::path(p).string().starts_with(fs::path(other).string() + "/"))
-                            return true;
-                    }
-                    return false;
-                }),
-            validPaths.end());
-        
+        auto normalizePath = [](const std::string& p) {
+			std::string n = fs::path(p).lexically_normal().string();
+			if (n.size() > 1 && n.back() == '/')
+				n.pop_back();
+			return n;
+		};
+
+		std::vector<std::string> filteredPaths;
+		for (const auto& p : validPaths) {
+		bool isSubpath = false;
+		std::string normP = normalizePath(p);
+		for (const auto& other : validPaths) {
+			if (p != other) {
+				std::string normOther = normalizePath(other);
+				if (normP.starts_with(normOther + "/")) {
+					isSubpath = true;
+					break;
+				}
+			}
+		}
+		if (!isSubpath)
+			filteredPaths.push_back(p);
+		}
+		validPaths = std::move(filteredPaths);
+
         if (validPaths.empty()) {
             flushStdin();
             restoreInput();
@@ -241,8 +254,6 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
     const ListTheme* theme = getActiveTheme();
     const bool isOriginal = (globalTheme == "original");
 	
-	g_operationCancelled.store(false);
-
     auto iequals = [](const std::string_view& a, const std::string_view& b) {
         return std::equal(a.begin(), a.end(), b.begin(), b.end(),
                          [](unsigned char a, unsigned char b) {
