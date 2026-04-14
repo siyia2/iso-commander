@@ -93,6 +93,16 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     const char* fileCol  = originalColors::resetPlain.data();
     const char* resetCol = originalColors::boldAlt.data();
 
+    // --- Detect if we are completing special commands (starting with !, ?, *) ---
+    bool is_special_cmd_completion = false;
+    if (num_matches > 0) {
+        const char* first_match = matches[1];
+        if (first_match && (first_match[0] == '!' || first_match[0] == '?' || first_match[0] == '*')) {
+            is_special_cmd_completion = true;
+        }
+    }
+
+    // --- Pagination state management (identical for both branches) ---
     const char* current_prefix = matches[0];
     if (strcmp(last_common_prefix, current_prefix) != 0) {
         current_page = 0;
@@ -118,6 +128,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
         items_to_display = (remaining > (int)ITEMS_PER_PAGE) ? (int)ITEMS_PER_PAGE : remaining;
     }
 
+    // --- Header printing ---
     if (num_matches > 1) {
         if (total_pages > 1) {
             printf("\n%sTab Completion Matches [page %d/%d%s] (%sCtrl+l%s → clear%s):%s\n\n",
@@ -128,39 +139,19 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
         }
     }
 
+    // Advance page for next call (identical)
     if (ITEMS_PER_PAGE > 0 && (size_t)num_matches > ITEMS_PER_PAGE) {
         current_page++;
         if (current_page >= total_pages) current_page = 0;
     }
 
-    const char* base_path = matches[1];
-    int base_len = 0;
-    const char* last_slash = strrchr(base_path, '/');
-    base_len = (last_slash != NULL) ? (last_slash - base_path + 1) : 0;
-
-    size_t max_item_length = 0;
-    for (int i = start_index; i < start_index + items_to_display; i++) {
-        size_t item_length = strlen(matches[i] + base_len);
-        if (item_length > max_item_length) max_item_length = item_length;
-    }
-
-    int num_columns = (items_to_display <= 4) ? 1 : 3;
-    const int column_spacing = 4;
-    int column_width = (num_columns < 3) ? ((max_item_length + 2 > 60) ? 60 : max_item_length + 2)
-                                         : ((max_item_length < 38) ? max_item_length + 2 : 40);
-    const int total_column_width = column_width + column_spacing;
-    int rows = (items_to_display + num_columns - 1) / num_columns;
-
-    auto isDirectory = [](const char* path) -> bool {
-        struct stat path_stat;
-        return (stat(path, &path_stat) == 0) && S_ISDIR(path_stat.st_mode);
-    };
-
+    // --- Common layout helpers ---
     auto smartTruncate = [](const char* str, int max_width) -> std::string {
         std::string result(str);
         size_t len = result.length();
         if (len <= (size_t)max_width) return result;
 
+        // Try to preserve extension for files (only relevant in file branch, but harmless elsewhere)
         size_t dot_pos = result.find_last_of('.');
         if (dot_pos != std::string::npos && dot_pos > 0 && len - dot_pos <= 10) {
             std::string ext = result.substr(dot_pos);
@@ -172,53 +163,123 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
         return result.substr(0, prefix_len) + "..." + result.substr(len - suffix_len, suffix_len);
     };
 
+    // Precompute display strings and lengths for each visible item
+    struct DisplayItem {
+        std::string display_text;   // truncated, colored string ready for printing
+        int visual_length;          // length without ANSI codes
+        const char* raw_match;      // original match for potential directory check
+    };
+    std::vector<DisplayItem> display_items;
+    display_items.reserve(items_to_display);
+
+    // Base path handling (only used in file branch)
+    const char* base_path = matches[1];
+    int base_len = 0;
+    if (!is_special_cmd_completion) {
+        const char* last_slash = strrchr(base_path, '/');
+        base_len = (last_slash != NULL) ? (last_slash - base_path + 1) : 0;
+    }
+
+    // Colors for special command prefixes
+    const char* exclColor = originalColors::yellow.data();
+    const char* qmarkColor = originalColors::blue.data();
+    const char* starColor = originalColors::purple.data();
+    const char* resetPlain = originalColors::resetPlain.data();
+
+    // Lambda to check if a path is a directory (file branch only)
+    auto isDirectory = [](const char* path) -> bool {
+        struct stat path_stat;
+        return (stat(path, &path_stat) == 0) && S_ISDIR(path_stat.st_mode);
+    };
+
+    // Determine maximum visual length for column layout
+    size_t max_item_length = 0;
+    for (int i = 0; i < items_to_display; ++i) {
+        int idx = start_index + i;
+        const char* raw = matches[idx];
+        std::string display;
+        int vis_len = 0;
+
+        if (is_special_cmd_completion) {
+            // Special command: whole string
+            const char* color = resetPlain;
+            if (raw[0] == '!') color = exclColor;
+            else if (raw[0] == '?') color = qmarkColor;
+            else if (raw[0] == '*') color = starColor;
+            std::string truncated = smartTruncate(raw, 1000); // temporarily use large width
+            vis_len = (int)truncated.length();
+            display = std::string(color) + truncated + resetPlain;
+        } else {
+            // File/directory: relative path
+            const char* relative = raw + base_len;
+            bool is_dir = isDirectory(raw);
+            if (is_dir) {
+                std::string truncated = smartTruncate(relative, 1000);
+                vis_len = (int)truncated.length() + 1; // +1 for trailing '/'
+                display = std::string(dirCol) + truncated + "/" + resetCol;
+            } else {
+                std::string truncated = smartTruncate(relative, 1000);
+                vis_len = (int)truncated.length();
+                display = std::string(fileCol) + truncated + resetCol;
+            }
+        }
+        display_items.push_back({display, vis_len, raw});
+        if ((size_t)vis_len > max_item_length) max_item_length = vis_len;
+    }
+
+    // Column layout computation
+    int num_columns = (items_to_display <= 4) ? 1 : 3;
+    const int column_spacing = 4;
+    int column_width = (num_columns < 3) ? ((max_item_length + 2 > 60) ? 60 : max_item_length + 2)
+                                         : ((max_item_length < 38) ? max_item_length + 2 : 40);
+    const int total_column_width = column_width + column_spacing;
+    int rows = (items_to_display + num_columns - 1) / num_columns;
+
+    // Now re-truncate with actual column width and update display strings
+    for (auto& item : display_items) {
+        const char* raw = item.raw_match;
+        if (is_special_cmd_completion) {
+            const char* color = resetPlain;
+            if (raw[0] == '!') color = exclColor;
+            else if (raw[0] == '?') color = qmarkColor;
+            else if (raw[0] == '*') color = starColor;
+            std::string truncated = smartTruncate(raw, column_width);
+            item.visual_length = (int)truncated.length();
+            item.display_text = std::string(color) + truncated + resetPlain;
+        } else {
+            const char* relative = raw + base_len;
+            bool is_dir = isDirectory(raw);
+            if (is_dir) {
+                std::string truncated = smartTruncate(relative, column_width - 1);
+                item.visual_length = (int)truncated.length() + 1;
+                item.display_text = std::string(dirCol) + truncated + "/" + resetCol;
+            } else {
+                std::string truncated = smartTruncate(relative, column_width);
+                item.visual_length = (int)truncated.length();
+                item.display_text = std::string(fileCol) + truncated + resetCol;
+            }
+        }
+    }
+
+    // --- Render grid ---
     for (int row = 0; row < rows; row++) {
         for (int col = 0; col < num_columns; col++) {
             int page_offset = row + col * rows;
-            int index = start_index + page_offset;
-
             if (page_offset < items_to_display) {
-                const char* full_path = matches[index];
-                const char* relative_path = full_path + base_len;
-                bool is_dir = isDirectory(full_path);
-                std::string formatted;
+                const auto& item = display_items[page_offset];
+                printf("%s", item.display_text.c_str());
 
-                // Capture the truncated string so we know the true rendered width,
-                // rather than using strlen(relative_path) which reflects the pre-truncation length.
-                if (is_dir) {
-                    std::string truncated = smartTruncate(relative_path, column_width - 1);
-                    formatted = std::string(dirCol) + truncated + "/" + resetCol;
-                    
-                    if (col < num_columns - 1 && page_offset < items_to_display - 1) {
-                        // Rendered width = truncated chars + 1 for "/"
-                        int displayed_length = (int)truncated.length() + 1;
-                        // Clamp padding to >= 0 to guard against any unexpected overflow.
-                        int padding = std::max(0, total_column_width - displayed_length);
-                        printf("%s", formatted.c_str());
-                        for (int i = 0; i < padding; i++) printf(" ");
-                        continue;
-                    }
-                } else {
-                    std::string truncated = smartTruncate(relative_path, column_width);
-                    formatted = std::string(fileCol) + truncated + resetCol;
-
-                    if (col < num_columns - 1 && page_offset < items_to_display - 1) {
-                        // Rendered width = truncated chars exactly
-                        int displayed_length = (int)truncated.length();
-                        // Clamp padding to >= 0 to guard against any unexpected overflow.
-                        int padding = std::max(0, total_column_width - displayed_length);
-                        printf("%s", formatted.c_str());
-                        for (int i = 0; i < padding; i++) printf(" ");
-                        continue;
-                    }
+                // Add padding if not last column and not last item
+                if (col < num_columns - 1 && page_offset < items_to_display - 1) {
+                    int padding = std::max(0, total_column_width - item.visual_length);
+                    for (int i = 0; i < padding; i++) printf(" ");
                 }
-
-                printf("%s", formatted.c_str());
             }
         }
         printf("\033[0m\n");
     }
 
+    // --- Footer pagination ---
     if (ITEMS_PER_PAGE > 0 && (size_t)num_matches > ITEMS_PER_PAGE) {
         printf("\n%s[%d/%d matches — press %sTab%s for next page]%s\n",
                labelCol, start_index + items_to_display - 1, num_matches,
