@@ -32,15 +32,23 @@ bool isValidDirectory(const std::string& path) {
 //=============================================================================
 
 /**
- * @brief Performs interactive or non-interactive ISO database refresh
- * 
- * This function scans directories for ISO files and updates the local database.
- * It supports both interactive mode (with user prompts) and non-interactive mode.
- * 
- * @param initialDir Initial directory path to scan (if empty, prompts user)
- * @param maxDepth Maximum directory depth to traverse (-1 for unlimited)
- * @param filterHistory Whether to filter command history
- * @param newISOFound Atomic flag set to true if new ISO files were discovered
+ * @brief Prompts the user for directory paths and imports discovered ISO files
+ *        into the local database.
+ *
+ * Reads a semicolon-delimited list of directory paths from the user, validates
+ * them, eliminates subpath duplicates, and scans each in parallel up to maxDepth.
+ * Discovered ISO files are deduplicated by saveToDatabase() against existing
+ * entries before writing.
+ *
+ * @param promptFlag    Passed to traverse() and verboseForDatabase() to control
+ *                      scan behaviour and output verbosity.
+ * @param maxDepth      Maximum directory recursion depth (-1 for unlimited).
+ * @param filterHistory Whether to load/save readline history with filtering.
+ * @param newISOFound   Atomic flag set to true if at least one new ISO entry
+ *                      was added to the database.
+ *
+ * @note Recursively calls itself on invalid input (? help) or exceptions.
+ *       Cancellable via Ctrl+C through g_operationCancelled.
  */
 void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
     try {
@@ -112,8 +120,8 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
 
         while (std::getline(iss, path, ';')) {
             if (!isValidDirectory(path)) {
-				std::string errCol = isOrig ? std::string(originalColors::red) : std::string(theme->secondary);
-				invalidPaths.insert(errCol + path);
+                std::string errCol = isOrig ? std::string(originalColors::red) : std::string(theme->secondary);
+                invalidPaths.insert(errCol + path);
                 continue;
             }
 
@@ -121,14 +129,27 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
                 validPaths.push_back(path);
             }
         }
+
+        // Remove any path that is a subpath of another valid path
+        validPaths.erase(
+            std::remove_if(validPaths.begin(), validPaths.end(),
+                [&validPaths](const std::string& p) {
+                    for (const auto& other : validPaths) {
+                        if (p != other &&
+                            fs::path(p).string().starts_with(fs::path(other).string() + "/"))
+                            return true;
+                    }
+                    return false;
+                }),
+            validPaths.end());
         
         if (validPaths.empty()) {
-			flushStdin();
-			restoreInput();
-			resetReadlinePagination();
-			if (!invalidPaths.empty()) {
-				verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
-			}
+            flushStdin();
+            restoreInput();
+            resetReadlinePagination();
+            if (!invalidPaths.empty()) {
+                verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
+            }
             return;
         }
         
@@ -152,11 +173,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
                 future.wait();
                 if (g_operationCancelled.load()) break;
             }
-        }
-        
-        if (!g_operationCancelled.load()) {
-            std::unordered_set<std::string> uniqueFiles(allIsoFiles.begin(), allIsoFiles.end());
-            allIsoFiles.assign(uniqueFiles.begin(), uniqueFiles.end());
         }
         
         flushStdin();
@@ -197,6 +213,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
         refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
     }
 }
+
 /**
  * @brief Recursively traverses a directory to find ISO files
  * 
