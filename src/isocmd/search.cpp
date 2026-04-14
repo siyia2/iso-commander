@@ -675,15 +675,37 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
 /**
  * @brief Discovers disc image files across multiple directories using a thread pool.
  *
- * Submits directory scan tasks to a shared static thread pool, where each task
- * processes a directory and returns discovered BIN/IMG/MDF/NRG/CHD/DAA files.
+ * Normalizes input paths to resolve trailing slashes and redundant components,
+ * deduplicates semantically identical paths, and filters out subdirectories that
+ * are already covered by a parent path. This ensures each directory tree is
+ * scanned exactly once.
  *
- * Results are aggregated, deduplicated, and merged into the appropriate RAM cache.
- * Supports cancellation via global operation flag and signal handling.
+ * Submits the filtered directory scan tasks to a shared static thread pool, where
+ * each task processes a directory recursively and returns discovered
+ * BIN/IMG/MDF/NRG/CHD/DAA files.
  *
- * @return Updated cache containing previously known and newly discovered files.
+ * Results are aggregated, deduplicated against the existing cache, and merged
+ * into the appropriate RAM cache. Supports cancellation via the global operation
+ * flag and signal handling.
+ *
+ * @param inputPaths          Vector of raw user-provided directory paths.
+ * @param fileNames           Output set to populate with discovered file paths.
+ * @param currentCacheOld     Returns the cache size before new additions.
+ * @param mode                File type to search for ("bin", "mdf", "nrg", "chd", "daa").
+ * @param callback            Optional callback invoked for each discovered file.
+ * @param directoryPaths      (Unused) Reserved for future use.
+ * @param invalidDirectoryPaths Set of paths that failed validation (for verbose output).
+ * @param processedErrorsFind Set of error messages encountered during traversal.
+ *
+ * @return Reference to the updated cache vector containing all known files of the given mode.
  */
-std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, std::unordered_set<std::string>& fileNames, int& currentCacheOld, const std::string& mode, const std::function<void(const std::string&, const std::string&)>& callback, const std::vector<std::string>& directoryPaths, std::unordered_set<std::string>& invalidDirectoryPaths, std::unordered_set<std::string>& processedErrorsFind) {
+std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, 
+                                   std::unordered_set<std::string>& fileNames, 
+                                   int& currentCacheOld, const std::string& mode, 
+                                   const std::function<void(const std::string&, const std::string&)>& callback, 
+                                   const std::vector<std::string>& directoryPaths, 
+                                   std::unordered_set<std::string>& invalidDirectoryPaths, 
+                                   std::unordered_set<std::string>& processedErrorsFind) {
     setupSignalHandlerCancellations();
     g_operationCancelled.store(false);
     
@@ -702,7 +724,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
     } else if (mode == "chd") {
         currentCacheOld = chdFilesCache.size();
         currentCache = &chdFilesCache;
-    } else if (mode == "daa") {        // <-- DAA branch
+    } else if (mode == "daa") {
         currentCacheOld = daaFilesCache.size();
         currentCache = &daaFilesCache;
     } else {
@@ -710,29 +732,47 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
         return {};
     }
     
-    std::vector<std::future<std::unordered_set<std::string>>> threadFutures;
-    std::unordered_set<std::string> processedValidPaths;
-    std::vector<std::string> uniquePaths;
-    
+    // ----- Normalization and deduplication -----
+    auto normalizePath = [](const std::string& p) {
+        std::string n = fs::path(p).lexically_normal().string();
+        if (n.size() > 1 && n.back() == '/')
+            n.pop_back();
+        return n;
+    };
+
+    std::unordered_set<std::string> uniqueNormalizedPaths;
+    std::vector<std::string> normalizedPaths;
+
     for (const auto& originalPath : inputPaths) {
-        std::string path = std::filesystem::path(originalPath).string();
-        if (path.empty() || !processedValidPaths.insert(path).second) {
-            continue;
+        std::string norm = normalizePath(originalPath);
+        if (uniqueNormalizedPaths.insert(norm).second) {
+            normalizedPaths.push_back(norm);
         }
-        uniquePaths.push_back(path);
     }
 
-    if (uniquePaths.empty()) {
+    // ----- Subpath filtering (O(n log n)) -----
+    std::sort(normalizedPaths.begin(), normalizedPaths.end());
+
+    std::vector<std::string> filteredPaths;
+    for (const auto& p : normalizedPaths) {
+        if (filteredPaths.empty() || !p.starts_with(filteredPaths.back() + "/")) {
+            filteredPaths.push_back(p);
+        }
+    }
+
+    if (filteredPaths.empty()) {
         flushStdin();
         restoreInput();
         return *currentCache;
     }
     
+    // ----- Submit filtered paths to thread pool -----
+    std::vector<std::future<std::unordered_set<std::string>>> threadFutures;
+    
     {
-        //Use the static pool
         auto& pool = getStaticThreadPool();
     
-        for (const auto& path : uniquePaths) {
+        for (const auto& path : filteredPaths) {   // <-- Use filteredPaths!
             threadFutures.push_back(pool.enqueue([path, &mode, &callback, &processedErrorsFind]() -> std::unordered_set<std::string> {
                 return processPaths(path, mode, callback, std::ref(processedErrorsFind));
             }));
@@ -743,7 +783,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths, s
                 std::unordered_set<std::string> threadResult = future.get();
                 fileNames.insert(threadResult.begin(), threadResult.end());
             }
-            // If the user cancelled via the signal handler, we can stop waiting
             if (g_operationCancelled.load()) break;
         }
     } 
