@@ -50,7 +50,7 @@ static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     },
 
     {"auto_update", "off", "Enable background metadata updates from folder path history (on/off)", "General Settings", isOnOff},
-    {"filenames_only", "on", "Display only filenames instead of full paths (on/off)", "", isOnOff},
+    {"filenames_only", "off", "Display only filenames instead of full paths (on/off)", "", isOnOff},
     {"pagination", "25", "Items per page in list view (0 to disable)", "", [](const std::string& v){ return isNum(v, 0, 1000); }},
 
     {"folder_path_history_lines", "30", "Max unique folder paths to persist in history", "History Settings", [](const std::string& v){ return isNum(v, 1, 5000); }},
