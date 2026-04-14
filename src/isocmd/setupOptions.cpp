@@ -58,7 +58,7 @@ static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
 
     {"mount_list", "compact", "Display mode for mount operations (full/compact)", "Display Modes", isDisplay},
     {"umount_list", "full", "Display mode for unmount operations (full/compact)", "", isDisplay},
-    {"cp_mv_rm_list", "compact", "Display mode for file operations (full/compact)", "", isDisplay},
+    {"cp_mv_rm_list", "full", "Display mode for file operations (full/compact)", "", isDisplay},
     {"write2usb_list", "compact", "Display mode for write2usb operations (full/compact)", "", isDisplay},
     {"convert2iso_lists", "compact", "Display mode for convert2iso operations (full/compact)", "", isDisplay},
 
