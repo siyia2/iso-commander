@@ -36,8 +36,8 @@ bool isValidDirectory(const std::string& path) {
  *        into the local database.
  *
  * Reads a semicolon-delimited list of directory paths from the user, validates
- * and trims each path, normalizes and eliminates subpath duplicates, then scans
- * each remaining path in parallel up to maxDepth. Discovered ISO files are
+ * and trims each path, normalizes and eliminates duplicates and subdirectories,
+ * then scans each remaining path in parallel up to maxDepth. Discovered ISO files are
  * deduplicated by saveToDatabase() against existing entries before writing.
  *
  * @param promptFlag    Passed to traverse() and verboseForDatabase() to control
@@ -47,7 +47,7 @@ bool isValidDirectory(const std::string& path) {
  * @param newISOFound   Atomic flag set to true if at least one new ISO entry
  *                      was added to the database.
  *
- * @note Recursively calls itself on invalid input (? help) or exceptions.
+ * @note Recursively calls itself on help request ('?') or exceptions.
  *       Cancellable via Ctrl+C through g_operationCancelled.
  */
 void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
@@ -104,7 +104,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
 
         if (input.find_first_not_of(" \t\n\r") == std::string::npos) return;
 
-        std::unordered_set<std::string> uniquePaths;
         std::vector<std::string> validPaths;
         std::unordered_set<std::string> invalidPaths;
         std::unordered_set<std::string> uniqueErrorMessages;
@@ -116,43 +115,48 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
 
         auto start_time = std::chrono::high_resolution_clock::now();
         std::istringstream iss(input);
-        std::string path;
+		std::string path;
 
-        while (std::getline(iss, path, ';')) {
-            path = trimWhitespace(path);
-            if (!isValidDirectory(path)) {
-                std::string errCol = isOrig ? std::string(originalColors::red) : std::string(theme->secondary);
-                invalidPaths.insert(errCol + path);
-                continue;
-            }
-
-            if (uniquePaths.insert(path).second) {
-                validPaths.push_back(path);
-            }
-        }
-
-        auto normalizePath = [](const std::string& p) {
+		// ----- Normalize before deduplication -----
+		auto normalizePath = [](const std::string& p) {
 			std::string n = fs::path(p).lexically_normal().string();
 			if (n.size() > 1 && n.back() == '/')
 				n.pop_back();
 			return n;
 		};
 
-		std::vector<std::string> filteredPaths;
-		for (const auto& p : validPaths) {
-		bool isSubpath = false;
-		std::string normP = normalizePath(p);
-		for (const auto& other : validPaths) {
-			if (p != other) {
-				std::string normOther = normalizePath(other);
-				if (normP.starts_with(normOther + "/")) {
-					isSubpath = true;
-					break;
-				}
+		// Use a set of normalized paths for true uniqueness
+		std::unordered_set<std::string> uniqueNormalizedPaths;
+
+		while (std::getline(iss, path, ';')) {
+			path = trimWhitespace(path);
+			if (!isValidDirectory(path)) {
+				std::string errCol = isOrig ? std::string(originalColors::red) : std::string(theme->secondary);
+				invalidPaths.insert(errCol + path);      // Keep raw path for error display
+				continue;
+			}
+
+			std::string normPath = normalizePath(path);  // Normalize early
+			if (uniqueNormalizedPaths.insert(normPath).second) {
+				validPaths.push_back(normPath);          // Store normalized version
 			}
 		}
-		if (!isSubpath)
-			filteredPaths.push_back(p);
+
+		// ----- Subpath filtering now works on already‑normalized paths -----
+		std::vector<std::string> filteredPaths;
+		for (const auto& p : validPaths) {
+			bool isSubpath = false;
+			for (const auto& other : validPaths) {
+				if (p != other) {
+					// No need to re‑normalize – both p and other are normalized already
+					if (p.starts_with(other + "/")) {
+						isSubpath = true;
+						break;
+					}
+				}
+			}
+			if (!isSubpath)
+				filteredPaths.push_back(p);
 		}
 		validPaths = std::move(filteredPaths);
 
