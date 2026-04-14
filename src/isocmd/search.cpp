@@ -36,9 +36,9 @@ bool isValidDirectory(const std::string& path) {
  *        into the local database.
  *
  * Reads a semicolon-delimited list of directory paths from the user, validates
- * them, eliminates subpath duplicates, and scans each in parallel up to maxDepth.
- * Discovered ISO files are deduplicated by saveToDatabase() against existing
- * entries before writing.
+ * and trims each path, normalizes and eliminates subpath duplicates, then scans
+ * each remaining path in parallel up to maxDepth. Discovered ISO files are
+ * deduplicated by saveToDatabase() against existing entries before writing.
  *
  * @param promptFlag    Passed to traverse() and verboseForDatabase() to control
  *                      scan behaviour and output verbosity.
