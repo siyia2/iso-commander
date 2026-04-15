@@ -161,7 +161,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             std::string msg;
             msg.reserve(128);
             msg.append(okLabel).append("Convert2ISO: ")
-               .append(okPath).append("'").append(displayPath).append("'")
+               .append(okPath).append("'").append(outputPath).append("'")
                .append(okLabel).append(": ").append(fileType).append(" → ISO.");
             localSuccessMsgs.push_back(std::move(msg));
 
