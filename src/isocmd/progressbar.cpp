@@ -52,11 +52,16 @@ void restoreInput(struct termios *oldt, int oldf) {
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes,
     std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks,
     std::atomic<bool>* isComplete, bool* verbose, const std::string& operation) {
+	
+	const ListTheme* theme = getActiveTheme();
+    const bool isOriginal = (globalTheme == "original");
 
+	std::string colorSuccess = isOriginal ? std::string(originalColors::green)   : std::string(theme->primary);
+	std::string colorFailure = isOriginal ? std::string(originalColors::red)     : std::string(theme->secondary);
+	std::string colorWarning = isOriginal ? std::string(originalColors::yellow)  : std::string(theme->warning);
+	std::string colorStatus  = isOriginal ? std::string(originalColors::boldAlt) : std::string(theme->muted);
+	
     disableInputForProgressBar(&oldt, &oldf);
-
-    const ListTheme* theme = getActiveTheme();
-    const bool isOrig = (globalTheme == "original");
 
     int processingBarWidth = 42;
     int finalBarWidth = 30;
@@ -131,7 +136,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         }
 
         std::stringstream ss;
-        ss << "\r\033[2K" << originalColors::boldAlt << "[";
+        ss << "\r\033[2K" << color << "[";
         for (int i = 0; i < barWidth; ++i)
             ss << (i < progressPos ? "=" : (i == progressPos && !isFinal ? ">" : " "));
         
@@ -186,22 +191,21 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             const size_t failedTasksValue    = failedTasks->load(std::memory_order_acquire);
             const bool wasCancelled          = g_operationCancelled.load(std::memory_order_acquire);
 
-            // Determine if we should force the "Completed" look
-            bool showAsFull = (!wasCancelled && failedTasksValue == 0);
+			bool snapTo100 = (!wasCancelled && failedTasksValue == 0);
 
-            std::cout << "\r\033[2K" << originalColors::boldAlt
-                      << " Status: " << operation << originalColors::boldAlt << " → "
-                      << (!wasCancelled
-                          ? (failedTasksValue > 0
-                             ? (completedTasksValue > 0
-                                ? std::string(originalColors::yellow) + "PARTIAL"
-                                : std::string(originalColors::red)    + "FAILED")
-                             : std::string(originalColors::green) + "COMPLETED")
-                          : std::string(originalColors::yellow) + "INTERRUPTED")
-                      << originalColors::boldAlt << '\n';
-
-            // Use the calculated boolean to prevent forcing 100% on cancellation
-            std::cout << renderProgressBar(showAsFull);
+			std::cout << "\r\033[2K" << colorStatus
+					  << " Status: " << operation << colorStatus << " → "
+					  << (!wasCancelled
+						  ? (failedTasksValue > 0
+							 ? (completedTasksValue > 0
+								? std::string(colorWarning) + "PARTIAL"
+								: std::string(colorFailure)  + "FAILED")
+							 : std::string(colorSuccess) + "COMPLETED")
+						  : std::string(colorWarning) + "INTERRUPTED")
+					  << originalColors::boldAlt << '\n';
+					  
+			processingBarWidth = finalBarWidth; 
+			std::cout << renderProgressBar(snapTo100);
 
             disableReadlineForConfirmation();
             enterPressed = true;
@@ -210,7 +214,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             restoreInput(&oldt, oldf);
 
             const std::string prompt =
-                "\001" + std::string(isOrig ? originalColors::blue : theme->muted) + "\002" +
+                "\001" + std::string(isOriginal ? originalColors::blue : theme->muted) + "\002" +
                 "Display verbose output? (y/n): " +
                 "\001" + std::string(originalColors::boldAlt) + "\002";
 
