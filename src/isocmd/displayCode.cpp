@@ -198,7 +198,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 /**
  * @brief Prepares and displays cached disc image file lists.
  *
- * Restores file lists from the appropriate format cache (BIN/IMG, MDF, NRG, CHD, DAA)
+ * Restores file lists from the appropriate format cache (BIN/IMG, MDF, NRG, CHD, DAA/GBI)
  * when not filtered and when cache state differs from the current view.
  *
  * If required, sorts both the active file list and the corresponding cache,
@@ -207,7 +207,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
  * Finally delegates rendering and interaction to the list display system.
  *
  * @param files Current working file list (may be replaced by cache)
- * @param fileType File extension type ("bin", "img", "mdf", "nrg", "chd", "daa")
+ * @param fileType File extension type ("bin", "img", "mdf", "nrg", "chd", "daa", gbi)
  * @param need2Sort Flag indicating whether sorting is required
  * @param isFiltered Filter state affecting cache restoration
  * @param list Controls whether list refresh behavior is executed
@@ -254,8 +254,8 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
             } else if (fileType == "chd") {
                 std::lock_guard<std::mutex> lock(chdCacheMutex);
                 sortFilesCaseInsensitive(chdFilesCache);
-            } else if (fileType == "daa") {                                         // <-- DAA sorting
-                std::lock_guard<std::mutex> lock(daaCacheMutex);
+            } else if (fileType == "daa") {
+                std::lock_guard<std::mutex> lock(daaGbiCacheMutex);
                 sortFilesCaseInsensitive(daaGbiFilesCache);
             }
         }
