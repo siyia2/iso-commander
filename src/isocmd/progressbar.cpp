@@ -100,13 +100,14 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     std::string totalBytesFormatted;
     size_t lastCompletedBytes = SIZE_MAX;
     std::string cachedCompletedBytesFormatted;
-    std::string cachedSpeedFormatted;
+    std::string cachedSpeedFormatted = "0.00 B/s"; // Initialize default
 
     if (bytesTrackingEnabled)
         totalBytesFormatted = formatSize(static_cast<double>(totalBytes));
 
     int lastRenderedLines = 1;
 
+    // forceFull: snaps progress to 100%. useFinalLayout: switches to finalBarWidth.
     auto renderProgressBar = [&](bool forceFull = false, bool useFinalLayout = false) -> std::string {
         const size_t completedTasksValue  = completedTasks->load(std::memory_order_acquire);
         const size_t failedTasksValue     = failedTasks->load(std::memory_order_acquire);
@@ -158,7 +159,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
             ss << '\n' << "\r\033[2K";
             for (int i = 0; i < percentPos; i++) ss << " ";
-            ss << "Speed: " << (useFinalLayout ? "0.00 B/s" : cachedSpeedFormatted);
+            ss << "Speed: " << cachedSpeedFormatted;
             outputLines = 3;
         }
 
@@ -229,6 +230,5 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             restoreReadline();
         }
     }
-
     std::cout << '\n';
 }
