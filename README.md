@@ -61,7 +61,7 @@ Database folder location: `/root/.local/share/isocmd/database/` || `~/.local/sha
 * Copy/Move ISO
 * Delete ISO
 * Write ISO to Removable USB Drives
-* Convert (.bin/.img/.chd/.daa/.mdf/.nrg) to ISO
+* Convert (.bin/.img/.chd/.daa/.gbi/.mdf/.nrg) to ISO
 
 ## Make dependencies
 - Archlinux: `readline util-linux`.
