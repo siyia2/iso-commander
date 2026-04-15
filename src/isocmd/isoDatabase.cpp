@@ -539,8 +539,8 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
         std::cout << "\n" << labelCol << "ISO → RAM: " << dataCol << globalIsoFileList.size() << "\n";
         
         std::cout << "\n" << warnCol << "BIN/IMG → RAM: " << dataCol << binImgFilesCache.size() << "\n"
+				  << warnCol << "DAA/GBI → RAM: " << dataCol << daaGbiFilesCache.size() << "\n"
 				  << warnCol << "CHD → RAM: " << dataCol << chdFilesCache.size() << "\n"
-				  << warnCol << "DAA/GBI → RAM: " << dataCol << daaFilesCache.size() << "\n"
                   << warnCol << "MDF → RAM: " << dataCol << mdfMdsFilesCache.size() << "\n"
                   << warnCol << "NRG → RAM: " << dataCol << nrgFilesCache.size() << "\n";
 
