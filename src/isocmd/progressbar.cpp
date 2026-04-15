@@ -39,28 +39,33 @@ void restoreInput(struct termios *oldt, int oldf) {
 }
 
 /**
- * @brief Displays a multi-line progress bar with byte tracking, task counts, and time elapsed.
- * @param completedBytes Atomic counter for bytes processed.
- * @param totalBytes Total bytes to process.
- * @param completedTasks Atomic counter for successful tasks.
- * @param failedTasks Atomic counter for failed tasks.
- * @param totalTasks Total number of tasks.
- * @param isComplete Atomic boolean signaling operation completion.
- * @param verbose Pointer to boolean to store user preference for verbose output.
- * @param operation Description of the current operation.
+ * @brief Displays an interactive, multi-line progress bar with byte tracking and status reporting.
+ * * Renders a dynamic terminal UI that tracks progress, speed, and task counts. 
+ * Upon completion, it shrinks the UI to a compact final layout, displays a 
+ * success/failure status, and prompts the user for verbose output preference.
+ *
+ * @param completedBytes   Atomic counter for bytes processed (nullptr to disable byte tracking).
+ * @param totalBytes       Total bytes to process.
+ * @param completedTasks   Atomic counter for successful tasks.
+ * @param failedTasks      Atomic counter for failed tasks.
+ * @param totalTasks       Total number of tasks.
+ * @param isComplete       Atomic boolean signaling the worker thread has finished.
+ * @param verbose          [out] Stores the user's choice to display detailed logs.
+ * @param operation        The name of the operation (used for width adjustment and status).
  */
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes,
     std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks,
     std::atomic<bool>* isComplete, bool* verbose, const std::string& operation) {
-	
-	const ListTheme* theme = getActiveTheme();
+    
+    const ListTheme* theme = getActiveTheme();
     const bool isOriginal = (globalTheme == "original");
 
-	std::string colorSuccess = isOriginal ? std::string(originalColors::green)   : std::string(theme->primary);
-	std::string colorFailure = isOriginal ? std::string(originalColors::red)     : std::string(theme->secondary);
-	std::string colorWarning = isOriginal ? std::string(originalColors::yellow)  : std::string(theme->warning);
-	std::string colorStatus  = isOriginal ? std::string(originalColors::boldAlt) : std::string(theme->muted);
-	
+    std::string colorSuccess = isOriginal ? std::string(originalColors::green)   : std::string(theme->primary);
+    std::string colorFailure = isOriginal ? std::string(originalColors::red)     : std::string(theme->secondary);
+    std::string colorWarning = isOriginal ? std::string(originalColors::yellow)  : std::string(theme->warning);
+    std::string colorStatus  = isOriginal ? std::string(originalColors::boldAlt) : std::string(theme->muted);
+    std::string colorActive  = isOriginal ? std::string(originalColors::blue)    : std::string(theme->primary);
+    
     disableInputForProgressBar(&oldt, &oldf);
 
     int processingBarWidth = 42;
@@ -102,8 +107,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
     int lastRenderedLines = 1;
 
-    // The lambda now uses isFinal to decide whether to force 100% or show actual atomic values
-    auto renderProgressBar = [&](bool isFinal = false) -> std::string {
+    auto renderProgressBar = [&](bool forceFull = false, bool useFinalLayout = false) -> std::string {
         const size_t completedTasksValue  = completedTasks->load(std::memory_order_acquire);
         const size_t failedTasksValue     = failedTasks->load(std::memory_order_acquire);
         const size_t completedBytesValue  = bytesTrackingEnabled
@@ -117,10 +121,9 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             overallProgress = std::max(bytesProgress, tasksProgress);
         }
 
-        // Only snap to 100% if we explicitly signal a successful final render
-        if (isFinal) overallProgress = 1.0;
+        if (forceFull) overallProgress = 1.0;
 
-        int barWidth    = isFinal ? finalBarWidth : processingBarWidth;
+        int barWidth    = useFinalLayout ? finalBarWidth : processingBarWidth;
         int progressPos = static_cast<int>(barWidth * overallProgress);
 
         auto currentTime    = std::chrono::high_resolution_clock::now();
@@ -136,9 +139,9 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         }
 
         std::stringstream ss;
-        ss << "\r\033[2K" << color << "[";
+        ss << "\r\033[2K" << colorActive << "[";
         for (int i = 0; i < barWidth; ++i)
-            ss << (i < progressPos ? "=" : (i == progressPos && !isFinal ? ">" : " "));
+            ss << (i < progressPos ? "=" : (i == progressPos && !useFinalLayout ? ">" : " "));
         
         ss << "] " << std::fixed << std::setprecision(0) << (overallProgress * 100.0)
            << "% (" << completedTasksValue << "/" << totalTasks << ") Time Elapsed: "
@@ -150,12 +153,12 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             ss << '\n' << "\r\033[2K";
             for (int i = 0; i < percentPos; i++) ss << " ";
             ss << "Processed: "
-               << (isFinal ? totalBytesFormatted : cachedCompletedBytesFormatted)
+               << (useFinalLayout ? totalBytesFormatted : cachedCompletedBytesFormatted)
                << "/" << totalBytesFormatted;
 
             ss << '\n' << "\r\033[2K";
             for (int i = 0; i < percentPos; i++) ss << " ";
-            ss << "Speed: " << cachedSpeedFormatted;
+            ss << "Speed: " << (useFinalLayout ? "0.00 B/s" : cachedSpeedFormatted);
             outputLines = 3;
         }
 
@@ -172,7 +175,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             while (read(STDIN_FILENO, &ch, 1) > 0); 
         }
 
-        std::string progressOutput = renderProgressBar();
+        std::string progressOutput = renderProgressBar(false, false);
         std::cout << progressOutput << std::flush;
 
         if (bytesTrackingEnabled && !isComplete->load(std::memory_order_acquire) && lastRenderedLines > 1) {
@@ -191,21 +194,20 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             const size_t failedTasksValue    = failedTasks->load(std::memory_order_acquire);
             const bool wasCancelled          = g_operationCancelled.load(std::memory_order_acquire);
 
-			bool snapTo100 = (!wasCancelled && failedTasksValue == 0);
+            bool snapTo100 = (!wasCancelled && failedTasksValue == 0);
 
-			std::cout << "\r\033[2K" << colorStatus
-					  << " Status: " << operation << colorStatus << " → "
-					  << (!wasCancelled
-						  ? (failedTasksValue > 0
-							 ? (completedTasksValue > 0
-								? std::string(colorWarning) + "PARTIAL"
-								: std::string(colorFailure)  + "FAILED")
-							 : std::string(colorSuccess) + "COMPLETED")
-						  : std::string(colorWarning) + "INTERRUPTED")
-					  << originalColors::boldAlt << '\n';
-					  
-			processingBarWidth = finalBarWidth; 
-			std::cout << renderProgressBar(snapTo100);
+            std::cout << "\r\033[2K" << colorStatus
+                      << " Status: " << operation << colorStatus << " → "
+                      << (!wasCancelled
+                          ? (failedTasksValue > 0
+                             ? (completedTasksValue > 0
+                                ? std::string(colorWarning) + "PARTIAL"
+                                : std::string(colorFailure)  + "FAILED")
+                             : std::string(colorSuccess) + "COMPLETED")
+                          : std::string(colorWarning) + "INTERRUPTED")
+                      << originalColors::boldAlt << '\n';
+
+            std::cout << renderProgressBar(snapTo100, true);
 
             disableReadlineForConfirmation();
             enterPressed = true;
@@ -214,7 +216,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             restoreInput(&oldt, oldf);
 
             const std::string prompt =
-                "\001" + std::string(color) + "\002" +
+                "\001" + std::string(isOriginal ? originalColors::blue : theme->muted) + "\002" +
                 "Display verbose output? (y/n): " +
                 "\001" + std::string(originalColors::boldAlt) + "\002";
 
