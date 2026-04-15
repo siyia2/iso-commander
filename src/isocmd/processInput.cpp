@@ -451,7 +451,7 @@ static size_t calculateTotalBytesForConversions(
  *
  * This function parses the user-provided input string (e.g., "1-5,7,9"), identifies
  * the corresponding files from the master list, and orchestrates multi‑threaded
- * conversion of supported image types (BIN/CCD, MDF, NRG, CHD, DAA) to standard ISO.
+ * conversion of supported image types (BIN/CCD, MDF, NRG, CHD, DAA/GBI) to standard ISO.
  *
  * The function includes an inline size estimation pass to provide an accurate
  * progress bar during conversion. Estimation logic varies by input format:
@@ -481,7 +481,7 @@ static size_t calculateTotalBytesForConversions(
  * @param modeMdf       If `true`, treat input files as Alcohol 120% MDF images.
  * @param modeNrg       If `true`, treat input files as Nero NRG images.
  * @param modeChd       If `true`, treat input files as MAME CHD compressed images.
- * @param modeDaa       If `true`, treat input files as PowerISO DAA compressed images.
+ * @param modeDaa       If `true`, treat input files as PowerISO DAA and gBurner GBI compressed images.
  * @param processedErrors Set to record any parsing errors (invalid indices/patterns).
  * @param successOuts   Set populated with themed messages of successfully converted ISOs.
  * @param skippedOuts   Set populated with themed messages of skipped files.

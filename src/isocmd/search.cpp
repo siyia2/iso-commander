@@ -328,13 +328,13 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 }
 
 //=============================================================================
-// Image Section (BIN/IMG/CHD/DAA/MDF/NRG)
+// Image Section (BIN/IMG/CHD/DAA/GBI/MDF/NRG)
 //=============================================================================
 
 /**
  * @brief Prepares and optionally displays the contents of a disc image RAM cache.
  *
- * Copies the active cache (BIN/IMG, MDF, NRG, CHD, or DAA) into the output vector
+ * Copies the active cache (BIN/IMG, MDF, NRG, CHD, or DAA/GBI) into the output vector
  * when listing is enabled. If the cache is empty, prints a status message
  * and waits for user input.
  *
@@ -348,18 +348,18 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
  * @param mdfMdsFilesCache Snapshot of MDF cache
  * @param nrgFilesCache Snapshot of NRG cache
  * @param chdFilesCache Snapshot of CHD cache
- * @param daaFilesCache Snapshot of DAA cache
+ * @param daaGbiFilesCache Snapshot of DAA/GBI cache
  * @param modeMdf Select MDF cache mode
  * @param modeNrg Select NRG cache mode
  * @param modeChd Select CHD cache mode
- * @param modeDaa Select DAA cache mode
+ * @param modeDaa Select DAA/GBI cache mode
  */
 void ramCacheList(std::vector<std::string>& files, bool& list, const std::string& fileExtension, 
                   const std::vector<std::string>& binImgFilesCache, 
                   const std::vector<std::string>& mdfMdsFilesCache, 
                   const std::vector<std::string>& nrgFilesCache,
                   const std::vector<std::string>& chdFilesCache,
-                  const std::vector<std::string>& daaFilesCache,   // <-- added
+                  const std::vector<std::string>& daaGbiFilesCache,   // <-- added
                   bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa) {   // <-- added modeDaa
     
     signal(SIGINT, SIG_IGN);        
@@ -370,7 +370,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
 
     bool isEmpty = false;
     if (modeDaa) {
-        isEmpty = daaFilesCache.empty();
+        isEmpty = daaGbiFilesCache.empty();
     } else if (modeChd) {
         isEmpty = chdFilesCache.empty();
     } else if (modeMdf) {
@@ -397,7 +397,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
         
     } else if (list) {
         if (modeDaa) {
-            files = daaFilesCache;
+            files = daaGbiFilesCache;
         } else if (modeChd) {
             files = chdFilesCache;
         } else if (modeMdf) {
@@ -415,7 +415,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
  *
  * Clears one cache at a time based on the selected mode:
  * - CHD
- * - DAA
+ * - DAA/GBI
  * - MDF
  * - NRG
  * - BIN/IMG (default)
@@ -428,7 +428,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
  * @param modeMdf Select MDF cache mode (mutually exclusive)
  * @param modeNrg Select NRG cache mode (mutually exclusive)
  * @param modeChd Select CHD cache mode (mutually exclusive)
- * @param modeDaa Select DAA cache mode (mutually exclusive)
+ * @param modeDaa Select DAA/GBI cache mode (mutually exclusive)
  */
 void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
     signal(SIGINT, SIG_IGN);
@@ -444,8 +444,8 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
     if (modeDaa) {
         extensions = {".daa", ".gbi"};
 		cacheType = "DAA/GBI";
-        cacheIsEmpty = daaFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(daaFilesCache);
+        cacheIsEmpty = daaGbiFilesCache.empty();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(daaGbiFilesCache);
     } else if (modeChd) {
         extensions = {".chd"};
         cacheType = "CHD";
@@ -514,7 +514,7 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
  * - MDF
  * - NRG
  * - CHD
- * - DAA
+ * - DAA/GBI
  *
  * Optionally supports keyword-based exclusion (currently unused).
  *
@@ -572,7 +572,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
  * @brief Recursively scans a single directory for disc image files as part of a parallel search system.
  *
  * Traverses the directory tree and filters files based on the specified mode
- * (BIN/IMG, MDF, NRG, CHD, or DAA). Applies cache checks and blacklist filtering
+ * (BIN/IMG, MDF, NRG, CHD, or DAA/GBI). Applies cache checks and blacklist filtering
  * before invoking a callback for newly discovered files.
  *
  * Supports cancellation handling, progress reporting, and error aggregation
@@ -597,7 +597,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
         bool blacklistMdf = (mode == "mdf");
         bool blacklistNrg = (mode == "nrg");
         bool blacklistChd = (mode == "chd");
-        bool blacklistDaa = (mode == "daa");   // <-- DAA mode flag
+        bool blacklistDaa = (mode == "daa");
         
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (g_operationCancelled.load()) {
@@ -645,7 +645,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                         } else if (mode == "chd") {
                             isInCache = (std::find(chdFilesCache.begin(), chdFilesCache.end(), fileName) != chdFilesCache.end());
                         } else if (mode == "daa") {   // <-- DAA cache check
-                            isInCache = (std::find(daaFilesCache.begin(), daaFilesCache.end(), fileName) != daaFilesCache.end());
+                            isInCache = (std::find(daaGbiFilesCache.begin(), daaGbiFilesCache.end(), fileName) != daaGbiFilesCache.end());
                         }
                         
                         if (!isInCache && localFileNames.insert(fileName).second) {
@@ -682,7 +682,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
  *
  * Submits the filtered directory scan tasks to a shared static thread pool, where
  * each task processes a directory recursively and returns discovered
- * BIN/IMG/MDF/NRG/CHD/DAA files.
+ * BIN/IMG/MDF/NRG/CHD/DAA/GBI files.
  *
  * Results are aggregated, deduplicated against the existing cache, and merged
  * into the appropriate RAM cache. Supports cancellation via the global operation
@@ -725,8 +725,8 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
         currentCacheOld = chdFilesCache.size();
         currentCache = &chdFilesCache;
     } else if (mode == "daa") {
-        currentCacheOld = daaFilesCache.size();
-        currentCache = &daaFilesCache;
+        currentCacheOld = daaGbiFilesCache.size();
+        currentCache = &daaGbiFilesCache;
     } else {
         restoreInput();
         return {};
@@ -809,7 +809,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
 }
 
 /**
- * @brief Dispatches special command inputs during BIN/IMG/MDF/NRG/CHD/DAA search UI interaction.
+ * @brief Dispatches special command inputs during BIN/IMG/MDF/NRG/CHD/DAA/GBI search UI interaction.
  *
  * Acts as a command router for the search interface, handling configuration changes,
  * UI settings, pagination control, cache operations, help output, and display mode switching.
@@ -863,15 +863,13 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input, const
         return true;
     }
     if (input == "!clr") {
-        // Now passing modeDaa to clear the DAA cache as well
         clearRamCache(modeMdf, modeNrg, modeChd, modeDaa);
         return true;
     }
     if (input == "ls") {
         list = true;
-        // Pass daaFilesCache and modeDaa to ramCacheList
         ramCacheList(files, list, fileExtension,
-                     binImgFilesCache, mdfMdsFilesCache, nrgFilesCache, chdFilesCache, daaFilesCache,
+                     binImgFilesCache, mdfMdsFilesCache, nrgFilesCache, chdFilesCache, daaGbiFilesCache,
                      modeMdf, modeNrg, modeChd, modeDaa);
         if (!files.empty())
             selectForImageFiles(fileType, files, newISOFound, list, isImportRunning);
@@ -884,7 +882,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input, const
  * @brief Interactive search and caching controller for disc image files.
  *
  * Provides a terminal-based interface for scanning user-provided directories
- * for BIN/IMG, MDF, NRG, CHD, and DAA image files. Supports multi-path input,
+ * for BIN/IMG, MDF, NRG, CHD, and DAA/GBI image files. Supports multi-path input,
  * directory validation, history management, and special command dispatch.
  *
  * Discovered files are cached in memory and forwarded to the file selection
@@ -916,7 +914,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
     const bool modeMdf = (fileType == "mdf");
     const bool modeNrg = (fileType == "nrg");
     const bool modeChd = (fileType == "chd");
-    const bool modeDaa = (fileType == "daa");   // <-- DAA mode flag
+    const bool modeDaa = (fileType == "daa");
 
     std::vector<std::string> files;
     files.reserve(100);
@@ -924,7 +922,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
     mdfMdsFilesCache.reserve(100);
     nrgFilesCache.reserve(100);
     chdFilesCache.reserve(100);
-    daaFilesCache.reserve(100);   // <-- reserve for DAA cache
+    daaGbiFilesCache.reserve(100);
 
     auto initIterationState = [&]() {
         enable_ctrl_d();
@@ -979,7 +977,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
         const std::string inputSearch = trimWhitespace(mainSearch.get());
 
         bool list = false;
-        // Update the helper to accept modeDaa (you'll need to modify its signature accordingly)
+        
         if (dispatchSpecialCommandForBinImgMdfNrgSearch(inputSearch, configPath, modeMdf, modeNrg, modeChd, modeDaa,
                                    fileExtension, files, fileType,
                                    newISOFound, list, isImportRunning))
@@ -1003,7 +1001,6 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
         bool newFilesFound = false;
         const auto start_time = std::chrono::high_resolution_clock::now();
 
-        // The findFiles function must be extended to handle DAA (scan for .daa files)
         files = findFiles(directoryPaths, fileNames, currentCacheOld, fileType,
                           [&](const std::string&, const std::string&) { newFilesFound = true; },
                           directoryPaths, invalidDirectoryPaths, processedErrorsFind);

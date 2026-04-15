@@ -15,7 +15,7 @@ bool fileExists(const std::string& fullPath) {
 
 
 /**
- * @brief Batch converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD, DAA) to ISO format.
+ * @brief Batch converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD, DAA, GBI) to ISO format.
  *
  * Handles per-file validation (existence and basic readability), skips existing outputs,
  * selects the appropriate conversion backend based on mode flags, and aggregates
