@@ -129,15 +129,16 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     }
 
     // --- Header printing ---
-    if (num_matches > 1) {
-        if (total_pages > 1) {
-            printf("\n%sTab Completion Matches [page %d/%d%s] (%sCtrl+l%s → clear%s):%s\n\n",
-                   labelCol, current_page + 1, total_pages, labelCol, hintCol, resetCol, labelCol, resetCol);
-        } else {
-            printf("\n%sTab Completion Matches (%sCtrl+l%s → clear%s):%s\n\n",
-                   labelCol, hintCol, resetCol, labelCol, resetCol);
-        }
-    }
+	if (num_matches > 1) {
+		const char* header_label = is_special_cmd_completion ? "Command Completion Matches" : "Tab Completion Matches";
+		if (total_pages > 1) {
+			printf("\n%s%s [page %d/%d%s] (%sCtrl+l%s → clear%s):%s\n\n",
+				   labelCol, header_label, current_page + 1, total_pages, labelCol, hintCol, resetCol, labelCol, resetCol);
+		} else {
+			printf("\n%s%s (%sCtrl+l%s → clear%s):%s\n\n",
+				   labelCol, header_label, hintCol, resetCol, labelCol, resetCol);
+		}
+	}
 
     // Advance page for next call (identical)
     if (ITEMS_PER_PAGE > 0 && (size_t)num_matches > ITEMS_PER_PAGE) {
