@@ -35,8 +35,8 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                   std::atomic<size_t>* completedBytes,
                   std::atomic<size_t>* completedTasks,
                   std::atomic<size_t>* failedTasks,
-                  std::vector<std::string>* successfulOutputPaths,   // new
-                  std::mutex* outPathsMutex) {                       // new
+                  std::vector<std::string>* successfulOutputPaths,
+                  std::mutex* outPathsMutex) {
 
     namespace fs = std::filesystem;
     const size_t BATCH_SIZE = 50;
@@ -93,7 +93,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                 auto& cache = modeNrg ? nrgFilesCache :
                               (modeMdf ? mdfMdsFilesCache :
                                (modeChd ? chdFilesCache :
-                                (modeDaa ? daaFilesCache : binImgFilesCache)));
+                                (modeDaa ? daaGbiFilesCache : binImgFilesCache)));
                 cache.erase(std::remove(cache.begin(), cache.end(), inputPath), cache.end());
             }
 
@@ -122,7 +122,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             msg.reserve(128);
             msg.append(skipLabel).append("Convert2ISO: ")
                .append(skipPath).append("'").append(displayPath).append("'")
-               .append(skipLabel).append(": ISO already exists, skipped.");
+               .append(skipLabel).append(": ISOalrExists → Skipped.");
             localSkippedMsgs.push_back(std::move(msg));
 
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -155,7 +155,8 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                                         fileNameLower.ends_with(".mdf") ? "MDF" :
                                         fileNameLower.ends_with(".nrg") ? "NRG" :
                                         fileNameLower.ends_with(".chd") ? "CHD" :
-                                        fileNameLower.ends_with(".daa") ? "DAA" : "Image";
+                                        fileNameLower.ends_with(".daa") ? "DAA" :
+										fileNameLower.ends_with(".gbi") ? "GBI" : "Image";
 
             std::string msg;
             msg.reserve(128);
