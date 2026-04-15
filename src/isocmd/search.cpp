@@ -528,7 +528,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
     // Determine which extension(s) are allowed
     if (blacklistDaa) {
-        if (extLower != ".daa" && extLower != ".gbi") {
+        if (!(extLower == ".daa" || extLower == ".gbi")) {
             return false;
         }
     }
