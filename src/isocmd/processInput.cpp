@@ -428,7 +428,7 @@ static size_t calculateTotalBytesForConversions(
                 totalBytes += sectors * info.sector_data;
             }
         }
-        else if (modeDaa && ext == "daa") {
+        else if (modeDaa && (ext == "daa" || ext == "gbi")) {
             uint64_t isoSize = getDaaIsoSize(file);
             if (isoSize > 0) totalBytes += isoSize;
         }
