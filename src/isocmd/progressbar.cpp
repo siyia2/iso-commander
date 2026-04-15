@@ -107,7 +107,6 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
     int lastRenderedLines = 1;
 
-    // forceFull: snaps progress to 100%. useFinalLayout: switches to finalBarWidth.
     auto renderProgressBar = [&](bool forceFull = false, bool useFinalLayout = false) -> std::string {
         const size_t completedTasksValue  = completedTasks->load(std::memory_order_acquire);
         const size_t failedTasksValue     = failedTasks->load(std::memory_order_acquire);
@@ -140,7 +139,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         }
 
         std::stringstream ss;
-        ss << "\r\033[2K" << colorActive << "[";
+        ss << "\r\033[2K" << color << "[";
         for (int i = 0; i < barWidth; ++i)
             ss << (i < progressPos ? "=" : (i == progressPos && !useFinalLayout ? ">" : " "));
         
@@ -217,7 +216,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             restoreInput(&oldt, oldf);
 
             const std::string prompt =
-                "\001" + std::string(isOriginal ? originalColors::blue : theme->muted) + "\002" +
+                "\001" + std::string(color) + "\002" +
                 "Display verbose output? (y/n): " +
                 "\001" + std::string(originalColors::boldAlt) + "\002";
 
