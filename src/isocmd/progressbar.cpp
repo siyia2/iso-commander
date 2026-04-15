@@ -214,7 +214,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             restoreInput(&oldt, oldf);
 
             const std::string prompt =
-                "\001" + std::string(isOriginal ? originalColors::blue : theme->muted) + "\002" +
+                "\001" + std::string(color) + "\002" +
                 "Display verbose output? (y/n): " +
                 "\001" + std::string(originalColors::boldAlt) + "\002";
 
