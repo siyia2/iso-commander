@@ -95,9 +95,9 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     if (bytesTrackingEnabled)
         totalBytesFormatted = formatSize(static_cast<double>(totalBytes));
 
-    // Track rendered line count so cursor repositioning is always accurate
     int lastRenderedLines = 1;
 
+    // The lambda now uses isFinal to decide whether to force 100% or show actual atomic values
     auto renderProgressBar = [&](bool isFinal = false) -> std::string {
         const size_t completedTasksValue  = completedTasks->load(std::memory_order_acquire);
         const size_t failedTasksValue     = failedTasks->load(std::memory_order_acquire);
@@ -111,6 +111,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
             overallProgress = std::max(bytesProgress, tasksProgress);
         }
+
+        // Only snap to 100% if we explicitly signal a successful final render
         if (isFinal) overallProgress = 1.0;
 
         int barWidth    = isFinal ? finalBarWidth : processingBarWidth;
@@ -132,6 +134,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         ss << "\r\033[2K" << originalColors::boldAlt << "[";
         for (int i = 0; i < barWidth; ++i)
             ss << (i < progressPos ? "=" : (i == progressPos && !isFinal ? ">" : " "));
+        
         ss << "] " << std::fixed << std::setprecision(0) << (overallProgress * 100.0)
            << "% (" << completedTasksValue << "/" << totalTasks << ") Time Elapsed: "
            << std::fixed << std::setprecision(1) << elapsedSeconds << "s";
@@ -151,25 +154,22 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             outputLines = 3;
         }
 
-        // record actual line count so the caller can move the cursor accurately
         lastRenderedLines = outputLines;
         return ss.str();
     };
 
     bool enterPressed = false;
-
     struct pollfd pfd{ STDIN_FILENO, POLLIN, 0 };
 
     while (!enterPressed) {
         if (poll(&pfd, 1, 100) > 0 && (pfd.revents & POLLIN)) {
             char ch;
-            while (read(STDIN_FILENO, &ch, 1) > 0);   // flush buffered chars
+            while (read(STDIN_FILENO, &ch, 1) > 0); 
         }
 
         std::string progressOutput = renderProgressBar();
         std::cout << progressOutput << std::flush;
 
-        // move up exactly as many lines as were actually rendered, not a hardcoded 2
         if (bytesTrackingEnabled && !isComplete->load(std::memory_order_acquire) && lastRenderedLines > 1) {
             std::cout << "\033[" << (lastRenderedLines - 1) << "A";
         }
@@ -184,10 +184,10 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
             const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
             const size_t failedTasksValue    = failedTasks->load(std::memory_order_acquire);
+            const bool wasCancelled          = g_operationCancelled.load(std::memory_order_acquire);
 
-            // capture cancellation state BEFORE the fence, not after isComplete is observed,
-            //       so we see the same memory snapshot as the worker thread that set isComplete.
-            const bool wasCancelled = g_operationCancelled.load(std::memory_order_acquire);
+            // Determine if we should force the "Completed" look
+            bool showAsFull = (!wasCancelled && failedTasksValue == 0);
 
             std::cout << "\r\033[2K" << originalColors::boldAlt
                       << " Status: " << operation << originalColors::boldAlt << " → "
@@ -200,7 +200,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                           : std::string(originalColors::yellow) + "INTERRUPTED")
                       << originalColors::boldAlt << '\n';
 
-            std::cout << renderProgressBar(true);
+            // Use the calculated boolean to prevent forcing 100% on cancellation
+            std::cout << renderProgressBar(showAsFull);
 
             disableReadlineForConfirmation();
             enterPressed = true;
