@@ -50,15 +50,20 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
         selectedFiles.push_back(files[index - 1]);
     }
     
+    const ListTheme* theme = getActiveTheme();
+    const bool isOrig = (globalTheme == "original");
+    
+	std::string colorMuted  = isOrig ? std::string(originalColors::boldAlt) : std::string(theme->muted);
+    
     std::string operationColor = std::string(isUnmount ? originalColors::yellow : originalColors::green);
     std::string operationName = isUnmount ? "umount" : "mount";
     
-    std::cout << originalColors::boldAlt << "\n Processing" 
+    std::cout << colorMuted << "\n Processing" 
           << (selectedFiles.size() > 1 ? " tasks" : " task") 
           << " for " << operationColor << operationName 
-          << originalColors::boldAlt << "... (" 
+          << colorMuted << "... (" 
           << originalColors::red << "Ctrl+c" 
-          << originalColors::boldAlt << ":cancel)\n";
+          << colorMuted << ":cancel)\n";
     
     std::string coloredProcess = std::string(operationColor) + operationName + std::string(originalColors::boldAlt);;
     
@@ -287,11 +292,17 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
         totalTasks *= destCount;
     }
     
-    std::cout << "\n" << originalColors::boldAlt << " Processing " 
+    const ListTheme* theme = getActiveTheme();
+    const bool isOrig = (globalTheme == "original");
+    
+	std::string colorMuted  = isOrig ? std::string(originalColors::boldAlt) : std::string(theme->muted);
+	
+    
+    std::cout << "\n" << colorMuted << " Processing " 
           << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process 
-          << originalColors::boldAlt << "... (" 
+          << colorMuted << "... (" 
           << originalColors::red << "Ctrl+c" 
-          << originalColors::boldAlt << ":cancel)\n";
+          << colorMuted << ":cancel)\n";
              
     std::string coloredProcess = 
     isDelete ? std::string(originalColors::red)    + process + std::string(originalColors::boldAlt) :
@@ -507,6 +518,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 	std::mutex outPathsMutex;
 	
     setupSignalHandlerCancellations();
+    
     const ListTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
@@ -552,22 +564,25 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     const size_t totalBytes = calculateTotalBytesForConversions(
     filesToProcess, modeMdf, modeNrg, modeChd, modeDaa);
 
+	std::string colorMuted  = isOrig ? std::string(originalColors::boldAlt) : std::string(theme->muted);
+	
+
     size_t totalTasks = filesToProcess.size();
     std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
 
     std::string operation;
-    if (modeMdf)      operation = std::string(originalColors::orange) + "mdf2iso"     + std::string(originalColors::boldAlt) + suffix;
-    else if (modeNrg) operation = std::string(originalColors::orange) + "nrg2iso"     + std::string(originalColors::boldAlt) + suffix;
-    else if (modeChd) operation = std::string(originalColors::orange) + "chd2iso"     + std::string(originalColors::boldAlt) + suffix;
-    else if (modeDaa) operation = std::string(originalColors::orange) + "daa2iso"     + std::string(originalColors::boldAlt) + suffix;
-    else              operation = std::string(originalColors::orange) + "ccd2iso" + std::string(originalColors::boldAlt) + suffix;
+    if (modeMdf)      operation = std::string(originalColors::orange) + "mdf2iso"     + std::string(colorMuted) + suffix;
+    else if (modeNrg) operation = std::string(originalColors::orange) + "nrg2iso"     + std::string(colorMuted) + suffix;
+    else if (modeChd) operation = std::string(originalColors::orange) + "chd2iso"     + std::string(colorMuted) + suffix;
+    else if (modeDaa) operation = std::string(originalColors::orange) + "daa2iso"     + std::string(colorMuted) + suffix;
+    else              operation = std::string(originalColors::orange) + "ccd2iso" + std::string(colorMuted) + suffix;
 
     clearScrollBuffer();
 
-    std::cout << "\n" << originalColors::boldAlt << " Processing "
-              << operation << originalColors::boldAlt << "... ("
+    std::cout << "\n" << colorMuted << " Processing "
+              << operation << colorMuted << "... ("
               << originalColors::red << "Ctrl+c"
-              << originalColors::boldAlt << ":cancel)\n";
+              << colorMuted << ":cancel)\n";
 
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
