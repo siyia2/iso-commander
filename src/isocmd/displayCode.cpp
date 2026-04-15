@@ -41,8 +41,6 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
 
     bool needToReload = isoListDirty.exchange(false);
 
-    clearScrollBuffer();
-
     std::vector<std::string> freshList;
     if (needToReload) {
         loadFromDatabase(freshList);
@@ -71,7 +69,9 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
             filteredFiles.clear();
             isFiltered = false;
         }
-
+		
+		clearScrollBuffer();
+		
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType,
                   pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
 
@@ -84,7 +84,9 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
 
         const std::string_view warnColor = isOriginal ? originalColors::yellow : theme->warning;
         const std::string_view reset     = originalColors::boldAlt;
-
+		
+		clearScrollBuffer();
+        
         std::cout << "\n" << warnColor << "ISO Cache is empty. Choose 'ImportISO' from the Main Menu Options." << reset << "\n";
         std::cout << color << "\n↵ to return..." << reset;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -232,9 +234,9 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
     : (!isFiltered && !chdFilesCache.empty() && fileType == "chd" &&
        (chdFilesCache.size() != files.size() || !std::equal(chdFilesCache.begin(), chdFilesCache.end(), files.begin())))
         ? (need2Sort = true, chdFilesCache)
-    : (!isFiltered && !daaFilesCache.empty() && fileType == "daa" &&               // <-- DAA branch
-       (daaFilesCache.size() != files.size() || !std::equal(daaFilesCache.begin(), daaFilesCache.end(), files.begin())))
-        ? (need2Sort = true, daaFilesCache)
+    : (!isFiltered && !daaGbiFilesCache.empty() && fileType == "daa" &&               // <-- DAA branch
+       (daaGbiFilesCache.size() != files.size() || !std::equal(daaGbiFilesCache.begin(), daaGbiFilesCache.end(), files.begin())))
+        ? (need2Sort = true, daaGbiFilesCache)
     : files;
             
     if (!list || (list && needSortingAfterflno)) {
@@ -254,7 +256,7 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
                 sortFilesCaseInsensitive(chdFilesCache);
             } else if (fileType == "daa") {                                         // <-- DAA sorting
                 std::lock_guard<std::mutex> lock(daaCacheMutex);
-                sortFilesCaseInsensitive(daaFilesCache);
+                sortFilesCaseInsensitive(daaGbiFilesCache);
             }
         }
         needSortingAfterflno = false;
