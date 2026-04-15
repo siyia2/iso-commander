@@ -442,8 +442,8 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
     bool cacheIsEmpty = false;
 
     if (modeDaa) {
-        extensions = {".daa"};
-        cacheType = "DAA";
+        extensions = {".daa", ".gbi"};
+		cacheType = "DAA/GBI";
         cacheIsEmpty = daaFilesCache.empty();
         if (!cacheIsEmpty) std::vector<std::string>().swap(daaFilesCache);
     } else if (modeChd) {
@@ -528,7 +528,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 
     // Determine which extension(s) are allowed
     if (blacklistDaa) {
-        if (extLower != ".daa") {
+        if (extLower != ".daa" && extLower != ".gbi") {
             return false;
         }
     }
@@ -610,7 +610,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                     std::string type = (blacklistMdf) ? "MDF" : 
                                        (blacklistNrg) ? "NRG" : 
                                        (blacklistChd) ? "CHD" : 
-                                       (blacklistDaa) ? "DAA" : "BIN/IMG";
+                                       (blacklistDaa) ? "DAA/GBI" : "BIN/IMG";
                     
                     std::string warnCol = std::string(isOriginal ? originalColors::yellow : theme->warning);
                     
@@ -902,7 +902,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
         {"mdf", {".mdf",      "MDF"    }},
         {"nrg", {".nrg",      "NRG"    }},
         {"chd", {".chd",      "CHD"    }},
-        {"daa", {".daa",      "DAA"    }}   // <-- DAA entry
+        {"daa", {".daa/.gbi", "DAA/GBI"}}
     };
 
     const auto configIt = fileTypeMap.find(fileTypeChoice);

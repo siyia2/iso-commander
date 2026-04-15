@@ -463,9 +463,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         fileExtensionWithOutDots = "CHD";
         operation = "chd2iso";
     } else if (fileType == "daa") {
-        fileExtension = ".daa";
-        fileExtensionWithOutDots = "DAA";
-        operation = "daa2iso";
+        fileExtension = ".daa/.gbi";
+		fileExtensionWithOutDots = "DAA/GBI";
+		operation = "daa2iso";
     } else {
         fileExtension = "";
         fileExtensionWithOutDots = "FILES";
