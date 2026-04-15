@@ -74,7 +74,7 @@ inline std::mutex binImgCacheMutex;
 inline std::mutex mdfMdsCacheMutex;
 inline std::mutex nrgCacheMutex;
 inline std::mutex chdCacheMutex;
-inline std::mutex daaCacheMutex;
+inline std::mutex daaGbiCacheMutex;
 inline std::mutex couNtMutex;
 
 // Data Caches
