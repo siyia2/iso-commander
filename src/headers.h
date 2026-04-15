@@ -85,7 +85,7 @@ inline std::vector<std::string> binImgFilesCache;
 inline std::vector<std::string> mdfMdsFilesCache;
 inline std::vector<std::string> nrgFilesCache;
 inline std::vector<std::string> chdFilesCache;
-inline std::vector<std::string> daaFilesCache;
+inline std::vector<std::string> daaGbiFilesCache;
 inline std::map<std::string, std::string> g_configCache;
 inline std::string g_cachedPath;
 
