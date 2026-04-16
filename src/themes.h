@@ -146,7 +146,9 @@ inline std::string color = getskin();
 
 // --- THEME DEFINITIONS ---
 
-inline constexpr UI::MainTheme OriginalTheme  = { UI::Palette::White, UI::Palette::Cyan, UI::Palette::Green, UI::Palette::Dim, UI::Palette::Amber, "", UI::Palette::Red };
+// Dummy holder for originalTheme, since the original theme uses a complex combination from original colors above
+inline constexpr UI::MainTheme OriginalTheme  = {"","","","","","",""};
+																													// primary, secondary, accent, muted, highlight, background, warning
 inline constexpr UI::MainTheme ClassicTheme   = { "\033[1;38;2;172;121;0m",  "\033[1;38;2;255;28;28m",   "\033[1;38;2;255;0;255m",   "\033[1;38;2;148;148;148m", "\033[1;38;2;255;255;0m",   "\033[1;48;2;60;60;60m",   "\033[1;38;2;255;135;0m" };
 inline constexpr UI::MainTheme HighContrast  = { "\033[1;38;2;255;255;255m", "\033[1;38;2;255;255;0m",   "\033[1;38;2;0;255;255m",   "\033[1;38;2;188;188;188m", "\033[1;38;2;0;255;0m",     "\033[1;48;2;70;70;70m",   "\033[1;38;2;255;135;0m" };
 inline constexpr UI::MainTheme NeonTheme      = { "\033[1;38;2;255;0;175m",   "\033[1;38;2;0;175;255m",   "\033[1;38;2;95;255;0m",    "\033[1;38;2;130;130;130m", "\033[1;38;2;255;255;0m",   "\033[1;48;2;40;40;40m",   "\033[1;38;2;255;175;0m" };
