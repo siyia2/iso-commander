@@ -12,7 +12,7 @@
  * utilizing a pre-allocated internal buffer to minimize heap allocations during output.
  */
 struct VerbosityFormatter {
-    const ListTheme* theme;
+    const MainTheme* theme;
     const bool isOriginal;
     std::string outputBuffer;
 

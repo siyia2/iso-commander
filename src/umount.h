@@ -11,7 +11,7 @@
  * ANSI color codes and theme-aware styling.
  */
 struct VerboseMessageFormatter {
-    const ListTheme* theme;
+    const MainTheme* theme;
     const bool isOriginal;
 
     // --- Cached Styling ---
