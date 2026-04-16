@@ -40,7 +40,7 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
         
         std::cout << "\n" << (isOrig ? originalColors::red : theme->secondary) 
                   << "No valid input provided." 
-                  << originalColors::boldAlt << "\n\n";
+                  << UI::Palette::BoldReset << "\n\n";
 
         std::cout << color << "↵ to continue..." << reset; 
         
@@ -65,7 +65,7 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
         
         std::cout << "\n" << (isOrig ? originalColors::yellow : theme->warning) 
                   << "No ISO available for " << operation << "." 
-                  << originalColors::boldAlt << "\n\n";
+                  << UI::Palette::BoldReset << "\n\n";
         
         std::cout << color << "↵ to continue..." << reset; 
 

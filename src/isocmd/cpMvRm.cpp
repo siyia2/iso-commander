@@ -168,7 +168,7 @@ bool& umountMvRmBreak, bool& abortDel) {
                 umountMvRmBreak = false;
                 abortDel = true;
 
-                std::cout << "\n" << colors.abort << "rm operation aborted by user." << originalColors::boldAlt << "\n";
+                std::cout << "\n" << colors.abort << "rm operation aborted by user." << UI::Palette::BoldReset << "\n";
                 std::cout << colors.prompt_blue << "\n↵ to continue..." << reset;
 
                 std::cin.clear();

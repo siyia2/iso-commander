@@ -773,7 +773,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             else                                  std::cout << prog.progress << "%";
 
             std::cout << wt.bold << " [" << wt.headerCol << currentSize << "/" << wt.sizeCol << prog.totalSize << wt.bold << "] "
-                      << wt.bold << formatSpeed(prog.speed) << wt.bold << "\n";
+                      << wt.speedCol << formatSpeed(prog.speed) << wt.bold << "\n";
         }
         std::cout << std::flush;
     };

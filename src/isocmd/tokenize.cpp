@@ -129,14 +129,11 @@ void tokenizeInput(const std::string& input,
 			oss << item;
 			first = false;
 		}
-		oss << "'" << originalColors::boldAlt; 
+		oss << "'" << UI::Palette::BoldReset; 
 		return oss.str();
 	};
 
-	const MainTheme* theme = getActiveTheme();
-	const bool isOriginal  = (globalTheme == "original");
-
-	std::string_view errorLabel = isOriginal ? originalColors::red : theme->secondary;
+	std::string_view errorLabel = getErrorCol();
 
 	if (!invalidInputs.empty()) {
 		uniqueErrorMessages.insert(formatCategory(errorLabel, "Invalid input", "Invalid inputs", invalidInputs));

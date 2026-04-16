@@ -88,41 +88,6 @@ static std::string trim(std::string str) {
     return str;
 }
 
-/**
- * @brief Thin wrapper that resolves the four most-used theme colors in one call.
- *
- * Callers receive four std::string_view values covering the common semantic
- * roles (label/muted, accent/success, warning/value, error/secondary).
- * Centralising this lookup eliminates the repetitive isOrig ternary that
- * previously appeared in every command handler.
- */
-struct ThemeColors {
-    std::string_view label;     ///< Neutral label / muted text
-    std::string_view accent;    ///< Success / enable / positive highlight
-    std::string_view warning;   ///< Value / numeric highlight
-    std::string_view error;     ///< Error / disable / negative highlight
-};
-
-static ThemeColors resolveTheme() {
-    const MainTheme* theme = getActiveTheme();
-    const bool isOrig = (globalTheme == "original");
-
-    if (isOrig) {
-        return {
-            originalColors::boldAlt,   ///< label: Standard bold white/reset
-            originalColors::green,  ///< accent: Vibrant Kelly Green
-            originalColors::yellow, ///< warning: Pure Yellow
-            originalColors::red     ///< error: Bright Red
-        };
-    }
-
-    return {
-        theme->muted,               ///< Neutral label / muted text
-        theme->accent,              ///< Success / enable / positive highlight
-        theme->warning,             ///< Value / numeric highlight
-        theme->secondary            ///< Error / disable / negative highlight
-    };
-}
 
 /**
  * @brief Prints a standardised config-file access error then flushes to stderr.
@@ -132,7 +97,7 @@ static void printConfigError(const std::string& configPath) {
     std::cerr << "\n" << error
               << "Error: Unable to access configuration file: "
               << warning << "'" << configPath << "'"
-              << error << ".\033[J\n" << originalColors::boldAlt;
+              << error << ".\033[J\n" << UI::Palette::BoldReset;
 }
 
 /**
@@ -326,7 +291,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     size_t colonPos = inputSearch.find(':');
     if (colonPos == std::string::npos) {
         auto [label, accent, warning, error] = resolveTheme();
-        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\n" << originalColors::boldAlt;
+        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\n" << UI::Palette::BoldReset;
         pauseForInput();
         return;
     }
@@ -334,7 +299,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     std::string valueStr = inputSearch.substr(colonPos + 1);
     if (!isNum(valueStr, 0, 1000)) {
         auto [label, accent, warning, error] = resolveTheme();
-        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\n" << originalColors::boldAlt;
+        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\n" << UI::Palette::BoldReset;
         pauseForInput();
         return;
     }
@@ -348,10 +313,10 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
         auto [label, accent, warning, error] = resolveTheme();
         if (val > 0) {
             std::cout << "\n" << label << "Pagination status updated: Max entries per page set to "
-                      << warning << val << label << ".\033[J\n" << originalColors::boldAlt;
+                      << warning << val << label << ".\033[J\n" << UI::Palette::BoldReset;
         } else {
             std::cout << "\n" << label << "Pagination status updated: "
-                      << error << "Disabled" << label << ".\033[J\n" << originalColors::boldAlt;
+                      << error << "Disabled" << label << ".\033[J\n" << UI::Palette::BoldReset;
         }
     }
 
@@ -368,7 +333,7 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
 
     if (inputSearch != "*flno:on" && inputSearch != "*flno:off") {
         auto [label, accent, warning, error] = resolveTheme();
-        std::cerr << "\n" << error << "Error: Invalid command format.\033[J\n" << originalColors::boldAlt;
+        std::cerr << "\n" << error << "Error: Invalid command format.\033[J\n" << UI::Palette::BoldReset;
         pauseForInput();
         return;
     }
@@ -383,7 +348,7 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
         std::cout << "\n" << label << "Filename-only lists have been "
                   << (isEnabling ? accent : error)
                   << (isEnabling ? "enabled" : "disabled")
-                  << label << ".\033[J\n" << originalColors::boldAlt;
+                  << label << ".\033[J\n" << UI::Palette::BoldReset;
     }
 
     pauseForInput();
@@ -417,7 +382,7 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
 
     if (!isValid) {
         auto [label, accent, warning, error] = resolveTheme();
-        std::cerr << "\n" << error << "Error: Invalid command or unsupported value.\033[J\n" << originalColors::boldAlt;
+        std::cerr << "\n" << error << "Error: Invalid command or unsupported value.\033[J\n" << UI::Palette::BoldReset;
         pauseForInput();
         return;
     }
@@ -436,7 +401,7 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
         auto [label, accent, warning, error] = resolveTheme();
         std::string_view settingLabel = (key == "skin") ? "Skin color" : "UI theme";
         std::cout << "\n" << label << settingLabel << " set to: "
-          << (key == "skin" ? color : accent) << value << label << ".\033[J\n" << originalColors::boldAlt;
+          << (key == "skin" ? color : accent) << value << label << ".\033[J\n" << UI::Palette::BoldReset;
     }
 
     pauseForInput();
@@ -522,9 +487,9 @@ void setDisplayMode(const std::string& inputSearch) {
     if (flushCache(configPath) && !updatedLabels.empty()) {
         auto [label, accent, warning, error] = resolveTheme();
         std::cout << "\n" << label << "Display mode set to "
-                  << accent << newValue << label << " for:\033[J\n" << originalColors::boldAlt;
+                  << accent << newValue << label << " for:\033[J\n" << UI::Palette::BoldReset;
         for (const auto& lbl : updatedLabels)
-            std::cout << "  " << label << "- " << originalColors::boldAlt << lbl << "\n";
+            std::cout << "  " << label << "- " << UI::Palette::BoldReset << lbl << "\n";
     }
 
     pauseForInput();
@@ -567,12 +532,12 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
                     applyThreadCapsAndHistoryLimits(g_configCache);
                     std::cout << "\n" << accent << it->second
                               << label  << " updated to: "
-                              << warning << valueStr << "originalColors::boldAlt\n";
+                              << warning << valueStr << "\n" << UI::Palette::BoldReset;
                 }
             } else {
                 std::cout << "\n" << error << "Error: Value "
                           << warning << "'" << valueStr << "'"
-                          << error  << " is out of range or invalid.originalColors::boldAlt\n";
+                          << error  << " is out of range or invalid.\n" << UI::Palette::BoldReset;
             }
         }
     }
@@ -585,42 +550,30 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
  */
 void displayConfigurationOptions(const std::string& configPath) {
     clearScrollBuffer();
-
-    fs::path p(configPath);
-    if (!fs::exists(p.parent_path()) && !p.parent_path().empty()) 
-        fs::create_directories(p.parent_path());
-
     syncCache(configPath);
 
     std::ifstream configFile(configPath);
-    if (!configFile.is_open()) {
-        printConfigError(configPath);
-        return;
+    if (!configFile.is_open()) { printConfigError(configPath); return; }
+    
+    auto tc = resolveTheme();
+    // Specific override for the title
+    std::string_view titleCol = (globalTheme == "original") ? originalColors::cyan : originalColors::boldAlt;
+
+    std::cout << "\n" << titleCol << "==== Current Configuration ====\n\n";
+
+    std::string line; 
+    int lineNum = 1;
+    while (std::getline(configFile, line)) {
+        std::string trimmed = trim(line);
+        if (!trimmed.empty() && trimmed[0] != '#') {
+            // No logic here, just direct output
+            std::cout << tc.accent << lineNum++ << ". " 
+                      << tc.label << trimmed << UI::Palette::BoldReset << "\n";
+        }
     }
-	
-	const MainTheme* theme = getActiveTheme();
-	const bool isOriginal = (globalTheme == "original");
-	
-    std::string_view accent = isOriginal ? originalColors::cyan : theme->accent;
-    std::string_view warning = isOriginal ? originalColors::yellow : theme->warning;
-    std::string_view label = isOriginal ? originalColors::green : theme->muted;
-       
-	std::cout << "\n" << accent << "==== Current Configuration ====\n\n" << originalColors::boldAlt;
-
-	std::string line; 
-	int lineNumber = 1;
-
-	while (std::getline(configFile, line)) {
-		std::string trimmed = trim(line);
-		if (!trimmed.empty() && trimmed[0] != '#') {
-			std::cout << label << lineNumber++ << ". "
-					  << originalColors::boldAlt << trimmed << originalColors::boldAlt << "\n";
-		}
-	}
-	configFile.close();
-
-	// Using warning (Yellow) and boldAlt (White) for the footer
-	std::cout << "\n" << warning << "Path: " << originalColors::boldAlt << configPath 
-          << color << "\n\n↵ to return..." << reset;
+    
+    std::cout << "\n" << tc.warning << "Path: " << UI::Palette::BoldReset << configPath 
+              << "\n\n" << color << "↵ to return..." << UI::Palette::BoldReset;
+    
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }

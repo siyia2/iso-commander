@@ -547,7 +547,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "\n" << (isOrig ? originalColors::red : theme->secondary) << "Error: Unable to access configuration file: "
                   << (isOrig ? originalColors::yellow : theme->warning) << "'" << configPath << "'" 
-                  << (isOrig ? originalColors::red : theme->secondary) << ".\n" << originalColors::boldAlt;
+                  << (isOrig ? originalColors::red : theme->secondary) << ".\n" << UI::Palette::BoldReset;
     }
 
     std::cout << color << "\n↵ to return..." << reset;
@@ -633,7 +633,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
                       << (isOrig ? originalColors::yellow : theme->warning) << "'" << databaseFilePath << "'" 
                       << (isOrig ? originalColors::red : theme->secondary) << ". File missing or inaccessible.\033[J" << std::endl;
             
-            std::cout << "\n" << (isOrig ? originalColors::green : theme->muted) << "↵ to continue..." << originalColors::boldAlt;
+            std::cout << "\n" << (isOrig ? originalColors::green : theme->muted) << "↵ to continue..." << UI::Palette::BoldReset;
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         } else {
             ofs.close();

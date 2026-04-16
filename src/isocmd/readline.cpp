@@ -84,16 +84,10 @@ char** my_special_completion_entry(const char* text, int start, int end) {
 void customListingsFunction(char **matches, int num_matches, int max_length) {
     (void)max_length;
 
-    const MainTheme* theme = getActiveTheme();
-    const bool isOrig = (globalTheme == "original");
+    // Resolve the raw pointer struct
+    ReadlineColors rc = resolveReadlineTheme();
 
-    const char* labelCol = isOrig ? originalColors::brown.data()  : theme->muted.data();
-    const char* hintCol  = isOrig ? originalColors::yellow.data() : theme->accent.data();
-    const char* dirCol   = isOrig ? originalColors::blue.data()   : theme->accent.data();
-    const char* fileCol  = originalColors::resetPlain.data();
-    const char* resetCol = originalColors::boldAlt.data();
-
-    // --- Detect if we are completing special commands (starting with !, ?, *) ---
+    // --- Detect if we are completing special commands ---
     bool is_special_cmd_completion = false;
     if (num_matches > 0) {
         const char* first_match = matches[1];
@@ -102,7 +96,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
         }
     }
 
-    // --- Pagination state management (identical for both branches) ---
+    // --- Pagination state management ---
     const char* current_prefix = matches[0];
     if (strcmp(last_common_prefix, current_prefix) != 0) {
         current_page = 0;
@@ -110,9 +104,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
         last_common_prefix[sizeof(last_common_prefix) - 1] = '\0';
     }
 
-    printf("\033[s");
-    std::cout << "\033[J";
-    printf("\n");
+    printf("\033[s\033[J\n"); // Save cursor and clear
 
     int total_pages = 1;
     int start_index = 1;
@@ -128,17 +120,19 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
         items_to_display = (remaining > (int)ITEMS_PER_PAGE) ? (int)ITEMS_PER_PAGE : remaining;
     }
 
-    // --- Header printing ---
-	if (num_matches > 1) {
-		const char* header_label = is_special_cmd_completion ? "CMD Completion Matches" : "Tab Completion Matches";
-		if (total_pages > 1) {
-			printf("\n%s%s [page %d/%d%s] (%sCtrl+l%s → clear%s):%s\n\n",
-				   labelCol, header_label, current_page + 1, total_pages, labelCol, hintCol, resetCol, labelCol, resetCol);
-		} else {
-			printf("\n%s%s (%sCtrl+l%s → clear%s):%s\n\n",
-				   labelCol, header_label, hintCol, resetCol, labelCol, resetCol);
-		}
-	}
+    // --- Header printing using raw pointers ---
+    if (num_matches > 1) {
+        const char* header_label = is_special_cmd_completion ? "CMD Completion Matches" : "Tab Completion Matches";
+        
+        if (total_pages > 1) {
+            printf("\n%s%s [page %d/%d%s] (%sCtrl+l%s → clear%s):%s\n\n",
+                   rc.label, header_label, current_page + 1, total_pages, rc.label, 
+                   rc.hint, rc.reset, rc.label, rc.reset);
+        } else {
+            printf("\n%s%s (%sCtrl+l%s → clear%s):%s\n\n",
+                   rc.label, header_label, rc.hint, rc.reset, rc.label, rc.reset);
+        }
+    }
 
     // Advance page for next call (identical)
     if (ITEMS_PER_PAGE > 0 && (size_t)num_matches > ITEMS_PER_PAGE) {
@@ -217,11 +211,11 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
             if (is_dir) {
                 std::string truncated = smartTruncate(relative, 1000);
                 vis_len = (int)truncated.length() + 1; // +1 for trailing '/'
-                display = std::string(dirCol) + truncated + "/" + resetCol;
+                display = std::string(rc.dir) + truncated + "/" + rc.reset;
             } else {
                 std::string truncated = smartTruncate(relative, 1000);
                 vis_len = (int)truncated.length();
-                display = std::string(fileCol) + truncated + resetCol;
+                display = std::string(rc.file) + truncated + rc.reset;
             }
         }
         display_items.push_back({display, vis_len, raw});
@@ -253,11 +247,11 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
             if (is_dir) {
                 std::string truncated = smartTruncate(relative, column_width - 1);
                 item.visual_length = (int)truncated.length() + 1;
-                item.display_text = std::string(dirCol) + truncated + "/" + resetCol;
+                item.display_text = std::string(rc.dir) + truncated + "/" + rc.reset;
             } else {
                 std::string truncated = smartTruncate(relative, column_width);
                 item.visual_length = (int)truncated.length();
-                item.display_text = std::string(fileCol) + truncated + resetCol;
+                item.display_text = std::string(rc.file) + truncated + rc.reset;
             }
         }
     }
@@ -283,8 +277,8 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     // --- Footer pagination ---
     if (ITEMS_PER_PAGE > 0 && (size_t)num_matches > ITEMS_PER_PAGE) {
         printf("\n%s[%d/%d matches — press %sTab%s for next page]%s\n",
-               labelCol, start_index + items_to_display - 1, num_matches,
-               hintCol, labelCol, resetCol);
+               rc.label, start_index + items_to_display - 1, num_matches,
+               rc.hint, rc.label, rc.reset);
     }
 
     printf("\033[u");

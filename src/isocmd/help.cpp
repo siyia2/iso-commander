@@ -32,14 +32,14 @@ void setupHelp(std::string_view title, const ThemeColors& tc) {
     disable_ctrl_d();
     clearScrollBuffer();
     std::cout << "\n" << tc.title << "===== " << title << " =====" 
-              << originalColors::boldAlt << "\n" << std::endl;
+              << UI::Palette::BoldReset << "\n" << std::endl;
 }
 
 /**
  * @brief Handles the standard return prompt for all help screens.
  */
 void endHelp() {
-    std::cout << color << "↵ to return..." << originalColors::boldAlt;
+    std::cout << color << "↵ to return..." << UI::Palette::BoldReset;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -47,7 +47,7 @@ void endHelp() {
  * @brief Helper to print a themed section header and its bulleted content.
  */
 void printSection(const ThemeColors& tc, std::string_view head, const std::string& body) {
-    std::cout << tc.head << head << originalColors::boldAlt << "\n";
+    std::cout << tc.head << head << UI::Palette::BoldReset << "\n";
     if (!body.empty()) {
         std::cout << body << "\n" << std::endl;
     } else {

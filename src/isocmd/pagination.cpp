@@ -109,14 +109,9 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                                   const std::function<void()>& setupEnvironmentFn, 
                                   bool& isPageTurn) {
 
+	const MainTheme* theme = getActiveTheme();
     const bool isOriginal = (globalTheme == "original");
-    const MainTheme* theme = getActiveTheme();
-
-    // Map to originalColors RGB values
-    std::string_view labelCol = isOriginal ? originalColors::brown  : theme->muted;
-    std::string_view valueCol = isOriginal ? originalColors::cyan    : theme->accent;
-    std::string_view totalCol = isOriginal ? originalColors::yellow  : theme->warning;
-    std::string_view resetCol = originalColors::boldAlt; 
+    const PrintListTheme c = getListColors(isOriginal, theme);
 
     bool disablePagination = (ITEMS_PER_PAGE <= 0 || entries.size() <= ITEMS_PER_PAGE);
     size_t totalPages = disablePagination ? 1 : ((entries.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
@@ -136,14 +131,14 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
 
         if (!disablePagination) {
             pageContent
-                << labelCol << "Page "
-                << valueCol << (currentPage + 1)
-                << labelCol << "/" << totalCol << totalPages
-                << labelCol << " (Items ("
-                << valueCol << (start + 1) << "-" << end
-                << labelCol << ")/" << totalCol << totalEntries
-                << labelCol << ")"
-                << resetCol << "\n\n";
+                << c.head << "Page "
+                << c.accent << (currentPage + 1)
+                << c.head << "/" << c.num << totalPages
+                << c.head << " (Items ("
+                << c.accent << (start + 1) << "-" << end
+                << c.head << ")/" << c.num << totalEntries
+                << c.head << ")"
+                << UI::Palette::BoldReset << "\n\n";
         }
 
         for (size_t i = start; i < end; ++i) {
@@ -151,11 +146,10 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
         }
 
         if (!disablePagination && totalPages > 1) {
-            // RESTORED: Everything on this line uses labelCol until the very end
-            pageContent << "\n" << labelCol << "Pagination: ";
+            pageContent << "\n" << c.head << "Pagination: ";
             if (currentPage > 0)                pageContent << "[p] ↵ Previous | ";
             if (currentPage < totalPages - 1)  pageContent << "[n] ↵ Next | ";
-            pageContent << "[g<num>] ↵ Go to | " << resetCol << "\n";
+            pageContent << "[g<num>] ↵ Go to | " << UI::Palette::BoldReset << "\n";
         }
 
         std::string prompt = promptPrefix + pageContent.str() + promptSuffix;
