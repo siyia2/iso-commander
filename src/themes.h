@@ -87,6 +87,28 @@ namespace UI {
     struct FilterTheme {
         std::string primary, filter, highlight, reset, iso;
     };
+    struct SetupColors {
+		std::string_view label, accent,  warning, error;
+	};
+	
+	struct VerboseMountColors { std::string_view label, path, highlight, warning, error, reset;
+	};
+	
+	struct ReadlineColors {
+		const char* label;
+		const char* hint;
+		const char* dir;
+		const char* file;
+		const char* reset;
+	};
+
+	struct ProgressBarColors {
+		const char* success; ///< Green / Primary
+		const char* failure; ///< Red / Secondary
+		const char* warning; ///< Yellow / Warning
+		const char* status;  ///< Muted / BoldAlt (Labels)
+		const char* reset;   ///< BoldReset
+	};
 }
 
 // --- BACKWARDS COMPATIBILITY BRIDGE ---
@@ -123,7 +145,10 @@ using PromptTheme    		 = UI::PromptTheme;
 using FilterTheme    		 = UI::FilterTheme;
 using CpMvRmColors           = UI::CpMvRmColors;
 using ConversionThemeStrings = UI::ConversionThemeStrings;
-
+using SetupColors            = UI::SetupColors;
+using VerboseMountColors     = UI::VerboseMountColors;
+using ReadlineColors         = UI::ReadlineColors;
+using ProgressBarColors      = UI::ProgressBarColors;
 
 // --- GLOBAL STATE ---
 
@@ -173,6 +198,10 @@ VerboseTheme getVerboseTheme();
 PrintListTheme getListColors(bool isOriginal, const MainTheme* theme);
 CpMvRmColors getCpMvRmColors();
 ConversionThemeStrings getConversionThemeStrings();
+SetupColors resolveTheme();
+VerboseMountColors resolveVerboseTheme();
+ReadlineColors resolveReadlineTheme();
+ProgressBarColors resolveProgressTheme();
 
 /**
  * @brief Resolves the current theme structure based on the globalTheme string.
@@ -196,6 +225,10 @@ inline const UI::MainTheme* getActiveTheme() {
 
     auto it = themeMap.find(globalTheme);
     return (it != themeMap.end()) ? it->second : &OriginalTheme;
+}
+
+inline std::string_view getErrorCol() {
+    return (globalTheme == "original") ? originalColors::red : getActiveTheme()->secondary;
 }
 
 #endif // THEMES_H
