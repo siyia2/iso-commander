@@ -171,7 +171,7 @@ void clearHistory(const std::string& inputSearch) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
     const std::string basePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/";

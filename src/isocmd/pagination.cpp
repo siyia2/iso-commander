@@ -110,7 +110,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                                   bool& isPageTurn) {
 
     const bool isOriginal = (globalTheme == "original");
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
 
     // Map to originalColors RGB values
     std::string_view labelCol = isOriginal ? originalColors::brown  : theme->muted;

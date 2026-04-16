@@ -119,7 +119,7 @@ int main(int argc, char *argv[]) {
         clear_history();
 
         // --- User Input Processing ---
-        const ListTheme* theme = getActiveTheme();
+        const MainTheme* theme = getActiveTheme();
         const bool isOriginal = (globalTheme == "original");
         char* rawInput = readline(("\n\001" + 
 									std::string(isOriginal ? originalColors::blue : theme->muted) + 

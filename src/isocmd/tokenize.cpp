@@ -133,7 +133,7 @@ void tokenizeInput(const std::string& input,
 		return oss.str();
 	};
 
-	const ListTheme* theme = getActiveTheme();
+	const MainTheme* theme = getActiveTheme();
 	const bool isOriginal  = (globalTheme == "original");
 
 	std::string_view errorLabel = isOriginal ? originalColors::red : theme->secondary;

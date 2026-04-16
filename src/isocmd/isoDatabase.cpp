@@ -497,7 +497,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
     disable_ctrl_d();
     clearScrollBuffer();
 
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
     std::string_view headerCol = isOrig ? originalColors::blue : theme->accent;
@@ -567,7 +567,7 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
     signal(SIGINT, SIG_IGN); 
     disable_ctrl_d();
 
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
     fs::path p(configPath);
@@ -616,7 +616,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
     
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
     
     std::string initialDir = "";

@@ -42,7 +42,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     
     if (items.empty()) return;
 
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
     const bool isOriginal = (globalTheme == "original");
     const PrintListTheme c = getListColors(isOriginal, theme);
 

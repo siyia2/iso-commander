@@ -104,7 +104,7 @@ struct ThemeColors {
 };
 
 static ThemeColors resolveTheme() {
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
     if (isOrig) {
@@ -598,7 +598,7 @@ void displayConfigurationOptions(const std::string& configPath) {
         return;
     }
 	
-	const ListTheme* theme = getActiveTheme();
+	const MainTheme* theme = getActiveTheme();
 	const bool isOriginal = (globalTheme == "original");
 	
     std::string_view accent = isOriginal ? originalColors::cyan : theme->accent;

@@ -8,7 +8,7 @@ namespace {
 /**
  * @brief Resolves a color for the current theme using string_view to avoid copies.
  */
-inline std::string_view resolveColor(const ListTheme* theme,
+inline std::string_view resolveColor(const MainTheme* theme,
                                      bool isOriginal,
                                      std::string_view originalColor) noexcept {
     return isOriginal ? originalColor : std::string_view(theme->accent);
@@ -18,7 +18,7 @@ inline std::string_view resolveColor(const ListTheme* theme,
  * @brief Aggregates resolved theme colors used by all help screens.
  */
 struct ThemeColors {
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
     bool isOriginal = (globalTheme == "original");
     std::string_view title = resolveColor(theme, isOriginal, originalColors::cyan);
     std::string_view head  = resolveColor(theme, isOriginal, originalColors::green);

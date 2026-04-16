@@ -38,7 +38,7 @@
  * - File type indicators (ISO, Image, Mounted)
  * - Decorative elements (Squares, Directories, and alternating row indices)
  */
-PrintListTheme getListColors(bool isOriginal, const ListTheme* theme) {
+PrintListTheme getListColors(bool isOriginal, const MainTheme* theme) {
     if (isOriginal) {
         return {
             originalColors::darkCyan, originalColors::brown, originalColors::yellow,
@@ -72,7 +72,7 @@ PrintListTheme getListColors(bool isOriginal, const ListTheme* theme) {
  *       as display characters, avoiding line wrapping glitches
  */
 PromptTheme getPromptTheme() {
-    const ListTheme* t = getActiveTheme();
+    const MainTheme* t = getActiveTheme();
     const bool orig = (globalTheme == "original");
     
     // Helper to wrap raw ANSI strings for readline
@@ -121,7 +121,7 @@ PromptTheme getPromptTheme() {
  *       (typically enabled for path selection interfaces)
  */
 FilterTheme getFilterTheme(const std::string& operationColor, bool includeIso) {
-    const ListTheme* t = getActiveTheme();
+    const MainTheme* t = getActiveTheme();
     const bool orig = (globalTheme == "original");
     
     // Helper to wrap raw ANSI strings for readline
@@ -176,7 +176,7 @@ FilterTheme getFilterTheme(const std::string& operationColor, bool includeIso) {
  * @see globalTheme
  */
 CpMvRmColors getCpMvRmColors() {
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
     const bool isOriginal = (globalTheme == "original");
     
     CpMvRmColors colors;
@@ -204,7 +204,7 @@ CpMvRmColors getCpMvRmColors() {
  * @note Colors are selected based on whether original theme or custom active theme is used
  */
 ConversionThemeStrings getConversionThemeStrings() {
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
     const bool isOriginal = (globalTheme == "original");
     
     return ConversionThemeStrings{
@@ -227,7 +227,7 @@ ConversionThemeStrings getConversionThemeStrings() {
  * @return Fully populated WriteTheme.
  */
 WriteTheme getWriteTheme() {
-    const ListTheme* t   = getActiveTheme();
+    const MainTheme* t   = getActiveTheme();
     const bool orig      = (globalTheme == "original");
 
     WriteTheme wt;
@@ -318,7 +318,7 @@ WriteTheme getWriteTheme() {
  * @note getskin() provides the default text color for the current skin
  */
 DatabaseTheme getDatabaseTheme() {
-    const ListTheme* t = getActiveTheme();
+    const MainTheme* t = getActiveTheme();
     const bool orig = (globalTheme == "original");
     
     DatabaseTheme dt;
@@ -378,7 +378,7 @@ DatabaseTheme getDatabaseTheme() {
  * @note getskin() provides the default text color for the current skin
  */
 VerboseTheme getVerboseTheme() {
-    const ListTheme* t = getActiveTheme();
+    const MainTheme* t = getActiveTheme();
     const bool orig = (globalTheme == "original");
     
     VerboseTheme vt;

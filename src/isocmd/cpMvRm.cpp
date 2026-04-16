@@ -467,7 +467,7 @@ const std::function<void(const fs::path&)>& changeOwnership) {
     if (success) {
         std::error_code deleteEc;
         if (!fs::remove(srcPath, deleteEc)) {
-            const ListTheme* theme = getActiveTheme();
+            const MainTheme* theme = getActiveTheme();
             const bool isOriginal  = (globalTheme == "original");
             std::string_view errLabel = isOriginal ? originalColors::red    : theme->secondary;
             std::string_view errPath  = isOriginal ? originalColors::yellow : theme->warning;

@@ -53,7 +53,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks,
     std::atomic<bool>* isComplete, bool* verbose, const std::string& operation) {
     
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
     const bool isOriginal = (globalTheme == "original");
 
     std::string colorSuccess = isOriginal ? std::string(originalColors::green)   : std::string(theme->primary);

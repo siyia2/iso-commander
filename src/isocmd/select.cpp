@@ -29,7 +29,7 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
                                  bool& isFiltered, bool& umountMvRmBreak, bool isUnmount, 
                                  bool& needsClrScrn) {
     
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
     
     if (!uniqueErrorMessages.empty() && operationFiles.empty() && 

@@ -79,7 +79,7 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     }
 
     if (isEmpty) {
-        const ListTheme* theme = getActiveTheme();
+        const MainTheme* theme = getActiveTheme();
         const bool isOriginal = (globalTheme == "original");
 
         const std::string_view warnColor = isOriginal ? originalColors::yellow : theme->warning;
@@ -165,7 +165,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     if (isoDirs.empty()) {
         clearScrollBuffer();
 
-        const ListTheme* theme = getActiveTheme();
+        const MainTheme* theme = getActiveTheme();
         const bool isOriginal  = (globalTheme == "original");
 
         const std::string_view warnColor = isOriginal ? originalColors::yellow : theme->warning;

@@ -50,7 +50,7 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
         selectedFiles.push_back(files[index - 1]);
     }
     
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
     
 	std::string colorMuted  = isOrig ? std::string(originalColors::boldAlt) : std::string(theme->muted);
@@ -292,7 +292,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
         totalTasks *= destCount;
     }
     
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
     
 	std::string colorMuted  = isOrig ? std::string(originalColors::boldAlt) : std::string(theme->muted);
@@ -519,7 +519,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 	
     setupSignalHandlerCancellations();
     
-    const ListTheme* theme = getActiveTheme();
+    const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
     g_operationCancelled.store(false);
