@@ -56,7 +56,7 @@ namespace UI {
     struct WriteTheme {
         std::string errLabel, errPath, warnLabel, infoLabel, bold;
         std::string headerCol, indexCol, pathCol, fileCol, sizeCol, warnCol;
-        std::string colorSuccess, colorFailure, colorWarning, colorStatus, speedCol, deviceCol, color;
+        std::string colorSuccess, colorFailure, colorWarning, colorStatus, speedCol, deviceCol;
         std::string rl_labelCol, rl_primaryCol, rl_highlightCol, rl_errorCol, rl_resetCol;
     };
     
@@ -73,11 +73,11 @@ namespace UI {
     };
 
     struct VerboseTheme {
-        std::string red, yellow, green, purple, magenta, blue, orange, bold, reset, color;
+        std::string red, yellow, green, purple, magenta, blue, orange, bold, reset;
     };
 
     struct DatabaseTheme {
-        std::string green, blue, orange, yellow, red, purple, bold, reset, color;
+        std::string green, blue, orange, yellow, red, purple, bold, reset;
     };
 
     struct PromptTheme {
