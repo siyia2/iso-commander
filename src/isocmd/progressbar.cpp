@@ -39,19 +39,15 @@ void restoreInput(struct termios *oldt, int oldf) {
 }
 
 /**
- * @brief Displays an interactive, multi-line progress bar with byte tracking and status reporting.
- * * Renders a dynamic terminal UI that tracks progress, speed, and task counts. 
- * Upon completion, it shrinks the UI to a compact final layout, displays a 
- * success/failure status, and prompts the user for verbose output preference.
- *
- * @param completedBytes   Atomic counter for bytes processed (nullptr to disable byte tracking).
- * @param totalBytes       Total bytes to process.
- * @param completedTasks   Atomic counter for successful tasks.
- * @param failedTasks      Atomic counter for failed tasks.
- * @param totalTasks       Total number of tasks.
- * @param isComplete       Atomic boolean signaling the worker thread has finished.
- * @param verbose          [out] Stores the user's choice to display detailed logs.
- * @param operation        The name of the operation (used for width adjustment and status).
+ * @brief Displays a multi-line progress bar with byte tracking, task counts, and time elapsed.
+ * @param completedBytes Atomic counter for bytes processed.
+ * @param totalBytes Total bytes to process.
+ * @param completedTasks Atomic counter for successful tasks.
+ * @param failedTasks Atomic counter for failed tasks.
+ * @param totalTasks Total number of tasks.
+ * @param isComplete Atomic boolean signaling operation completion.
+ * @param verbose Pointer to boolean to store user preference for verbose output.
+ * @param operation Description of the current operation.
  */
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes,
     std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks,
@@ -112,15 +108,27 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         const size_t completedBytesValue  = bytesTrackingEnabled
             ? completedBytes->load(std::memory_order_acquire) : 0;
 
-        double tasksProgress   = static_cast<double>(completedTasksValue + failedTasksValue) / totalTasks;
+        // Calculate task progress differently when cancelled
+        double tasksProgress;
+        if (cancelled) {
+            tasksProgress = static_cast<double>(completedTasksValue) / totalTasks;
+        } else {
+            tasksProgress = static_cast<double>(completedTasksValue + failedTasksValue) / totalTasks;
+        }
         double overallProgress = tasksProgress;
 
         if (bytesTrackingEnabled) {
             double bytesProgress = static_cast<double>(completedBytesValue) / totalBytes;
-            overallProgress = std::max(bytesProgress, tasksProgress);
+            if (cancelled) {
+                overallProgress = bytesProgress;
+            } else {
+                overallProgress = std::max(bytesProgress, tasksProgress);
+            }
         }
 
-        if (forceFull) overallProgress = 1.0;
+        if (forceFull && !cancelled) {
+            overallProgress = 1.0;
+        }
 
         int barWidth    = useFinalLayout ? finalBarWidth : processingBarWidth;
         int progressPos = static_cast<int>(barWidth * overallProgress);
@@ -159,12 +167,12 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             ss << '\n' << "\r\033[2K";
             for (int i = 0; i < percentPos; i++) ss << " ";
             if (useFinalLayout && !cancelled && bytesTrackingEnabled) {
-				double avgSpeed = elapsedSeconds > 0.0
-					? static_cast<double>(totalBytes) / elapsedSeconds : 0.0;
-				ss << "Speed: " << formatSize(avgSpeed) + "/s (avg)";
-			} else {
-				ss << "Speed: " << cachedSpeedFormatted;
-			}
+                double avgSpeed = elapsedSeconds > 0.0
+                    ? static_cast<double>(totalBytes) / elapsedSeconds : 0.0;
+                ss << "Speed: " << formatSize(avgSpeed) + "/s (avg)";
+            } else {
+                ss << "Speed: " << cachedSpeedFormatted;
+            }
             outputLines = 3;
         }
 
@@ -201,6 +209,9 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             const bool wasCancelled          = g_operationCancelled.load(std::memory_order_acquire);
 
             bool snapTo100 = (!wasCancelled && failedTasksValue == 0);
+            if (wasCancelled) {
+                snapTo100 = false;
+            }
 
             std::cout << "\r\033[2K" << colorStatus
                       << " Status: " << operation << colorStatus << " → "
