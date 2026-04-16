@@ -41,16 +41,8 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     namespace fs = std::filesystem;
     const size_t BATCH_SIZE = 50;
 
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal  = (globalTheme == "original");
-
-    std::string_view errLabel     = isOriginal ? originalColors::red      : theme->secondary;
-    std::string_view errPath      = isOriginal ? originalColors::yellow   : theme->warning;
-    std::string_view missingLabel = isOriginal ? originalColors::purple   : theme->secondary;
-    std::string_view okLabel      = isOriginal ? originalColors::boldAlt  : theme->muted;
-    std::string_view okPath       = isOriginal ? originalColors::green    : theme->primary;
-    std::string_view skipLabel    = isOriginal ? originalColors::yellow   : theme->warning;
-    std::string_view skipPath     = isOriginal ? originalColors::green    : theme->primary;
+    // Get themed strings from external function
+    ConversionThemeStrings themes = getConversionThemeStrings();
 
     uid_t real_uid; gid_t real_gid;
     std::string real_username, real_groupname;
@@ -83,9 +75,9 @@ void convertToISO(const std::vector<std::string>& imageFiles,
         if (!fs::exists(inputPath)) {
             std::string msg;
             msg.reserve(128);
-            msg.append(missingLabel).append("Convert2ISO: ")
-               .append(errPath).append("'").append(displayPath).append("'")
-               .append(missingLabel).append(": Missing file.");
+            msg.append(themes.missingLabel).append("Convert2ISO: ")
+               .append(themes.errPath).append("'").append(displayPath).append("'")
+               .append(themes.missingLabel).append(": Missing file.");
             localFailedMsgs.push_back(std::move(msg));
 
             {
@@ -106,9 +98,9 @@ void convertToISO(const std::vector<std::string>& imageFiles,
         if (!file.good()) {
             std::string msg;
             msg.reserve(128);
-            msg.append(errLabel).append("Convert2ISO: ")
-               .append(errPath).append("'").append(displayPath).append("'")
-               .append(errLabel).append(": Cannot be read, check permissions.");
+            msg.append(themes.errLabel).append("Convert2ISO: ")
+               .append(themes.errPath).append("'").append(displayPath).append("'")
+               .append(themes.errLabel).append(": Cannot be read, check permissions.");
             localFailedMsgs.push_back(std::move(msg));
 
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -120,9 +112,9 @@ void convertToISO(const std::vector<std::string>& imageFiles,
         if (fileExists(outputPath)) {
             std::string msg;
             msg.reserve(128);
-            msg.append(skipLabel).append("Convert2ISO: ")
-               .append(skipPath).append("'").append(displayPath).append("'")
-               .append(skipLabel).append(": ISOalrExists → Skipped.");
+            msg.append(themes.skipLabel).append("Convert2ISO: ")
+               .append(themes.skipPath).append("'").append(displayPath).append("'")
+               .append(themes.skipLabel).append(": ISOalrExists → Skipped.");
             localSkippedMsgs.push_back(std::move(msg));
 
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -156,13 +148,13 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                                         fileNameLower.ends_with(".nrg") ? "NRG" :
                                         fileNameLower.ends_with(".chd") ? "CHD" :
                                         fileNameLower.ends_with(".daa") ? "DAA" :
-										fileNameLower.ends_with(".gbi") ? "GBI" : "Image";
+                                        fileNameLower.ends_with(".gbi") ? "GBI" : "Image";
 
             std::string msg;
             msg.reserve(128);
-            msg.append(okLabel).append("Convert2ISO: ")
-               .append(okPath).append("'").append(outputPath).append("'")
-               .append(okLabel).append(": ").append(fileType).append(" → ISO.");
+            msg.append(themes.okLabel).append("Convert2ISO: ")
+               .append(themes.okPath).append("'").append(outputPath).append("'")
+               .append(themes.okLabel).append(": ").append(fileType).append(" → ISO.");
             localSuccessMsgs.push_back(std::move(msg));
 
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -173,9 +165,9 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             bool isCancelled = g_operationCancelled.load(std::memory_order_relaxed);
             std::string msg;
             msg.reserve(128);
-            msg.append(errLabel).append("Convert2ISO: ")
-               .append(errPath).append("'").append(displayPath).append("'")
-               .append(errLabel).append(": ").append(isCancelled ? "Cancelled." : "Failed.");
+            msg.append(themes.errLabel).append("Convert2ISO: ")
+               .append(themes.errPath).append("'").append(displayPath).append("'")
+               .append(themes.errLabel).append(": ").append(isCancelled ? "Cancelled." : "Failed.");
             localFailedMsgs.push_back(std::move(msg));
 
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
