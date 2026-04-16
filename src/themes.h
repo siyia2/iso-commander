@@ -9,9 +9,6 @@
 #define THEMES_H
 
 #include "headers.h"
-#include <string>
-#include <string_view>
-#include <unordered_map>
 
 namespace UI {
 
