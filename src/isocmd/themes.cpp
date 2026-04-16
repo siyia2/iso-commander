@@ -89,7 +89,7 @@ PromptTheme getPromptTheme() {
         pt.highlight = wrap(originalColors::orange);
         pt.reset     = wrap(originalColors::boldAlt);
     } else {
-        pt.iso       = wrap(t->accent);
+        pt.iso       = wrap(originalColors::green);
         pt.muted     = wrap(t->muted);
         pt.filter    = wrap(t->accent);
         pt.highlight = wrap(originalColors::orange);
