@@ -209,7 +209,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             // --- Verbose Prompt (Readline safe) ---
             const std::string prompt = "\001" + std::string(color) + "\002" +
                                        "Display verbose output? (y/n): " +
-                                       "\001" + std::string(color) + "\002";
+                                       "\001" + std::string(pc.reset) + "\002";
 
             std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
             if (input.get()) {

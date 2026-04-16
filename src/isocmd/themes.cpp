@@ -463,7 +463,7 @@ VerboseMountColors resolveVerboseTheme() {
  * * @return A @ref SetupColors struct containing std::string_view references 
  * to the resolved theme colors.
  */
-SetupColors resolveTheme() {
+SetupColors resolveOptionsTheme() {
     const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
@@ -472,7 +472,8 @@ SetupColors resolveTheme() {
             originalColors::boldAlt,   ///< label: Standard bold white/reset
             originalColors::green,  ///< accent: Vibrant Kelly Green
             originalColors::yellow, ///< warning: Pure Yellow
-            originalColors::red     ///< error: Bright Red
+            originalColors::red,     ///< error: Bright Red
+            UI::Palette::BoldReset
         };
     }
 
@@ -480,7 +481,8 @@ SetupColors resolveTheme() {
         theme->muted,               ///< Neutral label / muted text
         theme->accent,              ///< Success / enable / positive highlight
         theme->warning,             ///< Value / numeric highlight
-        theme->secondary            ///< Error / disable / negative highlight
+        theme->secondary,           ///< Error / disable / negative highlight
+        UI::Palette::BoldReset
     };
 }
 
