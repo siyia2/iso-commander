@@ -196,6 +196,29 @@ CpMvRmColors getCpMvRmColors() {
 }
 
 /**
+ * @brief Gets themed color strings for conversion output messages
+ * 
+ * @return ConversionThemeStrings Struct containing themed string views for errors,
+ *         success messages, skipped files, and their respective paths
+ * 
+ * @note Colors are selected based on whether original theme or custom active theme is used
+ */
+ConversionThemeStrings getConversionThemeStrings() {
+    const ListTheme* theme = getActiveTheme();
+    const bool isOriginal = (globalTheme == "original");
+    
+    return ConversionThemeStrings{
+        .errLabel     = isOriginal ? originalColors::red      : theme->secondary,
+        .errPath      = isOriginal ? originalColors::yellow   : theme->warning,
+        .missingLabel = isOriginal ? originalColors::purple   : theme->secondary,
+        .okLabel      = isOriginal ? originalColors::boldAlt  : theme->muted,
+        .okPath       = isOriginal ? originalColors::green    : theme->primary,
+        .skipLabel    = isOriginal ? originalColors::yellow   : theme->warning,
+        .skipPath     = isOriginal ? originalColors::green    : theme->primary
+    };
+}
+
+/**
  * @brief Builds and returns the resolved WriteTheme for the current global theme.
  *
  * Call once at the top of any write-UI function instead of repeating
