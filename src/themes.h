@@ -45,7 +45,7 @@ namespace UI {
         static constexpr std::string_view RL_BoldAlt   = "\001\033[0;1;38;2;215;215;215m\002";
     }
 
-    struct ListTheme {
+    struct MainTheme {
         std::string_view primary, secondary, accent, muted, highlight, background, warning;
     };
 
@@ -113,7 +113,7 @@ struct originalColors {
     static constexpr std::string_view rl_boldAlt   = UI::Palette::RL_BoldAlt;
 };
 
-using ListTheme      		 = UI::ListTheme;
+using MainTheme      		 = UI::MainTheme;
 using PrintListTheme 		 = UI::PrintListTheme;
 using WriteTheme     		 = UI::WriteTheme;
 using ProgressTheme  		 = UI::ProgressTheme;
@@ -146,19 +146,19 @@ inline std::string color = getskin();
 
 // --- THEME DEFINITIONS ---
 
-inline constexpr UI::ListTheme OriginalTheme  = { UI::Palette::White, UI::Palette::Cyan, UI::Palette::Green, UI::Palette::Dim, UI::Palette::Amber, "", UI::Palette::Red };
-inline constexpr UI::ListTheme ClassicTheme   = { "\033[1;38;2;172;121;0m",  "\033[1;38;2;255;28;28m",   "\033[1;38;2;255;0;255m",   "\033[1;38;2;148;148;148m", "\033[1;38;2;255;255;0m",   "\033[1;48;2;60;60;60m",   "\033[1;38;2;255;135;0m" };
-inline constexpr UI::ListTheme HighContrast  = { "\033[1;38;2;255;255;255m", "\033[1;38;2;255;255;0m",   "\033[1;38;2;0;255;255m",   "\033[1;38;2;188;188;188m", "\033[1;38;2;0;255;0m",     "\033[1;48;2;70;70;70m",   "\033[1;38;2;255;135;0m" };
-inline constexpr UI::ListTheme NeonTheme      = { "\033[1;38;2;255;0;175m",   "\033[1;38;2;0;175;255m",   "\033[1;38;2;95;255;0m",    "\033[1;38;2;130;130;130m", "\033[1;38;2;255;255;0m",   "\033[1;48;2;40;40;40m",   "\033[1;38;2;255;175;0m" };
-inline constexpr UI::ListTheme OceanTheme     = { "\033[1;38;2;0;135;255m",   "\033[1;38;2;0;175;255m",   "\033[1;38;2;0;255;255m",   "\033[1;38;2;95;135;175m",  "\033[1;38;2;135;215;255m", "\033[1;48;2;20;40;60m",   "\033[1;38;2;255;215;0m" };
-inline constexpr UI::ListTheme SunsetTheme    = { "\033[1;38;2;255;135;0m",   "\033[1;38;2;255;28;28m",   "\033[1;38;2;255;215;0m",   "\033[1;38;2;197;107;0m",   "\033[1;38;2;255;175;255m", "\033[1;48;2;80;30;0m",    "\033[1;38;2;255;255;0m" };
-inline constexpr UI::ListTheme ForestTheme    = { "\033[1;38;2;95;175;0m",    "\033[1;38;2;100;143;0m",   "\033[1;38;2;175;255;95m",  "\033[1;38;2;135;135;0m",   "\033[1;38;2;175;255;0m",   "\033[1;48;2;20;40;0m",    "\033[1;38;2;215;175;0m" };
-inline constexpr UI::ListTheme MidnightTheme  = { "\033[1;38;2;219;0;255m",   "\033[1;38;2;143;100;255m", "\033[1;38;2;175;135;255m", "\033[1;38;2;119;119;220m", "\033[1;38;2;215;175;255m", "\033[1;48;2;30;20;60m",   "\033[1;38;2;255;175;95m" };
-inline constexpr UI::ListTheme MonoTheme      = { "\033[1;38;2;255;255;255m", "\033[1;38;2;200;200;200m", "\033[1;38;2;160;160;160m", "\033[1;38;2;90;90;90m",   "\033[1;38;2;255;255;255m", "\033[1;48;2;50;50;50m",   "\033[1;38;2;130;130;130m" };
-inline constexpr UI::ListTheme RetroTheme     = { "\033[1;38;2;255;175;0m",   "\033[1;38;2;197;107;0m",   "\033[1;38;2;175;135;0m",   "\033[1;38;2;130;100;60m",  "\033[1;38;2;255;215;0m",   "\033[1;48;2;60;40;0m",    "\033[1;38;2;255;95;0m" };
-inline constexpr UI::ListTheme CrimsonTheme   = { "\033[1;38;2;252;37;37m",   "\033[1;38;2;239;64;64m",   "\033[1;38;2;255;140;140m", "\033[1;38;2;167;117;117m", "\033[1;38;2;255;200;200m", "\033[1;48;2;100;20;20m",  "\033[1;38;2;255;175;0m" };
-inline constexpr UI::ListTheme DraculaTheme   = { "\033[1;38;2;189;147;249m", "\033[1;38;2;255;121;198m", "\033[1;38;2;80;250;123m",  "\033[1;38;2;110;128;185m", "\033[1;38;2;241;250;140m", "\033[1;48;2;40;42;54m",   "\033[1;38;2;255;184;108m" };
-inline constexpr UI::ListTheme TokyoNightTheme = { "\033[1;38;2;135;175;255m", "\033[1;38;2;187;154;247m", "\033[1;38;2;158;206;106m", "\033[1;38;2;115;127;183m", "\033[1;38;2;224;175;104m", "\033[1;48;2;26;27;38m",   "\033[1;38;2;255;158;100m" };
+inline constexpr UI::MainTheme OriginalTheme  = { UI::Palette::White, UI::Palette::Cyan, UI::Palette::Green, UI::Palette::Dim, UI::Palette::Amber, "", UI::Palette::Red };
+inline constexpr UI::MainTheme ClassicTheme   = { "\033[1;38;2;172;121;0m",  "\033[1;38;2;255;28;28m",   "\033[1;38;2;255;0;255m",   "\033[1;38;2;148;148;148m", "\033[1;38;2;255;255;0m",   "\033[1;48;2;60;60;60m",   "\033[1;38;2;255;135;0m" };
+inline constexpr UI::MainTheme HighContrast  = { "\033[1;38;2;255;255;255m", "\033[1;38;2;255;255;0m",   "\033[1;38;2;0;255;255m",   "\033[1;38;2;188;188;188m", "\033[1;38;2;0;255;0m",     "\033[1;48;2;70;70;70m",   "\033[1;38;2;255;135;0m" };
+inline constexpr UI::MainTheme NeonTheme      = { "\033[1;38;2;255;0;175m",   "\033[1;38;2;0;175;255m",   "\033[1;38;2;95;255;0m",    "\033[1;38;2;130;130;130m", "\033[1;38;2;255;255;0m",   "\033[1;48;2;40;40;40m",   "\033[1;38;2;255;175;0m" };
+inline constexpr UI::MainTheme OceanTheme     = { "\033[1;38;2;0;135;255m",   "\033[1;38;2;0;175;255m",   "\033[1;38;2;0;255;255m",   "\033[1;38;2;95;135;175m",  "\033[1;38;2;135;215;255m", "\033[1;48;2;20;40;60m",   "\033[1;38;2;255;215;0m" };
+inline constexpr UI::MainTheme SunsetTheme    = { "\033[1;38;2;255;135;0m",   "\033[1;38;2;255;28;28m",   "\033[1;38;2;255;215;0m",   "\033[1;38;2;197;107;0m",   "\033[1;38;2;255;175;255m", "\033[1;48;2;80;30;0m",    "\033[1;38;2;255;255;0m" };
+inline constexpr UI::MainTheme ForestTheme    = { "\033[1;38;2;95;175;0m",    "\033[1;38;2;100;143;0m",   "\033[1;38;2;175;255;95m",  "\033[1;38;2;135;135;0m",   "\033[1;38;2;175;255;0m",   "\033[1;48;2;20;40;0m",    "\033[1;38;2;215;175;0m" };
+inline constexpr UI::MainTheme MidnightTheme  = { "\033[1;38;2;219;0;255m",   "\033[1;38;2;143;100;255m", "\033[1;38;2;175;135;255m", "\033[1;38;2;119;119;220m", "\033[1;38;2;215;175;255m", "\033[1;48;2;30;20;60m",   "\033[1;38;2;255;175;95m" };
+inline constexpr UI::MainTheme MonoTheme      = { "\033[1;38;2;255;255;255m", "\033[1;38;2;200;200;200m", "\033[1;38;2;160;160;160m", "\033[1;38;2;90;90;90m",   "\033[1;38;2;255;255;255m", "\033[1;48;2;50;50;50m",   "\033[1;38;2;130;130;130m" };
+inline constexpr UI::MainTheme RetroTheme     = { "\033[1;38;2;255;175;0m",   "\033[1;38;2;197;107;0m",   "\033[1;38;2;175;135;0m",   "\033[1;38;2;130;100;60m",  "\033[1;38;2;255;215;0m",   "\033[1;48;2;60;40;0m",    "\033[1;38;2;255;95;0m" };
+inline constexpr UI::MainTheme CrimsonTheme   = { "\033[1;38;2;252;37;37m",   "\033[1;38;2;239;64;64m",   "\033[1;38;2;255;140;140m", "\033[1;38;2;167;117;117m", "\033[1;38;2;255;200;200m", "\033[1;48;2;100;20;20m",  "\033[1;38;2;255;175;0m" };
+inline constexpr UI::MainTheme DraculaTheme   = { "\033[1;38;2;189;147;249m", "\033[1;38;2;255;121;198m", "\033[1;38;2;80;250;123m",  "\033[1;38;2;110;128;185m", "\033[1;38;2;241;250;140m", "\033[1;48;2;40;42;54m",   "\033[1;38;2;255;184;108m" };
+inline constexpr UI::MainTheme TokyoNightTheme = { "\033[1;38;2;135;175;255m", "\033[1;38;2;187;154;247m", "\033[1;38;2;158;206;106m", "\033[1;38;2;115;127;183m", "\033[1;38;2;224;175;104m", "\033[1;48;2;26;27;38m",   "\033[1;38;2;255;158;100m" };
 
 // --- FUNCTION DECLARATIONS ---
 
@@ -168,15 +168,15 @@ PromptTheme getPromptTheme();
 FilterTheme getFilterTheme(const std::string& operationColor = "", bool includeIso = false);
 DatabaseTheme getDatabaseTheme();
 VerboseTheme getVerboseTheme();
-PrintListTheme getListColors(bool isOriginal, const ListTheme* theme);
+PrintListTheme getListColors(bool isOriginal, const MainTheme* theme);
 CpMvRmColors getCpMvRmColors();
 ConversionThemeStrings getConversionThemeStrings();
 
 /**
  * @brief Resolves the current theme structure based on the globalTheme string.
  */
-inline const UI::ListTheme* getActiveTheme() {
-    static const std::unordered_map<std::string_view, const UI::ListTheme*> themeMap = {
+inline const UI::MainTheme* getActiveTheme() {
+    static const std::unordered_map<std::string_view, const UI::MainTheme*> themeMap = {
         {"original",      &OriginalTheme},
         {"classic",       &ClassicTheme},
         {"high_contrast", &HighContrast},
