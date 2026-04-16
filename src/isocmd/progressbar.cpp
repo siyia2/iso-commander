@@ -158,7 +158,13 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
             ss << '\n' << "\r\033[2K";
             for (int i = 0; i < percentPos; i++) ss << " ";
-            ss << "Speed: " << cachedSpeedFormatted;
+            if (useFinalLayout && !cancelled && bytesTrackingEnabled) {
+				double avgSpeed = elapsedSeconds > 0.0
+					? static_cast<double>(totalBytes) / elapsedSeconds : 0.0;
+				ss << "Speed: " << formatSize(avgSpeed) + "/s (avg)";
+			} else {
+				ss << "Speed: " << cachedSpeedFormatted;
+			}
             outputLines = 3;
         }
 
