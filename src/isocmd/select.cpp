@@ -497,7 +497,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
         std::string colorMuted     = isOriginal ? std::string(originalColors::rl_blue)   : wrap(theme->muted);
         std::string colorFilter    = isOriginal ? std::string(originalColors::rl_cyan)   : wrap(theme->accent);
-        std::string colorHighlight = isOriginal ? std::string(originalColors::rl_orange) : wrap(theme->highlight);
+        std::string colorHighlight = std::string(originalColors::rl_orange);
         std::string colorReset     = isOriginal ? std::string(originalColors::rl_boldAlt)  : wrap(originalColors::boldAlt);
 
         std::string prefix = isFiltered ? (colorFilter + "F⊳ ") : "";

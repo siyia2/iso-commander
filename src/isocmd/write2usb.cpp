@@ -764,12 +764,16 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     disableInput();
     clearScrollBuffer();
+    
+    const ListTheme* theme = getActiveTheme();
+	const bool isOriginal = (globalTheme == "original");
+	std::string colorMuted  = isOriginal ? std::string(originalColors::boldAlt) : std::string(theme->muted);
 
-    std::cout << "\n" << originalColors::boldAlt << "Processing " 
+    std::cout << "\n" << colorMuted << "Processing " 
           << (totalTasks > 1 ? "tasks" : "task") << " for " 
-          << originalColors::yellow << "write2usb" << originalColors::boldAlt 
+          << originalColors::yellow << "write2usb" << colorMuted 
           << " operation... (" << originalColors::red << "Ctrl+c" 
-          << originalColors::boldAlt << ":cancel)\n\n";
+          << colorMuted << ":cancel)\n\n";
     std::cout << "\033[s";
 
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -785,9 +789,6 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             deviceSizeStrs[prog.device] = formatFileSize(deviceSizes[prog.device]);
         }
     }
-    
-    const ListTheme* theme = getActiveTheme();
-	const bool isOriginal = (globalTheme == "original");
 	
 	auto displayAllProgress = [&]() {
 
