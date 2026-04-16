@@ -59,9 +59,15 @@ namespace UI {
         std::string colorSuccess, colorFailure, colorWarning, colorStatus, speedCol, deviceCol, color;
         std::string rl_labelCol, rl_primaryCol, rl_highlightCol, rl_errorCol, rl_resetCol;
     };
-    struct CpMvRmColors { std::string_view arrow, dir, iso, error_label, error_path, success_label, success_path, dest_path, abort, prompt_green, prompt_blue;
+    
+    struct CpMvRmColors { 
+		std::string_view arrow, dir, iso, error_label, error_path, success_label, success_path, dest_path, abort, prompt_green, prompt_blue;
 	};
-
+	
+	struct ConversionThemeStrings { 
+		std::string_view errLabel, errPath, missingLabel, okLabel, okPath, skipLabel, skipPath;
+	};
+	
     struct ProgressTheme {
         std::string color, colorSuccess, colorFailure, colorWarning, colorStatus, reset;
     };
@@ -107,15 +113,16 @@ struct originalColors {
     static constexpr std::string_view rl_boldAlt   = UI::Palette::RL_BoldAlt;
 };
 
-using ListTheme      = UI::ListTheme;
-using PrintListTheme = UI::PrintListTheme;
-using WriteTheme     = UI::WriteTheme;
-using ProgressTheme  = UI::ProgressTheme;
-using VerboseTheme   = UI::VerboseTheme;
-using DatabaseTheme  = UI::DatabaseTheme;
-using PromptTheme    = UI::PromptTheme;
-using FilterTheme    = UI::FilterTheme;
-using CpMvRmColors   = UI::CpMvRmColors;
+using ListTheme      		 = UI::ListTheme;
+using PrintListTheme 		 = UI::PrintListTheme;
+using WriteTheme     		 = UI::WriteTheme;
+using ProgressTheme  		 = UI::ProgressTheme;
+using VerboseTheme   		 = UI::VerboseTheme;
+using DatabaseTheme  		 = UI::DatabaseTheme;
+using PromptTheme    		 = UI::PromptTheme;
+using FilterTheme    		 = UI::FilterTheme;
+using CpMvRmColors           = UI::CpMvRmColors;
+using ConversionThemeStrings = UI::ConversionThemeStrings;
 
 
 // --- GLOBAL STATE ---
@@ -163,6 +170,7 @@ DatabaseTheme getDatabaseTheme();
 VerboseTheme getVerboseTheme();
 PrintListTheme getListColors(bool isOriginal, const ListTheme* theme);
 CpMvRmColors getCpMvRmColors();
+ConversionThemeStrings getConversionThemeStrings();
 
 /**
  * @brief Resolves the current theme structure based on the globalTheme string.
