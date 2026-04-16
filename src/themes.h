@@ -67,10 +67,6 @@ namespace UI {
 	struct ConversionThemeStrings { 
 		std::string_view errLabel, errPath, missingLabel, okLabel, okPath, skipLabel, skipPath;
 	};
-	
-    struct ProgressTheme {
-        std::string color, colorSuccess, colorFailure, colorWarning, colorStatus, reset;
-    };
 
     struct VerboseTheme {
         std::string red, yellow, green, purple, magenta, blue, orange, bold, reset;
@@ -88,7 +84,7 @@ namespace UI {
         std::string primary, filter, highlight, reset, iso;
     };
     struct SetupColors {
-		std::string_view label, accent,  warning, error;
+		std::string_view label, accent,  warning, error, boldReset;
 	};
 	
 	struct VerboseMountColors { std::string_view label, path, highlight, warning, error, reset;
@@ -138,7 +134,6 @@ struct originalColors {
 using MainTheme      		 = UI::MainTheme;
 using PrintListTheme 		 = UI::PrintListTheme;
 using WriteTheme     		 = UI::WriteTheme;
-using ProgressTheme  		 = UI::ProgressTheme;
 using VerboseTheme   		 = UI::VerboseTheme;
 using DatabaseTheme  		 = UI::DatabaseTheme;
 using PromptTheme    		 = UI::PromptTheme;
@@ -190,7 +185,6 @@ inline constexpr UI::MainTheme TokyoNightTheme = { "\033[1;38;2;135;175;255m", "
 // --- FUNCTION DECLARATIONS ---
 
 WriteTheme getWriteTheme();
-ProgressTheme getProgressTheme();
 PromptTheme getPromptTheme();
 FilterTheme getFilterTheme(const std::string& operationColor = "", bool includeIso = false);
 DatabaseTheme getDatabaseTheme();
@@ -198,7 +192,7 @@ VerboseTheme getVerboseTheme();
 PrintListTheme getListColors(bool isOriginal, const MainTheme* theme);
 CpMvRmColors getCpMvRmColors();
 ConversionThemeStrings getConversionThemeStrings();
-SetupColors resolveTheme();
+SetupColors resolveOptionsTheme();
 VerboseMountColors resolveVerboseTheme();
 ReadlineColors resolveReadlineTheme();
 ProgressBarColors resolveProgressTheme();
