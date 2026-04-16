@@ -130,7 +130,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
 
     // --- Header printing ---
 	if (num_matches > 1) {
-		const char* header_label = is_special_cmd_completion ? "Command Completion Matches" : "Tab Completion Matches";
+		const char* header_label = is_special_cmd_completion ? "CMD Completion Matches" : "Tab Completion Matches";
 		if (total_pages > 1) {
 			printf("\n%s%s [page %d/%d%s] (%sCtrl+l%s → clear%s):%s\n\n",
 				   labelCol, header_label, current_page + 1, total_pages, labelCol, hintCol, resetCol, labelCol, resetCol);
