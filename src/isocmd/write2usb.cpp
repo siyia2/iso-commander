@@ -41,7 +41,6 @@ uint64_t getBlockDeviceSize(const std::string& device) {
     return 0;
 }
 
-
 /**
  * @brief Formats a byte count as a human-readable size string.
  *
@@ -66,7 +65,6 @@ std::string formatFileSize(uint64_t size) {
     return oss.str();
 }
 
-
 /**
  * @brief Formats a write speed as a human-readable string.
  *
@@ -86,7 +84,6 @@ std::string formatSpeed(double mbPerSec) {
     }
     return oss.str();
 }
-
 
 /**
  * @brief Reads the model name of a block device from sysfs.
@@ -111,7 +108,6 @@ std::string getDriveName(const std::string& device) {
     
     return driveName.empty() ? "Unknown Drive" : driveName;
 }
-
 
 /**
  * @brief Enumerates removable block devices visible in @c /sys/block.
@@ -157,7 +153,6 @@ std::vector<std::string> getRemovableDevices() {
     
     return devices;
 }
-
 
 /**
  * @brief Determines whether a block device is a removable USB device.
@@ -246,7 +241,6 @@ bool isUsbDevice(const std::string& devicePath) {
     }
 }
 
-
 /**
  * @brief Checks whether a block device or any of its partitions is currently mounted.
  *
@@ -290,7 +284,6 @@ bool isDeviceMounted(const std::string& device) {
     mountsFile.close();
     return false;
 }
-
 
 /**
  * @brief Validates a set of ISO-to-device mappings and returns only the viable pairs.
@@ -399,7 +392,6 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
     return validPairs;
 }
 
-
 /**
  * @brief Parses a semicolon-delimited mapping string into (index, device) pairs.
  *
@@ -476,7 +468,6 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
     
     return deviceMap;
 }
-
 
 /**
  * @brief Interactive loop that collects and validates ISO-to-device mappings from the user.
@@ -737,7 +728,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
     }
 }
 
-
 /**
  * @brief Dispatches ISO-to-device write tasks to the thread pool and tracks progress.
  *
@@ -911,7 +901,6 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     restoreInput();
 }
 
-
 /**
  * @brief Entry point for the write-to-USB workflow.
  *
@@ -987,7 +976,6 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
-
 
 /**
  * @brief Writes an ISO image directly to a block device using O_DIRECT I/O.
