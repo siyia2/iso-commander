@@ -64,7 +64,6 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     std::string colorFailure = isOriginal ? std::string(originalColors::red)     : std::string(theme->secondary);
     std::string colorWarning = isOriginal ? std::string(originalColors::yellow)  : std::string(theme->warning);
     std::string colorStatus  = isOriginal ? std::string(originalColors::boldAlt) : std::string(theme->muted);
-    std::string colorActive  = isOriginal ? std::string(originalColors::blue)    : std::string(theme->primary);
     
     disableInputForProgressBar(&oldt, &oldf);
 
@@ -99,15 +98,15 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
     std::string totalBytesFormatted;
     size_t lastCompletedBytes = SIZE_MAX;
-    std::string cachedCompletedBytesFormatted;
-    std::string cachedSpeedFormatted = "0.00 B/s"; // Initialize default
+    std::string cachedCompletedBytesFormatted = "0.00 B";
+    std::string cachedSpeedFormatted = "0.00 B/s";
 
     if (bytesTrackingEnabled)
         totalBytesFormatted = formatSize(static_cast<double>(totalBytes));
 
     int lastRenderedLines = 1;
 
-    auto renderProgressBar = [&](bool forceFull = false, bool useFinalLayout = false) -> std::string {
+    auto renderProgressBar = [&](bool forceFull = false, bool useFinalLayout = false, bool cancelled = false) -> std::string {
         const size_t completedTasksValue  = completedTasks->load(std::memory_order_acquire);
         const size_t failedTasksValue     = failedTasks->load(std::memory_order_acquire);
         const size_t completedBytesValue  = bytesTrackingEnabled
@@ -152,8 +151,9 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             int percentPos = barWidth + 3;
             ss << '\n' << "\r\033[2K";
             for (int i = 0; i < percentPos; i++) ss << " ";
+            
             ss << "Processed: "
-               << (useFinalLayout ? totalBytesFormatted : cachedCompletedBytesFormatted)
+               << ((useFinalLayout && !cancelled) ? totalBytesFormatted : cachedCompletedBytesFormatted)
                << "/" << totalBytesFormatted;
 
             ss << '\n' << "\r\033[2K";
@@ -175,7 +175,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             while (read(STDIN_FILENO, &ch, 1) > 0); 
         }
 
-        std::string progressOutput = renderProgressBar(false, false);
+        std::string progressOutput = renderProgressBar(false, false, false);
         std::cout << progressOutput << std::flush;
 
         if (bytesTrackingEnabled && !isComplete->load(std::memory_order_acquire) && lastRenderedLines > 1) {
@@ -207,7 +207,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                           : std::string(colorWarning) + "INTERRUPTED")
                       << originalColors::boldAlt << '\n';
 
-            std::cout << renderProgressBar(snapTo100, true);
+            std::cout << renderProgressBar(snapTo100, true, wasCancelled);
 
             disableReadlineForConfirmation();
             enterPressed = true;
