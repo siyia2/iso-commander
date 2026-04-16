@@ -252,7 +252,6 @@ WriteTheme getWriteTheme() {
         wt.colorStatus  = originalColors::boldAlt;
         wt.deviceCol    = originalColors::yellow;
         wt.speedCol     = originalColors::boldAlt;
-        wt.color         = getskin();
         
         // No static storage needed - string_view is perfect!
         wt.rl_labelCol     = "\001" + std::string(originalColors::green) + "\002";
@@ -280,7 +279,6 @@ WriteTheme getWriteTheme() {
         wt.colorStatus  = t->muted;
         wt.deviceCol    = t->secondary;
         wt.speedCol     = t->highlight;
-        wt.color         = getskin();
         
         wt.rl_labelCol     = "\001" + std::string(t->accent) + "\002";
         wt.rl_primaryCol   = "\001" + std::string(t->muted) + "\002";
@@ -334,7 +332,6 @@ DatabaseTheme getDatabaseTheme() {
         dt.purple  = std::string(originalColors::purple);
         dt.bold    = std::string(originalColors::boldAlt);
         dt.reset   = std::string(originalColors::boldAlt);
-        dt.color   = getskin();
     } else {
         dt.green   = t->accent;
         dt.blue    = t->muted;
@@ -344,7 +341,6 @@ DatabaseTheme getDatabaseTheme() {
         dt.purple  = t->secondary;
         dt.bold    = t->muted;
         dt.reset   = originalColors::boldAlt;
-        dt.color   = getskin();
     }
     
     return dt;
@@ -397,7 +393,6 @@ VerboseTheme getVerboseTheme() {
         vt.orange  = std::string(originalColors::orange);
         vt.bold    = std::string(originalColors::boldAlt);
         vt.reset   = std::string(originalColors::boldAlt);
-        vt.color   = getskin();
     } else {
         vt.red     = t->secondary;
         vt.yellow  = t->warning;
@@ -408,7 +403,6 @@ VerboseTheme getVerboseTheme() {
         vt.orange  = t->highlight;
         vt.bold    = t->muted;
         vt.reset   = originalColors::boldAlt;
-        vt.color   = getskin();
     }
     
     return vt;

@@ -374,7 +374,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
         
         signal(SIGINT, SIG_IGN);
         disable_ctrl_d();
-        std::cout << wt.color << "\n\u21b5 to " << (!permissions ? "try again..." : "continue...") << wt.rl_resetCol;
+        std::cout << color << "\n\u21b5 to " << (!permissions ? "try again..." : "continue...") << wt.rl_resetCol;
         if (permissions) permissions = false;
         
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -511,7 +511,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                       << wt.warnCol << "!" 
                       << wt.rl_resetCol << "\n";
 
-            std::cout << wt.color << "\n↵ to try again..." << wt.rl_resetCol;
+            std::cout << color << "\n↵ to try again..." << wt.rl_resetCol;
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             return {};
         }
@@ -639,7 +639,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 std::cerr << "  • " << err << "\n";
             }
             
-            std::cout << wt.color << "\n↵ to try again..." << wt.rl_resetCol;
+            std::cout << color << "\n↵ to try again..." << wt.rl_resetCol;
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             continue;
         }
@@ -672,7 +672,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         // Constructing the Readline prompt using theme colors
         const std::string confirmPrompt = 
-            wt.color +
+            "\001" + color + "\002" +
             "\nProceed? (y/n): " +
             wt.rl_resetCol;
 
@@ -691,7 +691,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         restoreReadline();
 
         std::cout << "\n" << wt.colorWarning << "Write operation aborted by user." << wt.rl_resetCol << "\n";
-        std::cout << wt.color << "\n↵ to continue..." << wt.rl_resetCol;
+        std::cout << color << "\n↵ to continue..." << wt.rl_resetCol;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
 }
@@ -772,7 +772,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             else if (g_operationCancelled.load()) std::cout << wt.colorWarning << "CXL";
             else                                  std::cout << prog.progress << "%";
 
-            std::cout << wt.bold << " [" << currentSize << "/" << wt.sizeCol << prog.totalSize << wt.bold << "] "
+            std::cout << wt.bold << " [" << wt.headerCol << currentSize << "/" << wt.sizeCol << prog.totalSize << wt.bold << "] "
                       << wt.speedCol << formatSpeed(prog.speed) << wt.bold << "\n";
         }
         std::cout << std::flush;
@@ -926,7 +926,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     const WriteTheme wt = getWriteTheme();
 
     // Replaced 'color' and 'reset' with your RGB boldAlt and reset
-    std::cout << wt.color << "\n↵ to continue..." << reset;
+    std::cout << color << "\n↵ to continue..." << reset;
     
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }

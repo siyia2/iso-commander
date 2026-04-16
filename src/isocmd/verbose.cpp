@@ -78,7 +78,7 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
         }
     }
     
-    std::cout << vt.color << "↵ to continue..." << vt.reset; 
+    std::cout << color << "↵ to continue..." << vt.reset; 
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -257,7 +257,7 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
         std::cout << "\n" << vt.green << "Database Refresh: [" << vt.magenta << result << " ISO imported" << vt.green << "]" << vt.bold << "\n";
     }
 
-    std::cout << vt.color << "\n↵ to continue..." << vt.reset; 
+    std::cout << color << "\n↵ to continue..." << vt.reset; 
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
 }
@@ -342,7 +342,7 @@ void verboseSearchResults(const std::string& fileExtension, std::unordered_set<s
     std::cout << vt.bold << "Time Elapsed: " << std::fixed << std::setprecision(1)
               << total_elapsed_time << " seconds" << vt.bold << "\n\n";
     
-    std::cout << vt.color << "↵ to continue..." << vt.reset; 
+    std::cout << color << "↵ to continue..." << vt.reset; 
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     clearScrollBuffer();
 }
