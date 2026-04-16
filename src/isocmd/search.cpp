@@ -580,22 +580,24 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
         
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (g_operationCancelled.load()) {
-                if (!g_CancelledMessageAdded.exchange(true)) {
-                    std::lock_guard<std::mutex> lock(globalSetsMutex);
-                    processedErrorsFind.clear();
-                    localFileNames.clear();
-                    
-                    // Determine the file type string for the cancellation message
-                    std::string type = (blacklistMdf) ? "MDF" : 
-                                       (blacklistNrg) ? "NRG" : 
-                                       (blacklistChd) ? "CHD" : 
-                                       (blacklistDaa) ? "DAA/GBI" : "BIN/IMG";
-                    
-                    processedErrorsFind.insert(dt.yellow + type + " search interrupted by user.\n\n" + 
-                                             dt.reset);
-                }
-                break;
-            }
+                if (g_operationCancelled.load()) {
+					std::lock_guard<std::mutex> lock(globalSetsMutex);
+					
+					// Re-check under the lock to prevent races between threads
+					if (!g_CancelledMessageAdded.exchange(true)) {
+						processedErrorsFind.clear();
+						
+						std::string type = (blacklistMdf) ? "MDF" : 
+										   (blacklistNrg) ? "NRG" : 
+										   (blacklistChd) ? "CHD" : 
+										   (blacklistDaa) ? "DAA/GBI" : "BIN/IMG";
+						
+						processedErrorsFind.insert(dt.yellow + type + 
+							" search interrupted by user.\n\n" + dt.reset);
+					}
+					break;
+				}
+			}
             
             if (entry.is_regular_file()) {
                 totalFiles.fetch_add(1, std::memory_order_acq_rel);
