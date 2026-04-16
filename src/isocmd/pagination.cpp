@@ -115,7 +115,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
     // Map to originalColors RGB values
     std::string_view labelCol = isOriginal ? originalColors::brown  : theme->muted;
     std::string_view valueCol = isOriginal ? originalColors::cyan    : theme->accent;
-    std::string_view totalCol = isOriginal ? originalColors::yellow  : theme->accent;
+    std::string_view totalCol = isOriginal ? originalColors::yellow  : theme->warning;
     std::string_view resetCol = originalColors::boldAlt; 
 
     bool disablePagination = (ITEMS_PER_PAGE <= 0 || entries.size() <= ITEMS_PER_PAGE);
