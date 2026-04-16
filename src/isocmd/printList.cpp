@@ -44,7 +44,8 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
     const ListTheme* theme = getActiveTheme();
     const bool isOriginal = (globalTheme == "original");
-    
+    const PrintListTheme c = getListColors(isOriginal, theme);
+
     // --- Pagination Logic ---
     const size_t totalItems = items.size();
     const bool disablePagination = (ITEMS_PER_PAGE == 0 || totalItems <= ITEMS_PER_PAGE);
@@ -54,7 +55,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     const size_t startIndex = disablePagination ? 0 : (effectivePage * ITEMS_PER_PAGE);
     const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + ITEMS_PER_PAGE, totalItems);
 
-    // --- Performance: Hoist Type-Checking & Config Flags ---
+    // --- Flags & Config ---
     const bool isIsoMode     = (listType == "ISO_FILES");
     const bool isImgMode     = (listType == "IMAGE_FILES");
     const bool isMountedMode = (listType == "MOUNTED_ISOS");
@@ -62,22 +63,9 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     const bool showNamesOnly = displayConfig::toggleNamesOnly;
     const bool showFullUmount = displayConfig::toggleFullListUmount;
     
-    // --- Performance: Pre-calculate Gutter Width ---
     IntBuf<> ib1, ib2, ib3, ib4; 
     const size_t maxDigits = ib1.format(endIndex).length();
     const bool isIsoWithAutoUpdate = (isImportRunning.load() && isIsoMode && !isFiltered && !globalIsoFileList.empty());
-
-    // --- Color Mapping ---
-    std::string_view accentColor = isOriginal ? originalColors::darkCyan : theme->accent;
-    std::string_view headColor   = isOriginal ? originalColors::brown    : theme->muted; 
-    std::string_view numColor    = isOriginal ? originalColors::yellow   : theme->warning; 
-    std::string_view isoColor    = isOriginal ? originalColors::magenta  : theme->accent; 
-    std::string_view imgColor    = isOriginal ? originalColors::orange   : theme->highlight; 
-    std::string_view mntColor    = isOriginal ? originalColors::blue     : theme->secondary; 
-    std::string_view squareColor = originalColors::dimGray;
-    std::string_view indexA      = isOriginal ? originalColors::red      : theme->secondary;
-    std::string_view indexB      = isOriginal ? originalColors::green    : theme->accent;
-    std::string_view dirColor    = isOriginal ? originalColors::boldAlt  : theme->muted;
 
     // --- Output Buffering ---
     std::string output;
@@ -86,13 +74,13 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
     // --- Header ---
     if (!disablePagination) {
-        output.append(headColor).append("Page ")
-              .append(accentColor).append(ib1.format(effectivePage + 1))
-              .append(headColor).append("/").append(numColor).append(ib2.format(totalPages))
-              .append(headColor).append(" (Items (")
-              .append(accentColor).append(ib3.format(startIndex + 1))
-              .append("-").append(ib4.format(endIndex)).append(headColor).append(")/").append(numColor)
-              .append(ib1.format(totalItems)).append(headColor).append(")");
+        output.append(c.head).append("Page ")
+              .append(c.accent).append(ib1.format(effectivePage + 1))
+              .append(c.head).append("/").append(c.num).append(ib2.format(totalPages))
+              .append(c.head).append(" (Items (")
+              .append(c.accent).append(ib3.format(startIndex + 1))
+              .append("-").append(ib4.format(endIndex)).append(c.head).append(")/").append(c.num)
+              .append(ib1.format(totalItems)).append(c.head).append(")");
         
         if (isIsoWithAutoUpdate) {
             output.append(originalColors::dim).append("\n\n[Auto-Update: List restructures if newISOFound]");
@@ -105,22 +93,17 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
     // --- Main Item Loop ---
     for (size_t i = startIndex; i < endIndex; ++i) {
-        const std::string_view seqColor = (i % 2 == 0) ? indexA : indexB;
+        const std::string_view seqColor = (i % 2 == 0) ? c.indexA : c.indexB;
         std::string_view idxStr = ib1.format(i + 1);
         
         output.append(seqColor);
-        
-        // Right-alignment padding
-        if (idxStr.length() < maxDigits) {
-            output.append(maxDigits - idxStr.length(), ' ');
-        }
+        if (idxStr.length() < maxDigits) output.append(maxDigits - idxStr.length(), ' ');
         output.append(idxStr);
 
-        // Filter indices logic
         if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
-            output.append(":").append(originalColors::boldAlt).append(squareColor); 
+            output.append(":").append(originalColors::boldAlt).append(c.square); 
             output.append(ib2.format(filteringStack.back().originalIndices[i] + 1));
-            output.append(originalColors::boldAlt).append(squareColor).append("^ ");
+            output.append(originalColors::boldAlt).append(c.square).append("^ ");
         } else {
             output.append(". ").append(originalColors::boldAlt);
         }
@@ -130,18 +113,18 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         if (isFileMode) {
             auto [dir, fname] = extractDirectoryAndFilename(item, listSubType);
             if (!showNamesOnly) {
-                output.append(dirColor).append(dir).append(originalColors::boldAlt).append("/");
+                output.append(c.dir).append(dir).append(originalColors::boldAlt).append("/");
             }
-            output.append(isIsoMode ? isoColor : imgColor).append(fname);
+            output.append(isIsoMode ? c.iso : c.img).append(fname);
         } 
         else if (isMountedMode) {
             auto [dirPart, pathPart, hashPart] = parseMountPointComponents(item);
             if (showFullUmount) {
-                output.append(mntColor).append(dirPart)
-                      .append(isoColor).append(pathPart)
-                      .append(squareColor).append(hashPart);
+                output.append(c.mnt).append(dirPart)
+                      .append(c.iso).append(pathPart)
+                      .append(c.square).append(hashPart);
             } else {
-                output.append(isoColor).append(pathPart);
+                output.append(c.iso).append(pathPart);
             }
         }
         output.append(originalColors::boldAlt).append("\n");
@@ -149,7 +132,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
     // --- Footer ---
     if (!disablePagination) {
-        output.append("\n").append(headColor).append("Pagination: ");
+        output.append("\n").append(c.head).append("Pagination: ");
         if (effectivePage > 0) output.append("[p] ↵ Previous | ");
         if (effectivePage < totalPages - 1) output.append("[n] ↵ Next | ");
         output.append("[g<num>] ↵ Go to | ").append(originalColors::boldAlt).append("\n");
@@ -165,8 +148,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
               .append(procText).append("proc")
               .append(originalColors::boldAlt).append(bracketBg).append("]: ");
 
-        std::string_view pColor = (!isImgMode) ? isoColor : imgColor;
-        output.append(pColor);
+        output.append(!isImgMode ? c.iso : c.img);
         for (size_t i = 0; i < pendingIndices.size(); ++i) {
             output.append(pendingIndices[i]);
             if (i < pendingIndices.size() - 1) output.push_back(' ');

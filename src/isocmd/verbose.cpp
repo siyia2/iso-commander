@@ -18,8 +18,10 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
     clearScrollBuffer(); 
+    
+    const VerboseTheme vt = getVerboseTheme();
 
-    auto printSortedSet = [](std::unordered_set<std::string>& set, bool isError = false) {
+    auto printSortedSet = [&](std::unordered_set<std::string>& set, bool isError = false) {
         if (!set.empty()) {
             std::vector<std::string> vec(
                 std::make_move_iterator(set.begin()), 
@@ -30,13 +32,12 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
             std::cout << "\n";
             
             for (const auto& item : vec) {
-				if (isError) {
-					// Red for the error message, then reset to your high-fidelity bold
-					std::cerr << originalColors::red << item << originalColors::boldAlt  << "\n";
-				} else {
-					std::cout << item << "\n";
-				}
-			}
+                if (isError) {
+                    std::cerr << vt.red << item << vt.reset << "\n";
+                } else {
+                    std::cout << item << "\n";
+                }
+            }
         }
     };
 
@@ -77,7 +78,7 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
         }
     }
     
-    std::cout << color << "↵ to continue..." << reset; 
+    std::cout << vt.color << "↵ to continue..." << vt.reset; 
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -113,66 +114,60 @@ void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, 
                        const std::string& destDir, const std::string& errorDetail, const std::string& operation, 
                        std::vector<std::string>& verboseErrors, std::atomic<size_t>* failedTasks, 
                        std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertFunc) {
-
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal  = (globalTheme == "original");
-
-    std::string_view errLabel     = isOriginal ? originalColors::red      : theme->secondary;
-    std::string_view errPath      = isOriginal ? originalColors::yellow   : theme->warning;
-    std::string_view missingLabel = isOriginal ? originalColors::purple   : theme->secondary;
     
-    const std::string displaySrc  = (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile;
+    const VerboseTheme vt = getVerboseTheme();
+    const std::string displaySrc = (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile;
 
     std::string errorMsg;
     errorMsg.reserve(256);
 
     if (errorType == "same_file") {
-        errorMsg.append(errLabel).append("Cannot ").append(operation).append(" file to itself: ")
-                .append(errPath).append("'").append(srcDir).append("/").append(srcFile).append("'")
-                .append(originalColors::boldAlt).append(errLabel).append(".")
-                .append(originalColors::boldAlt);
+        errorMsg.append(vt.red).append("Cannot ").append(operation).append(" file to itself: ")
+                .append(vt.red).append("'").append(srcDir).append("/").append(srcFile).append("'")
+                .append(vt.reset).append(vt.red).append(".")
+                .append(vt.reset);
     }
     else if (errorType == "invalid_dest") {
-        errorMsg.append(errLabel).append("Error ").append(operation).append(": ")
-                .append(errPath).append("'").append(displaySrc).append("'")
-                .append(originalColors::boldAlt).append(errLabel).append(" to '").append(destDir).append("': ").append(errorDetail).append(".")
-                .append(originalColors::boldAlt).append(originalColors::boldAlt);
+        errorMsg.append(vt.red).append("Error ").append(operation).append(": ")
+                .append(vt.red).append("'").append(displaySrc).append("'")
+                .append(vt.reset).append(vt.red).append(" to '").append(destDir).append("': ").append(errorDetail).append(".")
+                .append(vt.reset);
     }
     else if (errorType == "source_missing") {
-        errorMsg.append(errLabel).append("Source file no longer exists: ")
-                .append(errPath).append("'").append(displaySrc).append("'")
-                .append(originalColors::boldAlt).append(errLabel).append(".")
-                .append(originalColors::boldAlt).append(originalColors::boldAlt);
+        errorMsg.append(vt.red).append("Source file no longer exists: ")
+                .append(vt.red).append("'").append(displaySrc).append("'")
+                .append(vt.reset).append(vt.red).append(".")
+                .append(vt.reset);
     }
     else if (errorType == "overwrite_failed") {
-        errorMsg.append(errLabel).append("Failed to overwrite: ")
-                .append(errPath).append("'").append(destDir).append("/").append(srcFile).append("'")
-                .append(originalColors::boldAlt).append(errLabel).append(" - ").append(errorDetail).append(".")
-                .append(originalColors::boldAlt).append(originalColors::boldAlt);
+        errorMsg.append(vt.red).append("Failed to overwrite: ")
+                .append(vt.red).append("'").append(destDir).append("/").append(srcFile).append("'")
+                .append(vt.reset).append(vt.red).append(" - ").append(errorDetail).append(".")
+                .append(vt.reset);
     }
     else if (errorType == "file_exists") {
-        errorMsg.append(errLabel).append("Error ").append(operation).append(": ")
-                .append(errPath).append("'").append(displaySrc).append("'")
-                .append(originalColors::boldAlt).append(errLabel).append(" to '").append(destDir).append("/': File exists (")
-                .append(errPath).append("enable overwrites")
-                .append(originalColors::boldAlt).append(errLabel).append(").")
-                .append(originalColors::boldAlt).append(originalColors::boldAlt);
+        errorMsg.append(vt.red).append("Error ").append(operation).append(": ")
+                .append(vt.red).append("'").append(displaySrc).append("'")
+                .append(vt.reset).append(vt.red).append(" to '").append(destDir).append("/': File exists (")
+                .append(vt.red).append("enable overwrites")
+                .append(vt.reset).append(vt.red).append(").")
+                .append(vt.reset);
     }
     else if (errorType == "remove_after_move") {
-        errorMsg.append(errLabel).append("Move completed but failed to remove source file: ")
-                .append(errPath).append("'").append(displaySrc).append("'")
-                .append(originalColors::boldAlt).append(errLabel).append(" - ").append(errorDetail)
-                .append(originalColors::boldAlt);
+        errorMsg.append(vt.red).append("Move completed but failed to remove source file: ")
+                .append(vt.red).append("'").append(displaySrc).append("'")
+                .append(vt.reset).append(vt.red).append(" - ").append(errorDetail)
+                .append(vt.reset);
     }
     else if (errorType == "missing_file") {
-        errorMsg.append(missingLabel).append("Missing: ")
-                .append(errPath).append("'").append(displaySrc).append("'")
-                .append(originalColors::boldAlt).append(missingLabel).append(".")
-                .append(originalColors::boldAlt).append(originalColors::boldAlt);
+        errorMsg.append(vt.purple).append("Missing: ")
+                .append(vt.red).append("'").append(displaySrc).append("'")
+                .append(vt.reset).append(vt.purple).append(".")
+                .append(vt.reset);
     }
     else {
-        errorMsg.append(errLabel).append("Error: ").append(errorDetail)
-                .append(originalColors::boldAlt).append(originalColors::boldAlt);
+        errorMsg.append(vt.red).append("Error: ").append(errorDetail)
+                .append(vt.reset);
     }
 
     verboseErrors.push_back(std::move(errorMsg));
@@ -211,27 +206,20 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal  = (globalTheme == "original");
-
-    std::string_view errLabel    = isOriginal ? originalColors::red       : theme->secondary;
-    std::string_view warnLabel   = isOriginal ? originalColors::yellow    : theme->warning;
-    std::string_view okLabel     = isOriginal ? originalColors::green     : theme->accent;
-    std::string_view importColor = isOriginal ? originalColors::magenta   : theme->highlight;
-    std::string_view boldLabel   = isOriginal ? originalColors::boldAlt   : theme->muted;
+    const VerboseTheme vt = getVerboseTheme();
 
     loadFromDatabase(globalIsoFileList);
 
     auto printInvalidPaths = [&]() {
         if (invalidPaths.empty()) return;
         if (totalFiles == 0 && validPaths.empty()) {
-            std::cout << "\r" << boldLabel << "Total files processed: 0\n" << std::flush;
+            std::cout << "\r" << vt.bold << "Total files processed: 0\n" << std::flush;
         }
-        std::cout << "\n" << boldLabel << "Invalid paths omitted from search: " << errLabel;
+        std::cout << "\n" << vt.bold << "Invalid paths omitted from search: " << vt.red;
         for (auto it = invalidPaths.begin(); it != invalidPaths.end();) {
             std::cout << "'" << *it << "'" << (++it != invalidPaths.end() ? " " : "");
         }
-        std::cout << boldLabel << ".\n";
+        std::cout << vt.bold << ".\n";
     };
 
     auto printErrorMessages = [&]() {
@@ -251,25 +239,25 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
     if (!promptFlag) return;
 
     const double total_elapsed = std::chrono::duration<double>(end_time - start_time).count();
-    std::cout << boldLabel << "\nTotal time taken: " << std::fixed << std::setprecision(1)
+    std::cout << vt.bold << "\nTotal time taken: " << std::fixed << std::setprecision(1)
               << total_elapsed << " seconds\n";
 
     if (g_operationCancelled) {
-        std::cout << "\n" << okLabel << "Database Refresh: [" << warnLabel << "Cancelled" << okLabel << "]" << boldLabel << "\n";
+        std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "Cancelled" << vt.green << "]" << vt.bold << "\n";
     } else if (!allIsoFiles.empty() && newISOFound.load() && !saveSuccess) {
-        std::cout << "\n" << errLabel << "Database Refresh failed: [" << warnLabel << "Unable to access the database file" << errLabel << "]" << boldLabel << "\n";
+        std::cout << "\n" << vt.red << "Database Refresh failed: [" << vt.yellow << "Unable to access the database file" << vt.red << "]" << vt.bold << "\n";
     } else if (validPaths.empty()) {
-        std::cout << "\n" << errLabel << "Database refresh failed: [" << warnLabel << "Lack of valid paths" << errLabel << "]" << boldLabel << "\n";
+        std::cout << "\n" << vt.red << "Database refresh failed: [" << vt.yellow << "Lack of valid paths" << vt.red << "]" << vt.bold << "\n";
     } else if (!allIsoFiles.empty() && !newISOFound.load() && !saveSuccess) {
-        std::cout << "\n" << okLabel << "Database Refresh: [" << warnLabel << "No new ISO found" << okLabel << "]" << boldLabel << "\n";
+        std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No new ISO found" << vt.green << "]" << vt.bold << "\n";
     } else if (allIsoFiles.empty()) {
-        std::cout << "\n" << okLabel << "Database Refresh: [" << warnLabel << "No ISO found" << okLabel << "]" << boldLabel << "\n";
+        std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No ISO found" << vt.green << "]" << vt.bold << "\n";
     } else if (!allIsoFiles.empty() && saveSuccess && newISOFound.load()) {
         int result = countDifferentEntries(allIsoFiles, globalIsoFileList);
-        std::cout << "\n" << okLabel << "Database Refresh: [" << importColor << result << " ISO imported" << okLabel << "]" << boldLabel << "\n";
+        std::cout << "\n" << vt.green << "Database Refresh: [" << vt.magenta << result << " ISO imported" << vt.green << "]" << vt.bold << "\n";
     }
 
-    std::cout << color << "\n↵ to continue..." << reset; 
+    std::cout << vt.color << "\n↵ to continue..." << vt.reset; 
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
 }
@@ -281,22 +269,18 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal  = (globalTheme == "original");
-
-    std::string_view boldLabel = isOriginal ? originalColors::boldAlt : theme->muted;
-	std::string_view errLabel  = isOriginal ? originalColors::red     : theme->secondary;
+    const VerboseTheme vt = getVerboseTheme();
 
     if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
-        std::cout << "\r" << boldLabel << "Total files processed: 0" << std::flush;
+        std::cout << "\r" << vt.bold << "Total files processed: 0" << std::flush;
     }
 
     if (!invalidDirectoryPaths.empty()) {
-        std::cout << "\n\n" << boldLabel << "Invalid paths omitted from search: " << errLabel;
+        std::cout << "\n\n" << vt.bold << "Invalid paths omitted from search: " << vt.red;
         for (auto it = invalidDirectoryPaths.begin(); it != invalidDirectoryPaths.end(); ++it) {
             std::cerr << "'" << *it << "'" << (std::next(it) != invalidDirectoryPaths.end() ? " " : "");
         }
-        std::cerr << boldLabel << ".";
+        std::cerr << vt.bold << ".";
     }
 
     if (!processedErrorsFind.empty()) {
@@ -317,15 +301,7 @@ void verboseSearchResults(const std::string& fileExtension, std::unordered_set<s
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal  = (globalTheme == "original");
-
-    std::string_view okLabel   = isOriginal ? originalColors::green  : theme->accent;
-    std::string_view errLabel  = isOriginal ? originalColors::red    : theme->secondary;
-    std::string_view warnLabel = isOriginal ? originalColors::yellow : theme->warning;
-    std::string_view extColor  = isOriginal ? originalColors::orange : theme->highlight;
-    std::string_view lsColor   = isOriginal ? originalColors::blue   : theme->primary;
-    std::string_view boldLabel = isOriginal ? originalColors::boldAlt   : theme->muted;
+    const VerboseTheme vt = getVerboseTheme();
 
     auto end_time = std::chrono::high_resolution_clock::now();
 
@@ -333,40 +309,40 @@ void verboseSearchResults(const std::string& fileExtension, std::unordered_set<s
 
     if (!fileNames.empty()) {
         std::cout << "\n\n"
-                  << okLabel   << fileNames.size() << " "
-                  << extColor  << "{" << fileExtension << "} "
-                  << okLabel   << "files found" << warnLabel << "\n"
+                  << vt.green << fileNames.size() << " "
+                  << vt.orange << "{" << fileExtension << "} "
+                  << vt.green << "files found" << vt.yellow << "\n"
                   << currentCacheOld << " "
-                  << extColor  << "{" << fileExtension << "} "
-                  << warnLabel << "cached entries" << originalColors::boldAlt << "\n\n";
+                  << vt.orange << "{" << fileExtension << "} "
+                  << vt.yellow << "cached entries" << vt.bold << "\n\n";
     }
 
     if (!newFilesFound && !files.empty() && !list) {
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
         std::cout << "\n\n"
-                  << errLabel  << "0 "
-                  << extColor  << "{" << fileExtension << "} "
-                  << errLabel  << "files found " << warnLabel << "\n"
+                  << vt.red << "0 "
+                  << vt.orange << "{" << fileExtension << "} "
+                  << vt.red << "files found " << vt.yellow << "\n"
                   << files.size() << " "
-                  << extColor  << "{" << fileExtension << "} "
-                  << warnLabel << "cached entries | "
-                  << lsColor   << "ls "
-                  << warnLabel << "↵ to list" << originalColors::boldAlt << "\n\n";
+                  << vt.orange << "{" << fileExtension << "} "
+                  << vt.yellow << "cached entries | "
+                  << vt.blue << "ls "
+                  << vt.yellow << "↵ to list" << vt.bold << "\n\n";
     }
 
     if (files.empty() && !list) {
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
         std::cout << "\n\n"
-                  << errLabel  << "0" << extColor << " {" << fileExtension << "} " << errLabel << "files found\n"
-                  << warnLabel << "0" << extColor << " {" << fileExtension << "} " << warnLabel << "cached entries\n"
-                  << originalColors::boldAlt << "\n";
+                  << vt.red << "0" << vt.orange << " {" << fileExtension << "} " << vt.red << "files found\n"
+                  << vt.yellow << "0" << vt.orange << " {" << fileExtension << "} " << vt.yellow << "cached entries\n"
+                  << vt.bold << "\n";
     }
 
     auto total_elapsed_time = std::chrono::duration<double>(end_time - start_time).count();
-    std::cout << boldLabel << "Time Elapsed: " << std::fixed << std::setprecision(1)
-              << total_elapsed_time << " seconds" << originalColors::boldAlt << "\n\n";
+    std::cout << vt.bold << "Time Elapsed: " << std::fixed << std::setprecision(1)
+              << total_elapsed_time << " seconds" << vt.bold << "\n\n";
     
-    std::cout << color << "↵ to continue..." << reset; 
+    std::cout << vt.color << "↵ to continue..." << vt.reset; 
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     clearScrollBuffer();
 }

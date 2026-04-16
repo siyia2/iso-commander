@@ -478,29 +478,23 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
         isUnmount,
         displayConfig::toggleFullListUmount
     };
-
-    // Helper to wrap raw ANSI strings for readline
+	
+	// Helper to wrap raw ANSI strings for readline
 	auto wrap = [](std::string_view s) -> std::string {
 		return "\001" + std::string(s) + "\002";
 	};
-
-	const ListTheme* theme = getActiveTheme();
-	const bool isOriginal = (globalTheme == "original");
-
-	// Use pre-wrapped originalColors or wrap the raw theme members
-	std::string colorPrimary = isOriginal ? std::string(originalColors::rl_blue) : wrap(theme->muted);
-	std::string colorFilter  = isOriginal ? std::string(originalColors::rl_cyan) : wrap(theme->accent);
-	std::string colorReset   = isOriginal ? std::string(originalColors::rl_reset) : wrap(originalColors::boldAlt);
+	
+	const FilterTheme ft = getFilterTheme(); // No operation color, default highlight
 
 	// Assuming operationColor comes from the raw theme, it needs wrapping
 	std::string safeOpColor = wrap(operationColor);
 
 	const std::string prompt =
-		colorFilter  + "FilterTerms" +
-		colorPrimary + " ↵ for " +
+		ft.filter  + "FilterTerms" +
+		ft.primary + " ↵ for " +
 		safeOpColor  + operation +
-		colorPrimary + ", or ↵ to return: " +
-		colorReset;
+		ft.primary + ", or ↵ to return: " +
+		ft.reset;
 
     auto onEmptyInput = [&]() {
         clear_history();
@@ -543,29 +537,23 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
         currentPage
     };
 
-    // Helper to wrap raw ANSI strings for readline
-	auto wrap = [](std::string_view s) -> std::string {
-		return "\001" + std::string(s) + "\002";
-	};
-
 	const bool isInteractive = (inputString == "/");
 	const std::string quickPat = isInteractive ? "" : inputString.substr(1);
 
-	const ListTheme* theme = getActiveTheme();
-	const bool isOriginal = (globalTheme == "original");
+	const FilterTheme ft = getFilterTheme(); // No operation color, default highlight
+	
+	// Helper to wrap raw ANSI strings for readline
+	auto wrap = [](std::string_view s) -> std::string {
+		return "\001" + std::string(s) + "\002";
+	};
+	std::string operationColor = std::string(originalColors::orange);
 
-	// Wrap themed colors, but keep originalColors::rl_ variants as-is
-	std::string colorMuted  = isOriginal ? std::string(originalColors::rl_blue)   : wrap(theme->muted);
-	std::string colorExt    = isOriginal ? std::string(originalColors::rl_orange) : wrap(theme->highlight);
-	std::string colorFilter = isOriginal ? std::string(originalColors::rl_cyan)   : wrap(theme->accent);
-	std::string colorReset  = isOriginal ? std::string(originalColors::rl_reset)  : wrap(originalColors::boldAlt);
-
-	const std::string prompt = 
-		colorFilter + "FilterTerms" + 
-		colorMuted  + " ↵ for " + 
-		colorExt    + operation + 
-		colorMuted  + ", or ↵ to return: " + 
-		colorReset;
+    const std::string prompt = 
+        ft.filter    + "FilterTerms" + 
+        ft.primary   + " ↵ for " + 
+        wrap(operationColor) + operation + 
+        ft.primary   + ", or ↵ to return: " + 
+        ft.reset;
 		
 		auto onEmptyInput = [&]() {
 			clear_history();

@@ -14,9 +14,8 @@
  */
 std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>& indexChunks, const std::vector<std::string>& isoFiles) {
     std::vector<std::string> entries;
-
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalTheme == "original");
+    
+    const CpMvRmColors colors = getCpMvRmColors();
 
     for (const auto& chunk : indexChunks) {
         for (int index : chunk) {
@@ -27,16 +26,16 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
             std::string entry;
             entry.reserve(isoDir.length() + filename.length() + 64);
 
-            entry += originalColors::boldAlt;
+            entry += colors.arrow;
             entry += "-> ";
 
             if (!displayConfig::toggleNamesOnly) {
-                entry += (isOriginal ? originalColors::boldAlt : theme->muted);
+                entry += colors.dir;
                 entry.append(isoDir);
                 entry += "/";
             }
 
-            entry += (isOriginal ? originalColors::magenta : theme->accent);
+            entry += colors.iso;
             entry.append(filename);
             entry += originalColors::boldAlt;
             entry += '\n';
@@ -54,36 +53,28 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
  * @return An empty string if valid, or a color-coded error message if invalid.
  */
 static std::string validateLinuxPath(const std::string& path) {
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal  = (globalTheme == "original");
-
-    std::string errLabel = isOriginal
-        ? std::string(originalColors::red)
-        :  std::string(theme->secondary);
-    std::string errPath  = isOriginal
-        ? std::string(originalColors::yellow)
-        : std::string(theme->warning);
+    const CpMvRmColors colors = getCpMvRmColors();
 
     auto makeError = [&](const std::string& msg) -> std::string {
         return msg + std::string(originalColors::rl_reset);
     };
 
     if (path.empty() || path[0] != '/')
-        return makeError(errLabel + "Error: Path " + errPath + "'" + path + "'" + errLabel + " must be absolute (start with '/').");
+        return makeError(std::string(colors.error_label) + "Error: Path " + std::string(colors.error_path) + "'" + path + "'" + std::string(colors.error_label) + " must be absolute (start with '/').");
 
     for (char c : path)
         if (iscntrl(static_cast<unsigned char>(c)))
-            return makeError(errLabel + "Error: Control characters in path " + errPath + "'" + path + "'" + errLabel + ".");
+            return makeError(std::string(colors.error_label) + "Error: Control characters in path " + std::string(colors.error_path) + "'" + path + "'" + std::string(colors.error_label) + ".");
 
     if (path.find_first_not_of(" \t") == std::string::npos)
-        return makeError(errLabel + "Error: Path " + errPath + "'" + path + "'" + errLabel + " is blank.");
+        return makeError(std::string(colors.error_label) + "Error: Path " + std::string(colors.error_path) + "'" + path + "'" + std::string(colors.error_label) + " is blank.");
 
     struct stat pathStat;
     if (stat(path.c_str(), &pathStat) != 0)
-        return makeError(errLabel + "Error: Path " + errPath + "'" + path + "'" + errLabel + " does not exist.");
+        return makeError(std::string(colors.error_label) + "Error: Path " + std::string(colors.error_path) + "'" + path + "'" + std::string(colors.error_label) + " does not exist.");
 
     if (!S_ISDIR(pathStat.st_mode))
-        return makeError(errLabel + "Error: " + errPath + "'" + path + "'" + errLabel + " is not a directory.");
+        return makeError(std::string(colors.error_label) + "Error: " + std::string(colors.error_path) + "'" + path + "'" + std::string(colors.error_label) + " is not a directory.");
 
     return "";
 }
@@ -97,11 +88,10 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unorde
 bool& umountMvRmBreak, bool& abortDel) {
     rl_attempted_completion_function = nullptr;
 
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalTheme == "original");
+    const CpMvRmColors colors = getCpMvRmColors();
 
-    std::string green = isOriginal ? std::string(originalColors::green) : std::string(theme->accent);
-    std::string blue  = isOriginal ? std::string(originalColors::blue)  : std::string(theme->secondary);
+    std::string green = std::string(colors.prompt_green);
+    std::string blue  = std::string(colors.prompt_blue);
     std::string red   = std::string(originalColors::red);
     std::string reset = std::string(originalColors::boldAlt);
 
@@ -178,12 +168,8 @@ bool& umountMvRmBreak, bool& abortDel) {
                 umountMvRmBreak = false;
                 abortDel = true;
 
-                const ListTheme* t = getActiveTheme();
-                const bool orig    = (globalTheme == "original");
-                std::string_view abortColor = orig ? originalColors::yellow   : t->warning;
-
-                std::cout << "\n" << abortColor << "rm operation aborted by user." << originalColors::boldAlt << "\n";
-                std::cout << color << "\n↵ to continue..." << reset;
+                std::cout << "\n" << colors.abort << "rm operation aborted by user." << originalColors::boldAlt << "\n";
+                std::cout << colors.prompt_blue << "\n↵ to continue..." << reset;
 
                 std::cin.clear();
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -227,11 +213,10 @@ bool& overwriteExisting) {
                 }
             };
 
-            const ListTheme* theme = getActiveTheme();
-            const bool isOriginal  = (globalTheme == "original");
+            const CpMvRmColors colors = getCpMvRmColors();
 
-            std::string green = isOriginal ? "\001" + std::string(originalColors::green) + "\002" : "\001" + std::string(theme->accent)    + "\002";
-            std::string blue  = isOriginal ? "\001" + std::string(originalColors::blue)  + "\002" : "\001" + std::string(theme->secondary) + "\002";
+            std::string green = "\001" + std::string(colors.prompt_green) + "\002";
+            std::string blue  = "\001" + std::string(colors.prompt_blue) + "\002";
             std::string reset = "\001" + std::string(originalColors::boldAlt) + "\002";
 
             std::string promptPrefix = "\n";
@@ -370,14 +355,7 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
 const std::string& destDirProcessed, const std::string& destFile, std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<size_t>* completedTasks,
 std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages) {
 
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal  = (globalTheme == "original");
-
-    std::string_view errLabel = isOriginal ? originalColors::red      : theme->secondary;
-    std::string_view errPath  = isOriginal ? originalColors::yellow   : theme->warning;
-    std::string_view okLabel  = isOriginal ? originalColors::boldAlt  : theme->muted;
-    std::string_view okPath   = isOriginal ? originalColors::green    : theme->primary;
-    std::string_view destPath = isOriginal ? originalColors::blue      : theme->accent;
+    const CpMvRmColors colors = getCpMvRmColors();
 
     const std::string displaySrc = (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile;
 
@@ -385,9 +363,9 @@ std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful, const 
         std::string errorDetail = cancelled ? "Cancelled" : ec.message();
         std::string msg;
         msg.reserve(128);
-        msg.append(errLabel).append("Error ").append(verb).append(": ")
-           .append(errPath).append("'").append(displaySrc).append("'")
-           .append(originalColors::boldAlt).append(errLabel).append(" to '").append(destDirProcessed).append("/': ")
+        msg.append(colors.error_label).append("Error ").append(verb).append(": ")
+           .append(colors.error_path).append("'").append(displaySrc).append("'")
+           .append(originalColors::boldAlt).append(colors.error_label).append(" to '").append(destDirProcessed).append("/': ")
            .append(errorDetail).append(".")
            .append(originalColors::boldAlt).append(originalColors::boldAlt);
         verboseErrors.push_back(std::move(msg));
@@ -397,10 +375,10 @@ std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful, const 
         std::string pastVerb = (verb == "moving") ? "Moved" : "Copied";
         std::string msg;
         msg.reserve(128);
-        msg.append(okLabel).append(pastVerb).append(": ")
-           .append(okPath).append("'").append(displaySrc).append("'")
-           .append(originalColors::boldAlt).append(okLabel).append(" to ")
-           .append(destPath).append("'").append(destDirProcessed).append("/").append(destFile).append("'")
+        msg.append(colors.success_label).append(pastVerb).append(": ")
+           .append(colors.success_path).append("'").append(displaySrc).append("'")
+           .append(originalColors::boldAlt).append(colors.success_label).append(" to ")
+           .append(colors.dest_path).append("'").append(destDirProcessed).append("/").append(destFile).append("'")
            .append(originalColors::boldAlt).append(originalColors::boldAlt).append(".");
         verboseIsos.push_back(std::move(msg));
         completedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -414,22 +392,16 @@ std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful, const 
 void performDeleteOperation(const fs::path& srcPath, const std::string& srcDir, const std::string& srcFile, size_t fileSize, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks,
 std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages) {
 
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal  = (globalTheme == "original");
-
-    std::string_view errLabel = isOriginal ? originalColors::red     : theme->secondary;
-    std::string_view errPath  = isOriginal ? originalColors::yellow  : theme->warning;
-    std::string_view okLabel  = isOriginal ? originalColors::boldAlt : theme->muted;
-    std::string_view okPath   = isOriginal ? originalColors::green   : theme->primary;
+    const CpMvRmColors colors = getCpMvRmColors();
 
     const std::string displaySrc = (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile;
 
     if (g_operationCancelled.load()) {
         std::string msg;
         msg.reserve(128);
-        msg.append(errLabel).append("Error deleting: ")
-           .append(errPath).append("'").append(displaySrc).append("'")
-           .append(originalColors::boldAlt).append(errLabel).append(": Cancelled.")
+        msg.append(colors.error_label).append("Error deleting: ")
+           .append(colors.error_path).append("'").append(displaySrc).append("'")
+           .append(originalColors::boldAlt).append(colors.error_label).append(": Cancelled.")
            .append(originalColors::boldAlt).append(originalColors::boldAlt);
         verboseErrors.push_back(std::move(msg));
         failedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -443,18 +415,18 @@ std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, 
         completedBytes->fetch_add(fileSize);
         std::string msg;
         msg.reserve(128);
-        msg.append(okLabel).append("Deleted: ")
-           .append(okPath).append("'").append(displaySrc).append("'")
-           .append(originalColors::boldAlt).append(okLabel).append(".")
+        msg.append(colors.success_label).append("Deleted: ")
+           .append(colors.success_path).append("'").append(displaySrc).append("'")
+           .append(originalColors::boldAlt).append(colors.success_label).append(".")
            .append(originalColors::boldAlt);
         verboseIsos.push_back(std::move(msg));
         completedTasks->fetch_add(1, std::memory_order_acq_rel);
     } else {
         std::string msg;
         msg.reserve(128);
-        msg.append(errLabel).append("Error deleting: ")
-           .append(errPath).append("'").append(displaySrc).append("'")
-           .append(originalColors::boldAlt).append(errLabel).append(": ").append(ec.message()).append(".")
+        msg.append(colors.error_label).append("Error deleting: ")
+           .append(colors.error_path).append("'").append(displaySrc).append("'")
+           .append(originalColors::boldAlt).append(colors.error_label).append(": ").append(ec.message()).append(".")
            .append(originalColors::boldAlt).append(originalColors::boldAlt);
         verboseErrors.push_back(std::move(msg));
         failedTasks->fetch_add(1, std::memory_order_acq_rel);

@@ -306,15 +306,7 @@ bool isDeviceMounted(const std::string& device) {
  */
 std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<std::pair<size_t, std::string>>& deviceMap, const std::vector<IsoInfo>& selectedIsos, bool& permissions) {
     
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal  = (globalTheme == "original");
-
-    std::string_view errLabel   = isOriginal ? originalColors::red    : theme->secondary;
-    std::string_view errPath    = isOriginal ? originalColors::yellow : theme->warning;
-    std::string_view warnLabel  = isOriginal ? originalColors::yellow : theme->warning;
-    std::string_view infoLabel  = isOriginal ? originalColors::green  : theme->primary;
-    std::string_view reset      = originalColors::boldAlt;
-    std::string_view bold       = originalColors::boldAlt;
+    const WriteTheme wt = getWriteTheme();
 
     std::vector<std::string> validationErrors;
     std::vector<std::pair<IsoInfo, std::string>> validPairs;
@@ -332,41 +324,41 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
         errMsg.reserve(256);
 
         if (!isUsbDevice(device)) {
-            errMsg.append(errPath).append("'").append(device).append("'")
-                  .append(reset).append(errLabel).append(" is not a removable USB device")
-                  .append(reset);
+            errMsg.append(wt.errPath).append("'").append(device).append("'")
+                  .append(wt.rl_resetCol).append(wt.errLabel).append(" is not a removable USB device")
+                  .append(wt.rl_resetCol);
             validationErrors.push_back(std::move(errMsg));
             continue;
         }
         
         if (isDeviceMounted(device)) {
-            errMsg.append(errPath).append("'").append(device).append("'")
-                  .append(reset).append(errLabel).append(" or its partitions are mounted")
-                  .append(reset);
+            errMsg.append(wt.errPath).append("'").append(device).append("'")
+                  .append(wt.rl_resetCol).append(wt.errLabel).append(" or its partitions are mounted")
+                  .append(wt.rl_resetCol);
             validationErrors.push_back(std::move(errMsg));
             continue;
         }
         
         if (deviceSize == 0) {
-            errMsg.append(errLabel).append("Failed to get size for ")
-                  .append(errPath).append("'").append(device).append("'")
-                  .append(reset).append(errLabel).append(" check permissions")
-                  .append(reset);
+            errMsg.append(wt.errLabel).append("Failed to get size for ")
+                  .append(wt.errPath).append("'").append(device).append("'")
+                  .append(wt.rl_resetCol).append(wt.errLabel).append(" check permissions")
+                  .append(wt.rl_resetCol);
             validationErrors.push_back(std::move(errMsg));
             permissions = true;
             continue;
         }
         
         if (iso.size > deviceSize) {
-            errMsg.append(infoLabel).append("'").append(iso.filename).append("'")
-                  .append(reset).append(bold).append(" (")
-                  .append(warnLabel).append(iso.sizeStr).append(reset).append(bold)
+            errMsg.append(wt.infoLabel).append("'").append(iso.filename).append("'")
+                  .append(wt.rl_resetCol).append(wt.bold).append(" (")
+                  .append(wt.warnLabel).append(iso.sizeStr).append(wt.rl_resetCol).append(wt.bold)
                   .append(") is too large for ")
-                  .append(errPath).append("'").append(device)
+                  .append(wt.errPath).append("'").append(device)
                   .append(" <").append(driveName).append(">'")
-                  .append(reset).append(bold).append(" (")
-                  .append(warnLabel).append(deviceSizeStr).append(reset).append(bold).append(")")
-                  .append(reset);
+                  .append(wt.rl_resetCol).append(wt.bold).append(" (")
+                  .append(wt.warnLabel).append(deviceSizeStr).append(wt.rl_resetCol).append(wt.bold).append(")")
+                  .append(wt.rl_resetCol);
             validationErrors.push_back(std::move(errMsg));
             continue;
         }
@@ -375,14 +367,14 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
     }
     
     if (!validationErrors.empty()) {
-        std::cerr << "\n" << errLabel << "Validation errors:" << reset << bold << "\n";
+        std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.rl_resetCol << wt.bold << "\n";
         for (const auto& err : validationErrors) {
-            std::cerr << "  \u2022 " << err << bold << "\n";
+            std::cerr << "  \u2022 " << err << wt.bold << "\n";
         }
         
         signal(SIGINT, SIG_IGN);
         disable_ctrl_d();
-        std::cout << bold << "\n\u21b5 to " << (!permissions ? "try again..." : "continue...") << reset;
+        std::cout << wt.color << "\n\u21b5 to " << (!permissions ? "try again..." : "continue...") << wt.rl_resetCol;
         if (permissions) permissions = false;
         
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -503,19 +495,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         rl_bind_keyseq("\033[B", rl_get_next_history);
     };
     
-	const ListTheme* theme = getActiveTheme();
-	const bool isOriginal = (globalTheme == "original");
-
-	static constexpr std::string_view reset = originalColors::boldAlt;
-	static constexpr std::string_view boldReset = originalColors::boldAlt;
-
-	std::string headerCol = isOriginal ? std::string(originalColors::green)   : std::string(theme->accent);
-	std::string indexCol  = isOriginal ? std::string(originalColors::yellow)  : std::string(theme->secondary);
-	std::string pathCol   = isOriginal ? std::string(originalColors::boldAlt) : std::string(theme->muted);
-	std::string fileCol   = isOriginal ? std::string(originalColors::magenta) : std::string(theme->accent);
-	std::string sizeCol   = isOriginal ? std::string(originalColors::purple)  : std::string(theme->highlight);
-	
-	std::string warnCol   = isOriginal ? std::string(originalColors::red)     : std::string(theme->warning);
+    const WriteTheme wt = getWriteTheme();
 
     while (true) {
         setupReadline();
@@ -524,17 +504,17 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         clearScrollBuffer();
         
         if ((selectedIsos.size() > ITEMS_PER_PAGE) && (ITEMS_PER_PAGE > 0)) {
-            std::cout << "\n" << warnCol  << "ISO selections for " 
-                              << indexCol << "write" 
-                              << warnCol  << " cannot exceed the current pagination limit of " 
-                              << indexCol << ITEMS_PER_PAGE 
-                              << warnCol  << "!" 
-                              << originalColors::boldAlt << "\n";
+            std::cout << "\n" << wt.warnCol << "ISO selections for " 
+                      << wt.indexCol << "write" 
+                      << wt.warnCol << " cannot exceed the current pagination limit of " 
+                      << wt.indexCol << ITEMS_PER_PAGE 
+                      << wt.warnCol << "!" 
+                      << wt.rl_resetCol << "\n";
 
-		std::cout << color << "\n↵ to try again..." << reset;
-		std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-		return {};
-	}
+            std::cout << wt.color << "\n↵ to try again..." << wt.rl_resetCol;
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            return {};
+        }
 
         displayErrors(uniqueErrorMessages);
 
@@ -543,25 +523,25 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             return a.size > b.size;
         });
 
-		std::ostringstream devicePromptStream;
-		devicePromptStream << "\n" << boldReset << "Selected " << headerCol << "ISO" << boldReset << ":\n\n";
+        std::ostringstream devicePromptStream;
+        devicePromptStream << "\n" << wt.bold << "Selected " << wt.headerCol << "ISO" << wt.bold << ":\n\n";
 
-		for (size_t i = 0; i < sortedIsos.size(); ++i) {
-			auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
-			
-			devicePromptStream << "  " << indexCol << (i + 1) << ">" << boldReset << " ";
-			
-			if (!displayConfig::toggleNamesOnly) {
-				devicePromptStream << pathCol << isoDir << "/";
-			}
-			
-			devicePromptStream << fileCol << filename;
-			
-			devicePromptStream << boldReset << " (" << sizeCol << sortedIsos[i].sizeStr 
-							   << boldReset << ")\n";
-		}
+        for (size_t i = 0; i < sortedIsos.size(); ++i) {
+            auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
+            
+            devicePromptStream << "  " << wt.indexCol << (i + 1) << ">" << wt.bold << " ";
+            
+            if (!displayConfig::toggleNamesOnly) {
+                devicePromptStream << wt.pathCol << isoDir << "/";
+            }
+            
+            devicePromptStream << wt.fileCol << filename;
+            
+            devicePromptStream << wt.bold << " (" << wt.sizeCol << sortedIsos[i].sizeStr 
+                              << wt.bold << ")\n";
+        }
 
-        devicePromptStream << "\n" << originalColors::boldAlt << "Removable USB Devices:" << originalColors::boldAlt << "\n\n";
+        devicePromptStream << "\n" << wt.rl_resetCol << "Removable USB Devices:" << wt.rl_resetCol << "\n\n";
         std::vector<std::string> usbDevices = getRemovableDevices();
         
         struct DeviceInfo {
@@ -592,47 +572,36 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         });
 
         if (deviceInfos.empty()) {
-				devicePromptStream << "  " << originalColors::red << "No removable USB devices detected!" << originalColors::boldAlt << "\n";
-			} else {
-				for (const auto& dev : deviceInfos) {
-					if (dev.error) {
-						devicePromptStream << "  " << originalColors::red << dev.path << " (error)" << originalColors::boldAlt << "\n";
-					} else {
-						devicePromptStream << "  " << originalColors::yellow << dev.path 
-										   << originalColors::boldAlt << " <" << dev.driveName 
-										   << "> (" << originalColors::purple << dev.sizeStr 
-										   << originalColors::boldAlt << ")"
-										   << (dev.mounted ? std::string(originalColors::red) + " (mounted)" + std::string(originalColors::boldAlt) : "") 
-										   << "\n";
-					}
-				}
-			}
+            devicePromptStream << "  " << wt.colorFailure << "No removable USB devices detected!" << wt.rl_resetCol << "\n";
+        } else {
+            for (const auto& dev : deviceInfos) {
+                if (dev.error) {
+                    devicePromptStream << "  " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
+                } else {
+                    devicePromptStream << "  " << wt.deviceCol << dev.path 
+                                      << wt.rl_resetCol << " <" << dev.driveName 
+                                      << "> (" << wt.sizeCol << dev.sizeStr 
+                                      << wt.rl_resetCol << ")"
+                                      << (dev.mounted ? wt.colorFailure + " (mounted)" + wt.rl_resetCol : "") 
+                                      << "\n";
+                }
+            }
+        }
 
-		g_completerData.sortedIsos = &sortedIsos;
-		g_completerData.usbDevices = &usbDevices;
+        g_completerData.sortedIsos = &sortedIsos;
+        g_completerData.usbDevices = &usbDevices;
 
-		// Helper to wrap raw ANSI strings for readline
-		auto wrap = [](std::string_view s) -> std::string {
-			return "\001" + std::string(s) + "\002";
-		};
+        devicePromptStream << "\n" << wt.rl_labelCol << "Mappings" 
+                          << wt.rl_primaryCol << " ↵ as " 
+                          << wt.rl_highlightCol << "INDEX>DEVICE" 
+                          << wt.rl_primaryCol << ", ? ↵ for help, < ↵ to return: " 
+                          << wt.rl_resetCol;
 
+        std::string devicePrompt = devicePromptStream.str();
 
-		std::string labelCol     = isOriginal ? std::string(originalColors::rl_green)  : wrap(theme->accent);
-		std::string primaryCol   = isOriginal ? std::string(originalColors::rl_blue)   : wrap(theme->muted);
-		std::string highlightCol = isOriginal ? std::string(originalColors::rl_yellow) : wrap(theme->secondary); 
-		std::string resetCol     = wrap(originalColors::boldAlt);
-
-		devicePromptStream << "\n" << labelCol   << "Mappings" 
-						   << primaryCol         << " ↵ as " 
-						   << highlightCol       << "INDEX>DEVICE" 
-						   << primaryCol         << ", ? ↵ for help, < ↵ to return: " 
-						   << resetCol;
-
-				std::string devicePrompt = devicePromptStream.str();
-
-				std::unique_ptr<char, decltype(&std::free)> deviceInput(
-					readline(devicePrompt.c_str()), &std::free
-				);
+        std::unique_ptr<char, decltype(&std::free)> deviceInput(
+            readline(devicePrompt.c_str()), &std::free
+        );
         
         if (!deviceInput) {
             restoreReadline();
@@ -640,12 +609,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         }
         
         if (deviceInput.get()[0] == '\0') {
-			continue;
-		}
-		
+            continue;
+        }
+        
         std::string mainInputString(deviceInput.get());
-		if (mainInputString == "<") {
-			restoreReadline();
+        if (mainInputString == "<") {
+            restoreReadline();
             return {};
         }
         
@@ -665,65 +634,64 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         auto deviceMap = parseDeviceMappings(deviceInput.get(), isoFilenames, errors);
 
         if (!errors.empty()) {
-			std::cerr << "\n" << originalColors::red << "Errors:" << originalColors::boldAlt << "\n";
-			for (const auto& err : errors) {
-				std::cerr << "  • " << err << "\n";
-			}
-			
-			// Using red for the retry prompt
-			std::cout << originalColors::red << "\n↵ to try again..." << originalColors::boldAlt;
-			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-			continue;
-		}
+            std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
+            for (const auto& err : errors) {
+                std::cerr << "  • " << err << "\n";
+            }
+            
+            std::cout << wt.color << "\n↵ to try again..." << wt.rl_resetCol;
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            continue;
+        }
 
-		bool permissions = false;
-		auto validPairs = validateDevices(deviceMap, sortedIsos, permissions);
-		if (validPairs.empty()) {
-			continue;
-		}
+        bool permissions = false;
+        auto validPairs = validateDevices(deviceMap, sortedIsos, permissions);
+        if (validPairs.empty()) {
+            continue;
+        }
 
-		// Warning message with High-Saturation RGB Red and Yellow
-		std::cout << "\n" << originalColors::yellow << "WARNING: This will " 
-				  << originalColors::red << "*ERASE ALL DATA*" 
-				  << originalColors::yellow << " on:" << originalColors::boldAlt << "\n\n";
+        // Warning message with colors from theme
+        std::cout << "\n" << wt.colorWarning << "WARNING: This will " 
+                  << wt.colorFailure << "*ERASE ALL DATA*" 
+                  << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
 
-		for (const auto& [iso, device] : validPairs) {
-			uint64_t deviceSize = getBlockDeviceSize(device);
-			std::string deviceSizeStr = formatFileSize(deviceSize);
-			std::string driveName = getDriveName(device);
-			
-			std::cout << "  {" << originalColors::yellow << device 
-					  << " " << originalColors::boldAlt << "<" << driveName << "> (" 
-					  << originalColors::purple << deviceSizeStr 
-					  << originalColors::boldAlt << ")} ← {" << fileCol
-					  << iso.filename << originalColors::boldAlt << " (" << sizeCol
-					  << iso.sizeStr << originalColors::boldAlt << ")}\n";
-		}
+        for (const auto& [iso, device] : validPairs) {
+            uint64_t deviceSize = getBlockDeviceSize(device);
+            std::string deviceSizeStr = formatFileSize(deviceSize);
+            std::string driveName = getDriveName(device);
+            
+            std::cout << "  {" << wt.deviceCol << device 
+                      << " " << wt.rl_resetCol << "<" << driveName << "> (" 
+                      << wt.sizeCol << deviceSizeStr 
+                      << wt.rl_resetCol << ")} ← {" << wt.fileCol
+                      << iso.filename << wt.rl_resetCol << " (" << wt.sizeCol
+                      << iso.sizeStr << wt.rl_resetCol << ")}\n";
+        }
 
-		disableReadlineForConfirmation();
+        disableReadlineForConfirmation();
 
-		// Constructing the Readline prompt with proper RGB and wrappers
-		const std::string confirmPrompt = 
-			"\001" + std::string(isOriginal ? originalColors::blue : theme->muted) + "\002" +
-			"\002\nProceed? (y/n): " +
-			"\001" + std::string(originalColors::boldAlt) + "\002";
+        // Constructing the Readline prompt using theme colors
+        const std::string confirmPrompt = 
+            wt.color +
+            "\nProceed? (y/n): " +
+            wt.rl_resetCol;
 
-		std::unique_ptr<char, decltype(&std::free)> confirmation(
-			readline(confirmPrompt.c_str()), 
-			&std::free
-		);
+        std::unique_ptr<char, decltype(&std::free)> confirmation(
+            readline(confirmPrompt.c_str()), 
+            &std::free
+        );
 
-		if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
-			restoreReadline();
-			setupSignalHandlerCancellations();
-			g_operationCancelled.store(false);
-			return validPairs;
-		}
+        if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
+            restoreReadline();
+            setupSignalHandlerCancellations();
+            g_operationCancelled.store(false);
+            return validPairs;
+        }
 
-		restoreReadline();
+        restoreReadline();
 
-		std::cout << "\n" << originalColors::yellow << "Write operation aborted by user." << originalColors::boldAlt << "\n";
-        std::cout << color << "\n↵ to continue..." << reset;
+        std::cout << "\n" << wt.colorWarning << "Write operation aborted by user." << wt.rl_resetCol << "\n";
+        std::cout << wt.color << "\n↵ to continue..." << wt.rl_resetCol;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
 }
@@ -757,23 +725,21 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
 
     std::atomic<size_t> completedTasks(0);
-	std::atomic<bool> isProcessingComplete(false);
-	const size_t totalTasks = validPairs.size();
+    std::atomic<bool> isProcessingComplete(false);
+    const size_t totalTasks = validPairs.size();
 
-	ThreadPool& pool = getStaticThreadPool();
+    ThreadPool& pool = getStaticThreadPool();
 
     disableInput();
     clearScrollBuffer();
     
-    const ListTheme* theme = getActiveTheme();
-	const bool isOriginal = (globalTheme == "original");
-	std::string colorMuted  = isOriginal ? std::string(originalColors::boldAlt) : std::string(theme->muted);
+    const WriteTheme wt = getWriteTheme();
 
-    std::cout << "\n" << colorMuted << "Processing " 
-          << (totalTasks > 1 ? "tasks" : "task") << " for " 
-          << originalColors::yellow << "write2usb" << colorMuted 
-          << " operation... (" << originalColors::red << "Ctrl+c" 
-          << colorMuted << ":cancel)\n\n";
+    std::cout << "\n" << wt.colorStatus << "Processing " 
+              << (totalTasks > 1 ? "tasks" : "task") << " for " 
+              << wt.colorWarning << "write2usb" << wt.colorStatus 
+              << " operation... (" << wt.colorFailure << "Ctrl+c" 
+              << wt.colorStatus << ":cancel)\n\n";
     std::cout << "\033[s";
 
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -789,41 +755,28 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             deviceSizeStrs[prog.device] = formatFileSize(deviceSizes[prog.device]);
         }
     }
-	
-	auto displayAllProgress = [&]() {
+        
+    auto displayAllProgress = [&]() {
+        for (size_t i = 0; i < progressData.size(); ++i) {
+            const auto& prog = progressData[i];
+            std::string currentSize = formatFileSize(prog.bytesWritten.load());
 
-		// Non-status colors: theme roles or original fallback
-		const std::string_view fileCol   = isOriginal ? originalColors::magenta : theme->accent;
-		const std::string_view deviceCol = isOriginal ? originalColors::yellow  : theme->secondary;
-		const std::string_view sizeCol   = isOriginal ? originalColors::purple  : theme->primary;
-		const std::string_view speedCol  = isOriginal ? originalColors::boldAlt : theme->highlight;
+            std::cout << "\033[K"
+                      << wt.fileCol << prog.filename << " " << wt.bold << " → {"
+                      << wt.deviceCol << prog.device << wt.bold << " <"
+                      << deviceNames[prog.device] << "> (" << wt.sizeCol
+                      << deviceSizeStrs[prog.device] << wt.bold << ")} " << wt.bold;
 
-		// Status colors remain fixed regardless of theme
-		constexpr std::string_view doneCol = originalColors::green;
-		constexpr std::string_view failCol = originalColors::red;
-		constexpr std::string_view cxlCol  = originalColors::yellow;
-		constexpr std::string_view bold    = originalColors::boldAlt;
+            if (prog.completed)                   std::cout << wt.colorSuccess << "DONE";
+            else if (prog.failed)                 std::cout << wt.colorFailure << "FAIL";
+            else if (g_operationCancelled.load()) std::cout << wt.colorWarning << "CXL";
+            else                                  std::cout << prog.progress << "%";
 
-		for (size_t i = 0; i < progressData.size(); ++i) {
-			const auto& prog = progressData[i];
-			std::string currentSize = formatFileSize(prog.bytesWritten.load());
-
-			std::cout << "\033[K"
-					  << fileCol << prog.filename << " " << bold << " → {"
-					  << deviceCol << prog.device << bold << " <"
-					  << deviceNames[prog.device] << "> (" << sizeCol
-					  << deviceSizeStrs[prog.device] << bold << ")} " << bold;
-
-			if (prog.completed)                   std::cout << doneCol << "DONE";
-			else if (prog.failed)                 std::cout << failCol << "FAIL";
-			else if (g_operationCancelled.load()) std::cout << cxlCol  << "CXL";
-			else                                  std::cout << prog.progress << "%";
-
-			std::cout << bold << " [" << currentSize << "/" << sizeCol << prog.totalSize << bold << "] "
-					  << speedCol << formatSpeed(prog.speed) << bold << "\n";
-		}
-		std::cout << std::flush;
-	};
+            std::cout << wt.bold << " [" << currentSize << "/" << wt.sizeCol << prog.totalSize << wt.bold << "] "
+                      << wt.speedCol << formatSpeed(prog.speed) << wt.bold << "\n";
+        }
+        std::cout << std::flush;
+    };
 
     auto displayProgress = [&]() {
         while (!isProcessingComplete.load(std::memory_order_acquire) && 
@@ -844,8 +797,8 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
                 progressData[i].completed.store(true);
                 completedTasks.fetch_add(1);
             } else if (!g_operationCancelled.load()) {
-				progressData[i].failed.store(true);
-			}
+                progressData[i].failed.store(true);
+            }
         }));
     }
 
@@ -871,32 +824,31 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     
     size_t completedTasksValue = completedTasks.load();
 
-	// Using RGB Yellow for the "write" operation label
-	std::string operation = std::string(originalColors::yellow) + "write2usb" + std::string(originalColors::boldAlt);
+    std::string operation = wt.colorWarning + "write2usb" + wt.rl_resetCol;
 
-	std::cout << "\r" << originalColors::boldAlt << "Status: " << operation << " → " 
-			  << (!g_operationCancelled.load() 
-				  ? (failedTasksValue > 0 
-					 ? (completedTasksValue > 0 
-						? std::string(originalColors::yellow) + "PARTIAL"
-						: std::string(originalColors::red)    + "FAILED")
-					 : std::string(originalColors::green)  + "COMPLETED")
-				  : std::string(originalColors::yellow) + "INTERRUPTED")
-			  << originalColors::boldAlt << std::endl;
+    std::cout << "\r" << wt.colorStatus << "Status: " << operation << " → " 
+              << (!g_operationCancelled.load() 
+                  ? (failedTasksValue > 0 
+                     ? (completedTasksValue > 0 
+                        ? wt.colorWarning + "PARTIAL"
+                        : wt.colorFailure + "FAILED")
+                     : wt.colorSuccess + "COMPLETED")
+                  : wt.colorWarning + "INTERRUPTED")
+              << wt.rl_resetCol << std::endl;
 
-	std::cout << "\033[u"; // Restore cursor position (Keep raw ANSI)
+    std::cout << "\033[u";
 
-	auto endTime = std::chrono::high_resolution_clock::now();
-	auto duration = std::chrono::duration<double>(endTime - startTime).count();
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration<double>(endTime - startTime).count();
 
     std::cout << std::fixed << std::setprecision(1);
-	std::cout << "\n" << originalColors::boldAlt << "Successful: " 
-          << originalColors::green << completedTasks.load() 
-          << originalColors::boldAlt << "/" 
-          << originalColors::yellow << validPairs.size() 
-          << originalColors::boldAlt << " | Time Elapsed: " 
-          << originalColors::boldAlt << duration << "s" 
-          << originalColors::boldAlt << "\n";
+    std::cout << "\n" << wt.colorStatus << "Successful: " 
+              << wt.colorSuccess << completedTasks.load() 
+              << wt.colorStatus << "/" 
+              << wt.colorWarning << validPairs.size() 
+              << wt.colorStatus << " | Time Elapsed: " 
+              << wt.colorStatus << duration << "s" 
+              << wt.colorStatus << "\n";
     
     flushStdin();
     restoreInput();
@@ -971,9 +923,10 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     // Cleanup and wait for user acknowledgment
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
+    const WriteTheme wt = getWriteTheme();
 
     // Replaced 'color' and 'reset' with your RGB boldAlt and reset
-    std::cout << color << "\n↵ to continue..." << reset;
+    std::cout << wt.color << "\n↵ to continue..." << reset;
     
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }

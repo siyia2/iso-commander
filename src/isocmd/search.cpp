@@ -17,7 +17,6 @@
 //=============================================================================
 // General Section
 //=============================================================================
-
 /**
  * @brief Checks if a given path is a valid directory
  * @param path The filesystem path to check
@@ -58,8 +57,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
         rl_attempted_completion_function = my_special_completion_entry;
         g_operationCancelled.store(false);
         
-        const ListTheme* theme = getActiveTheme();
-        const bool isOrig = (globalTheme == "original");
+        const DatabaseTheme dt = getDatabaseTheme();
 
         clearScrollBuffer();
         loadHistory(filterHistory);
@@ -67,18 +65,15 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
         rl_bind_key('\f', clear_screen_and_buffer);
         rl_bind_key('\t', rl_complete);
         
-        std::string_view primary = isOrig ? originalColors::green : theme->accent;
-        std::string_view secondary = isOrig ? originalColors::blue : theme->muted;
-
         std::string prompt;
         prompt.reserve(512);
-        prompt.append("\001").append(primary).append("\002FolderPaths")
-              .append("\001").append(secondary).append("\002 ↵ to scan for ")
-              .append("\001").append(primary).append("\002.iso")
-              .append("\001").append(secondary).append("\002 entries and import them into the ")
-              .append("\001").append(primary).append("\002local")
-              .append("\001").append(secondary).append("\002 database, ? ↵ help, ↵ return:\n")
-              .append("\001").append(originalColors::boldAlt).append("\002");
+        prompt.append("\001").append(dt.green).append("\002FolderPaths")
+              .append("\001").append(dt.blue).append("\002 ↵ to scan for ")
+              .append("\001").append(dt.green).append("\002.iso")
+              .append("\001").append(dt.blue).append("\002 entries and import them into the ")
+              .append("\001").append(dt.green).append("\002local")
+              .append("\001").append(dt.blue).append("\002 database, ? ↵ help, ↵ return:\n")
+              .append("\001").append(dt.reset).append("\002");
 
         char* rawSearchQuery = readline(prompt.c_str());
         if (!rawSearchQuery) return;
@@ -115,47 +110,44 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
 
         auto start_time = std::chrono::high_resolution_clock::now();
         std::istringstream iss(input);
-		std::string path;
+        std::string path;
 
-		// ----- Normalize before deduplication -----
-		auto normalizePath = [](const std::string& p) {
-			std::string n = fs::path(p).lexically_normal().string();
-			if (n.size() > 1 && n.back() == '/')
-				n.pop_back();
-			return n;
-		};
+        // ----- Normalize before deduplication -----
+        auto normalizePath = [](const std::string& p) {
+            std::string n = fs::path(p).lexically_normal().string();
+            if (n.size() > 1 && n.back() == '/')
+                n.pop_back();
+            return n;
+        };
 
-		// Use a set of normalized paths for true uniqueness
-		std::unordered_set<std::string> uniqueNormalizedPaths;
+        // Use a set of normalized paths for true uniqueness
+        std::unordered_set<std::string> uniqueNormalizedPaths;
 
-		while (std::getline(iss, path, ';')) {
-			path = trimWhitespace(path);
-			if (!isValidDirectory(path)) {
-				std::string errCol = isOrig ? std::string(originalColors::red) : std::string(theme->secondary);
-				invalidPaths.insert(errCol + path);      // Keep raw path for error display
-				continue;
-			}
+        while (std::getline(iss, path, ';')) {
+            path = trimWhitespace(path);
+            if (!isValidDirectory(path)) {
+                invalidPaths.insert(dt.red + path);
+                continue;
+            }
 
-			std::string normPath = normalizePath(path);  // Normalize early
-			if (uniqueNormalizedPaths.insert(normPath).second) {
-				validPaths.push_back(normPath);          // Store normalized version
-			}
-		}
+            std::string normPath = normalizePath(path);
+            if (uniqueNormalizedPaths.insert(normPath).second) {
+                validPaths.push_back(normPath);
+            }
+        }
 
-		// ----- Subpath filtering now works on already‑normalized paths -----
-		
-		// Sort normalized input
-		std::sort(validPaths.begin(), validPaths.end());
+        // ----- Subpath filtering now works on already‑normalized paths -----
+        
+        // Sort normalized input
+        std::sort(validPaths.begin(), validPaths.end());
 
-		std::vector<std::string> filteredPaths;
-		for (const auto& p : validPaths) {
-			// Because the list is sorted lexicographically, any parent directory
-			// of p will be the most recently added path in filteredPaths.
-			if (filteredPaths.empty() || !p.starts_with(filteredPaths.back() + "/")) {
-				filteredPaths.push_back(p);
-			}
-		}
-		validPaths = std::move(filteredPaths);
+        std::vector<std::string> filteredPaths;
+        for (const auto& p : validPaths) {
+            if (filteredPaths.empty() || !p.starts_with(filteredPaths.back() + "/")) {
+                filteredPaths.push_back(p);
+            }
+        }
+        validPaths = std::move(filteredPaths);
 
         if (validPaths.empty()) {
             flushStdin();
@@ -193,8 +185,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
         restoreInput();
         resetReadlinePagination();
             
-        std::cout << "\r" << (isOrig ? originalColors::boldAlt : theme->accent) 
-                  << "Total files processed: " << totalFiles;
+        std::cout << "\r" << dt.bold << "Total files processed: " << totalFiles;
         
         if (!invalidPaths.empty() || !validPaths.empty()) {
             std::cout << "\n";
@@ -215,13 +206,11 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
         }
 
     } catch (const std::exception& e) {
-        const ListTheme* theme = getActiveTheme();
-        const bool isOrig = (globalTheme == "original");
+        const DatabaseTheme dt = getDatabaseTheme();
 
-        std::cerr << "\n" << (isOrig ? originalColors::red : theme->secondary) 
-                  << "Unable to access ISO database: " << e.what() << originalColors::boldAlt << std::endl;
+        std::cerr << "\n" << dt.red << "Unable to access ISO database: " << e.what() << dt.reset << std::endl;
         
-        std::cout << color << "\n↵ to continue..." << reset; 
+        std::cout << dt.color << "\n↵ to continue..." << dt.reset; 
 
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
@@ -252,8 +241,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
     std::vector<std::string> localIsoFiles; 
     std::atomic<bool> g_CancelledMessageAdded{false}; 
     
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalTheme == "original");
+    const DatabaseTheme dt = getDatabaseTheme();
 	
     auto iequals = [](const std::string_view& a, const std::string_view& b) {
         return std::equal(a.begin(), a.end(), b.begin(), b.end(),
@@ -272,8 +260,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                     std::lock_guard<std::mutex> lock(traverseErrorsMutex);
                     uniqueErrorMessages.clear(); 
                     
-                    std::string warnCol = std::string(isOriginal ? originalColors::yellow : theme->warning);
-                    std::string msg = "\n" + warnCol + "ISO search interrupted by user." + std::string(originalColors::boldAlt);
+                    std::string msg = "\n" + dt.yellow + "ISO search interrupted by user." + dt.reset;
                     uniqueErrorMessages.insert(msg);
                 }
                 break;
@@ -290,8 +277,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                 totalFiles.fetch_add(1, std::memory_order_acq_rel); 
                 if (totalFiles % 100 == 0) { 
                     std::lock_guard<std::mutex> lock(couNtMutex); 
-                    std::cout << "\r" << (isOriginal ? originalColors::boldAlt : theme->accent) 
-                              << "Total files processed: " << totalFiles << std::flush;
+                    std::cout << "\r" << dt.bold << "Total files processed: " << totalFiles << std::flush;
                 }
             }
 
@@ -316,9 +302,8 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
         }
 
     } catch (const std::filesystem::filesystem_error& e) {
-        std::string errCol = std::string(isOriginal ? originalColors::red : theme->secondary);
-        std::string formattedError = "\n" + errCol + "Error: " + path.string() + " - " + 
-                                     e.what() + std::string(originalColors::boldAlt);
+        std::string formattedError = "\n" + dt.red + "Error: " + path.string() + " - " + 
+                                     e.what() + dt.reset;
         
         if (promptFlag) {
             std::lock_guard<std::mutex> errorLock(traverseErrorsMutex); 
@@ -359,14 +344,13 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
                   const std::vector<std::string>& mdfMdsFilesCache, 
                   const std::vector<std::string>& nrgFilesCache,
                   const std::vector<std::string>& chdFilesCache,
-                  const std::vector<std::string>& daaGbiFilesCache,   // <-- added
-                  bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa) {   // <-- added modeDaa
+                  const std::vector<std::string>& daaGbiFilesCache,
+                  bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa) {
     
     signal(SIGINT, SIG_IGN);        
     disable_ctrl_d();
     
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalTheme == "original");
+    const DatabaseTheme dt = getDatabaseTheme();
 
     bool isEmpty = false;
     if (modeDaa) {
@@ -382,11 +366,10 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
     }
 
     if (isEmpty && list) {
-        std::cout << "\n" << (isOriginal ? originalColors::yellow : theme->warning) 
-                  << "No " << fileExtension << " entries stored in RAM.\033[J" 
-                  << originalColors::boldAlt << "\n";
+        std::cout << "\n" << dt.yellow << "No " << fileExtension << " entries stored in RAM.\033[J" 
+                  << dt.reset << "\n";
 
-        std::cout << color << "\n↵ to continue..." << reset; 
+        std::cout << dt.color << "\n↵ to continue..." << dt.reset; 
         
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         
@@ -434,8 +417,7 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
     
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalTheme == "original");
+    const DatabaseTheme dt = getDatabaseTheme();
 
     std::vector<std::string> extensions;
     std::string cacheType;
@@ -443,7 +425,7 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
 
     if (modeDaa) {
         extensions = {".daa", ".gbi"};
-		cacheType = "DAA/GBI";
+        cacheType = "DAA/GBI";
         cacheIsEmpty = daaGbiFilesCache.empty();
         if (!cacheIsEmpty) std::vector<std::string>().swap(daaGbiFilesCache);
     } else if (modeChd) {
@@ -490,16 +472,14 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
     }
 
     if (cacheIsEmpty && !transformationCacheWasCleared) {
-        std::cout << "\n" << (isOriginal ? originalColors::yellow : theme->warning) 
-                  << cacheType << " buffer is empty. Nothing to clear.\033[J" 
-                  << originalColors::boldAlt << "\n";
+        std::cout << "\n" << dt.yellow << cacheType << " buffer is empty. Nothing to clear.\033[J" 
+                  << dt.reset << "\n";
     } else {
-        std::cout << "\n" << (isOriginal ? originalColors::green : theme->accent) 
-                  << cacheType << " buffer cleared.\033[J" 
-                  << originalColors::boldAlt << "\n";
+        std::cout << "\n" << dt.green << cacheType << " buffer cleared.\033[J" 
+                  << dt.reset << "\n";
     }
 
-    std::cout << color << "\n↵ to continue..." << reset; 
+    std::cout << dt.color << "\n↵ to continue..." << dt.reset; 
 
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     clearScrollBuffer();
@@ -583,8 +563,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 std::unordered_set<std::string> processPaths(const std::string& path, const std::string& mode, 
                                             const std::function<void(const std::string&, const std::string&)>& callback, 
                                             std::unordered_set<std::string>& processedErrorsFind) {
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalTheme == "original");
+    const DatabaseTheme dt = getDatabaseTheme();
 
     std::atomic<size_t> totalFiles{0};
     std::unordered_set<std::string> localFileNames;
@@ -612,10 +591,8 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                                        (blacklistChd) ? "CHD" : 
                                        (blacklistDaa) ? "DAA/GBI" : "BIN/IMG";
                     
-                    std::string warnCol = std::string(isOriginal ? originalColors::yellow : theme->warning);
-                    
-                    processedErrorsFind.insert(warnCol + type + " search interrupted by user.\n\n" + 
-                                             std::string(originalColors::boldAlt));
+                    processedErrorsFind.insert(dt.yellow + type + " search interrupted by user.\n\n" + 
+                                             dt.reset);
                 }
                 break;
             }
@@ -625,11 +602,9 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                 
                 if (totalFiles % 100 == 0) {
                     std::lock_guard<std::mutex> lock(couNtMutex);
-                    std::cout << "\r" << (isOriginal ? originalColors::boldAlt : theme->accent) 
-                              << "Total files processed: " << totalFiles << std::flush;
+                    std::cout << "\r" << dt.bold << "Total files processed: " << totalFiles << std::flush;
                 }
                 
-                // Call blacklist with the new DAA flag
                 if (blacklist(entry, blacklistMdf, blacklistNrg, blacklistChd, blacklistDaa)) {
                     std::string fileName = entry.path().string();
                     {
@@ -644,7 +619,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                             isInCache = (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) != binImgFilesCache.end());
                         } else if (mode == "chd") {
                             isInCache = (std::find(chdFilesCache.begin(), chdFilesCache.end(), fileName) != chdFilesCache.end());
-                        } else if (mode == "daa") {   // <-- DAA cache check
+                        } else if (mode == "daa") {
                             isInCache = (std::find(daaGbiFilesCache.begin(), daaGbiFilesCache.end(), fileName) != daaGbiFilesCache.end());
                         }
                         
@@ -657,16 +632,14 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
         }
     } catch (const std::filesystem::filesystem_error& e) {
         std::lock_guard<std::mutex> lock(globalSetsMutex);
-        std::string errCol = std::string(isOriginal ? originalColors::red : theme->secondary);
         
-        processedErrorsFind.insert(errCol + "Error traversing path: " + path + " - " + 
-                                 e.what() + std::string(originalColors::boldAlt));
+        processedErrorsFind.insert(dt.red + "Error traversing path: " + path + " - " + 
+                                 e.what() + dt.reset);
     }
     
     {
         std::lock_guard<std::mutex> lock(couNtMutex);
-        std::cout << "\r" << (isOriginal ? originalColors::boldAlt : theme->accent) 
-                  << "Total files processed: " << totalFiles << originalColors::boldAlt;
+        std::cout << "\r" << dt.bold << "Total files processed: " << totalFiles << dt.reset;
     }
     
     return localFileNames;
@@ -905,7 +878,8 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
 
     const auto configIt = fileTypeMap.find(fileTypeChoice);
     if (configIt == fileTypeMap.end()) {
-        std::cout << originalColors::red << "Invalid file type choice. Supported types: BIN/IMG, MDF, NRG, CHD, DAA" << originalColors::boldAlt << "\n";
+        const DatabaseTheme dt = getDatabaseTheme();
+        std::cout << dt.red << "Invalid file type choice. Supported types: BIN/IMG, MDF, NRG, CHD, DAA" << dt.reset << "\n";
         return;
     }
 
@@ -952,23 +926,17 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
         initIterationState();
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         
-        const ListTheme* theme = getActiveTheme();
-        const bool isOriginal = (globalTheme == "original");
-
-        std::string_view headCol = isOriginal ? originalColors::green  : theme->accent;
-        std::string_view textCol = isOriginal ? originalColors::blue   : theme->muted;
-        std::string_view extCol  = isOriginal ? originalColors::orange : theme->accent;
-        std::string_view ramCol  = isOriginal ? originalColors::yellow : theme->accent;
+        const DatabaseTheme dt = getDatabaseTheme();
 
         std::string prompt;
         prompt.reserve(512);
-        prompt.append("\001").append(headCol).append("\002FolderPaths")
-              .append("\001").append(textCol).append("\002 ↵ to scan for \001")
-              .append("\001").append(extCol).append("\002").append(fileExtension)
-              .append("\001").append(textCol).append("\002 entries and cache them into \001")
-              .append("\001").append(ramCol).append("\002RAM\001")
-              .append("\001").append(textCol).append("\002, ? ↵ help, ↵ return:\n\001")
-              .append(originalColors::boldAlt).append("\002");
+        prompt.append("\001").append(dt.green).append("\002FolderPaths")
+              .append("\001").append(dt.blue).append("\002 ↵ to scan for \001")
+              .append("\001").append(dt.orange).append("\002").append(fileExtension)
+              .append("\001").append(dt.blue).append("\002 entries and cache them into \001")
+              .append("\001").append(dt.yellow).append("\002RAM\001")
+              .append("\001").append(dt.blue).append("\002, ? ↵ help, ↵ return:\n\001")
+              .append(dt.reset).append("\002");
         
         std::unique_ptr<char, decltype(&std::free)> mainSearch(readline(prompt.c_str()), &std::free);
 
@@ -992,8 +960,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
                 if (isValidDirectory(path)) {
                     directoryPaths.push_back(path);
                 } else {
-                    std::string errPrefix = isOriginal ? std::string(originalColors::red) : std::string(theme->secondary);
-                    invalidDirectoryPaths.insert(errPrefix + path);
+                    invalidDirectoryPaths.insert(dt.red + path);
                 }
             }
         }
@@ -1011,9 +978,8 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
                 saveHistory(filterHistory);
             }
         } catch (const std::exception& e) {
-            std::cerr << "\n\n" << (isOriginal ? originalColors::red : theme->secondary) 
-                      << "Unable to access local database: " << e.what() 
-                      << originalColors::boldAlt << std::endl;
+            std::cerr << "\n\n" << dt.red << "Unable to access local database: " << e.what() 
+                      << dt.reset << std::endl;
         }
 
         verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths,
