@@ -1,125 +1,177 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file themes.h
+ * @brief Terminal UI theme management system for ISO Commander.
+ */
+
 #ifndef THEMES_H
 #define THEMES_H
 
-/**
- * @brief Current active skin name.
- */
-inline std::string skin = "white"; 
+#include "headers.h"
+#include <string>
+#include <string_view>
+#include <unordered_map>
 
-/**
- * @brief Global reset sequence for skin terminal formatting.
- */
-inline std::string reset = "\033[0;1;38;2;215;215;215m";
+namespace UI {
 
-/**
- * @brief Canonical list of all supported configuration settings with validation.
- * @details Maps user-defined skin names to high-fidelity ANSI color sequences.
- * @return A string containing the ANSI escape code for the selected skin.
- */
-inline std::string getskin() {
-    if (skin == "green")   return "\033[1;38;2;0;255;0m";
-    if (skin == "cyan")    return "\033[1;38;2;0;200;200m";
-    if (skin == "purple")  return "\033[1;38;2;189;147;249m";
-    if (skin == "amber")   return "\033[1;38;2;255;176;0m";
-    if (skin == "rose")    return "\033[1;38;2;255;121;198m";
-    if (skin == "white")   return "\033[1;38;2;215;215;215m"; // Brighter Silver/Grey RGB
-    return "\033[0m";
+    /**
+     * @brief Raw 24-bit ANSI Escape Sequences.
+     */
+    namespace Palette {
+        static constexpr std::string_view Reset        = "\033[0m";
+        static constexpr std::string_view BoldReset    = "\033[0;1;38;2;215;215;215m";
+        static constexpr std::string_view Dim          = "\033[0;38;2;130;130;130m";
+        static constexpr std::string_view DimGray      = "\033[1;38;2;100;100;100m";
+
+        static constexpr std::string_view Red          = "\033[1;38;2;255;40;40m";
+        static constexpr std::string_view Green        = "\033[1;38;2;0;255;50m"; 
+        static constexpr std::string_view Yellow       = "\033[1;38;2;255;255;0m";
+        static constexpr std::string_view Blue         = "\033[1;38;2;0;125;255m";
+        static constexpr std::string_view Magenta      = "\033[1;38;2;255;0;255m"; 
+        static constexpr std::string_view Cyan         = "\033[1;38;2;103;233;235m";
+        static constexpr std::string_view DarkCyan     = "\033[1;38;2;0;160;160m";
+        static constexpr std::string_view Orange       = "\033[1;38;2;255;120;0m";
+        static constexpr std::string_view Purple       = "\033[1;38;2;140;70;200m";
+        static constexpr std::string_view Brown        = "\033[1;38;2;165;75;25m";
+        static constexpr std::string_view Amber        = "\033[1;38;2;255;176;0m";
+        static constexpr std::string_view Rose         = "\033[1;38;2;255;121;198m";
+        static constexpr std::string_view White        = "\033[1;38;2;215;215;215m";
+        static constexpr std::string_view BGNavy       = "\033[1;48;2;0;0;175m";
+        
+        // Readline-wrapped variants
+        static constexpr std::string_view RL_Reset     = "\001\033[0;1;38;2;215;215;215m\002";
+        static constexpr std::string_view RL_Blue      = "\001\033[1;38;2;0;125;255m\002";
+        static constexpr std::string_view RL_Green     = "\001\033[1;38;2;0;255;50m\002";
+        static constexpr std::string_view RL_Red       = "\001\033[1;38;2;255;40;40m\002";
+        static constexpr std::string_view RL_Yellow    = "\001\033[1;38;2;255;255;0m\002";
+        static constexpr std::string_view RL_BoldAlt   = "\001\033[0;1;38;2;215;215;215m\002";
+    }
+
+    struct ListTheme {
+        std::string_view primary, secondary, accent, muted, highlight, background, warning;
+    };
+
+    struct PrintListTheme {
+        std::string_view accent, head, num, iso, img, mnt, square, indexA, indexB, dir;
+    };
+
+    struct WriteTheme {
+        std::string errLabel, errPath, warnLabel, infoLabel, bold;
+        std::string headerCol, indexCol, pathCol, fileCol, sizeCol, warnCol;
+        std::string colorSuccess, colorFailure, colorWarning, colorStatus, speedCol, deviceCol, color;
+        std::string rl_labelCol, rl_primaryCol, rl_highlightCol, rl_errorCol, rl_resetCol;
+    };
+    struct CpMvRmColors { std::string_view arrow, dir, iso, error_label, error_path, success_label, success_path, dest_path, abort, prompt_green, prompt_blue;
+	};
+
+    struct ProgressTheme {
+        std::string color, colorSuccess, colorFailure, colorWarning, colorStatus, reset;
+    };
+
+    struct VerboseTheme {
+        std::string red, yellow, green, purple, magenta, blue, orange, bold, reset, color;
+    };
+
+    struct DatabaseTheme {
+        std::string green, blue, orange, yellow, red, purple, bold, reset, color;
+    };
+
+    struct PromptTheme {
+        std::string iso, muted, filter, highlight, reset;
+    };
+
+    struct FilterTheme {
+        std::string primary, filter, highlight, reset, iso;
+    };
 }
 
-/**
- * @brief The resolved ANSI color string based on the initial skin value.
- * @note This is initialized once at startup.
- */
-inline std::string color = getskin();
+// --- BACKWARDS COMPATIBILITY BRIDGE ---
 
-/**
- * @brief The globally selected theme identifier.
- */
+struct originalColors {
+    static constexpr std::string_view red          = UI::Palette::Red;
+    static constexpr std::string_view green        = UI::Palette::Green;
+    static constexpr std::string_view yellow       = UI::Palette::Yellow;
+    static constexpr std::string_view blue         = UI::Palette::Blue;
+    static constexpr std::string_view magenta      = UI::Palette::Magenta;
+    static constexpr std::string_view cyan         = UI::Palette::Cyan;
+    static constexpr std::string_view darkCyan     = UI::Palette::DarkCyan;
+    static constexpr std::string_view orange       = UI::Palette::Orange;
+    static constexpr std::string_view purple       = UI::Palette::Purple;
+    static constexpr std::string_view brown        = UI::Palette::Brown;
+    static constexpr std::string_view boldAlt      = UI::Palette::BoldReset;
+    static constexpr std::string_view resetPlain   = UI::Palette::Reset;
+    static constexpr std::string_view dim          = UI::Palette::Dim;
+    static constexpr std::string_view dimGray      = UI::Palette::DimGray;
+    static constexpr std::string_view bgNavy       = UI::Palette::BGNavy;
+    
+    // Readline variants
+    static constexpr std::string_view rl_reset     = UI::Palette::RL_Reset;
+    static constexpr std::string_view rl_boldAlt   = UI::Palette::RL_BoldAlt;
+};
+
+using ListTheme      = UI::ListTheme;
+using PrintListTheme = UI::PrintListTheme;
+using WriteTheme     = UI::WriteTheme;
+using ProgressTheme  = UI::ProgressTheme;
+using VerboseTheme   = UI::VerboseTheme;
+using DatabaseTheme  = UI::DatabaseTheme;
+using PromptTheme    = UI::PromptTheme;
+using FilterTheme    = UI::FilterTheme;
+using CpMvRmColors   = UI::CpMvRmColors;
+
+
+// --- GLOBAL STATE ---
+
+inline std::string skin = "white"; 
+inline std::string reset = std::string(UI::Palette::BoldReset);
 inline std::string globalTheme = "original";
 
-/**
- * @brief Defines a complete color palette for UI list rendering.
- */
-struct ListTheme {
-    std::string_view primary;
-    std::string_view secondary;
-    std::string_view accent;
-    std::string_view muted;
-    std::string_view highlight;
-    std::string_view background;
-    std::string_view warning;
-};
+inline std::string getskin() {
+    using namespace UI::Palette;
+    if (skin == "green")  return std::string(Green);
+    if (skin == "cyan")   return std::string(Cyan);
+    if (skin == "purple") return std::string(Purple);
+    if (skin == "amber")  return std::string(Amber);
+    if (skin == "rose")   return std::string(Rose);
+    if (skin == "white")  return std::string(White);
+    return std::string(Reset);
+}
+
+inline std::string color = getskin();
+
+// --- THEME DEFINITIONS ---
+
+inline constexpr UI::ListTheme OriginalTheme  = { UI::Palette::White, UI::Palette::Cyan, UI::Palette::Green, UI::Palette::Dim, UI::Palette::Amber, "", UI::Palette::Red };
+inline constexpr UI::ListTheme ClassicTheme   = { "\033[1;38;2;172;121;0m",  "\033[1;38;2;255;28;28m",   "\033[1;38;2;255;0;255m",   "\033[1;38;2;148;148;148m", "\033[1;38;2;255;255;0m",   "\033[1;48;2;60;60;60m",   "\033[1;38;2;255;135;0m" };
+inline constexpr UI::ListTheme HighContrast  = { "\033[1;38;2;255;255;255m", "\033[1;38;2;255;255;0m",   "\033[1;38;2;0;255;255m",   "\033[1;38;2;188;188;188m", "\033[1;38;2;0;255;0m",     "\033[1;48;2;70;70;70m",   "\033[1;38;2;255;135;0m" };
+inline constexpr UI::ListTheme NeonTheme      = { "\033[1;38;2;255;0;175m",   "\033[1;38;2;0;175;255m",   "\033[1;38;2;95;255;0m",    "\033[1;38;2;130;130;130m", "\033[1;38;2;255;255;0m",   "\033[1;48;2;40;40;40m",   "\033[1;38;2;255;175;0m" };
+inline constexpr UI::ListTheme OceanTheme     = { "\033[1;38;2;0;135;255m",   "\033[1;38;2;0;175;255m",   "\033[1;38;2;0;255;255m",   "\033[1;38;2;95;135;175m",  "\033[1;38;2;135;215;255m", "\033[1;48;2;20;40;60m",   "\033[1;38;2;255;215;0m" };
+inline constexpr UI::ListTheme SunsetTheme    = { "\033[1;38;2;255;135;0m",   "\033[1;38;2;255;28;28m",   "\033[1;38;2;255;215;0m",   "\033[1;38;2;197;107;0m",   "\033[1;38;2;255;175;255m", "\033[1;48;2;80;30;0m",    "\033[1;38;2;255;255;0m" };
+inline constexpr UI::ListTheme ForestTheme    = { "\033[1;38;2;95;175;0m",    "\033[1;38;2;100;143;0m",   "\033[1;38;2;175;255;95m",  "\033[1;38;2;135;135;0m",   "\033[1;38;2;175;255;0m",   "\033[1;48;2;20;40;0m",    "\033[1;38;2;215;175;0m" };
+inline constexpr UI::ListTheme MidnightTheme  = { "\033[1;38;2;219;0;255m",   "\033[1;38;2;143;100;255m", "\033[1;38;2;175;135;255m", "\033[1;38;2;119;119;220m", "\033[1;38;2;215;175;255m", "\033[1;48;2;30;20;60m",   "\033[1;38;2;255;175;95m" };
+inline constexpr UI::ListTheme MonoTheme      = { "\033[1;38;2;255;255;255m", "\033[1;38;2;200;200;200m", "\033[1;38;2;160;160;160m", "\033[1;38;2;90;90;90m",   "\033[1;38;2;255;255;255m", "\033[1;48;2;50;50;50m",   "\033[1;38;2;130;130;130m" };
+inline constexpr UI::ListTheme RetroTheme     = { "\033[1;38;2;255;175;0m",   "\033[1;38;2;197;107;0m",   "\033[1;38;2;175;135;0m",   "\033[1;38;2;130;100;60m",  "\033[1;38;2;255;215;0m",   "\033[1;48;2;60;40;0m",    "\033[1;38;2;255;95;0m" };
+inline constexpr UI::ListTheme CrimsonTheme   = { "\033[1;38;2;252;37;37m",   "\033[1;38;2;239;64;64m",   "\033[1;38;2;255;140;140m", "\033[1;38;2;167;117;117m", "\033[1;38;2;255;200;200m", "\033[1;48;2;100;20;20m",  "\033[1;38;2;255;175;0m" };
+inline constexpr UI::ListTheme DraculaTheme   = { "\033[1;38;2;189;147;249m", "\033[1;38;2;255;121;198m", "\033[1;38;2;80;250;123m",  "\033[1;38;2;110;128;185m", "\033[1;38;2;241;250;140m", "\033[1;48;2;40;42;54m",   "\033[1;38;2;255;184;108m" };
+inline constexpr UI::ListTheme TokyoNightTheme = { "\033[1;38;2;135;175;255m", "\033[1;38;2;187;154;247m", "\033[1;38;2;158;206;106m", "\033[1;38;2;115;127;183m", "\033[1;38;2;224;175;104m", "\033[1;48;2;26;27;38m",   "\033[1;38;2;255;158;100m" };
+
+// --- FUNCTION DECLARATIONS ---
+
+WriteTheme getWriteTheme();
+ProgressTheme getProgressTheme();
+PromptTheme getPromptTheme();
+FilterTheme getFilterTheme(const std::string& operationColor = "", bool includeIso = false);
+DatabaseTheme getDatabaseTheme();
+VerboseTheme getVerboseTheme();
+PrintListTheme getListColors(bool isOriginal, const ListTheme* theme);
+CpMvRmColors getCpMvRmColors();
 
 /**
- * @brief Container for modern 24-bit RGB terminal color specifications (Bold).
- * @details Uses True Color escape sequences with the bold attribute included.
- * Format: \033[1;38;2;R;G;Bm
+ * @brief Resolves the current theme structure based on the globalTheme string.
  */
-/**
- * @brief Container for modern 24-bit RGB terminal color specifications (Bold).
- * @details Uses True Color escape sequences with the bold attribute included.
- * Format: \033[1;38;2;R;G;Bm
- */
-struct originalColors {
-    static constexpr std::string_view resetPlain = "\033[0m";
-	static constexpr std::string_view boldAlt 	 = "\033[0;1;38;2;215;215;215m";
-    static constexpr std::string_view dim        = "\033[0;38;2;130;130;130m";
-
-    static constexpr std::string_view red        = "\033[1;38;2;255;40;40m";
-    
-    static constexpr std::string_view green      = "\033[1;38;2;0;255;50m"; 
-    
-    static constexpr std::string_view yellow     = "\033[1;38;2;255;255;0m";
-    static constexpr std::string_view blue       = "\033[1;38;2;0;125;255m";
-    
-    static constexpr std::string_view magenta    = "\033[1;38;2;255;0;255m"; 
-
-    static constexpr std::string_view cyan       = "\033[1;38;2;103;233;235m";
-    static constexpr std::string_view orange     = "\033[1;38;2;255;120;0m";
-    static constexpr std::string_view brown      = "\033[1;38;2;165;75;25m";
-    static constexpr std::string_view darkCyan   = "\033[1;38;2;0;160;160m";
-    static constexpr std::string_view purple     = "\033[1;38;2;140;70;200m";
-    static constexpr std::string_view dimGray    = "\033[1;38;2;100;100;100m";
-    
-    static constexpr std::string_view bgNavy     = "\033[1;48;2;0;0;175m";
-
-    // Readline-wrapped variants
-    static constexpr std::string_view rl_blue    = "\001\033[1;38;2;0;125;255m\002";
-    static constexpr std::string_view rl_green   = "\001\033[1;38;2;0;255;50m\002";
-    static constexpr std::string_view rl_orange  = "\001\033[1;38;2;255;120;0m\002";
-    static constexpr std::string_view rl_yellow  = "\001\033[1;38;2;255;255;0m\002";
-    static constexpr std::string_view rl_cyan    = "\001\033[1;38;2;103;233;235m\002";
-    static constexpr std::string_view rl_boldAlt = "\001\033[0;1;38;2;215;215;215m\002";
-    // Readline-wrapped RGB Bold White (215, 215, 215)
-	static constexpr std::string_view rl_reset = "\001\033[0;1;38;2;215;215;215m\002";
-};
-
-// --- Theme Instances ---
-
-// Dummy holder for originalTheme, since the original theme uses a complex combination from original colors above
-inline ListTheme OriginalTheme = {"","","","","","",""};
-																				// primary, secondary, accent, muted, highlight, background, warning
-inline ListTheme ClassicTheme     = {"\033[1;38;2;172;121;0m",  "\033[1;38;2;255;28;28m",   "\033[1;38;2;255;0;255m",   "\033[1;38;2;148;148;148m", "\033[1;38;2;255;255;0m",   "\033[1;48;2;60;60;60m",   "\033[1;38;2;255;135;0m"};
-inline ListTheme HighContrast    = {"\033[1;38;2;255;255;255m", "\033[1;38;2;255;255;0m",   "\033[1;38;2;0;255;255m",   "\033[1;38;2;188;188;188m", "\033[1;38;2;0;255;0m",     "\033[1;48;2;70;70;70m",   "\033[1;38;2;255;135;0m"};
-inline ListTheme NeonTheme       = {"\033[1;38;2;255;0;175m",   "\033[1;38;2;0;175;255m",   "\033[1;38;2;95;255;0m",    "\033[1;38;2;130;130;130m", "\033[1;38;2;255;255;0m",   "\033[1;48;2;40;40;40m",   "\033[1;38;2;255;175;0m"};
-inline ListTheme OceanTheme      = {"\033[1;38;2;0;135;255m",   "\033[1;38;2;0;175;255m",   "\033[1;38;2;0;255;255m",   "\033[1;38;2;95;135;175m",  "\033[1;38;2;135;215;255m", "\033[1;48;2;20;40;60m",   "\033[1;38;2;255;215;0m"};
-inline ListTheme SunsetTheme     = {"\033[1;38;2;255;135;0m",   "\033[1;38;2;255;28;28m",   "\033[1;38;2;255;215;0m",   "\033[1;38;2;197;107;0m",   "\033[1;38;2;255;175;255m", "\033[1;48;2;80;30;0m",    "\033[1;38;2;255;255;0m"};
-inline ListTheme ForestTheme     = {"\033[1;38;2;95;175;0m",    "\033[1;38;2;100;143;0m",   "\033[1;38;2;175;255;95m",  "\033[1;38;2;135;135;0m",   "\033[1;38;2;175;255;0m",   "\033[1;48;2;20;40;0m",    "\033[1;38;2;215;175;0m"};
-inline ListTheme MidnightTheme   = {"\033[1;38;2;219;0;255m",   "\033[1;38;2;143;100;255m", "\033[1;38;2;175;135;255m", "\033[1;38;2;119;119;220m", "\033[1;38;2;215;175;255m", "\033[1;48;2;30;20;60m",   "\033[1;38;2;255;175;95m"};
-inline ListTheme MonoTheme       = {"\033[1;38;2;255;255;255m", "\033[1;38;2;200;200;200m", "\033[1;38;2;160;160;160m", "\033[1;38;2;90;90;90m",   "\033[1;38;2;255;255;255m", "\033[1;48;2;50;50;50m",   "\033[1;38;2;130;130;130m"};
-inline ListTheme RetroTheme      = {"\033[1;38;2;255;175;0m",   "\033[1;38;2;197;107;0m",   "\033[1;38;2;175;135;0m",   "\033[1;38;2;130;100;60m",  "\033[1;38;2;255;215;0m",   "\033[1;48;2;60;40;0m",    "\033[1;38;2;255;95;0m"};
-inline ListTheme CrimsonTheme    = {"\033[1;38;2;252;37;37m",   "\033[1;38;2;239;64;64m",   "\033[1;38;2;255;140;140m", "\033[1;38;2;167;117;117m", "\033[1;38;2;255;200;200m", "\033[1;48;2;100;20;20m",  "\033[1;38;2;255;175;0m"};
-inline ListTheme DraculaTheme    = {"\033[1;38;2;189;147;249m", "\033[1;38;2;255;121;198m", "\033[1;38;2;80;250;123m",  "\033[1;38;2;110;128;185m", "\033[1;38;2;241;250;140m", "\033[1;48;2;40;42;54m",   "\033[1;38;2;255;184;108m"};
-inline ListTheme TokyoNightTheme = {"\033[1;38;2;135;175;255m", "\033[1;38;2;187;154;247m", "\033[1;38;2;158;206;106m", "\033[1;38;2;115;127;183m", "\033[1;38;2;224;175;104m", "\033[1;48;2;26;27;38m",   "\033[1;38;2;255;158;100m"};
-
-/**
- * @brief Resolves the current theme structure based on the global system settings.
- * @return A pointer to a static ListTheme instance. Defaults to OriginalTheme if unknown.
- */
-inline const ListTheme* getActiveTheme() {
-    static const std::unordered_map<std::string, const ListTheme*> themeMap = {
+inline const UI::ListTheme* getActiveTheme() {
+    static const std::unordered_map<std::string_view, const UI::ListTheme*> themeMap = {
         {"original",      &OriginalTheme},
         {"classic",       &ClassicTheme},
         {"high_contrast", &HighContrast},
@@ -132,7 +184,7 @@ inline const ListTheme* getActiveTheme() {
         {"retro",         &RetroTheme},
         {"crimson",       &CrimsonTheme},
         {"dracula",       &DraculaTheme},
-        {"tokyo",         &TokyoNightTheme},
+        {"tokyo",         &TokyoNightTheme}
     };
 
     auto it = themeMap.find(globalTheme);
