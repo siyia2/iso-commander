@@ -524,7 +524,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         });
 
         std::ostringstream devicePromptStream;
-        devicePromptStream << "\n" << wt.bold << "Selected " << wt.headerCol << "ISO" << wt.bold << ":\n\n";
+        devicePromptStream << "\n" << wt.pathCol << "Selected " << wt.headerCol << "ISO" << wt.bold << ":\n\n";
 
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
             auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
@@ -773,7 +773,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             else                                  std::cout << prog.progress << "%";
 
             std::cout << wt.bold << " [" << wt.headerCol << currentSize << "/" << wt.sizeCol << prog.totalSize << wt.bold << "] "
-                      << wt.speedCol << formatSpeed(prog.speed) << wt.bold << "\n";
+                      << wt.bold << formatSpeed(prog.speed) << wt.bold << "\n";
         }
         std::cout << std::flush;
     };
