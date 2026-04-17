@@ -320,7 +320,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 			return "\001" + std::string(s) + "\002";
 		};
 
-		const PromptTheme pt = getPromptTheme();
+		const ReadlineAndPromptTheme pt = getPromptTheme();
 
 		// Wrap operationColor separately since it comes from a different source
 		std::string safeOpColor = wrap(operationColor);
@@ -332,9 +332,9 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 		std::string prompt = 
 			prefix + 
 			pt.iso       + "ISO" + 
-			pt.muted     + " ↵ for " + 
+			pt.primary   + " ↵ for " +
 			safeOpColor    + operation + 
-			pt.muted     + ", ? ↵ for help, < ↵ to return: " + 
+			pt.primary   + ", ? ↵ for help, < ↵ to return: " +
 			pt.reset;
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
@@ -481,16 +481,16 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 		
 		std::cout << "\033[1A\033[K";
 
-        const PromptTheme pt = getPromptTheme();
+        const ReadlineAndPromptTheme pt = getPromptTheme();
         
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
         std::string prompt = 
             prefix + 
             pt.highlight + fileExtensionWithOutDots + 
-            pt.muted     + " ↵ for " + 
+            pt.primary   + " ↵ for " +
             pt.highlight + operation + 
-            pt.muted     + ", ? ↵ for help, < ↵ to return: " + 
+            pt.primary   + ", ? ↵ for help, < ↵ to return: " +
             pt.reset;
         
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);

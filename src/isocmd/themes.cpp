@@ -6,25 +6,35 @@
 /**
  * @file themes.cpp
  * @brief Theme resolution and color palette management for ISO Commander UI.
- * * Implements theme-aware color getter functions that adapt between the original
+ *
+ * Implements theme-aware color getter functions that adapt between the original
  * hardcoded color scheme and user-selected custom themes (classic, neon, ocean,
  * sunset, forest, midnight, mono, retro, crimson, dracula, tokyo).
- * * Provides context-specific color palettes and semantic resolvers for:
+ *
+ * Provides context-specific color palettes and semantic resolvers for:
  * - List displays (PrintListTheme)
- * - File operations (CpMvRmColors) 
+ * - File operations (CpMvRmColors)
  * - Write/export UI (WriteTheme)
- * - Database operations (DatabaseTheme)
- * - Interactive prompts (PromptTheme, FilterTheme)
- * - Verbose logging (VerboseMountColors/resolveVerboseTheme)
- * - Configuration menus (SetupColors/resolveTheme)
- * - CLI tab-completion (ReadlineColors/resolveReadlineTheme)
- * - High-frequency UI (ProgressBarColors/resolveProgressTheme)
- * * Data structures are optimized based on use-case:
+ * - Database operations (VerboseAndDatabaseTheme / SemanticUIColors)
+ * - Interactive prompts (ReadlineAndPromptTheme)
+ * - Verbose logging (VerboseAndDatabaseTheme / SemanticUIColors)
+ * - Configuration menus (SemanticUIColors)
+ * - CLI tab-completion (ReadlineColors)
+ * - High-frequency UI (ProgressBarColors)
+ *
+ * Merged structs (see headers.h):
+ * - VerboseAndDatabaseTheme: replaces VerboseTheme + DatabaseTheme (std::string named-color bags)
+ * - ReadlineAndPromptTheme:  replaces PromptTheme + FilterTheme (readline-wrapped std::string)
+ * - SemanticUIColors:        replaces SetupColors + VerboseMountColors + DatabaseSwitchesColors
+ *
+ * Data structures are optimized based on use-case:
  * - std::string_view: Used for general UI logic and structured bindings.
- * - const char*: Used for high-frequency rendering and C-style library hooks (Readline).
- * * Readline-wrapped color variants (\001/\002) are provided for interactive
+ * - const char*:      Used for high-frequency rendering and C-style library hooks (Readline).
+ *
+ * Readline-wrapped color variants (\001/\002) are provided for interactive
  * prompts to ensure correct line editing behavior.
- * * @see getActiveTheme()
+ *
+ * @see getActiveTheme()
  * @see globalTheme
  */
 
@@ -34,112 +44,119 @@
 // ============================================================
 
 /**
- * @brief Creates and returns a PromptTheme for readline-powered interactive prompts
- * 
+ * @brief Creates and returns a ReadlineAndPromptTheme for readline-powered interactive prompts.
+ *
  * Generates ANSI color codes wrapped with readline delimiter markers (\001/\002)
  * to ensure correct width calculation during line editing.
- * 
- * @return PromptTheme Populated theme structure with readline-wrapped color codes
- * 
- * Color mapping:
- * - Original theme: green for ISO, blue for muted, cyan for filter, orange for highlight
- * - Custom theme: theme's accent for ISO/filter, theme's muted for muted
- * - Highlight and reset always use original colors (orange/boldAlt) for consistency
- * 
- * @note Wrapping with \001 and \002 prevents readline from counting ANSI codes
- *       as display characters, avoiding line wrapping glitches
+ *
+ * Merged from: getPromptTheme()
+ * Call site usage:
+ * - .accent    — ISO path / active input color  (was pt.iso)
+ * - .primary   — neutral/muted base text        (was pt.muted)
+ * - .filter    — filter bar highlight
+ * - .highlight — orange emphasis
+ * - .reset     — boldAlt terminal reset
+ * - .iso       — unused / empty for prompt-only callers
+ *
+ * @return ReadlineAndPromptTheme Populated with readline-wrapped color codes.
+ *
+ * @note \001/\002 wrapping prevents readline from counting ANSI codes as display
+ *       characters, avoiding line-wrapping glitches.
  */
-PromptTheme getPromptTheme() {
+ReadlineAndPromptTheme getPromptTheme() {
     const MainTheme* t = getActiveTheme();
     const bool orig = (globalTheme == "original");
-    
-    // Helper to wrap raw ANSI strings for readline
+
     auto wrap = [](std::string_view s) -> std::string {
         return "\001" + std::string(s) + "\002";
     };
-    
-    PromptTheme pt;
-    
+
+    ReadlineAndPromptTheme pt;
+
     if (orig) {
-        pt.iso       = wrap(originalColors::green);
-        pt.muted     = wrap(originalColors::blue);
+        pt.accent    = wrap(originalColors::green);
+        pt.primary   = wrap(originalColors::blue);
         pt.filter    = wrap(originalColors::cyan);
         pt.highlight = wrap(originalColors::orange);
         pt.reset     = wrap(originalColors::boldAlt);
-    } else {
         pt.iso       = wrap(originalColors::green);
-        pt.muted     = wrap(t->muted);
+    } else {
+        pt.accent    = wrap(originalColors::green);
+        pt.primary   = wrap(t->muted);
         pt.filter    = wrap(t->accent);
         pt.highlight = wrap(originalColors::orange);
         pt.reset     = wrap(originalColors::boldAlt);
+        pt.iso       = wrap(originalColors::green);
     }
-    
+
     return pt;
 }
 
 /**
- * @brief Creates and returns a FilterTheme for readline-powered filter/prompt UI
- * 
+ * @brief Creates and returns a ReadlineAndPromptTheme for readline-powered filter/prompt UI.
+ *
  * Generates ANSI color codes wrapped with readline delimiter markers (\001/\002)
  * for use in interactive filter bars and search interfaces. Supports optional
  * ISO path coloring and custom operation-specific highlight colors.
- * 
- * @param operationColor Optional custom color for highlight text (e.g., "red", "green")
- * @param includeIso     When true, enables ISO path coloring in the theme
- * @return FilterTheme   Populated theme structure with readline-wrapped color codes
- * 
- * Color mapping:
- * - Original theme: blue primary, cyan filter, orange highlight, green ISO
- * - Custom theme: muted primary, accent filter, theme highlight (or custom operationColor)
- * - Reset always uses originalColors::boldAlt for consistency
- * 
- * @note Wrapping with \001 and \002 prevents readline from counting ANSI codes
- *       as display characters, avoiding line wrapping issues in filter prompts
- * @note ISO coloring is conditionally included based on includeIso parameter
- *       (typically enabled for path selection interfaces)
+ *
+ * Merged from: getFilterTheme()
+ * Call site usage:
+ * - .primary   — neutral base / muted label text
+ * - .filter    — filter bar accent color
+ * - .highlight — operation-specific or theme highlight
+ * - .reset     — boldAlt terminal reset
+ * - .iso       — ISO path color (empty string when includeIso is false)
+ * - .accent    — unused / empty for filter-only callers
+ *
+ * @param operationColor Optional custom color for highlight text (raw ANSI string).
+ * @param includeIso     When true, enables ISO path coloring via .iso field.
+ * @return ReadlineAndPromptTheme Populated with readline-wrapped color codes.
+ *
+ * @note \001/\002 wrapping prevents readline from counting ANSI codes as display
+ *       characters, avoiding line-wrapping issues in filter prompts.
  */
-FilterTheme getFilterTheme(const std::string& operationColor, bool includeIso) {
+ReadlineAndPromptTheme getFilterTheme(const std::string& operationColor, bool includeIso) {
     const MainTheme* t = getActiveTheme();
     const bool orig = (globalTheme == "original");
-    
-    // Helper to wrap raw ANSI strings for readline
+
     auto wrap = [](std::string_view s) -> std::string {
         return "\001" + std::string(s) + "\002";
     };
-    
-    FilterTheme ft;
-    
+
+    ReadlineAndPromptTheme ft;
+
     if (orig) {
         ft.primary   = wrap(originalColors::blue);
         ft.filter    = wrap(originalColors::cyan);
         ft.highlight = wrap(originalColors::orange);
         ft.reset     = wrap(originalColors::boldAlt);
         ft.iso       = includeIso ? wrap(originalColors::green) : "";
+        ft.accent    = "";
     } else {
         ft.primary   = wrap(t->muted);
         ft.filter    = wrap(t->accent);
         ft.highlight = operationColor.empty() ? wrap(t->highlight) : wrap(operationColor);
         ft.reset     = wrap(originalColors::boldAlt);
         ft.iso       = includeIso ? wrap(t->accent) : "";
+        ft.accent    = "";
     }
-    
+
     return ft;
 }
 
 /**
  * @brief Resolves semantic colors for Readline tab-completion listings.
  *
- * This function provides raw @c const @c char* pointers to theme colors, specifically 
- * optimized for the custom Readline listing hook. It ensures compatibility with 
- * @c printf-based formatting used in completion displays and maintains visual 
- * consistency between the CLI prompt and file listings.
+ * Provides raw @c const @c char* pointers specifically optimized for the custom
+ * Readline listing hook. Ensures compatibility with @c printf-based formatting
+ * used in completion displays.
  *
  * @return A @ref ReadlineColors struct containing:
- * - @b label: Muted color for the completion headers and pagination info.
- * - @b hint: Highlight color for interactive hints (e.g., "Ctrl+l").
- * - @b dir: Distinct color for directory entries in the listing.
- * - @b file: Standard color for regular file entries.
- * - @b reset: The terminal reset/boldAlt sequence for output cleanup.
+ * - @b label: Muted color for completion headers and pagination info.
+ * - @b hint:  Highlight color for interactive hints (e.g., "Ctrl+l").
+ * - @b dir:   Distinct color for directory entries.
+ * - @b file:  Standard color for regular file entries.
+ * - @b reset: Terminal reset/boldAlt sequence.
  */
 ReadlineColors resolveReadlineTheme() {
     const MainTheme* theme = getActiveTheme();
@@ -158,7 +175,7 @@ ReadlineColors resolveReadlineTheme() {
     return {
         theme->muted.data(),
         theme->accent.data(),
-        theme->accent.data(), // Directories use accent in modern themes
+        theme->accent.data(),
         originalColors::resetPlain.data(),
         originalColors::boldAlt.data()
     };
@@ -171,12 +188,11 @@ ReadlineColors resolveReadlineTheme() {
 
 /**
  * @brief Resolves the color palette for list rendering based on the active theme mode.
- * * This function abstracts the color selection logic, mapping either the legacy 
- * hardcoded "original" colors or the dynamic properties of the provided ListTheme
- * to a standardized set of UI components used by the list printer.
- * * @param isOriginal Boolean flag indicating if the legacy 'original' theme is active.
- * @param theme Pointer to the current active ListTheme configuration (ignored if isOriginal is true).
- * * @return PrintListTheme A struct containing std::string_view color codes for:
+ *
+ * @param isOriginal Boolean flag indicating if the legacy 'original' theme is active.
+ * @param theme      Pointer to the current active MainTheme (ignored if isOriginal is true).
+ *
+ * @return PrintListTheme A struct containing std::string_view color codes for:
  * - UI accents, headers, and numbers
  * - File type indicators (ISO, Image, Mounted)
  * - Decorative elements (Squares, Directories, and alternating row indices)
@@ -184,16 +200,16 @@ ReadlineColors resolveReadlineTheme() {
 PrintListTheme getListColors(bool isOriginal, const MainTheme* theme) {
     if (isOriginal) {
         return {
-            originalColors::darkCyan, originalColors::brown, originalColors::yellow,
-            originalColors::magenta,  originalColors::orange, originalColors::blue,
-            originalColors::dimGray,   originalColors::red,    originalColors::green,
+            originalColors::darkCyan, originalColors::brown,   originalColors::yellow,
+            originalColors::magenta,  originalColors::orange,  originalColors::blue,
+            originalColors::dimGray,  originalColors::red,     originalColors::green,
             originalColors::boldAlt
         };
     }
     return {
-        theme->accent,    theme->muted,    theme->warning,
-        theme->accent,    theme->highlight, theme->secondary,
-        originalColors::dimGray, theme->secondary, theme->accent,
+        theme->accent,           theme->muted,      theme->warning,
+        theme->accent,           theme->highlight,  theme->secondary,
+        originalColors::dimGray, theme->secondary,  theme->accent,
         theme->muted
     };
 }
@@ -205,85 +221,61 @@ PrintListTheme getListColors(bool isOriginal, const MainTheme* theme) {
 
 /**
  * @brief Retrieves the color scheme for Copy/Move/Remove operations.
- * 
- * This function generates a color palette specifically tailored for file operations
- * (copy, move, remove) in the ISO Commander. The colors adapt to either the
- * original classic theme or the currently active user-selected theme.
- * 
- * The color mapping includes:
- * - Arrow prefix indicators for list entries
- * - Directory and ISO filename highlighting
- * - Error messages with labeled and path components
- * - Success confirmations for completed operations
- * - Destination path visualization
- * - Abort/cancellation notifications
- * - Interactive prompt elements (green/blue accents)
- * 
+ *
  * @return CpMvRmColors A structure containing all color string_views for cp/mv/rm operations.
- *         The returned colors are either from the original palette (if globalTheme == "original")
- *         or from the active theme's mapped colors.
- * 
- * @note The function is theme-aware and automatically adjusts based on the current
- *       globalTheme setting ("original" vs custom themes).
- * 
+ *
  * @see CpMvRmColors
  * @see getActiveTheme()
- * @see globalTheme
  */
 CpMvRmColors getCpMvRmColors() {
     const MainTheme* theme = getActiveTheme();
     const bool isOriginal = (globalTheme == "original");
-    
+
     CpMvRmColors colors;
-    colors.arrow = originalColors::boldAlt;
-    colors.dir   = isOriginal ? originalColors::boldAlt : theme->muted;
-    colors.iso   = isOriginal ? originalColors::magenta : theme->accent;
-    colors.error_label = isOriginal ? originalColors::red     : theme->secondary;
-    colors.error_path  = isOriginal ? originalColors::yellow  : theme->warning;
+    colors.arrow         = originalColors::boldAlt;
+    colors.dir           = isOriginal ? originalColors::boldAlt : theme->muted;
+    colors.iso           = isOriginal ? originalColors::magenta : theme->accent;
+    colors.error_label   = isOriginal ? originalColors::red     : theme->secondary;
+    colors.error_path    = isOriginal ? originalColors::yellow  : theme->warning;
     colors.success_label = isOriginal ? originalColors::boldAlt : theme->muted;
     colors.success_path  = isOriginal ? originalColors::green   : theme->primary;
     colors.dest_path     = isOriginal ? originalColors::blue    : theme->accent;
     colors.abort         = isOriginal ? originalColors::yellow  : theme->warning;
     colors.prompt_green  = isOriginal ? originalColors::green   : theme->accent;
     colors.prompt_blue   = isOriginal ? originalColors::blue    : theme->secondary;
-    
+
     return colors;
 }
 
 /**
- * @brief Gets themed color strings for conversion output messages
- * 
+ * @brief Gets themed color strings for conversion output messages.
+ *
  * @return ConversionThemeStrings Struct containing themed string views for errors,
- *         success messages, skipped files, and their respective paths
- * 
- * @note Colors are selected based on whether original theme or custom active theme is used
+ *         success messages, skipped files, and their respective paths.
  */
 ConversionThemeStrings getConversionThemeStrings() {
     const MainTheme* theme = getActiveTheme();
     const bool isOriginal = (globalTheme == "original");
-    
+
     return ConversionThemeStrings{
-        .errLabel     = isOriginal ? originalColors::red      : theme->secondary,
-        .errPath      = isOriginal ? originalColors::yellow   : theme->warning,
-        .missingLabel = isOriginal ? originalColors::purple   : theme->secondary,
-        .okLabel      = isOriginal ? originalColors::boldAlt  : theme->muted,
-        .okPath       = isOriginal ? originalColors::green    : theme->primary,
-        .skipLabel    = isOriginal ? originalColors::yellow   : theme->warning,
-        .skipPath     = isOriginal ? originalColors::green    : theme->primary
+        .errLabel     = isOriginal ? originalColors::red     : theme->secondary,
+        .errPath      = isOriginal ? originalColors::yellow  : theme->warning,
+        .missingLabel = isOriginal ? originalColors::purple  : theme->secondary,
+        .okLabel      = isOriginal ? originalColors::boldAlt : theme->muted,
+        .okPath       = isOriginal ? originalColors::green   : theme->primary,
+        .skipLabel    = isOriginal ? originalColors::yellow  : theme->warning,
+        .skipPath     = isOriginal ? originalColors::green   : theme->primary
     };
 }
 
 /**
  * @brief Builds and returns the resolved WriteTheme for the current global theme.
  *
- * Call once at the top of any write-UI function instead of repeating
- * getActiveTheme() + isOriginal checks inline.
- *
  * @return Fully populated WriteTheme.
  */
 WriteTheme getWriteTheme() {
-    const MainTheme* t   = getActiveTheme();
-    const bool orig      = (globalTheme == "original");
+    const MainTheme* t  = getActiveTheme();
+    const bool orig     = (globalTheme == "original");
 
     WriteTheme wt;
 
@@ -293,26 +285,25 @@ WriteTheme getWriteTheme() {
         wt.warnLabel    = originalColors::yellow;
         wt.infoLabel    = originalColors::green;
         wt.bold         = originalColors::boldAlt;
-        
+
         wt.headerCol    = originalColors::green;
         wt.indexCol     = originalColors::yellow;
         wt.pathCol      = originalColors::boldAlt;
         wt.fileCol      = originalColors::magenta;
         wt.sizeCol      = originalColors::purple;
         wt.warnCol      = originalColors::red;
-        
+
         wt.colorSuccess = originalColors::green;
         wt.colorFailure = originalColors::red;
         wt.colorWarning = originalColors::yellow;
         wt.colorStatus  = originalColors::boldAlt;
         wt.deviceCol    = originalColors::yellow;
         wt.speedCol     = originalColors::boldAlt;
-        
-        // No static storage needed - string_view is perfect!
-        wt.rl_labelCol     = "\001" + std::string(originalColors::green) + "\002";
-        wt.rl_primaryCol   = "\001" + std::string(originalColors::blue) + "\002";
-        wt.rl_highlightCol = "\001" + std::string(originalColors::yellow) + "\002";
-        wt.rl_errorCol     = "\001" + std::string(originalColors::red) + "\002";
+
+        wt.rl_labelCol     = "\001" + std::string(originalColors::green)   + "\002";
+        wt.rl_primaryCol   = "\001" + std::string(originalColors::blue)    + "\002";
+        wt.rl_highlightCol = "\001" + std::string(originalColors::yellow)  + "\002";
+        wt.rl_errorCol     = "\001" + std::string(originalColors::red)     + "\002";
         wt.rl_resetCol     = "\001" + std::string(originalColors::boldAlt) + "\002";
     } else {
         wt.errLabel     = t->secondary;
@@ -320,25 +311,25 @@ WriteTheme getWriteTheme() {
         wt.warnLabel    = t->warning;
         wt.infoLabel    = t->primary;
         wt.bold         = originalColors::boldAlt;
-        
+
         wt.headerCol    = t->accent;
         wt.indexCol     = t->secondary;
         wt.pathCol      = t->muted;
         wt.fileCol      = t->accent;
         wt.sizeCol      = t->highlight;
         wt.warnCol      = t->warning;
-        
+
         wt.colorSuccess = t->primary;
         wt.colorFailure = t->secondary;
         wt.colorWarning = t->warning;
         wt.colorStatus  = t->muted;
         wt.deviceCol    = t->secondary;
         wt.speedCol     = originalColors::boldAlt;
-        
-        wt.rl_labelCol     = "\001" + std::string(t->accent) + "\002";
-        wt.rl_primaryCol   = "\001" + std::string(t->muted) + "\002";
-        wt.rl_highlightCol = "\001" + std::string(t->secondary) + "\002";
-        wt.rl_errorCol     = "\001" + std::string(t->secondary) + "\002";
+
+        wt.rl_labelCol     = "\001" + std::string(t->accent)               + "\002";
+        wt.rl_primaryCol   = "\001" + std::string(t->muted)                + "\002";
+        wt.rl_highlightCol = "\001" + std::string(t->secondary)            + "\002";
+        wt.rl_errorCol     = "\001" + std::string(t->secondary)            + "\002";
         wt.rl_resetCol     = "\001" + std::string(originalColors::boldAlt) + "\002";
     }
 
@@ -351,38 +342,32 @@ WriteTheme getWriteTheme() {
 // ============================================================
 
 /**
- * @brief Creates and returns a DatabaseTheme for database operation displays
- * 
- * Configures color scheme for database-related UI elements including query results,
- * record operations, and status messages. Maps semantic database operations to
- * appropriate theme colors.
- * 
- * @return DatabaseTheme Populated theme structure with raw ANSI color codes
- * 
+ * @brief Creates and returns a VerboseAndDatabaseTheme for database operation displays.
+ *
+ * Merged from: getDatabaseTheme()
+ * The .magenta field is unused by database callers — it is zero-initialized
+ * (empty string) and can be safely ignored at database call sites.
+ *
  * Color semantics:
- * - Green:   Success/INSERT operations
- * - Blue:    Information/SELECT queries
- * - Orange:  Highlights/UPDATE modifications
- * - Yellow:  Warnings/notices
- * - Red:     Errors/DELETE operations
- * - Purple:  Metadata/schema information
- * - Bold:    Emphasis/keywords
- * - Color:   Default database text color
- * 
- * Color mapping:
- * - Original theme: Uses hardcoded originalColors (green/blue/orange/yellow/red/purple)
- * - Custom theme: Maps to theme's accent (green), muted (blue), highlight (orange),
- *                 warning (yellow), secondary (red/purple)
- * 
- * @note reset always uses originalColors::boldAlt for consistent termination
- * @note getskin() provides the default text color for the current skin
+ * - green:   Success / INSERT operations
+ * - blue:    Information / SELECT queries
+ * - orange:  Highlights / UPDATE modifications
+ * - yellow:  Warnings / notices
+ * - red:     Errors / DELETE operations
+ * - purple:  Metadata / schema information
+ * - bold:    Emphasis / keywords
+ * - reset:   Terminal reset sequence
+ *
+ * @return VerboseAndDatabaseTheme Populated theme structure.
+ *
+ * @note reset always uses originalColors::boldAlt for consistent termination.
  */
-DatabaseTheme getDatabaseTheme() {
+VerboseAndDatabaseTheme getDatabaseTheme() {
     const MainTheme* t = getActiveTheme();
     const bool orig = (globalTheme == "original");
-    
-    DatabaseTheme dt;
-    
+
+    VerboseAndDatabaseTheme dt;
+
     if (orig) {
         dt.green   = std::string(originalColors::green);
         dt.blue    = std::string(originalColors::blue);
@@ -391,6 +376,7 @@ DatabaseTheme getDatabaseTheme() {
         dt.red     = std::string(originalColors::red);
         dt.purple  = std::string(originalColors::purple);
         dt.bold    = std::string(originalColors::boldAlt);
+        dt.magenta = "";
         dt.reset   = std::string(originalColors::boldAlt);
     } else {
         dt.green   = t->accent;
@@ -400,49 +386,55 @@ DatabaseTheme getDatabaseTheme() {
         dt.red     = t->secondary;
         dt.purple  = t->secondary;
         dt.bold    = t->muted;
+        dt.magenta = "";
         dt.reset   = originalColors::boldAlt;
     }
-    
+
     return dt;
 }
 
 /**
  * @brief Resolves semantic colors for database statistics and configuration state displays.
- * * This resolver maps theme colors to specific roles used in the "database switches"
- * and statistics screens. It provides a distinct visual hierarchy for headers, 
- * data values, and system status messages (Enabled/Disabled).
- * * @return A @ref DatabaseSwitchesColors struct containing:
- * - @b header: Highlight color for section titles (e.g., Blue/Accent).
- * - @b label: Muted color for category descriptions (e.g., Green/Muted).
- * - @b data: High-contrast color for numeric values and file paths.
- * - @b warning: Secondary highlight for buffered/cached entry counts.
- * - @b status: Positive feedback color for "Enabled" or "Cleared" states.
- * - @b error: Critical feedback color for "Disabled" or "Access Denied" states.
- * - @b reset: Standard terminal reset sequence to clear formatting.
+ *
+ * Merged from: resolveDatabaseTheme() → now returns SemanticUIColors.
+ * Call site field mapping:
+ * - .accent    ← header  (section titles)
+ * - .label     ← label   (category descriptions)
+ * - .data      ← data    (numeric values / file paths)
+ * - .warning   ← warning (buffered/cached entry counts)
+ * - .error     ← error   (Disabled / Access Denied states)
+ * - .str       ← string  (string-type value color)
+ * - .reset     ← reset
+ * - .highlight and .path are unused by database switch callers.
+ *
+ * @return SemanticUIColors Populated with database-switch color roles.
  */
-DatabaseSwitchesColors resolveDatabaseTheme() {
+SemanticUIColors resolveDatabaseTheme() {
     const MainTheme* theme = getActiveTheme();
+
     if (globalTheme == "original") {
         return {
-            originalColors::blue,    // header
-            originalColors::green,   // label
-            originalColors::boldAlt, // data
-            originalColors::orange,  // warning
-            originalColors::green,   // status
-            originalColors::red,     // error
-            originalColors::cyan, //string
-            UI::Palette::BoldReset
+            .label     = originalColors::green,
+            .accent    = originalColors::blue,
+            .warning   = originalColors::orange,
+            .error     = originalColors::red,
+            .reset     = UI::Palette::BoldReset,
+            .path      = {},
+            .highlight = {},
+            .data      = originalColors::boldAlt,
+            .str       = originalColors::cyan
         };
     }
     return {
-        theme->accent,    // header
-        theme->muted,     // label
-        theme->accent,    // data
-        theme->warning,   // warning
-        theme->accent,    // status
-        theme->secondary, // error
-        originalColors::cyan, //string
-        UI::Palette::BoldReset
+        .label     = theme->muted,
+        .accent    = theme->accent,
+        .warning   = theme->warning,
+        .error     = theme->secondary,
+        .reset     = UI::Palette::BoldReset,
+        .path      = {},
+        .highlight = {},
+        .data      = theme->accent,
+        .str       = originalColors::cyan
     };
 }
 
@@ -452,42 +444,33 @@ DatabaseSwitchesColors resolveDatabaseTheme() {
 // ============================================================
 
 /**
- * @brief Creates and returns a VerboseTheme for detailed debug/logging output
- * 
- * Configures color scheme for verbose logging and diagnostic messages,
- * providing semantic color coding for different log levels and message types.
- * 
- * @return VerboseTheme Populated theme structure with raw ANSI color codes
- * 
+ * @brief Creates and returns a VerboseAndDatabaseTheme for detailed debug/logging output.
+ *
+ * Merged from: getVerboseTheme()
+ * All nine fields are populated. Database callers only use a subset and leave
+ * .magenta empty — verbose callers use all fields including .magenta.
+ *
  * Color semantics:
- * - Red:     Errors, critical failures
- * - Yellow:  Warnings, deprecated features
- * - Green:   Success, completed operations
- * - Purple:  Debug info, stack traces
- * - Magenta: Highlights, attention points
- * - Blue:    Informational messages, progress
- * - Orange:  Cautions, non-critical issues
- * - Bold:    Emphasis, important keywords
- * - Color:   Default verbose text color
- * 
- * Color mapping:
- * - Original theme: Uses hardcoded originalColors with distinct semantic meanings
- * - Custom theme: Maps to theme's semantic colors:
- *   - secondary for errors/purple (critical/debug)
- *   - warning for warnings
- *   - primary for success/info
- *   - highlight for emphasis/magenta/orange
- *   - muted for bold emphasis
- * 
- * @note reset always uses originalColors::boldAlt for consistent termination
- * @note getskin() provides the default text color for the current skin
+ * - red:     Errors, critical failures
+ * - yellow:  Warnings, deprecated features
+ * - green:   Success, completed operations
+ * - purple:  Debug info, stack traces
+ * - magenta: Highlights, attention points  ← verbose-only field
+ * - blue:    Informational messages, progress
+ * - orange:  Cautions, non-critical issues
+ * - bold:    Emphasis, important keywords
+ * - reset:   Terminal reset sequence
+ *
+ * @return VerboseAndDatabaseTheme Populated theme structure.
+ *
+ * @note reset always uses originalColors::boldAlt for consistent termination.
  */
-VerboseTheme getVerboseTheme() {
+VerboseAndDatabaseTheme getVerboseTheme() {
     const MainTheme* t = getActiveTheme();
     const bool orig = (globalTheme == "original");
-    
-    VerboseTheme vt;
-    
+
+    VerboseAndDatabaseTheme vt;
+
     if (orig) {
         vt.red     = std::string(originalColors::red);
         vt.yellow  = std::string(originalColors::yellow);
@@ -509,49 +492,51 @@ VerboseTheme getVerboseTheme() {
         vt.bold    = t->muted;
         vt.reset   = originalColors::boldAlt;
     }
-    
+
     return vt;
 }
 
 /**
- * @brief Resolves semantic colors for both mount and unmount verbose logging.
+ * @brief Resolves semantic colors for mount and unmount verbose logging.
  *
- * This resolver provides a specialized mapping for high-detail strings used in 
- * @ref VerbosityFormatter (mounts) and @ref VerboseMessageFormatter (unmounts). 
- * It ensures visual consistency across all disk operations by differentiating 
- * between static labels, filesystem paths, and action highlights.
+ * Merged from: resolveVerboseTheme() → now returns SemanticUIColors.
+ * Call site field mapping:
+ * - .label     ← label     (static prefixes: "ISO:", "Unmounted:")
+ * - .path      ← path      (file and directory paths)
+ * - .highlight ← highlight (destination mount points)
+ * - .warning   ← warning   (skipped states / path-specific warnings)
+ * - .error     ← error     (failure prefixes)
+ * - .reset     ← reset
+ * - .accent, .data, .str are unused by verbose mount callers.
  *
- * @details The mapping logic accounts for the legacy "original" theme by providing 
- * hardcoded ANSI overrides, while dynamic themes are mapped to their semantic 
- * equivalents (e.g., @c path maps to @c theme->primary).
- *
- * @return A @ref VerboseMountColors struct containing:
- * - @b label: Neutral text for prefixes (e.g., "ISO:", "Unmounted:").
- * - @b path: High-visibility color for file and directory paths.
- * - @b highlight: High-contrast color for destination mount points.
- * - @b warning: Distinct color for skipped states or path-specific warnings.
- * - @b error: Critical color for "Failed to mnt" or "Failed to unmount" prefixes.
- * - @b reset: The terminal default/reset sequence (usually boldAlt).
+ * @return SemanticUIColors Populated with verbose mount color roles.
  */
-VerboseMountColors resolveVerboseTheme() {
+SemanticUIColors resolveVerboseTheme() {
     const MainTheme* theme = getActiveTheme();
+
     if (globalTheme == "original") {
         return {
-            originalColors::boldAlt, // label
-            originalColors::green,   // path
-            originalColors::blue,    // highlight
-            originalColors::yellow,  // warning
-            originalColors::red,     // error
-            originalColors::boldAlt  // reset
+            .label     = originalColors::boldAlt,
+            .accent    = {},
+            .warning   = originalColors::yellow,
+            .error     = originalColors::red,
+            .reset     = originalColors::boldAlt,
+            .path      = originalColors::green,
+            .highlight = originalColors::blue,
+            .data      = {},
+            .str       = {}
         };
     }
     return {
-        theme->muted,      // label
-        theme->primary,    // path (usually primary/green)
-        theme->accent,     // highlight (usually accent/blue)
-        theme->warning,    // warning
-        theme->secondary,  // error
-        originalColors::boldAlt
+        .label     = theme->muted,
+        .accent    = {},
+        .warning   = theme->warning,
+        .error     = theme->secondary,
+        .reset     = originalColors::boldAlt,
+        .path      = theme->primary,
+        .highlight = theme->accent,
+        .data      = {},
+        .str       = {}
     };
 }
 
@@ -561,36 +546,46 @@ VerboseMountColors resolveVerboseTheme() {
 // ============================================================
 
 /**
- * @brief Resolves semantic UI colors based on the active global theme.
- * * This function acts as a centralized mapper that translates internal theme 
- * states (e.g., "original" vs. custom themes) into a unified @ref SetupColors 
- * structure. It maps specific visual roles (labels, accents, warnings, errors) 
- * to the appropriate ANSI escape codes or hex values.
- * * @note Centralizing this lookup eliminates repetitive conditional checks 
- * within individual command handlers and UI components.
- * * @return A @ref SetupColors struct containing std::string_view references 
- * to the resolved theme colors.
+ * @brief Resolves semantic UI colors for the options/setup menu.
+ *
+ * Merged from: resolveOptionsTheme() → now returns SemanticUIColors.
+ * Call site field mapping:
+ * - .label   ← label   (standard bold text)
+ * - .accent  ← accent  (success / enable / positive highlight)
+ * - .warning ← warning (value / numeric highlight)
+ * - .error   ← error   (error / disable / negative highlight)
+ * - .reset   ← boldReset
+ * - .path, .highlight, .data, .str are unused by setup callers.
+ *
+ * @return SemanticUIColors Populated with setup/options color roles.
  */
-SetupColors resolveOptionsTheme() {
+SemanticUIColors resolveOptionsTheme() {
     const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
     if (isOrig) {
         return {
-            originalColors::boldAlt,   ///< label: Standard bold white/reset
-            originalColors::green,  ///< accent: Vibrant Kelly Green
-            originalColors::yellow, ///< warning: Pure Yellow
-            originalColors::red,     ///< error: Bright Red
-            UI::Palette::BoldReset
+            .label     = originalColors::boldAlt,
+            .accent    = originalColors::green,
+            .warning   = originalColors::yellow,
+            .error     = originalColors::red,
+            .reset     = UI::Palette::BoldReset,
+            .path      = {},
+            .highlight = {},
+            .data      = {},
+            .str       = {}
         };
     }
-
     return {
-        theme->muted,               ///< Neutral label / muted text
-        theme->accent,              ///< Success / enable / positive highlight
-        theme->warning,             ///< Value / numeric highlight
-        theme->secondary,           ///< Error / disable / negative highlight
-        UI::Palette::BoldReset
+        .label     = theme->muted,
+        .accent    = theme->accent,
+        .warning   = theme->warning,
+        .error     = theme->secondary,
+        .reset     = UI::Palette::BoldReset,
+        .path      = {},
+        .highlight = {},
+        .data      = {},
+        .str       = {}
     };
 }
 
@@ -600,22 +595,21 @@ SetupColors resolveOptionsTheme() {
 // ============================================================
 
 /**
- * @brief Resolves semantic colors specifically for high-frequency progress bar rendering.
+ * @brief Resolves semantic colors for high-frequency progress bar rendering.
  *
- * This resolver maps global theme states to a @ref ProgressBarColors struct using raw 
- * @c const @c char* pointers. By avoiding @c std::string allocations and centralized 
- * ternary logic, it ensures minimal CPU overhead during the high-frequency update 
- * loop (typically 100ms intervals).
+ * Uses raw @c const @c char* pointers to avoid std::string allocations during
+ * the high-frequency update loop (typically 100ms intervals).
  *
  * @return A @ref ProgressBarColors struct containing:
- * - @b success: Color for completed bar segments (e.g., Green/Primary).
- * - @b failure: Color for failed state indicators (e.g., Red/Secondary).
- * - @b warning: Color for partial success or interruptions (e.g., Yellow/Warning).
- * - @b status: Color for brackets and metadata labels (e.g., Muted/BoldAlt).
- * - @b reset: The terminal reset sequence for clean line endings.
+ * - @b success: Color for completed bar segments.
+ * - @b failure: Color for failed state indicators.
+ * - @b warning: Color for partial success or interruptions.
+ * - @b status:  Color for brackets and metadata labels.
+ * - @b reset:   Terminal reset sequence.
  */
 ProgressBarColors resolveProgressTheme() {
     const MainTheme* theme = getActiveTheme();
+
     if (globalTheme == "original") {
         return {
             originalColors::green.data(),

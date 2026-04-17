@@ -497,7 +497,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
     disable_ctrl_d();
     clearScrollBuffer();
 
-    auto [header, label, data, warn, status, error, string, reset] = resolveDatabaseTheme();
+    auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveDatabaseTheme();
 
     try {
         for (const auto& path : {databaseFilePath, historyFilePath, filterHistoryFilePath}) {
@@ -506,7 +506,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
             }
         }
 
-        std::cout << "\n" << header << "=== ISO Database ===" << reset << "\n";
+        std::cout << "\n" << accent << "=== ISO Database ===" << reset << "\n";
         
         std::uintmax_t fileSizeInBytes = std::filesystem::file_size(databaseFilePath);
         double fileSizeInKB = fileSizeInBytes / 1024.0;
@@ -518,28 +518,28 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
                   << "\n" << label << "Entries: " << data << countNonEmptyLines(databaseFilePath) 
                   << "\n" << label << "Location: " << data << "'" << databaseFilePath << "'" << reset << "\n";
 
-        std::cout << "\n" << header << "=== History Database ===" << reset << "\n"
+        std::cout << "\n" << accent << "=== History Database ===" << reset << "\n"
                   << "\n" << label << "FolderPath Entries: " << data << countNonEmptyLines(historyFilePath) << "/" << MAX_HISTORY_LINES
                   << "\n" << label << "Location: " << data << "'" << historyFilePath << "'"
                   << "\n\n" << label << "FilterTerm Entries: " << data << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
                   << "\n" << label << "Location: " << data << "'" << filterHistoryFilePath << "'" << std::endl;
         
-        std::cout << "\n" << header << "=== Buffered Entries ===" << reset << "\n";
+        std::cout << "\n" << accent << "=== Buffered Entries ===" << reset << "\n";
         
-        std::cout << string << "\nSTR → RAM: " << data 
+        std::cout << str << "\nSTR → RAM: " << data
                   << (transformationCache.size() + cachedParsesForUmount.size()) << "\n";
         
         std::cout << "\n" << label << "ISO → RAM: " << data << globalIsoFileList.size() << "\n";
         
-        std::cout << "\n" << warn << "BIN/IMG → RAM: " << data << binImgFilesCache.size() << "\n"
-                  << warn << "DAA/GBI → RAM: " << data << daaGbiFilesCache.size() << "\n"
-                  << warn << "CHD → RAM: " << data << chdFilesCache.size() << "\n"
-                  << warn << "MDF → RAM: " << data << mdfMdsFilesCache.size() << "\n"
-                  << warn << "NRG → RAM: " << data << nrgFilesCache.size() << "\n";
+        std::cout << "\n" << warning << "BIN/IMG → RAM: " << data << binImgFilesCache.size() << "\n"
+                  << warning << "DAA/GBI → RAM: " << data << daaGbiFilesCache.size() << "\n"
+                  << warning << "CHD → RAM: " << data << chdFilesCache.size() << "\n"
+                  << warning << "MDF → RAM: " << data << mdfMdsFilesCache.size() << "\n"
+                  << warning << "NRG → RAM: " << data << nrgFilesCache.size() << "\n";
 
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "\n" << error << "Error: Unable to access configuration file: "
-                  << warn << "'" << configPath << "'" 
+                  << warning << "'" << configPath << "'"
                   << error << ".\n" << reset;
     }
 
@@ -573,7 +573,7 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
 
     if (writeConfig(configPath, g_configCache)) {
         std::cout << "\n" << db.label << "Automatic background updates have been "
-                  << (isEnabling ? db.status : db.error) << (isEnabling ? "enabled" : "disabled")
+                  << (isEnabling ? db.data : db.error) << (isEnabling ? "enabled" : "disabled")
                   << db.label << ".\033[J" << db.reset << "\n";
     } else {
         std::cerr << "\n" << db.error << "Error: Unable to access configuration file: " 
@@ -631,7 +631,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
                 ++it;
             }
             
-            std::cout << "\n" << db.status << "ISO database cleared successfully." << "\033[J" << std::endl;
+            std::cout << "\n" << db.data << "ISO database cleared successfully." << "\033[J" << std::endl;
             std::cout << color << "\n↵ to continue..." << db.reset; 
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             std::vector<std::string>().swap(globalIsoFileList);

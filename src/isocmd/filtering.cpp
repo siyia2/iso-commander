@@ -484,7 +484,7 @@ const std::string& operationColor, const std::vector<std::string>& isoDirs, bool
 		return "\001" + std::string(s) + "\002";
 	};
 	
-	const FilterTheme ft = getFilterTheme(); // No operation color, default highlight
+	const ReadlineAndPromptTheme ft = getFilterTheme("", false);  // No operation color, don't include ISO
 
 	// Assuming operationColor comes from the raw theme, it needs wrapping
 	std::string safeOpColor = wrap(operationColor);
@@ -540,7 +540,7 @@ bool& filterHistory, bool& need2Sort, size_t& currentPage)
 	const bool isInteractive = (inputString == "/");
 	const std::string quickPat = isInteractive ? "" : inputString.substr(1);
 
-	const FilterTheme ft = getFilterTheme(); // No operation color, default highlight
+	const ReadlineAndPromptTheme ft = getFilterTheme("", false);  // No operation color, don't include ISO
 	
 	// Helper to wrap raw ANSI strings for readline
 	auto wrap = [](std::string_view s) -> std::string {

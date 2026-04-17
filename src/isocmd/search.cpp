@@ -57,7 +57,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
         rl_attempted_completion_function = my_special_completion_entry;
         g_operationCancelled.store(false);
         
-        const DatabaseTheme dt = getDatabaseTheme();
+        const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
         clearScrollBuffer();
         loadHistory(filterHistory);
@@ -206,7 +206,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
         }
 
     } catch (const std::exception& e) {
-        const DatabaseTheme dt = getDatabaseTheme();
+        const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
         std::cerr << "\n" << dt.red << "Unable to access ISO database: " << e.what() << dt.reset << std::endl;
         
@@ -241,7 +241,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
     std::vector<std::string> localIsoFiles; 
     std::atomic<bool> g_CancelledMessageAdded{false}; 
     
-    const DatabaseTheme dt = getDatabaseTheme();
+    const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 	
     auto iequals = [](const std::string_view& a, const std::string_view& b) {
         return std::equal(a.begin(), a.end(), b.begin(), b.end(),
@@ -350,7 +350,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
     signal(SIGINT, SIG_IGN);        
     disable_ctrl_d();
     
-    const DatabaseTheme dt = getDatabaseTheme();
+    const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
     bool isEmpty = false;
     if (modeDaa) {
@@ -417,7 +417,7 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
     
-    const DatabaseTheme dt = getDatabaseTheme();
+    const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
     std::vector<std::string> extensions;
     std::string cacheType;
@@ -563,7 +563,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
 std::unordered_set<std::string> processPaths(const std::string& path, const std::string& mode, 
                                             const std::function<void(const std::string&, const std::string&)>& callback, 
                                             std::unordered_set<std::string>& processedErrorsFind) {
-    const DatabaseTheme dt = getDatabaseTheme();
+    const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
     std::atomic<size_t> totalFiles{0};
     std::unordered_set<std::string> localFileNames;
@@ -880,7 +880,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
 
     const auto configIt = fileTypeMap.find(fileTypeChoice);
     if (configIt == fileTypeMap.end()) {
-        const DatabaseTheme dt = getDatabaseTheme();
+        const VerboseAndDatabaseTheme dt = getDatabaseTheme();
         std::cout << dt.red << "Invalid file type choice. Supported types: BIN/IMG, MDF, NRG, CHD, DAA" << dt.reset << "\n";
         return;
     }
@@ -928,7 +928,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
         initIterationState();
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         
-        const DatabaseTheme dt = getDatabaseTheme();
+        const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
         std::string prompt;
         prompt.reserve(512);

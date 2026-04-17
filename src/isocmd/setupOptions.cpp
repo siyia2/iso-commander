@@ -93,11 +93,11 @@ static std::string trim(std::string str) {
  * @brief Prints a standardised config-file access error then flushes to stderr.
  */
 static void printConfigError(const std::string& configPath) {
-    auto [label, accent, warning, error, boldReset] = resolveOptionsTheme();
+    auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
     std::cerr << "\n" << error
               << "Error: Unable to access configuration file: "
               << warning << "'" << configPath << "'"
-              << error << ".\033[J\n" << boldReset;
+              << error << ".\033[J\n" << reset;
 }
 
 /**
@@ -290,16 +290,16 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
 
     size_t colonPos = inputSearch.find(':');
     if (colonPos == std::string::npos) {
-        auto [label, accent, warning, error, boldReset] = resolveOptionsTheme();
-        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\n" << boldReset;
+        auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
+        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\n" << reset;
         pauseForInput();
         return;
     }
 
     std::string valueStr = inputSearch.substr(colonPos + 1);
     if (!isNum(valueStr, 0, 1000)) {
-        auto [label, accent, warning, error, boldReset] = resolveOptionsTheme();
-        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\n" << boldReset;
+        auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
+        std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\n" << reset;
         pauseForInput();
         return;
     }
@@ -310,13 +310,13 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
 
     if (flushCache(configPath)) {
 		ITEMS_PER_PAGE = static_cast<size_t>(val);
-        auto [label, accent, warning, error, boldReset] = resolveOptionsTheme();
+        auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
         if (val > 0) {
             std::cout << "\n" << label << "Pagination status updated: Max entries per page set to "
-                      << warning << val << label << ".\033[J\n" << boldReset;
+                      << warning << val << label << ".\033[J\n" << reset;
         } else {
             std::cout << "\n" << label << "Pagination status updated: "
-                      << error << "Disabled" << label << ".\033[J\n" << boldReset;
+                      << error << "Disabled" << label << ".\033[J\n" << reset;
         }
     }
 
@@ -332,8 +332,8 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
     disable_ctrl_d();
 
     if (inputSearch != "*flno:on" && inputSearch != "*flno:off") {
-        auto [label, accent, warning, error, boldReset] = resolveOptionsTheme();
-        std::cerr << "\n" << error << "Error: Invalid command format.\033[J\n" << boldReset;
+        auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
+        std::cerr << "\n" << error << "Error: Invalid command format.\033[J\n" << reset;
         pauseForInput();
         return;
     }
@@ -344,11 +344,11 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
 
     if (flushCache(configPath)) {
         displayConfig::toggleNamesOnly = isEnabling;
-        auto [label, accent, warning, error, boldReset] = resolveOptionsTheme();
+        auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
         std::cout << "\n" << label << "Filename-only lists have been "
                   << (isEnabling ? accent : error)
                   << (isEnabling ? "enabled" : "disabled")
-                  << label << ".\033[J\n" << boldReset;
+                  << label << ".\033[J\n" << reset;
     }
 
     pauseForInput();
@@ -381,8 +381,8 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
     }
 
     if (!isValid) {
-        auto [label, accent, warning, error, boldReset] = resolveOptionsTheme();
-        std::cerr << "\n" << error << "Error: Invalid command or unsupported value.\033[J\n" << boldReset;
+        auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
+        std::cerr << "\n" << error << "Error: Invalid command or unsupported value.\033[J\n" << reset;
         pauseForInput();
         return;
     }
@@ -398,10 +398,10 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
             globalTheme = value;
         }
         // Resolve theme AFTER applying the new value so feedback uses the new colors.
-        auto [label, accent, warning, error, boldReset] = resolveOptionsTheme();
+        auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
         std::string_view settingLabel = (key == "skin") ? "Skin color" : "UI theme";
         std::cout << "\n" << label << settingLabel << " set to: "
-          << (key == "skin" ? color : accent) << value << label << ".\033[J\n" << boldReset;
+          << (key == "skin" ? color : accent) << value << label << ".\033[J\n" << reset;
     }
 
     pauseForInput();
@@ -485,11 +485,11 @@ void setDisplayMode(const std::string& inputSearch) {
     }
 
     if (flushCache(configPath) && !updatedLabels.empty()) {
-        auto [label, accent, warning, error, boldReset] = resolveOptionsTheme();
+        auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
         std::cout << "\n" << label << "Display mode set to "
-                  << accent << newValue << label << " for:\033[J\n" << boldReset;
+                  << accent << newValue << label << " for:\033[J\n" << reset;
         for (const auto& lbl : updatedLabels)
-            std::cout << "  " << label << "- " << boldReset << lbl << "\n";
+            std::cout << "  " << label << "- " << reset << lbl << "\n";
     }
 
     pauseForInput();
@@ -522,7 +522,7 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
                 if (entry.key == it->second) { valid = entry.validate(valueStr); break; }
             }
 
-            auto [label, accent, warning, error, boldReset] = resolveOptionsTheme();
+            auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
 
             if (valid) {
                 syncCache(configPath);
@@ -532,12 +532,12 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
                     applyThreadCapsAndHistoryLimits(g_configCache);
                     std::cout << "\n" << accent << it->second
                               << label  << " updated to: "
-                              << warning << valueStr << "\n" << boldReset;
+                              << warning << valueStr << "\n" << reset;
                 }
             } else {
                 std::cout << "\n" << error << "Error: Value "
                           << warning << "'" << valueStr << "'"
-                          << error  << " is out of range or invalid.\n" << boldReset;
+                          << error  << " is out of range or invalid.\n" << reset;
             }
         }
     }
@@ -557,7 +557,7 @@ void displayConfigurationOptions(const std::string& configPath) {
     
     auto tc = resolveOptionsTheme();
     // Specific override for the title
-    std::string_view titleCol = (globalTheme == "original") ? originalColors::cyan : tc.boldReset;
+    std::string_view titleCol = (globalTheme == "original") ? originalColors::cyan : tc.reset;
 
     std::cout << "\n" << titleCol << "==== Current Configuration ====\n\n";
 
@@ -568,12 +568,12 @@ void displayConfigurationOptions(const std::string& configPath) {
         if (!trimmed.empty() && trimmed[0] != '#') {
             // No logic here, just direct output
             std::cout << tc.accent << lineNum++ << ". " 
-                      << tc.label << trimmed << tc.boldReset << "\n";
+                      << tc.label << trimmed << tc.reset << "\n";
         }
     }
     
-    std::cout << "\n" << tc.warning << "Path: " << tc.boldReset << configPath 
-              << "\n\n" << color << "↵ to return..." << tc.boldReset;
+    std::cout << "\n" << tc.warning << "Path: " << tc.reset << configPath 
+              << "\n\n" << color << "↵ to return..." << tc.reset;
     
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }

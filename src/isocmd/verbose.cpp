@@ -19,7 +19,7 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
     disable_ctrl_d();
     clearScrollBuffer(); 
     
-    const VerboseTheme vt = getVerboseTheme();
+    const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
     auto printSortedSet = [&](std::unordered_set<std::string>& set, bool isError = false) {
         if (!set.empty()) {
@@ -115,7 +115,7 @@ void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, 
                        std::vector<std::string>& verboseErrors, std::atomic<size_t>* failedTasks, 
                        std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertFunc) {
     
-    const VerboseTheme vt = getVerboseTheme();
+    const VerboseAndDatabaseTheme vt = getVerboseTheme();
     const std::string displaySrc = (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile;
 
     std::string errorMsg;
@@ -206,7 +206,7 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    const VerboseTheme vt = getVerboseTheme();
+    const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
     loadFromDatabase(globalIsoFileList);
 
@@ -269,7 +269,7 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    const VerboseTheme vt = getVerboseTheme();
+    const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
     if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
         std::cout << "\r" << vt.bold << "Total files processed: 0" << std::flush;
@@ -315,7 +315,7 @@ void verboseSearchResults(const std::string& fileExtension,
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    const VerboseTheme vt = getVerboseTheme();
+    const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
     auto end_time = std::chrono::high_resolution_clock::now();
 
