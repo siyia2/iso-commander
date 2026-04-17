@@ -122,9 +122,9 @@ int main(int argc, char *argv[]) {
         const MainTheme* theme = getActiveTheme();
         const bool isOriginal = (globalTheme == "original");
         char* rawInput = readline(("\n\001" + 
-									std::string(isOriginal ? originalColors::blue : theme->muted) + 
+									std::string(isOriginal ? UI::Palette::Blue : theme->muted) + 
 									"\002Choose an option:" + 
-									std::string(originalColors::rl_boldAlt) + 
+									std::string(UI::Palette::RL_BoldAlt) + 
 									" ").c_str());
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
