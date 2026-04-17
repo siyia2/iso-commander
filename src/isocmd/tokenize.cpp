@@ -111,11 +111,13 @@ void tokenizeInput(const std::string& input,
             invalidInputs.insert(token);
         }
     }
+    
+    SemanticUIColors sc = resolveVerboseTheme();
 
     /**
 	* @brief Formats error categories with appropriate pluralization and ANSI colors.
 	*/
-	auto formatCategory = [](std::string_view color, std::string_view singular, 
+	auto formatCategory = [&sc](std::string_view color, std::string_view singular, 
 							 std::string_view plural, const auto& container) {
 		if (container.empty()) return std::string();
 
@@ -129,21 +131,19 @@ void tokenizeInput(const std::string& input,
 			oss << item;
 			first = false;
 		}
-		oss << "'" << UI::Palette::BoldReset; 
+		oss << "'" << sc.reset; 
 		return oss.str();
 	};
 
-	std::string_view errorLabel = getErrorCol();
-
 	if (!invalidInputs.empty()) {
-		uniqueErrorMessages.insert(formatCategory(errorLabel, "Invalid input", "Invalid inputs", invalidInputs));
+		uniqueErrorMessages.insert(formatCategory(sc.error, "Invalid input", "Invalid inputs", invalidInputs));
 	}
 
 	if (!invalidIndices.empty()) {
-		uniqueErrorMessages.insert(formatCategory(errorLabel, "Invalid index", "Invalid indexes", invalidIndices));
+		uniqueErrorMessages.insert(formatCategory(sc.error, "Invalid index", "Invalid indexes", invalidIndices));
 	}
 
 	if (!invalidRanges.empty()) {
-		uniqueErrorMessages.insert(formatCategory(errorLabel, "Invalid range", "Invalid ranges", invalidRanges));
+		uniqueErrorMessages.insert(formatCategory(sc.error, "Invalid range", "Invalid ranges", invalidRanges));
 	}
 }
