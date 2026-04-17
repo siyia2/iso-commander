@@ -611,7 +611,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
         std::ofstream ofs(databaseFilePath, std::ofstream::out | std::ofstream::trunc);
         if (!ofs) {
             std::cerr << "\n" << db.error << "Error clearing ISO database: " 
-                      << db.warning << "'" << databaseFilePath << "'" 
+                      << db.path << "'" << databaseFilePath << "'" 
                       << db.error << ". File missing or inaccessible.\033[J" << std::endl;
             
             std::cout << "\n" << color << "↵ to continue..." << db.reset;

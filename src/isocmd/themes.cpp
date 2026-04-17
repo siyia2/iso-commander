@@ -406,7 +406,7 @@ VerboseAndDatabaseTheme getDatabaseTheme() {
  * - .str       ← string  (string-type value color)
  * - .reset     ← reset
  * - .highlight ← for std::cout << "\n" << db.highlight << "ISO database cleared successfully." << "\033[J" << std::endl;
- * - .path is unused by database switch callers.
+ * - .path 		←  << databaseFilePath <<
  *
  * @return SemanticUIColors Populated with database-switch color roles.
  */
@@ -420,7 +420,7 @@ SemanticUIColors resolveDatabaseTheme() {
             .warning   = originalColors::orange,
             .error     = originalColors::red,
             .reset     = UI::Palette::BoldReset,
-            .path      = {},
+            .path      = originalColors::yellow,
             .highlight = originalColors::green,
             .data      = originalColors::boldAlt,
             .str       = originalColors::cyan
@@ -432,7 +432,7 @@ SemanticUIColors resolveDatabaseTheme() {
         .warning   = theme->warning,
         .error     = theme->secondary,
         .reset     = UI::Palette::BoldReset,
-        .path      = {},
+        .path      = theme->warning,
         .highlight = theme->accent,
         .data      = theme->accent,
         .str       = originalColors::cyan
