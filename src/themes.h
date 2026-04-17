@@ -114,22 +114,33 @@ using ProgressBarColors       = UI::ProgressBarColors;
 
 // --- GLOBAL STATE ---
 
-inline std::string skin = "white"; 
-inline std::string reset = std::string(UI::Palette::BoldReset);
-inline std::string globalTheme = "original";
+inline constexpr std::string_view default_skin = "white";
+inline std::string_view skin = default_skin;
+inline constexpr std::string_view reset = UI::Palette::BoldReset;
+inline std::string_view globalTheme = "original";
 
-inline std::string getskin() {
+// Bring Palette colors into scope for convenience
+using UI::Palette::White;
+using UI::Palette::Red;
+using UI::Palette::Green;
+using UI::Palette::Cyan;
+using UI::Palette::Purple;
+using UI::Palette::Amber;
+using UI::Palette::Rose;
+using UI::Palette::Reset;
+
+inline std::string_view getskin() {  // Remove constexpr
     using namespace UI::Palette;
-    if (skin == "green")  return std::string(Green);
-    if (skin == "cyan")   return std::string(Cyan);
-    if (skin == "purple") return std::string(Purple);
-    if (skin == "amber")  return std::string(Amber);
-    if (skin == "rose")   return std::string(Rose);
-    if (skin == "white")  return std::string(White);
-    return std::string(Reset);
+    if (skin == "green")  return Green;
+    if (skin == "cyan")   return Cyan;
+    if (skin == "purple") return Purple;
+    if (skin == "amber")  return Amber;
+    if (skin == "rose")   return Rose;
+    if (skin == "white")  return White;
+    return Reset;
 }
 
-inline std::string color = getskin();
+inline std::string_view color = UI::Palette::White;
 
 // --- THEME DEFINITIONS ---
 
