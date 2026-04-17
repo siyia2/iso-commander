@@ -572,9 +572,9 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
     g_configCache["auto_update"] = isEnabling ? "on" : "off";
 
     if (writeConfig(configPath, g_configCache)) {
-        std::cout << "\n" << db.label << "Automatic background updates have been "
-                  << (isEnabling ? db.data : db.error) << (isEnabling ? "enabled" : "disabled")
-                  << db.label << ".\033[J" << db.reset << "\n";
+        std::cout << "\n" << db.reset << "Automatic background updates have been "
+                  << (isEnabling ? db.label : db.error) << (isEnabling ? "enabled" : "disabled")
+                  << db.reset << ".\033[J" << db.reset << "\n";
     } else {
         std::cerr << "\n" << db.error << "Error: Unable to access configuration file: " 
                   << db.warning << "'" << configPath << "'" 
@@ -631,7 +631,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
                 ++it;
             }
             
-            std::cout << "\n" << db.data << "ISO database cleared successfully." << "\033[J" << std::endl;
+            std::cout << "\n" << db.highlight << "ISO database cleared successfully." << "\033[J" << std::endl;
             std::cout << color << "\n↵ to continue..." << db.reset; 
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             std::vector<std::string>().swap(globalIsoFileList);
