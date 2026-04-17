@@ -957,31 +957,26 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         progressData[progressIndex].failed.store(true);
         return false;
     }
-
     int device_fd = open(device.c_str(), O_WRONLY | O_DIRECT);
     if (device_fd == -1) {
         progressData[progressIndex].failed.store(true);
         return false;
     }
-
     int sectorSize = 0;
     if (ioctl(device_fd, BLKSSZGET, &sectorSize) < 0 || sectorSize == 0) {
         progressData[progressIndex].failed.store(true);
         close(device_fd);
         return false;
     }
-
     const uint64_t fileSize = std::filesystem::file_size(isoPath);
     if (fileSize % sectorSize != 0) {
         progressData[progressIndex].failed.store(true);
         close(device_fd);
         return false;
     }
-
     size_t bufferSize = 8 * 1024 * 1024;
     bufferSize = (bufferSize / sectorSize) * sectorSize;
     if (bufferSize == 0) bufferSize = sectorSize;
-
     char* alignedBuffer = nullptr;
     if (posix_memalign((void**)&alignedBuffer, sectorSize, bufferSize) != 0) {
         progressData[progressIndex].failed.store(true);
@@ -989,25 +984,33 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         return false;
     }
     std::unique_ptr<char, decltype(&free)> bufferGuard(alignedBuffer, &free);
-
     auto startTime = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
     uint64_t bytesInWindow = 0;
     const int UPDATE_INTERVAL_MS = 500;
+
+    auto updateSpeed = [&](auto now) {
+        auto timeSinceLast = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate);
+        if (bytesInWindow > 0 && timeSinceLast.count() > 0) {
+            double seconds = timeSinceLast.count() / 1000.0;
+            progressData[progressIndex].speed.store(
+                (static_cast<double>(bytesInWindow) / (1024.0 * 1024.0)) / seconds);
+            bytesInWindow = 0;
+            lastUpdate = now;
+        }
+    };
 
     try {
         while (progressData[progressIndex].bytesWritten.load() < fileSize && !g_operationCancelled) {
             const uint64_t totalWritten = progressData[progressIndex].bytesWritten.load();
             const uint64_t remaining = fileSize - totalWritten;
             const size_t bytesToRead = std::min(bufferSize, static_cast<size_t>(remaining));
-
             iso.read(alignedBuffer, bytesToRead);
             const std::streamsize bytesRead = iso.gcount();
-            
+
             if (bytesRead <= 0 || static_cast<size_t>(bytesRead) != bytesToRead) {
                 throw std::runtime_error("Read error");
             }
-
             ssize_t bytesWritten = 0;
             while (bytesWritten < static_cast<ssize_t>(bytesToRead)) {
                 size_t chunk = std::min(static_cast<size_t>(bytesToRead - bytesWritten), bufferSize);
@@ -1019,23 +1022,14 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                 }
                 bytesWritten += result;
             }
-
             progressData[progressIndex].bytesWritten.fetch_add(bytesWritten);
             bytesInWindow += bytesWritten;
 
             auto now = std::chrono::high_resolution_clock::now();
-            auto timeSinceLastUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate);
-
-            if (timeSinceLastUpdate.count() >= UPDATE_INTERVAL_MS) {
-                const int progress = static_cast<int>((static_cast<double>(progressData[progressIndex].bytesWritten.load()) / fileSize) * 100);
-                progressData[progressIndex].progress.store(progress);
-
-                double seconds = timeSinceLastUpdate.count() / 1000.0;
-                double mbPerSec = (static_cast<double>(bytesInWindow) / (1024 * 1024)) / seconds;
-                progressData[progressIndex].speed.store(mbPerSec);
-
-                lastUpdate = now;
-                bytesInWindow = 0;
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count() >= UPDATE_INTERVAL_MS) {
+                progressData[progressIndex].progress.store(
+                    static_cast<int>((static_cast<double>(progressData[progressIndex].bytesWritten.load()) / fileSize) * 100));
+                updateSpeed(now);
             }
         }
     } catch (...) {
@@ -1052,9 +1046,10 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     close(device_fd);
 
     if (!g_operationCancelled && progressData[progressIndex].bytesWritten.load() == fileSize) {
+        updateSpeed(std::chrono::high_resolution_clock::now());
+        progressData[progressIndex].progress.store(100);
         progressData[progressIndex].completed.store(true);
         return true;
     }
-
     return false;
 }
