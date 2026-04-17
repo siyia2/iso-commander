@@ -158,11 +158,14 @@ CpMvRmColors getCpMvRmColors();
 ConversionThemeStrings getConversionThemeStrings();
 ReadlineColors resolveReadlineTheme();
 ProgressBarColors resolveProgressTheme();
+
 SemanticUIColors resolveOptionsTheme();
 SemanticUIColors resolveVerboseTheme();
-VerboseAndDatabaseTheme getVerboseTheme();
 SemanticUIColors resolveDatabaseTheme();
+
+VerboseAndDatabaseTheme getVerboseTheme();
 VerboseAndDatabaseTheme getDatabaseTheme();
+
 ReadlineAndPromptTheme getPromptTheme();
 ReadlineAndPromptTheme getFilterTheme(const std::string& operationColor, bool includeIso);
 
