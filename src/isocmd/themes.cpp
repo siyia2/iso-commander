@@ -420,7 +420,7 @@ SemanticUIColors resolveDatabaseTheme() {
             .error     = originalColors::red,
             .reset     = UI::Palette::BoldReset,
             .path      = {},
-            .highlight = {},
+            .highlight = originalColors::green,
             .data      = originalColors::boldAlt,
             .str       = originalColors::cyan
         };
@@ -432,7 +432,7 @@ SemanticUIColors resolveDatabaseTheme() {
         .error     = theme->secondary,
         .reset     = UI::Palette::BoldReset,
         .path      = {},
-        .highlight = {},
+        .highlight = theme->accent,
         .data      = theme->accent,
         .str       = originalColors::cyan
     };
