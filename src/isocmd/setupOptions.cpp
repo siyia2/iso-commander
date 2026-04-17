@@ -556,18 +556,15 @@ void displayConfigurationOptions(const std::string& configPath) {
     if (!configFile.is_open()) { printConfigError(configPath); return; }
     
     auto tc = resolveOptionsTheme();
-    // Specific override for the title
-    std::string_view titleCol = (globalTheme == "original") ? originalColors::cyan : tc.reset;
-
-    std::cout << "\n" << titleCol << "==== Current Configuration ====\n\n";
+    
+    std::cout << "\n" << tc.accent << "==== Current Configuration ====\n\n" << tc.reset;
 
     std::string line; 
     int lineNum = 1;
     while (std::getline(configFile, line)) {
         std::string trimmed = trim(line);
         if (!trimmed.empty() && trimmed[0] != '#') {
-            // No logic here, just direct output
-            std::cout << tc.accent << lineNum++ << ". " 
+            std::cout << tc.warning << lineNum++ << ". " 
                       << tc.label << trimmed << tc.reset << "\n";
         }
     }
