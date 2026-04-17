@@ -12,7 +12,7 @@
  * utilizing a pre-allocated internal buffer to minimize heap allocations during output.
  */
 struct VerbosityFormatter {
-    const VerboseMountColors tc;
+    const SemanticUIColors tc;
     std::string outputBuffer;
 
     VerbosityFormatter() : tc(resolveVerboseTheme()) {

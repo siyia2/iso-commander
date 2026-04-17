@@ -45,68 +45,35 @@ namespace UI {
         static constexpr std::string_view RL_BoldAlt   = "\001\033[0;1;38;2;215;215;215m\002";
     }
 
-    struct MainTheme {
-        std::string_view primary, secondary, accent, muted, highlight, background, warning;
-    };
-
-    struct PrintListTheme {
-        std::string_view accent, head, num, iso, img, mnt, square, indexA, indexB, dir;
-    };
-
-    struct WriteTheme {
-        std::string errLabel, errPath, warnLabel, infoLabel, bold;
-        std::string headerCol, indexCol, pathCol, fileCol, sizeCol, warnCol;
-        std::string colorSuccess, colorFailure, colorWarning, colorStatus, speedCol, deviceCol;
-        std::string rl_labelCol, rl_primaryCol, rl_highlightCol, rl_errorCol, rl_resetCol;
-    };
-    
-    struct CpMvRmColors { 
-		std::string_view arrow, dir, iso, error_label, error_path, success_label, success_path, dest_path, abort, prompt_green, prompt_blue;
-	};
-	
-	struct ConversionThemeStrings { 
-		std::string_view errLabel, errPath, missingLabel, okLabel, okPath, skipLabel, skipPath;
+	struct MainTheme { std::string_view primary, secondary, accent, muted, highlight, background, warning; 
 	};
 
-    struct VerboseTheme {
-        std::string red, yellow, green, purple, magenta, blue, orange, bold, reset;
-    };
-
-    struct DatabaseTheme {
-        std::string green, blue, orange, yellow, red, purple, bold, reset;
-    };
-    
-    struct DatabaseSwitchesColors {std::string_view header, label, data, warning, status, error, string, reset;
+	struct PrintListTheme { std::string_view accent, head, num, iso, img, mnt, square, indexA, indexB, dir; 
 	};
 
-    struct PromptTheme {
-        std::string iso, muted, filter, highlight, reset;
-    };
-
-    struct FilterTheme {
-        std::string primary, filter, highlight, reset, iso;
-    };
-    struct SetupColors {
-		std::string_view label, accent,  warning, error, boldReset;
-	};
-	
-	struct VerboseMountColors { std::string_view label, path, highlight, warning, error, reset;
-	};
-	
-	struct ReadlineColors {
-		const char* label;
-		const char* hint;
-		const char* dir;
-		const char* file;
-		const char* reset;
+	struct WriteTheme { std::string errLabel, errPath, warnLabel, infoLabel, bold, headerCol, indexCol, pathCol, fileCol, sizeCol, warnCol, 
+		colorSuccess, colorFailure, colorWarning, colorStatus, speedCol, deviceCol, rl_labelCol, rl_primaryCol, rl_highlightCol, rl_errorCol, rl_resetCol; 
 	};
 
-	struct ProgressBarColors {
-		const char* success;
-		const char* failure;
-		const char* warning;
-		const char* status;
-		const char* reset;
+	struct CpMvRmColors { std::string_view arrow, dir, iso, error_label, error_path, success_label, success_path, dest_path, abort, prompt_green, prompt_blue; 
+	};
+
+	struct ConversionThemeStrings { std::string_view errLabel, errPath, missingLabel, okLabel, okPath, skipLabel, skipPath; 
+	};
+
+	struct VerboseAndDatabaseTheme { std::string red, yellow, green, purple, magenta, blue, orange, bold, reset; 
+	};
+
+	struct ReadlineAndPromptTheme { std::string primary, filter, highlight, reset, iso, accent; 
+	};
+
+	struct SemanticUIColors { std::string_view label, accent, warning, error, reset, path, highlight, data, str; 
+	};
+
+	struct ReadlineColors { const char* label, *hint, *dir, *file, *reset; 
+	};
+
+	struct ProgressBarColors { const char* success, *failure, *warning, *status, *reset; 
 	};
 }
 
@@ -134,20 +101,16 @@ struct originalColors {
     static constexpr std::string_view rl_boldAlt   = UI::Palette::RL_BoldAlt;
 };
 
-using MainTheme      		 = UI::MainTheme;
-using PrintListTheme 		 = UI::PrintListTheme;
-using WriteTheme     		 = UI::WriteTheme;
-using VerboseTheme   		 = UI::VerboseTheme;
-using DatabaseTheme  		 = UI::DatabaseTheme;
-using PromptTheme    		 = UI::PromptTheme;
-using FilterTheme    		 = UI::FilterTheme;
-using CpMvRmColors           = UI::CpMvRmColors;
-using ConversionThemeStrings = UI::ConversionThemeStrings;
-using SetupColors            = UI::SetupColors;
-using VerboseMountColors     = UI::VerboseMountColors;
-using ReadlineColors         = UI::ReadlineColors;
-using ProgressBarColors      = UI::ProgressBarColors;
-using DatabaseSwitchesColors = UI::DatabaseSwitchesColors;
+using MainTheme      		  = UI::MainTheme;
+using PrintListTheme 		  = UI::PrintListTheme;
+using WriteTheme     		  = UI::WriteTheme;
+using VerboseAndDatabaseTheme = UI::VerboseAndDatabaseTheme;
+using ReadlineAndPromptTheme  = UI::ReadlineAndPromptTheme;
+using CpMvRmColors            = UI::CpMvRmColors;
+using ConversionThemeStrings  = UI::ConversionThemeStrings;
+using SemanticUIColors        = UI::SemanticUIColors;
+using ReadlineColors          = UI::ReadlineColors;
+using ProgressBarColors       = UI::ProgressBarColors;
 
 // --- GLOBAL STATE ---
 
@@ -189,18 +152,18 @@ inline constexpr UI::MainTheme TokyoNightTheme = { "\033[1;38;2;135;175;255m", "
 // --- FUNCTION DECLARATIONS ---
 
 WriteTheme getWriteTheme();
-PromptTheme getPromptTheme();
-FilterTheme getFilterTheme(const std::string& operationColor = "", bool includeIso = false);
-DatabaseTheme getDatabaseTheme();
-VerboseTheme getVerboseTheme();
 PrintListTheme getListColors(bool isOriginal, const MainTheme* theme);
 CpMvRmColors getCpMvRmColors();
 ConversionThemeStrings getConversionThemeStrings();
-SetupColors resolveOptionsTheme();
-VerboseMountColors resolveVerboseTheme();
 ReadlineColors resolveReadlineTheme();
 ProgressBarColors resolveProgressTheme();
-DatabaseSwitchesColors resolveDatabaseTheme();
+SemanticUIColors resolveOptionsTheme();
+SemanticUIColors resolveVerboseTheme();
+VerboseAndDatabaseTheme getVerboseTheme();
+SemanticUIColors resolveDatabaseTheme();
+VerboseAndDatabaseTheme getDatabaseTheme();
+ReadlineAndPromptTheme getPromptTheme();
+ReadlineAndPromptTheme getFilterTheme(const std::string& operationColor, bool includeIso);
 
 /**
  * @brief Resolves the current theme structure based on the globalTheme string.

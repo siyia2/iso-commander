@@ -11,7 +11,7 @@
  * ANSI color codes and theme-aware styling.
  */
 struct VerboseMessageFormatter {
-    const VerboseMountColors tc;
+    const SemanticUIColors tc;
 
     VerboseMessageFormatter() : tc(resolveVerboseTheme()) {}
 
