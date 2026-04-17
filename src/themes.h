@@ -114,22 +114,11 @@ using ProgressBarColors       = UI::ProgressBarColors;
 
 // --- GLOBAL STATE ---
 
-inline constexpr std::string_view default_skin = "white";
-inline std::string_view skin = default_skin;
-inline constexpr std::string_view reset = UI::Palette::BoldReset;
-inline std::string_view globalTheme = "original";
+inline std::string_view skin = "white"; 
+inline std::string_view reset = UI::Palette::BoldReset;
+inline std::string globalTheme = "original";
 
-// Bring Palette colors into scope for convenience
-using UI::Palette::White;
-using UI::Palette::Red;
-using UI::Palette::Green;
-using UI::Palette::Cyan;
-using UI::Palette::Purple;
-using UI::Palette::Amber;
-using UI::Palette::Rose;
-using UI::Palette::Reset;
-
-inline std::string_view getskin() {  // Remove constexpr
+inline std::string_view getskin() {
     using namespace UI::Palette;
     if (skin == "green")  return Green;
     if (skin == "cyan")   return Cyan;
@@ -140,7 +129,8 @@ inline std::string_view getskin() {  // Remove constexpr
     return Reset;
 }
 
-inline std::string_view color = UI::Palette::White;
+// Global color view updated via the function
+inline std::string_view color = getskin();
 
 // --- THEME DEFINITIONS ---
 
