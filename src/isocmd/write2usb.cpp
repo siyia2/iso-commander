@@ -773,7 +773,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             else                                  std::cout << prog.progress << "%";
 
             std::cout << wt.bold << " [" << wt.headerCol << currentSize << "/" << wt.sizeCol << prog.totalSize << wt.bold << "] "
-                      << wt.speedCol << formatSpeed(prog.speed) << wt.bold << "\n";
+          << wt.speedCol << formatSpeed(prog.speed) << (prog.completed ? " (avg)" : "") << wt.bold << "\n";
         }
         std::cout << std::flush;
     };
@@ -1046,7 +1046,13 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     close(device_fd);
 
     if (!g_operationCancelled && progressData[progressIndex].bytesWritten.load() == fileSize) {
-        updateSpeed(std::chrono::high_resolution_clock::now());
+        auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::high_resolution_clock::now() - startTime);
+        double seconds = totalElapsed.count() / 1000.0;
+        double avgSpeed = seconds > 0.0
+            ? (static_cast<double>(fileSize) / (1024.0 * 1024.0)) / seconds
+            : 0.0;
+        progressData[progressIndex].speed.store(avgSpeed);
         progressData[progressIndex].progress.store(100);
         progressData[progressIndex].completed.store(true);
         return true;
