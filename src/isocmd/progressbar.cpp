@@ -53,8 +53,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks,
     std::atomic<bool>* isComplete, bool* verbose, const std::string& operation) {
     
-    // 1. Resolve theme once at the start
-    auto pc = resolveProgressTheme();
+    ProgressBarColors pc = resolveProgressTheme();
     
     disableInputForProgressBar(&oldt, &oldf);
 
