@@ -824,7 +824,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     
     size_t completedTasksValue = completedTasks.load();
 
-    std::string operation = wt.colorWarning + "write2usb" + wt.rl_resetCol;
+    std::string operation = std::string(originalColors::yellow) + "write2usb" + wt.rl_resetCol;
 
     std::cout << "\r" << wt.colorStatus << "Status: " << operation << " → " 
               << (!g_operationCancelled.load() 
