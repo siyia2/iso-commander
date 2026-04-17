@@ -360,7 +360,7 @@ void verboseSearchResults(const std::string& fileExtension,
     std::cout << vt.bold << "Time Elapsed: " << std::fixed << std::setprecision(1)
               << total_elapsed_time << " seconds" << vt.bold << "\n\n";
 
-    std::cout << vt.green << "↵ to continue..." << vt.reset << vt.bold;
+    std::cout << color << "↵ to continue..." << vt.reset << vt.bold;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     clearScrollBuffer();
 }

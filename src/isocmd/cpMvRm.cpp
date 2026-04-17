@@ -169,7 +169,7 @@ bool& umountMvRmBreak, bool& abortDel) {
                 abortDel = true;
 
                 std::cout << "\n" << colors.abort << "rm operation aborted by user." << UI::Palette::BoldReset << "\n";
-                std::cout << colors.prompt_blue << "\n↵ to continue..." << reset;
+                std::cout << color << "\n↵ to continue..." << reset;
 
                 std::cin.clear();
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
