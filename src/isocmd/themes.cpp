@@ -405,7 +405,8 @@ VerboseAndDatabaseTheme getDatabaseTheme() {
  * - .error     ← error   (Disabled / Access Denied states)
  * - .str       ← string  (string-type value color)
  * - .reset     ← reset
- * - .highlight and .path are unused by database switch callers.
+ * - .highlight ← for std::cout << "\n" << db.highlight << "ISO database cleared successfully." << "\033[J" << std::endl;
+ * - .path is unused by database switch callers.
  *
  * @return SemanticUIColors Populated with database-switch color roles.
  */
