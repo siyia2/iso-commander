@@ -28,34 +28,10 @@
  * @see globalTheme
  */
 
-/**
- * @brief Resolves the color palette for list rendering based on the active theme mode.
- * * This function abstracts the color selection logic, mapping either the legacy 
- * hardcoded "original" colors or the dynamic properties of the provided ListTheme
- * to a standardized set of UI components used by the list printer.
- * * @param isOriginal Boolean flag indicating if the legacy 'original' theme is active.
- * @param theme Pointer to the current active ListTheme configuration (ignored if isOriginal is true).
- * * @return PrintListTheme A struct containing std::string_view color codes for:
- * - UI accents, headers, and numbers
- * - File type indicators (ISO, Image, Mounted)
- * - Decorative elements (Squares, Directories, and alternating row indices)
- */
-PrintListTheme getListColors(bool isOriginal, const MainTheme* theme) {
-    if (isOriginal) {
-        return {
-            originalColors::darkCyan, originalColors::brown, originalColors::yellow,
-            originalColors::magenta,  originalColors::orange, originalColors::blue,
-            originalColors::dimGray,   originalColors::red,    originalColors::green,
-            originalColors::boldAlt
-        };
-    }
-    return {
-        theme->accent,    theme->muted,    theme->warning,
-        theme->accent,    theme->highlight, theme->secondary,
-        originalColors::dimGray, theme->secondary, theme->accent,
-        theme->muted
-    };
-}
+
+// ============================================================
+//  Interactive Prompts & Input
+// ============================================================
 
 /**
  * @brief Creates and returns a PromptTheme for readline-powered interactive prompts
@@ -149,6 +125,83 @@ FilterTheme getFilterTheme(const std::string& operationColor, bool includeIso) {
     
     return ft;
 }
+
+/**
+ * @brief Resolves semantic colors for Readline tab-completion listings.
+ *
+ * This function provides raw @c const @c char* pointers to theme colors, specifically 
+ * optimized for the custom Readline listing hook. It ensures compatibility with 
+ * @c printf-based formatting used in completion displays and maintains visual 
+ * consistency between the CLI prompt and file listings.
+ *
+ * @return A @ref ReadlineColors struct containing:
+ * - @b label: Muted color for the completion headers and pagination info.
+ * - @b hint: Highlight color for interactive hints (e.g., "Ctrl+l").
+ * - @b dir: Distinct color for directory entries in the listing.
+ * - @b file: Standard color for regular file entries.
+ * - @b reset: The terminal reset/boldAlt sequence for output cleanup.
+ */
+ReadlineColors resolveReadlineTheme() {
+    const MainTheme* theme = getActiveTheme();
+    const bool isOrig = (globalTheme == "original");
+
+    if (isOrig) {
+        return {
+            originalColors::brown.data(),
+            originalColors::yellow.data(),
+            originalColors::blue.data(),
+            originalColors::resetPlain.data(),
+            originalColors::boldAlt.data()
+        };
+    }
+
+    return {
+        theme->muted.data(),
+        theme->accent.data(),
+        theme->accent.data(), // Directories use accent in modern themes
+        originalColors::resetPlain.data(),
+        originalColors::boldAlt.data()
+    };
+}
+
+
+// ============================================================
+//  List & Navigation Display
+// ============================================================
+
+/**
+ * @brief Resolves the color palette for list rendering based on the active theme mode.
+ * * This function abstracts the color selection logic, mapping either the legacy 
+ * hardcoded "original" colors or the dynamic properties of the provided ListTheme
+ * to a standardized set of UI components used by the list printer.
+ * * @param isOriginal Boolean flag indicating if the legacy 'original' theme is active.
+ * @param theme Pointer to the current active ListTheme configuration (ignored if isOriginal is true).
+ * * @return PrintListTheme A struct containing std::string_view color codes for:
+ * - UI accents, headers, and numbers
+ * - File type indicators (ISO, Image, Mounted)
+ * - Decorative elements (Squares, Directories, and alternating row indices)
+ */
+PrintListTheme getListColors(bool isOriginal, const MainTheme* theme) {
+    if (isOriginal) {
+        return {
+            originalColors::darkCyan, originalColors::brown, originalColors::yellow,
+            originalColors::magenta,  originalColors::orange, originalColors::blue,
+            originalColors::dimGray,   originalColors::red,    originalColors::green,
+            originalColors::boldAlt
+        };
+    }
+    return {
+        theme->accent,    theme->muted,    theme->warning,
+        theme->accent,    theme->highlight, theme->secondary,
+        originalColors::dimGray, theme->secondary, theme->accent,
+        theme->muted
+    };
+}
+
+
+// ============================================================
+//  File Operations
+// ============================================================
 
 /**
  * @brief Retrieves the color scheme for Copy/Move/Remove operations.
@@ -292,7 +345,12 @@ WriteTheme getWriteTheme() {
     return wt;
 }
 
- /**
+
+// ============================================================
+//  Database Operations
+// ============================================================
+
+/**
  * @brief Creates and returns a DatabaseTheme for database operation displays
  * 
  * Configures color scheme for database-related UI elements including query results,
@@ -347,6 +405,49 @@ DatabaseTheme getDatabaseTheme() {
     
     return dt;
 }
+
+/**
+ * @brief Resolves semantic colors for database statistics and configuration state displays.
+ * * This resolver maps theme colors to specific roles used in the "database switches"
+ * and statistics screens. It provides a distinct visual hierarchy for headers, 
+ * data values, and system status messages (Enabled/Disabled).
+ * * @return A @ref DatabaseSwitchesColors struct containing:
+ * - @b header: Highlight color for section titles (e.g., Blue/Accent).
+ * - @b label: Muted color for category descriptions (e.g., Green/Muted).
+ * - @b data: High-contrast color for numeric values and file paths.
+ * - @b warning: Secondary highlight for buffered/cached entry counts.
+ * - @b status: Positive feedback color for "Enabled" or "Cleared" states.
+ * - @b error: Critical feedback color for "Disabled" or "Access Denied" states.
+ * - @b reset: Standard terminal reset sequence to clear formatting.
+ */
+DatabaseSwitchesColors resolveDatabaseTheme() {
+    const MainTheme* theme = getActiveTheme();
+    if (globalTheme == "original") {
+        return {
+            originalColors::blue,    // header
+            originalColors::green,   // label
+            originalColors::boldAlt, // data
+            originalColors::orange,  // warning
+            originalColors::green,   // status
+            originalColors::red,     // error
+            UI::Palette::BoldReset
+        };
+    }
+    return {
+        theme->accent,    // header
+        theme->muted,     // label
+        theme->accent,    // data
+        theme->warning,   // warning
+        theme->accent,    // status
+        theme->secondary, // error
+        UI::Palette::BoldReset
+    };
+}
+
+
+// ============================================================
+//  Verbose / Logging Output
+// ============================================================
 
 /**
  * @brief Creates and returns a VerboseTheme for detailed debug/logging output
@@ -452,6 +553,11 @@ VerboseMountColors resolveVerboseTheme() {
     };
 }
 
+
+// ============================================================
+//  Configuration / Setup UI
+// ============================================================
+
 /**
  * @brief Resolves semantic UI colors based on the active global theme.
  * * This function acts as a centralized mapper that translates internal theme 
@@ -486,43 +592,10 @@ SetupColors resolveOptionsTheme() {
     };
 }
 
-/**
- * @brief Resolves semantic colors for Readline tab-completion listings.
- *
- * This function provides raw @c const @c char* pointers to theme colors, specifically 
- * optimized for the custom Readline listing hook. It ensures compatibility with 
- * @c printf-based formatting used in completion displays and maintains visual 
- * consistency between the CLI prompt and file listings.
- *
- * @return A @ref ReadlineColors struct containing:
- * - @b label: Muted color for the completion headers and pagination info.
- * - @b hint: Highlight color for interactive hints (e.g., "Ctrl+l").
- * - @b dir: Distinct color for directory entries in the listing.
- * - @b file: Standard color for regular file entries.
- * - @b reset: The terminal reset/boldAlt sequence for output cleanup.
- */
-ReadlineColors resolveReadlineTheme() {
-    const MainTheme* theme = getActiveTheme();
-    const bool isOrig = (globalTheme == "original");
 
-    if (isOrig) {
-        return {
-            originalColors::brown.data(),
-            originalColors::yellow.data(),
-            originalColors::blue.data(),
-            originalColors::resetPlain.data(),
-            originalColors::boldAlt.data()
-        };
-    }
-
-    return {
-        theme->muted.data(),
-        theme->accent.data(),
-        theme->accent.data(), // Directories use accent in modern themes
-        originalColors::resetPlain.data(),
-        originalColors::boldAlt.data()
-    };
-}
+// ============================================================
+//  High-Frequency Rendering
+// ============================================================
 
 /**
  * @brief Resolves semantic colors specifically for high-frequency progress bar rendering.
@@ -558,4 +631,3 @@ ProgressBarColors resolveProgressTheme() {
         UI::Palette::BoldReset.data()
     };
 }
-
