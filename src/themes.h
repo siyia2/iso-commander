@@ -76,15 +76,8 @@ namespace UI {
         std::string green, blue, orange, yellow, red, purple, bold, reset;
     };
     
-    struct DatabaseSwitchesColors {
-    std::string_view header;  ///< Section headers (=== Title ===)
-    std::string_view label;   ///< Category labels (Capacity, Entries)
-    std::string_view data;    ///< Numeric/Path data values
-    std::string_view warning; ///< Buffered/Cached entry warnings
-    std::string_view status;  ///< Success/Enabled status
-    std::string_view error;   ///< Failure/Disabled status
-    std::string_view reset;   ///< Standard BoldReset
-};
+    struct DatabaseSwitchesColors {std::string_view header, label, data, warning, status, error, string, reset;
+	};
 
     struct PromptTheme {
         std::string iso, muted, filter, highlight, reset;
@@ -109,11 +102,11 @@ namespace UI {
 	};
 
 	struct ProgressBarColors {
-		const char* success; ///< Green / Primary
-		const char* failure; ///< Red / Secondary
-		const char* warning; ///< Yellow / Warning
-		const char* status;  ///< Muted / BoldAlt (Labels)
-		const char* reset;   ///< BoldReset
+		const char* success;
+		const char* failure;
+		const char* warning;
+		const char* status;
+		const char* reset;
 	};
 }
 
