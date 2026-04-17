@@ -497,7 +497,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
     disable_ctrl_d();
     clearScrollBuffer();
 
-    auto [header, label, data, warn, status, error, reset] = resolveDatabaseTheme();
+    auto [header, label, data, warn, status, error, string, reset] = resolveDatabaseTheme();
 
     try {
         for (const auto& path : {databaseFilePath, historyFilePath, filterHistoryFilePath}) {
@@ -526,7 +526,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
         
         std::cout << "\n" << header << "=== Buffered Entries ===" << reset << "\n";
         
-        std::cout << header << "\nSTR → RAM: " << data 
+        std::cout << string << "\nSTR → RAM: " << data 
                   << (transformationCache.size() + cachedParsesForUmount.size()) << "\n";
         
         std::cout << "\n" << label << "ISO → RAM: " << data << globalIsoFileList.size() << "\n";

@@ -430,6 +430,7 @@ DatabaseSwitchesColors resolveDatabaseTheme() {
             originalColors::orange,  // warning
             originalColors::green,   // status
             originalColors::red,     // error
+            originalColors::cyan, //string
             UI::Palette::BoldReset
         };
     }
@@ -440,6 +441,7 @@ DatabaseSwitchesColors resolveDatabaseTheme() {
         theme->warning,   // warning
         theme->accent,    // status
         theme->secondary, // error
+        originalColors::cyan, //string
         UI::Palette::BoldReset
     };
 }
