@@ -614,7 +614,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
                       << db.warning << "'" << databaseFilePath << "'" 
                       << db.error << ". File missing or inaccessible.\033[J" << std::endl;
             
-            std::cout << "\n" << db.label << "↵ to continue..." << db.reset;
+            std::cout << "\n" << color << "↵ to continue..." << db.reset;
             std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         } else {
             ofs.close();
