@@ -75,6 +75,16 @@ namespace UI {
     struct DatabaseTheme {
         std::string green, blue, orange, yellow, red, purple, bold, reset;
     };
+    
+    struct DatabaseSwitchesColors {
+    std::string_view header;  ///< Section headers (=== Title ===)
+    std::string_view label;   ///< Category labels (Capacity, Entries)
+    std::string_view data;    ///< Numeric/Path data values
+    std::string_view warning; ///< Buffered/Cached entry warnings
+    std::string_view status;  ///< Success/Enabled status
+    std::string_view error;   ///< Failure/Disabled status
+    std::string_view reset;   ///< Standard BoldReset
+};
 
     struct PromptTheme {
         std::string iso, muted, filter, highlight, reset;
@@ -144,6 +154,7 @@ using SetupColors            = UI::SetupColors;
 using VerboseMountColors     = UI::VerboseMountColors;
 using ReadlineColors         = UI::ReadlineColors;
 using ProgressBarColors      = UI::ProgressBarColors;
+using DatabaseSwitchesColors = UI::DatabaseSwitchesColors;
 
 // --- GLOBAL STATE ---
 
@@ -196,6 +207,7 @@ SetupColors resolveOptionsTheme();
 VerboseMountColors resolveVerboseTheme();
 ReadlineColors resolveReadlineTheme();
 ProgressBarColors resolveProgressTheme();
+DatabaseSwitchesColors resolveDatabaseTheme();
 
 /**
  * @brief Resolves the current theme structure based on the globalTheme string.
