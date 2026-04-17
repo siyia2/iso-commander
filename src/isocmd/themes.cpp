@@ -555,7 +555,8 @@ SemanticUIColors resolveVerboseTheme() {
  * - .warning ← warning (value / numeric highlight)
  * - .error   ← error   (error / disable / negative highlight)
  * - .reset   ← boldReset
- * - .path, .highlight, .data, .str are unused by setup callers.
+ * - .highlight ← (config header)
+ * - .path, .data, .str are unused by setup callers.
  *
  * @return SemanticUIColors Populated with setup/options color roles.
  */
@@ -571,7 +572,7 @@ SemanticUIColors resolveOptionsTheme() {
             .error     = originalColors::red,
             .reset     = UI::Palette::BoldReset,
             .path      = {},
-            .highlight = {},
+            .highlight = originalColors::blue,
             .data      = {},
             .str       = {}
         };
@@ -583,7 +584,7 @@ SemanticUIColors resolveOptionsTheme() {
         .error     = theme->secondary,
         .reset     = UI::Palette::BoldReset,
         .path      = {},
-        .highlight = {},
+        .highlight = theme->accent,
         .data      = {},
         .str       = {}
     };

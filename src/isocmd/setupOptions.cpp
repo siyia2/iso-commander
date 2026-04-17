@@ -557,7 +557,7 @@ void displayConfigurationOptions(const std::string& configPath) {
     
     auto tc = resolveOptionsTheme();
     
-    std::cout << "\n" << tc.accent << "==== Current Configuration ====\n\n" << tc.reset;
+    std::cout << "\n" << tc.highlight << "==== Current Configuration ====\n\n" << tc.reset;
 
     std::string line; 
     int lineNum = 1;
