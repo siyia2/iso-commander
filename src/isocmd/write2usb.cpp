@@ -672,7 +672,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         // Constructing the Readline prompt using theme colors
         const std::string confirmPrompt = 
-            "\001" + color + "\002" +
+            "\001" + std::string(color) + "\002" +
             "\nProceed? (y/n): " +
             wt.rl_resetCol;
 
