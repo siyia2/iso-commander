@@ -190,8 +190,4 @@ inline const UI::MainTheme* getActiveTheme() {
     return (it != themeMap.end()) ? it->second : &OriginalTheme;
 }
 
-inline std::string_view getErrorCol() {
-    return (globalTheme == "original") ? originalColors::red : getActiveTheme()->secondary;
-}
-
 #endif // THEMES_H
