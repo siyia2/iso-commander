@@ -88,6 +88,13 @@ static std::string trim(std::string str) {
     return str;
 }
 
+/**
+ * @brief Prints the standard "↵ to continue…" pause and waits for Enter.
+ */
+static void pauseForInput() {
+    std::cout << color << "\n↵ to continue..." << reset;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
 
 /**
  * @brief Prints a standardised config-file access error then flushes to stderr.
@@ -98,14 +105,6 @@ static void printConfigError(const std::string& configPath) {
               << "Error: Unable to access configuration file: "
               << warning << "'" << configPath << "'"
               << error << ".\033[J\n" << reset;
-}
-
-/**
- * @brief Prints the standard "↵ to continue…" pause and waits for Enter.
- */
-static void pauseForInput() {
-    std::cout << color << "\n↵ to continue..." << reset;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
 /**
@@ -549,12 +548,13 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
  * @brief UI Function: Displays the current config file content to the user.
  */
 void displayConfigurationOptions(const std::string& configPath) {
-    clearScrollBuffer();
     syncCache(configPath);
 
     std::ifstream configFile(configPath);
-    if (!configFile.is_open()) { printConfigError(configPath); return; }
+    if (!configFile.is_open()) { printConfigError(configPath); pauseForInput(); return; }
     
+    clearScrollBuffer();
+
     auto tc = resolveOptionsTheme();
     
     std::cout << "\n" << tc.highlight << "==== Current Configuration ====\n\n" << tc.reset;
