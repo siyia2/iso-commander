@@ -77,30 +77,6 @@ namespace UI {
 	};
 }
 
-// --- BACKWARDS COMPATIBILITY BRIDGE ---
-
-struct originalColors {
-    static constexpr std::string_view red          = UI::Palette::Red;
-    static constexpr std::string_view green        = UI::Palette::Green;
-    static constexpr std::string_view yellow       = UI::Palette::Yellow;
-    static constexpr std::string_view blue         = UI::Palette::Blue;
-    static constexpr std::string_view magenta      = UI::Palette::Magenta;
-    static constexpr std::string_view cyan         = UI::Palette::Cyan;
-    static constexpr std::string_view darkCyan     = UI::Palette::DarkCyan;
-    static constexpr std::string_view orange       = UI::Palette::Orange;
-    static constexpr std::string_view purple       = UI::Palette::Purple;
-    static constexpr std::string_view brown        = UI::Palette::Brown;
-    static constexpr std::string_view boldAlt      = UI::Palette::BoldReset;
-    static constexpr std::string_view resetPlain   = UI::Palette::Reset;
-    static constexpr std::string_view dim          = UI::Palette::Dim;
-    static constexpr std::string_view dimGray      = UI::Palette::DimGray;
-    static constexpr std::string_view bgNavy       = UI::Palette::BGNavy;
-    
-    // Readline variants
-    static constexpr std::string_view rl_reset     = UI::Palette::RL_Reset;
-    static constexpr std::string_view rl_boldAlt   = UI::Palette::RL_BoldAlt;
-};
-
 using MainTheme      		  = UI::MainTheme;
 using PrintListTheme 		  = UI::PrintListTheme;
 using WriteTheme     		  = UI::WriteTheme;
