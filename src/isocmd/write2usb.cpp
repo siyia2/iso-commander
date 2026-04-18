@@ -598,7 +598,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         const std::string confirmPrompt =
 			"\001" + std::string(color) + "\002" +
 			"\nProceed? (y/n): "
-			+ std::string(wt.rl_resetCol);
+			+ wt.rl_resetCol;
 
         std::unique_ptr<char, decltype(&std::free)> confirmation(
             readline(confirmPrompt.c_str()), 
