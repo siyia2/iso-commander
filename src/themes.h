@@ -93,20 +93,23 @@ using ProgressBarColors       = UI::ProgressBarColors;
 inline std::string_view skin = "white"; 
 inline std::string_view reset = UI::Palette::BoldReset;
 inline std::string globalTheme = "original";
+inline std::string_view color;
 
 inline std::string_view getskin() {
     using namespace UI::Palette;
-    if (skin == "green")  return Green;
-    if (skin == "cyan")   return Cyan;
-    if (skin == "purple") return Purple;
-    if (skin == "amber")  return Amber;
-    if (skin == "rose")   return Rose;
-    if (skin == "white")  return White;
-    return Reset;
+    static constexpr std::pair<std::string_view, std::string_view> skinMap[] = {
+        {"amber",  Amber},
+        {"cyan",   Cyan},
+        {"green",  Green},
+        {"purple", Purple},
+        {"rose",   Rose},
+        {"white",  White},
+    };
+    auto it = std::lower_bound(std::begin(skinMap), std::end(skinMap), skin,
+        [](const auto& entry, std::string_view val) { return entry.first < val; });
+    color = (it != std::end(skinMap) && it->first == skin) ? it->second : Reset;
+    return color;
 }
-
-// Global color view updated via the function
-inline std::string_view color = getskin();
 
 // --- THEME DEFINITIONS ---
 
@@ -149,24 +152,24 @@ ReadlineAndPromptTheme getFilterTheme(const std::string& operationColor, bool in
  * @brief Resolves the current theme structure based on the globalTheme string.
  */
 inline const UI::MainTheme* getActiveTheme() {
-    static const std::unordered_map<std::string_view, const UI::MainTheme*> themeMap = {
-        {"original",      &OriginalTheme},
+    static constexpr std::pair<std::string_view, const UI::MainTheme*> themeTable[] = {
         {"classic",       &ClassicTheme},
-        {"high_contrast", &HighContrast},
-        {"neon",          &NeonTheme},
-        {"ocean",         &OceanTheme},
-        {"sunset",        &SunsetTheme},
-        {"forest",        &ForestTheme},
-        {"midnight",      &MidnightTheme},
-        {"mono",          &MonoTheme},
-        {"retro",         &RetroTheme},
         {"crimson",       &CrimsonTheme},
         {"dracula",       &DraculaTheme},
-        {"tokyo",         &TokyoNightTheme}
+        {"forest",        &ForestTheme},
+        {"high_contrast", &HighContrast},
+        {"midnight",      &MidnightTheme},
+        {"mono",          &MonoTheme},
+        {"neon",          &NeonTheme},
+        {"ocean",         &OceanTheme},
+        {"original",      &OriginalTheme},
+        {"retro",         &RetroTheme},
+        {"sunset",        &SunsetTheme},
+        {"tokyo",         &TokyoNightTheme},
     };
-
-    auto it = themeMap.find(globalTheme);
-    return (it != themeMap.end()) ? it->second : &OriginalTheme;
+    auto it = std::lower_bound(std::begin(themeTable), std::end(themeTable), globalTheme,
+        [](const auto& entry, const std::string& val) { return entry.first < val; });
+    return (it != std::end(themeTable) && it->first == globalTheme) ? it->second : &OriginalTheme;
 }
 
 #endif // THEMES_H
