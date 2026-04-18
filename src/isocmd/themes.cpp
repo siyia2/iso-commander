@@ -177,11 +177,11 @@ WriteTheme getWriteTheme() {
         wt.deviceCol    = UI::Palette::Yellow;
         wt.speedCol     = UI::Palette::BoldReset;
 
-        wt.rl_labelCol     = std::string(UI::Palette::RL_Green);
-        wt.rl_primaryCol   = std::string(UI::Palette::RL_Blue);
-        wt.rl_highlightCol = std::string(UI::Palette::RL_Yellow);
-        wt.rl_errorCol     = std::string(UI::Palette::RL_Red);
-        wt.rl_resetCol     = std::string(UI::Palette::RL_BoldAlt);
+        wt.rl_labelCol     = "\001" + std::string(UI::Palette::Green)     + "\002";
+        wt.rl_primaryCol   = "\001" + std::string(UI::Palette::Blue)      + "\002";
+        wt.rl_highlightCol = "\001" + std::string(UI::Palette::Yellow)    + "\002";
+        wt.rl_errorCol     = "\001" + std::string(UI::Palette::Red)       + "\002";
+        wt.rl_resetCol     = "\001" + std::string(UI::Palette::BoldReset) + "\002";
     } else {
         wt.errLabel     = t->secondary;
         wt.errPath      = t->warning;
@@ -207,7 +207,7 @@ WriteTheme getWriteTheme() {
         wt.rl_primaryCol   = "\001" + std::string(t->muted)                + "\002";
         wt.rl_highlightCol = "\001" + std::string(t->secondary)            + "\002";
         wt.rl_errorCol     = "\001" + std::string(t->secondary)            + "\002";
-        wt.rl_resetCol     = std::string(UI::Palette::RL_BoldAlt);
+        wt.rl_resetCol     = "\001" + std::string(UI::Palette::BoldReset)  + "\002";
     }
 
     return wt;

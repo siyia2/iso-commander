@@ -595,10 +595,10 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         disableReadlineForConfirmation();
 
         // Constructing the Readline prompt using theme colors
-        const std::string confirmPrompt = 
-            "\001" + std::string(color) + "\002" +
-            "\nProceed? (y/n): " +
-            wt.rl_resetCol;
+        const std::string confirmPrompt =
+			"\001" + std::string(color) + "\002" +
+			"\nProceed? (y/n): "
+			+ std::string(wt.rl_resetCol);
 
         std::unique_ptr<char, decltype(&std::free)> confirmation(
             readline(confirmPrompt.c_str()), 
