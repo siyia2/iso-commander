@@ -108,49 +108,4 @@ inline void swap_daa_if_be(daa_t* d, int endian) {
     swap32_if_be(&d->crc, 1);
 }
 
-/**
- * @brief Get the uncompressed ISO size from a DAA file
- * 
- * Reads the DAA file header and extracts the original ISO image size
- * before compression. This is useful for pre-allocating buffers or
- * verifying available disk space before extraction.
- * 
- * @param path Path to the DAA file (UTF-8 encoded on applicable platforms)
- * @return Uncompressed ISO size in bytes, or 0 if:
- *         - File cannot be opened
- *         - Read operation fails
- *         - DAA signature is invalid (not "DAA" or "GBI")
- * 
- * @note The function automatically handles endianness detection and
- *       byte-swapping based on the host platform.
- * 
- * @warning The returned size is the claimed size from the DAA header;
- *          no validation is performed against actual compressed data.
- * 
- * @see daa_t::isosize
- */
-static uint64_t getDaaIsoSize(const std::string& path) {
-    FILE* f = fopen(path.c_str(), "rb");
-    if (!f) return 0;
-
-    daa_t daa;
-    if (fread(&daa, 1, sizeof(daa), f) != sizeof(daa)) {
-        fclose(f);
-        return 0;
-    }
-    fclose(f);
-
-    // Determine host endianness (0 = little-endian, no swap)
-    int endian = 1;
-    if (*(char*)&endian) endian = 0;
-    swap_daa_if_be(&daa, endian);
-
-    // Check signature (basic validation)
-    if (strncmp((char*)daa.sign, "DAA", 16) != 0 &&
-        strncmp((char*)daa.sign, "GBI", 16) != 0) {
-        return 0;
-    }
-    return daa.isosize;
-}
-
 #endif // DAA2ISO_H
