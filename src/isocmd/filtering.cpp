@@ -13,29 +13,7 @@ namespace AnsiEscape {
     constexpr const char* CLEAR_TWO_LINES  = "\033[2A\033[K";
 }
 
-// ─── Global state ────────────────────────────────────────────────────────────
-
-std::vector<FilteringState> filteringStack;
-
 // ─── Boyer-Moore implementation ──────────────────────────────────────────────
-
-/**
- * @brief Represents a single search token with precomputed Boyer-Moore tables
- * 
- * Stores both case-sensitive and case-insensitive versions of the pattern
- * with their corresponding heuristic tables for efficient searching.
- */
-struct QueryToken {
-    std::string original;
-    std::string lower;
-    bool        isCaseSensitive;
-
-    std::vector<int> originalBadChar;
-    std::vector<int> originalGoodSuffix;
-
-    std::vector<int> lowerBadChar;
-    std::vector<int> lowerGoodSuffix;
-};
 
 /**
  * @brief Precomputes Boyer-Moore bad character and good suffix tables for a pattern
