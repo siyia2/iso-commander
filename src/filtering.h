@@ -21,7 +21,7 @@ struct FilteringState {
  * @details Pushed when a new filter is applied, popped when the user clears or
  * narrows a filter. An empty stack means no filtering is active.
  */
-extern std::vector<FilteringState> filteringStack;
+inline std::vector<FilteringState> filteringStack;
 
 /**
  * @brief Binds all mutable state needed by a single filter operation.
@@ -77,6 +77,24 @@ struct FilterCallConfig {
     bool                             isUnmount      = false;
     /** @brief Passed through to @c FilterContext::toggleFullListUmount. */
     bool                             toggleFullList = false;
+};
+
+/**
+ * @brief Represents a single search token with precomputed Boyer-Moore tables
+ * 
+ * Stores both case-sensitive and case-insensitive versions of the pattern
+ * with their corresponding heuristic tables for efficient searching.
+ */
+struct QueryToken {
+    std::string original;
+    std::string lower;
+    bool        isCaseSensitive;
+
+    std::vector<int> originalBadChar;
+    std::vector<int> originalGoodSuffix;
+
+    std::vector<int> lowerBadChar;
+    std::vector<int> lowerGoodSuffix;
 };
 
 #endif // FILTERING_H
