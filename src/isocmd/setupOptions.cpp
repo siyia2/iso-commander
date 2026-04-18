@@ -458,28 +458,28 @@ void setDisplayMode(const std::string& inputSearch) {
         g_configCache[key] = newValue;
 		if (key == "mount_list") {
 			displayConfig::toggleFullListMount = isFull;
-			updatedLabels.push_back(std::string(originalColors::green) + "mount");
+			updatedLabels.push_back(std::string(UI::Palette::Green) + "mount");
 		}
 		else if (key == "umount_list") {
 			displayConfig::toggleFullListUmount = isFull;
-			updatedLabels.push_back(std::string(originalColors::yellow) + "unmount");
+			updatedLabels.push_back(std::string(UI::Palette::Yellow) + "unmount");
 		}
 		else if (key == "cp_mv_rm_list") {
 			displayConfig::toggleFullListCpMvRm = isFull;
 			// Combining multiple views into one string
 			updatedLabels.push_back(
-				std::string(originalColors::green)  + "cp"+ std::string(originalColors::boldAlt) +"/" + 
-				std::string(originalColors::yellow) + "mv"+ std::string(originalColors::boldAlt) + "/" + 
-				std::string(originalColors::red)    + "rm"
+				std::string(UI::Palette::Green)  + "cp"+ std::string(UI::Palette::BoldReset) +"/" + 
+				std::string(UI::Palette::Yellow) + "mv"+ std::string(UI::Palette::BoldReset) + "/" + 
+				std::string(UI::Palette::Red)    + "rm"
 			);
 		}
 		else if (key == "convert2iso_lists") {
 			displayConfig::toggleFullListConvert2iso = isFull;
-			updatedLabels.push_back(std::string(originalColors::orange) + "convert2iso");
+			updatedLabels.push_back(std::string(UI::Palette::Orange) + "convert2iso");
 		}
 		else if (key == "write2usb_list") {
 			displayConfig::toggleFullListWrite2usb = isFull;
-			updatedLabels.push_back(std::string(originalColors::yellow) + "write2usb");
+			updatedLabels.push_back(std::string(UI::Palette::Yellow) + "write2usb");
 		}
     }
 

@@ -176,10 +176,10 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     }
 
     // Colors for special command prefixes
-    const char* exclColor = originalColors::yellow.data();
-    const char* qmarkColor = originalColors::blue.data();
-    const char* starColor = originalColors::purple.data();
-    const char* resetPlain = originalColors::resetPlain.data();
+    const char* exclColor = UI::Palette::Yellow.data();
+    const char* qmarkColor = UI::Palette::Blue.data();
+    const char* starColor = UI::Palette::Purple.data();
+    const char* resetPlain = UI::Palette::Reset.data();
 
     // Lambda to check if a path is a directory (file branch only)
     auto isDirectory = [](const char* path) -> bool {

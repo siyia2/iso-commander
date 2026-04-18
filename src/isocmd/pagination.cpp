@@ -138,7 +138,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                 << c.accent << (start + 1) << "-" << end
                 << c.head << ")/" << c.num << totalEntries
                 << c.head << ")"
-                << originalColors::boldAlt << "\n\n";
+                << UI::Palette::BoldReset << "\n\n";
         }
 
         for (size_t i = start; i < end; ++i) {
@@ -149,7 +149,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
             pageContent << "\n" << c.head << "Pagination: ";
             if (currentPage > 0)                pageContent << "[p] ↵ Previous | ";
             if (currentPage < totalPages - 1)  pageContent << "[n] ↵ Next | ";
-            pageContent << "[g<num>] ↵ Go to | " << originalColors::boldAlt << "\n";
+            pageContent << "[g<num>] ↵ Go to | " << UI::Palette::BoldReset << "\n";
         }
 
         std::string prompt = promptPrefix + pageContent.str() + promptSuffix;

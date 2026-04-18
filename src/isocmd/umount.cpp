@@ -34,11 +34,11 @@ bool isDirectoryEmpty(const std::string& path) {
 static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessageFormatter& fmt, const char* messageKey) {
     auto dirParts = parseMountPointComponents(isoDir);
     std::string formattedDir = std::get<1>(dirParts);
-    std::string_view squareColor = originalColors::dimGray;
+    std::string_view squareColor = UI::Palette::DimGray;
 
     if (displayConfig::toggleFullListUmount) {
 		formattedDir = std::get<0>(dirParts) + formattedDir 
-					   + std::string(squareColor) + std::get<2>(dirParts) + std::string(originalColors::boldAlt);
+					   + std::string(squareColor) + std::get<2>(dirParts) + std::string(UI::Palette::BoldReset);
 	}
     return fmt.format(messageKey, formattedDir);
 }

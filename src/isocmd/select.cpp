@@ -38,9 +38,9 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
         clearScrollBuffer();
         needsClrScrn = true;
         
-        std::cout << "\n" << (isOrig ? originalColors::red : theme->secondary) 
+        std::cout << "\n" << (isOrig ? UI::Palette::Red : theme->secondary) 
                   << "No valid input provided." 
-                  << originalColors::boldAlt << "\n\n";
+                  << UI::Palette::BoldReset << "\n\n";
 
         std::cout << color << "↵ to continue..." << reset; 
         
@@ -63,9 +63,9 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
         clearScrollBuffer();
         needsClrScrn = true;
         
-        std::cout << "\n" << (isOrig ? originalColors::yellow : theme->warning) 
+        std::cout << "\n" << (isOrig ? UI::Palette::Yellow : theme->warning) 
                   << "No ISO available for " << operation << "." 
-                  << originalColors::boldAlt << "\n\n";
+                  << UI::Palette::BoldReset << "\n\n";
         
         std::cout << color << "↵ to continue..." << reset; 
 
@@ -264,12 +264,12 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     size_t originalPage = currentPage;
 
     std::string operationColor = std::string(
-		operation == "rm"     ? originalColors::red    :
-		operation == "cp"     ? originalColors::green  :
-		operation == "mv"     ? originalColors::yellow :
-		operation == "mount"  ? originalColors::green  :
-		operation == "write2usb"  ? originalColors::yellow :
-		operation == "umount" ? originalColors::yellow : originalColors::rl_boldAlt
+		operation == "rm"     ? UI::Palette::Red    :
+		operation == "cp"     ? UI::Palette::Green  :
+		operation == "mv"     ? UI::Palette::Yellow :
+		operation == "mount"  ? UI::Palette::Green  :
+		operation == "write2usb"  ? UI::Palette::Yellow :
+		operation == "umount" ? UI::Palette::Yellow : UI::Palette::RL_BoldAlt
 	);
                                  
     bool isMount = (operation == "mount");

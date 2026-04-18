@@ -185,21 +185,21 @@ void clearHistory(const std::string& inputSearch) {
         filePath = basePath + "iso_commander_filter_database.txt";
         historyType = "FilterTerm";
     } else {
-        std::cerr << "\n" << (isOrig ? originalColors::red : theme->secondary) << "Invalid command: " 
-                  << (isOrig ? originalColors::yellow : theme->warning) << "'" << inputSearch << "'" 
-                  << (isOrig ? originalColors::red : theme->secondary) << ".\033[J" << std::endl;
+        std::cerr << "\n" << (isOrig ? UI::Palette::Red : theme->secondary) << "Invalid command: " 
+                  << (isOrig ? UI::Palette::Yellow : theme->warning) << "'" << inputSearch << "'" 
+                  << (isOrig ? UI::Palette::Red : theme->secondary) << ".\033[J" << std::endl;
         return;
     }
 
     std::ofstream ofs(filePath, std::ofstream::out | std::ofstream::trunc);
     if (!ofs) {
-        std::cerr << "\n" << (isOrig ? originalColors::red : theme->secondary) 
+        std::cerr << "\n" << (isOrig ? UI::Palette::Red : theme->secondary) 
                   << "Error clearing " << historyType << " database: " 
-                  << (isOrig ? originalColors::yellow : theme->warning) << "'" << filePath << "'" 
-                  << (isOrig ? originalColors::red : theme->secondary) << ". File missing or inaccessible.\033[J" << std::endl;
+                  << (isOrig ? UI::Palette::Yellow : theme->warning) << "'" << filePath << "'" 
+                  << (isOrig ? UI::Palette::Red : theme->secondary) << ". File missing or inaccessible.\033[J" << std::endl;
     } else {
         ofs.close();
-        std::cout << "\n" << (isOrig ? originalColors::green : theme->accent) 
+        std::cout << "\n" << (isOrig ? UI::Palette::Green : theme->accent) 
                   << historyType << " database cleared successfully.\033[J" << std::endl;
         clear_history();
     }

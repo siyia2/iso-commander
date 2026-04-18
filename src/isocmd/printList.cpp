@@ -83,12 +83,12 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
               .append(ib1.format(totalItems)).append(c.head).append(")");
         
         if (isIsoWithAutoUpdate) {
-            output.append(originalColors::dim).append("\n\n[Auto-Update: List restructures if newISOFound]");
+            output.append(UI::Palette::Dim).append("\n\n[Auto-Update: List restructures if newISOFound]");
         }
-        output.append(originalColors::boldAlt).append("\n\n");
+        output.append(UI::Palette::BoldReset).append("\n\n");
     } 
     else if (isIsoWithAutoUpdate) {
-        output.append(originalColors::dim).append("[Auto-Update: List restructures if newISOFound]\n\n");
+        output.append(UI::Palette::Dim).append("[Auto-Update: List restructures if newISOFound]\n\n");
     }
 
     // --- Main Item Loop ---
@@ -101,11 +101,11 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append(idxStr);
 
         if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
-            output.append(":").append(originalColors::boldAlt).append(c.square); 
+            output.append(":").append(UI::Palette::BoldReset).append(c.square); 
             output.append(ib2.format(filteringStack.back().originalIndices[i] + 1));
-            output.append(originalColors::boldAlt).append(c.square).append("^ ");
+            output.append(UI::Palette::BoldReset).append(c.square).append("^ ");
         } else {
-            output.append(". ").append(originalColors::boldAlt);
+            output.append(". ").append(UI::Palette::BoldReset);
         }
 
         const std::string& item = items[i];
@@ -113,7 +113,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         if (isFileMode) {
             auto [dir, fname] = extractDirectoryAndFilename(item, listSubType);
             if (!showNamesOnly) {
-                output.append(c.dir).append(dir).append(originalColors::boldAlt).append("/");
+                output.append(c.dir).append(dir).append(UI::Palette::BoldReset).append("/");
             }
             output.append(isIsoMode ? c.iso : c.img).append(fname);
         } 
@@ -127,7 +127,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                 output.append(c.iso).append(pathPart);
             }
         }
-        output.append(originalColors::boldAlt).append("\n");
+        output.append(UI::Palette::BoldReset).append("\n");
     }
 
     // --- Footer ---
@@ -135,25 +135,25 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append("\n").append(c.head).append("Pagination: ");
         if (effectivePage > 0) output.append("[p] ↵ Previous | ");
         if (effectivePage < totalPages - 1) output.append("[n] ↵ Next | ");
-        output.append("[g<num>] ↵ Go to | ").append(originalColors::boldAlt).append("\n");
+        output.append("[g<num>] ↵ Go to | ").append(UI::Palette::BoldReset).append("\n");
     }
 
     // --- Pending Processes ---
     if (hasPendingProcess && !pendingIndices.empty()) {
         output.append("\n");
-        std::string_view bracketBg = isOriginal ? originalColors::bgNavy : theme->background;
-        std::string_view procText   = isOriginal ? originalColors::green  : theme->accent;
+        std::string_view bracketBg = isOriginal ? UI::Palette::BGNavy : theme->background;
+        std::string_view procText   = isOriginal ? UI::Palette::Green  : theme->accent;
 
         output.append(bracketBg).append("Pending for [")
               .append(procText).append("proc")
-              .append(originalColors::boldAlt).append(bracketBg).append("]: ");
+              .append(UI::Palette::BoldReset).append(bracketBg).append("]: ");
 
         output.append(!isImgMode ? c.iso : c.img);
         for (size_t i = 0; i < pendingIndices.size(); ++i) {
             output.append(pendingIndices[i]);
             if (i < pendingIndices.size() - 1) output.push_back(' ');
         }
-        output.append(originalColors::boldAlt).append("\n");
+        output.append(UI::Palette::BoldReset).append("\n");
     }
 
     std::cout.write(output.data(), output.size());

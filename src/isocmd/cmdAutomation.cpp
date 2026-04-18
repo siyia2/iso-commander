@@ -17,7 +17,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
     g_operationCancelled.store(false);
 
     if (argc < 2) {
-        std::cerr << originalColors::red << "Error: No arguments provided." << originalColors::resetPlain << "\n";
+        std::cerr << UI::Palette::Red << "Error: No arguments provided." << UI::Palette::Reset << "\n";
         return 1;
     }
 
@@ -34,13 +34,13 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             try {
                 maxDepth = std::stoi(arg.substr(2));
                 if (maxDepth < 0) {
-                    std::cerr << originalColors::yellow << "Warning: Negative depth (" << maxDepth
-                              << ") means a full recursive scan." << originalColors::resetPlain << "\n";
+                    std::cerr << UI::Palette::Yellow << "Warning: Negative depth (" << maxDepth
+                              << ") means a full recursive scan." << UI::Palette::Reset << "\n";
                     maxDepth = -1;
                 }
             } catch (...) {
-                std::cerr << originalColors::yellow << "Warning: Invalid depth '" << arg.substr(2)
-                          << "'. Using 0 (surface scan)." << originalColors::resetPlain << "\n";
+                std::cerr << UI::Palette::Yellow << "Warning: Invalid depth '" << arg.substr(2)
+                          << "'. Using 0 (surface scan)." << UI::Palette::Reset << "\n";
                 maxDepth = 0;
             }
         } else {
@@ -49,7 +49,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
     }
 
     if (args.empty()) {
-        std::cerr << originalColors::red << "Error: No action provided." << originalColors::resetPlain << "\n";
+        std::cerr << UI::Palette::Red << "Error: No action provided." << UI::Palette::Reset << "\n";
         return 1;
     }
 
@@ -57,7 +57,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
     if (action == "mount") {
         if (geteuid() != 0) {
-            std::cerr << originalColors::red << "Error: Root privileges required for mounting ISOs." << originalColors::resetPlain << "\n";
+            std::cerr << UI::Palette::Red << "Error: Root privileges required for mounting ISOs." << UI::Palette::Reset << "\n";
             return 1;
         }
 
@@ -66,7 +66,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
         for (size_t i = 0; i < args.size() - 1; ++i) {
             if (g_operationCancelled.load()) {
-                if (!silentMode) std::cout << originalColors::yellow << "\nOperation cancelled by user." << originalColors::resetPlain << "\n";
+                if (!silentMode) std::cout << UI::Palette::Yellow << "\nOperation cancelled by user." << UI::Palette::Reset << "\n";
                 return 1;
             }
 
@@ -76,8 +76,8 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             try {
                 if (!fs::exists(path)) {
                     if (!silentMode)
-                        std::cerr << originalColors::yellow << "Warning: '" << originalColors::red << originalPath
-                                  << originalColors::yellow << "' does not exist, skipping." << originalColors::resetPlain << "\n";
+                        std::cerr << UI::Palette::Yellow << "Warning: '" << UI::Palette::Red << originalPath
+                                  << UI::Palette::Yellow << "' does not exist, skipping." << UI::Palette::Reset << "\n";
                     hasErrors = true;
                     continue;
                 }
@@ -87,8 +87,8 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                     std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                     if (ext != ".iso") {
                         if (!silentMode)
-                            std::cerr << originalColors::yellow << "Warning: '" << originalColors::red << originalPath
-                                      << originalColors::yellow << "' is not an ISO file, skipping." << originalColors::resetPlain << "\n";
+                            std::cerr << UI::Palette::Yellow << "Warning: '" << UI::Palette::Red << originalPath
+                                      << UI::Palette::Yellow << "' is not an ISO file, skipping." << UI::Palette::Reset << "\n";
                         hasErrors = true;
                         continue;
                     }
@@ -119,8 +119,8 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                             }
                         } catch (const fs::filesystem_error& e) {
                             if (!silentMode)
-                                std::cerr << originalColors::yellow << "Warning: Error scanning directory '" << originalColors::red << dir.string()
-                                          << originalColors::yellow << "': " << e.what() << originalColors::resetPlain << "\n";
+                                std::cerr << UI::Palette::Yellow << "Warning: Error scanning directory '" << UI::Palette::Red << dir.string()
+                                          << UI::Palette::Yellow << "': " << e.what() << UI::Palette::Reset << "\n";
                             hasErrors = true;
                         }
                     };
@@ -128,22 +128,22 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                     scanDir(path, 0);
                 } else {
                     if (!silentMode)
-                        std::cerr << originalColors::yellow << "Warning: '" << originalColors::red << originalPath
-                                  << originalColors::yellow << "' is not a valid file or directory, skipping." << originalColors::resetPlain << "\n";
+                        std::cerr << UI::Palette::Yellow << "Warning: '" << UI::Palette::Red << originalPath
+                                  << UI::Palette::Yellow << "' is not a valid file or directory, skipping." << UI::Palette::Reset << "\n";
                     hasErrors = true;
                 }
             } catch (const fs::filesystem_error& e) {
                 if (!silentMode)
-                    std::cerr << originalColors::yellow << "Warning: Error processing '" << originalColors::red << originalPath
-                              << originalColors::yellow << "': " << e.what() << originalColors::resetPlain << "\n";
+                    std::cerr << UI::Palette::Yellow << "Warning: Error processing '" << UI::Palette::Red << originalPath
+                              << UI::Palette::Yellow << "': " << e.what() << UI::Palette::Reset << "\n";
                 hasErrors = true;
             }
         }
         
-        if (!silentMode && g_operationCancelled.load()) std::cout << originalColors::yellow << "Mount Operation cancelled by user." << originalColors::resetPlain << "\n";
+        if (!silentMode && g_operationCancelled.load()) std::cout << UI::Palette::Yellow << "Mount Operation cancelled by user." << UI::Palette::Reset << "\n";
         
         if (isoFiles.empty()) {
-            if (!silentMode && !g_operationCancelled.load()) std::cout << "\n" << originalColors::yellow << "No ISO files found to mount." << originalColors::resetPlain << "\n";
+            if (!silentMode && !g_operationCancelled.load()) std::cout << "\n" << UI::Palette::Yellow << "No ISO files found to mount." << UI::Palette::Reset << "\n";
             return hasErrors ? 1 : 0;
         }
 
@@ -167,7 +167,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             for (const auto& msg : mountedFails) std::cout << msg << "\n";
             std::cout << "\nMount Summary:\n";
             std::cout << "Successful: " << completedTasks.load() << "\n";
-            std::cout << "Failed: " << failedTasks.load() << originalColors::resetPlain << "\n" ;
+            std::cout << "Failed: " << failedTasks.load() << UI::Palette::Reset << "\n" ;
         }
 
         return (completedTasks.load() > 0 || (!hasErrors && isoFiles.empty())) ? 0 : 1;
@@ -178,7 +178,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         bool hasErrors = false;
         
         if (geteuid() != 0) {
-            std::cerr << originalColors::red << "Error: Root privileges required for unmounting ISOs." << originalColors::resetPlain << "\n";
+            std::cerr << UI::Palette::Red << "Error: Root privileges required for unmounting ISOs." << UI::Palette::Reset << "\n";
             return 1;
         }
 
@@ -188,7 +188,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             try {
                 for (const auto& entry : fs::directory_iterator("/mnt")) {
                     if (g_operationCancelled.load()) {
-                        if (!silentMode) std::cout << originalColors::yellow << "\nOperation cancelled by user." << originalColors::resetPlain << "\n";
+                        if (!silentMode) std::cout << UI::Palette::Yellow << "\nOperation cancelled by user." << UI::Palette::Reset << "\n";
                         return 1;
                     }
                     if (entry.is_directory()) {
@@ -199,13 +199,13 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                     }
                 }
             } catch (const fs::filesystem_error& e) {
-                std::cerr << originalColors::red << "Error scanning /mnt: " << e.what() << originalColors::resetPlain << "\n";
+                std::cerr << UI::Palette::Red << "Error scanning /mnt: " << e.what() << UI::Palette::Reset << "\n";
                 return 1;
             }
         } else {
             for (size_t i = 0; i < args.size() - 1; ++i) {
                 if (g_operationCancelled.load()) {
-                    if (!silentMode) std::cout << originalColors::yellow << "\nOperation cancelled by user." << originalColors::resetPlain << "\n";
+                    if (!silentMode) std::cout << UI::Palette::Yellow << "\nOperation cancelled by user." << UI::Palette::Reset << "\n";
                     return 1;
                 }
 
@@ -232,9 +232,9 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                             mountPointsToUnmount.insert(canonicalStr);
                         } else {
                             if (!silentMode)
-                                std::cerr << originalColors::yellow << "Warning: Directory parameter '" << originalColors::red << originalPath
-                                          << originalColors::yellow << "' is not allowed. Only " << originalColors::blue << "/mnt" << originalColors::yellow 
-                                          << " or " << originalColors::blue << "/mnt/iso_*" << originalColors::yellow << " allowed." << originalColors::resetPlain << "\n";
+                                std::cerr << UI::Palette::Yellow << "Warning: Directory parameter '" << UI::Palette::Red << originalPath
+                                          << UI::Palette::Yellow << "' is not allowed. Only " << UI::Palette::Blue << "/mnt" << UI::Palette::Yellow 
+                                          << " or " << UI::Palette::Blue << "/mnt/iso_*" << UI::Palette::Yellow << " allowed." << UI::Palette::Reset << "\n";
                             hasErrors = true;
                         }
                     } else {
@@ -247,24 +247,24 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                             mountPointsToUnmount.insert(fs::canonical(candidatePath).string());
                         } else {
                             if (!silentMode)
-                                std::cerr << originalColors::yellow << "Warning: Mount point '" << originalColors::red << originalPath
-                                          << originalColors::yellow << "' does not exist or is invalid, skipping." << originalColors::resetPlain << "\n";
+                                std::cerr << UI::Palette::Yellow << "Warning: Mount point '" << UI::Palette::Red << originalPath
+                                          << UI::Palette::Yellow << "' does not exist or is invalid, skipping." << UI::Palette::Reset << "\n";
                             hasErrors = true;
                         }
                     }
                 } catch (const fs::filesystem_error& e) {
                     if (!silentMode)
-                        std::cerr << originalColors::yellow << "Warning: Error processing '" << originalColors::red << originalPath
-                                  << originalColors::yellow << "': " << e.what() << originalColors::resetPlain << "\n";
+                        std::cerr << UI::Palette::Yellow << "Warning: Error processing '" << UI::Palette::Red << originalPath
+                                  << UI::Palette::Yellow << "': " << e.what() << UI::Palette::Reset << "\n";
                     hasErrors = true;
                 }
             }
         }
         
-        if (!silentMode && g_operationCancelled.load()) std::cout << originalColors::yellow << "Umount Operation cancelled by user." << originalColors::resetPlain << "\n";
+        if (!silentMode && g_operationCancelled.load()) std::cout << UI::Palette::Yellow << "Umount Operation cancelled by user." << UI::Palette::Reset << "\n";
         
         if (mountPointsToUnmount.empty()) {
-            if (!silentMode && !g_operationCancelled.load()) std::cout << "\n" << originalColors::yellow << "No ISO mount points found to unmount." << originalColors::resetPlain << "\n";
+            if (!silentMode && !g_operationCancelled.load()) std::cout << "\n" << UI::Palette::Yellow << "No ISO mount points found to unmount." << UI::Palette::Reset << "\n";
             return hasErrors ? 1 : 0;
         }
 
@@ -283,12 +283,12 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             for (const auto& msg : unmountedErrors) std::cout << msg << "\n";
             std::cout << "\nUnmount Summary:\n";
             std::cout << "Successful: " << completedTasks.load() << "\n";
-            std::cout << "Failed: " << failedTasks.load() << originalColors::resetPlain << "\n";
+            std::cout << "Failed: " << failedTasks.load() << UI::Palette::Reset << "\n";
         }
 
         return (failedTasks.load() == 0 && !hasErrors) || completedTasks.load() > 0 ? 0 : 1;
     }
 
-    std::cerr << originalColors::red << "Error: Unknown action '" << action << "'" << originalColors::resetPlain << "\n";
+    std::cerr << UI::Palette::Red << "Error: Unknown action '" << action << "'" << UI::Palette::Reset << "\n";
     return 1;
 }

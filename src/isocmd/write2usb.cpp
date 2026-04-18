@@ -661,8 +661,8 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     std::cout << "\n" << wt.colorStatus << "Processing " 
               << (totalTasks > 1 ? "tasks" : "task") << " for " 
-              << originalColors::yellow << "write2usb" << wt.colorStatus 
-              << " operation... (" << originalColors::red << "Ctrl+c" 
+              << UI::Palette::Yellow << "write2usb" << wt.colorStatus 
+              << " operation... (" << UI::Palette::Red << "Ctrl+c" 
               << wt.colorStatus << ":cancel)\n\n";
     std::cout << "\033[s";
 
@@ -748,7 +748,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     
     size_t completedTasksValue = completedTasks.load();
 
-    std::string operation = std::string(originalColors::yellow) + "write2usb" + wt.rl_resetCol;
+    std::string operation = std::string(UI::Palette::Yellow) + "write2usb" + wt.rl_resetCol;
 
     std::cout << "\r" << wt.colorStatus << "Status: " << operation << " → " 
               << (!g_operationCancelled.load() 
@@ -808,9 +808,9 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
             if (!std::filesystem::exists(isoFiles[idx - 1])) {
                 // Using RGB Purple and Yellow for missing file errors
                 uniqueErrorMessages.insert(
-                    std::string(originalColors::purple) + "Missing: " + 
-                    std::string(originalColors::yellow) + "'" + isoFiles[idx - 1] + "'" + 
-                    std::string(originalColors::purple) + "."
+                    std::string(UI::Palette::Purple) + "Missing: " + 
+                    std::string(UI::Palette::Yellow) + "'" + isoFiles[idx - 1] + "'" + 
+                    std::string(UI::Palette::Purple) + "."
                 );
                 continue;
             }
@@ -825,7 +825,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
         } catch (const std::filesystem::filesystem_error& e) {
             // Using RGB Red for system access errors
             uniqueErrorMessages.insert(
-                std::string(originalColors::red) + "Error accessing ISO file: " + e.what() + "."
+                std::string(UI::Palette::Red) + "Error accessing ISO file: " + e.what() + "."
             );
             continue;
         }

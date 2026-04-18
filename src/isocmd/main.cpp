@@ -10,7 +10,7 @@
  * * @param version A string representing the semantic version (e.g., "6.3.5").
  */
 void printVersionNumber(const std::string& version) {    
-    std::cout << originalColors::boldAlt << "Iso Commander v" << version << originalColors::resetPlain << "\n";
+    std::cout << UI::Palette::BoldReset << "Iso Commander v" << version << UI::Palette::Reset << "\n";
 }
 
 /**
@@ -61,10 +61,10 @@ int main(int argc, char *argv[]) {
     fl.l_len = 0;
 
     if (fcntl(lockFileDescriptor, F_SETLK, &fl) == -1) {
-        std::cerr << originalColors::red << "error: " 
-          << originalColors::yellow << "failed to setup transaction (unable to lock database)\n"
-          << "  " << originalColors::boldAlt << "if you're sure isocmd isn't already running, you can remove '/tmp/isocmd.lock'\n" 
-          << originalColors::resetPlain << std::endl;
+        std::cerr << UI::Palette::Red << "error: " 
+          << UI::Palette::Yellow << "failed to setup transaction (unable to lock database)\n"
+          << "  " << UI::Palette::BoldReset << "if you're sure isocmd isn't already running, you can remove '/tmp/isocmd.lock'\n" 
+          << UI::Palette::Reset << std::endl;
         close(lockFileDescriptor);
         return 1;
     }
@@ -105,11 +105,11 @@ int main(int argc, char *argv[]) {
         // --- Status Message Handling ---
         static bool messagePrinted = false;
         if (search && !isHistoryFileEmpty(historyFilePath) && isImportRunning.load()) {
-            std::cout << originalColors::dim << "[Auto-Update: running in the background...]\n" << originalColors::resetPlain;
+            std::cout << UI::Palette::Dim << "[Auto-Update: running in the background...]\n" << UI::Palette::Reset;
             messageActive.store(true);
             std::thread(clearMessageAfterTimeout, 1, std::ref(isAtMain), std::ref(isImportRunning), std::ref(messageActive)).detach();
         } else if ((search && !messagePrinted) && (isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
-            std::cout << originalColors::dim << "[Auto-Update: no stored folder paths to scan...]\n" << originalColors::resetPlain;
+            std::cout << UI::Palette::Dim << "[Auto-Update: no stored folder paths to scan...]\n" << UI::Palette::Reset;
             messagePrinted = true;
             messageActive.store(true);
             std::thread(clearMessageAfterTimeout, 4, std::ref(isAtMain), std::ref(isImportRunning), std::ref(messageActive)).detach();
@@ -170,7 +170,7 @@ int main(int argc, char *argv[]) {
     }
 
     // --- Cleanup ---
-    std::cout << originalColors::resetPlain << std::flush;
+    std::cout << UI::Palette::Reset << std::flush;
     close(lockFileDescriptor);
     unlink(lockFile);
     return 0;

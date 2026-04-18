@@ -562,7 +562,7 @@ void handleFilteringConvert2ISO(const std::string& inputString, std::vector<std:
     runSharedFilterFlow(inputString, {
         .files          = &files,
         .operation      = operation,
-        .operationColor = originalColors::orange,
+        .operationColor = UI::Palette::Orange,
         .isFiltered     = &isFiltered,
         .needsClrScrn   = &needsClrScrn,
         .filterHistory  = &filterHistory,

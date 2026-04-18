@@ -53,19 +53,19 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
     
-	std::string colorMuted  = isOrig ? std::string(originalColors::boldAlt) : std::string(theme->muted);
+	std::string colorMuted  = isOrig ? std::string(UI::Palette::BoldReset) : std::string(theme->muted);
     
-    std::string operationColor = std::string(isUnmount ? originalColors::yellow : originalColors::green);
+    std::string operationColor = std::string(isUnmount ? UI::Palette::Yellow : UI::Palette::Green);
     std::string operationName = isUnmount ? "umount" : "mount";
     
     std::cout << colorMuted << "\n Processing" 
           << (selectedFiles.size() > 1 ? " tasks" : " task") 
           << " for " << operationColor << operationName 
           << colorMuted << "... (" 
-          << originalColors::red << "Ctrl+c" 
+          << UI::Palette::Red << "Ctrl+c" 
           << colorMuted << ":cancel)\n";
     
-    std::string coloredProcess = std::string(operationColor) + operationName + std::string(originalColors::boldAlt);;
+    std::string coloredProcess = std::string(operationColor) + operationName + std::string(UI::Palette::BoldReset);;
     
     ThreadPool& pool = getStaticThreadPool();
     const size_t poolSize = pool.threadCount();
@@ -230,7 +230,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     bool isCopy   = (process == "cp");
     
     std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
-    std::string operationColor = std::string(isDelete ? originalColors::red : (isCopy ? originalColors::green : originalColors::yellow));
+    std::string operationColor = std::string(isDelete ? UI::Palette::Red : (isCopy ? UI::Palette::Green : UI::Palette::Yellow));
 
     tokenizeInput(input, isoFiles, uniqueErrorMessages, processedIndices);
 
@@ -280,19 +280,19 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
     
-	std::string colorMuted  = isOrig ? std::string(originalColors::boldAlt) : std::string(theme->muted);
+	std::string colorMuted  = isOrig ? std::string(UI::Palette::BoldReset) : std::string(theme->muted);
 	
     
     std::cout << "\n" << colorMuted << " Processing " 
           << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process 
           << colorMuted << "... (" 
-          << originalColors::red << "Ctrl+c" 
+          << UI::Palette::Red << "Ctrl+c" 
           << colorMuted << ":cancel)\n";
              
     std::string coloredProcess = 
-    isDelete ? std::string(originalColors::red)    + process + std::string(originalColors::boldAlt) :
-    isMove   ? std::string(originalColors::yellow) + process + std::string(originalColors::boldAlt) :
-    isCopy   ? std::string(originalColors::green)  + process + std::string(originalColors::boldAlt) :
+    isDelete ? std::string(UI::Palette::Red)    + process + std::string(UI::Palette::BoldReset) :
+    isMove   ? std::string(UI::Palette::Yellow) + process + std::string(UI::Palette::BoldReset) :
+    isCopy   ? std::string(UI::Palette::Green)  + process + std::string(UI::Palette::BoldReset) :
     process;
     
     std::atomic<bool> isProcessingComplete(false);
@@ -419,8 +419,8 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 
     if (processedIndices.empty()) {
         clearScrollBuffer();
-        std::cout << "\n" << (isOrig ? originalColors::red : theme->secondary)
-                  << "No valid input provided." << originalColors::boldAlt << "\n";
+        std::cout << "\n" << (isOrig ? UI::Palette::Red : theme->secondary)
+                  << "No valid input provided." << UI::Palette::BoldReset << "\n";
         std::cout << color << "\n↵ to continue..." << reset;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         needsClrScrn = true;
@@ -452,24 +452,24 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     const size_t totalBytes = calculateTotalBytesForConversions(
     filesToProcess, modeMdf, modeNrg, modeChd, modeDaa);
 
-	std::string colorMuted  = isOrig ? std::string(originalColors::boldAlt) : std::string(theme->muted);
+	std::string colorMuted  = isOrig ? std::string(UI::Palette::BoldReset) : std::string(theme->muted);
 	
 
     size_t totalTasks = filesToProcess.size();
     std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
 
     std::string operation;
-    if (modeMdf)      operation = std::string(originalColors::orange) + "mdf2iso"     + std::string(colorMuted) + suffix;
-    else if (modeNrg) operation = std::string(originalColors::orange) + "nrg2iso"     + std::string(colorMuted) + suffix;
-    else if (modeChd) operation = std::string(originalColors::orange) + "chd2iso"     + std::string(colorMuted) + suffix;
-    else if (modeDaa) operation = std::string(originalColors::orange) + "daa2iso"     + std::string(colorMuted) + suffix;
-    else              operation = std::string(originalColors::orange) + "ccd2iso" + std::string(colorMuted) + suffix;
+    if (modeMdf)      operation = std::string(UI::Palette::Orange) + "mdf2iso"     + std::string(colorMuted) + suffix;
+    else if (modeNrg) operation = std::string(UI::Palette::Orange) + "nrg2iso"     + std::string(colorMuted) + suffix;
+    else if (modeChd) operation = std::string(UI::Palette::Orange) + "chd2iso"     + std::string(colorMuted) + suffix;
+    else if (modeDaa) operation = std::string(UI::Palette::Orange) + "daa2iso"     + std::string(colorMuted) + suffix;
+    else              operation = std::string(UI::Palette::Orange) + "ccd2iso" + std::string(colorMuted) + suffix;
 
     clearScrollBuffer();
 
     std::cout << "\n" << colorMuted << " Processing "
               << operation << colorMuted << "... ("
-              << originalColors::red << "Ctrl+c"
+              << UI::Palette::Red << "Ctrl+c"
               << colorMuted << ":cancel)\n";
 
     std::atomic<size_t> completedBytes(0);

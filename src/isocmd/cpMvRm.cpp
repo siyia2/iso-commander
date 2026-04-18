@@ -37,7 +37,7 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
 
             entry += colors.iso;
             entry.append(filename);
-            entry += originalColors::boldAlt;
+            entry += UI::Palette::BoldReset;
             entry += '\n';
 
             entries.push_back(std::move(entry));
@@ -56,7 +56,7 @@ static std::string validateLinuxPath(const std::string& path) {
     const CpMvRmColors colors = getCpMvRmColors();
 
     auto makeError = [&](const std::string& msg) -> std::string {
-        return msg + std::string(originalColors::rl_reset);
+        return msg + std::string(UI::Palette::RL_Reset);
     };
 
     if (path.empty() || path[0] != '/')
@@ -92,8 +92,8 @@ bool& umountMvRmBreak, bool& abortDel) {
 
     std::string green = std::string(colors.prompt_green);
     std::string blue  = std::string(colors.prompt_blue);
-    std::string red   = std::string(originalColors::red);
-    std::string reset = std::string(originalColors::boldAlt);
+    std::string red   = std::string(UI::Palette::Red);
+    std::string reset = std::string(UI::Palette::BoldReset);
 
     bool isPageTurn = false;
     bool disablePagination = (ITEMS_PER_PAGE <= 0 || isoFiles.size() <= ITEMS_PER_PAGE);
@@ -217,7 +217,7 @@ bool& overwriteExisting) {
 
             std::string green = "\001" + std::string(colors.prompt_green) + "\002";
             std::string blue  = "\001" + std::string(colors.prompt_blue) + "\002";
-            std::string reset = "\001" + std::string(originalColors::boldAlt) + "\002";
+            std::string reset = "\001" + std::string(UI::Palette::BoldReset) + "\002";
 
             std::string promptPrefix = "\n";
             std::string promptSuffix =
@@ -365,9 +365,9 @@ std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful, const 
         msg.reserve(128);
         msg.append(colors.error_label).append("Error ").append(verb).append(": ")
            .append(colors.error_path).append("'").append(displaySrc).append("'")
-           .append(originalColors::boldAlt).append(colors.error_label).append(" to '").append(destDirProcessed).append("/': ")
+           .append(UI::Palette::BoldReset).append(colors.error_label).append(" to '").append(destDirProcessed).append("/': ")
            .append(errorDetail).append(".")
-           .append(originalColors::boldAlt).append(originalColors::boldAlt);
+           .append(UI::Palette::BoldReset).append(UI::Palette::BoldReset);
         verboseErrors.push_back(std::move(msg));
         failedTasks->fetch_add(1, std::memory_order_acq_rel);
         operationSuccessful.store(false);
@@ -377,9 +377,9 @@ std::atomic<size_t>* failedTasks, std::atomic<bool>& operationSuccessful, const 
         msg.reserve(128);
         msg.append(colors.success_label).append(pastVerb).append(": ")
            .append(colors.success_path).append("'").append(displaySrc).append("'")
-           .append(originalColors::boldAlt).append(colors.success_label).append(" to ")
+           .append(UI::Palette::BoldReset).append(colors.success_label).append(" to ")
            .append(colors.dest_path).append("'").append(destDirProcessed).append("/").append(destFile).append("'")
-           .append(originalColors::boldAlt).append(originalColors::boldAlt).append(".");
+           .append(UI::Palette::BoldReset).append(UI::Palette::BoldReset).append(".");
         verboseIsos.push_back(std::move(msg));
         completedTasks->fetch_add(1, std::memory_order_acq_rel);
     }
@@ -401,8 +401,8 @@ std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, 
         msg.reserve(128);
         msg.append(colors.error_label).append("Error deleting: ")
            .append(colors.error_path).append("'").append(displaySrc).append("'")
-           .append(originalColors::boldAlt).append(colors.error_label).append(": Cancelled.")
-           .append(originalColors::boldAlt).append(originalColors::boldAlt);
+           .append(UI::Palette::BoldReset).append(colors.error_label).append(": Cancelled.")
+           .append(UI::Palette::BoldReset).append(UI::Palette::BoldReset);
         verboseErrors.push_back(std::move(msg));
         failedTasks->fetch_add(1, std::memory_order_acq_rel);
         operationSuccessful.store(false);
@@ -417,8 +417,8 @@ std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, 
         msg.reserve(128);
         msg.append(colors.success_label).append("Deleted: ")
            .append(colors.success_path).append("'").append(displaySrc).append("'")
-           .append(originalColors::boldAlt).append(colors.success_label).append(".")
-           .append(originalColors::boldAlt);
+           .append(UI::Palette::BoldReset).append(colors.success_label).append(".")
+           .append(UI::Palette::BoldReset);
         verboseIsos.push_back(std::move(msg));
         completedTasks->fetch_add(1, std::memory_order_acq_rel);
     } else {
@@ -426,8 +426,8 @@ std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, 
         msg.reserve(128);
         msg.append(colors.error_label).append("Error deleting: ")
            .append(colors.error_path).append("'").append(displaySrc).append("'")
-           .append(originalColors::boldAlt).append(colors.error_label).append(": ").append(ec.message()).append(".")
-           .append(originalColors::boldAlt).append(originalColors::boldAlt);
+           .append(UI::Palette::BoldReset).append(colors.error_label).append(": ").append(ec.message()).append(".")
+           .append(UI::Palette::BoldReset).append(UI::Palette::BoldReset);
         verboseErrors.push_back(std::move(msg));
         failedTasks->fetch_add(1, std::memory_order_acq_rel);
         operationSuccessful.store(false);
@@ -469,16 +469,16 @@ const std::function<void(const fs::path&)>& changeOwnership) {
         if (!fs::remove(srcPath, deleteEc)) {
             const MainTheme* theme = getActiveTheme();
             const bool isOriginal  = (globalTheme == "original");
-            std::string_view errLabel = isOriginal ? originalColors::red    : theme->secondary;
-            std::string_view errPath  = isOriginal ? originalColors::yellow : theme->warning;
+            std::string_view errLabel = isOriginal ? UI::Palette::Red    : theme->secondary;
+            std::string_view errPath  = isOriginal ? UI::Palette::Yellow : theme->warning;
 
             const std::string displaySrc = (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile;
             std::string msg;
             msg.reserve(128);
             msg.append(errLabel).append("Move completed but failed to remove source file: ")
                .append(errPath).append("'").append(displaySrc).append("'")
-               .append(originalColors::boldAlt).append(errLabel).append(" - ").append(deleteEc.message())
-               .append(originalColors::boldAlt);
+               .append(UI::Palette::BoldReset).append(errLabel).append(" - ").append(deleteEc.message())
+               .append(UI::Palette::BoldReset);
             verboseErrors.push_back(std::move(msg));
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
             batchInsertMessages();

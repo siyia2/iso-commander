@@ -20,8 +20,8 @@ inline std::string_view resolveColor(const MainTheme* theme,
 struct ThemeColors {
     const MainTheme* theme = getActiveTheme();
     bool isOriginal = (globalTheme == "original");
-    std::string_view title = resolveColor(theme, isOriginal, originalColors::cyan);
-    std::string_view head  = resolveColor(theme, isOriginal, originalColors::green);
+    std::string_view title = resolveColor(theme, isOriginal, UI::Palette::Cyan);
+    std::string_view head  = resolveColor(theme, isOriginal, UI::Palette::Green);
 };
 
 /**
@@ -68,20 +68,20 @@ void helpSelections() {
     const ThemeColors tc;
     setupHelp("Help Guide For Lists", tc);
 
-    printSection(tc, "1. Hotkeys:", std::string(originalColors::boldAlt) +
-        "   • Quick Return : " + std::string(originalColors::yellow) + "Ctrl+d\n" + std::string(originalColors::boldAlt) +
-        "   • Clear Line   : " + std::string(originalColors::yellow) + "Ctrl+u");
+    printSection(tc, "1. Hotkeys:", std::string(UI::Palette::BoldReset) +
+        "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
+        "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u");
 
-    printSection(tc, "2. Selecting Items:", std::string(originalColors::boldAlt) +
-        "   • Single/Multiple : " + std::string(originalColors::purple) + "'1' or '1 5 6'\n" + std::string(originalColors::boldAlt) +
-        "   • Range/Combine   : " + std::string(originalColors::purple) + "'1-3' or '1-3 5 7-9'\n" + std::string(originalColors::boldAlt) +
-        "   • Pending/All     : " + std::string(originalColors::purple) + "'1-3 5;' or '00' " + std::string(originalColors::yellow) +"('00' for mount/umount only)");
+    printSection(tc, "2. Selecting Items:", std::string(UI::Palette::BoldReset) +
+        "   • Single/Multiple : " + std::string(UI::Palette::Purple) + "'1' or '1 5 6'\n" + std::string(UI::Palette::BoldReset) +
+        "   • Range/Combine   : " + std::string(UI::Palette::Purple) + "'1-3' or '1-3 5 7-9'\n" + std::string(UI::Palette::BoldReset) +
+        "   • Pending/All     : " + std::string(UI::Palette::Purple) + "'1-3 5;' or '00' " + std::string(UI::Palette::Yellow) +"('00' for mount/umount only)");
 
     printSection(tc, "3. Special Commands:",
-        "   " + std::string(originalColors::boldAlt) + "• " + std::string(originalColors::blue) + "'~' / '*' " + std::string(originalColors::boldAlt) + "   : Toggle Compact/Full or Filename-only lists\n" + std::string(originalColors::boldAlt) +
-        "   " + std::string(originalColors::boldAlt) + "• " + std::string(originalColors::blue) + "'/' / '/t' " + std::string(originalColors::boldAlt) + "  : Filter list / Direct filter (e.g., '/term1;term2')\n" + std::string(originalColors::boldAlt) +
-        "   " + std::string(originalColors::boldAlt) + "• " + std::string(originalColors::blue) + "'n'/'p'/'g' " + std::string(originalColors::boldAlt) + " : Pagination (Next, Previous, Go to page)\n" + std::string(originalColors::boldAlt) +
-        "   " + std::string(originalColors::boldAlt) + "• " + std::string(originalColors::blue) + "'proc'/'clr' " + std::string(originalColors::boldAlt) + ": Process or Clear pending items");
+        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~' / '*' " + std::string(UI::Palette::BoldReset) + "   : Toggle Compact/Full or Filename-only lists\n" + std::string(UI::Palette::BoldReset) +
+        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'/' / '/t' " + std::string(UI::Palette::BoldReset) + "  : Filter list / Direct filter (e.g., '/term1;term2')\n" + std::string(UI::Palette::BoldReset) +
+        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'n'/'p'/'g' " + std::string(UI::Palette::BoldReset) + " : Pagination (Next, Previous, Go to page)\n" + std::string(UI::Palette::BoldReset) +
+        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'proc'/'clr' " + std::string(UI::Palette::BoldReset) + ": Process or Clear pending items");
 
     printSection(tc, "4. Tips:",
         "   • Indexes correspond only to their generated list\n"
@@ -100,9 +100,9 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     setupHelp("Help Guide For " + titleStr + " Prompt", tc);
 
     // 1. Hotkeys
-    std::string keys = std::string(originalColors::boldAlt) + "   • Quick Return  : " + std::string(originalColors::yellow) + "Ctrl+d\n";
-    if (!isCpMv) keys += std::string(originalColors::boldAlt) + "   • Cancel Search : " + std::string(originalColors::yellow) + "Ctrl+c\n";
-    keys += std::string(originalColors::boldAlt) + "   • Clear Line    : " + std::string(originalColors::yellow) + "Ctrl+u";
+    std::string keys = std::string(UI::Palette::BoldReset) + "   • Quick Return  : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n";
+    if (!isCpMv) keys += std::string(UI::Palette::BoldReset) + "   • Cancel Search : " + std::string(UI::Palette::Yellow) + "Ctrl+c\n";
+    keys += std::string(UI::Palette::BoldReset) + "   • Clear Line    : " + std::string(UI::Palette::Yellow) + "Ctrl+u";
     printSection(tc, "1. Hotkeys:", keys);
 
     // 2. Selecting FolderPaths
@@ -116,34 +116,34 @@ void helpSearches(bool isCpMv, bool import2ISO) {
                                      "   • 'mv' to multiple destinations uses cp and remove (slower)");
     } else {
         // 3. Cleanup/Display (convert2iso specific)
-        printSection(tc, std::string(originalColors::cyan) + "| Tab completion: Supports !, ?, and * command prefixes |", "");
+        printSection(tc, std::string(UI::Palette::Cyan) + "| Tab completion: Supports !, ?, and * command prefixes |", "");
 
-        std::string displayCmds = "   " + std::string(originalColors::boldAlt) + "•" + std::string(originalColors::yellow) + " !clr / !clr_paths / !clr_filter" + std::string(originalColors::boldAlt) + " : Clear corresponding cache/database\n";
+        std::string displayCmds = "   " + std::string(UI::Palette::BoldReset) + "•" + std::string(UI::Palette::Yellow) + " !clr / !clr_paths / !clr_filter" + std::string(UI::Palette::BoldReset) + " : Clear corresponding cache/database\n";
         
-        displayCmds += "   " + std::string(originalColors::boldAlt) + "•" + std::string(originalColors::blue) + " ";
+        displayCmds += "   " + std::string(UI::Palette::BoldReset) + "•" + std::string(UI::Palette::Blue) + " ";
         
         // Aligned spacing for both conditions
         if (!import2ISO) {
-            displayCmds += "ls / ?config / ?stats           " + std::string(originalColors::boldAlt) + ": Display cached image entries/config/stats";
+            displayCmds += "ls / ?config / ?stats           " + std::string(UI::Palette::BoldReset) + ": Display cached image entries/config/stats";
         } else {
             // Added extra spaces to compensate for the missing "ls / " string (5 chars)
-            displayCmds += "?config / ?stats                " + std::string(originalColors::boldAlt) + ": Display config/stats";
+            displayCmds += "?config / ?stats                " + std::string(UI::Palette::BoldReset) + ": Display config/stats";
         }
 
         printSection(tc, "3. Cleanup/Display Commands:", displayCmds);
 
         // 4. Configuration
-        std::string configCmds = std::string(originalColors::boldAlt) +
-            "   A. Pagination     : " + std::string(originalColors::purple) + "'*pagination:{number}' (0 to disable)\n" + std::string(originalColors::boldAlt) +
-            "   B. List Modes     : " + std::string(originalColors::purple) + "'*fl_m' or '*cl_m', multiple → *fl_moucw (fl → full | cl → compact)\n                         (m → mount , u → umount, o → cp_mv_rm, w → write2usb, c → convert2iso)\n" + std::string(originalColors::boldAlt) +
-            "   C. Filenames Only : " + std::string(originalColors::purple) + "'*flno:on' or '*flno:off' " + std::string(originalColors::yellow) + "(:on overrides List Modes, umount excluded)\n" + std::string(originalColors::boldAlt) +
-            "   D. Appearance     : " + std::string(originalColors::purple) + "'*skin:{color}' or '*theme:{name}'";
+        std::string configCmds = std::string(UI::Palette::BoldReset) +
+            "   A. Pagination     : " + std::string(UI::Palette::Purple) + "'*pagination:{number}' (0 to disable)\n" + std::string(UI::Palette::BoldReset) +
+            "   B. List Modes     : " + std::string(UI::Palette::Purple) + "'*fl_m' or '*cl_m', multiple → *fl_moucw (fl → full | cl → compact)\n                         (m → mount , u → umount, o → cp_mv_rm, w → write2usb, c → convert2iso)\n" + std::string(UI::Palette::BoldReset) +
+            "   C. Filenames Only : " + std::string(UI::Palette::Purple) + "'*flno:on' or '*flno:off' " + std::string(UI::Palette::Yellow) + "(:on overrides List Modes, umount excluded)\n" + std::string(UI::Palette::BoldReset) +
+            "   D. Appearance     : " + std::string(UI::Palette::Purple) + "'*skin:{color}' or '*theme:{name}'";
         
         if (import2ISO) {
-            configCmds += std::string(originalColors::boldAlt) + "\n   E. Auto-Update    : " + std::string(originalColors::purple) + "'*auto:on' or '*auto:off'";
+            configCmds += std::string(UI::Palette::BoldReset) + "\n   E. Auto-Update    : " + std::string(UI::Palette::Purple) + "'*auto:on' or '*auto:off'";
         }
 
-        printSection(tc, std::string(originalColors::orange) + "4. Configuration Commands (Persistent):", configCmds);
+        printSection(tc, std::string(UI::Palette::Orange) + "4. Configuration Commands (Persistent):", configCmds);
     }
 
     endHelp();
@@ -157,9 +157,9 @@ void helpMappings() {
     setupHelp("Help Guide For Mappings", tc);
 
     printSection(tc, "1. Hotkeys:",
-        std::string(originalColors::boldAlt) + "   • Quick Return : " + std::string(originalColors::yellow) + "Ctrl+d\n" + std::string(originalColors::boldAlt) +
-        "   • Clear Line   :   " + std::string(originalColors::yellow) + "Ctrl+u\n" + std::string(originalColors::boldAlt) +
-        "   • Declutter    :    " + std::string(originalColors::yellow) + "Ctrl+l");
+        std::string(UI::Palette::BoldReset) + "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
+        "   • Clear Line   :   " + std::string(UI::Palette::Yellow) + "Ctrl+u\n" + std::string(UI::Palette::BoldReset) +
+        "   • Declutter    :    " + std::string(UI::Palette::Yellow) + "Ctrl+l");
 
     printSection(tc, "2. Selecting Mappings:",
         "   • Syntax   : Index>Device (e.g., '1>/dev/sdc')\n"

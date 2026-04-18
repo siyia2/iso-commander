@@ -82,8 +82,8 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
         const MainTheme* theme = getActiveTheme();
         const bool isOriginal = (globalTheme == "original");
 
-        const std::string_view warnColor = isOriginal ? originalColors::yellow : theme->warning;
-        const std::string_view reset     = originalColors::boldAlt;
+        const std::string_view warnColor = isOriginal ? UI::Palette::Yellow : theme->warning;
+        const std::string_view reset     = UI::Palette::BoldReset;
 		
 		clearScrollBuffer();
         
@@ -168,8 +168,8 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         const MainTheme* theme = getActiveTheme();
         const bool isOriginal  = (globalTheme == "original");
 
-        const std::string_view warnColor = isOriginal ? originalColors::yellow : theme->warning;
-        const std::string_view reset     = originalColors::boldAlt;
+        const std::string_view warnColor = isOriginal ? UI::Palette::Yellow : theme->warning;
+        const std::string_view reset     = UI::Palette::BoldReset;
 
         std::cerr << "\n" << warnColor << "No paths matching the '/mnt/iso_{name}' pattern found." << reset << "\n";
         std::cout << color << "\n↵ to return..." << reset;
