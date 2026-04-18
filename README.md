@@ -67,6 +67,8 @@ Database folder location: `/root/.local/share/isocmd/database/` || `~/.local/sha
 - Archlinux: `readline util-linux`.
 - Debian: `libreadline-dev libmount-dev`.
 
+- Agnostic: `libchdr` (alr statically built)
+
 ## Ways to Install
 * Download the binary from latest release.
 * Download and compile from source with `make`.
