@@ -252,22 +252,6 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
 // ─── Shared filtering core ───────────────────────────────────────────────────
 
 /**
- * @brief Context structure for filter operations
- */
-struct FilterContext {
-    std::vector<std::string>& files;
-    bool&                      isFiltered;
-    bool&                      needsClrScrn;
-    bool&                      filterHistory;
-    size_t&                    currentPage;
-
-    const std::vector<std::string>* sourceOverride = nullptr;
-
-    bool isUnmount            = false;
-    bool toggleFullListUmount = false;
-};
-
-/**
  * @brief Core filtering logic applied to a file list
  * 
  * @param searchString The search pattern to apply
@@ -442,123 +426,147 @@ const std::function<void()>& onEmptyInput = nullptr)
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * @brief Handles filtering for ISO file operations
- * 
- * @param inputString The input string (starting with '/' for filter mode)
- * @param filteredFiles Vector of files to filter
- * @param isFiltered Flag indicating if filtering is active
- * @param needsClrScrn Flag indicating if screen needs clearing
- * @param filterHistory Flag for history saving
- * @param operation Name of the operation being performed
- * @param operationColor ANSI color code for operation text
- * @param isoDirs ISO directories to search
- * @param isUnmount Flag for unmount mode
- * @param currentPage Reference to current page number
- * @return true if input was handled as a filter command
+ * @brief Core implementation shared by all filter entry points.
+ * @details Validates the input string, builds the readline prompt, constructs a
+ * @c FilterContext from @p cfg, then delegates to @c runFilterLoop. Returns early
+ * without side effects if @p inputString is not a valid filter command.
+ *
+ * Valid filter commands are:
+ * - @c "/"            — opens an interactive filter prompt with no pre-filled term
+ * - @c "/term"        — opens the prompt with @c "term" as the initial pattern
+ *
+ * The following inputs are explicitly rejected and cause an early @c false return:
+ * - Empty string or any string not starting with @c '/'
+ * - Strings starting with @c ';' or @c "/;"
+ * - Strings containing more than one @c '/' character
+ * - Strings containing @c ";;"
+ *
+ * @param inputString  Raw input from the user, expected to start with @c '/'.
+ * @param cfg          Configuration struct with all state pointers and display options.
+ *                     All non-optional pointer fields must be non-null.
+ * @return @c true if @p inputString was recognised as a filter command and handled,
+ *         @c false if it was not a filter command and should be processed elsewhere.
  */
-bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation,
-const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage)
+bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig& cfg)
 {
     if (inputString != "/" && (inputString.empty() || inputString[0] != '/'))
         return false;
-        
-    if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos)
-		return false;
+    if (inputString[0] == ';' ||
+       (inputString[0] == '/' && inputString.size() > 1 && inputString[1] == ';') ||
+        std::count(inputString.begin(), inputString.end(), '/') > 1 ||
+        inputString.find(";;") != std::string::npos)
+        return false;
 
-    const std::vector<std::string>& baseSource =
-        isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+    auto wrap = [](std::string_view s) -> std::string {
+        return "\001" + std::string(s) + "\002";
+    };
+
+    const ReadlineAndPromptTheme ft = getFilterTheme("", false);
+    const std::string prompt =
+        ft.filter  + "FilterTerms" +
+        ft.primary + " ↵ for " +
+        wrap(cfg.operationColor) + cfg.operation +
+        ft.primary + ", or ↵ to return: " +
+        ft.reset;
 
     FilterContext ctx {
-        filteredFiles,
-        isFiltered,
-        needsClrScrn,
-        filterHistory,
-        currentPage,
-        &baseSource,
-        isUnmount,
-        displayConfig::toggleFullListUmount
+        *cfg.files,
+        *cfg.isFiltered,
+        *cfg.needsClrScrn,
+        *cfg.filterHistory,
+        *cfg.currentPage
     };
-	
-	// Helper to wrap raw ANSI strings for readline
-	auto wrap = [](std::string_view s) -> std::string {
-		return "\001" + std::string(s) + "\002";
-	};
-	
-	const ReadlineAndPromptTheme ft = getFilterTheme("", false);  // No operation color, don't include ISO
-
-	// Assuming operationColor comes from the raw theme, it needs wrapping
-	std::string safeOpColor = wrap(operationColor);
-
-	const std::string prompt =
-		ft.filter  + "FilterTerms" +
-		ft.primary + " ↵ for " +
-		safeOpColor  + operation +
-		ft.primary + ", or ↵ to return: " +
-		ft.reset;
+    if (cfg.sourceOverride) {
+        ctx.sourceOverride       = cfg.sourceOverride;
+        ctx.isUnmount            = cfg.isUnmount;
+        ctx.toggleFullListUmount = cfg.toggleFullList;
+    }
 
     auto onEmptyInput = [&]() {
         clear_history();
-        needsClrScrn = isFiltered;
+        *cfg.needsClrScrn = *cfg.isFiltered;
+    };
+
+    auto onSort = [&]() {
+        if (cfg.need2Sort) *cfg.need2Sort = true;
     };
 
     const std::string quickPattern =
         (inputString == "/") ? "" : inputString.substr(1);
 
-    runFilterLoop(prompt, quickPattern, ctx, []{}, onEmptyInput);
+    runFilterLoop(prompt, quickPattern, ctx, onSort, onEmptyInput);
     return true;
 }
 
 /**
- * @brief Handles filtering for conversion to ISO operations
- * 
- * @param mainInputString The input string (starting with '/' for filter mode)
- * @param files Vector of files to filter
- * @param fileExtensionWithOutDots File extension for display
- * @param isFiltered Flag indicating if filtering is active
- * @param needsClrScrn Flag indicating if screen needs clearing
- * @param filterHistory Flag for history saving
- * @param need2Sort Flag indicating if resorting is needed
- * @param currentPage Reference to current page number
+ * @brief Filter entry point for ISO file operations (mount, unmount, etc.).
+ * @details Resolves the correct source list based on the current filter and unmount
+ * state, then forwards to @c runSharedFilterFlow. The source list priority is:
+ * -# @p filteredFiles — if a filter is already active
+ * -# @p isoDirs       — if in unmount mode with no active filter
+ * -# @c globalIsoFileList — otherwise
+ *
+ * @param inputString    Raw user input; must start with @c '/' to trigger filtering.
+ * @param filteredFiles  The currently displayed (possibly already filtered) file list.
+ * @param isFiltered     True if @p filteredFiles is a subset of the full source list.
+ * @param needsClrScrn   Set to true when the display requires a full redraw.
+ * @param filterHistory  Set to true when the filter term should be saved to history.
+ * @param operation      Name of the ISO operation shown in the prompt (e.g. "Mount").
+ * @param operationColor Raw ANSI escape code used to colorise @p operation in the prompt.
+ * @param isoDirs        Mounted ISO paths used as the source list in unmount mode.
+ * @param isUnmount      True when the caller is performing an unmount operation.
+ * @param currentPage    Current page index; may be reset after filtering.
+ * @return @c true if @p inputString was handled as a filter command, @c false otherwise.
  */
-void handleFilteringConvert2ISO(const std::string& inputString, std::vector<std::string>& files, const std::string& operation, bool& isFiltered, bool& needsClrScrn,
-bool& filterHistory, bool& need2Sort, size_t& currentPage)
+bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles,
+    bool& isFiltered, bool& needsClrScrn, bool& filterHistory,
+    const std::string& operation, const std::string& operationColor,
+    const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage)
 {
-    if (inputString.empty() ||
-        (inputString != "/" && inputString[0] != '/'))
-        return;
-    if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos)
-		return;
+    const std::vector<std::string>& baseSource =
+        isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
 
-    FilterContext ctx {
-        files,
-        isFiltered,
-        needsClrScrn,
-        filterHistory,
-        currentPage
-    };
+    return runSharedFilterFlow(inputString, {
+        .files          = &filteredFiles,
+        .sourceOverride = &baseSource,
+        .operation      = operation,
+        .operationColor = operationColor,
+        .isFiltered     = &isFiltered,
+        .needsClrScrn   = &needsClrScrn,
+        .filterHistory  = &filterHistory,
+        .currentPage    = &currentPage,
+        .isUnmount      = isUnmount,
+        .toggleFullList = displayConfig::toggleFullListUmount
+    });
+}
 
-	const bool isInteractive = (inputString == "/");
-	const std::string quickPat = isInteractive ? "" : inputString.substr(1);
-
-	const ReadlineAndPromptTheme ft = getFilterTheme("", false);  // No operation color, don't include ISO
-	
-	// Helper to wrap raw ANSI strings for readline
-	auto wrap = [](std::string_view s) -> std::string {
-		return "\001" + std::string(s) + "\002";
-	};
-	std::string operationColor = std::string(originalColors::orange);
-
-    const std::string prompt = 
-        ft.filter    + "FilterTerms" + 
-        ft.primary   + " ↵ for " + 
-        wrap(operationColor) + operation + 
-        ft.primary   + ", or ↵ to return: " + 
-        ft.reset;
-		
-		auto onEmptyInput = [&]() {
-			clear_history();
-			needsClrScrn = isFiltered;
-		};
-
-		runFilterLoop(prompt, quickPat, ctx, [&] { need2Sort = true; }, onEmptyInput);
-	}
+/**
+ * @brief Filter entry point for convert-to-ISO operations.
+ * @details Forwards directly to @c runSharedFilterFlow using a fixed orange
+ * operation color. Unlike @c handleFilteringForISO there is no unmount mode
+ * or source list override — the files vector is always used as-is.
+ *
+ * @param inputString  Raw user input; must start with @c '/' to trigger filtering.
+ * @param files        The list of convertible files to filter in place.
+ * @param operation    Name of the conversion operation shown in the prompt.
+ * @param isFiltered   True if @p files is already a filtered subset.
+ * @param needsClrScrn Set to true when the display requires a full redraw.
+ * @param filterHistory Set to true when the filter term should be saved to history.
+ * @param need2Sort    Set to true when the result list needs resorting after filtering.
+ * @param currentPage  Current page index; may be reset after filtering.
+ */
+void handleFilteringConvert2ISO(const std::string& inputString, std::vector<std::string>& files,
+    const std::string& operation, bool& isFiltered, bool& needsClrScrn,
+    bool& filterHistory, bool& need2Sort, size_t& currentPage)
+{
+    runSharedFilterFlow(inputString, {
+        .files          = &files,
+        .operation      = operation,
+        .operationColor = originalColors::orange,
+        .isFiltered     = &isFiltered,
+        .needsClrScrn   = &needsClrScrn,
+        .filterHistory  = &filterHistory,
+        .need2Sort      = &need2Sort,
+        .currentPage    = &currentPage
+    });
+}
