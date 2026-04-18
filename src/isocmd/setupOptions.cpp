@@ -468,8 +468,8 @@ void setDisplayMode(const std::string& inputSearch) {
 			displayConfig::toggleFullListCpMvRm = isFull;
 			// Combining multiple views into one string
 			updatedLabels.push_back(
-				std::string(originalColors::green)  + "cp"+ std::string(UI::Palette::BoldReset) +"/" + 
-				std::string(originalColors::yellow) + "mv"+ std::string(UI::Palette::BoldReset) + "/" + 
+				std::string(originalColors::green)  + "cp"+ std::string(originalColors::boldAlt) +"/" + 
+				std::string(originalColors::yellow) + "mv"+ std::string(originalColors::boldAlt) + "/" + 
 				std::string(originalColors::red)    + "rm"
 			);
 		}

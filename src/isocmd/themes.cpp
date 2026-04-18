@@ -419,7 +419,7 @@ SemanticUIColors resolveDatabaseTheme() {
             .accent    = originalColors::blue,
             .warning   = originalColors::orange,
             .error     = originalColors::red,
-            .reset     = UI::Palette::BoldReset,
+            .reset     = originalColors::boldAlt,
             .path      = originalColors::yellow,
             .highlight = originalColors::green,
             .data      = originalColors::boldAlt,
@@ -431,7 +431,7 @@ SemanticUIColors resolveDatabaseTheme() {
         .accent    = theme->accent,
         .warning   = theme->warning,
         .error     = theme->secondary,
-        .reset     = UI::Palette::BoldReset,
+        .reset     = originalColors::boldAlt,
         .path      = theme->warning,
         .highlight = theme->accent,
         .data      = theme->accent,
@@ -571,7 +571,7 @@ SemanticUIColors resolveOptionsTheme() {
             .accent    = originalColors::green,
             .warning   = originalColors::yellow,
             .error     = originalColors::red,
-            .reset     = UI::Palette::BoldReset,
+            .reset     = originalColors::boldAlt,
             .path      = {},
             .highlight = originalColors::blue,
             .data      = {},
@@ -583,7 +583,7 @@ SemanticUIColors resolveOptionsTheme() {
         .accent    = theme->accent,
         .warning   = theme->warning,
         .error     = theme->secondary,
-        .reset     = UI::Palette::BoldReset,
+        .reset     = originalColors::boldAlt,
         .path      = {},
         .highlight = theme->accent,
         .data      = {},
@@ -618,7 +618,7 @@ ProgressBarColors resolveProgressTheme() {
             originalColors::red.data(),
             originalColors::yellow.data(),
             originalColors::boldAlt.data(),
-            UI::Palette::BoldReset.data()
+            originalColors::boldAlt.data()
         };
     }
     return {
@@ -626,6 +626,6 @@ ProgressBarColors resolveProgressTheme() {
         theme->secondary.data(),
         theme->warning.data(),
         theme->muted.data(),
-        UI::Palette::BoldReset.data()
+        originalColors::boldAlt.data()
     };
 }

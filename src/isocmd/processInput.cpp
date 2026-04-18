@@ -532,7 +532,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     if (processedIndices.empty()) {
         clearScrollBuffer();
         std::cout << "\n" << (isOrig ? originalColors::red : theme->secondary)
-                  << "No valid input provided." << UI::Palette::BoldReset << "\n";
+                  << "No valid input provided." << originalColors::boldAlt << "\n";
         std::cout << color << "\n↵ to continue..." << reset;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         needsClrScrn = true;
