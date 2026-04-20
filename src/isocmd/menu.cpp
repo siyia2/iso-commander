@@ -70,7 +70,7 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
                   << "|5. Copy                  |\n"
                   << "+-------------------------+\n"
                   << "|6. Write                 |\n"
-                  << "+-------------------------+" << reset << std::endl << "\n";
+                  << "+-------------------------+" << UI::Palette::BoldReset << std::endl << "\n";
         
         const MainTheme* theme = getActiveTheme();
         const bool isOriginal = (globalTheme == "original");
@@ -152,7 +152,7 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
                   << "|4. MDF2ISO++             |\n"
                   << "+-------------------------+\n"
                   << "|5. NRG2ISO++             |\n"
-                  << "+-------------------------+" << reset << std::endl << "\n";
+                  << "+-------------------------+" << UI::Palette::BoldReset << std::endl << "\n";
         
         const MainTheme* theme = getActiveTheme();
         const bool isOriginal = (globalTheme == "original");
