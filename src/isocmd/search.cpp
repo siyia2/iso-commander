@@ -210,9 +210,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
 
         std::cerr << "\n" << dt.red << "Unable to access ISO database: " << e.what() << dt.reset << std::endl;
         
-        std::cout << color << "\n↵ to continue..." << dt.reset; 
-
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        pressEnterToContinue();
         refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
     }
 }
@@ -369,9 +367,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
         std::cout << "\n" << dt.yellow << "No " << fileExtension << " entries stored in RAM.\033[J" 
                   << dt.reset << "\n";
 
-        std::cout << color << "\n↵ to continue..." << dt.reset; 
-        
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        pressEnterToContinue();
         
         files.clear();
         
@@ -479,9 +475,7 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
                   << dt.reset << "\n";
     }
 
-    std::cout << color << "\n↵ to continue..." << dt.reset; 
-
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    pressEnterToContinue();
     clearScrollBuffer();
 }
 

@@ -78,8 +78,7 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
         }
     }
     
-    std::cout << color << "↵ to continue..." << vt.reset; 
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    pressEnterToContinue();
 }
 
 /**
@@ -257,8 +256,7 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
         std::cout << "\n" << vt.green << "Database Refresh: [" << vt.magenta << result << " ISO imported" << vt.green << "]" << vt.bold << "\n";
     }
 
-    std::cout << color << "\n↵ to continue..." << vt.reset; 
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    pressEnterToContinue();
     refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
 }
 
@@ -358,9 +356,46 @@ void verboseSearchResults(const std::string& fileExtension,
     auto total_elapsed_time =
         std::chrono::duration<double>(end_time - start_time).count();
     std::cout << vt.bold << "Time Elapsed: " << std::fixed << std::setprecision(1)
-              << total_elapsed_time << " seconds" << vt.bold << "\n\n";
+              << total_elapsed_time << " seconds" << vt.bold << "\n";
 
-    std::cout << color << "↵ to continue..." << vt.reset << vt.bold;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    pressEnterToContinue();
     clearScrollBuffer();
 }
+
+/**
+ * @brief Waits for the user to press Enter before allowing another attempt.
+ * 
+ * Prompts the user to press the Enter key, then discards any remaining input
+ * in the stream buffer (including newline characters) to pause execution
+ * until the user is ready to try again.
+ */
+void pressEnterToTry() {
+	std::cout << color << "\n↵ to try again..." << reset;
+     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+/**
+ * @brief Waits for the user to press Enter before returning to a previous menu or state.
+ * 
+ * Displays a message prompting the user to press Enter, then clears the input
+ * buffer to ensure the program waits for explicit user confirmation before
+ * returning to a calling context.
+ */
+void pressEnterToReturn() {
+	std::cout << color << "\n↵ to return..." << reset;
+     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+/**
+ * @brief Waits for the user to press Enter before continuing program execution.
+ * 
+ * Outputs a prompt instructing the user to press Enter, then ignores all
+ * characters in the input stream up to and including the newline. This is
+ * typically used to pause output so the user can read messages before the
+ * program proceeds.
+ */
+void pressEnterToContinue() {
+	std::cout << color << "\n↵ to continue..." << reset;
+     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+

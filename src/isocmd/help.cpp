@@ -36,14 +36,6 @@ void setupHelp(std::string_view title, const ThemeColors& tc) {
 }
 
 /**
- * @brief Handles the standard return prompt for all help screens.
- */
-void endHelp() {
-    std::cout << color << "↵ to return..." << UI::Palette::BoldReset;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-}
-
-/**
  * @brief Helper to print a themed section header and its bulleted content.
  */
 void printSection(const ThemeColors& tc, std::string_view head, const std::string& body) {
@@ -88,7 +80,7 @@ void helpSelections() {
         "   • Indexes^ refer to the original unfiltered list\n"
         "   • Filtering is adaptive, incremental, and unconstrained by pagination");
 
-    endHelp();
+    pressEnterToReturn();
 }
 
 /**
@@ -146,7 +138,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         printSection(tc, std::string(UI::Palette::Orange) + "4. Configuration Commands (Persistent):", configCmds);
     }
 
-    endHelp();
+    pressEnterToReturn();
 }
 
 /**
@@ -170,5 +162,5 @@ void helpMappings() {
         "   • Partitions are not eligible for write2usb, only raw devices\n"
         "   • USB detection relies on '/sys/class/block/sd*/removable' kernel value");
 
-    endHelp();
+    pressEnterToReturn();
 }

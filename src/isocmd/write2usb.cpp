@@ -34,7 +34,7 @@ std::string getDriveName(const std::string& device) {
 }
 
 /**
- * @brief Determines whether a block device is a removable USB device.
+ * @brief Determines whether a block device is a USB flash drive.
  *
  * Uses three complementary heuristics in priority order:
  *  1. Canonical sysfs path contains "/usb"  (strongest — short-circuits).
@@ -45,7 +45,7 @@ std::string getDriveName(const std::string& device) {
  * If the attribute is unreadable the function returns false (fail-closed).
  *
  * @param devicePath Absolute path to the block device (must start with /dev/).
- * @return true if the device is identified as a removable USB device.
+ * @return true if the device is identified as a removable USB flash device.
  */
 bool isUsbDevice(const std::string& devicePath) {
     try {
@@ -322,7 +322,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
         
         signal(SIGINT, SIG_IGN);
         disable_ctrl_d();
-        std::cout << color << "\n\u21b5 to " << (!permissions ? "try again..." : "continue...") << wt.rl_resetCol;
+        std::cout << color << "\n\u21b5 to " << (!permissions ? "try again..." : "continue...") << reset;
         if (permissions) permissions = false;
         
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -459,8 +459,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                       << wt.warnCol << "!" 
                       << wt.rl_resetCol << "\n";
 
-            std::cout << color << "\n↵ to try again..." << wt.rl_resetCol;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            pressEnterToTry();
             return {};
         }
 
@@ -520,7 +519,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         });
 
         if (deviceInfos.empty()) {
-            devicePromptStream << "  " << wt.colorFailure << "No removable USB devices detected!" << wt.rl_resetCol << "\n";
+            devicePromptStream << "  " << wt.colorFailure << "No USB flash drives detected!" << wt.rl_resetCol << "\n";
         } else {
             for (const auto& dev : deviceInfos) {
                 if (dev.error) {
@@ -587,8 +586,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 std::cerr << "  • " << err << "\n";
             }
             
-            std::cout << color << "\n↵ to try again..." << wt.rl_resetCol;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+           pressEnterToTry();
             continue;
         }
 
@@ -640,8 +638,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         std::cout << "\n" << UI::Palette::Yellow << "write2usb" << wt.colorWarning << " operation aborted by user." << wt.rl_resetCol << "\n";
         
-        std::cout << color << "\n↵ to continue..." << reset;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+		pressEnterToContinue();
     }
 }
 
@@ -873,8 +870,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    std::cout << color << "\n↵ to continue..." << reset;   
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    pressEnterToContinue();
 }
 
 /**

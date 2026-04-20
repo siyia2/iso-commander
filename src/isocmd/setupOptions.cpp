@@ -89,14 +89,6 @@ static std::string trim(std::string str) {
 }
 
 /**
- * @brief Prints the standard "↵ to continue…" pause and waits for Enter.
- */
-static void pauseForInput() {
-    std::cout << color << "\n↵ to continue..." << reset;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-}
-
-/**
  * @brief Prints a standardised config-file access error then flushes to stderr.
  */
 static void printConfigError(const std::string& configPath) {
@@ -291,7 +283,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     if (colonPos == std::string::npos) {
         auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
         std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\n" << reset;
-        pauseForInput();
+        pressEnterToTry();
         return;
     }
 
@@ -299,7 +291,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
     if (!isNum(valueStr, 0, 1000)) {
         auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
         std::cout << "\n" << error << "Error: Invalid number (0-1000 required)\033[J\n" << reset;
-        pauseForInput();
+        pressEnterToTry();
         return;
     }
 
@@ -319,7 +311,7 @@ void updatePagination(const std::string& inputSearch, const std::string& configP
         }
     }
 
-    pauseForInput();
+    pressEnterToContinue();
 }
 
 /**
@@ -333,7 +325,7 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
     if (inputSearch != "*flno:on" && inputSearch != "*flno:off") {
         auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
         std::cerr << "\n" << error << "Error: Invalid command format.\033[J\n" << reset;
-        pauseForInput();
+        pressEnterToTry();
         return;
     }
 
@@ -350,7 +342,7 @@ void updateFilenamesOnly(const std::string& configPath, const std::string& input
                   << label << ".\033[J\n" << reset;
     }
 
-    pauseForInput();
+    pressEnterToContinue();
 }
 
 /**
@@ -382,7 +374,7 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
     if (!isValid) {
         auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
         std::cerr << "\n" << error << "Error: Invalid command or unsupported value.\033[J\n" << reset;
-        pauseForInput();
+        pressEnterToTry();
         return;
     }
 
@@ -403,7 +395,7 @@ void updateUIAppearance(const std::string& configPath, const std::string& inputS
           << (key == "skin" ? color : accent) << value << label << ".\033[J\n" << reset;
     }
 
-    pauseForInput();
+    pressEnterToContinue();
 }
 
 const std::unordered_map<char, std::string> settingMap = {
@@ -441,7 +433,7 @@ void setDisplayMode(const std::string& inputSearch) {
     std::string command     = inputSearch.substr(1, 2); 
     size_t      underscorePos = inputSearch.find('_');
     
-    if (underscorePos == std::string::npos) { pauseForInput(); return; }
+    if (underscorePos == std::string::npos) { pressEnterToContinue(); return; }
 
     std::string settingsStr = inputSearch.substr(underscorePos + 1);
     std::string newValue    = (command == "cl") ? "compact" : "full";
@@ -491,7 +483,7 @@ void setDisplayMode(const std::string& inputSearch) {
             std::cout << "  " << label << "- " << reset << lbl << "\n";
     }
 
-    pauseForInput();
+    pressEnterToContinue();
 }
 
 /**
@@ -541,7 +533,7 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
         }
     }
 
-    pauseForInput();
+    pressEnterToContinue();
 }
 
 /**
@@ -551,7 +543,7 @@ void displayConfigurationOptions(const std::string& configPath) {
     syncCache(configPath);
 
     std::ifstream configFile(configPath);
-    if (!configFile.is_open()) { printConfigError(configPath); pauseForInput(); return; }
+    if (!configFile.is_open()) { printConfigError(configPath); pressEnterToContinue(); return; }
     
     clearScrollBuffer();
 
@@ -569,8 +561,6 @@ void displayConfigurationOptions(const std::string& configPath) {
         }
     }
     
-    std::cout << "\n" << tc.warning << "Path: " << tc.reset << configPath 
-              << "\n\n" << color << "↵ to return..." << tc.reset;
-    
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    std::cout << "\n" << tc.warning << "Path: " << tc.reset << configPath << "\n";
+    pressEnterToReturn();
 }

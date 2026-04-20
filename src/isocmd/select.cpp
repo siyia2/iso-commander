@@ -42,9 +42,7 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
                   << "No valid input provided." 
                   << UI::Palette::BoldReset << "\n\n";
 
-        std::cout << color << "↵ to continue..." << reset; 
-        
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        pressEnterToContinue();
     } 
     else if (verbose) {
         clearScrollBuffer();
@@ -67,9 +65,7 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
                   << "No ISO available for " << operation << "." 
                   << UI::Palette::BoldReset << "\n\n";
         
-        std::cout << color << "↵ to continue..." << reset; 
-
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        pressEnterToContinue();
         return;
     }
 }

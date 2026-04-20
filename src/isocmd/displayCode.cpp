@@ -88,8 +88,7 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
 		clearScrollBuffer();
         
         std::cout << "\n" << warnColor << "ISO Cache is empty. Choose 'ImportISO' from the Main Menu Options." << reset << "\n";
-        std::cout << color << "\n↵ to return..." << reset;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        pressEnterToReturn();
         return false;
     }
 
@@ -172,8 +171,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         const std::string_view reset     = UI::Palette::BoldReset;
 
         std::cerr << "\n" << warnColor << "No paths matching the '/mnt/iso_{name}' pattern found." << reset << "\n";
-        std::cout << color << "\n↵ to return..." << reset;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        pressEnterToReturn();
 
         std::vector<std::string>().swap(lastSortedDirs);
 		lastIsoCount = 0;

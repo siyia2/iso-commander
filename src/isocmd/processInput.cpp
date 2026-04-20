@@ -421,8 +421,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
         clearScrollBuffer();
         std::cout << "\n" << (isOrig ? UI::Palette::Red : theme->secondary)
                   << "No valid input provided." << UI::Palette::BoldReset << "\n";
-        std::cout << color << "\n↵ to continue..." << reset;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        pressEnterToContinue();
         needsClrScrn = true;
         return;
     }

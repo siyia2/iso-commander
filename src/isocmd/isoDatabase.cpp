@@ -542,9 +542,8 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
                   << warning << "'" << configPath << "'"
                   << error << ".\n" << reset;
     }
-
-    std::cout << color << "\n↵ to return..." << reset;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    
+    pressEnterToReturn();
 }
 
 /**
@@ -581,8 +580,7 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
                   << db.error << ".\033[J" << db.reset << "\n";
     }
 
-    std::cout << color << "\n↵ to continue..." << db.reset;
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    pressEnterToContinue();
 }
 
 /**
@@ -614,8 +612,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
                       << db.path << "'" << databaseFilePath << "'" 
                       << db.error << ". File missing or inaccessible.\033[J" << std::endl;
             
-            std::cout << "\n" << color << "↵ to continue..." << db.reset;
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            pressEnterToContinue();
         } else {
             ofs.close();
             for (auto it = transformationCache.begin(); it != transformationCache.end();) {
@@ -632,8 +629,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
             }
             
             std::cout << "\n" << db.highlight << "ISO database cleared successfully." << "\033[J" << std::endl;
-            std::cout << color << "\n↵ to continue..." << db.reset; 
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            pressEnterToContinue();
             std::vector<std::string>().swap(globalIsoFileList);
         }
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
