@@ -322,10 +322,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
         
         signal(SIGINT, SIG_IGN);
         disable_ctrl_d();
-        std::cout << color << "\n\u21b5 to " << (!permissions ? "try again..." : "continue...") << reset;
-        if (permissions) permissions = false;
-        
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        permissions ? (permissions = false, pressEnterToContinue()) : pressEnterToTry();
         return {};
     }
     
