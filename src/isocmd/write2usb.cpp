@@ -903,7 +903,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
  *         was not cancelled; @c false otherwise.
  */
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex) {
-    // 1. Open input file (unbuffered I/O)
+    // Open ISO for reading
     int iso_fd = open(isoPath.c_str(), O_RDONLY);
     if (iso_fd == -1) {
         progressData[progressIndex].failed.store(true);
@@ -912,7 +912,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     auto closeIso = [](int* fd) { if (*fd != -1) close(*fd); };
     std::unique_ptr<int, decltype(closeIso)> isoGuard(&iso_fd, closeIso);
 
-    // 2. Open device with O_DIRECT
+    // Open device with O_DIRECT for unbuffered writes
     int dev_fd = open(device.c_str(), O_WRONLY | O_DIRECT);
     if (dev_fd == -1) {
         progressData[progressIndex].failed.store(true);
@@ -921,22 +921,31 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     auto closeDev = [](int* fd) { if (*fd != -1) close(*fd); };
     std::unique_ptr<int, decltype(closeDev)> devGuard(&dev_fd, closeDev);
 
-    // 3. Get sector size (required for O_DIRECT alignment)
+    // Get sector size (required for O_DIRECT alignment)
     int sectorSize = 0;
     if (ioctl(dev_fd, BLKSSZGET, &sectorSize) < 0 || sectorSize <= 0) {
         progressData[progressIndex].failed.store(true);
         return false;
     }
 
-    // 4. Get ISO file size (alignment check removed - we'll pad instead)
-    const uint64_t fileSize = std::filesystem::file_size(isoPath);
-    // Calculate padded size (round up to sector boundary)
+    uint64_t fileSize = 0;
+    try {
+        fileSize = std::filesystem::file_size(isoPath);
+    } catch (const std::filesystem::filesystem_error&) {
+        progressData[progressIndex].failed.store(true);
+        return false;
+    }
+    if (fileSize == 0) {
+        progressData[progressIndex].failed.store(true);
+        return false;
+    }
+
+    // Pad file size up to sector boundary for O_DIRECT
     const uint64_t paddedSize = ((fileSize + sectorSize - 1) / sectorSize) * sectorSize;
 
-    // 5. Allocate aligned buffer (16 MiB default)
+    // Allocate aligned buffer (16 MiB, rounded down to sector boundary)
     constexpr size_t DESIRED_BUFFER = 16 * 1024 * 1024;
-    size_t bufferSize = DESIRED_BUFFER;
-    bufferSize = (bufferSize / sectorSize) * sectorSize;
+    size_t bufferSize = (DESIRED_BUFFER / sectorSize) * sectorSize;
     if (bufferSize == 0) bufferSize = sectorSize;
 
     char* alignedBuffer = nullptr;
@@ -946,8 +955,8 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     }
     std::unique_ptr<char, decltype(&free)> bufferGuard(alignedBuffer, &free);
 
-    // 6. Progress tracking setup
-    auto startTime = std::chrono::high_resolution_clock::now();
+    // Progress / speed tracking
+    auto startTime  = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
     uint64_t bytesInWindow = 0;
     constexpr int UPDATE_INTERVAL_MS = 500;
@@ -963,49 +972,58 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         }
     };
 
-    // 7. Main copy loop (write up to paddedSize to include zero-padding)
+    uint64_t localBytesWritten = 0;
+
     try {
-        while (progressData[progressIndex].bytesWritten.load() < paddedSize && !g_operationCancelled.load()) {
-            uint64_t totalWritten = progressData[progressIndex].bytesWritten.load();
-            uint64_t remaining = paddedSize - totalWritten;
-            size_t bytesToRead = static_cast<size_t>(std::min<uint64_t>(bufferSize, remaining));
+        while (localBytesWritten < paddedSize && !g_operationCancelled.load()) {
+            uint64_t remaining   = paddedSize - localBytesWritten;
+            size_t   bytesToRead = static_cast<size_t>(std::min<uint64_t>(bufferSize, remaining));
 
-            ssize_t bytesRead = read(iso_fd, alignedBuffer, bytesToRead);
-            if (bytesRead < 0) {
-                throw std::runtime_error("Read error");
+            ssize_t bytesRead = 0;
+            while (true) {
+                bytesRead = read(iso_fd, alignedBuffer, bytesToRead);
+                if (bytesRead >= 0) break;
+                if (errno == EINTR)  continue;
+                throw std::runtime_error("Read error: " + std::string(strerror(errno)));
             }
-            
-            // Handle EOF (final partial chunk with padding)
+
             if (bytesRead == 0) {
-                // End of file reached - zero out the remaining buffer
-                memset(alignedBuffer, 0, bytesToRead);
+                // EOF — remainder is padding; zero the full chunk
+                std::memset(alignedBuffer, 0, bytesToRead);
             } else if (static_cast<size_t>(bytesRead) < bytesToRead) {
-                // Partial read on final chunk - zero pad the rest
-                memset(alignedBuffer + bytesRead, 0, bytesToRead - bytesRead);
+                // Short read on final chunk — zero-pad the tail
+                std::memset(alignedBuffer + bytesRead, 0, bytesToRead - bytesRead);
             }
 
+            // Write loop — handles partial writes and EINTR
             size_t remainingToWrite = bytesToRead;
-            char* writePtr = alignedBuffer;
+            char*  writePtr         = alignedBuffer;
             while (remainingToWrite > 0) {
                 ssize_t written = write(dev_fd, writePtr, remainingToWrite);
                 if (written < 0) {
                     if (errno == EINTR) continue;
-                    throw std::runtime_error("Write error");
+                    throw std::runtime_error("Write error: " + std::string(strerror(errno)));
                 }
-                remainingToWrite -= written;
-                writePtr += written;
+
+                remainingToWrite -= static_cast<size_t>(written);
+                writePtr         += written;
+
+                uint64_t reportable = std::min<uint64_t>(
+                    static_cast<uint64_t>(written),
+                    fileSize - std::min(localBytesWritten, fileSize));
+                localBytesWritten                        += static_cast<size_t>(written);
+                bytesInWindow                            += reportable;
+                progressData[progressIndex].bytesWritten.fetch_add(reportable);
             }
 
-            progressData[progressIndex].bytesWritten.fetch_add(bytesToRead);
-            bytesInWindow += bytesToRead;
-
-            auto now = std::chrono::high_resolution_clock::now();
-            auto msSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count();
+            // Throttled progress + speed update
+            auto now           = std::chrono::high_resolution_clock::now();
+            auto msSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     now - lastUpdate).count();
             if (msSinceUpdate >= UPDATE_INTERVAL_MS) {
-                // Progress based on actual file size (not padded)
-                double progressPercent = std::min(100.0, 
-                    (static_cast<double>(progressData[progressIndex].bytesWritten.load()) / fileSize) * 100.0);
-                progressData[progressIndex].progress.store(static_cast<int>(progressPercent));
+                uint64_t reported = progressData[progressIndex].bytesWritten.load();
+                progressData[progressIndex].progress.store(
+                    static_cast<int>((static_cast<double>(reported) / fileSize) * 100));
                 updateSpeed(now);
             }
         }
@@ -1016,17 +1034,20 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         return false;
     }
 
-    // 8. Final sync
     if (!g_operationCancelled.load()) {
-        fsync(dev_fd);
+        if (fsync(dev_fd) != 0) {
+            progressData[progressIndex].failed.store(true);
+            return false;
+        }
     }
 
-    // 9. Final progress update
-    if (!g_operationCancelled.load() && progressData[progressIndex].bytesWritten.load() == paddedSize) {
+    if (!g_operationCancelled.load() && localBytesWritten >= paddedSize) {
         auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - startTime);
-        double seconds = totalElapsed.count() / 1000.0;
-        double avgSpeed = seconds > 0.0 ? (static_cast<double>(fileSize) / (1024.0 * 1024.0)) / seconds : 0.0;
+        double seconds  = totalElapsed.count() / 1000.0;
+        double avgSpeed = seconds > 0.0
+            ? (static_cast<double>(fileSize) / (1024.0 * 1024.0)) / seconds
+            : 0.0;
         progressData[progressIndex].speed.store(avgSpeed);
         progressData[progressIndex].progress.store(100);
         progressData[progressIndex].completed.store(true);
