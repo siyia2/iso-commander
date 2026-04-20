@@ -177,7 +177,7 @@ std::vector<std::string> getRemovableDevices() {
 
             const std::string devPath = "/dev/" + deviceName;
 
-            // FIX 2: Also filter by USB
+            // Also filter by USB
             if (isUsbDevice(devPath)) {
                 devices.push_back(devPath);
             }
