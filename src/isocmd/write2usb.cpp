@@ -89,7 +89,7 @@ bool isUsbDevice(const std::string& devicePath) {
             std::error_code ec;
             const std::string resolved = fs::canonical(sysPath, ec).string();
             if (!ec && resolved.find("/usb") != std::string::npos) {
-                return true;   // FIX 4: early return — no need to continue
+                return true;
             }
         }
 
