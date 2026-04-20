@@ -453,7 +453,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         
         if ((selectedIsos.size() > ITEMS_PER_PAGE) && (ITEMS_PER_PAGE > 0)) {
             std::cout << "\n" << wt.warnCol << "ISO selections for " 
-                      << wt.indexCol << "write" 
+                      << UI::Palette::Yellow << "write2usb" 
                       << wt.warnCol << " cannot exceed the current pagination limit of " 
                       << wt.indexCol << ITEMS_PER_PAGE 
                       << wt.warnCol << "!" 
