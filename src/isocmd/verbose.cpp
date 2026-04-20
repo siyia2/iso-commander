@@ -47,7 +47,6 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
             printSortedSet(primarySet, false);
             printSortedSet(secondarySet, false);
             printSortedSet(errorSet, true); 
-            std::cout << "\n";
             break;
         }
         case 1:
@@ -55,7 +54,6 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
             printSortedSet(primarySet, false);
             printSortedSet(secondarySet, false);
             printSortedSet(errorSet, false);
-            std::cout << "\n";
             break;
         }
         case 2:
@@ -64,7 +62,6 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
             printSortedSet(tertiarySet, true);
             printSortedSet(secondarySet, true);
             printSortedSet(errorSet, true);
-            std::cout << "\n";
             break;
         }
         case 3:
@@ -73,7 +70,6 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
             printSortedSet(tertiarySet, false);
             printSortedSet(errorSet, false);
             printSortedSet(primarySet, false);
-            std::cout << "\n";
             break;
         }
     }

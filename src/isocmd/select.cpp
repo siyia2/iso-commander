@@ -40,7 +40,7 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
         
         std::cout << "\n" << (isOrig ? UI::Palette::Red : theme->secondary) 
                   << "No valid input provided." 
-                  << UI::Palette::BoldReset << "\n\n";
+                  << UI::Palette::BoldReset << "\n";
 
         pressEnterToContinue();
     } 
