@@ -600,7 +600,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         // Warning message with colors from theme
         std::cout << "\n" << wt.colorWarning << "WARNING: This will " 
-                  << wt.colorFailure << "*ERASE ALL DATA*" 
+                  << UI::Palette::Red << "*ERASE ALL DATA*" 
                   << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
 
         for (const auto& [iso, device] : validPairs) {
@@ -639,7 +639,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         restoreReadline();
 
         std::cout << "\n" << UI::Palette::Yellow << "write2usb" << wt.colorWarning << " operation aborted by user." << wt.rl_resetCol << "\n";
-        std::cout << color << "\n↵ to continue..." << wt.rl_resetCol;
+        
+        std::cout << color << "\n↵ to continue..." << reset;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
 }
@@ -817,6 +818,8 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages) {
     clearScrollBuffer();
     std::unordered_set<int> indicesToProcess;
+    
+   const WriteTheme wt = getWriteTheme();
 
     setupSignalHandlerCancellations();
     g_operationCancelled.store(false);
@@ -830,10 +833,9 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     for (int idx : indicesToProcess) {
         try {
             if (!std::filesystem::exists(isoFiles[idx - 1])) {
-                // Using RGB Purple and Yellow for missing file errors
                 uniqueErrorMessages.insert(
                     std::string(UI::Palette::Purple) + "Missing: " + 
-                    std::string(UI::Palette::Yellow) + "'" + isoFiles[idx - 1] + "'" + 
+                    std::string(wt.colorWarning) + "'" + isoFiles[idx - 1] + "'" + 
                     std::string(UI::Palette::Purple) + "."
                 );
                 continue;
@@ -847,9 +849,8 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
                 static_cast<size_t>(idx)
             });
         } catch (const std::filesystem::filesystem_error& e) {
-            // Using RGB Red for system access errors
             uniqueErrorMessages.insert(
-                std::string(UI::Palette::Red) + "Error accessing ISO file: " + e.what() + "."
+                std::string(wt.colorFailure) + "Error accessing ISO file: " + e.what() + "."
             );
             continue;
         }
@@ -871,11 +872,8 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     // Cleanup and wait for user acknowledgment
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
-    const WriteTheme wt = getWriteTheme();
 
-    // Replaced 'color' and 'reset' with your RGB boldAlt and reset
-    std::cout << color << "\n↵ to continue..." << reset;
-    
+    std::cout << color << "\n↵ to continue..." << reset;   
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
@@ -883,7 +881,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
  * @brief Writes an ISO image directly to a block device using O_DIRECT I/O.
  *
  * Opens the ISO for reading and the target device with @c O_WRONLY|O_DIRECT,
- * then streams data in sector-aligned chunks (default 16 MiB buffer, rounded
+ * then streams data in sector-aligned chunks (default 8 MiB buffer, rounded
  * down to a multiple of the device sector size). If the ISO size is not a
  * multiple of the sector size, the final chunk is zero-padded to the sector
  * boundary to satisfy O_DIRECT alignment requirements. Progress, speed, and

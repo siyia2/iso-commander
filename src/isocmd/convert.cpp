@@ -13,7 +13,6 @@ bool fileExists(const std::string& fullPath) {
     return std::filesystem::exists(fullPath);
 }
 
-
 /**
  * @brief Batch converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD, DAA, GBI) to ISO format.
  *
