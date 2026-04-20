@@ -168,7 +168,7 @@ bool& umountMvRmBreak, bool& abortDel) {
                 umountMvRmBreak = false;
                 abortDel = true;
 
-                std::cout << "\n" << colors.abort << "rm operation aborted by user." << UI::Palette::BoldReset << "\n";
+                std::cout << "\n" << UI::Palette::Red << "rm" << colors.abort << " operation aborted by user." << UI::Palette::BoldReset << "\n";
                 std::cout << color << "\n↵ to continue..." << reset;
 
                 std::cin.clear();
