@@ -151,6 +151,9 @@ void print_ascii();
 void helpSelections();
 void helpSearches(bool isCpMv, bool import2ISO);
 void helpMappings();
+void pressEnterToTry();
+void pressEnterToReturn();
+void pressEnterToContinue();
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered, size_t& currentPage, std::atomic<bool>& isImportRunning);
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose, const std::string& operation);
 void displayConfigurationOptions(const std::string& configPath);
@@ -241,6 +244,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 void processInputForConversions(const std::string& input, std::vector<std::string>& fileList, const bool& modeMdf, const bool& modeNrg, const bool& modeChd, const bool& modeDaa, 
 std::unordered_set<std::string>& processedErrors,
 std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts, bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound);
+
 //------------------
 // Return Type Functions
 //------------------
