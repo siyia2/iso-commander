@@ -34,135 +34,159 @@ std::string getDriveName(const std::string& device) {
 }
 
 /**
- * @brief Enumerates removable block devices visible in @c /sys/block.
- *
- * Skips loop devices, RAM disks, zram devices, and any entry whose name
- * contains a digit (e.g. @c sr0, partition nodes).  A device is included
- * only when its @c removable sysfs attribute reads @c "1".
- *
- * @return Vector of absolute device paths such as @c /dev/sdb.
- */
-std::vector<std::string> getRemovableDevices() {
-    std::vector<std::string> devices;    
-    try {
-        for (const auto& entry : fs::directory_iterator("/sys/block")) {
-            std::string deviceName = entry.path().filename();
-            
-            if (deviceName.find("loop") == 0 || 
-                deviceName.find("ram") == 0 ||
-                deviceName.find("zram") == 0) {
-                continue;
-            }
-
-            bool hasNumber = false;
-            for (char ch : deviceName) {
-                if (std::isdigit(ch)) {
-                    hasNumber = true;
-                    break;
-                }
-            }
-            if (hasNumber) {
-                continue;
-            }
-
-            std::ifstream removableFile(entry.path() / "removable");
-            std::string removable;
-            if (removableFile >> removable && removable == "1") {
-                devices.push_back("/dev/" + deviceName);
-            }
-        }
-    } catch (const fs::filesystem_error& e) {
-        std::cerr << "Filesystem error: " << e.what() << std::endl;
-    }
-    
-    return devices;
-}
-
-/**
  * @brief Determines whether a block device is a removable USB device.
  *
- * Uses three complementary heuristics in order:
- *  -# Canonical sysfs path contains @c "/usb".
- *  -# A @c uevent file in the device tree contains a USB bus identifier.
- *  -# USB-specific sysfs attributes (@c speed, @c version, @c manufacturer) exist.
+ * Uses three complementary heuristics in priority order:
+ *  1. Canonical sysfs path contains "/usb"  (strongest — short-circuits).
+ *  2. A uevent file in the device tree contains an exact USB bus identifier.
+ *  3. USB-specific sysfs attributes (speed, version, manufacturer) exist.
  *
- * The device is only considered USB when at least one heuristic matches
- * @em and the @c removable sysfs attribute is @c "1" (when readable).
+ * The removable sysfs attribute MUST read "1" for the call to return true.
+ * If the attribute is unreadable the function returns false (fail-closed).
  *
- * @param devicePath Absolute path to the block device (must start with @c /dev/).
- * @return @c true if the device is identified as a removable USB device.
+ * @param devicePath Absolute path to the block device (must start with /dev/).
+ * @return true if the device is identified as a removable USB device.
  */
 bool isUsbDevice(const std::string& devicePath) {
     try {
-        if (devicePath.substr(0, 5) != "/dev/") {
-            return false;
-        }
-        size_t lastSlash = devicePath.find_last_of('/');
-        std::string deviceName = (lastSlash == std::string::npos) ? 
-            devicePath : devicePath.substr(lastSlash + 1);
-            
-        if (deviceName.empty() || 
-            std::any_of(deviceName.begin(), deviceName.end(), ::isdigit)) {
+        // Basic path sanity check
+        if (devicePath.size() < 6 || devicePath.substr(0, 5) != "/dev/") {
             return false;
         }
 
-        std::string sysPath = "/sys/block/" + deviceName;
-        if (!std::filesystem::exists(sysPath)) {
+        const std::string deviceName = devicePath.substr(devicePath.find_last_of('/') + 1);
+
+        // Reject empty names or names that look like partition nodes
+        if (deviceName.empty() ||
+            std::isdigit(static_cast<unsigned char>(deviceName.back()))) {
             return false;
         }
 
-        bool isUsb = false;
-
-        std::error_code ec;
-        std::string resolvedPath = std::filesystem::canonical(sysPath, ec).string();
-        if (!ec) {
-            isUsb = resolvedPath.find("/usb") != std::string::npos;
+        const std::string sysPath = "/sys/block/" + deviceName;
+        if (!fs::exists(sysPath)) {
+            return false;
         }
 
-        std::vector<std::string> ueventPaths = {
-            sysPath + "/device/uevent",
-            sysPath + "/uevent"
-        };
+        {
+            std::ifstream removableFile(sysPath + "/removable");
+            std::string removable;
+            if (!removableFile || !std::getline(removableFile, removable)) {
+                return false;   // can't confirm removable → reject
+            }
+            // Trim possible trailing whitespace / newline
+            while (!removable.empty() && std::isspace(static_cast<unsigned char>(removable.back()))) {
+                removable.pop_back();
+            }
+            if (removable != "1") {
+                return false;
+            }
+        }
 
-        for (const auto& path : ueventPaths) {
-            std::ifstream uevent(path);
-            std::string line;
-            while (std::getline(uevent, line)) {
-                if (line.find("ID_BUS=usb") != std::string::npos ||
-                    line.find("DRIVER=usb") != std::string::npos ||
-                    line.find("ID_USB") != std::string::npos) {
-                    isUsb = true;
-                    break;
+        // --- Heuristic 1: canonical sysfs path contains "/usb" --------------
+        // This is the most reliable signal.  Short-circuit immediately so the
+        // weaker heuristics don't run unnecessarily.
+        {
+            std::error_code ec;
+            const std::string resolved = fs::canonical(sysPath, ec).string();
+            if (!ec && resolved.find("/usb") != std::string::npos) {
+                return true;   // FIX 4: early return — no need to continue
+            }
+        }
+
+        // --- Heuristic 2: uevent contains exact USB bus identifier ----------
+        //  Only match the key=value pairs that unambiguously indicate a USB storage bus.
+        {
+            const std::vector<std::string> ueventPaths = {
+                sysPath + "/device/uevent",
+                sysPath + "/uevent"
+            };
+
+            for (const auto& path : ueventPaths) {
+                std::ifstream uevent(path);
+                std::string line;
+                while (std::getline(uevent, line)) {
+                    if (line == "ID_BUS=usb" ||
+                        line.rfind("DRIVER=usb", 0) == 0) {
+                        return true;
+                    }
                 }
             }
-            if (isUsb) break;
         }
 
-        std::vector<std::string> usbIndicators = {
-            sysPath + "/device/speed",
-            sysPath + "/device/version",
-            sysPath + "/device/manufacturer"
-        };
+        // --- Heuristic 3: USB-specific sysfs attributes exist ---------------
+        // Weakest signal — only reached when the two stronger ones both miss.
+        // "speed" and "version" live under the USB interface node; their
+        // presence is a reasonable (though not infallible) USB indicator.
+        {
+            const std::vector<std::string> usbIndicators = {
+                sysPath + "/device/speed",
+                sysPath + "/device/version",
+                sysPath + "/device/manufacturer"
+            };
 
-        for (const auto& path : usbIndicators) {
-            if (std::filesystem::exists(path)) {
-                isUsb = true;
-                break;
+            for (const auto& path : usbIndicators) {
+                if (fs::exists(path)) {
+                    return true;
+                }
             }
         }
 
-        std::string removablePath = sysPath + "/removable";
-        std::ifstream removableFile(removablePath);
-        std::string removable;
-        if (removableFile && std::getline(removableFile, removable)) {
-            return isUsb && (removable == "1");
-        }
-
-        return isUsb;
+        return false;
 
     } catch (const std::exception&) {
         return false;
     }
+}
+
+/**
+ * @brief Enumerates removable USB block devices visible in /sys/block.
+ *
+ * Skips loop devices, RAM disks, zram devices, and any entry whose name
+ * ends with a digit (partition suffix). A device is included only when
+ * its removable sysfs attribute reads "1" and isUsbDevice() confirms it
+ * is USB-attached.
+ *
+ * @return Vector of absolute device paths such as /dev/sdb.
+ */
+std::vector<std::string> getRemovableDevices() {
+    std::vector<std::string> devices;
+
+    try {
+        for (const auto& entry : fs::directory_iterator("/sys/block")) {
+            const std::string deviceName = entry.path().filename().string();
+
+            // Skip virtual / pseudo devices by prefix
+            if (deviceName.rfind("loop", 0) == 0 ||
+                deviceName.rfind("ram",  0) == 0 ||
+                deviceName.rfind("zram", 0) == 0) {
+                continue;
+            }
+
+            // Only skip names that END with a digit (partition suffix
+            // e.g. "sda1").
+            if (!deviceName.empty() && std::isdigit(static_cast<unsigned char>(deviceName.back()))) {
+                continue;
+            }
+
+            // Must be marked removable
+            std::ifstream removableFile(entry.path() / "removable");
+            std::string removable;
+            if (!(removableFile >> removable) || removable != "1") {
+                continue;
+            }
+
+            const std::string devPath = "/dev/" + deviceName;
+
+            // FIX 2: Also filter by USB
+            if (isUsbDevice(devPath)) {
+                devices.push_back(devPath);
+            }
+        }
+    } catch (const fs::filesystem_error& e) {
+        std::cerr << "Filesystem error: " << e.what() << '\n';
+    }
+
+    return devices;
 }
 
 /**
@@ -614,7 +638,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         restoreReadline();
 
-        std::cout << "\n" << wt.colorWarning << "Write operation aborted by user." << wt.rl_resetCol << "\n";
+        std::cout << "\n" << UI::Palette::Yellow << "write2usb" << wt.colorWarning << " operation aborted by user." << wt.rl_resetCol << "\n";
         std::cout << color << "\n↵ to continue..." << wt.rl_resetCol;
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
@@ -859,64 +883,79 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
  * @brief Writes an ISO image directly to a block device using O_DIRECT I/O.
  *
  * Opens the ISO for reading and the target device with @c O_WRONLY|O_DIRECT,
- * then streams data in sector-aligned chunks (default 8 MiB buffer, rounded
- * down to a multiple of the device sector size).  Progress, speed, and
+ * then streams data in sector-aligned chunks (default 16 MiB buffer, rounded
+ * down to a multiple of the device sector size). If the ISO size is not a
+ * multiple of the sector size, the final chunk is zero-padded to the sector
+ * boundary to satisfy O_DIRECT alignment requirements. Progress, speed, and
  * completion state are written atomically to @c progressData[progressIndex].
  *
  * Speed is recalculated every 500 ms using a sliding byte window.
  * The write loop checks @c g_operationCancelled before each iteration and
  * exits cleanly without marking the task as failed when a cancellation is
- * detected.  @c fsync is called on the device fd only if the write was not
+ * detected. @c fsync is called on the device fd only if the write was not
  * cancelled, avoiding unnecessary I/O on a partial transfer.
  *
  * @param isoPath       Absolute path to the source ISO image.
  * @param device        Absolute path to the target block device (e.g. @c /dev/sdb).
  * @param progressIndex Index into @ref progressData for this task.
- * @return @c true if every byte of the ISO was written successfully and the
- *         operation was not cancelled; @c false otherwise.
+ * @return @c true if every byte of the ISO was written successfully (including
+ *         any zero-padding required for sector alignment) and the operation
+ *         was not cancelled; @c false otherwise.
  */
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex) {
-    std::ifstream iso(isoPath, std::ios::binary);
-    if (!iso) {
+    // 1. Open input file (unbuffered I/O)
+    int iso_fd = open(isoPath.c_str(), O_RDONLY);
+    if (iso_fd == -1) {
         progressData[progressIndex].failed.store(true);
         return false;
     }
-    int device_fd = open(device.c_str(), O_WRONLY | O_DIRECT);
-    if (device_fd == -1) {
+    auto closeIso = [](int* fd) { if (*fd != -1) close(*fd); };
+    std::unique_ptr<int, decltype(closeIso)> isoGuard(&iso_fd, closeIso);
+
+    // 2. Open device with O_DIRECT
+    int dev_fd = open(device.c_str(), O_WRONLY | O_DIRECT);
+    if (dev_fd == -1) {
         progressData[progressIndex].failed.store(true);
         return false;
     }
+    auto closeDev = [](int* fd) { if (*fd != -1) close(*fd); };
+    std::unique_ptr<int, decltype(closeDev)> devGuard(&dev_fd, closeDev);
+
+    // 3. Get sector size (required for O_DIRECT alignment)
     int sectorSize = 0;
-    if (ioctl(device_fd, BLKSSZGET, &sectorSize) < 0 || sectorSize == 0) {
+    if (ioctl(dev_fd, BLKSSZGET, &sectorSize) < 0 || sectorSize <= 0) {
         progressData[progressIndex].failed.store(true);
-        close(device_fd);
         return false;
     }
+
+    // 4. Get ISO file size (alignment check removed - we'll pad instead)
     const uint64_t fileSize = std::filesystem::file_size(isoPath);
-    if (fileSize % sectorSize != 0) {
-        progressData[progressIndex].failed.store(true);
-        close(device_fd);
-        return false;
-    }
-    size_t bufferSize = 8 * 1024 * 1024;
+    // Calculate padded size (round up to sector boundary)
+    const uint64_t paddedSize = ((fileSize + sectorSize - 1) / sectorSize) * sectorSize;
+
+    // 5. Allocate aligned buffer (16 MiB default)
+    constexpr size_t DESIRED_BUFFER = 16 * 1024 * 1024;
+    size_t bufferSize = DESIRED_BUFFER;
     bufferSize = (bufferSize / sectorSize) * sectorSize;
     if (bufferSize == 0) bufferSize = sectorSize;
+
     char* alignedBuffer = nullptr;
-    if (posix_memalign((void**)&alignedBuffer, sectorSize, bufferSize) != 0) {
+    if (posix_memalign(reinterpret_cast<void**>(&alignedBuffer), sectorSize, bufferSize) != 0) {
         progressData[progressIndex].failed.store(true);
-        close(device_fd);
         return false;
     }
     std::unique_ptr<char, decltype(&free)> bufferGuard(alignedBuffer, &free);
+
+    // 6. Progress tracking setup
     auto startTime = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
     uint64_t bytesInWindow = 0;
-    const int UPDATE_INTERVAL_MS = 500;
+    constexpr int UPDATE_INTERVAL_MS = 500;
 
     auto updateSpeed = [&](auto now) {
-        auto timeSinceLast = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate);
-        if (bytesInWindow > 0 && timeSinceLast.count() > 0) {
-            double seconds = timeSinceLast.count() / 1000.0;
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate);
+        if (bytesInWindow > 0 && elapsed.count() > 0) {
+            double seconds = elapsed.count() / 1000.0;
             progressData[progressIndex].speed.store(
                 (static_cast<double>(bytesInWindow) / (1024.0 * 1024.0)) / seconds);
             bytesInWindow = 0;
@@ -924,35 +963,49 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         }
     };
 
+    // 7. Main copy loop (write up to paddedSize to include zero-padding)
     try {
-        while (progressData[progressIndex].bytesWritten.load() < fileSize && !g_operationCancelled) {
-            const uint64_t totalWritten = progressData[progressIndex].bytesWritten.load();
-            const uint64_t remaining = fileSize - totalWritten;
-            const size_t bytesToRead = std::min(bufferSize, static_cast<size_t>(remaining));
-            iso.read(alignedBuffer, bytesToRead);
-            const std::streamsize bytesRead = iso.gcount();
+        while (progressData[progressIndex].bytesWritten.load() < paddedSize && !g_operationCancelled.load()) {
+            uint64_t totalWritten = progressData[progressIndex].bytesWritten.load();
+            uint64_t remaining = paddedSize - totalWritten;
+            size_t bytesToRead = static_cast<size_t>(std::min<uint64_t>(bufferSize, remaining));
 
-            if (bytesRead <= 0 || static_cast<size_t>(bytesRead) != bytesToRead) {
+            ssize_t bytesRead = read(iso_fd, alignedBuffer, bytesToRead);
+            if (bytesRead < 0) {
                 throw std::runtime_error("Read error");
             }
-            ssize_t bytesWritten = 0;
-            while (bytesWritten < static_cast<ssize_t>(bytesToRead)) {
-                size_t chunk = std::min(static_cast<size_t>(bytesToRead - bytesWritten), bufferSize);
-                chunk = (chunk / sectorSize) * sectorSize;
-                if (chunk == 0) break;
-                ssize_t result = write(device_fd, alignedBuffer + bytesWritten, chunk);
-                if (result == -1) {
+            
+            // Handle EOF (final partial chunk with padding)
+            if (bytesRead == 0) {
+                // End of file reached - zero out the remaining buffer
+                memset(alignedBuffer, 0, bytesToRead);
+            } else if (static_cast<size_t>(bytesRead) < bytesToRead) {
+                // Partial read on final chunk - zero pad the rest
+                memset(alignedBuffer + bytesRead, 0, bytesToRead - bytesRead);
+            }
+
+            size_t remainingToWrite = bytesToRead;
+            char* writePtr = alignedBuffer;
+            while (remainingToWrite > 0) {
+                ssize_t written = write(dev_fd, writePtr, remainingToWrite);
+                if (written < 0) {
+                    if (errno == EINTR) continue;
                     throw std::runtime_error("Write error");
                 }
-                bytesWritten += result;
+                remainingToWrite -= written;
+                writePtr += written;
             }
-            progressData[progressIndex].bytesWritten.fetch_add(bytesWritten);
-            bytesInWindow += bytesWritten;
+
+            progressData[progressIndex].bytesWritten.fetch_add(bytesToRead);
+            bytesInWindow += bytesToRead;
 
             auto now = std::chrono::high_resolution_clock::now();
-            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count() >= UPDATE_INTERVAL_MS) {
-                progressData[progressIndex].progress.store(
-                    static_cast<int>((static_cast<double>(progressData[progressIndex].bytesWritten.load()) / fileSize) * 100));
+            auto msSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count();
+            if (msSinceUpdate >= UPDATE_INTERVAL_MS) {
+                // Progress based on actual file size (not padded)
+                double progressPercent = std::min(100.0, 
+                    (static_cast<double>(progressData[progressIndex].bytesWritten.load()) / fileSize) * 100.0);
+                progressData[progressIndex].progress.store(static_cast<int>(progressPercent));
                 updateSpeed(now);
             }
         }
@@ -960,26 +1013,25 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         if (!g_operationCancelled.load()) {
             progressData[progressIndex].failed.store(true);
         }
-        close(device_fd);
         return false;
     }
 
+    // 8. Final sync
     if (!g_operationCancelled.load()) {
-        fsync(device_fd);
+        fsync(dev_fd);
     }
-    close(device_fd);
 
-    if (!g_operationCancelled && progressData[progressIndex].bytesWritten.load() == fileSize) {
+    // 9. Final progress update
+    if (!g_operationCancelled.load() && progressData[progressIndex].bytesWritten.load() == paddedSize) {
         auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - startTime);
         double seconds = totalElapsed.count() / 1000.0;
-        double avgSpeed = seconds > 0.0
-            ? (static_cast<double>(fileSize) / (1024.0 * 1024.0)) / seconds
-            : 0.0;
+        double avgSpeed = seconds > 0.0 ? (static_cast<double>(fileSize) / (1024.0 * 1024.0)) / seconds : 0.0;
         progressData[progressIndex].speed.store(avgSpeed);
         progressData[progressIndex].progress.store(100);
         progressData[progressIndex].completed.store(true);
         return true;
     }
+
     return false;
 }
