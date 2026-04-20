@@ -91,7 +91,6 @@ using ProgressBarColors       = UI::ProgressBarColors;
 // --- GLOBAL STATE ---
 
 inline std::string_view skin = "white"; 
-inline std::string_view reset = UI::Palette::BoldReset;
 inline std::string globalTheme = "original";
 inline std::string_view color;
 
