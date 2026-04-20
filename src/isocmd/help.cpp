@@ -150,8 +150,8 @@ void helpMappings() {
 
     printSection(tc, "1. Hotkeys:",
         std::string(UI::Palette::BoldReset) + "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
-        "   • Clear Line   :   " + std::string(UI::Palette::Yellow) + "Ctrl+u\n" + std::string(UI::Palette::BoldReset) +
-        "   • Declutter    :    " + std::string(UI::Palette::Yellow) + "Ctrl+l");
+        "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u\n" + std::string(UI::Palette::BoldReset) +
+        "   • Declutter    : " + std::string(UI::Palette::Yellow) + "Ctrl+l");
 
     printSection(tc, "2. Selecting Mappings:",
         "   • Syntax   : Index>Device (e.g., '1>/dev/sdc')\n"
