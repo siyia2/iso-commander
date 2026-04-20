@@ -688,7 +688,6 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
               << UI::Palette::Yellow << "write2usb" << wt.colorStatus 
               << " operation... (" << UI::Palette::Red << "Ctrl+c" 
               << wt.colorStatus << ":cancel)\n\n";
-    std::cout << "\033[s";
 
     auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -710,7 +709,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             std::string currentSize = formatFileSize(prog.bytesWritten.load());
 
             std::cout << "\033[K"
-                      << wt.fileCol << prog.filename << " " << wt.bold << " → {"
+                      << wt.fileCol << prog.filename << " " << wt.bold << "→ {"
                       << wt.deviceCol << prog.device << wt.bold << " <"
                       << deviceNames[prog.device] << "> (" << wt.sizeCol
                       << deviceSizeStrs[prog.device] << wt.bold << ")} " << wt.bold;
