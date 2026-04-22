@@ -71,7 +71,7 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
 }
 
 /**
- * @brief Routes the user input to the specific logic for mounting, writing, or file manipulation.
+ * @brief Routes the user input to the specific logic for mounting, unmounting, writing, or file manipulation.
  * * @param inputString Raw user input from readline.
  * @param isMount Operation is a mount.
  * @param isUnmount Operation is an unmount.
@@ -90,7 +90,12 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
  * @param filterHistory Flag for filtering history state.
  * @param newISOFound Atomic flag for background refresh.
  */
-void processOperationForSelectedIsoFiles(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered, const std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& skippedMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
+void processOperationForSelectedIsoFiles(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered, const std::vector<std::string>& filteredFiles, 
+										 std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, 
+										 std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, 
+										 std::unordered_set<std::string>& skippedMessages, bool& needsClrScrn, 
+										 const std::string& operation, std::atomic<bool>& isAtISOList, 
+										 bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
     
     clearScrollBuffer();
     needsClrScrn = true;
@@ -209,7 +214,10 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
  * @param isImportRunning Flag preventing refresh during active imports.
  * @param updateHasRun Atomic trigger for a refresh.
  */
-void refreshListAfterAutoUpdate(int timeoutS, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::atomic<bool>& newISOFound) {
+void refreshListAfterAutoUpdate(int timeoutS, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, 
+								bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, 
+								std::vector<std::string>& pendingIndices, bool& hasPendingProcess, 
+								size_t& currentPage, size_t& originalPage, std::atomic<bool>& newISOFound) {
     
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(timeoutS));
