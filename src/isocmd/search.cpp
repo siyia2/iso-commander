@@ -201,10 +201,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
             clear_history();
         }
         verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
-        if (!g_operationCancelled.load()) {
-            saveToDatabase(allIsoFiles, newISOFound);
-        }
-
     } catch (const std::exception& e) {
         const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
