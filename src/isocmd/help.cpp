@@ -64,18 +64,18 @@ void helpSelections() {
         "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u");
 
-    printSection(tc, "2. Selecting Items:", std::string(UI::Palette::BoldReset) +
+    printSection(tc, "\n2. Selecting Items:", std::string(UI::Palette::BoldReset) +
         "   • Single/Multiple : " + std::string(UI::Palette::Purple) + "'1' or '1 5 6'\n" + std::string(UI::Palette::BoldReset) +
         "   • Range/Combine   : " + std::string(UI::Palette::Purple) + "'1-3' or '1-3 5 7-9'\n" + std::string(UI::Palette::BoldReset) +
         "   • Pending/All     : " + std::string(UI::Palette::Purple) + "'1-3 5;' or '00' " + std::string(UI::Palette::Yellow) +"('00' for mount/umount only)");
 
-    printSection(tc, "3. Special Commands:",
+    printSection(tc, "\n3. Special Commands:",
         "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~' / '*' " + std::string(UI::Palette::BoldReset) + "   : Toggle Compact/Full or Filename-only lists\n" + std::string(UI::Palette::BoldReset) +
         "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'/' / '/t' " + std::string(UI::Palette::BoldReset) + "  : Filter list / Direct filter (e.g., '/term1;term2')\n" + std::string(UI::Palette::BoldReset) +
         "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'n'/'p'/'g' " + std::string(UI::Palette::BoldReset) + " : Pagination (Next, Previous, Go to page)\n" + std::string(UI::Palette::BoldReset) +
         "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'proc'/'clr' " + std::string(UI::Palette::BoldReset) + ": Process or Clear pending items");
 
-    printSection(tc, "4. Tips:",
+    printSection(tc, "\n4. Tips:",
         "   • Indexes correspond only to their generated list\n"
         "   • Indexes^ refer to the original unfiltered list\n"
         "   • Filtering is adaptive, incremental, and unconstrained by pagination");
@@ -98,9 +98,9 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     printSection(tc, "1. Hotkeys:", keys);
 
     // 2. Selecting FolderPaths
-    printSection(tc, "2. Selecting FolderPaths:",
-        std::string("   • Single/Multiple : '/dir/' or '/dir1/;/dir2/'") +
-        (isCpMv ? "\n   • Overwrite       : Append -o (e.g., '/dir/ -o')" : ""));
+    printSection(tc, "\n2. Selecting FolderPaths:",
+        std::string("   • Single/Multiple : '/dir/' or '/dir1/;/dir2/'\n") +
+        (isCpMv ? "   • Overwrite       : Append -o (e.g., '/dir/ -o')\n" : ""));
 
     if (isCpMv) {
         // 3. Tips (Cp/Mv specific)
@@ -116,10 +116,10 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         
         // Aligned spacing for both conditions
         if (!import2ISO) {
-            displayCmds += "ls / ?config / ?stats           " + std::string(UI::Palette::BoldReset) + ": Display cached image entries/config/stats";
+            displayCmds += "ls / ?config / ?stats           " + std::string(UI::Palette::BoldReset) + ": Display cached image entries/config/stats\n";
         } else {
             // Added extra spaces to compensate for the missing "ls / " string (5 chars)
-            displayCmds += "?config / ?stats                " + std::string(UI::Palette::BoldReset) + ": Display config/stats";
+            displayCmds += "?config / ?stats                " + std::string(UI::Palette::BoldReset) + ": Display config/stats\n";
         }
 
         printSection(tc, "3. Cleanup/Display Commands:", displayCmds);
@@ -153,11 +153,11 @@ void helpMappings() {
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u\n" + std::string(UI::Palette::BoldReset) +
         "   • Declutter    : " + std::string(UI::Palette::Yellow) + "Ctrl+l");
 
-    printSection(tc, "2. Selecting Mappings:",
+    printSection(tc, "\n2. Selecting Mappings:",
         "   • Syntax   : Index>Device (e.g., '1>/dev/sdc')\n"
         "   • Multiple : Separate with ';' (e.g., '1>/dev/sdc;2>/dev/sdd')");
 
-    printSection(tc, "3. Tips:",
+    printSection(tc, "\n3. Tips:",
         "   • Tab-complete INDEX>DEVICE pairs for faster mapping\n"
         "   • Partitions are not eligible for write2usb, only raw devices\n"
         "   • USB detection relies on '/sys/class/block/sd*/removable' kernel value");
