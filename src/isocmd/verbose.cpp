@@ -205,6 +205,7 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
 	
 	if (newISOFound.load()) {
 		loadFromDatabase(globalIsoFileList);
+		newISOFound.store(false);
 	}
     
     auto printInvalidPaths = [&]() {
