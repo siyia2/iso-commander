@@ -232,9 +232,7 @@ void refreshListAfterAutoUpdate(int timeoutS, std::atomic<bool>& isAtISOList, st
                 rl_redisplay();
             }
 
-            updateHasRun.store(false);
-            newISOFound.store(false);
-            
+            updateHasRun.store(false);            
             break;
         }
     }

@@ -194,8 +194,10 @@ void updateDatabaseAfterOperations(const std::string& filePathsStr,
             allIsoFiles.push_back(std::move(path));
     }
 
-    if (!allIsoFiles.empty())
+    if (!allIsoFiles.empty()) {
         saveToDatabase(allIsoFiles, newISOFound);
+	}
+	newISOFound.store(false);
 }
 
 /**
@@ -341,6 +343,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     
     saveToDatabase(allIsoFiles, newISOFound);
     isImportRunning.store(false);
+    newISOFound.store(false);
 }
 
 /**
