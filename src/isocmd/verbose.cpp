@@ -202,9 +202,11 @@ void verboseForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_
     disable_ctrl_d();
 
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
-
-    loadFromDatabase(globalIsoFileList);
-
+	
+	if (newISOFound.load()) {
+		loadFromDatabase(globalIsoFileList);
+	}
+    
     auto printInvalidPaths = [&]() {
         if (invalidPaths.empty()) return;
         if (totalFiles == 0 && validPaths.empty()) {
