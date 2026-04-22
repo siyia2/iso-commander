@@ -373,6 +373,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         }
         
         if (inputString == "proc" && pendingIndices.empty()) {
+			needsClrScrn = false;
             hasPendingProcess = false;
             continue;
         }
@@ -536,6 +537,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         
         if (inputString == "proc" && pendingIndices.empty()) {
             hasPendingProcess = false;
+            needsClrScrn = false;
             continue;
         }
         
