@@ -320,6 +320,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
+        // Launch a detached thread for automatic list updating if startup auto-update option is enabled
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
             std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
                         std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
