@@ -351,6 +351,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         std::string inputString(input.get());
         
         if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
+			needsClrScrn = false;
 			continue;
 		}
 		if (input.get()[0] == '\0') {
@@ -546,6 +547,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         }
 
         if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
+            needsClrScrn = false;
             continue;
         }
 
