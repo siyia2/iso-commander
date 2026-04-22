@@ -344,7 +344,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 			pt.primary     + ", ? ↵ for help, < ↵ to return: " +
 			pt.reset;
 
-        std::unique_ptr<char[], decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
+        std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
         
         if (!rawInput) break;
         
