@@ -48,7 +48,7 @@ namespace UI {
 	struct MainTheme { std::string_view primary, secondary, accent, muted, highlight, background, warning; 
 	};
 
-	struct PrintListTheme { std::string_view accent, head, num, iso, img, mnt, square, indexA, indexB, dir; 
+	struct PrintListTheme { std::string_view accent, head, num, iso, img, mnt, square, indexA, indexB, dir, bracketBg, procText; 
 	};
 
 	struct WriteTheme { std::string errLabel, errPath, warnLabel, infoLabel, bold, headerCol, indexCol, pathCol, fileCol, sizeCol, warnCol, 
@@ -131,7 +131,7 @@ inline constexpr UI::MainTheme TokyoNightTheme =  {  "\033[1;38;2;135;175;255m",
 // --- FUNCTION DECLARATIONS ---
 
 WriteTheme getWriteTheme();
-PrintListTheme getListColors(bool isOriginal, const MainTheme* theme);
+PrintListTheme getListColors();
 CpMvRmColors getCpMvRmColors();
 ConversionThemeStrings getConversionThemeStrings();
 ReadlineColors resolveReadlineTheme();
