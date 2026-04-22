@@ -330,15 +330,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         
         std::cout << "\033[1A\033[K";
 
-        // Helper to wrap raw ANSI strings for readline
-		auto wrap = [](std::string_view s) -> std::string {
-			return "\001" + std::string(s) + "\002";
-		};
-
 		const ReadlineAndPromptTheme pt = getPromptTheme();
-
-		// Wrap operationColor separately since it comes from a different source
-		std::string safeOpColor = wrap(operationColor);
 
 		// Build the prompt
 		// Prefix calculation now uses the safely wrapped colorFilter
@@ -346,10 +338,10 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
 		std::string prompt = 
 			prefix + 
-			pt.iso       + "ISO" + 
-			pt.primary   + " ↵ for " +
-			safeOpColor    + operation + 
-			pt.primary   + ", ? ↵ for help, < ↵ to return: " +
+			pt.iso         + "ISO" + 
+			pt.primary     + " ↵ for " + "\001" +
+			operationColor + "\002" + operation + 
+			pt.primary     + ", ? ↵ for help, < ↵ to return: " +
 			pt.reset;
 
         std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
