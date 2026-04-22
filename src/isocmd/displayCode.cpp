@@ -57,6 +57,7 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
             hasPendingProcess = false;
         
             sortFilesCaseInsensitive(globalIsoFileList);
+            
         }
 
         if (needSortingAfterflno) {
@@ -69,9 +70,7 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
             filteredFiles.clear();
             isFiltered = false;
         }
-		
-		clearScrollBuffer();
-		
+		clearScrollBuffer();	
         printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType,
                   pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
 
@@ -80,8 +79,6 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
 
     if (isEmpty) {
 		const PrintListTheme c = getListColors();
-		
-		clearScrollBuffer();
         
         std::cout << "\n" << c.num << "ISO Cache is empty. Choose 'ImportISO' from the Main Menu Options." << c.dir << "\n";
         pressEnterToReturn();
