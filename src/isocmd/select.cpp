@@ -217,7 +217,7 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
 void refreshListAfterAutoUpdate(int timeoutS, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, 
 								bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, 
 								std::vector<std::string>& pendingIndices, bool& hasPendingProcess, 
-								size_t& currentPage, size_t& originalPage, std::atomic<bool>& newISOFound) {
+								size_t& currentPage, size_t& originalPage) {
     
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(timeoutS));
@@ -323,7 +323,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
                         std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
                         std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(pendingIndices), 
-                        std::ref(hasPendingProcess), std::ref(currentPage), std::ref(originalPage), std::ref(newISOFound)).detach();
+                        std::ref(hasPendingProcess), std::ref(currentPage), std::ref(originalPage));
         }
         
         std::cout << "\033[1A\033[K";
