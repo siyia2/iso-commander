@@ -332,8 +332,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
 		const ReadlineAndPromptTheme pt = getPromptTheme();
 
-		// Build the prompt
-		// Prefix calculation now uses the safely wrapped colorFilter
 		std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
 		std::string prompt = 
