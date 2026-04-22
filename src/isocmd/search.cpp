@@ -154,7 +154,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
             restoreInput();
             resetReadlinePagination();
             if (!invalidPaths.empty()) {
-                verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
+                saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
             }
             return;
         }
@@ -200,7 +200,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
             saveHistory(filterHistory);
             clear_history();
         }
-        verboseForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
+        saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
     } catch (const std::exception& e) {
         const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
