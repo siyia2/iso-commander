@@ -41,7 +41,7 @@ void setupHelp(std::string_view title, const ThemeColors& tc) {
 void printSection(const ThemeColors& tc, std::string_view head, const std::string& body) {
     std::cout << tc.head << head << UI::Palette::BoldReset << "\n";
     if (!body.empty()) {
-        std::cout << body << "\n" << std::endl;
+        std::cout << body << std::endl;
     } else {
         std::cout << std::endl; // Just one extra line for spacing if no body
     }
