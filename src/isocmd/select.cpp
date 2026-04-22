@@ -344,17 +344,17 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 			pt.primary     + ", ? ↵ for help, < ↵ to return: " +
 			pt.reset;
 
-        std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+        std::unique_ptr<char[], decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
         
-        if (!input.get()) break;
-            
-        std::string inputString(input.get());
+        if (!rawInput) break;
+        
+        std::string inputString(rawInput.get());
         
         if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
 			needsClrScrn = false;
 			continue;
 		}
-		if (input.get()[0] == '\0') {
+		if (rawInput.get()[0] == '\0') {
             needsClrScrn = false;
             continue; 
         }
