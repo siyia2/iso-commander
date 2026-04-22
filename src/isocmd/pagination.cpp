@@ -109,10 +109,8 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                                   const std::function<void()>& setupEnvironmentFn, 
                                   bool& isPageTurn) {
 
-	const MainTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalTheme == "original");
-    const PrintListTheme c = getListColors(isOriginal, theme);
-
+	const PrintListTheme c = getListColors();
+	
     bool disablePagination = (ITEMS_PER_PAGE <= 0 || entries.size() <= ITEMS_PER_PAGE);
     size_t totalPages = disablePagination ? 1 : ((entries.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
     size_t currentPage = 0; 

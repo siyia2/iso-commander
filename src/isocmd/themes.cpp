@@ -93,23 +93,24 @@ ReadlineColors resolveReadlineTheme() {
 //  List & Navigation Display
 // ============================================================
 
-PrintListTheme getListColors(bool isOriginal, const MainTheme* theme) {
-    if (isOriginal) {
-        return {
-            UI::Palette::DarkCyan, UI::Palette::Brown,   UI::Palette::Yellow,
-            UI::Palette::Magenta,  UI::Palette::Orange,  UI::Palette::Blue,
-            UI::Palette::DimGray,  UI::Palette::Red,     UI::Palette::Green,
-            UI::Palette::BoldReset
-        };
-    }
+PrintListTheme getListColors() {
+    const MainTheme* theme = getActiveTheme();
+    const bool isOriginal = (globalTheme == "original");
     return {
-        theme->accent,           theme->muted,      theme->warning,
-        theme->accent,           theme->highlight,  theme->secondary,
-        UI::Palette::DimGray,    theme->secondary,  theme->accent,
-        theme->muted
+        isOriginal ? UI::Palette::DarkCyan  : theme->accent,
+        isOriginal ? UI::Palette::Brown     : theme->muted,
+        isOriginal ? UI::Palette::Yellow    : theme->warning,
+        isOriginal ? UI::Palette::Magenta   : theme->accent,
+        isOriginal ? UI::Palette::Orange    : theme->highlight,
+        isOriginal ? UI::Palette::Blue      : theme->secondary,
+        isOriginal ? UI::Palette::DimGray   : UI::Palette::DimGray,
+        isOriginal ? UI::Palette::Red       : theme->secondary,
+        isOriginal ? UI::Palette::Green     : theme->accent,
+        isOriginal ? UI::Palette::BoldReset : theme->muted,
+        isOriginal ? UI::Palette::BGNavy    : theme->background,  // bracketBg
+        isOriginal ? UI::Palette::Green     : theme->accent       // procText
     };
 }
-
 
 // ============================================================
 //  File Operations

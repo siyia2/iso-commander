@@ -79,15 +79,11 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     }
 
     if (isEmpty) {
-        const MainTheme* theme = getActiveTheme();
-        const bool isOriginal = (globalTheme == "original");
-
-        const std::string_view warnColor = isOriginal ? UI::Palette::Yellow : theme->warning;
-        const std::string_view reset     = UI::Palette::BoldReset;
+		const PrintListTheme c = getListColors();
 		
 		clearScrollBuffer();
         
-        std::cout << "\n" << warnColor << "ISO Cache is empty. Choose 'ImportISO' from the Main Menu Options." << reset << "\n";
+        std::cout << "\n" << c.num << "ISO Cache is empty. Choose 'ImportISO' from the Main Menu Options." << c.dir << "\n";
         pressEnterToReturn();
         return false;
     }

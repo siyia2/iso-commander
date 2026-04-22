@@ -42,9 +42,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     
     if (items.empty()) return;
 
-    const MainTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalTheme == "original");
-    const PrintListTheme c = getListColors(isOriginal, theme);
+    const PrintListTheme c = getListColors();
 
     // --- Pagination Logic ---
     const size_t totalItems = items.size();
@@ -56,11 +54,11 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + ITEMS_PER_PAGE, totalItems);
 
     // --- Flags & Config ---
-    const bool isIsoMode     = (listType == "ISO_FILES");
-    const bool isImgMode     = (listType == "IMAGE_FILES");
-    const bool isMountedMode = (listType == "MOUNTED_ISOS");
-    const bool isFileMode    = (isIsoMode || isImgMode);
-    const bool showNamesOnly = displayConfig::toggleNamesOnly;
+    const bool isIsoMode      = (listType == "ISO_FILES");
+    const bool isImgMode      = (listType == "IMAGE_FILES");
+    const bool isMountedMode  = (listType == "MOUNTED_ISOS");
+    const bool isFileMode     = (isIsoMode || isImgMode);
+    const bool showNamesOnly  = displayConfig::toggleNamesOnly;
     const bool showFullUmount = displayConfig::toggleFullListUmount;
     
     IntBuf<> ib1, ib2, ib3, ib4; 
@@ -141,12 +139,9 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     // --- Pending Processes ---
     if (hasPendingProcess && !pendingIndices.empty()) {
         output.append("\n");
-        std::string_view bracketBg = isOriginal ? UI::Palette::BGNavy : theme->background;
-        std::string_view procText   = isOriginal ? UI::Palette::Green  : theme->accent;
-
-        output.append(bracketBg).append("Pending for [")
-              .append(procText).append("proc")
-              .append(UI::Palette::BoldReset).append(bracketBg).append("]: ");
+        output.append(c.bracketBg).append("Pending for [")
+              .append(c.procText).append("proc")
+              .append(UI::Palette::BoldReset).append(c.bracketBg).append("]: ");
 
         output.append(!isImgMode ? c.iso : c.img);
         for (size_t i = 0; i < pendingIndices.size(); ++i) {
