@@ -233,9 +233,19 @@ void refreshListAfterAutoUpdate(int timeoutS, std::atomic<bool>& isAtISOList, st
 }
 
 /**
- * @brief The main menu loop for ISO operations (mount, umount, cp, mv, rm, write).
- * * Provides a paginated, filterable interface for selecting ISO files and executing 
- * system operations.
+ * @brief Interactive file selection for ISO operations (mount, umount, cp, mv, rm, write2usb).
+ *
+ * Provides a paginated, multi-layer filterable interface for selecting ISO files
+ * (or mounted ISOs for umount) and executing system operations. Key behaviours:
+ *
+ * - Displays either the global ISO file list or the mounted-ISO list depending
+ *   on the operation, with background auto-refresh when new ISOs are detected.
+ * - Supports stacked filtering with filter history, allowing successive narrowing
+ *   of the displayed list; '<' unwinds the filter state or returns to the caller.
+ * - Implements a two-phase pending/deferred execution model: selections can be
+ *   staged into a pending list and reviewed before the operation is committed.
+ * - Pagination and help display are handled inline via processPaginationHelpAndDisplay.
+ * - Loops until the user explicitly returns or EOF (Ctrl-D) is received.
  */
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
     rl_bind_key('\f', prevent_readline_keybindings);
