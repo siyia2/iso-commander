@@ -12,6 +12,9 @@
 struct FilteringState {
     /** @brief Indices into the original unfiltered dataset for each currently visible item. */
     std::vector<size_t> originalIndices;
+    /** @brief The query string used to produce this filter level; persisted so the
+     *         filter can be re-applied after an async list reload. */
+    std::string query;
     /** @brief True if a filter is active at this stack level, false if showing all items. */
     bool isFiltered;
 };
@@ -22,6 +25,14 @@ struct FilteringState {
  * narrows a filter. An empty stack means no filtering is active.
  */
 inline std::vector<FilteringState> filteringStack;
+
+/**
+ * @brief Filters file indices based on a search query using the Boyer-Moore algorithm.
+ * @param files Vector of file paths to search.
+ * @param query Search query with semicolon-separated terms.
+ * @return Vector of indices into @p files whose entries match the query.
+ */
+std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query);
 
 /**
  * @brief Binds all mutable state needed by a single filter operation.
@@ -80,10 +91,11 @@ struct FilterCallConfig {
 };
 
 /**
- * @brief Represents a single search token with precomputed Boyer-Moore tables
- * 
- * Stores both case-sensitive and case-insensitive versions of the pattern
- * with their corresponding heuristic tables for efficient searching.
+ * @brief Represents a single search token with precomputed Boyer-Moore tables.
+ * @details Built from a semicolon-separated query term by @c buildQueryTokens and
+ * consumed by @c filterFilesIndices. Stores both case-sensitive and case-insensitive
+ * pattern variants with their corresponding bad-character and good-suffix heuristic
+ * tables for efficient repeated searching.
  */
 struct QueryToken {
     std::string original;
