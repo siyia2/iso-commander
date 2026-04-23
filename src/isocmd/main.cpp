@@ -15,11 +15,15 @@ void printVersionNumber(const std::string& version) {
 
 /**
  * @brief Entry point for Iso Commander.
- * * This function initializes the application state, manages a single-instance lock 
- * via file descriptors, handles command-line arguments, and starts the background 
- * ISO discovery thread if auto-update is enabled. It contains the primary 
+ *
+ * Initializes application state, manages a single-instance lock via file
+ * descriptors, handles command-line arguments, and starts the background
+ * ISO discovery thread if auto-update is enabled. Background threads are
+ * tracked in a vector and joined on exit via stop flags, ensuring no
+ * dangling references on program termination. Contains the primary
  * execution loop for the main menu.
- * * @param argc Argument count.
+ *
+ * @param argc Argument count.
  * @param argv Argument vector.
  * @return int Returns 0 on successful exit, 1 if another instance is already running.
  */
@@ -32,6 +36,8 @@ int main(int argc, char *argv[]) {
     std::atomic<bool> isAtISOList{false};
     std::atomic<bool> updateHasRun{false};
     std::atomic<bool> newISOFound{false};
+    std::atomic<bool> stopImport{false};
+	std::atomic<bool> stopMessage{false};
     
     globalIsoFileList.reserve(100);
     setupReadlineToIgnoreCtrlC();
@@ -80,11 +86,13 @@ int main(int argc, char *argv[]) {
     std::map<std::string, std::string> config = readUserConfigLists(configPath);
     search = readUserConfigUpdates(configPath); 
     
+    std::vector<std::thread> backgroundThreads;
+
     if (search) {
         isImportRunning.store(true);
-        std::thread([&isImportRunning, &newISOFound]() {
-            backgroundDatabaseImport(isImportRunning, newISOFound);
-        }).detach();
+        backgroundThreads.emplace_back([&isImportRunning, &newISOFound, &stopImport]() {
+            backgroundDatabaseImport(isImportRunning, newISOFound, stopImport);
+        });
         updateHasRun.store(true);
     }
     
@@ -107,12 +115,16 @@ int main(int argc, char *argv[]) {
         if (search && !isHistoryFileEmpty(historyFilePath) && isImportRunning.load()) {
             std::cout << UI::Palette::Dim << "[Auto-Update: running in the background...]\n" << UI::Palette::Reset;
             messageActive.store(true);
-            std::thread(clearMessageAfterTimeout, 1, std::ref(isAtMain), std::ref(isImportRunning), std::ref(messageActive)).detach();
+            std::thread(clearMessageAfterTimeout, 2, std::ref(isAtMain),
+                        std::ref(isImportRunning), std::ref(messageActive),
+                        std::ref(stopMessage)).detach();
         } else if ((search && !messagePrinted) && (isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
             std::cout << UI::Palette::Dim << "[Auto-Update: no stored folder paths to scan...]\n" << UI::Palette::Reset;
             messagePrinted = true;
             messageActive.store(true);
-            std::thread(clearMessageAfterTimeout, 4, std::ref(isAtMain), std::ref(isImportRunning), std::ref(messageActive)).detach();
+            std::thread(clearMessageAfterTimeout, 8, std::ref(isAtMain),
+                        std::ref(isImportRunning), std::ref(messageActive),
+                        std::ref(stopMessage)).detach();
         }
         
         printMenu();
@@ -170,6 +182,11 @@ int main(int argc, char *argv[]) {
     }
 
     // --- Cleanup ---
+    stopImport.store(true);
+    stopMessage.store(true);
+    for (auto& t : backgroundThreads)
+        if (t.joinable()) t.join();
+        
     std::cout << UI::Palette::Reset << std::flush;
     close(lockFileDescriptor);
     unlink(lockFile);

@@ -264,15 +264,18 @@ std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string
 }
 
 /**
- * @brief Performs background ISO file import without blocking the UI
- * 
+ * @brief Performs background ISO file import without blocking the UI.
+ *
  * Reads history paths, reduces them hierarchically, traverses directories
- * to find ISO files, and saves them to the database.
- * 
- * @param isImportRunning Atomic flag indicating if import is in progress
- * @param newISOFound Atomic flag set to true if new ISOs were found
+ * to find ISO files, and saves them to the database. Checks a stop flag
+ * between major phases to allow prompt exit on program termination.
+ * Traverse tasks themselves run to completion once started.
+ *
+ * @param isImportRunning Atomic flag indicating if import is in progress.
+ * @param newISOFound Atomic flag set to true if new ISOs were found.
+ * @param stopImport Stop flag checked between phases to allow early exit on program termination.
  */
-void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
+void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& stopImport) {
     std::vector<std::string> paths;
     int localMaxDepth = -1;
     bool localPromptFlag = false;
@@ -285,34 +288,31 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
         }
         std::string line;
         while (std::getline(file, line)) {
+            if (stopImport.load()) { isImportRunning.store(false); return; }
             std::istringstream iss(line);
             std::string path;
             while (std::getline(iss, path, ';')) {
                 if (!path.empty() && path[0] == '/') {
-                    if (path.back() != '/') {
-                        path += '/';
-                    }
-                    if (std::find(paths.begin(), paths.end(), path) == paths.end()) {
+                    if (path.back() != '/') path += '/';
+                    if (std::find(paths.begin(), paths.end(), path) == paths.end())
                         paths.push_back(path);
-                    }
                 }
             }
         }
     }
     
+    if (stopImport.load()) { isImportRunning.store(false); return; }
+
     if (paths.size() > 1) {
         auto it = std::find(paths.begin(), paths.end(), "/");
-        if (it != paths.end()) {
-            paths.erase(it);
-        }
+        if (it != paths.end()) paths.erase(it);
     }
     
     std::vector<std::string> finalPaths = hierarchicalPathReduction(paths);
     
-    if (finalPaths.empty()) {
-        isImportRunning.store(false);
-        return;
-    }
+    if (finalPaths.empty()) { isImportRunning.store(false); return; }
+
+    if (stopImport.load()) { isImportRunning.store(false); return; }
 
     std::vector<std::string> allIsoFiles;
     std::atomic<size_t> totalFiles{0};
@@ -324,8 +324,8 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     std::vector<std::future<void>> futures;
     
     for (const auto& path : finalPaths) {
+        if (stopImport.load()) { isImportRunning.store(false); return; }
         if (isValidDirectory(path)) {
-            // Use the singleton pool
             futures.emplace_back(pool.enqueue([&, path]() {
                 traverse(path, allIsoFiles, uniqueErrorMessages,
                          totalFiles, processMutex, traverseErrorMutex,
@@ -334,13 +334,12 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
         }
     }
     
-    // Wait for all traversal tasks to complete
     for (auto& future : futures) {
-        if (future.valid()) {
-            future.wait();
-        }
+        if (future.valid()) future.wait();
     }
     
+    if (stopImport.load()) { isImportRunning.store(false); return; }
+	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
     saveToDatabase(allIsoFiles, newISOFound);
     isImportRunning.store(false);
     newISOFound.store(false);

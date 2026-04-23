@@ -221,28 +221,34 @@ void printMenu() {
 
 /**
  * @brief Threaded worker that clears temporary status messages from the terminal after a delay.
- * * It ensures that messages don't persist indefinitely and triggers a UI redraw if 
- * the user is currently at the main menu.
- * * @param timeoutSeconds Duration to wait before clearing.
+ *
+ * Waits for a given number of 500ms ticks before clearing the message, checking
+ * a stop flag on each tick to allow prompt exit when the program terminates.
+ * Triggers a UI redraw if the user is currently at the main menu.
+ *
+ * @param timeoutTicks Number of 500ms ticks to wait before clearing (e.g. 2 = 1s, 8 = 4s).
  * @param isAtMain Tracks if the user is currently viewing the main menu.
- * @param isImportRunning Prevents clearing if an active import is printing logs.
+ * @param isImportRunning Prevents clearing if an active import is still running.
  * @param messageActive Flag indicating a temporary message is currently visible.
+ * @param stopMessage Stop flag checked every 500ms to allow early exit on program termination.
  */
-void clearMessageAfterTimeout(int timeoutSeconds, std::atomic<bool>& isAtMain, std::atomic<bool>& isImportRunning, std::atomic<bool>& messageActive) {
-    while (true) {
-        std::this_thread::sleep_for(std::chrono::seconds(timeoutSeconds));
-        
-        if (!isImportRunning.load()) {
-            if (messageActive.load() && isAtMain.load()) {
-                clearScrollBuffer();
-                print_ascii();
-                printMenu();
-                std::cout << "\n";
-                rl_on_new_line(); 
-                rl_redisplay();
-                messageActive.store(false);
-            }
-            break; 
+void clearMessageAfterTimeout(int timeoutTicks, std::atomic<bool>& isAtMain, std::atomic<bool>& isImportRunning, std::atomic<bool>& messageActive, std::atomic<bool>& stopMessage) {
+    int elapsed = 0;
+    while (elapsed < timeoutTicks) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        elapsed++;
+        if (stopMessage.load()) return;  // ← checks every 500ms
+    }
+
+    if (!isImportRunning.load()) {
+        if (messageActive.load() && isAtMain.load()) {
+            clearScrollBuffer();
+            print_ascii();
+            printMenu();
+            std::cout << "\n";
+            rl_on_new_line();
+            rl_redisplay();
+            messageActive.store(false);
         }
     }
 }
