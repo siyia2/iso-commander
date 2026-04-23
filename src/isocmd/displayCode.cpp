@@ -20,10 +20,12 @@ namespace displayConfig {
 
 /**
  * @brief Loads ISO files from the database and updates the display.
- * Reloads the global ISO list from the database when the dirty flag is set,
- * and handles UI state updates including filtering and pagination.
- * When a filter is active during reload, it is re-applied against the fresh
- * list to keep filteredFiles and original indices current.
+ * * Synchronizes the global ISO list with the database when the dirty flag is set.
+ * If a filter is active during a reload, it is re-applied to ensure the visible 
+ * results and original index mappings remain consistent with the new data.
+ *
+ * @note If a re-applied filter returns no results, the filter stack is cleared 
+ * and the view resets to the full list to prevent a blank UI.
  *
  * @param filteredFiles Reference to the vector of currently filtered files.
  * @param isFiltered Boolean flag indicating if a filter is active.
