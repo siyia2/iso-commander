@@ -153,7 +153,6 @@ int main(int argc, char *argv[]) {
         }
 
         std::string choice(input.get());
-        std::string initialDir = "";
 
         if (choice == "1") {
             isAtMain.store(false);
