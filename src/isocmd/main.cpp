@@ -93,7 +93,9 @@ int main(int argc, char *argv[]) {
         backgroundThreads.emplace_back([&isImportRunning, &newISOFound, &stopImport]() {
             backgroundDatabaseImport(isImportRunning, newISOFound, stopImport);
         });
-        updateHasRun.store(true);
+        if (!(isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
+			updateHasRun.store(true);
+		}
     }
     
     paginationSet(configPath);
@@ -118,7 +120,7 @@ int main(int argc, char *argv[]) {
             std::thread(clearMessageAfterTimeout, 2, std::ref(isAtMain),
                         std::ref(isImportRunning), std::ref(messageActive),
                         std::ref(stopMessage)).detach();
-        } else if ((search && !messagePrinted) && (isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
+        } else if ((search && !messagePrinted && !updateHasRun.load()) && (isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
             std::cout << UI::Palette::Dim << "[Auto-Update: no stored folder paths to scan...]\n" << UI::Palette::Reset;
             messagePrinted = true;
             messageActive.store(true);
