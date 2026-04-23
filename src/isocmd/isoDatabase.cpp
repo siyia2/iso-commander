@@ -335,8 +335,12 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     }
     
     for (auto& future : futures) {
-        if (future.valid()) future.wait();
-    }
+		if (future.valid()) {
+			while (future.wait_for(std::chrono::milliseconds(50)) != std::future_status::ready) {
+				if (stopImport.load()) { isImportRunning.store(false); return; }
+			}
+		}
+	}
     
     if (stopImport.load()) { isImportRunning.store(false); return; }
 	

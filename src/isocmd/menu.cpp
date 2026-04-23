@@ -274,24 +274,19 @@ void monitorAndClearMessageReturningFromSubmenu(std::atomic<bool>& isRunning,
                                                 std::atomic<bool>& messageActive, 
                                                 std::atomic<bool>& stopSignal,
                                                 std::atomic<bool>& isAtMain) {
-    
-    // 1. Wait for work to finish or program to exit
-    while (isRunning.load() && !stopSignal.load()) {
+    while (isRunning.load()) {
+        if (stopSignal.load()) return;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    // 2. If the message is still active, we need to force a redraw
-    // Ensure we only do this if the user is actually at the main menu to avoid
-    // disrupting inputs in sub-menus or while the program is closing.
     if (messageActive.load() && !stopSignal.load() && isAtMain.load()) {
-		clearScrollBuffer();
-            print_ascii();
-            printMenu();
-            std::cout << "\n";
-            rl_on_new_line();
-            rl_redisplay();
+        clearScrollBuffer();
+        print_ascii();
+        printMenu();
+        std::cout << "\n";
+        rl_on_new_line();
+        rl_redisplay();
         messageActive.store(false);
-       
     }
 }
 
