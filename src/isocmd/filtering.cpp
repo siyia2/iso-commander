@@ -232,7 +232,8 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
 /**
  * @brief Core filtering logic applied to a file list
  * 
- * @param searchString The search pattern to apply
+ * @param searchString The search pattern to apply; saved into FilteringState
+ *                     so the filter can be re-applied after async list reloads.
  * @param ctx FilterContext containing state and file references
  * @return true if filter was applied successfully, false otherwise
  */
@@ -297,6 +298,8 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
 
     FilteringState newState;
     newState.originalIndices.reserve(tempIndices.size());
+    newState.query      = searchString;  // save query
+    newState.isFiltered = true;
 
     const bool canTranslate = ctx.isFiltered &&
                               !filteringStack.empty() &&
@@ -311,7 +314,6 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
         }
         newState.originalIndices.push_back(originalIdx);
     }
-    newState.isFiltered = true;
 
     if (ctx.isFiltered && !filteringStack.empty())
         filteringStack.back() = std::move(newState);

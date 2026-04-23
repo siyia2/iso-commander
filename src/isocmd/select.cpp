@@ -226,7 +226,7 @@ void refreshListAfterAutoUpdate(int timeoutS, std::atomic<bool>& isAtISOList, st
         std::this_thread::sleep_for(std::chrono::seconds(timeoutS));
 
         if (!isImportRunning.load()) {
-            if (isAtISOList.load() && !state->isFiltered) {
+            if (isAtISOList.load()) {
                 loadAndDisplayIso(state->filteredFiles, state->isFiltered, state->listSubtype, 
                                   state->umountMvRmBreak, state->pendingIndices, state->hasPendingProcess, 
                                   state->currentPage, state->originalPage, isImportRunning);
