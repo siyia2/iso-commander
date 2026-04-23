@@ -40,77 +40,90 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered
 size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
+    
     bool needToReload = isoListDirty.exchange(false);
     std::vector<std::string> freshList;
+    
     if (needToReload) {
         loadFromDatabase(freshList);
     }
+    
     bool isEmpty = false;
     {
-		std::lock_guard<std::mutex> lock(updateListMutex);
-		if (needToReload) {
-			globalIsoFileList = std::move(freshList);
-			currentPage = originalPage;
-			pendingIndices.clear();
-			hasPendingProcess = false;
-			sortFilesCaseInsensitive(globalIsoFileList);
-		}
+        std::lock_guard<std::mutex> lock(updateListMutex);
+        
+        if (needToReload) {
+            globalIsoFileList = std::move(freshList);
+            currentPage = originalPage;
+            pendingIndices.clear();
+            hasPendingProcess = false;
+            sortFilesCaseInsensitive(globalIsoFileList);
 
-		// --- REFRESH FILTER STATE ---
-        /** * @name Filter State Synchronization
-         * @details Re-evaluates the active filter against the updated global file list.
-         * This ensures the filtered view remains consistent after a database reload.
-         */
-        /// @{
-        if (isFiltered && !filteringStack.empty()) {
-            // Access the current top-of-stack filter configuration by reference
-            auto& state = filteringStack.back();
-            
-            if (!state.query.empty()) {
-                /** @note filterFilesIndices performs the actual string matching logic */
-                auto newIndices = filterFilesIndices(globalIsoFileList, state.query);
+            /** * @name Filter State Synchronization
+             * @details Re-evaluates active filters against the newly reloaded globalIsoFileList.
+             * This ensures that search results remain accurate if the underlying database 
+             * records have changed, been added, or removed.
+             */
+            /// @{
+            if (isFiltered && !filteringStack.empty()) {
+                // Access the active filter state by reference to update in-place
+                auto& state = filteringStack.back();
+                
+                if (!state.query.empty()) {
+                    /** @note filterFilesIndices performs string matching and returns index pointers. */
+                    auto newIndices = filterFilesIndices(globalIsoFileList, state.query);
 
-                if (newIndices.empty()) {
-                    /** @warning No matches found. Resetting to unfiltered view to prevent a blank UI. */
-                    filteringStack.clear();
-                    filteredFiles.clear();
-                    isFiltered = false;
-                } else {
-                    // Transfer ownership of new indices to the stack state
-                    state.originalIndices = std::move(newIndices);
+                    if (newIndices.empty()) {
+                        /** @warning Zero matches found after reload. 
+                         * Resetting state to prevent the UI from displaying an empty filtered view. 
+                         */
+                        filteringStack.clear();
+                        filteredFiles.clear();
+                        isFiltered = false;
+                    } else {
+                        // Transfer ownership of new index vector to the state object
+                        state.originalIndices = std::move(newIndices);
 
-                    // Rebuild the visible file list based on the new index mapping
-                    filteredFiles.clear();
-                    filteredFiles.reserve(state.originalIndices.size());
-                    for (size_t idx : state.originalIndices) {
-                        filteredFiles.push_back(globalIsoFileList[idx]);
+                        // Sync the display list with the new indices
+                        filteredFiles.clear();
+                        filteredFiles.reserve(state.originalIndices.size());
+                        for (size_t idx : state.originalIndices) {
+                            filteredFiles.push_back(globalIsoFileList[idx]);
+                        }
                     }
                 }
             }
+            /// @}
         }
-        /// @}
-        // ----------------------------
 
-		if (needSortingAfterflno) {
-			sortFilesCaseInsensitive(globalIsoFileList);
-			needSortingAfterflno = false;
-		}
-		if (umountMvRmBreak) {
-			filteringStack.clear();
-			filteredFiles.clear();
-			isFiltered = false;
-		}
-		clearScrollBuffer();
-		printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType,
-				  pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
-		isEmpty = globalIsoFileList.empty();
-	}
+        if (needSortingAfterflno) {
+            sortFilesCaseInsensitive(globalIsoFileList);
+            needSortingAfterflno = false;
+        }
+
+        // Logic check: Manual break clears existing filter state
+        if (umountMvRmBreak) {
+            filteringStack.clear();
+            filteredFiles.clear();
+            isFiltered = false;
+        }
+
+        clearScrollBuffer();
+        
+        // Use either the recently refreshed filteredFiles or the global master list
+        printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType,
+                  pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
+        
+        isEmpty = globalIsoFileList.empty();
+    }
+
     if (isEmpty) {
         const PrintListTheme c = getListColors();
         std::cout << "\n" << c.num << "ISO Cache is empty. Choose 'ImportISO' from the Main Menu Options." << c.dir << "\n";
         pressEnterToReturn();
         return false;
     }
+    
     return true;
 }
 
