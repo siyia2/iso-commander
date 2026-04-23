@@ -120,7 +120,7 @@ int main(int argc, char *argv[]) {
             std::cout << UI::Palette::Dim << "[Auto-Update: running in the background...]\n" << UI::Palette::Reset;
             messageActive.store(true);
             if (!monitorThreadSpawned.exchange(true)) {
-				backgroundThreads.emplace_back(monitorAndClearMessageReturningFromSubmenu, 
+				backgroundThreads.emplace_back(monitorAndClearMessage, 
 											   std::ref(isImportRunning), 
 											   std::ref(messageActive), 
 											   std::ref(stopMessage),
