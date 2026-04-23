@@ -20,8 +20,9 @@ void printVersionNumber(const std::string& version) {
  * descriptors, handles command-line arguments, and starts the background
  * ISO discovery thread if auto-update is enabled. Background threads are
  * tracked in a vector and joined on exit via stop flags, ensuring no
- * dangling references on program termination. Contains the primary
- * execution loop for the main menu.
+ * dangling references on program termination. A spawn guard prevents
+ * duplicate monitor threads across main menu re-entries. Contains the
+ * primary execution loop for the main menu.
  *
  * @param argc Argument count.
  * @param argv Argument vector.
@@ -38,6 +39,7 @@ int main(int argc, char *argv[]) {
     std::atomic<bool> newISOFound{false};
     std::atomic<bool> stopImport{false};
 	std::atomic<bool> stopMessage{false};
+	std::atomic<bool> monitorThreadSpawned{false};
     
     globalIsoFileList.reserve(100);
     setupReadlineToIgnoreCtrlC();
@@ -117,18 +119,20 @@ int main(int argc, char *argv[]) {
         if (search && !isHistoryFileEmpty(historyFilePath) && isImportRunning.load()) {
             std::cout << UI::Palette::Dim << "[Auto-Update: running in the background...]\n" << UI::Palette::Reset;
             messageActive.store(true);
-            backgroundThreads.emplace_back(monitorAndClearMessageReturningFromSubmenu, 
-                                           std::ref(isImportRunning), 
-                                           std::ref(messageActive), 
-                                           std::ref(stopMessage),
-                                           std::ref(isAtMain));
+            if (!monitorThreadSpawned.exchange(true)) {
+				backgroundThreads.emplace_back(monitorAndClearMessageReturningFromSubmenu, 
+											   std::ref(isImportRunning), 
+											   std::ref(messageActive), 
+											   std::ref(stopMessage),
+											   std::ref(isAtMain));
+			}
         } else if ((search && !messagePrinted && !updateHasRun.load()) && (isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
             std::cout << UI::Palette::Dim << "[Auto-Update: no stored folder paths to scan...]\n" << UI::Palette::Reset;
             messagePrinted = true;
             messageActive.store(true);
-            std::thread(clearMessageAfterTimeoutInMain, 8, std::ref(isAtMain),
-                        std::ref(isImportRunning), std::ref(messageActive),
-                        std::ref(stopMessage)).detach();
+            backgroundThreads.emplace_back(clearMessageAfterTimeoutInMain, 8, std::ref(isAtMain),
+                                std::ref(isImportRunning), std::ref(messageActive),
+                                std::ref(stopMessage));
         }
         
         printMenu();
