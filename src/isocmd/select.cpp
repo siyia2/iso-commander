@@ -211,7 +211,7 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
 /**
  * @brief Background thread function to refresh the ISO list when data changes.
  *
- * @param timeoutS Polling interval in seconds (typically 1s).
+ * @param timeoutS Polling interval in seconds (typically 500ms).
  * @param isAtISOList Flag indicating if the list view is currently active.
  * @param isImportRunning Flag preventing refresh during active imports.
  * @param updateHasRun Atomic trigger indicating a refresh is needed.
@@ -219,11 +219,11 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
  * @param state Shared ownership of the display state (filteredFiles, pagination,
  *              etc.), allowing the thread to safely outlive the caller.
  */
-void refreshListAfterAutoUpdate(int timeoutS, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, 
+void refreshListAfterAutoUpdate(int timeoutMS, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, 
                                 std::atomic<bool>& updateHasRun, std::atomic<bool>& newISOFound,
                                 std::shared_ptr<RefreshState> state) {
     while (true) {
-        std::this_thread::sleep_for(std::chrono::seconds(timeoutS));
+        std::this_thread::sleep_for(std::chrono::milliseconds(timeoutMS));
 
         if (!isImportRunning.load()) {
             if (isAtISOList.load()) {
@@ -336,7 +336,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         }
         // Launch a detached thread for automatic list updating if startup auto-update is running
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
-            std::thread(refreshListAfterAutoUpdate, 1,
+            std::thread(refreshListAfterAutoUpdate, 500,
                         std::ref(isAtISOList), std::ref(isImportRunning),
                         std::ref(updateHasRun), std::ref(newISOFound),
                         refreshState).detach();  // shared_ptr copied into thread, safe to detach
