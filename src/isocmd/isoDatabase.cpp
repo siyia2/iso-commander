@@ -339,7 +339,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     }
     
     if (stopImport.load()) { isImportRunning.store(false); return; }
-	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+	
     saveToDatabase(allIsoFiles, newISOFound);
     isImportRunning.store(false);
     newISOFound.store(false);
