@@ -276,7 +276,7 @@ void monitorAndClearMessageReturningFromSubmenu(std::atomic<bool>& isRunning,
                                                 std::atomic<bool>& isAtMain) {
     while (isRunning.load()) {
         if (stopSignal.load()) return;
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
 
     if (messageActive.load() && !stopSignal.load() && isAtMain.load()) {
