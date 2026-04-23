@@ -232,7 +232,8 @@ void printMenu() {
  * @param messageActive Flag indicating a temporary message is currently visible.
  * @param stopMessage Stop flag checked every 500ms to allow early exit on program termination.
  */
-void clearMessageAfterTimeout(int timeoutTicks, std::atomic<bool>& isAtMain, std::atomic<bool>& isImportRunning, std::atomic<bool>& messageActive, std::atomic<bool>& stopMessage) {
+void clearMessageAfterTimeoutInMain(int timeoutTicks, std::atomic<bool>& isAtMain, std::atomic<bool>& isImportRunning, 
+									std::atomic<bool>& messageActive, std::atomic<bool>& stopMessage) {
     int elapsed = 0;
     while (elapsed < timeoutTicks) {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -250,6 +251,47 @@ void clearMessageAfterTimeout(int timeoutTicks, std::atomic<bool>& isAtMain, std
             rl_redisplay();
             messageActive.store(false);
         }
+    }
+}
+
+/**
+ * @brief Observes background task completion and performs an asynchronous UI refresh.
+ * * This function runs in a background thread to monitor the lifecycle of a database 
+ * import. Once the task finishes (or the program signals a shutdown), it evaluates 
+ * if the user is currently at the main menu. 
+ * * If active, it performs a "soft refresh" by:
+ * 1. Clearing the terminal buffer to remove the "Auto-Update" status line.
+ * 2. Re-rendering the ASCII art and menu options.
+ * 3. Utilizing Readline's internal state functions (rl_on_new_line, rl_redisplay) 
+ * to restore the user's current input prompt without clearing any text 
+ * the user may have already started typing.
+ * * @param isRunning     Atomic flag tracking the worker thread's activity.
+ * @param messageActive Atomic flag tracking if the status message is visible.
+ * @param stopSignal    Atomic flag to abort monitoring during program exit.
+ * @param isAtMain      Atomic flag ensuring refresh only occurs on the primary menu.
+ */
+void monitorAndClearMessageReturningFromSubmenu(std::atomic<bool>& isRunning, 
+                                                std::atomic<bool>& messageActive, 
+                                                std::atomic<bool>& stopSignal,
+                                                std::atomic<bool>& isAtMain) {
+    
+    // 1. Wait for work to finish or program to exit
+    while (isRunning.load() && !stopSignal.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    // 2. If the message is still active, we need to force a redraw
+    // Ensure we only do this if the user is actually at the main menu to avoid
+    // disrupting inputs in sub-menus or while the program is closing.
+    if (messageActive.load() && !stopSignal.load() && isAtMain.load()) {
+		clearScrollBuffer();
+            print_ascii();
+            printMenu();
+            std::cout << "\n";
+            rl_on_new_line();
+            rl_redisplay();
+        messageActive.store(false);
+       
     }
 }
 

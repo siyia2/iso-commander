@@ -117,14 +117,16 @@ int main(int argc, char *argv[]) {
         if (search && !isHistoryFileEmpty(historyFilePath) && isImportRunning.load()) {
             std::cout << UI::Palette::Dim << "[Auto-Update: running in the background...]\n" << UI::Palette::Reset;
             messageActive.store(true);
-            std::thread(clearMessageAfterTimeout, 2, std::ref(isAtMain),
-                        std::ref(isImportRunning), std::ref(messageActive),
-                        std::ref(stopMessage)).detach();
+            backgroundThreads.emplace_back(monitorAndClearMessageReturningFromSubmenu, 
+                                           std::ref(isImportRunning), 
+                                           std::ref(messageActive), 
+                                           std::ref(stopMessage),
+                                           std::ref(isAtMain));
         } else if ((search && !messagePrinted && !updateHasRun.load()) && (isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
             std::cout << UI::Palette::Dim << "[Auto-Update: no stored folder paths to scan...]\n" << UI::Palette::Reset;
             messagePrinted = true;
             messageActive.store(true);
-            std::thread(clearMessageAfterTimeout, 8, std::ref(isAtMain),
+            std::thread(clearMessageAfterTimeoutInMain, 8, std::ref(isAtMain),
                         std::ref(isImportRunning), std::ref(messageActive),
                         std::ref(stopMessage)).detach();
         }
