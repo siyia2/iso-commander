@@ -3,6 +3,7 @@
 #include "../headers.h"
 #include "../display.h"
 #include "../filtering.h"
+#include "../select.h"
 #include "../themes.h"
 
 /**
@@ -209,32 +210,32 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
 
 /**
  * @brief Background thread function to refresh the ISO list when data changes.
- * * @param timeoutS for polling set to 1s.
- * @param isAtISOList Flag indicating if list view is active.
+ *
+ * @param timeoutS Polling interval in seconds (typically 1s).
+ * @param isAtISOList Flag indicating if the list view is currently active.
  * @param isImportRunning Flag preventing refresh during active imports.
- * @param updateHasRun Atomic trigger for a refresh.
+ * @param updateHasRun Atomic trigger indicating a refresh is needed.
+ * @param newISOFound Atomic flag cleared after the refresh completes.
+ * @param state Shared ownership of the display state (filteredFiles, pagination,
+ *              etc.), allowing the thread to safely outlive the caller.
  */
-void refreshListAfterAutoUpdate(int timeoutS, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, 
-								bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, 
-								std::vector<std::string>& pendingIndices, bool& hasPendingProcess, 
-								size_t& currentPage, size_t& originalPage, std::atomic<bool>& newISOFound) {
-    
+void refreshListAfterAutoUpdate(int timeoutS, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, 
+                                std::atomic<bool>& updateHasRun, std::atomic<bool>& newISOFound,
+                                std::shared_ptr<RefreshState> state) {
     while (true) {
         std::this_thread::sleep_for(std::chrono::seconds(timeoutS));
 
         if (!isImportRunning.load()) {
-
-            if (isAtISOList.load() && !isFiltered) {
-                loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning);
+            if (isAtISOList.load() && !state->isFiltered) {
+                loadAndDisplayIso(state->filteredFiles, state->isFiltered, state->listSubtype, 
+                                  state->umountMvRmBreak, state->pendingIndices, state->hasPendingProcess, 
+                                  state->currentPage, state->originalPage, isImportRunning);
                 std::cout << "\n";
-                
                 rl_on_new_line();
                 rl_redisplay();
             }
-
             updateHasRun.store(false);
             newISOFound.store(false);
-            
             break;
         }
     }
@@ -248,6 +249,8 @@ void refreshListAfterAutoUpdate(int timeoutS, std::atomic<bool>& isAtISOList, st
  *
  * - Displays either the global ISO file list or the mounted-ISO list depending
  *   on the operation, with background auto-refresh when new ISOs are detected.
+ *   Display state is owned via a shared_ptr (RefreshState), allowing a detached
+ *   refresh thread to safely outlive the function without dangling references.
  * - Supports stacked filtering with filter history, allowing successive narrowing
  *   of the displayed list; '<' unwinds the filter state or returns to the caller.
  * - Implements a two-phase pending/deferred execution model: selections can be
@@ -260,39 +263,48 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     rl_bind_key('\t', prevent_readline_keybindings);
     
     std::unordered_set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
-    std::vector<std::string> filteredFiles;
-    static std::vector<std::string> isoDirs; 
-    
-    std::vector<std::string> pendingIndices;
-    bool hasPendingProcess = false;
-    
+    static std::vector<std::string> isoDirs;
+
     globalIsoFileList.reserve(100);
-    filteredFiles.reserve(100);
     isoDirs.reserve(100);
-    
-    bool isFiltered = false;
-    bool needsClrScrn = true;
-    bool umountMvRmBreak = false;
+
+    auto refreshState = std::make_shared<RefreshState>();
+
+    std::vector<std::string>& filteredFiles = refreshState->filteredFiles;
+    std::vector<std::string>& pendingIndices = refreshState->pendingIndices;
+    bool& isFiltered                         = refreshState->isFiltered;
+    bool& hasPendingProcess                  = refreshState->hasPendingProcess;
+    bool& umountMvRmBreak                    = refreshState->umountMvRmBreak;
+    std::string& listSubtype                 = refreshState->listSubtype;
+    size_t& currentPage                      = refreshState->currentPage;
+    size_t& originalPage                     = refreshState->originalPage;
+
+    filteredFiles.reserve(100);
+    isFiltered      = false;
+    hasPendingProcess = false;
+    umountMvRmBreak = false;
+    currentPage     = 0;
+    originalPage    = 0;
+
+    bool needsClrScrn  = true;
     bool filterHistory = false;
-    size_t currentPage = 0;
-    size_t originalPage = currentPage;
 
     std::string operationColor = std::string(
-		operation == "rm"     ? UI::Palette::Red    :
-		operation == "cp"     ? UI::Palette::Green  :
-		operation == "mv"     ? UI::Palette::Yellow :
-		operation == "mount"  ? UI::Palette::Green  :
-		operation == "write2usb"  ? UI::Palette::Yellow :
-		operation == "umount" ? UI::Palette::Yellow : UI::Palette::RL_BoldAlt
-	);
-                                 
-    bool isMount = (operation == "mount");
+        operation == "rm"        ? UI::Palette::Red    :
+        operation == "cp"        ? UI::Palette::Green  :
+        operation == "mv"        ? UI::Palette::Yellow :
+        operation == "mount"     ? UI::Palette::Green  :
+        operation == "write2usb" ? UI::Palette::Yellow :
+        operation == "umount"    ? UI::Palette::Yellow : UI::Palette::RL_BoldAlt
+    );
+
+    bool isMount   = (operation == "mount");
     bool isUnmount = (operation == "umount");
-    bool write = (operation == "write2usb");
+    bool write     = (operation == "write2usb");
     bool isConversion = false;
-    
-    std::string listSubtype = isMount ? "mount" : (write ? "write2usb" : "cp_mv_rm");
-    
+
+    listSubtype = isMount ? "mount" : (write ? "write2usb" : "cp_mv_rm");
+
     while (true) {
         enable_ctrl_d();
         setupSignalHandlerCancellations();
@@ -300,34 +312,34 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
         filterHistory = false;
         clear_history();
-        
+
         if (!isFiltered) originalPage = currentPage;
-        
+
         if (!isUnmount) {
             removeNonExistentPathsFromDatabase(globalIsoFileList);
             isAtISOList.store(true);
         }
-        
+
         if (needsClrScrn) {
             if (!isUnmount) {
                 if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning)) {
-					newISOFound.store(false);
+                    newISOFound.store(false);
                     break;
-				}
+                }
             } else {
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning))
                     break;
             }
-            
+
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
         // Launch a detached thread for automatic list updating if startup auto-update is running
         if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
-            std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
-                        std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
-                        std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(pendingIndices), 
-                        std::ref(hasPendingProcess), std::ref(currentPage), std::ref(originalPage), std::ref(newISOFound)).detach();
+            std::thread(refreshListAfterAutoUpdate, 1,
+                        std::ref(isAtISOList), std::ref(isImportRunning),
+                        std::ref(updateHasRun), std::ref(newISOFound),
+                        refreshState).detach();  // shared_ptr copied into thread, safe to detach
         }
         
         std::cout << "\033[1A\033[K";
