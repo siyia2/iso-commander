@@ -72,11 +72,9 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
                   << "|6. Write                 |\n"
                   << "+-------------------------+" << UI::Palette::BoldReset << std::endl << "\n";
         
-        const MainTheme* theme = getActiveTheme();
-        const bool isOriginal = (globalTheme == "original");
-        char* rawInput = readline(("\001" + 
-									std::string(isOriginal ? UI::Palette::Blue : theme->muted) + 
-									"\002Choose an option:" + 
+        const ReadlineAndPromptTheme pt = getPromptTheme();
+        char* rawInput = readline(( std::string(pt.primary) + 
+									"Choose an option:" + 
 									std::string(UI::Palette::RL_BoldAlt) + 
 									" ").c_str());
         
@@ -154,11 +152,9 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
                   << "|5. NRG2ISO++             |\n"
                   << "+-------------------------+" << UI::Palette::BoldReset << std::endl << "\n";
         
-        const MainTheme* theme = getActiveTheme();
-        const bool isOriginal = (globalTheme == "original");
-        char* rawInput = readline(("\001" + 
-									std::string(isOriginal ? UI::Palette::Blue : theme->muted) + 
-									"\002Choose an option:" + 
+        const ReadlineAndPromptTheme pt = getPromptTheme();
+        char* rawInput = readline(( std::string(pt.primary) + 
+									"Choose an option:" + 
 									std::string(UI::Palette::RL_BoldAlt) + 
 									" ").c_str());
 
