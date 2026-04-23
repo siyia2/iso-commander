@@ -194,7 +194,7 @@ void updateDatabaseAfterOperations(const std::string& filePathsStr, std::atomic<
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
 void updatePagination(const std::string& inputSearch, const std::string& configPath);
 void clearMessageAfterTimeoutInMain(int timeoutSeconds, std::atomic<bool>& isAtMain, std::atomic<bool>& isImportRunning, std::atomic<bool>& messageActive, std::atomic<bool>& stopMessage);
-void monitorAndClearMessageReturningFromSubmenu(std::atomic<bool>& isRunning, std::atomic<bool>& messageActive, std::atomic<bool>& stopSignal, std::atomic<bool>& isAtMain);
+void monitorAndClearMessage(std::atomic<bool>& isRunning, std::atomic<bool>& messageActive, std::atomic<bool>& stopSignal, std::atomic<bool>& isAtMain);
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname);
 void processInputForMountOrUmount(const std::string& input, const std::vector<std::string>& files, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& operationBreak, bool& verbose, bool isUnmount);
 void processInputForCpMvRm(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& filterHistory, bool& verbose, std::atomic<bool>& newISOFound);
