@@ -47,50 +47,64 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     }
     bool isEmpty = false;
     {
-        std::lock_guard<std::mutex> lock(updateListMutex);
-        if (needToReload) {
+		std::lock_guard<std::mutex> lock(updateListMutex);
+		if (needToReload) {
 			globalIsoFileList = std::move(freshList);
 			currentPage = originalPage;
 			pendingIndices.clear();
 			hasPendingProcess = false;
 			sortFilesCaseInsensitive(globalIsoFileList);
-			if (isFiltered && !filteringStack.empty()) {
-				const std::string savedQuery = filteringStack.back().query;
-				if (!savedQuery.empty()) {
-					auto newIndices = filterFilesIndices(globalIsoFileList, savedQuery);
-					if (!newIndices.empty()) {
-						FilteringState newState;
-						newState.query = savedQuery;
-						newState.isFiltered = true;
-						filteredFiles.clear();
-						filteredFiles.reserve(newIndices.size());
-						for (size_t idx : newIndices) {
-							filteredFiles.push_back(globalIsoFileList[idx]);
-							newState.originalIndices.push_back(idx);
-						}
-						filteringStack.back() = std::move(newState);
-					} else {
-						filteringStack.clear();
-						filteredFiles.clear();
-						isFiltered = false;
-					}
-				}
-			}
 		}
-        if (needSortingAfterflno) {
-            sortFilesCaseInsensitive(globalIsoFileList);
-            needSortingAfterflno = false;
+
+		// --- REFRESH FILTER STATE ---
+        /** * @name Filter State Synchronization
+         * @details Re-evaluates the active filter against the updated global file list.
+         * This ensures the filtered view remains consistent after a database reload.
+         */
+        /// @{
+        if (isFiltered && !filteringStack.empty()) {
+            // Access the current top-of-stack filter configuration by reference
+            auto& state = filteringStack.back();
+            
+            if (!state.query.empty()) {
+                /** @note filterFilesIndices performs the actual string matching logic */
+                auto newIndices = filterFilesIndices(globalIsoFileList, state.query);
+
+                if (newIndices.empty()) {
+                    /** @warning No matches found. Resetting to unfiltered view to prevent a blank UI. */
+                    filteringStack.clear();
+                    filteredFiles.clear();
+                    isFiltered = false;
+                } else {
+                    // Transfer ownership of new indices to the stack state
+                    state.originalIndices = std::move(newIndices);
+
+                    // Rebuild the visible file list based on the new index mapping
+                    filteredFiles.clear();
+                    filteredFiles.reserve(state.originalIndices.size());
+                    for (size_t idx : state.originalIndices) {
+                        filteredFiles.push_back(globalIsoFileList[idx]);
+                    }
+                }
+            }
         }
-        if (umountMvRmBreak) {
-            filteringStack.clear();
-            filteredFiles.clear();
-            isFiltered = false;
-        }
-        clearScrollBuffer();
-        printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType,
-                  pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
-        isEmpty = globalIsoFileList.empty();
-    }
+        /// @}
+        // ----------------------------
+
+		if (needSortingAfterflno) {
+			sortFilesCaseInsensitive(globalIsoFileList);
+			needSortingAfterflno = false;
+		}
+		if (umountMvRmBreak) {
+			filteringStack.clear();
+			filteredFiles.clear();
+			isFiltered = false;
+		}
+		clearScrollBuffer();
+		printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType,
+				  pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
+		isEmpty = globalIsoFileList.empty();
+	}
     if (isEmpty) {
         const PrintListTheme c = getListColors();
         std::cout << "\n" << c.num << "ISO Cache is empty. Choose 'ImportISO' from the Main Menu Options." << c.dir << "\n";
