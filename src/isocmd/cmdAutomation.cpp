@@ -96,7 +96,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                 } else if (fs::is_directory(path)) {
                     disableInput();
                     if (!silentMode) {
-                        std::cout << UI::Palette::BoldReset << "\nScanning directory " << path << " ("<< (maxDepth == 0 ? "surface scan" : "max depth: " + (maxDepth < 0 ? "unlimited" : std::to_string(maxDepth))) << ")...\n";
+                        std::cout << UI::Palette::BoldReset << "Scanning directory " << path << " ("<< (maxDepth == 0 ? "surface scan" : "max depth: " + (maxDepth < 0 ? "unlimited" : std::to_string(maxDepth))) << ")...\n";
                     }
 
                     std::function<void(const fs::path&, int)> scanDir;
@@ -184,7 +184,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
         if (args.size() <= 1 || (args.size() == 2 && (args[0] == "all"))) {
             disableInput();
-            if (!silentMode) std::cout << UI::Palette::BoldReset << "\nScanning /mnt for ISO mount points (surface scan)...\n";
+            if (!silentMode) std::cout << UI::Palette::BoldReset << "Scanning /mnt for ISO mount points (surface scan)...\n";
             try {
                 for (const auto& entry : fs::directory_iterator("/mnt")) {
                     if (g_operationCancelled.load()) {
@@ -219,7 +219,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
                         if (canonicalStr == "/mnt") {
                             disableInput();
-                            if (!silentMode) std::cout << "\nScanning /mnt for ISO mount points (surface scan)...\n";
+                            if (!silentMode) std::cout << "Scanning /mnt for ISO mount points (surface scan)...\n";
                             for (const auto& entry : fs::directory_iterator(canonicalPath)) {
                                 if (entry.is_directory()) {
                                     std::string entryDirName = entry.path().filename().string();
