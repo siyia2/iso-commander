@@ -6,19 +6,6 @@
 #include "../themes.h"
 
 /**
- * @namespace displayConfig
- * @brief Default display configuration options for UI lists.
- */
-namespace displayConfig {
-    bool toggleFullListMount = false;
-    bool toggleFullListUmount = true;
-    bool toggleFullListCpMvRm = false;
-    bool toggleFullListWrite2usb = false;
-    bool toggleFullListConvert2iso = false;
-    bool toggleNamesOnly = false;
-}
-
-/**
  * @brief Loads ISO files from the database and updates the display.
  * * Synchronizes the global ISO list with the database when the dirty flag is set.
  * If a filter is active during a reload, it is re-applied to ensure the visible 
@@ -60,50 +47,15 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
             pendingIndices.clear();
             hasPendingProcess = false;
             sortFilesCaseInsensitive(globalIsoFileList);
-
-            /** * @name Filter State Synchronization
-             * @details Re-evaluates active filters against the newly reloaded globalIsoFileList.
-             * This ensures that search results remain accurate if the underlying database 
-             * records have changed, been added, or removed.
-             */
-            /// @{
-            if (isFiltered && !filteringStack.empty()) {
-                // Access the active filter state by reference to update in-place
-                auto& state = filteringStack.back();
-                
-                if (!state.query.empty()) {
-                    /** @note filterFilesIndices performs string matching and returns index pointers. */
-                    auto newIndices = filterFilesIndices(globalIsoFileList, state.query);
-
-                    if (newIndices.empty()) {
-                        /** @warning Zero matches found after reload. 
-                         * Resetting state to prevent the UI from displaying an empty filtered view. 
-                         */
-                        filteringStack.clear();
-                        filteredFiles.clear();
-                        isFiltered = false;
-                    } else {
-                        // Transfer ownership of new index vector to the state object
-                        state.originalIndices = std::move(newIndices);
-
-                        // Sync the display list with the new indices
-                        filteredFiles.clear();
-                        filteredFiles.reserve(state.originalIndices.size());
-                        for (size_t idx : state.originalIndices) {
-                            filteredFiles.push_back(globalIsoFileList[idx]);
-                        }
-                    }
-                }
-            }
-            /// @}
-        }
+			
+			syncFilteringStackForIso(globalIsoFileList, filteringStack, filteredFiles, isFiltered);
+		}
 
         if (needSortingAfterflno) {
             sortFilesCaseInsensitive(globalIsoFileList);
             needSortingAfterflno = false;
         }
 
-        // Logic check: Manual break clears existing filter state
         if (umountMvRmBreak) {
             filteringStack.clear();
             filteredFiles.clear();

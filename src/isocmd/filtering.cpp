@@ -301,24 +301,26 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
     newState.query      = searchString;  // save query
     newState.isFiltered = true;
 
-    const bool canTranslate = ctx.isFiltered &&
-                              !filteringStack.empty() &&
-                              !filteringStack.back().originalIndices.empty();
+	for (size_t idx : tempIndices) {
+		size_t globalIdx = idx;
+		// Walk all existing stack levels to translate idx (relative to the
+		// current display list) all the way back to a globalIsoFileList index.
+		// Each level's originalIndices maps its local positions to the level
+		// below, until we reach level 0 whose indices ARE already global.
+		if (!filteringStack.empty()) {
+			// tempIndices are local to sourceList. sourceList was built from
+			// filteringStack levels in order, so we need to chain through them.
+			// Start from the innermost (back) and work outward.
+			for (int lvl = static_cast<int>(filteringStack.size()) - 1; lvl >= 0; --lvl) {
+				const auto& lvlIndices = filteringStack[lvl].originalIndices;
+				if (globalIdx < lvlIndices.size())
+					globalIdx = lvlIndices[globalIdx];
+			}
+		}
+		newState.originalIndices.push_back(globalIdx);
+	}
 
-    for (size_t idx : tempIndices) {
-        size_t originalIdx = idx;
-        if (canTranslate) {
-            const auto& prevIndices = filteringStack.back().originalIndices;
-            if (idx < prevIndices.size())
-                originalIdx = prevIndices[idx];
-        }
-        newState.originalIndices.push_back(originalIdx);
-    }
-
-    if (ctx.isFiltered && !filteringStack.empty())
-        filteringStack.back() = std::move(newState);
-    else
-        filteringStack.push_back(std::move(newState));
+    filteringStack.push_back(std::move(newState));
 
     ctx.isFiltered = true;
     return true;
@@ -399,6 +401,96 @@ const std::function<void()>& onEmptyInput = nullptr)
             onSuccess();
         } else {
             handleEmpty();
+        }
+    }
+}
+
+// ─── Filter stack sync ───────────────────────────────────────────────────
+
+/**
+ * @brief Performs multi-stage filtering on the global ISO file list.
+ * * This block processes a stack of filtering states to progressively narrow down 
+ * the files displayed to the user. Each level of the @ref filteringStack applies 
+ * a new search query to the results of the previous level.
+ * * @section filtering_logic Logic Flow:
+ * 1.  **Initialization**: Starts with a full range of indices representing @ref globalIsoFileList.
+ * 2.  **Iterative Filtering**: For each @ref FilteringState in the stack:
+ * - Extracts filenames or full paths based on @ref displayConfig::toggleNamesOnly.
+ * - Executes the @ref filterFilesIndices function with the current query.
+ * - Maps the resulting local indices back to the original global file indices.
+ * - Updates the active index set for the next stack iteration.
+ * 3.  **Break Condition**: If any filter level results in zero matches, the "broken" flag is set, 
+ * the stack is cleared, and filtering is disabled.
+ * 4.  **Finalization**: If matches survive all levels, the @ref filteredFiles list is 
+ * repopulated using the final set of surviving global indices.
+ * * @note This implementation uses `std::move` on the index vector to optimize performance 
+ * during transition between stack levels.
+ * * @pre `isFiltered` must be true and `filteringStack` must not be empty.
+ * @post `filteredFiles` will contain the subset of `globalIsoFileList` that satisfies all queries, 
+ * or will be cleared if no matches are found.
+ */
+void syncFilteringStackForIso(
+    const std::vector<std::string>& globalIsoFileList,
+    std::vector<FilteringState>& filteringStack,
+    std::vector<std::string>& filteredFiles,
+    bool& isFiltered) 
+{
+    if (!isFiltered || filteringStack.empty()) {
+        return;
+    }
+
+    // 1. Initialize currentIndices with all possible file indices [0, 1, ..., N-1]
+    std::vector<size_t> currentIndices(globalIsoFileList.size());
+    std::iota(currentIndices.begin(), currentIndices.end(), 0);
+
+    bool broken = false;
+
+    // 2. Iterate through each filter in the stack
+    for (auto& state : filteringStack) {
+        std::vector<std::string> searchList;
+        searchList.reserve(currentIndices.size());
+
+        // Prepare the strings to search (Full Path vs File Name only)
+        for (size_t idx : currentIndices) {
+            const std::string& path = globalIsoFileList[idx];
+            if (displayConfig::toggleNamesOnly) {
+                size_t lastSlash = path.find_last_of('/');
+                searchList.push_back(lastSlash != std::string::npos ? path.substr(lastSlash + 1) : path);
+            } else {
+                searchList.push_back(path);
+            }
+        }
+
+        // Apply the filter query to the current subset
+        auto localMatches = filterFilesIndices(searchList, state.query);
+
+        if (localMatches.empty()) {
+            broken = true;
+            break;
+        }
+
+        // Map local relative indices back to the global indices
+        std::vector<size_t> nextIndices;
+        nextIndices.reserve(localMatches.size());
+        for (size_t localIdx : localMatches) {
+            nextIndices.push_back(currentIndices[localIdx]);
+        }
+
+        // Update the stack state and the "active" working set for the next iteration
+        state.originalIndices = nextIndices;
+        currentIndices = std::move(nextIndices);
+    }
+
+    // 3. Finalize results
+    if (broken) {
+        filteringStack.clear();
+        filteredFiles.clear();
+        isFiltered = false;
+    } else {
+        filteredFiles.clear();
+        filteredFiles.reserve(currentIndices.size());
+        for (size_t idx : currentIndices) {
+            filteredFiles.push_back(globalIsoFileList[idx]);
         }
     }
 }
