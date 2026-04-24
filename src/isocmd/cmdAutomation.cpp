@@ -241,8 +241,8 @@ static int handleMount(const ParsedArgs& args) {
         for (const auto& msg : skippedMessages) std::cout << msg << "\n";
         for (const auto& msg : mountedFails)    std::cout << msg << "\n";
         std::cout << "\nMount summary:\n"
-                  << " Successful: " << completedTasks.load() << "\n"
-                  << " Failed:     " << failedTasks.load()
+                  << "  Successful: " << completedTasks.load() << "\n"
+                  << "  Failed:     " << failedTasks.load()
                   << UI::Palette::Reset << "\n\n";
     }
 
@@ -366,8 +366,8 @@ static int handleUmount(const ParsedArgs& args) {
         for (const auto& msg : unmountedFiles)  std::cout << msg << "\n";
         for (const auto& msg : unmountedErrors) std::cout << msg << "\n";
         std::cout << "\nUnmount summary:\n"
-                  << " Successful: " << completedTasks.load() << "\n"
-                  << " Failed:     " << failedTasks.load()
+                  << "  Successful: " << completedTasks.load() << "\n"
+                  << "  Failed:     " << failedTasks.load()
                   << UI::Palette::Reset << "\n\n";
     }
 
