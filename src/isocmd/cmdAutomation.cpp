@@ -178,7 +178,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         bool hasErrors = false;
         
         if (geteuid() != 0) {
-            std::cerr << UI::Palette::Red << "Error: Root privileges required for unmounting ISOs." << UI::Palette::Reset << "\n";
+            std::cerr << UI::Palette::Red << "Error: Root privileges required for unmounting ISOs." << UI::Palette::Reset << "\n\n";
             return 1;
         }
 
