@@ -75,7 +75,7 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, s
         const ReadlineAndPromptTheme pt = getPromptTheme();
         char* rawInput = readline(( std::string(pt.primary) + 
 									"Choose an option:" + 
-									std::string(UI::Palette::RL_BoldAlt) + 
+									std::string(pt.reset) + 
 									" ").c_str());
         
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
@@ -155,7 +155,7 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
         const ReadlineAndPromptTheme pt = getPromptTheme();
         char* rawInput = readline(( std::string(pt.primary) + 
 									"Choose an option:" + 
-									std::string(UI::Palette::RL_BoldAlt) + 
+									std::string(pt.reset) + 
 									" ").c_str());
 
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
