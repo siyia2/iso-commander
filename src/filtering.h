@@ -20,6 +20,12 @@ struct FilteringState {
 };
 
 /**
+ * @brief Synchronizes the filtered results by iteratively applying the filtering stack to the global ISO list.
+ * Clears the filtering state if any query level returns zero matches, otherwise populates the display list.
+ */
+void syncFilteringStackForIso(const std::vector<std::string>& globalIsoFileList, std::vector<FilteringState>& filteringStack, std::vector<std::string>& filteredFiles, bool& isFiltered);
+
+/**
  * @brief Global stack tracking all active filter levels in LIFO order.
  * @details Pushed when a new filter is applied, popped when the user clears or
  * narrows a filter. An empty stack means no filtering is active.

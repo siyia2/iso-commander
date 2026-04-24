@@ -8,24 +8,24 @@
  * @details Namespace containing global toggles that control the verbosity and 
  * detail level of various list-based operations within the UI.
  */
-namespace displayConfig {
+inline namespace displayConfig {
     /** @brief Toggle to show the full list during mount operations. */
-    extern bool toggleFullListMount;
+    inline bool toggleFullListMount = false;
     
     /** @brief Toggle to show the full list during unmount operations. */
-    extern bool toggleFullListUmount;
+    inline bool toggleFullListUmount = false;
     
     /** @brief Toggle to show the full list during file operations (Cp/Mv/Rm). */
-    extern bool toggleFullListCpMvRm;
+    inline bool toggleFullListCpMvRm = false;
     
     /** @brief Toggle to show the full list during write operations. */
-    extern bool toggleFullListWrite2usb;
+    inline bool toggleFullListWrite2usb = false;
     
     /** @brief Toggle to show the full list during image convert2isos. */
-    extern bool toggleFullListConvert2iso;
+    inline bool toggleFullListConvert2iso = false;
     
     /** @brief Toggle to display only filenames, hiding full directory paths. */
-    extern bool toggleNamesOnly;
+    inline bool toggleNamesOnly = false;
 }
 
 #endif // DISPLAY_H
