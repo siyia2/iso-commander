@@ -17,7 +17,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
     g_operationCancelled.store(false);
 
     if (argc < 2) {
-        std::cerr << UI::Palette::Red << "Error: No arguments provided." << UI::Palette::Reset << "\n";
+        std::cerr << UI::Palette::Red << "Error: No arguments provided." << UI::Palette::Reset << "\n\n";
         return 1;
     }
 
@@ -49,7 +49,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
     }
 
     if (args.empty()) {
-        std::cerr << UI::Palette::Red << "Error: No action provided." << UI::Palette::Reset << "\n";
+        std::cerr << UI::Palette::Red << "Error: No action provided." << UI::Palette::Reset << "\n\n";
         return 1;
     }
 
@@ -57,7 +57,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
     if (action == "mount") {
         if (geteuid() != 0) {
-            std::cerr << UI::Palette::Red << "Error: Root privileges required for mounting ISOs." << UI::Palette::Reset << "\n";
+            std::cerr << UI::Palette::Red << "Error: Root privileges required for mounting ISOs." << UI::Palette::Reset << "\n\n";
             return 1;
         }
 
@@ -66,7 +66,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
         for (size_t i = 0; i < args.size() - 1; ++i) {
             if (g_operationCancelled.load()) {
-                if (!silentMode) std::cout << UI::Palette::Yellow << "\nOperation cancelled by user." << UI::Palette::Reset << "\n";
+                if (!silentMode) std::cout << UI::Palette::Yellow << "\nOperation cancelled by user." << UI::Palette::Reset << "\n\n";
                 return 1;
             }
 
@@ -96,7 +96,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                 } else if (fs::is_directory(path)) {
                     disableInput();
                     if (!silentMode) {
-                        std::cout << UI::Palette::BoldReset << "Scanning directory " << path << " ("<< (maxDepth == 0 ? "surface scan" : "max depth: " + (maxDepth < 0 ? "unlimited" : std::to_string(maxDepth))) << ")...\n";
+                        std::cout << UI::Palette::BoldReset << "\nScanning directory " << path << " ("<< (maxDepth == 0 ? "surface scan" : "max depth: " + (maxDepth < 0 ? "unlimited" : std::to_string(maxDepth))) << ")...\n";
                     }
 
                     std::function<void(const fs::path&, int)> scanDir;
@@ -167,7 +167,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             for (const auto& msg : mountedFails) std::cout << msg << "\n";
             std::cout << "\nMount Summary:\n";
             std::cout << "Successful: " << completedTasks.load() << "\n";
-            std::cout << "Failed: " << failedTasks.load() << UI::Palette::Reset << "\n" ;
+            std::cout << "Failed: " << failedTasks.load() << UI::Palette::Reset << "\n\n" ;
         }
 
         return (completedTasks.load() > 0 || (!hasErrors && isoFiles.empty())) ? 0 : 1;
@@ -184,11 +184,11 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
         if (args.size() <= 1 || (args.size() == 2 && (args[0] == "all"))) {
             disableInput();
-            if (!silentMode) std::cout << UI::Palette::BoldReset << "Scanning /mnt for ISO mount points (surface scan)...\n";
+            if (!silentMode) std::cout << UI::Palette::BoldReset << "\nScanning /mnt for ISO mount points (surface scan)...\n";
             try {
                 for (const auto& entry : fs::directory_iterator("/mnt")) {
                     if (g_operationCancelled.load()) {
-                        if (!silentMode) std::cout << UI::Palette::Yellow << "\nOperation cancelled by user." << UI::Palette::Reset << "\n";
+                        if (!silentMode) std::cout << UI::Palette::Yellow << "\nOperation cancelled by user." << UI::Palette::Reset << "\n\n";
                         return 1;
                     }
                     if (entry.is_directory()) {
@@ -199,13 +199,13 @@ int handleMountUmountCommands(int argc, char* argv[]) {
                     }
                 }
             } catch (const fs::filesystem_error& e) {
-                std::cerr << UI::Palette::Red << "Error scanning /mnt: " << e.what() << UI::Palette::Reset << "\n";
+                std::cerr << UI::Palette::Red << "Error scanning /mnt: " << e.what() << UI::Palette::Reset << "\n\n";
                 return 1;
             }
         } else {
             for (size_t i = 0; i < args.size() - 1; ++i) {
                 if (g_operationCancelled.load()) {
-                    if (!silentMode) std::cout << UI::Palette::Yellow << "\nOperation cancelled by user." << UI::Palette::Reset << "\n";
+                    if (!silentMode) std::cout << UI::Palette::Yellow << "\nOperation cancelled by user." << UI::Palette::Reset << "\n\n";
                     return 1;
                 }
 
@@ -219,7 +219,7 @@ int handleMountUmountCommands(int argc, char* argv[]) {
 
                         if (canonicalStr == "/mnt") {
                             disableInput();
-                            if (!silentMode) std::cout << "Scanning /mnt for ISO mount points (surface scan)...\n";
+                            if (!silentMode) std::cout << "\nScanning /mnt for ISO mount points (surface scan)...\n";
                             for (const auto& entry : fs::directory_iterator(canonicalPath)) {
                                 if (entry.is_directory()) {
                                     std::string entryDirName = entry.path().filename().string();
@@ -261,10 +261,10 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             }
         }
         
-        if (!silentMode && g_operationCancelled.load()) std::cout << UI::Palette::Yellow << "Umount Operation cancelled by user." << UI::Palette::Reset << "\n";
+        if (!silentMode && g_operationCancelled.load()) std::cout << UI::Palette::Yellow << "Umount Operation cancelled by user." << UI::Palette::Reset << "\n\n";
         
         if (mountPointsToUnmount.empty()) {
-            if (!silentMode && !g_operationCancelled.load()) std::cout << "\n" << UI::Palette::Yellow << "No ISO mount points found to unmount." << UI::Palette::Reset << "\n";
+            if (!silentMode && !g_operationCancelled.load()) std::cout << "\n" << UI::Palette::Yellow << "No ISO mount points found to unmount." << UI::Palette::Reset << "\n\n";
             return hasErrors ? 1 : 0;
         }
 
@@ -283,12 +283,12 @@ int handleMountUmountCommands(int argc, char* argv[]) {
             for (const auto& msg : unmountedErrors) std::cout << msg << "\n";
             std::cout << "\nUnmount Summary:\n";
             std::cout << "Successful: " << completedTasks.load() << "\n";
-            std::cout << "Failed: " << failedTasks.load() << UI::Palette::Reset << "\n";
+            std::cout << "Failed: " << failedTasks.load() << UI::Palette::Reset << "\n\n";
         }
-
+		
         return (failedTasks.load() == 0 && !hasErrors) || completedTasks.load() > 0 ? 0 : 1;
     }
 
-    std::cerr << UI::Palette::Red << "Error: Unknown action '" << action << "'" << UI::Palette::Reset << "\n";
+    std::cerr << UI::Palette::Red << "Error: Unknown action '" << action << "'" << UI::Palette::Reset << "\n\n";
     return 1;
 }
