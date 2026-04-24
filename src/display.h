@@ -13,7 +13,7 @@ inline namespace displayConfig {
     inline bool toggleFullListMount = false;
     
     /** @brief Toggle to show the full list during unmount operations. */
-    inline bool toggleFullListUmount = false;
+    inline bool toggleFullListUmount = true;
     
     /** @brief Toggle to show the full list during file operations (Cp/Mv/Rm). */
     inline bool toggleFullListCpMvRm = false;
