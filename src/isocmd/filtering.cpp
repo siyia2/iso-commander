@@ -230,12 +230,17 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
 // ─── Shared filtering core ───────────────────────────────────────────────────
 
 /**
- * @brief Core filtering logic applied to a file list
- * 
- * @param searchString The search pattern to apply; saved into FilteringState
- *                     so the filter can be re-applied after async list reloads.
- * @param ctx FilterContext containing state and file references
- * @return true if filter was applied successfully, false otherwise
+ * @brief Executes core filtering logic with support for nested filter stacks.
+ * * * Transforms source paths into searchable strings based on context (e.g., 
+ * filename only or unmount-specific keys).
+ * * Chains new results through the existing `filteringStack` to ensure that 
+ * local indices are correctly mapped back to the global database indices.
+ * * Manages UI state by resetting pagination and marking the screen for refresh.
+ *
+ * @param searchString The substring pattern to filter by (saved for state recovery).
+ * @param ctx FilterContext providing source lists, unmount flags, and UI state.
+ * @return true if matches were found and the filter stack was updated; 
+ * false if the query is empty or no matches exist.
  */
 static bool applyFilterCore(const std::string& searchString, FilterContext& ctx) {
     if (searchString.empty()) return false;
@@ -439,13 +444,13 @@ void syncFilteringStackForIso(
         return;
     }
 
-    // 1. Initialize currentIndices with all possible file indices [0, 1, ..., N-1]
+    // Initialize currentIndices with all possible file indices [0, 1, ..., N-1]
     std::vector<size_t> currentIndices(globalIsoFileList.size());
     std::iota(currentIndices.begin(), currentIndices.end(), 0);
 
     bool broken = false;
 
-    // 2. Iterate through each filter in the stack
+    // Iterate through each filter in the stack
     for (auto& state : filteringStack) {
         std::vector<std::string> searchList;
         searchList.reserve(currentIndices.size());
@@ -481,7 +486,7 @@ void syncFilteringStackForIso(
         currentIndices = std::move(nextIndices);
     }
 
-    // 3. Finalize results
+    // Finalize results
     if (broken) {
         filteringStack.clear();
         filteredFiles.clear();

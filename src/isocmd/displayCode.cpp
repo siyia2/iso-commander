@@ -87,21 +87,25 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
 const std::string MOUNTED_ISO_PATH = "/mnt";
 
 /**
- * @brief Scans and displays currently mounted ISO directories.
- * Checks for directories matching the 'iso_' pattern in the mount path and uses
- * stat()-based change detection to determine if the directory list requires a re-sort/refresh.
- * Rescans only when directory metadata changes, and resets state only when iso_ contents differ.
- *
- * @param isoDirs Vector to store found mount paths.
- * @param filteredFiles Reference to filtered results.
- * @param isFiltered Filter state.
- * @param umountMvRmBreak UI refresh flag.
- * @param pendingIndices Marks items for processing.
- * @param hasPendingProcess Process state flag.
- * @param currentPage Current pagination index.
- * @param originalPage Original page index backup.
- * @param isImportRunning Atomic flag for import status.
- * @return true if mount points exist, false otherwise.
+ * @brief Scans, filters, and renders currently mounted ISO directories.
+ * * Uses stat-based caching to detect changes in MOUNTED_ISO_PATH. A full re-scan 
+ * and re-sort occur only if the directory's modification time or link count changes.
+ * * If changes are detected and the resulting directory list differs from the cache:
+ * - Updates the static cache.
+ * - Resets pending process states and indices.
+ * * If no ISOs are found, it clears internal caches and displays a warning.
+ * Otherwise, it manages pagination state and invokes the UI rendering (printList).
+ * * @note Temporarily ignores SIGINT and disables Ctrl+D during execution.
+ * * @param isoDirs [out] Vector populated with current mount paths.
+ * @param filteredFiles [in/out] List of files post-filtering.
+ * @param isFiltered [in/out] Boolean toggle for filtering mode.
+ * @param umountMvRmBreak [in] UI flag to force a refresh/reset of the view.
+ * @param pendingIndices [in/out] Tracks items marked for batch operations.
+ * @param hasPendingProcess [in/out] Flag indicating active background tasks.
+ * @param currentPage [in/out] Current UI pagination index.
+ * @param originalPage [out] Backup of page index when filtering is reset.
+ * @param isImportRunning [in] Atomic flag to prevent UI collisions during imports.
+ * @return true if ISOs were found and displayed; false if the directory is empty.
  */
 bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     signal(SIGINT, SIG_IGN);
