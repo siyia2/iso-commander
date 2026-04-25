@@ -64,8 +64,8 @@ Database folder location: `/root/.local/share/isocmd/database/` || `~/.local/sha
 * Convert (.bin/.img/.chd/.daa/.gbi/.mdf/.nrg) to ISO
 
 ## Make dependencies
-- Archlinux: `readline util-linux`.
-- Debian: `libreadline-dev libmount-dev`.
+- Archlinux: `readline util-linux xz zstd`.
+- Debian: `libreadline-dev libmount-dev liblzma-dev libzstd-dev`.
 
 - Agnostic: `libchdr` (statically built and linked).
 
