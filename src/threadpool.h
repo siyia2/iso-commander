@@ -16,10 +16,10 @@ template <typename T>
 class LockFreeQueue {
 private:
     struct Node {
-        T data;
+        std::unique_ptr<T> data;
         std::atomic<std::shared_ptr<Node>> next;
-        Node() : next(nullptr) {}
-        Node(T&& val) : data(std::move(val)), next(nullptr) {}
+        Node() : data(nullptr), next(nullptr) {}
+        Node(T&& val) : data(std::make_unique<T>(std::move(val))), next(nullptr) {}
     };
 
     alignas(64) std::atomic<std::shared_ptr<Node>> head;
@@ -36,61 +36,64 @@ public:
      * @brief Enqueues an item into the queue.
      * @param value The item to be added.
      */
-    void enqueue(T value) {
-        auto new_node = std::make_shared<Node>(std::move(value));
-        while (true) {
-            std::shared_ptr<Node> last = tail.load(std::memory_order_acquire);
-            std::shared_ptr<Node> next = last->next.load(std::memory_order_acquire);
+	void enqueue(T value) {
+		auto new_node = std::make_shared<Node>(std::move(value));
+		while (true) {
+			auto last = tail.load(std::memory_order_acquire);
+			auto next = last->next.load(std::memory_order_acquire);
 
-            if (last == tail.load(std::memory_order_acquire)) {
-                if (next == nullptr) {
-                    if (last->next.compare_exchange_weak(next, new_node,
-                                                        std::memory_order_release,
-                                                        std::memory_order_relaxed)) {
-                        tail.compare_exchange_weak(last, new_node,
-                                                  std::memory_order_release,
-                                                  std::memory_order_relaxed);
-                        return;
-                    }
-                } else {
-                    tail.compare_exchange_weak(last, next,
-                                              std::memory_order_release,
-                                              std::memory_order_relaxed);
-                }
-            }
-        }
-    }
+			if (last == tail.load(std::memory_order_acquire)) {
+				if (next == nullptr) {
+					// Try to link the new node
+					if (last->next.compare_exchange_weak(next, new_node, 
+						std::memory_order_release, std::memory_order_relaxed)) {
+						
+						// Optimization: Move tail. Use release to ensure node linkage is visible.
+						tail.compare_exchange_weak(last, new_node, std::memory_order_release);
+						return;
+					}
+				} else {
+					// Tail is lagging; help move it forward. 
+					// We use release because we're publishing the 'next' pointer's state.
+					tail.compare_exchange_weak(last, next, std::memory_order_release);
+				}
+			}
+		}
+	}
 
-    /**
+	/**
      * @brief Dequeues an item from the queue.
      * @param result Reference to store the popped item.
      * @return True if successful, false if queue is empty.
      */
-    bool dequeue(T& result) {
-        while (true) {
-            std::shared_ptr<Node> first = head.load(std::memory_order_acquire);
-            std::shared_ptr<Node> last = tail.load(std::memory_order_acquire);
-            std::shared_ptr<Node> next = first->next.load(std::memory_order_acquire);
+	bool dequeue(T& result) {
+		while (true) {
+			auto first = head.load(std::memory_order_acquire);
+			auto last = tail.load(std::memory_order_acquire);
+			auto next = first->next.load(std::memory_order_acquire);
 
-            if (first == head.load(std::memory_order_acquire)) {
-                if (first == last) {
-                    if (next == nullptr) return false;
-                    tail.compare_exchange_weak(last, next, 
-                                              std::memory_order_release, 
-                                              std::memory_order_relaxed);
-                } else {
-                    // FIX: We must only move the data AFTER winning the CAS to avoid 
-                    // multiple threads moving from the same node or double-freeing.
-                    if (head.compare_exchange_weak(first, next,
-                                                  std::memory_order_acq_rel,
-                                                  std::memory_order_relaxed)) {
-                        result = std::move(next->data);
-                        return true;
-                    }
-                }
-            }
-        }
-    }
+			if (first == head.load(std::memory_order_acquire)) {
+				if (first == last) {
+					if (next == nullptr) return false; // Queue truly empty
+					
+					// Tail is lagging behind head (queue has 1 item but tail hasn't moved)
+					// Help move tail forward using release order.
+					tail.compare_exchange_weak(last, next, std::memory_order_release);
+				} else {
+					// Try to swing the head to the next node.
+					// We use acq_rel here because we need to acquire the data 
+					// and release the new head position.
+					if (head.compare_exchange_weak(first, next, std::memory_order_acq_rel)) {
+						if (next->data) {
+							result = std::move(*(next->data));
+							next->data.reset();
+						}
+						return true;
+					}
+				}
+			}
+		}
+	}
 };
 
 /**
@@ -256,20 +259,8 @@ public:
  * @brief Retrieves a singleton instance of the ThreadPool.
  */
 inline ThreadPool& getStaticThreadPool() {
-    static ThreadPool* instance = new ThreadPool([] {
-        return std::min({static_cast<size_t>(maxThreads), MAX_USEFUL_THREADS});
-    }());
-    
-    [[maybe_unused]] static bool registered = []() {
-        std::atexit([]() { 
-            // This will only run if the user didn't 
-            // manually call shutdown() in main().
-            instance->shutdown(); 
-        });
-        return true;
-    }();
-    
-    return *instance;
+    static ThreadPool instance(std::min({static_cast<size_t>(maxThreads), MAX_USEFUL_THREADS}));
+    return instance;
 }
 
 #endif // THREAD_POOL_H
