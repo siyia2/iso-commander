@@ -191,7 +191,7 @@ WriteTheme getWriteTheme() {
         wt.bold         = UI::Palette::BoldReset;
 
         wt.headerCol    = t->accent;
-        wt.indexCol     = t->secondary;
+        wt.indexCol     = t->warning;
         wt.pathCol      = t->muted;
         wt.fileCol      = t->accent;
         wt.sizeCol      = t->highlight;
