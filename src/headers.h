@@ -78,7 +78,7 @@ inline std::mutex daaGbiCacheMutex;
 inline std::mutex couNtMutex;
 
 // Data Caches
-inline std::vector<std::string> globalIsoFileList;
+inline std::shared_ptr<std::vector<std::string>> globalIsoFilesPtr = std::make_shared<std::vector<std::string>>();
 inline std::unordered_map<std::string, std::string> transformationCache;
 inline std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> cachedParsesForUmount;
 inline std::vector<std::string> binImgFilesCache;
