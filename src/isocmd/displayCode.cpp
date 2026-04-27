@@ -6,27 +6,24 @@
 #include "../themes.h"
 
 /**
- * @brief Loads ISO files from the database and updates the display using atomic pointer swaps.
- * * When the dirty flag is set, this function loads fresh data into a new buffer outside 
- * the critical section, then atomically updates 'globalIsoFilesPtr'. This ensures 
- * thread safety by preventing background threads from accessing a vector currently 
- * being cleared or resized.
- * * @details 
- * - If a filter is active during a reload, it is re-applied via syncFilteringStackForIso.
- * - Handles 'needSortingAfterflno' by cloning and replacing the global list to avoid 
- * race conditions during sorting.
- * - Updates pagination and resets pending operation states upon a full reload.
+ * @brief Loads ISO files from the database and updates the display.
+ * * Synchronizes the global ISO list with the database when the dirty flag is set.
+ * If a filter is active during a reload, it is re-applied to ensure the visible 
+ * results and original index mappings remain consistent with the new data.
  *
- * @param filteredFiles    Reference to the vector of currently filtered files.
- * @param isFiltered       Boolean flag indicating if a filter is active.
- * @param listSubType      String representing the sub-category of the list (for UI).
- * @param umountMvRmBreak  Flag to clear filters and force a full refresh.
- * @param pendingIndices   Vector of indices marked for processing (cleared on reload).
- * @param hasPendingProcess Boolean flag indicating if there are staged operations.
- * @param currentPage      Current page index (restored to originalPage on reload).
- * @param originalPage     Backup of the page index before a filter was applied.
- * @param isImportRunning  Atomic flag preventing UI interference during active imports.
- * * @return true if the list contains items, false if the database/cache is empty.
+ * @note If a re-applied filter returns no results, the filter stack is cleared 
+ * and the view resets to the full list to prevent a blank UI.
+ *
+ * @param filteredFiles Reference to the vector of currently filtered files.
+ * @param isFiltered Boolean flag indicating if a filter is active.
+ * @param listSubType String representing the sub-category of the list.
+ * @param umountMvRmBreak Flag to force a break/refresh in the UI state.
+ * @param pendingIndices Vector of indices currently marked for processing.
+ * @param hasPendingProcess Boolean flag indicating if there are active background tasks.
+ * @param currentPage Current page index for pagination.
+ * @param originalPage Backup of the page index before filtering.
+ * @param isImportRunning Atomic flag monitoring active import operations.
+ * @return true if the list contains items, false if the cache is empty.
  */
 bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
 size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
@@ -34,35 +31,28 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     disable_ctrl_d();
     
     bool needToReload = isoListDirty.exchange(false);
+    std::vector<std::string> freshList;
     
     if (needToReload) {
-        // 1. Create a NEW vector and load data into it outside the lock
-        auto freshList = std::make_shared<std::vector<std::string>>();
-        loadFromDatabase(*freshList);
-        sortFilesCaseInsensitive(*freshList);
-
-        std::lock_guard<std::mutex> lock(updateListMutex);
-        
-        // 2. Atomic pointer swap: replace the global shared_ptr
-        globalIsoFilesPtr = freshList;
-
-        currentPage = originalPage;
-        pendingIndices.clear();
-        hasPendingProcess = false;
-        
-        // 3. Sync filtering using the new data
-        syncFilteringStackForIso(*globalIsoFilesPtr, filteringStack, filteredFiles, isFiltered);
+        loadFromDatabase(freshList);
     }
-
+    
     bool isEmpty = false;
     {
         std::lock_guard<std::mutex> lock(updateListMutex);
+        
+        if (needToReload) {
+            globalIsoFileList = std::move(freshList);
+            currentPage = originalPage;
+            pendingIndices.clear();
+            hasPendingProcess = false;
+            sortFilesCaseInsensitive(globalIsoFileList);
+			
+			syncFilteringStackForIso(globalIsoFileList, filteringStack, filteredFiles, isFiltered);
+		}
 
         if (needSortingAfterflno) {
-            // If sorting is needed, we must clone and replace to keep it thread-safe
-            auto sortedList = std::make_shared<std::vector<std::string>>(*globalIsoFilesPtr);
-            sortFilesCaseInsensitive(*sortedList);
-            globalIsoFilesPtr = sortedList;
+            sortFilesCaseInsensitive(globalIsoFileList);
             needSortingAfterflno = false;
         }
 
@@ -74,11 +64,11 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
 
         clearScrollBuffer();
         
-        // Use the dereferenced pointer for printing
-        printList(isFiltered ? filteredFiles : *globalIsoFilesPtr, "ISO_FILES", listSubType,
+        // Use either the recently refreshed filteredFiles or the global master list
+        printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType,
                   pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
         
-        isEmpty = globalIsoFilesPtr->empty();
+        isEmpty = globalIsoFileList.empty();
     }
 
     if (isEmpty) {

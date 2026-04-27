@@ -791,7 +791,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input, const
                                                   std::atomic<bool>& isImportRunning) {
     
     if (input == "?stats") {
-        displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, *globalIsoFilesPtr);
+        displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
         return true;
     }
     if (input == "?config") {

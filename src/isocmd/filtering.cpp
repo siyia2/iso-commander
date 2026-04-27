@@ -601,7 +601,7 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
     const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage)
 {
     const std::vector<std::string>& baseSource =
-        isFiltered ? filteredFiles : (isUnmount ? isoDirs : *globalIsoFilesPtr);
+        isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
 
     return runSharedFilterFlow(inputString, {
         .files          = &filteredFiles,

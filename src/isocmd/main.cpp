@@ -3,7 +3,6 @@
 #include "../headers.h"
 #include "../display.h"
 #include "../themes.h"
-#include "../threadpool.h"
 
 /**
  * @brief Outputs the current program version to the standard output.
@@ -39,7 +38,7 @@ int main(int argc, char *argv[]) {
                      monitorThreadSpawned{false};
     /// @}
     
-    globalIsoFilesPtr->reserve(1000);
+    globalIsoFileList.reserve(100);
     setupReadlineToIgnoreCtrlC();
 
     // --- Version & Utility Command Dispatch ---

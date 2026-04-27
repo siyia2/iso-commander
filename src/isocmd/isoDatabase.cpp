@@ -608,7 +608,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     auto db = resolveDatabaseTheme();
     
     if (inputSearch == "?stats") {
-        displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, *globalIsoFilesPtr);
+        displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
     } else if (inputSearch == "?config") {
         displayConfigurationOptions(configPath);
     } else if (inputSearch == "!clr") {
@@ -636,7 +636,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
             
             std::cout << "\n" << db.highlight << "ISO database cleared successfully." << "\033[J" << std::endl;
             pressEnterToContinue();
-            std::vector<std::string>().swap(*globalIsoFilesPtr);
+            std::vector<std::string>().swap(globalIsoFileList);
         }
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
         clearHistory(inputSearch);
