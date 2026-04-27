@@ -78,8 +78,8 @@ inline std::mutex daaGbiCacheMutex;
 inline std::mutex couNtMutex;
 
 // Data Caches
-inline std::shared_ptr<std::vector<std::string>> globalIsoFilesPtr = std::make_shared<std::vector<std::string>>();
-inline std::unordered_map<std::string, std::string> transformationCache;
+inline std::vector<std::string> globalIsoFileList;
+inline thread_local std::unordered_map<std::string, std::string> transformationCache;
 inline std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> cachedParsesForUmount;
 inline std::vector<std::string> binImgFilesCache;
 inline std::vector<std::string> mdfMdsFilesCache;
@@ -155,7 +155,7 @@ void pressEnterToTry();
 void pressEnterToReturn();
 void pressEnterToContinue();
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered, size_t& currentPage, std::atomic<bool>& isImportRunning);
-void displayProgressBarWithSize(std::shared_ptr<std::atomic<size_t>> completedBytes, size_t totalBytes, std::shared_ptr<std::atomic<size_t>> completedTasks, std::shared_ptr<std::atomic<size_t>> failedTasks, size_t totalTasks, std::shared_ptr<std::atomic<bool>> isComplete, bool* verbose, const std::string& operation);
+void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose, const std::string& operation);
 void displayConfigurationOptions(const std::string& configPath);
 void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList);
 void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages);
