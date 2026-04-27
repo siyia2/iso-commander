@@ -265,8 +265,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     std::unordered_set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
     static std::vector<std::string> isoDirs;
 
-    globalIsoFilesPtr->reserve(100);
-    isoDirs.reserve(100);
+    isoDirs.reserve(1000);
 
     auto refreshState = std::make_shared<RefreshState>();
 
@@ -279,7 +278,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     size_t& currentPage                      = refreshState->currentPage;
     size_t& originalPage                     = refreshState->originalPage;
 
-    filteredFiles.reserve(100);
+    filteredFiles.reserve(1000);
     isFiltered      = false;
     hasPendingProcess = false;
     umountMvRmBreak = false;

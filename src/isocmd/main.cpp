@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
                      monitorThreadSpawned{false};
     /// @}
     
-    globalIsoFilesPtr->reserve(100);
+    globalIsoFilesPtr->reserve(1000);
     setupReadlineToIgnoreCtrlC();
 
     // --- Version & Utility Command Dispatch ---
