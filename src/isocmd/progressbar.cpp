@@ -39,15 +39,21 @@ void restoreInput(struct termios *oldt, int oldf) {
 }
 
 /**
- * @brief Displays a multi-line progress bar with byte tracking, task counts, and time elapsed.
- * @param completedBytes Atomic counter for bytes processed.
- * @param totalBytes Total bytes to process.
- * @param completedTasks Atomic counter for successful tasks.
- * @param failedTasks Atomic counter for failed tasks.
- * @param totalTasks Total number of tasks.
- * @param isComplete Atomic boolean signaling operation completion.
- * @param verbose Pointer to boolean to store user preference for verbose output.
- * @param operation Description of the current operation.
+ * @brief Displays a dynamic, multi-line progress bar with byte tracking and task metrics.
+ * * This function manages a live-updating terminal UI. It uses ANSI escape sequences to 
+ * handle multi-line rendering (Task Progress, Processed Bytes, and Current Speed).
+ * It supports both task-based (count) and data-based (byte) progress tracking.
+ * * @param completedBytes Shared atomic counter for bytes processed (pass nullptr to disable byte tracking).
+ * @param totalBytes     Total byte size of the operation (used for percentage calculation).
+ * @param completedTasks Shared atomic counter for successful task completions.
+ * @param failedTasks    Shared atomic counter for task failures.
+ * @param totalTasks     Total number of tasks to be performed.
+ * @param isComplete     Shared atomic boolean signaling the display loop to terminate.
+ * @param verbose        Pointer to output boolean; stores user's choice to see detailed logs post-operation.
+ * @param operation      String description for the UI (e.g., "mount", "mdf2iso").
+ * * @note This function takes ownership of shared_ptr references to ensure memory safety 
+ * if the calling scope exits before the progress thread joins.
+ * @note Input is disabled during execution and restored upon completion via termios.
  */
 void displayProgressBarWithSize(
     std::shared_ptr<std::atomic<size_t>> completedBytes, 
