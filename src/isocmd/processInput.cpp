@@ -486,22 +486,26 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     futures.reserve(indexChunks.size());
 
     for (const auto& chunk : indexChunks) {
-        futures.emplace_back(pool.enqueue([chunk, &fileList,
-                                           &successOuts, &skippedOuts, &failedOuts,
-                                           modeMdf, modeNrg, modeChd, modeDaa,
-                                           &completedBytes, &completedTasks, &failedTasks,
-                                           &successfulOutputPaths, &outPathsMutex]() {
-            std::vector<std::string> imageFilesInChunk;
-            imageFilesInChunk.reserve(chunk.size());
-            for (size_t idx : chunk)
-                imageFilesInChunk.push_back(fileList[idx - 1]);
+		futures.emplace_back(pool.enqueue([chunk, fileList, // Capture by value
+										   &successOuts, &skippedOuts, &failedOuts,
+										   modeMdf, modeNrg, modeChd, modeDaa,
+										   &completedBytes, &completedTasks, &failedTasks,
+										   &successfulOutputPaths, &outPathsMutex]() {
+			if (g_operationCancelled.load()) return;
 
-            convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
-                         modeMdf, modeNrg, modeChd, modeDaa,
-                         &completedBytes, &completedTasks, &failedTasks,
-                         &successfulOutputPaths, &outPathsMutex);
-        }));
-    }
+			std::vector<std::string> imageFilesInChunk;
+			imageFilesInChunk.reserve(chunk.size());
+			for (size_t idx : chunk) {
+				// Safe: fileList is a local copy inside this thread's scope
+				imageFilesInChunk.push_back(fileList[idx - 1]);
+			}
+
+			convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
+						 modeMdf, modeNrg, modeChd, modeDaa,
+						 &completedBytes, &completedTasks, &failedTasks,
+						 &successfulOutputPaths, &outPathsMutex);
+		}));
+	}
 
     for (auto& future : futures)
         future.wait();
