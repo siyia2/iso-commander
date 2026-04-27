@@ -5,6 +5,24 @@
 #include "../mount.h"
 
 /**
+ * @brief Provides default LSan suppression rules for known third-party leaks.
+ *
+ * Suppresses false-positive leak reports originating from @c libmount's
+ * internal @c realpath() allocation inside @c mnt_context_prepare_mount(),
+ * which is never freed by the library before LSan's end-of-process scan.
+ * The leak is confined entirely to @c libmount.so and is not reachable or
+ * fixable from user code.
+ *
+ * This function is a weak symbol recognised by LeakSanitizer at startup;
+ * it has no effect in non-ASan builds.
+ *
+ * @return A newline-separated list of LSan suppression patterns.
+ */
+extern "C" const char* __lsan_default_suppressions() {
+    return "leak:mnt_context_prepare_mount\n";
+}
+
+/**
  * @brief Checks if a file is a valid disk image (ISO 9660 or UDF).
  *
  * Checks in order: ISO 9660, UDF (sector sizes 512/2048/4096).
@@ -107,12 +125,13 @@ static std::string mountPointSuffix(const std::string& isoPath) {
  * @brief Mounts valid ISO files to unique directories under /mnt using loop devices.
  *
  * Performs progressive validation (root → cancellation → existence → format) before
- * attempting mount, minimising unnecessary I/O. A fresh libmnt_context is created per
- * file to avoid stale state from mnt_reset_context. The in-memory mount point cache
- * is updated on each successful mount so duplicate paths within the same batch are
- * caught without re-reading /proc/mounts.
+ * attempting mount, minimising unnecessary I/O. A single libmnt_context is allocated
+ * once for the batch and reset via mnt_reset_context between files to avoid repeated
+ * allocation overhead. The in-memory mount point cache is updated on each successful
+ * mount so duplicate paths within the same batch are caught without re-reading
+ * /proc/mounts.
  *
- * Mount points: /mnt/iso_<stem>~<5-char base-36 FNV-1a suffix>
+ * Mount points: /mnt/iso_<stem>~<suffix> where suffix is derived from mountPointSuffix().
  *
  * @param isoFiles        Absolute paths to ISO files to process.
  * @param mountedFiles    Output: success messages (FS type included).
@@ -154,9 +173,25 @@ void mountIsoFiles(
         return;
     }
 
+    // ----------------------------------------------------------------
+    // Allocate a single context for the whole batch (perf)
+    // ----------------------------------------------------------------
+    libmnt_context* ctx = mnt_new_context();
+    if (!ctx) {
+        if (!silentMode) {
+            std::lock_guard<std::mutex> lock(globalSetsMutex);
+            mountedFails.insert("\033[1;91mFailed to create mount context.\033[0m");
+        }
+        return;
+    }
+    struct CtxGuard {
+        libmnt_context* c;
+        ~CtxGuard() { mnt_free_context(c); }
+    } ctxGuard{ctx};
+
     // Mount point cache: pre-populated from /proc/mounts, updated in-loop
     // so duplicate paths within the same batch are detected immediately.
-    auto mountPointCache = buildMountPointCache();
+    auto mountPointCache = buildMountPointCache();  // non-const: must be updated on success
 
     std::vector<std::string> tempMountedFiles;
     std::vector<std::string> tempSkippedMessages;
@@ -244,13 +279,8 @@ void mountIsoFiles(
             continue;
         }
 
-        libmnt_context* ctx = mnt_new_context();
-        if (!ctx) {
-            recordFail(isoFile, "badFS");
-            maybeFlush();
-            continue;
-        }
-
+        // Reset and reuse the shared context (perf)
+        mnt_reset_context(ctx);
         mnt_context_set_source(ctx, isoFile.c_str());
         mnt_context_set_target(ctx, mountPoint.c_str());
         mnt_context_set_options(ctx, "loop,ro");
@@ -272,7 +302,6 @@ void mountIsoFiles(
             fs::remove(mountPoint, ec);
         }
 
-        mnt_free_context(ctx);
         maybeFlush();
     }
 
