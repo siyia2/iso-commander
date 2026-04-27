@@ -131,7 +131,7 @@ static std::string mountPointSuffix(const std::string& isoPath) {
  * mount so duplicate paths within the same batch are caught without re-reading
  * /proc/mounts.
  *
- * Mount points: /mnt/iso_<stem>~<suffix> where suffix is derived from mountPointSuffix().
+ * Mount points: /mnt/iso_<stem>~<5-char base-36 FNV-1a suffix>.
  *
  * @param isoFiles        Absolute paths to ISO files to process.
  * @param mountedFiles    Output: success messages (FS type included).
