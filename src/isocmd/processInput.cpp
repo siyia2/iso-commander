@@ -16,7 +16,7 @@
 
 /**
  * @brief Orchestrates the mounting or unmounting of ISO files using a static thread pool and progress tracking.
- * * @param input Raw user input string (indices or "00").
+ * @param input Raw user input string (indices or "00").
  * @param files List of available files.
  * @param operationFiles Set to populate with successfully processed files.
  * @param skippedMessages Set to track items skipped during the operation.
@@ -29,13 +29,13 @@
 void processInputForMountOrUmount(const std::string& input, const std::vector<std::string>& files, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& operationBreak, bool& verbose, bool isUnmount) {
     setupSignalHandlerCancellations();
     g_operationCancelled.store(false);
-    
+
     std::unordered_set<int> indicesToProcess;
-    
+    std::vector<int> selectedIndices;
+
     if (input == "00") {
-        for (int i = 1; i <= static_cast<int>(files.size()); ++i) {
+        for (int i = 1; i <= static_cast<int>(files.size()); ++i)
             indicesToProcess.insert(i);
-        }
     } else {
         tokenizeInput(input, files, uniqueErrorMessages, indicesToProcess);
         if (indicesToProcess.empty()) {
@@ -43,79 +43,78 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
             return;
         }
     }
-    
-    std::vector<std::string> selectedFiles;
-    selectedFiles.reserve(indicesToProcess.size());
-    for (int index : indicesToProcess) {
-        selectedFiles.push_back(files[index - 1]);
-    }
-    
+
+    selectedIndices.reserve(indicesToProcess.size());
+    for (int index : indicesToProcess)
+        selectedIndices.push_back(index);
+
     const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
-    
-	std::string colorMuted  = isOrig ? std::string(UI::Palette::BoldReset) : std::string(theme->muted);
-    
+
+    std::string colorMuted = isOrig ? std::string(UI::Palette::BoldReset) : std::string(theme->muted);
     std::string operationColor = std::string(isUnmount ? UI::Palette::Yellow : UI::Palette::Green);
     std::string operationName = isUnmount ? "umount" : "mount";
-    
-    std::cout << colorMuted << "\n Processing" 
-          << (selectedFiles.size() > 1 ? " tasks" : " task") 
-          << " for " << operationColor << operationName 
-          << colorMuted << "... (" 
-          << UI::Palette::Red << "Ctrl+c" 
-          << colorMuted << ":cancel)\n";
-    
-    std::string coloredProcess = std::string(operationColor) + operationName + std::string(UI::Palette::BoldReset);;
-    
+
+    std::cout << colorMuted << "\n Processing"
+              << (selectedIndices.size() > 1 ? " tasks" : " task")
+              << " for " << operationColor << operationName
+              << colorMuted << "... ("
+              << UI::Palette::Red << "Ctrl+c"
+              << colorMuted << ":cancel)\n";
+
+    std::string coloredProcess = std::string(operationColor) + operationName + std::string(UI::Palette::BoldReset);
+
     ThreadPool& pool = getStaticThreadPool();
     const size_t poolSize = pool.threadCount();
     const size_t cap = isUnmount ? UMOUNT_THREAD_CAP : MOUNT_THREAD_CAP;
-    size_t numThreads = std::max(size_t(2), std::min({selectedFiles.size(), cap, poolSize}));
+    size_t numThreads = std::max(size_t(2), std::min({selectedIndices.size(), cap, poolSize}));
 
-    if ((selectedFiles.size() + numThreads - 1) / numThreads > 100) {
-        numThreads = (selectedFiles.size() + 99) / 100;
-    }
+    if ((selectedIndices.size() + numThreads - 1) / numThreads > 100)
+        numThreads = (selectedIndices.size() + 99) / 100;
 
-    std::vector<std::vector<std::string>> chunks(numThreads);
-    for (size_t i = 0; i < selectedFiles.size(); ++i) {
-        chunks[i % numThreads].push_back(std::move(selectedFiles[i]));
-    }
-    
+    std::vector<std::vector<int>> indexChunks(numThreads);
+    for (size_t i = 0; i < selectedIndices.size(); ++i)
+        indexChunks[i % numThreads].push_back(selectedIndices[i]);
+
     std::vector<std::future<void>> futures;
     std::atomic<size_t> completedTasks(0);
     std::atomic<size_t> failedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
-    
+
     std::thread progressThread(
-        displayProgressBarWithSize, 
+        displayProgressBarWithSize,
         nullptr,
         static_cast<size_t>(0),
         &completedTasks,
         &failedTasks,
-        selectedFiles.size(),
+        selectedIndices.size(),
         &isProcessingComplete,
         &verbose,
         std::string(coloredProcess)
     );
-    
-    for (const auto& chunk : chunks) {
-        futures.emplace_back(pool.enqueue([&, chunk]() {
-            if (g_operationCancelled.load()) return;
-            
-            if (isUnmount) {
-                unmountISO(chunk, operationFiles, operationFails, &completedTasks, &failedTasks, false);
-            } else {
-                mountIsoFiles(chunk, operationFiles, skippedMessages, operationFails, &completedTasks, &failedTasks, false);
-            }
-        }));
-    }
-    
-    for (auto& future : futures) {
+
+    for (const auto& idxChunk : indexChunks) {
+		futures.emplace_back(pool.enqueue([=, &operationFiles, &skippedMessages, &operationFails, &completedTasks, &failedTasks]() {
+			if (g_operationCancelled.load()) return;
+
+			std::vector<std::string> chunkStr;
+			chunkStr.reserve(idxChunk.size());
+			for (int idx : idxChunk) {
+				chunkStr.push_back(files[idx - 1]);
+			}
+
+			if (isUnmount)
+				unmountISO(chunkStr, operationFiles, operationFails, &completedTasks, &failedTasks, false);
+			else
+				mountIsoFiles(chunkStr, operationFiles, skippedMessages, operationFails, &completedTasks, &failedTasks, false);
+		}));
+	}
+
+    for (auto& future : futures)
         future.wait();
-    }
-    
+
     if (completedTasks == 0 && isUnmount) operationBreak = false;
-    
+
     isProcessingComplete.store(true);
     signal(SIGINT, SIG_IGN);
     progressThread.join();
@@ -217,10 +216,10 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
  */
 void processInputForCpMvRm(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& filterHistory, bool& verbose, std::atomic<bool>& newISOFound) {
     setupSignalHandlerCancellations();
-    
+
     std::vector<std::string> successfulDestPaths;
-	std::mutex destPathsMutex;
-    
+    std::mutex destPathsMutex;
+
     bool overwriteExisting = false;
     std::string userDestDir;
     std::unordered_set<int> processedIndices;
@@ -228,7 +227,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     bool isDelete = (process == "rm");
     bool isMove   = (process == "mv");
     bool isCopy   = (process == "cp");
-    
+
     std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
     std::string operationColor = std::string(isDelete ? UI::Palette::Red : (isCopy ? UI::Palette::Green : UI::Palette::Yellow));
 
@@ -238,21 +237,21 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
         umountMvRmBreak = false;
         return;
     }
-    
+
     ThreadPool& pool = getStaticThreadPool();
     const size_t poolSize = pool.threadCount();
     const size_t cap = isDelete ? RM_THREAD_CAP : CPMV_THREAD_CAP;
     const size_t numThreads = std::max(size_t(2), std::min({processedIndices.size(), cap, poolSize}));
-    
+
     std::vector<std::vector<int>> indexChunks = groupFilesIntoChunksForCpMvRm(processedIndices, isoFiles, numThreads, isDelete);
 
     bool abortDel = false;
-    std::string processedUserDestDir = userDestDirCpMv(isoFiles, indexChunks, uniqueErrorMessages, userDestDir, 
-                                                     operationColor, operationDescription, umountMvRmBreak, 
-                                                     filterHistory, isDelete, isCopy, abortDel, overwriteExisting);
-        
+    std::string processedUserDestDir = userDestDirCpMv(isoFiles, indexChunks, uniqueErrorMessages, userDestDir,
+                                                       operationColor, operationDescription, umountMvRmBreak,
+                                                       filterHistory, isDelete, isCopy, abortDel, overwriteExisting);
+
     g_operationCancelled.store(false);
-    
+
     if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
         uniqueErrorMessages.clear();
         return;
@@ -260,88 +259,93 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     uniqueErrorMessages.clear();
     clearScrollBuffer();
 
-    std::vector<std::string> filesToProcess;
-    for (const auto& index : processedIndices) {
-        filesToProcess.push_back(isoFiles[index - 1]);
+    size_t totalBytes = 0;
+    {
+        std::vector<std::string> filesToProcess;
+        filesToProcess.reserve(processedIndices.size());
+        for (const auto& chunk : indexChunks)
+            for (int idx : chunk)
+                filesToProcess.push_back(isoFiles[idx - 1]);
+        totalBytes = getTotalFileSize(filesToProcess);
     }
 
-    std::atomic<size_t> completedBytes(0);
-    std::atomic<size_t> completedTasks(0);
-    std::atomic<size_t> failedTasks(0);
-    size_t totalBytes = getTotalFileSize(filesToProcess);
-    size_t totalTasks = filesToProcess.size();
-                 
+    size_t totalTasks = processedIndices.size();
+
     if (isCopy || isMove) {
         size_t destCount = std::count(processedUserDestDir.begin(), processedUserDestDir.end(), ';') + 1;
         totalBytes *= destCount;
         totalTasks *= destCount;
     }
-    
+
     const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
-    
-	std::string colorMuted  = isOrig ? std::string(UI::Palette::BoldReset) : std::string(theme->muted);
-	
-    
-    std::cout << "\n" << colorMuted << " Processing " 
-          << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process 
-          << colorMuted << "... (" 
-          << UI::Palette::Red << "Ctrl+c" 
-          << colorMuted << ":cancel)\n";
-             
-    std::string coloredProcess = 
-    isDelete ? std::string(UI::Palette::Red)    + process + std::string(UI::Palette::BoldReset) :
-    isMove   ? std::string(UI::Palette::Yellow) + process + std::string(UI::Palette::BoldReset) :
-    isCopy   ? std::string(UI::Palette::Green)  + process + std::string(UI::Palette::BoldReset) :
-    process;
-    
+
+    std::string colorMuted = isOrig ? std::string(UI::Palette::BoldReset) : std::string(theme->muted);
+
+    std::cout << "\n" << colorMuted << " Processing "
+              << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process
+              << colorMuted << "... ("
+              << UI::Palette::Red << "Ctrl+c"
+              << colorMuted << ":cancel)\n";
+
+    std::string coloredProcess =
+        isDelete ? std::string(UI::Palette::Red)    + process + std::string(UI::Palette::BoldReset) :
+        isMove   ? std::string(UI::Palette::Yellow) + process + std::string(UI::Palette::BoldReset) :
+        isCopy   ? std::string(UI::Palette::Green)  + process + std::string(UI::Palette::BoldReset) :
+        process;
+
+    std::atomic<size_t> completedBytes(0);
+    std::atomic<size_t> completedTasks(0);
+    std::atomic<size_t> failedTasks(0);
     std::atomic<bool> isProcessingComplete(false);
 
-    std::thread progressThread(displayProgressBarWithSize, &completedBytes, 
-                                 totalBytes, &completedTasks, &failedTasks, 
-                                 totalTasks, &isProcessingComplete, &verbose, std::string(coloredProcess));
+    std::thread progressThread(displayProgressBarWithSize, &completedBytes,
+                               totalBytes, &completedTasks, &failedTasks,
+                               totalTasks, &isProcessingComplete, &verbose, std::string(coloredProcess));
 
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
 
     for (const auto& chunk : indexChunks) {
-        std::vector<std::string> isoFilesInChunk;
-        isoFilesInChunk.reserve(chunk.size());
-        std::transform(chunk.begin(), chunk.end(), std::back_inserter(isoFilesInChunk),
-            [&isoFiles](size_t index) { return isoFiles[index - 1]; });
-
-        futures.emplace_back(pool.enqueue([isoFilesInChunk = std::move(isoFilesInChunk), 
-                                             &isoFiles, &operationIsos, &operationErrors, &userDestDir, 
-                                             isMove, isCopy, isDelete, &completedBytes, &completedTasks, 
-                                             &failedTasks, &overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
-								handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors,
-										   userDestDir, isMove, isCopy, isDelete,
+		futures.emplace_back(pool.enqueue([chunk, isoFiles, userDestDir, 
+										   &operationIsos, &operationErrors,
+										   isMove, isCopy, isDelete,
 										   &completedBytes, &completedTasks, &failedTasks,
-										   overwriteExisting,
-										   &successfulDestPaths, &destPathsMutex);
-        }));
-    }
+										   &overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
+			
+			if (g_operationCancelled.load()) return;
 
-    for (auto& future : futures) {
+			std::vector<std::string> isoFilesInChunk;
+			isoFilesInChunk.reserve(chunk.size());
+			for (int idx : chunk) {
+				// Safe: isoFiles is now a local copy within the lambda
+				isoFilesInChunk.push_back(isoFiles[idx - 1]);
+			}
+
+			handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors,
+								   userDestDir, isMove, isCopy, isDelete,
+								   &completedBytes, &completedTasks, &failedTasks,
+								   overwriteExisting, &successfulDestPaths, &destPathsMutex);
+		}));
+	}
+
+    for (auto& future : futures)
         future.wait();
-    }
-    
+
     if (completedTasks == 0) umountMvRmBreak = false;
     isProcessingComplete.store(true);
-    signal(SIGINT, SIG_IGN);  
+    signal(SIGINT, SIG_IGN);
     progressThread.join();
-    
+
     if (completedTasks.load() > 0 && !isDelete) {
-		std::string exactPaths;
-		for (const auto& destPath : successfulDestPaths) {
-			if (!exactPaths.empty()) exactPaths += ';';
-			exactPaths += destPath;
-		}
-		
-		if (!exactPaths.empty()) {
-			updateDatabaseAfterOperations(exactPaths, newISOFound);
-		}
-	}
+        std::string exactPaths;
+        for (const auto& destPath : successfulDestPaths) {
+            if (!exactPaths.empty()) exactPaths += ';';
+            exactPaths += destPath;
+        }
+        if (!exactPaths.empty())
+            updateDatabaseAfterOperations(exactPaths, newISOFound);
+    }
     clear_history();
 }
 
@@ -394,19 +398,18 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
  */
 void processInputForConversions(const std::string& input, std::vector<std::string>& fileList,
                                const bool& modeMdf, const bool& modeNrg, const bool& modeChd,
-                               const bool& modeDaa,          // <-- new DAA flag
+                               const bool& modeDaa,
                                std::unordered_set<std::string>& processedErrors,
                                std::unordered_set<std::string>& successOuts,
                                std::unordered_set<std::string>& skippedOuts,
                                std::unordered_set<std::string>& failedOuts,
                                bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound)
 {
-	
-	std::vector<std::string> successfulOutputPaths;
-	std::mutex outPathsMutex;
-	
+    std::vector<std::string> successfulOutputPaths;
+    std::mutex outPathsMutex;
+
     setupSignalHandlerCancellations();
-    
+
     const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
@@ -441,27 +444,27 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
         it = chunkEnd;
     }
 
-    std::vector<std::string> filesToProcess;
-    filesToProcess.reserve(processedIndices.size());
-    for (const auto& index : processedIndices) {
-        filesToProcess.push_back(fileList[index - 1]);
+    // build only for size calculation, then immediately release
+    size_t totalBytes = 0;
+    {
+        std::vector<std::string> filesToProcess;
+        filesToProcess.reserve(processedIndices.size());
+        for (const auto& chunk : indexChunks)
+            for (size_t idx : chunk)
+                filesToProcess.push_back(fileList[idx - 1]);
+        totalBytes = calculateTotalBytesForConversions(filesToProcess, modeMdf, modeNrg, modeChd, modeDaa);
     }
-	
-	// Size calculation for progressbar
-    const size_t totalBytes = calculateTotalBytesForConversions(
-    filesToProcess, modeMdf, modeNrg, modeChd, modeDaa);
 
-	std::string colorMuted  = isOrig ? std::string(UI::Palette::BoldReset) : std::string(theme->muted);
-	
+    std::string colorMuted = isOrig ? std::string(UI::Palette::BoldReset) : std::string(theme->muted);
 
-    size_t totalTasks = filesToProcess.size();
+    size_t totalTasks = processedIndices.size();
     std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
 
     std::string operation;
-    if (modeMdf)      operation = std::string(UI::Palette::Orange) + "mdf2iso"     + std::string(colorMuted) + suffix;
-    else if (modeNrg) operation = std::string(UI::Palette::Orange) + "nrg2iso"     + std::string(colorMuted) + suffix;
-    else if (modeChd) operation = std::string(UI::Palette::Orange) + "chd2iso"     + std::string(colorMuted) + suffix;
-    else if (modeDaa) operation = std::string(UI::Palette::Orange) + "daa2iso"     + std::string(colorMuted) + suffix;
+    if (modeMdf)      operation = std::string(UI::Palette::Orange) + "mdf2iso" + std::string(colorMuted) + suffix;
+    else if (modeNrg) operation = std::string(UI::Palette::Orange) + "nrg2iso" + std::string(colorMuted) + suffix;
+    else if (modeChd) operation = std::string(UI::Palette::Orange) + "chd2iso" + std::string(colorMuted) + suffix;
+    else if (modeDaa) operation = std::string(UI::Palette::Orange) + "daa2iso" + std::string(colorMuted) + suffix;
     else              operation = std::string(UI::Palette::Orange) + "ccd2iso" + std::string(colorMuted) + suffix;
 
     clearScrollBuffer();
@@ -483,37 +486,36 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     futures.reserve(indexChunks.size());
 
     for (const auto& chunk : indexChunks) {
-        std::vector<std::string> imageFilesInChunk;
-        imageFilesInChunk.reserve(chunk.size());
-        std::transform(chunk.begin(), chunk.end(), std::back_inserter(imageFilesInChunk),
-            [&fileList](size_t index) { return fileList[index - 1]; });
+        futures.emplace_back(pool.enqueue([chunk, &fileList,
+                                           &successOuts, &skippedOuts, &failedOuts,
+                                           modeMdf, modeNrg, modeChd, modeDaa,
+                                           &completedBytes, &completedTasks, &failedTasks,
+                                           &successfulOutputPaths, &outPathsMutex]() {
+            std::vector<std::string> imageFilesInChunk;
+            imageFilesInChunk.reserve(chunk.size());
+            for (size_t idx : chunk)
+                imageFilesInChunk.push_back(fileList[idx - 1]);
 
-        futures.emplace_back(pool.enqueue([imageFilesInChunk = std::move(imageFilesInChunk),
-			&successOuts, &skippedOuts, &failedOuts,
-			modeMdf, modeNrg, modeChd, modeDaa,
-			&completedBytes, &completedTasks, &failedTasks,
-			&successfulOutputPaths, &outPathsMutex]() {
-		convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
-			modeMdf, modeNrg, modeChd, modeDaa,
-			&completedBytes, &completedTasks, &failedTasks,
-			&successfulOutputPaths, &outPathsMutex);
-		}));
+            convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
+                         modeMdf, modeNrg, modeChd, modeDaa,
+                         &completedBytes, &completedTasks, &failedTasks,
+                         &successfulOutputPaths, &outPathsMutex);
+        }));
     }
 
-    for (auto& future : futures) {
+    for (auto& future : futures)
         future.wait();
-    }
 
     isProcessingComplete.store(true);
     signal(SIGINT, SIG_IGN);
     progressThread.join();
-    
-	if (!successfulOutputPaths.empty()) {
-		std::string exactPaths;
-		for (const auto& outPath : successfulOutputPaths) {
-			if (!exactPaths.empty()) exactPaths += ';';
-			exactPaths += outPath;
-		}
-		updateDatabaseAfterOperations(exactPaths, newISOFound);
-	}
+
+    if (!successfulOutputPaths.empty()) {
+        std::string exactPaths;
+        for (const auto& outPath : successfulOutputPaths) {
+            if (!exactPaths.empty()) exactPaths += ';';
+            exactPaths += outPath;
+        }
+        updateDatabaseAfterOperations(exactPaths, newISOFound);
+    }
 }
