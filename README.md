@@ -49,7 +49,6 @@ Database folder location: `/root/.local/share/isocmd/database/` || `~/.local/sha
 
 - iso9660
 - UDF
-- HFSPlus
 - Rock Ridge
 - Joliet
 - ISOFs
