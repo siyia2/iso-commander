@@ -180,11 +180,6 @@ int main(int argc, char *argv[]) {
     /// @{
     stopImport = stopMessage = true;
     for (auto& t : backgroundThreads) if (t.joinable()) t.join();
-
-    // ADD THIS HERE:
-    // Shut down the pool while main() is still alive and the heap is stable.
-    getStaticThreadPool().shutdown();
-
     std::cout << UI::Palette::Reset << std::flush;
     close(lockFileDescriptor);
     unlink(lockFile);
