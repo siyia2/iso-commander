@@ -204,7 +204,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
 	
 	if (newISOFound.load()) {
-		loadFromDatabase(globalIsoFileList);
+		loadFromDatabase(*globalIsoFilesPtr);
 		newISOFound.store(false);
 	}
     
@@ -251,7 +251,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
     } else if (allIsoFiles.empty()) {
         std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No ISO found" << vt.green << "]" << vt.bold << "\n";
     } else if (!allIsoFiles.empty() && saveSuccess && newISOFound.load()) {
-        int result = countDifferentEntries(allIsoFiles, globalIsoFileList);
+        int result = countDifferentEntries(allIsoFiles, *globalIsoFilesPtr);
         std::cout << "\n" << vt.green << "Database Refresh: [" << vt.magenta << result << " ISO imported" << vt.green << "]" << vt.bold << "\n";
     }
 

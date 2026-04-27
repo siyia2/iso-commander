@@ -58,7 +58,7 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
         needsClrScrn = true;
     }
 
-    if (!isUnmount && globalIsoFileList.empty()) {
+    if (!isUnmount && globalIsoFilesPtr->empty()) {
         clearScrollBuffer();
         needsClrScrn = true;
         
@@ -91,41 +91,51 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
  * @param filterHistory Flag for filtering history state.
  * @param newISOFound Atomic flag for background refresh.
  */
-void processOperationForSelectedIsoFiles(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered, const std::vector<std::string>& filteredFiles, 
-										 std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, 
-										 std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, 
-										 std::unordered_set<std::string>& skippedMessages, bool& needsClrScrn, 
-										 const std::string& operation, std::atomic<bool>& isAtISOList, 
-										 bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
-    
+void processOperationForSelectedIsoFiles(
+    const std::string& inputString, 
+    bool isMount, 
+    bool isUnmount, 
+    bool write, 
+    bool& isFiltered, 
+    std::vector<std::string> activeList, // Snapshot for global/filtered data
+    std::vector<std::string>& isoDirs,   // Safe reference for unmounting
+    std::unordered_set<std::string>& operationFiles, 
+    std::unordered_set<std::string>& operationFails, 
+    std::unordered_set<std::string>& uniqueErrorMessages, 
+    std::unordered_set<std::string>& skippedMessages, 
+    bool& needsClrScrn, 
+    const std::string& operation, 
+    std::atomic<bool>& isAtISOList, 
+    bool& umountMvRmBreak, 
+    bool& filterHistory, 
+    std::atomic<bool>& newISOFound) 
+{
     clearScrollBuffer();
     needsClrScrn = true;
     bool verbose = false;
     
-    if (isMount || isUnmount) {
+    if (isUnmount) {
         isAtISOList.store(false);
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : 
-                                                    (isUnmount ? isoDirs : globalIsoFileList);
+        umountMvRmBreak = true;
         
-        if (isUnmount) {
-            umountMvRmBreak = true;
-        }
-        
-        processInputForMountOrUmount(inputString, activeList, operationFiles, skippedMessages, 
-                            operationFails, uniqueErrorMessages, umountMvRmBreak, verbose, isUnmount);
-    } else if (write) {
-        isAtISOList.store(false);
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-        writeToUsb(inputString, activeList, uniqueErrorMessages);
+        // Use the safe reference for unmount
+        processInputForMountOrUmount(inputString, isoDirs, operationFiles, skippedMessages, 
+                                     operationFails, uniqueErrorMessages, umountMvRmBreak, verbose, isUnmount);
     } else {
         isAtISOList.store(false);
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-        processInputForCpMvRm(inputString, activeList, operation, operationFiles, operationFails, 
-                             uniqueErrorMessages, umountMvRmBreak, filterHistory, verbose, newISOFound);
+        if (isMount) {
+            processInputForMountOrUmount(inputString, activeList, operationFiles, skippedMessages, 
+                                         operationFails, uniqueErrorMessages, umountMvRmBreak, verbose, isUnmount);
+        } else if (write) {
+            writeToUsb(inputString, activeList, uniqueErrorMessages);
+        } else {
+            processInputForCpMvRm(inputString, activeList, operation, operationFiles, operationFails, 
+                                  uniqueErrorMessages, umountMvRmBreak, filterHistory, verbose, newISOFound);
+        }
     }
     
     handleSelectIsoFilesResults(uniqueErrorMessages, operationFiles, operationFails, skippedMessages, 
-                               operation, verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn);
+                                operation, verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn);
 }
 
 /**
@@ -185,7 +195,25 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
  * @return true If the "proc" command was executed.
  * @return false Otherwise.
  */
-bool handlePendingProcess(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingProcess,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
+bool handlePendingProcess(const std::string& inputString, 
+                          std::vector<std::string>& pendingIndices, 
+                          bool& hasPendingProcess, 
+                          bool isMount, 
+                          bool isUnmount, 
+                          bool write, 
+                          bool isFiltered, 
+                          std::vector<std::string> activeList, // Changed: Pass by value (snapshot)
+                          std::vector<std::string>& isoDirs, 
+                          std::unordered_set<std::string>& operationFiles, 
+                          std::unordered_set<std::string>& skippedMessages, 
+                          std::unordered_set<std::string>& operationFails, 
+                          std::unordered_set<std::string>& uniqueErrorMessages, 
+                          bool& needsClrScrn, 
+                          const std::string& operation, 
+                          std::atomic<bool>& isAtISOList, 
+                          bool& umountMvRmBreak, 
+                          bool& filterHistory, 
+                          std::atomic<bool>& newISOFound) {
     
     if (hasPendingProcess && !pendingIndices.empty() && inputString == "proc") {
         std::string combinedIndices = "";
@@ -196,11 +224,12 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
             }
         }
         
+        // Pass the snapshot 'activeList' down to the operation handler
         processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered, 
-                     filteredFiles, isoDirs, operationFiles, 
-                     operationFails, uniqueErrorMessages, skippedMessages,
-                     needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-                     filterHistory, newISOFound);
+                                     activeList, isoDirs, operationFiles, 
+                                     operationFails, uniqueErrorMessages, skippedMessages,
+                                     needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
+                                     filterHistory, newISOFound);
 
         return true;
     }
@@ -265,7 +294,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     std::unordered_set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
     static std::vector<std::string> isoDirs;
 
-    globalIsoFileList.reserve(100);
+    globalIsoFilesPtr->reserve(100);
     isoDirs.reserve(100);
 
     auto refreshState = std::make_shared<RefreshState>();
@@ -298,9 +327,9 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         operation == "umount"    ? UI::Palette::Yellow : UI::Palette::RL_BoldAlt
     );
 
-    bool isMount   = (operation == "mount");
-    bool isUnmount = (operation == "umount");
-    bool write     = (operation == "write2usb");
+    bool isMount      = (operation == "mount");
+    bool isUnmount    = (operation == "umount");
+    bool write        = (operation == "write2usb");
     bool isConversion = false;
 
     listSubtype = isMount ? "mount" : (write ? "write2usb" : "cp_mv_rm");
@@ -316,7 +345,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         if (!isFiltered) originalPage = currentPage;
 
         if (!isUnmount) {
-            removeNonExistentPathsFromDatabase(globalIsoFileList);
+            removeNonExistentPathsFromDatabase(*globalIsoFilesPtr);
             isAtISOList.store(true);
         }
 
@@ -334,39 +363,42 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
-        // Launch a detached thread for automatic list updating if startup auto-update is running
-        if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
+
+        if (updateHasRun.load() && !isUnmount && !globalIsoFilesPtr->empty()) {
             std::thread(refreshListAfterAutoUpdate, 500,
                         std::ref(isAtISOList), std::ref(isImportRunning),
                         std::ref(updateHasRun), std::ref(newISOFound),
-                        refreshState).detach();  // shared_ptr copied into thread, safe to detach
+                        refreshState).detach();
         }
         
+        std::shared_ptr<std::vector<std::string>> currentListSnapshot;
+        {
+            std::lock_guard<std::mutex> lock(updateListMutex);
+            if (isFiltered) {
+                currentListSnapshot = std::make_shared<std::vector<std::string>>(filteredFiles);
+            } else if (isUnmount) {
+                currentListSnapshot = std::make_shared<std::vector<std::string>>(isoDirs);
+            } else {
+                currentListSnapshot = globalIsoFilesPtr; 
+            }
+        }
+
         std::cout << "\033[1A\033[K";
 
-		const ReadlineAndPromptTheme pt = getPromptTheme();
-
-		std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
-
-		std::string prompt = 
-			prefix + 
-			pt.iso         + "ISO" + 
-			pt.primary     + " ↵ for " + "\001" +
-			operationColor + "\002" + operation + 
-			pt.primary     + ", ? ↵ for help, < ↵ to return: " +
-			pt.reset;
+        const ReadlineAndPromptTheme pt = getPromptTheme();
+        std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
+        std::string prompt = prefix + pt.iso + "ISO" + pt.primary + " ↵ for " + "\001" + operationColor + "\002" + operation + pt.primary + ", ? ↵ for help, < ↵ to return: " + pt.reset;
 
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
-        
         if (!rawInput) break;
         
         std::string inputString(rawInput.get());
         
         if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
-			needsClrScrn = false;
-			continue;
-		}
-		if (rawInput.get()[0] == '\0') {
+            needsClrScrn = false;
+            continue;
+        }
+        if (inputString.empty()) {
             needsClrScrn = false;
             continue; 
         }
@@ -385,7 +417,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         }
         
         if (inputString == "proc" && pendingIndices.empty()) {
-			needsClrScrn = false;
+            needsClrScrn = false;
             hasPendingProcess = false;
             continue;
         }
@@ -397,20 +429,29 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             continue;
         }
 
-        const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-        size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
+        size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((currentListSnapshot->size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
         bool need2Sort = false;
         
         bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, isMount, isUnmount, write, isConversion, need2Sort, isAtISOList);
-
         if (validCommand) continue;
 
-        bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isMount, isUnmount, write, isFiltered, 
-                                                    filteredFiles, isoDirs, operationFiles, skippedMessages, operationFails, uniqueErrorMessages,
-                                                    needsClrScrn, operation, isAtISOList, umountMvRmBreak, filterHistory, newISOFound);
-        if (pendingExecuted) {
-            continue;
-        }
+        bool pendingExecuted = handlePendingProcess(
+            inputString, pendingIndices, hasPendingProcess, 
+            isMount, isUnmount, write, isFiltered, 
+            *currentListSnapshot, // Snapshot value copy
+            isoDirs,              // Reference to isoDirs
+            operationFiles, 
+            skippedMessages, 
+            operationFails, 
+            uniqueErrorMessages, 
+            needsClrScrn, 
+            operation, 
+            isAtISOList, 
+            umountMvRmBreak, 
+            filterHistory, 
+            newISOFound
+        );
+        if (pendingExecuted) continue;
 
         if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn, 
                                     filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage)) {
@@ -418,15 +459,23 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         }
 
         bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn);
-        if (pendingHandled) {
-            continue;
-        }
+        if (pendingHandled) continue;
 
-        processOperationForSelectedIsoFiles(inputString, isMount, isUnmount, write, isFiltered, 
-                                           filteredFiles, isoDirs, operationFiles, 
-                                           operationFails, uniqueErrorMessages, skippedMessages,
-                                           needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-                                           filterHistory, newISOFound);
+        processOperationForSelectedIsoFiles(
+            inputString, isMount, isUnmount, write, isFiltered, 
+            *currentListSnapshot, // Snapshot value copy
+            isoDirs,              // Reference to isoDirs
+            operationFiles, 
+            operationFails, 
+            uniqueErrorMessages, 
+            skippedMessages,
+            needsClrScrn, 
+            operation, 
+            isAtISOList, 
+            umountMvRmBreak, 
+            filterHistory, 
+            newISOFound
+        );
     }
 }
 

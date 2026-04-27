@@ -69,7 +69,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
                 sortFilesCaseInsensitive(list);
             };
 
-            std::thread(sortJob, std::ref(globalIsoFileList), std::ref(updateListMutex)).detach();
+            std::thread(sortJob, std::ref(*globalIsoFilesPtr), std::ref(updateListMutex)).detach();
             std::thread(sortJob, std::ref(binImgFilesCache), std::ref(binImgCacheMutex)).detach();
             std::thread(sortJob, std::ref(mdfMdsFilesCache), std::ref(mdfMdsCacheMutex)).detach();
             std::thread(sortJob, std::ref(nrgFilesCache), std::ref(nrgCacheMutex)).detach();
