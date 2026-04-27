@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
                      monitorThreadSpawned{false};
     /// @}
     
-    globalIsoFileList.reserve(100);
+    globalIsoFileList.reserve(1000);
     setupReadlineToIgnoreCtrlC();
 
     // --- Version & Utility Command Dispatch ---
