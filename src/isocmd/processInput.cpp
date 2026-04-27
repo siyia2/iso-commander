@@ -94,20 +94,18 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     );
 
     for (const auto& idxChunk : indexChunks) {
-		futures.emplace_back(pool.enqueue([=, &operationFiles, &skippedMessages, &operationFails, &completedTasks, &failedTasks]() {
+        futures.emplace_back(pool.enqueue([&, idxChunk]() {
+            std::vector<std::string> chunkStr;
+            chunkStr.reserve(idxChunk.size());
+            for (int idx : idxChunk)
+                chunkStr.push_back(files[idx - 1]);
 
-			std::vector<std::string> chunkStr;
-			chunkStr.reserve(idxChunk.size());
-			for (int idx : idxChunk) {
-				chunkStr.push_back(files[idx - 1]);
-			}
-
-			if (isUnmount)
-				unmountISO(chunkStr, operationFiles, operationFails, completedTasks.get(), failedTasks.get(), false);
-			else
-				mountIsoFiles(chunkStr, operationFiles, skippedMessages, operationFails, completedTasks.get(), failedTasks.get(), false);
-		}));
-	}
+            if (isUnmount)
+                unmountISO(chunkStr, operationFiles, operationFails, completedTasks.get(), failedTasks.get(), false);
+            else
+                mountIsoFiles(chunkStr, operationFiles, skippedMessages, operationFails, completedTasks.get(), failedTasks.get(), false);
+        }));
+    }
 
     for (auto& future : futures)
         future.wait();
@@ -307,24 +305,21 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     futures.reserve(indexChunks.size());
 
     for (const auto& chunk : indexChunks) {
-		futures.emplace_back(pool.enqueue([chunk, isoFiles, userDestDir, 
-										   &operationIsos, &operationErrors,
-										   isMove, isCopy, isDelete,
-										   &completedBytes, &completedTasks, &failedTasks,
-										   &overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
-			
-			std::vector<std::string> isoFilesInChunk;
-			isoFilesInChunk.reserve(chunk.size());
-			for (int idx : chunk) {
-				isoFilesInChunk.push_back(isoFiles[idx - 1]);
-			}
+        futures.emplace_back(pool.enqueue([chunk, &isoFiles, &operationIsos, &operationErrors,
+                                           &userDestDir, isMove, isCopy, isDelete,
+                                           completedBytes, completedTasks, failedTasks,
+                                           &overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
+            std::vector<std::string> isoFilesInChunk;
+            isoFilesInChunk.reserve(chunk.size());
+            for (int idx : chunk)
+                isoFilesInChunk.push_back(isoFiles[idx - 1]);
 
-			handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors,
-								   userDestDir, isMove, isCopy, isDelete,
-								   completedBytes.get(), completedTasks.get(), failedTasks.get(),
-								   overwriteExisting, &successfulDestPaths, &destPathsMutex);
-		}));
-	}
+            handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors,
+                                   userDestDir, isMove, isCopy, isDelete,
+                                   completedBytes.get(), completedTasks.get(), failedTasks.get(),
+                                   overwriteExisting, &successfulDestPaths, &destPathsMutex);
+        }));
+    }
 
     for (auto& future : futures)
         future.wait();
@@ -485,24 +480,22 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     futures.reserve(indexChunks.size());
 
     for (const auto& chunk : indexChunks) {
-		futures.emplace_back(pool.enqueue([chunk, fileList, // Capture by value
-										   &successOuts, &skippedOuts, &failedOuts,
-										   modeMdf, modeNrg, modeChd, modeDaa,
-										   &completedBytes, &completedTasks, &failedTasks,
-										   &successfulOutputPaths, &outPathsMutex]() {
-			std::vector<std::string> imageFilesInChunk;
-			imageFilesInChunk.reserve(chunk.size());
-			for (size_t idx : chunk) {
-				// Safe: fileList is a local copy inside this thread's scope
-				imageFilesInChunk.push_back(fileList[idx - 1]);
-			}
+        futures.emplace_back(pool.enqueue([chunk, &fileList,
+                                           &successOuts, &skippedOuts, &failedOuts,
+                                           modeMdf, modeNrg, modeChd, modeDaa,
+                                           completedBytes, completedTasks, failedTasks,
+                                           &successfulOutputPaths, &outPathsMutex]() {
+            std::vector<std::string> imageFilesInChunk;
+            imageFilesInChunk.reserve(chunk.size());
+            for (size_t idx : chunk)
+                imageFilesInChunk.push_back(fileList[idx - 1]);
 
-			convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
-						 modeMdf, modeNrg, modeChd, modeDaa,
-						 completedBytes.get(), completedTasks.get(), failedTasks.get(),
-						 &successfulOutputPaths, &outPathsMutex);
-		}));
-	}
+            convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
+                         modeMdf, modeNrg, modeChd, modeDaa,
+                         completedBytes.get(), completedTasks.get(), failedTasks.get(),
+                         &successfulOutputPaths, &outPathsMutex);
+        }));
+    }
 
     for (auto& future : futures)
         future.wait();
