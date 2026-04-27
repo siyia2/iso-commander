@@ -15,9 +15,16 @@
  */
 
 /**
- * @brief Orchestrates the mounting or unmounting of ISO files using a static thread pool and progress tracking.
- * @param input Raw user input string (indices or "00").
- * @param files List of available files.
+ * @brief Orchestrates the mounting or unmounting of ISO files using a static thread pool.
+ * * High-performance orchestration that minimizes memory overhead by capturing the master 
+ * file list by reference while distributing work via index-based chunks.
+ * * @section threading_logic Threading Logic
+ * - Uses a mixed-capture lambda: large containers are referenced, while task-specific 
+ * indices and operation flags are captured by value for thread-local consistency.
+ * - Employs std::future::wait to ensure all worker threads complete before the master 
+ * list's scope ends, preventing use-after-free conditions.
+ * * @param input Raw user input string (indices or "00").
+ * @param files Master list of available files (captured by reference in workers).
  * @param operationFiles Set to populate with successfully processed files.
  * @param skippedMessages Set to track items skipped during the operation.
  * @param operationFails Set to track failed file paths.
@@ -94,20 +101,28 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     );
 
     for (const auto& idxChunk : indexChunks) {
-        futures.emplace_back(pool.enqueue([&, idxChunk]() {
-            if (g_operationCancelled.load()) return;
+		futures.emplace_back(pool.enqueue([&files, &operationFiles, &operationFails, 
+										   &skippedMessages, &completedTasks, &failedTasks, 
+										   idxChunk, isUnmount]() { 
+			if (g_operationCancelled.load()) return;
 
-            std::vector<std::string> chunkStr;
-            chunkStr.reserve(idxChunk.size());
-            for (int idx : idxChunk)
-                chunkStr.push_back(files[idx - 1]);
+			std::vector<std::string> chunkStr;
+			chunkStr.reserve(idxChunk.size());
+			
+			for (int idx : idxChunk) {
+				if (idx > 0 && idx <= static_cast<int>(files.size())) {
+					chunkStr.push_back(files[idx - 1]); 
+				}
+			}
 
-            if (isUnmount)
-                unmountISO(chunkStr, operationFiles, operationFails, &completedTasks, &failedTasks, false);
-            else
-                mountIsoFiles(chunkStr, operationFiles, skippedMessages, operationFails, &completedTasks, &failedTasks, false);
-        }));
-    }
+			if (isUnmount)
+				// Add '&' before completedTasks and failedTasks
+				unmountISO(chunkStr, operationFiles, operationFails, &completedTasks, &failedTasks, false);
+			else
+				// Add '&' before completedTasks and failedTasks
+				mountIsoFiles(chunkStr, operationFiles, skippedMessages, operationFails, &completedTasks, &failedTasks, false);
+		}));
+	}
 
     for (auto& future : futures)
         future.wait();
@@ -120,11 +135,14 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
 }
 
 /**
- * @brief Groups file indices into chunks for parallel processing, preventing race conditions by grouping identical filenames.
+ * @brief Groups file indices into chunks for parallel processing.
+ * * Optimizes concurrency by balancing workload while preventing filesystem race conditions.
+ * For non-delete operations, files with the same base name (e.g., multi-part images) 
+ * are grouped into the same chunk to ensure sequential processing by a single thread.
  * * @param processedIndices Set of indices selected by the user.
- * @param isoFiles Master list of file paths.
+ * @param isoFiles Master list of file paths used for name-collision logic.
  * @param numThreads Desired concurrency level.
- * @param isDelete Flag indicating if the operation is a deletion (avoids name-collision logic).
+ * @param isDelete Flag indicating if the operation is a deletion (bypasses name grouping).
  * @return A vector of chunks, where each chunk is a vector of indices.
  */
 std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered_set<int>& processedIndices, const std::vector<std::string>& isoFiles, unsigned int numThreads, bool isDelete) 
@@ -174,29 +192,17 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
 
 
 /**
- * @brief Handles bulk copy, move, or remove operations with threading and progress visualization.
+ * @brief Handles bulk copy, move, or remove operations with thread safety.
  *
- * This function orchestrates the lifecycle of filesystem operations (cp, mv, rm) on selected 
- * image files. It handles everything from user confirmation and destination selection to 
- * multi-threaded execution and database synchronization.
+ * Orchestrates filesystem lifecycle events on selected image files. This version
+ * utilizes an index-based chunking strategy to remain memory-efficient even when 
+ * processing thousands of files.
  *
- * @section Workflow Lifecycle
- * 1. **Input Parsing**: Tokenizes the user string to map selections to the master ISO list.
- * 2. **Pre-Processing & Validation**: 
- * - Determines thread caps based on operation type (e.g., `RM_THREAD_CAP` vs `CPMV_THREAD_CAP`).
- * - Invokes `userDestDirCpMv` to handle UI interactions, such as selecting destination 
- * folders or confirming permanent deletion.
- * 3. **Progress Estimation**: Calculates total byte size and task count. For copies/moves to 
- * multiple destinations, these metrics are scaled accordingly to ensure the progress bar 
- * reflects the true workload.
- * 4. **Execution**:
- * - Spawns a dedicated thread for the live progress bar.
- * - Distributes file chunks into a static thread pool for parallel execution via `handleIsoFileOperation`.
- * 5. **Post-Processing & Cleanup**:
- * - Disables signal handlers and joins the progress thread.
- * - **Database Sync**: If files were moved or copied, a **synchronous** update is triggered
- * for the affected directories. This ensures the database is fully indexed before 
- * returning control to the user.
+ * @section memory_safety Memory Safety
+ * - **Zero-Copy Setup**: Avoids duplicating the master ISO list by using reference 
+ * captures combined with future synchronization.
+ * - **Thread Isolation**: Each worker constructs its own local string vector from 
+ * provided indices, ensuring thread-local data ownership during I/O.
  *
  * @param input Raw user input (e.g., "1-3, 5").
  * @param isoFiles Master list of files.
@@ -204,14 +210,10 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
  * @param operationIsos Set to track successfully modified items.
  * @param operationErrors Set to track failed items.
  * @param uniqueErrorMessages Set for unique UI error reporting.
- * @param umountMvRmBreak Flag for outer loop control; set to false if no tasks are completed.
+ * @param umountMvRmBreak Flag for outer loop control.
  * @param filterHistory Flag indicating if the view is filtered.
- * @param verbose Detailed output toggle for progress updates.
+ * @param verbose Detailed output toggle.
  * @param newISOFound Atomic flag for filesystem changes.
- *
- * @note Cancellation via SIGINT (Ctrl+C) is caught during the execution phase, allowing 
- * partial batches to complete while preventing new tasks from starting. Database 
- * synchronization is performed on the main thread after all tasks finish.
  */
 void processInputForCpMvRm(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& filterHistory, bool& verbose, std::atomic<bool>& newISOFound) {
     setupSignalHandlerCancellations();
@@ -307,19 +309,25 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
 
     for (const auto& chunk : indexChunks) {
         futures.emplace_back(pool.enqueue([chunk, &isoFiles, &operationIsos, &operationErrors,
-                                           &userDestDir, isMove, isCopy, isDelete,
-                                           &completedBytes, &completedTasks, &failedTasks,
-                                           &overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
-            std::vector<std::string> isoFilesInChunk;
-            isoFilesInChunk.reserve(chunk.size());
-            for (int idx : chunk)
-                isoFilesInChunk.push_back(isoFiles[idx - 1]);
+                                       userDestDir, isMove, isCopy, isDelete, // Captured by value
+                                       &completedBytes, &completedTasks, &failedTasks,
+										   overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
+			
+			if (g_operationCancelled.load(std::memory_order_relaxed)) return;
 
-            handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors,
-                                   userDestDir, isMove, isCopy, isDelete,
-                                   &completedBytes, &completedTasks, &failedTasks,
-                                   overwriteExisting, &successfulDestPaths, &destPathsMutex);
-        }));
+			std::vector<std::string> isoFilesInChunk;
+			isoFilesInChunk.reserve(chunk.size());
+			for (int idx : chunk) {
+				if (idx > 0 && idx <= static_cast<int>(isoFiles.size())) {
+					isoFilesInChunk.push_back(isoFiles[idx - 1]);
+				}
+			}
+
+			handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors,
+								   userDestDir, isMove, isCopy, isDelete,
+								   &completedBytes, &completedTasks, &failedTasks,
+								   overwriteExisting, &successfulDestPaths, &destPathsMutex);
+		}));
     }
 
     for (auto& future : futures)
@@ -343,51 +351,31 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
 }
 
 /**
- * @brief Processes user input to convert multiple disk image files to ISO format.
+ * @brief Processes user input to convert disk images to ISO with real-time tracking.
  *
- * This function parses the user-provided input string (e.g., "1-5,7,9"), identifies
- * the corresponding files from the master list, and orchestrates multi‑threaded
- * conversion of supported image types (BIN/CCD, MDF, NRG, CHD, DAA/GBI) to standard ISO.
+ * Performs multi-threaded conversion of supported image types (CCD, MDF, NRG, CHD, DAA).
+ * Includes an inline size estimation pass for an accurate byte-level progress bar.
  *
- * The function includes an inline size estimation pass to provide an accurate
- * progress bar during conversion. Estimation logic varies by input format:
- * - **NRG**: Excludes a 300 KiB (307200 byte) header.
- * - **MDF**: Reads sector geometry via `MdfTypeInfo` and computes user data bytes.
- * - **BIN/CCD**: Assumes 2352‑byte raw sectors with 2048 bytes of user data.
- * - **CHD**: Opens the CHD file, inspects the header, and calculates total sectors
- *   multiplied by 2048 bytes (ISO user data per sector).
- * - **DAA**: Calls `getDaaIsoSize()` to query the uncompressed ISO size from the
- *   DAA archive header without extracting the entire file.
+ * @section threading_concurrency Threading & Concurrency
+ * - **Mixed Capture Strategy**: Captures primitive flags (modeMdf, etc.) by value 
+ * to ensure immutable state within workers, while capturing output sets by reference 
+ * for shared result aggregation.
+ * - **Database Integration**: Triggers a targeted database update post-conversion 
+ * using exact output paths, ensuring new ISOs are indexed without a full scan.
  *
- * @section multi_threading Multi-Threading and Progress
- * Tasks are distributed across a static thread pool by splitting the selection into
- * chunks. A dedicated background thread manages a real-time progress bar that tracks
- * both byte-level progress and task completion/failure counts.
- *
- * @section post_processing Post-Conversion Sync
- * Upon completion of all threads, the function joins the progress display and performs
- * a cleanup of signal handlers. If any conversions were successful, it constructs the
- * exact expected ISO output paths (same stem as input, `.iso` extension) and calls
- * `updateDatabaseAfterOperations` directly — bypassing directory traversal entirely —
- * to index only the newly created files. This avoids costly scans of large directories
- * and ensures the database is updated synchronously before returning.
- *
- * @param input         Raw user selection string (e.g., "1,3-5").
- * @param fileList      Master vector of all non‑ISO image paths.
- * @param modeMdf       If `true`, treat input files as Alcohol 120% MDF images.
- * @param modeNrg       If `true`, treat input files as Nero NRG images.
- * @param modeChd       If `true`, treat input files as MAME CHD compressed images.
- * @param modeDaa       If `true`, treat input files as PowerISO DAA and gBurner GBI compressed images.
- * @param processedErrors Set to record any parsing errors (invalid indices/patterns).
- * @param successOuts   Set populated with themed messages of successfully converted ISOs.
- * @param skippedOuts   Set populated with themed messages of skipped files.
- * @param failedOuts    Set populated with themed messages of failed conversions.
- * @param verbose       If `true`, extra progress details are displayed.
- * @param needsClrScrn  Reference flag set to `true` if the terminal should be cleared.
- * @param newISOFound   Atomic flag set to `true` when at least one new ISO is indexed.
- *
- * @note Cancellation via SIGINT (Ctrl+C) is handled gracefully; database updates
- *       only trigger if at least one file was successfully converted.
+ * @param input Raw user selection string.
+ * @param fileList Master vector of non-ISO image paths.
+ * @param modeMdf Flag for Alcohol 120% MDF images.
+ * @param modeNrg Flag for Nero NRG images.
+ * @param modeChd Flag for MAME CHD images.
+ * @param modeDaa Flag for PowerISO DAA/GBI images.
+ * @param processedErrors Set to record parsing errors.
+ * @param successOuts Result messages for successes.
+ * @param skippedOuts Result messages for skips.
+ * @param failedOuts Result messages for failures.
+ * @param verbose Extra progress details.
+ * @param needsClrScrn Flag to request terminal clear.
+ * @param newISOFound Atomic flag for filesystem changes.
  */
 void processInputForConversions(const std::string& input, std::vector<std::string>& fileList,
                                const bool& modeMdf, const bool& modeNrg, const bool& modeChd,
@@ -479,21 +467,30 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     futures.reserve(indexChunks.size());
 
     for (const auto& chunk : indexChunks) {
-        futures.emplace_back(pool.enqueue([chunk, &fileList,
-                                           &successOuts, &skippedOuts, &failedOuts,
-                                           modeMdf, modeNrg, modeChd, modeDaa,
-                                           &completedBytes, &completedTasks, &failedTasks,
-                                           &successfulOutputPaths, &outPathsMutex]() {
-            std::vector<std::string> imageFilesInChunk;
-            imageFilesInChunk.reserve(chunk.size());
-            for (size_t idx : chunk)
-                imageFilesInChunk.push_back(fileList[idx - 1]);
+        futures.emplace_back(pool.enqueue([chunk, &fileList, 
+                                       &successOuts, &skippedOuts, &failedOuts,
+                                       modeMdf, modeNrg, modeChd, modeDaa, // Captured by VALUE
+                                       &completedBytes, &completedTasks, &failedTasks,
+										   &successfulOutputPaths, &outPathsMutex]() {
+			
+			// Cancellation check
+			if (g_operationCancelled.load(std::memory_order_relaxed)) return;
 
-            convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
-                         modeMdf, modeNrg, modeChd, modeDaa,
-                         &completedBytes, &completedTasks, &failedTasks,
-                         &successfulOutputPaths, &outPathsMutex);
-        }));
+			std::vector<std::string> imageFilesInChunk;
+			imageFilesInChunk.reserve(chunk.size());
+			for (size_t idx : chunk) {
+				// Safe index check
+				if (idx > 0 && idx <= fileList.size()) {
+					imageFilesInChunk.push_back(fileList[idx - 1]);
+				}
+			}
+
+			// Perform conversion
+			convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
+						 modeMdf, modeNrg, modeChd, modeDaa,
+						 &completedBytes, &completedTasks, &failedTasks,
+						 &successfulOutputPaths, &outPathsMutex);
+		}));
     }
 
     for (auto& future : futures)
