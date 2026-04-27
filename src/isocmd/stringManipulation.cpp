@@ -47,9 +47,9 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
     }
     
     // Cache lookup for processed directory paths
-    std::string fullPathKey(path);
-    if (auto it = transformationCache.find(fullPathKey); it != transformationCache.end()) {
-        return {it->second, std::move(filename)};
+    std::string dirKey(originalDir);
+	if (auto it = transformationCache.find(dirKey); it != transformationCache.end()) {
+		return {it->second, std::move(filename)};
     }
     
     std::string processedDir;
@@ -82,7 +82,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
         start = end + 1;
     }
     
-    transformationCache[fullPathKey] = processedDir;
+    transformationCache[dirKey] = processedDir;
     return {processedDir, std::move(filename)};
 }
 
