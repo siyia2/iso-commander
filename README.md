@@ -63,7 +63,7 @@ Database folder location: `/root/.local/share/isocmd/database/` || `~/.local/sha
 * Write ISO to Removable USB Drives
 * Convert (.bin/.img/.chd/.daa/.gbi/.mdf/.nrg) to ISO
 
-## Make dependencies
+## Dependencies
 - Archlinux: `readline util-linux xz zstd`.
 - Debian: `libreadline-dev libmount-dev liblzma-dev libzstd-dev`.
 
