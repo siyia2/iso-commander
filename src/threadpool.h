@@ -177,27 +177,9 @@ public:
     ~ThreadPool() {
         // 1. Wait for current workload to finish naturally
         waitAllTasksCompleted();
-
-        // 2. Signal shutdown
-        stop.store(true, std::memory_order_release);
-        {
-            std::lock_guard<std::mutex> lock(mutex);
-            cv.notify_all();
-        }
-
-        // 3. Join threads to ensure no one is accessing 'this' or the queue
-        for (auto& t : workers) {
-            if (t.joinable()) t.join();
-        }
-
-        // 4. Clean up any tasks that were enqueued after waitAllTasksCompleted 
-        // but before the stop signal.
-        std::function<void()> residual;
-        while (task_queue.dequeue(residual)) {
-            if (residual) {
-                try { residual(); } catch (...) {}
-            }
-        }
+        
+        // 2. Use the unified shutdown logic
+        shutdown();
     }
 
     /**
@@ -241,6 +223,29 @@ public:
             return task_state.load(std::memory_order_acquire) == 0;
         });
     }
+    
+    /**
+     * @brief Unified shutdown logic to stop workers and clear memory.
+     */
+    void shutdown() {
+		// 1. Signal stop. If already signaled, do nothing.
+		if (stop.exchange(true, std::memory_order_acq_rel)) return;
+
+		// 2. Wake up all sleeping threads so they can see the stop signal
+		{
+			std::lock_guard<std::mutex> lock(mutex);
+			cv.notify_all();
+		}
+
+		// 3. Join workers. Now the heap is safe from background access.
+		for (auto& t : workers) {
+			if (t.joinable()) t.join();
+		}
+		
+		// 4. (Optional) Clear the queue function wrappers
+		std::function<void()> residual;
+		while (task_queue.dequeue(residual)) { residual = nullptr; }
+	}
 
     bool isIdle() const { return task_state.load(std::memory_order_acquire) == 0; }
     size_t threadCount() const { return num_threads; }
@@ -251,10 +256,20 @@ public:
  * @brief Retrieves a singleton instance of the ThreadPool.
  */
 inline ThreadPool& getStaticThreadPool() {
-    static ThreadPool instance([] {
+    static ThreadPool* instance = new ThreadPool([] {
         return std::min({static_cast<size_t>(maxThreads), MAX_USEFUL_THREADS});
     }());
-    return instance;
+    
+    [[maybe_unused]] static bool registered = []() {
+        std::atexit([]() { 
+            // This will only run if the user didn't 
+            // manually call shutdown() in main().
+            instance->shutdown(); 
+        });
+        return true;
+    }();
+    
+    return *instance;
 }
 
 #endif // THREAD_POOL_H
