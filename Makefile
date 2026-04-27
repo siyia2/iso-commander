@@ -5,17 +5,25 @@ MAKEFLAGS = -j$(NUM_PROCESSORS)
 # ---------- Compiler and common flags ----------
 CXX = g++
 
-# ---- Sanitizer mode ----
+# ---- Base flags (used by both normal and sanitizer builds) ----
+CXXFLAGS_BASE = -std=c++20 -Wall -Wextra
+LDFLAGS_BASE  = -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
+
+# ---- Normal build ----
+CXXFLAGS_NORMAL = -O3 -flto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti
+LDFLAGS_NORMAL  = -Wl,--gc-sections -Wl,--strip-all
+
+# ---- Sanitizer build ----
 ifeq ($(SANITIZE),1)
-    # Optimize for debugging: low optimization, debug symbols, keep frame pointers
-    CXXFLAGS_COMMON = -std=c++20 -O1 -g -fno-omit-frame-pointer -Wall -Wextra
-    LDFLAGS_COMMON  = -fsanitize=address
-else
-    # Original production flags
-    CXXFLAGS_COMMON = -std=c++20 -O3 -Wall -Wextra -flto -fmerge-all-constants \
-                      -fdata-sections -ffunction-sections -fno-plt -fno-rtti
-    LDFLAGS_COMMON  = -Wl,--gc-sections -Wl,--strip-all -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
+    CXXFLAGS_EXTRA = -O1 -g -fno-omit-frame-pointer -fsanitize=address
+    LDFLAGS_EXTRA  = -fsanitize=address
+    # Explicitly disable things that conflict with ASan
+    CXXFLAGS_NORMAL = -O1 -g -fno-omit-frame-pointer
+    LDFLAGS_NORMAL  =
 endif
+
+CXXFLAGS_COMMON = $(CXXFLAGS_BASE) $(CXXFLAGS_NORMAL) $(CXXFLAGS_EXTRA)
+LDFLAGS_COMMON  = $(LDFLAGS_BASE) $(LDFLAGS_NORMAL) $(LDFLAGS_EXTRA)
 
 # ---------- Shared library for both builds ----------
 CHD_STATIC = ./deps/libchdr-static.a
@@ -23,23 +31,27 @@ CHD_STATIC = ./deps/libchdr-static.a
 # ---------- Dynamic build (default) ----------
 CXXFLAGS_DYN = $(CXXFLAGS_COMMON) -I./deps/libchdr/include
 LIBS_DYN = -lreadline -lmount $(CHD_STATIC) -llzma -lz -lzstd
-
-ifeq ($(SANITIZE),1)
-    # Remove any LTO/opt-only flags from link line
-    LDFLAGS_DYN = -lreadline -lmount $(LDFLAGS_COMMON)
-else
-    LDFLAGS_DYN = -lreadline -lmount -flto -ffunction-sections -fdata-sections -fno-plt $(LDFLAGS_COMMON)
-endif
+LDFLAGS_DYN = -lreadline -lmount $(LDFLAGS_COMMON)
 
 # ---------- Static build (use STATIC=1) ----------
-# (Paths to static libraries remain unchanged)
+LZMA_STATIC = /usr/lib/liblzma.a
+ZLIB_STATIC = /usr/lib/libz.a
+ZSTD_STATIC = /usr/lib/libzstd.a
+READLINE_STATIC = /usr/lib/libreadline.a
+NCURSES_STATIC = /usr/lib/libncurses.a
+MOUNT_STATIC = /usr/lib/libmount.a
+BLKID_STATIC = /usr/lib/libblkid.a
+ECONF_STATIC = /usr/lib/libeconf.a
+INTL_STATIC = /usr/lib/libintl.a
+
+# Sanitizer + full static is tricky. Prefer dynamic for ASan builds.
 ifeq ($(SANITIZE),1)
-    # ASan + full static linkage often needs extra care; you may prefer dynamic build.
-    # If you really need static, add -static-libasan and keep LDFLAGS_STAT simple.
+    # Keep it simple: don't strip, don't use LTO
     LDFLAGS_STAT = -static $(LDFLAGS_COMMON)
 else
-    LDFLAGS_STAT = -static $(LDFLAGS_COMMON)   # original: -static $(LDFLAGS_COMMON)
+    LDFLAGS_STAT = -static $(LDFLAGS_COMMON) $(LDFLAGS_NORMAL)
 endif
+
 CXXFLAGS_STAT = $(CXXFLAGS_COMMON) -I./deps/libchdr/include
 LIBS_STAT = $(CHD_STATIC) \
             $(LZMA_STATIC) $(ZLIB_STATIC) $(ZSTD_STATIC) \
@@ -57,7 +69,7 @@ else
     LDFLAGS  = $(LDFLAGS_DYN)
 endif
 
-# ---------- Directories and source files ----------
+# ---------- Rest remains the same ----------
 SRC_DIR = $(CURDIR)/src
 OBJ_DIR = $(CURDIR)/obj
 INSTALL_DIR = $(CURDIR)/bin
@@ -69,7 +81,6 @@ SRC_FILES = isocmd/main.cpp isocmd/history.cpp isocmd/verbose.cpp isocmd/isoData
 
 OBJ_FILES = $(patsubst %.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
 
-# ---------- Targets ----------
 all: isocmd
 
 isocmd: $(OBJ_FILES)
