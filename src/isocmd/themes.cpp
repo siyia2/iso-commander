@@ -201,12 +201,12 @@ WriteTheme getWriteTheme() {
         wt.colorFailure = t->secondary;
         wt.colorWarning = t->warning;
         wt.colorStatus  = t->muted;
-        wt.deviceCol    = t->secondary;
+        wt.deviceCol    = t->warning;
         wt.speedCol     = UI::Palette::BoldReset;
 
         wt.rl_labelCol     = "\001" + std::string(t->accent)               + "\002";
         wt.rl_primaryCol   = "\001" + std::string(t->muted)                + "\002";
-        wt.rl_highlightCol = "\001" + std::string(t->secondary)            + "\002";
+        wt.rl_highlightCol = "\001" + std::string(t->warning)              + "\002";
         wt.rl_errorCol     = "\001" + std::string(t->secondary)            + "\002";
         wt.rl_resetCol     = "\001" + std::string(UI::Palette::BoldReset)  + "\002";
     }

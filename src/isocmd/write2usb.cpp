@@ -473,7 +473,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
             auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
             
-            devicePromptStream << "  " << wt.indexCol << (i + 1) << ">" << wt.bold << " ";
+            devicePromptStream << "  " << wt.warnCol << (i + 1) << ">" << wt.bold << " ";
             
             if (!displayConfig::toggleNamesOnly) {
                 devicePromptStream << wt.pathCol << isoDir << "/";
