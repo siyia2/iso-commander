@@ -24,71 +24,70 @@
  * @see ISO 9660 ECMA-119, UDF OSTA standard, Apple HFS+ Technical Note TN1150.
  */
 static bool isValidIsoFile(const std::string& path) {
-    std::ifstream f(path, std::ios::binary);
-    if (!f) return false;
+    // Open with binary mode. We use ate to get size, but immediately check if open.
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    if (!f.is_open()) {
+        return false;
+    }
 
-    // Minimum viable file size (~300 KB) — covers ISO 9660 (offset 32769)
-    // and HFS (offset 1024). UDF bounds are checked per-iteration below.
-    f.seekg(0, std::ios::end);
-    if (!f.good()) return false;
     const auto fileSize = static_cast<std::streamoff>(f.tellg());
-    if (fileSize < 307200) return false;
+    
+    // Minimum viable size for any of these formats (~34KB)
+    // ISO9660 starts at 32KB + 2KB for the Primary Volume Descriptor.
+    if (fileSize < 34816) {
+        return false;
+    }
 
-    char sig[6] = {};
+    // Stack buffer for signatures to avoid allocations
+    std::array<char, 5> sig;
 
-    // -----------------------------------------------------------------------
-    // ISO 9660 (ECMA-119): Primary Volume Descriptor at LBA 16,
-    // 2048-byte sectors → absolute offset 32768; identifier at +1 → 32769.
-    // -----------------------------------------------------------------------
-    f.clear();                  // reset any stream error/EOF bits
-    f.seekg(32769);
-    f.read(sig, 5);
-    if (f.good() && std::string_view(sig, 5) == "CD001")
-        return true;
+    // --- 1. ISO 9660 (CD001) ---
+    // Sector 16 (16 * 2048 = 32768). Identifier is at offset +1.
+    f.clear();
+    if (f.seekg(32769) && f.read(sig.data(), 5)) {
+        if (std::string_view(sig.data(), 5) == "CD001") return true;
+    }
 
-    // -----------------------------------------------------------------------
-    // UDF (OSTA): Volume Recognition Sequence in sectors 16–19 and 256.
-    // The VSD identifier field starts at byte offset +1 within the sector.
-    // Probe three sector sizes to cover optical (2048), HDD/USB (512/4096).
-    // -----------------------------------------------------------------------
-    static constexpr int kUdfSectors[]   = {16, 17, 18, 19, 256};
-    static constexpr int kSectorSizes[]  = {512, 2048, 4096};
+    // --- 2. UDF (Universal Disk Format) ---
+    // We check common Volume Recognition Sequence (VRS) locations.
+    static constexpr int kUdfSectors[]  = {16, 17, 18, 19, 256};
+    static constexpr int kSectorSizes[] = {512, 2048, 4096};
 
     for (const int secSize : kSectorSizes) {
         for (const int sector : kUdfSectors) {
             const auto offset = static_cast<std::streamoff>(sector) * secSize + 1;
-            if (offset + 5 > fileSize)  // not enough data at this geometry
-                continue;
+            
+            if (offset + 5 > fileSize) continue;
 
-            f.clear();              // must clear before every seekg
-            f.seekg(offset);
-            f.read(sig, 5);
-            if (!f.good()) continue;
-
-            const std::string_view sv(sig, 5);
-            if (sv == "BEA01" || sv == "NSR02" || sv == "NSR03")
-                return true;
+            f.clear();
+            if (f.seekg(offset) && f.read(sig.data(), 5)) {
+                std::string_view sv(sig.data(), 5);
+                if (sv == "BEA01" || sv == "NSR02" || sv == "NSR03" || sv == "TEA01") {
+                    return true;
+                }
+            }
         }
     }
 
-    // -----------------------------------------------------------------------
-    // HFS (0x4244), HFS+ (0x482B), HFSX (0x4858):
-    // Volume Header magic at byte offset 1024, stored big-endian.
-    // Byte-swap only on little-endian hosts for portability.
-    // -----------------------------------------------------------------------
-    f.clear();
-    f.seekg(1024);
-    uint16_t hfsMagic = 0;
-    f.read(reinterpret_cast<char*>(&hfsMagic), 2);
-    if (f.good()) {
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-        hfsMagic = __builtin_bswap16(hfsMagic);
-#endif
-        if (hfsMagic == 0x4244 ||   // HFS
-            hfsMagic == 0x482B ||   // HFS+
-            hfsMagic == 0x4858)     // HFSX
-            return true;
-    }
+    // --- 3. HFS / HFS+ / HFSX ---
+	if (fileSize >= 1026) {
+		f.clear();
+		if (f.seekg(1024)) {
+			unsigned char buf[2]; 
+			if (f.read(reinterpret_cast<char*>(buf), 2) && f.gcount() == 2) {
+				// Manually reconstruct: (High Byte << 8) | Low Byte
+				// HFS is Big-Endian, so buf[0] is the most significant byte.
+				uint16_t hfsMagic = (static_cast<uint16_t>(buf[0]) << 8) | buf[1];
+
+				if (hfsMagic == 0x4244 || // 'BD'
+					hfsMagic == 0x482B || // 'H+'
+					hfsMagic == 0x4858)   // 'HX'
+				{
+					return true;
+				}
+			}
+		}
+	}
 
     return false;
 }
