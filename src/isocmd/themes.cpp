@@ -131,7 +131,7 @@ CpMvRmColors getCpMvRmColors() {
     colors.dest_path     = isOriginal ? UI::Palette::Blue       : theme->accent;
     colors.abort         = isOriginal ? UI::Palette::Yellow      : theme->warning;
     colors.prompt_green  = isOriginal ? UI::Palette::Green      : theme->accent;
-    colors.prompt_blue   = isOriginal ? UI::Palette::Blue       : theme->secondary;
+    colors.prompt_blue   = isOriginal ? UI::Palette::Blue       : theme->muted;
 
     return colors;
 }
