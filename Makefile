@@ -69,7 +69,7 @@ else
     LDFLAGS  = $(LDFLAGS_DYN)
 endif
 
-# ---------- Rest remains the same ----------
+# ---------- Directories and source files ----------
 SRC_DIR = $(CURDIR)/src
 OBJ_DIR = $(CURDIR)/obj
 INSTALL_DIR = $(CURDIR)/bin
