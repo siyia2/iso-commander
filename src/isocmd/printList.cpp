@@ -118,7 +118,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         else if (isMountedMode) {
             auto [dirPart, pathPart, hashPart] = parseMountPointComponents(item);
             if (showFullUmount) {
-                output.append(c.mnt).append(dirPart)
+                output.append(c.mnt).append(dirPart).append(UI::Palette::BoldReset)
                       .append(c.iso).append(pathPart)
                       .append(c.square).append(hashPart);
             } else {
