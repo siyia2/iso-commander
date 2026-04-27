@@ -95,7 +95,6 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
 
     for (const auto& idxChunk : indexChunks) {
 		futures.emplace_back(pool.enqueue([=, &operationFiles, &skippedMessages, &operationFails, &completedTasks, &failedTasks]() {
-			if (g_operationCancelled.load()) return;
 
 			std::vector<std::string> chunkStr;
 			chunkStr.reserve(idxChunk.size());
@@ -313,12 +312,9 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
 										   &completedBytes, &completedTasks, &failedTasks,
 										   &overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
 			
-			if (g_operationCancelled.load()) return;
-
 			std::vector<std::string> isoFilesInChunk;
 			isoFilesInChunk.reserve(chunk.size());
 			for (int idx : chunk) {
-				// Safe: isoFiles is now a local copy within the lambda
 				isoFilesInChunk.push_back(isoFiles[idx - 1]);
 			}
 
@@ -491,8 +487,6 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 										   modeMdf, modeNrg, modeChd, modeDaa,
 										   &completedBytes, &completedTasks, &failedTasks,
 										   &successfulOutputPaths, &outPathsMutex]() {
-			if (g_operationCancelled.load()) return;
-
 			std::vector<std::string> imageFilesInChunk;
 			imageFilesInChunk.reserve(chunk.size());
 			for (size_t idx : chunk) {
