@@ -95,7 +95,6 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
 
     for (const auto& idxChunk : indexChunks) {
         futures.emplace_back(pool.enqueue([&, idxChunk]() {
-            if (g_operationCancelled.load()) return;
 
             std::vector<std::string> chunkStr;
             chunkStr.reserve(idxChunk.size());
