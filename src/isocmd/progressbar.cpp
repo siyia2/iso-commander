@@ -49,9 +49,15 @@ void restoreInput(struct termios *oldt, int oldf) {
  * @param verbose Pointer to boolean to store user preference for verbose output.
  * @param operation Description of the current operation.
  */
-void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes,
-    std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks,
-    std::atomic<bool>* isComplete, bool* verbose, const std::string& operation) {
+void displayProgressBarWithSize(
+    std::shared_ptr<std::atomic<size_t>> completedBytes, 
+    size_t totalBytes,
+    std::shared_ptr<std::atomic<size_t>> completedTasks, 
+    std::shared_ptr<std::atomic<size_t>> failedTasks, 
+    size_t totalTasks,
+    std::shared_ptr<std::atomic<bool>> isComplete, 
+    bool* verbose, 
+    const std::string& operation) {
     
     ProgressBarColors pc = resolveProgressTheme();
     

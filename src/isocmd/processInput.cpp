@@ -77,18 +77,18 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
         indexChunks[i % numThreads].push_back(selectedIndices[i]);
 
     std::vector<std::future<void>> futures;
-    std::atomic<size_t> completedTasks(0);
-    std::atomic<size_t> failedTasks(0);
-    std::atomic<bool> isProcessingComplete(false);
+    auto completedTasks = std::make_shared<std::atomic<size_t>>(0);
+	auto failedTasks = std::make_shared<std::atomic<size_t>>(0);
+	auto isProcessingComplete = std::make_shared<std::atomic<bool>>(false);
 
     std::thread progressThread(
         displayProgressBarWithSize,
         nullptr,
         static_cast<size_t>(0),
-        &completedTasks,
-        &failedTasks,
+        completedTasks,
+        failedTasks,
         selectedIndices.size(),
-        &isProcessingComplete,
+        isProcessingComplete,
         &verbose,
         std::string(coloredProcess)
     );
@@ -103,18 +103,18 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
 			}
 
 			if (isUnmount)
-				unmountISO(chunkStr, operationFiles, operationFails, &completedTasks, &failedTasks, false);
+				unmountISO(chunkStr, operationFiles, operationFails, completedTasks.get(), failedTasks.get(), false);
 			else
-				mountIsoFiles(chunkStr, operationFiles, skippedMessages, operationFails, &completedTasks, &failedTasks, false);
+				mountIsoFiles(chunkStr, operationFiles, skippedMessages, operationFails, completedTasks.get(), failedTasks.get(), false);
 		}));
 	}
 
     for (auto& future : futures)
         future.wait();
 
-    if (completedTasks == 0 && isUnmount) operationBreak = false;
+    if (completedTasks->load() > 0 && isUnmount) operationBreak = false;
 
-    isProcessingComplete.store(true);
+    isProcessingComplete->store(true);
     signal(SIGINT, SIG_IGN);
     progressThread.join();
 }
@@ -293,14 +293,15 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
         isCopy   ? std::string(UI::Palette::Green)  + process + std::string(UI::Palette::BoldReset) :
         process;
 
-    std::atomic<size_t> completedBytes(0);
-    std::atomic<size_t> completedTasks(0);
-    std::atomic<size_t> failedTasks(0);
-    std::atomic<bool> isProcessingComplete(false);
+    auto completedBytes = std::make_shared<std::atomic<size_t>>(0);
+	auto completedTasks = std::make_shared<std::atomic<size_t>>(0);
+	auto failedTasks = std::make_shared<std::atomic<size_t>>(0);
+	auto isProcessingComplete = std::make_shared<std::atomic<bool>>(false);
 
-    std::thread progressThread(displayProgressBarWithSize, &completedBytes,
-                               totalBytes, &completedTasks, &failedTasks,
-                               totalTasks, &isProcessingComplete, &verbose, std::string(coloredProcess));
+
+    std::thread progressThread(displayProgressBarWithSize, completedBytes,
+                               totalBytes, completedTasks, failedTasks,
+                               totalTasks, isProcessingComplete, &verbose, std::string(coloredProcess));
 
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
@@ -320,7 +321,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
 
 			handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors,
 								   userDestDir, isMove, isCopy, isDelete,
-								   &completedBytes, &completedTasks, &failedTasks,
+								   completedBytes.get(), completedTasks.get(), failedTasks.get(),
 								   overwriteExisting, &successfulDestPaths, &destPathsMutex);
 		}));
 	}
@@ -328,12 +329,12 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     for (auto& future : futures)
         future.wait();
 
-    if (completedTasks == 0) umountMvRmBreak = false;
-    isProcessingComplete.store(true);
+    if (completedTasks->load() > 0) umountMvRmBreak = false;
+    isProcessingComplete->store(true);
     signal(SIGINT, SIG_IGN);
     progressThread.join();
 
-    if (completedTasks.load() > 0 && !isDelete) {
+    if (completedTasks->load() > 0 && !isDelete) {
         std::string exactPaths;
         for (const auto& destPath : successfulDestPaths) {
             if (!exactPaths.empty()) exactPaths += ';';
@@ -470,13 +471,15 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
               << UI::Palette::Red << "Ctrl+c"
               << colorMuted << ":cancel)\n";
 
-    std::atomic<size_t> completedBytes(0);
-    std::atomic<size_t> completedTasks(0);
-    std::atomic<size_t> failedTasks(0);
-    std::atomic<bool> isProcessingComplete(false);
+    auto completedBytes = std::make_shared<std::atomic<size_t>>(0);
+	auto completedTasks = std::make_shared<std::atomic<size_t>>(0);
+	auto failedTasks = std::make_shared<std::atomic<size_t>>(0);
+	auto isProcessingComplete = std::make_shared<std::atomic<bool>>(false);
 
-    std::thread progressThread(displayProgressBarWithSize, &completedBytes,
-        totalBytes, &completedTasks, &failedTasks, totalTasks, &isProcessingComplete, &verbose, operation);
+    std::thread progressThread(displayProgressBarWithSize, 
+    completedBytes, totalBytes, 
+    completedTasks, failedTasks, totalTasks, 
+    isProcessingComplete, &verbose, operation);
 
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
@@ -496,7 +499,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 
 			convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
 						 modeMdf, modeNrg, modeChd, modeDaa,
-						 &completedBytes, &completedTasks, &failedTasks,
+						 completedBytes.get(), completedTasks.get(), failedTasks.get(),
 						 &successfulOutputPaths, &outPathsMutex);
 		}));
 	}
@@ -504,7 +507,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     for (auto& future : futures)
         future.wait();
 
-    isProcessingComplete.store(true);
+    isProcessingComplete->store(true);
     signal(SIGINT, SIG_IGN);
     progressThread.join();
 
