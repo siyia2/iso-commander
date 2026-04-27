@@ -55,24 +55,24 @@ static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessage
  * @param failedTasks Atomic counter for failed operations.
  * @param silentMode If true, suppresses message formatting and set insertion.
  */
-void unmountISO(const std::vector<std::string>& isoDirs, 
-                std::unordered_set<std::string>& unmountedFiles, 
-                std::unordered_set<std::string>& unmountedErrors, 
-                std::atomic<size_t>* completedTasks, 
-                std::atomic<size_t>* failedTasks, 
-                bool silentMode) {
-
+void unmountISO(
+    const std::vector<std::string>& isoDirs,
+    std::unordered_set<std::string>& unmountedFiles,
+    std::unordered_set<std::string>& unmountedErrors,
+    std::atomic<size_t>* completedTasks,
+    std::atomic<size_t>* failedTasks,
+    bool silentMode)
+{
     const bool hasRoot = (geteuid() == 0);
     VerboseMessageFormatter messageFormatter;
     std::vector<std::string> errorMessages, successMessages;
 
+    constexpr size_t kBatchSize = 50;
     if (!silentMode) {
-        const size_t BATCH_SIZE = 50;
-        errorMessages.reserve(BATCH_SIZE);
-        successMessages.reserve(BATCH_SIZE);
+        errorMessages.reserve(kBatchSize);
+        successMessages.reserve(kBatchSize);
     }
 
-    // Transfers local batch buffers to the global shared sets
     auto flushTemporaryBuffers = [&]() {
         if (silentMode) return;
         std::lock_guard<std::mutex> lock(globalSetsMutex);
@@ -86,57 +86,56 @@ void unmountISO(const std::vector<std::string>& isoDirs,
         }
     };
 
-    auto isCancelled = []() { return g_operationCancelled.load(); };
-
-    if (!hasRoot) {
-        for (const auto& isoDir : isoDirs) {
-            if (!silentMode) {
-                errorMessages.push_back(formatDirForDisplay(isoDir, messageFormatter, "root_error"));
-            }
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+    auto maybeFlush = [&]() {
+        if (!silentMode &&
+            (successMessages.size() >= kBatchSize ||
+             errorMessages.size()   >= kBatchSize)) {
+            flushTemporaryBuffers();
         }
-        flushTemporaryBuffers();
+    };
+
+    // ----------------------------------------------------------------
+    // Early-out: no root → bulk-increment and flush error messages
+    // ----------------------------------------------------------------
+    if (!hasRoot) {
+        if (!silentMode) {
+            for (const auto& isoDir : isoDirs)
+                errorMessages.push_back(
+                    formatDirForDisplay(isoDir, messageFormatter, "root_error"));
+            flushTemporaryBuffers();
+        }
+        failedTasks->fetch_add(isoDirs.size(), std::memory_order_relaxed);
         return;
     }
 
     for (const auto& isoDir : isoDirs) {
-        if (isCancelled()) {
-            if (!silentMode) {
-                errorMessages.push_back(formatDirForDisplay(isoDir, messageFormatter, "cancel"));
-            }
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+
+        if (g_operationCancelled.load(std::memory_order_relaxed)) {
+            if (!silentMode)
+                errorMessages.push_back(
+                    formatDirForDisplay(isoDir, messageFormatter, "cancel"));
+            failedTasks->fetch_add(1, std::memory_order_relaxed);
+            maybeFlush();
             continue;
         }
 
-        // MNT_DETACH allows the mount point to be unmounted even if busy (lazy unmount)
+        // MNT_DETACH allows lazy unmount even if the mount point is busy
         const int result = umount2(isoDir.c_str(), MNT_DETACH);
 
-        if (result == 0) {
+        if (result == 0 || isDirectoryEmpty(isoDir)) {
             rmdir(isoDir.c_str());
-            completedTasks->fetch_add(1, std::memory_order_acq_rel);
-            if (!silentMode) {
-                successMessages.push_back(formatDirForDisplay(isoDir, messageFormatter, "success"));
-            }
+            completedTasks->fetch_add(1, std::memory_order_relaxed);
+            if (!silentMode)
+                successMessages.push_back(
+                    formatDirForDisplay(isoDir, messageFormatter, "success"));
         } else {
-            // Check if the mount is already gone but the directory remains
-            if (isDirectoryEmpty(isoDir)) {
-                rmdir(isoDir.c_str());
-                completedTasks->fetch_add(1, std::memory_order_acq_rel);
-                if (!silentMode) {
-                    successMessages.push_back(formatDirForDisplay(isoDir, messageFormatter, "success"));
-                }
-            } else {
-                failedTasks->fetch_add(1, std::memory_order_acq_rel);
-                if (!silentMode) {
-                    errorMessages.push_back(formatDirForDisplay(isoDir, messageFormatter, "error"));
-                }
-            }
+            failedTasks->fetch_add(1, std::memory_order_relaxed);
+            if (!silentMode)
+                errorMessages.push_back(
+                    formatDirForDisplay(isoDir, messageFormatter, "error"));
         }
 
-        // Flush in batches to reduce lock contention on globalSetsMutex
-        if (!silentMode && (successMessages.size() >= 50 || errorMessages.size() >= 50)) {
-            flushTemporaryBuffers();
-        }
+        maybeFlush();
     }
 
     flushTemporaryBuffers();
