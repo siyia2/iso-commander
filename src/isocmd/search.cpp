@@ -72,7 +72,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
               .append("\001").append(dt.green).append("\002.iso")
               .append("\001").append(dt.blue).append("\002 entries and import them into the ")
               .append("\001").append(dt.green).append("\002local")
-              .append("\001").append(dt.blue).append("\002 database, ? ↵ help, ↵ return:\n")
+              .append("\001").append(dt.blue).append("\002 database, ? ↵ for help, ↵ to return:\n")
               .append("\001").append(dt.reset).append("\002");
 
         char* rawSearchQuery = readline(prompt.c_str());
@@ -905,7 +905,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
               .append("\001").append(dt.orange).append("\002").append(fileExtension)
               .append("\001").append(dt.blue).append("\002 entries and cache them into \001")
               .append("\001").append(dt.yellow).append("\002RAM\001")
-              .append("\001").append(dt.blue).append("\002, ? ↵ help, ↵ return:\n\001")
+              .append("\001").append(dt.blue).append("\002, ? ↵ for help, ↵ to return:\n\001")
               .append(dt.reset).append("\002");
         
         std::unique_ptr<char, decltype(&std::free)> mainSearch(readline(prompt.c_str()), &std::free);

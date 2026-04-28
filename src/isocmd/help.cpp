@@ -71,7 +71,7 @@ void helpSelections() {
 
     printSection(tc, "\n3. Special Commands:",
         "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~' / '*' " + std::string(UI::Palette::BoldReset) + "         : Toggle Compact/Full or Filename-only lists\n" + std::string(UI::Palette::BoldReset) +
-        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'/' / '/t' " + std::string(UI::Palette::BoldReset) + "        : Filter list / Direct filter (e.g., '/term1;term2')\n" + std::string(UI::Palette::BoldReset) +
+        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'/' / '/t' " + std::string(UI::Palette::BoldReset) + "        : Filter list / Direct filter (e.g., '/term1;term2', both require ↵)\n" + std::string(UI::Palette::BoldReset) +
         "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgUp'/'PgDn'/'g' " + std::string(UI::Palette::BoldReset) + " : Pagination (Next, Previous, Go to page)\n" + std::string(UI::Palette::BoldReset) +
         "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'proc'/'clr' " + std::string(UI::Palette::BoldReset) + "      : Process or Clear pending items");
 

@@ -449,6 +449,30 @@ int clear_screen_and_buffer(int, int) {
     return 0;
 }
 
+int flno_handler(int, int) {
+    rl_replace_line("*", 0);
+    rl_done = 1;  // ← returns immediately, no Enter needed
+    return 0;
+}
+
+int toggleExit_handler(int, int) {
+    rl_replace_line("<", 0);
+    rl_done = 1;  // ← returns immediately, no Enter needed
+    return 0;
+}
+
+int toggleHelp_handler(int, int) {
+    rl_replace_line("?", 0);
+    rl_done = 1;  // ← returns immediately, no Enter needed
+    return 0;
+}
+
+int toggleList_handler(int, int) {
+    rl_replace_line("~", 0);
+    rl_done = 1;  // ← returns immediately, no Enter needed
+    return 0;
+}
+
 /**
  * @brief Readline key handler for the Page Down key.
  *
@@ -479,4 +503,36 @@ int pgup_handler(int, int) {
     rl_replace_line("PgUp", 0);
     rl_done = 1;  // ← returns immediately, no Enter needed
     return 0;
+}
+
+/**
+ * Sets up custom keybindings for file selections.
+ * Overrides default behavior for navigation and specific character keys.
+ */
+void setup_custom_keybindingsForSelect(void) {
+    /* Map Page Up and Page Down to custom handlers */
+    rl_bind_keyseq("\\e[5~", pgup_handler);
+    rl_bind_keyseq("\\e[6~", pgdn_handler);
+
+    /* Map printable characters to feature toggles */
+    rl_bind_keyseq("*", flno_handler);
+    rl_bind_keyseq("~", toggleList_handler);
+    rl_bind_keyseq("<", toggleExit_handler);
+    rl_bind_keyseq("?", toggleHelp_handler);
+}
+
+/**
+ * Resets to default the custom keybindings for file selections.
+ * Overrides default behavior for navigation and specific character keys.
+ */
+void reset_custom_keybindingsForSelect(void) {
+    /* Restore Page Up and Page Down to history navigation */
+    rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+    rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+
+    /* Restore standard printable characters to default self-insert */
+    rl_bind_keyseq("<", rl_insert);
+    rl_bind_keyseq("?", rl_insert);
+    rl_bind_keyseq("*", rl_insert);
+    rl_bind_keyseq("~", rl_insert);
 }

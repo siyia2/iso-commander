@@ -308,8 +308,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     while (true) {
         enable_ctrl_d();
         setupSignalHandlerCancellations();
-        rl_bind_keyseq("\\e[5~", pgup_handler);
-		rl_bind_keyseq("\\e[6~", pgdn_handler);
+        setup_custom_keybindingsForSelect();
         g_operationCancelled.store(false);
         resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
         filterHistory = false;
@@ -355,7 +354,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 			pt.iso         + "ISO" + 
 			pt.primary     + " ↵ for " + "\001" +
 			operationColor + "\002" + operation + 
-			pt.primary     + ", ? ↵ for help, < ↵ to return: " +
+			pt.primary     + ", ? help, < return: " +
 			pt.reset;
 
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
@@ -431,8 +430,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                                            filterHistory, newISOFound);
     }
     
-    rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
-	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+    reset_custom_keybindingsForSelect();
 }
 
 /**
@@ -493,8 +491,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
     while (true) {
         enable_ctrl_d();
         setupSignalHandlerCancellations();
-        rl_bind_keyseq("\\e[5~", pgup_handler);
-		rl_bind_keyseq("\\e[6~", pgdn_handler);
+        setup_custom_keybindingsForSelect();
         g_operationCancelled.store(false);
         bool verbose = false; 
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
@@ -518,7 +515,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             pt.highlight + fileExtensionWithOutDots + 
             pt.primary   + " ↵ for " +
             pt.highlight + operation + 
-            pt.primary   + ", ? ↵ for help, < ↵ to return: " +
+            pt.primary   + ", ? help, < return: " +
             pt.reset;
         
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
@@ -632,7 +629,5 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             }
         }
     }
-    
-    rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
-	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+   reset_custom_keybindingsForSelect();
 }
