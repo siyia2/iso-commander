@@ -449,27 +449,47 @@ int clear_screen_and_buffer(int, int) {
     return 0;
 }
 
+/**
+ * @brief Readline key handler for the '*' key.
+ * * Replaces the current line buffer with '*' and signals Readline to 
+ * finish the current input session immediately without an Enter keypress.
+ */
 int flno_handler(int, int) {
     rl_replace_line("*", 0);
-    rl_done = 1;  // ← returns immediately, no Enter needed
+    rl_done = 1;  
     return 0;
 }
 
+/**
+ * @brief Readline key handler for the '<' key.
+ * * Sets the input buffer to '<' to signal an exit command and terminates
+ * the Readline loop immediately.
+ */
 int toggleExit_handler(int, int) {
     rl_replace_line("<", 0);
-    rl_done = 1;  // ← returns immediately, no Enter needed
+    rl_done = 1;
     return 0;
 }
 
+/**
+ * @brief Readline key handler for the '?' key.
+ * * Replaces the input with '?' to trigger the help interface and 
+ * returns control to the calling function immediately.
+ */
 int toggleHelp_handler(int, int) {
     rl_replace_line("?", 0);
-    rl_done = 1;  // ← returns immediately, no Enter needed
+    rl_done = 1;
     return 0;
 }
 
+/**
+ * @brief Readline key handler for the '~' key.
+ * * Replaces the input with '~' to toggle the list view mode and
+ * exits the prompt without requiring a newline.
+ */
 int toggleList_handler(int, int) {
     rl_replace_line("~", 0);
-    rl_done = 1;  // ← returns immediately, no Enter needed
+    rl_done = 1;
     return 0;
 }
 
@@ -506,8 +526,11 @@ int pgup_handler(int, int) {
 }
 
 /**
- * Sets up custom keybindings for file selections.
- * Overrides default behavior for navigation and specific character keys.
+ * @brief Configures custom keybindings for a specialized file selection UI.
+ *
+ * This function intercepts standard keypresses (PageUp/Down, *, ~, <, ?) 
+ * and maps them to custom handlers. This transforms the standard Readline 
+ * prompt into a single-keypress command interface.
  */
 void setup_custom_keybindingsForSelect(void) {
     /* Map Page Up and Page Down to custom handlers */
@@ -522,8 +545,11 @@ void setup_custom_keybindingsForSelect(void) {
 }
 
 /**
- * Resets to default the custom keybindings for file selections.
- * Overrides default behavior for navigation and specific character keys.
+ * @brief Restores Readline keybindings to their original state.
+ *
+ * Reverts navigation keys to history scrolling and returns character keys 
+ * to standard text insertion (rl_insert). This should be called after 
+ * the file selection UI is closed to prevent breaking standard input.
  */
 void reset_custom_keybindingsForSelect(void) {
     /* Restore Page Up and Page Down to history navigation */
