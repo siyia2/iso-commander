@@ -25,56 +25,67 @@ extern "C" const char* __lsan_default_suppressions() {
 /**
  * @brief Checks if a file is a valid disk image (ISO 9660 or UDF).
  *
- * Checks in order: ISO 9660, UDF (sector sizes 512/2048/4096).
+ * Checks in order: ISO 9660, UDF (sector sizes 2048/512/4096).
  *
  * @param path Filesystem path to the file to be checked.
  * @return true if a recognised disk image signature is found, false otherwise.
  *
  * @note Performs binary reads only; does not modify the file.
- * @note UDF detection probes sector sizes 512, 2048, and 4096 for broad media support.
+ * @note UDF detection probes sectors {16, 17, 18, 19, 256} across sector sizes
+ *       2048, 512, and 4096 bytes for broad media support.
+ * @note Requires a minimum file size of 34816 bytes.
  *
  * @warning May return true for truncated images that still contain valid magic bytes.
  *
  * @see ISO 9660 ECMA-119, UDF OSTA standard.
  */
 static bool isValidIsoFile(const std::string& path) {
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
-    if (!f.is_open()) return false;
+    const int fd = open(path.c_str(), O_RDONLY | O_NOATIME | O_CLOEXEC);
+    if (fd < 0) return false;
 
-    const auto fileSize = static_cast<std::streamoff>(f.tellg());
+    struct stat st;
+    if (fstat(fd, &st) < 0 || st.st_size < 34816) {
+        close(fd);
+        return false;
+    }
+    const off_t fileSize = st.st_size;
 
-    // ISO 9660 PVD sits at byte 32769; UDF VRS with 512-byte sectors needs
-    // at least sector 16 * 512 + 6 = 8198 bytes. 34816 comfortably covers both.
-    if (fileSize < 34816) return false;
-
-    // Seek to offset, read exactly n bytes. Returns false on short read.
-    auto readAt = [&](std::streamoff offset, char* buf, std::streamsize n) -> bool {
-        if (offset + n > fileSize) return false;
-        f.clear();
-        return f.seekg(offset) && f.read(buf, n) && f.gcount() == n;
-    };
+    posix_fadvise(fd, 0, 0, POSIX_FADV_RANDOM);
 
     char sig[5];
 
+    auto readAt = [&](off_t offset, std::size_t n) -> bool {
+        if (offset + static_cast<off_t>(n) > fileSize) return false;
+        return pread(fd, sig, n, offset) == static_cast<ssize_t>(n);
+    };
+
+    bool found = false;
+
     // --- 1. ISO 9660 (CD001) at sector 16, byte offset +1 ---
-    if (readAt(32769, sig, 5) && std::string_view(sig, 5) == "CD001")
-        return true;
+    if (readAt(32769, 5) && std::string_view(sig, 5) == "CD001") {
+        found = true;
+    }
 
     // --- 2. UDF Volume Recognition Sequence ---
-    static constexpr int kUdfSectors[]  = {16, 17, 18, 19, 256};
-    static constexpr int kSectorSizes[] = {512, 2048, 4096};
-
-    for (const int secSize : kSectorSizes) {
-        for (const int sector : kUdfSectors) {
-            if (!readAt(static_cast<std::streamoff>(sector) * secSize + 1, sig, 5))
-                continue;
-            std::string_view sv(sig, 5);
-            if (sv == "BEA01" || sv == "NSR02" || sv == "NSR03" || sv == "TEA01")
-                return true;
+    if (!found) {
+        static constexpr int kUdfSectors[]  = {16, 17, 18, 19, 256};
+        static constexpr int kSectorSizes[] = {2048, 512, 4096};
+        for (const int secSize : kSectorSizes) {
+            for (const int sector : kUdfSectors) {
+                if (!readAt(static_cast<off_t>(sector) * secSize + 1, 5)) continue;
+                std::string_view sv(sig, 5);
+                if (sv == "BEA01" || sv == "NSR02" || sv == "NSR03" || sv == "TEA01") {
+                    found = true;
+                    break;
+                }
+            }
+            if (found) break;
         }
     }
 
-    return false;
+    posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
+    close(fd);
+    return found;
 }
 
 /**
