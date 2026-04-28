@@ -38,7 +38,14 @@ int main(int argc, char *argv[]) {
                      monitorThreadSpawned{false};
     /// @}
     
+    // Generous reserve for future lists
     globalIsoFileList.reserve(1000);
+    binImgFilesCache.reserve(1000);
+	mdfMdsFilesCache.reserve(1000);
+	nrgFilesCache.reserve(1000);
+	chdFilesCache.reserve(1000);
+	daaGbiFilesCache.reserve(1000);
+	
     setupReadlineToIgnoreCtrlC();
 
     // --- Version & Utility Command Dispatch ---
