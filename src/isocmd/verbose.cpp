@@ -369,7 +369,6 @@ void verboseSearchResults(const std::string& fileExtension,
  * until the user is ready to try again.
  */
 void pressEnterToTry() {
-	    enable_ctrl_d();
 	std::cout << color << "\n↵ to try again..." << UI::Palette::BoldReset;
      std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
@@ -382,7 +381,6 @@ void pressEnterToTry() {
  * returning to a calling context.
  */
 void pressEnterToReturn() {
-	    enable_ctrl_d();
 	std::cout << color << "\n↵ to return..." << UI::Palette::BoldReset;
      std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
@@ -396,7 +394,6 @@ void pressEnterToReturn() {
  * program proceeds.
  */
 void pressEnterToContinue() {
-	    enable_ctrl_d();
 	std::cout << color << "\n↵ to continue..." << UI::Palette::BoldReset;
      std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
