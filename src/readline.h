@@ -45,10 +45,80 @@ extern CompleterData g_completerData;
 char** completion_cb(const char* text, int start, int end);
 
 /**
- * @brief Readline key handler callbacks for PgUp/PgDn pagination navigation.
+ * @brief Readline key handler for the Page Up key.
+ * * Sets the line buffer to "PgUp" and forces an immediate return to signal
+ * a request for the previous page of data.
+ * * @param count Unused readline repeat count.
+ * @param key   The key code that triggered the handler.
+ * @return Always returns 0.
  */
 int pgup_handler(int count, int key);
+
+/**
+ * @brief Readline key handler for the '~' key.
+ * * Sets the line buffer to "~" and forces an immediate return to toggle
+ * between different list view modes.
+ * * @param count Unused readline repeat count.
+ * @param key   The key code that triggered the handler.
+ * @return Always returns 0.
+ */
+int toggleList_handler(int count, int key);
+
+/**
+ * @brief Readline key handler for the '?' key.
+ * * Sets the line buffer to "?" and forces an immediate return to trigger
+ * the display of the help or usage interface.
+ * * @param count Unused readline repeat count.
+ * @param key   The key code that triggered the handler.
+ * @return Always returns 0.
+ */
+int toggleHelp_handler(int count, int key);
+
+/**
+ * @brief Readline key handler for the '<' key.
+ * * Sets the line buffer to "<" and forces an immediate return to signal
+ * an exit or "back" command from the current menu.
+ * * @param count Unused readline repeat count.
+ * @param key   The key code that triggered the handler.
+ * @return Always returns 0.
+ */
+int toggleExit_handler(int count, int key);
+
+/**
+ * @brief Readline key handler for the '*' key.
+ * * Sets the line buffer to "*" and forces an immediate return, typically 
+ * used to toggle file numbering or select-all functionality.
+ * * @param count Unused readline repeat count.
+ * @param key   The key code that triggered the handler.
+ * @return Always returns 0.
+ */
+int flno_handler(int count, int key);
+
+/**
+ * @brief Readline key handler for the Page Down key.
+ * * Sets the line buffer to "PgDn" and forces an immediate return to signal
+ * a request for the next page of data.
+ * * @param count Unused readline repeat count.
+ * @param key   The key code that triggered the handler.
+ * @return Always returns 0.
+ */
 int pgdn_handler(int count, int key);
+
+/**
+ * @brief Initializes and binds custom key sequences for file selection.
+ * * Maps physical keys (like PageUp/PageDown) and character keys (*, <, ?, ~)
+ * to their respective internal handlers to allow single-key navigation 
+ * without requiring the Enter key.
+ */
+void setup_custom_keybindingsForSelect(void);
+
+/**
+ * @brief Restores standard Readline behavior for modified keys.
+ * * Unbinds custom selection handlers and restores default functions, such 
+ * as history navigation and standard character insertion, to ensure 
+ * normal terminal behavior elsewhere in the application.
+ */
+void reset_custom_keybindingsForSelect(void);
 
 #endif
 #endif // READLINE_H
