@@ -362,39 +362,53 @@ void verboseSearchResults(const std::string& fileExtension,
 }
 
 /**
- * @brief Waits for the user to press Enter before allowing another attempt.
- * 
- * Prompts the user to press the Enter key, then discards any remaining input
- * in the stream buffer (including newline characters) to pause execution
- * until the user is ready to try again.
+ * @brief Waits for the user to press Enter or Ctrl+D before allowing another attempt.
+ *
+ * Uses raw fd read to correctly handle both Enter and Ctrl+D regardless of
+ * tty VEOF state, avoiding buffering issues with std::cin in canonical mode.
  */
 void pressEnterToTry() {
-	std::cout << color << "\n↵ to try again..." << UI::Palette::BoldReset;
-     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    enable_ctrl_d();
+    std::cout << color << "\n↵ to try again..." << UI::Palette::BoldReset;
+    std::cout.flush();
+    char ch;
+    while (read(STDIN_FILENO, &ch, 1) > 0) {
+        if (ch == '\n' || ch == 4) break;
+    }
+    tcflush(STDIN_FILENO, TCIFLUSH);
 }
 
 /**
- * @brief Waits for the user to press Enter before returning to a previous menu or state.
- * 
- * Displays a message prompting the user to press Enter, then clears the input
- * buffer to ensure the program waits for explicit user confirmation before
- * returning to a calling context.
+ * @brief Waits for the user to press Enter or Ctrl+D before returning to a previous menu or state.
+ *
+ * Uses raw fd read to correctly handle both Enter and Ctrl+D regardless of
+ * tty VEOF state, avoiding buffering issues with std::cin in canonical mode.
  */
 void pressEnterToReturn() {
-	std::cout << color << "\n↵ to return..." << UI::Palette::BoldReset;
-     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    enable_ctrl_d();
+    std::cout << color << "\n↵ to return..." << UI::Palette::BoldReset;
+    std::cout.flush();
+    char ch;
+    while (read(STDIN_FILENO, &ch, 1) > 0) {
+        if (ch == '\n' || ch == 4) break;
+    }
+    tcflush(STDIN_FILENO, TCIFLUSH);
 }
 
 /**
- * @brief Waits for the user to press Enter before continuing program execution.
- * 
- * Outputs a prompt instructing the user to press Enter, then ignores all
- * characters in the input stream up to and including the newline. This is
- * typically used to pause output so the user can read messages before the
- * program proceeds.
+ * @brief Waits for the user to press Enter or Ctrl+D before continuing program execution.
+ *
+ * Uses raw fd read to correctly handle both Enter and Ctrl+D regardless of
+ * tty VEOF state, avoiding buffering issues with std::cin in canonical mode.
  */
 void pressEnterToContinue() {
-	std::cout << color << "\n↵ to continue..." << UI::Palette::BoldReset;
-     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    enable_ctrl_d();
+    std::cout << color << "\n↵ to continue..." << UI::Palette::BoldReset;
+    std::cout.flush();
+    char ch;
+    while (read(STDIN_FILENO, &ch, 1) > 0) {
+        if (ch == '\n' || ch == 4) break;
+    }
+    tcflush(STDIN_FILENO, TCIFLUSH);
 }
 
