@@ -542,7 +542,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         devicePromptStream << "\n" << wt.rl_labelCol << "Mappings" 
                           << wt.rl_primaryCol << " ↵ as " 
                           << wt.rl_highlightCol << "INDEX>DEVICE" 
-                          << wt.rl_primaryCol << ", ? ↵ help, < ↵ return: " 
+                          << wt.rl_primaryCol << ", ? help, < return: " 
                           << wt.rl_resetCol;
 
         std::string devicePrompt = devicePromptStream.str();
