@@ -115,7 +115,7 @@ bool& umountMvRmBreak, bool& abortDel) {
         green + "\002ISO\001" +
         blue + "\002 will be \001" +
         red + "\002*PERMANENTLY DELETED FROM DISK*\001" +
-        blue + "\002. Proceed? (Y/N):\001" +
+        blue + "\002. Proceed? (y/n):\001" +
         reset + "\002 ";
 
     while (true) {
