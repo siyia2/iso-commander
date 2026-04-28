@@ -27,7 +27,7 @@ ReadlineAndPromptTheme getPromptTheme() {
     } else {
         pt.accent    = wrap(UI::Palette::Green);
         pt.primary   = wrap(t->muted);
-        pt.filter    = wrap(t->accent);
+        pt.filter    = wrap(UI::Palette::Cyan);
         pt.highlight = wrap(UI::Palette::Orange);
         pt.reset     = wrap(UI::Palette::BoldReset);
         pt.iso       = wrap(UI::Palette::Green);
@@ -55,7 +55,7 @@ ReadlineAndPromptTheme getFilterTheme(const std::string& operationColor, bool in
         ft.accent    = "";
     } else {
         ft.primary   = wrap(t->muted);
-        ft.filter    = wrap(t->accent);
+        ft.filter    = wrap(UI::Palette::Cyan);
         ft.highlight = operationColor.empty() ? wrap(t->highlight) : wrap(operationColor);
         ft.reset     = wrap(UI::Palette::BoldReset);
         ft.iso       = includeIso ? wrap(t->accent) : "";
