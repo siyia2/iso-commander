@@ -64,7 +64,7 @@ void helpSelections() {
         "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u");
 
-    printSection(tc, "\n2. Selecting Items:", std::string(UI::Palette::BoldReset) +
+    printSection(tc, "\n2. Selecting Items (↵):", std::string(UI::Palette::BoldReset) +
         "   • Single/Multiple : " + std::string(UI::Palette::Purple) + "'1' or '1 5 6'\n" + std::string(UI::Palette::BoldReset) +
         "   • Range/Combine   : " + std::string(UI::Palette::Purple) + "'1-3' or '1-3 5 7-9'\n" + std::string(UI::Palette::BoldReset) +
         "   • Pending/All     : " + std::string(UI::Palette::Purple) + "'1-3 5;' or '00' " + std::string(UI::Palette::Yellow) +"('00' ↔ mnt/umnt)");
@@ -72,7 +72,7 @@ void helpSelections() {
     printSection(tc, "\n3. Special Commands:",
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~'|'*'|'/'" + std::string(UI::Palette::BoldReset) + "        : View (Full/Compact) | Filenames (¬umount) | Filter (e.g. term1;term2)\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgUp'|'PgDn'|'g' " + std::string(UI::Palette::BoldReset) + " : Pagination (Next, Previous, Go to page)\n" +
-    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process or Clear pending items");
+    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process or Clear pending indices");
     printSection(tc, "\n4. Tips:",
         "   • Indexes correspond only to their generated list\n"
         "   • Indexes^ refer to the original unfiltered list\n"
@@ -96,7 +96,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     printSection(tc, "1. Hotkeys:", keys);
 
     // 2. Selecting FolderPaths
-    printSection(tc, "\n2. Selecting FolderPaths:",
+    printSection(tc, "\n2. Selecting FolderPaths (↵):",
         std::string("   • Single/Multiple : '/dir/' or '/dir1/;/dir2/'\n") +
         (isCpMv ? "   • Overwrite       : Append -o (e.g., '/dir/ -o')\n" : ""));
 
@@ -120,7 +120,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
             displayCmds += "'?config'|'?stats'                " + std::string(UI::Palette::BoldReset) + ": Display config|stats\n";
         }
 
-        printSection(tc, "3. Cleanup/Display Commands:", displayCmds);
+        printSection(tc, "3. Cleanup/Display Commands (↵):", displayCmds);
 
         // 4. Configuration
         std::string configCmds = std::string(UI::Palette::BoldReset) +
@@ -133,7 +133,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
             configCmds += std::string(UI::Palette::BoldReset) + "\n   E. Auto-Update    : " + std::string(UI::Palette::Purple) + "'*auto:on' or '*auto:off'";
         }
 
-        printSection(tc, std::string(UI::Palette::Orange) + "4. Configuration Commands (Persistent):", configCmds);
+        printSection(tc, std::string(UI::Palette::Orange) + "4. Configuration Commands (Persistent ↵):", configCmds);
     }
 
     pressEnterToReturn();
@@ -151,7 +151,7 @@ void helpMappings() {
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u\n" + std::string(UI::Palette::BoldReset) +
         "   • Declutter    : " + std::string(UI::Palette::Yellow) + "Ctrl+l");
 
-    printSection(tc, "\n2. Selecting Mappings:",
+    printSection(tc, "\n2. Selecting Mappings (↵):",
         "   • Syntax   : Index>Device (e.g., '1>/dev/sdc')\n"
         "   • Multiple : Separate with ';' (e.g., '1>/dev/sdc;2>/dev/sdd')");
 
