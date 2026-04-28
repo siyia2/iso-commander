@@ -352,16 +352,16 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 // ─── Interactive / quick filter driver ───────────────────────────────────────
 
 /**
- * @brief Runs an interactive or quick filter session
- * 
- * @param promptText The prompt text to display
- * @param quickPattern Pre-supplied pattern for quick mode (empty for interactive)
- * @param ctx FilterContext containing state
- * @param onSuccess Callback invoked when filter succeeds
- * @param onEmptyInput Callback invoked when input is empty or cancelled
+ * @brief Runs an interactive filter session.
+ *
+ * @param promptText   The prompt text to display.
+ * @param ctx          FilterContext containing state.
+ * @param onSuccess    Callback invoked when a filter is successfully applied.
+ * @param onEmptyInput Callback invoked when input is empty or cancelled.
  */
-static void runFilterLoop(const std::string& promptText, const std::string& quickPattern, FilterContext& ctx, const std::function<void()>& onSuccess,
-const std::function<void()>& onEmptyInput = nullptr)
+static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
+    const std::function<void()>& onSuccess,
+    const std::function<void()>& onEmptyInput = nullptr)
 {
     auto tryFilter = [&](const std::string& query) -> bool {
         return applyFilterCore(query, ctx);
@@ -374,43 +374,32 @@ const std::function<void()>& onEmptyInput = nullptr)
 
     const auto& handleEmpty = onEmptyInput ? onEmptyInput : defaultEmptyInput;
 
-    if (quickPattern.empty()) {
-        std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+    std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+    clear_history();
+    ctx.filterHistory = true;
+    loadHistory(ctx.filterHistory);
 
-        clear_history();
-        ctx.filterHistory = true;
-        loadHistory(ctx.filterHistory);
+    while (true) {
+        std::unique_ptr<char, decltype(&std::free)> raw(
+            readline(promptText.c_str()), &std::free);
 
-        while (true) {
-            std::unique_ptr<char, decltype(&std::free)> raw(
-                readline(promptText.c_str()), &std::free);
-
-            if (!raw || raw.get()[0] == '\0' || strcmp(raw.get(), "/") == 0
-			|| raw.get()[0] == ';' || (raw.get()[0] == '/' && raw.get()[1] == ';')
-			|| std::count(raw.get(), raw.get() + strlen(raw.get()), '/') > 1
-			|| strstr(raw.get(), ";;") != nullptr) {
-				std::cout << "\033[1A\033[K";
-                handleEmpty();
-                break;
-            }
-
-            std::string query(raw.get());
-            if (tryFilter(query)) {
-                saveQueryToHistory(query, ctx.filterHistory, true);
-                onSuccess();
-                break;
-            }
-
-            std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
-        }
-    } else {
-        if (tryFilter(quickPattern)) {
-            saveQueryToHistory(quickPattern, ctx.filterHistory);
-            onSuccess();
-        } else {
-			std::cout << "\033[1A\033[K";
+        if (!raw || raw.get()[0] == '\0' || strcmp(raw.get(), "/") == 0
+        || raw.get()[0] == ';' || (raw.get()[0] == '/' && raw.get()[1] == ';')
+        || std::count(raw.get(), raw.get() + strlen(raw.get()), '/') > 1
+        || strstr(raw.get(), ";;") != nullptr) {
+            std::cout << "\033[1A\033[K";
             handleEmpty();
+            break;
         }
+
+        std::string query(raw.get());
+        if (tryFilter(query)) {
+            saveQueryToHistory(query, ctx.filterHistory, true);
+            onSuccess();
+            break;
+        }
+
+        std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
     }
 }
 
@@ -510,32 +499,17 @@ void syncFilteringStackForIso(
  * @brief Core implementation shared by all filter entry points.
  * @details Validates the input string, builds the readline prompt, constructs a
  * @c FilterContext from @p cfg, then delegates to @c runFilterLoop. Returns early
- * without side effects if @p inputString is not a valid filter command.
+ * without side effects if @p inputString is not @c "/".
  *
- * Valid filter commands are:
- * - @c "/"            — opens an interactive filter prompt with no pre-filled term
- * - @c "/term"        — opens the prompt with @c "term" as the initial pattern
- *
- * The following inputs are explicitly rejected and cause an early @c false return:
- * - Empty string or any string not starting with @c '/'
- * - Strings starting with @c ';' or @c "/;"
- * - Strings containing more than one @c '/' character
- * - Strings containing @c ";;"
- *
- * @param inputString  Raw input from the user, expected to start with @c '/'.
+ * @param inputString  Raw input from the user; must be exactly @c "/" to trigger filtering.
  * @param cfg          Configuration struct with all state pointers and display options.
  *                     All non-optional pointer fields must be non-null.
  * @return @c true if @p inputString was recognised as a filter command and handled,
- *         @c false if it was not a filter command and should be processed elsewhere.
+ *         @c false otherwise.
  */
 bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig& cfg)
 {
-    if (inputString != "/" && (inputString.empty() || inputString[0] != '/'))
-        return false;
-    if (inputString[0] == ';' ||
-       (inputString[0] == '/' && inputString.size() > 1 && inputString[1] == ';') ||
-        std::count(inputString.begin(), inputString.end(), '/') > 1 ||
-        inputString.find(";;") != std::string::npos)
+    if (inputString != "/")
         return false;
 
     auto wrap = [](std::string_view s) -> std::string {
@@ -576,10 +550,7 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
         if (cfg.need2Sort) *cfg.need2Sort = true;
     };
 
-    const std::string quickPattern =
-        (inputString == "/") ? "" : inputString.substr(1);
-
-    runFilterLoop(prompt, quickPattern, ctx, onSort, onEmptyInput);
+    runFilterLoop(prompt, ctx, onSort, onEmptyInput);
     return true;
 }
 
