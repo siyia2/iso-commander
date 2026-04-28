@@ -338,13 +338,14 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
  * 
  * @param query The query string to save
  * @param filterHistory Reference to filter history flag
+ * @param alreadyLoaded If true, skips loadHistory (caller loaded before the prompt)
  */
-static void saveQueryToHistory(const std::string& query, bool& filterHistory) {
+static void saveQueryToHistory(const std::string& query, bool& filterHistory, bool alreadyLoaded = false) {
     filterHistory = true;
-    loadHistory(filterHistory);
+    if (!alreadyLoaded)
+        loadHistory(filterHistory);
     add_history(query.c_str());
     saveHistory(filterHistory);
-    clear_history();
 }
 
 // ─── Interactive / quick filter driver ───────────────────────────────────────
@@ -375,11 +376,11 @@ const std::function<void()>& onEmptyInput = nullptr)
     if (quickPattern.empty()) {
         std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
 
-        while (true) {
-            clear_history();
-            ctx.filterHistory = true;
-            loadHistory(ctx.filterHistory);
+        clear_history();
+        ctx.filterHistory = true;
+        loadHistory(ctx.filterHistory);
 
+        while (true) {
             std::unique_ptr<char, decltype(&std::free)> raw(
                 readline(promptText.c_str()), &std::free);
 
@@ -393,7 +394,7 @@ const std::function<void()>& onEmptyInput = nullptr)
 
             std::string query(raw.get());
             if (tryFilter(query)) {
-                saveQueryToHistory(query, ctx.filterHistory);
+                saveQueryToHistory(query, ctx.filterHistory, true);
                 onSuccess();
                 break;
             }
