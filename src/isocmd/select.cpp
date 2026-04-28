@@ -5,6 +5,7 @@
 #include "../filtering.h"
 #include "../select.h"
 #include "../themes.h"
+#include "../readline.h"
 
 /**
  * @brief Processes and displays the results of ISO file selection operations.
@@ -258,6 +259,7 @@ void refreshListAfterAutoUpdate(int timeoutMS, std::atomic<bool>& isAtISOList, s
  * - Loops until the user explicitly returns or EOF (Ctrl-D) is received.
  */
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
+	
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
     
@@ -306,6 +308,8 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     while (true) {
         enable_ctrl_d();
         setupSignalHandlerCancellations();
+        rl_bind_keyseq("\\e[5~", pgup_handler);
+		rl_bind_keyseq("\\e[6~", pgdn_handler);
         g_operationCancelled.store(false);
         resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
         filterHistory = false;
@@ -426,6 +430,9 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                                            needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
                                            filterHistory, newISOFound);
     }
+    
+    rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
 }
 
 /**
@@ -442,7 +449,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
-    
+
     std::unordered_set<std::string> processedErrors, successOuts, skippedOuts, failedOuts;
     std::vector<std::string> pendingIndices;
     bool hasPendingProcess = false;
@@ -486,6 +493,8 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
     while (true) {
         enable_ctrl_d();
         setupSignalHandlerCancellations();
+        rl_bind_keyseq("\\e[5~", pgup_handler);
+		rl_bind_keyseq("\\e[6~", pgdn_handler);
         g_operationCancelled.store(false);
         bool verbose = false; 
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
@@ -623,4 +632,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             }
         }
     }
+    
+    rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
 }

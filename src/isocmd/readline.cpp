@@ -448,3 +448,35 @@ int clear_screen_and_buffer(int, int) {
     
     return 0;
 }
+
+/**
+ * @brief Readline key handler for the Page Down key.
+ *
+ * Simulates entering the "p" (previous page) command and immediately
+ * returns from the readline prompt without requiring Enter.
+ *
+ * @param Unused readline count parameter.
+ * @param Unused readline key parameter.
+ * @return Always returns 0.
+ */
+int pgdn_handler(int, int) {
+    rl_replace_line("PgDn", 0);
+    rl_done = 1;  // ← returns immediately, no Enter needed
+    return 0;
+}
+
+/**
+ * @brief Readline key handler for the Page Up key.
+ *
+ * Simulates entering the "n" (next page) command and immediately
+ * returns from the readline prompt without requiring Enter.
+ *
+ * @param Unused readline count parameter.
+ * @param Unused readline key parameter.
+ * @return Always returns 0.
+ */
+int pgup_handler(int, int) {
+    rl_replace_line("PgUp", 0);
+    rl_done = 1;  // ← returns immediately, no Enter needed
+    return 0;
+}

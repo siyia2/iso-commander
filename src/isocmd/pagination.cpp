@@ -9,6 +9,7 @@
  * @brief Logic for terminal pagination, navigation commands, and display toggles.
  */
 
+
 /**
  * @brief Processes standard navigation and help commands for the main application loop.
  * * Handles 'n' (next), 'p' (prev), 'g<num>' (go to), and special toggles like '*' 
@@ -26,7 +27,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
         currentPage = totalPages - 1;
     }
     
-    if (command == "n") {
+    if (command == "PgUp") {
         if (totalPages > 0 && currentPage < totalPages - 1) {
             currentPage++;
             needsClrScrn = true;
@@ -34,7 +35,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
         return true;
     }
 
-    if (command == "p") {
+    if (command == "PgDn") {
         if (currentPage > 0) {
             currentPage--;
             needsClrScrn = true;
@@ -145,8 +146,8 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
 
         if (!disablePagination && totalPages > 1) {
             pageContent << "\n" << c.head << "Pagination: ";
-            if (currentPage > 0)                pageContent << "[p] ↵ Previous | ";
-            if (currentPage < totalPages - 1)  pageContent << "[n] ↵ Next | ";
+            if (currentPage > 0)                pageContent << "[PgDn] Previous | ";
+            if (currentPage < totalPages - 1)  pageContent << "[PgUp] Next | ";
             pageContent << "[g<num>] ↵ Go to | " << UI::Palette::BoldReset << "\n";
         }
 
@@ -170,12 +171,12 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                     }
                 } catch (...) { isNavigation = true; }
             }
-            else if (userInput == "n") {
+            else if (userInput == "PgUp") {
                 isPageTurn = true;
                 isNavigation = true;
                 if (currentPage < totalPages - 1) currentPage++;
             }
-            else if (userInput == "p") {
+            else if (userInput == "PgDn") {
                 isPageTurn = true;
                 isNavigation = true;
                 if (currentPage > 0) currentPage--;

@@ -131,8 +131,8 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     // --- Footer ---
     if (!disablePagination) {
         output.append("\n").append(c.head).append("Pagination: ");
-        if (effectivePage > 0) output.append("[p] ↵ Previous | ");
-        if (effectivePage < totalPages - 1) output.append("[n] ↵ Next | ");
+        if (effectivePage > 0) output.append("[PgDn] Previous | ");
+        if (effectivePage < totalPages - 1) output.append("[PgUp] Next | ");
         output.append("[g<num>] ↵ Go to | ").append(UI::Palette::BoldReset).append("\n");
     }
 

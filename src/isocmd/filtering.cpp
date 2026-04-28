@@ -538,7 +538,10 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
     auto wrap = [](std::string_view s) -> std::string {
         return "\001" + std::string(s) + "\002";
     };
-
+	
+	rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+	
     const ReadlineAndPromptTheme ft = getFilterTheme("", false);
     const std::string prompt =
         ft.filter  + "FilterTerms" +
