@@ -621,18 +621,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
             pressEnterToContinue();
         } else {
             ofs.close();
-            for (auto it = transformationCache.begin(); it != transformationCache.end();) {
-                const std::string& key = it->first;
-                if (key.size() >= 4) {
-                    std::string ext = key.substr(key.size() - 4);
-                    toLowerInPlace(ext);
-                    if (ext == ".iso") {
-                        it = transformationCache.erase(it);
-                        continue;
-                    }
-                }
-                ++it;
-            }
+			transformationCache.clear();
             
             std::cout << "\n" << db.highlight << "ISO database cleared successfully." << "\033[J" << std::endl;
             pressEnterToContinue();

@@ -395,7 +395,6 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
  * - NRG
  * - BIN/IMG (default)
  *
- * Also removes matching entries from the transformation cache based on file extension.
  *
  * Additionally performs terminal/UI state handling (signal reset, input control)
  * and prints a status message to the user.
@@ -442,28 +441,7 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
         if (!cacheIsEmpty) std::vector<std::string>().swap(binImgFilesCache);
     }
 
-    bool transformationCacheWasCleared = false;
-    
-    for (auto it = transformationCache.begin(); it != transformationCache.end();) {
-        std::string keyLower = it->first;
-        toLowerInPlace(keyLower);
-
-        bool shouldErase = std::any_of(extensions.begin(), extensions.end(),
-            [&keyLower](std::string ext) {
-                toLowerInPlace(ext);
-                return keyLower.size() >= ext.size() &&
-                       keyLower.compare(keyLower.size() - ext.size(), ext.size(), ext) == 0;
-            });
-
-        if (shouldErase) {
-            it = transformationCache.erase(it);
-            transformationCacheWasCleared = true;
-        } else {
-            ++it;
-        }
-    }
-
-    if (cacheIsEmpty && !transformationCacheWasCleared) {
+    if (cacheIsEmpty) {
         std::cout << "\n" << dt.yellow << cacheType << " buffer is empty. Nothing to clear.\033[J" 
                   << dt.reset << "\n";
     } else {
