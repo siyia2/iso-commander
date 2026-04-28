@@ -50,6 +50,10 @@ int main(int argc, char *argv[]) {
     /// Configure readline completion behavior
     rl_completer_word_break_characters = ";";
     rl_completion_display_matches_hook = customListingsFunction;
+    
+    // Bind PgUp and PgDn to arrow keys
+    rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
 
     /**
      * @brief Single-instance lock mechanism
