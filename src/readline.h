@@ -44,5 +44,11 @@ extern CompleterData g_completerData;
  */
 char** completion_cb(const char* text, int start, int end);
 
+/**
+ * @brief Readline key handler callbacks for PgUp/PgDn pagination navigation.
+ */
+int pgup_handler(int count, int key);
+int pgdn_handler(int count, int key);
+
 #endif
 #endif // READLINE_H
