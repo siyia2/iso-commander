@@ -386,6 +386,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         }
         
         if (inputString == "proc" && pendingIndices.empty()) {
+			std::cout << "\033[1B\033[K";
 			needsClrScrn = false;
             hasPendingProcess = false;
             continue;
@@ -415,6 +416,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
         if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn, 
                                     filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage)) {
+										std::cout << "\033[1B\033[K";
                 continue;
         }
 
@@ -552,6 +554,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         }
         
         if (inputString == "proc" && pendingIndices.empty()) {
+			std::cout << "\033[1B\033[K";
             hasPendingProcess = false;
             needsClrScrn = false;
             continue;
@@ -565,9 +568,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         }
 
         if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
-            needsClrScrn = false;
-            continue;
-        }
+			needsClrScrn = false;
+			continue;
+		}
 
         if (rawInput.get()[0] == '\0') {
             needsClrScrn = false;
@@ -607,6 +610,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
         if (inputString == "/" || (!inputString.empty() && inputString[0] == '/')) {
             handleFilteringConvert2ISO(inputString, files, operation, isFiltered, needsClrScrn, filterHistory, need2Sort, currentPage);
+            std::cout << "\033[1B\033[K";
             continue;
         }
         else if (inputString.find(';') != std::string::npos) {

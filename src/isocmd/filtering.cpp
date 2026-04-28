@@ -5,6 +5,7 @@
 #include "../threadpool.h"
 #include "../filtering.h"
 #include "../themes.h"
+#include "../readline.h"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -388,6 +389,7 @@ const std::function<void()>& onEmptyInput = nullptr)
 			|| raw.get()[0] == ';' || (raw.get()[0] == '/' && raw.get()[1] == ';')
 			|| std::count(raw.get(), raw.get() + strlen(raw.get()), '/') > 1
 			|| strstr(raw.get(), ";;") != nullptr) {
+				std::cout << "\033[1A\033[K";
                 handleEmpty();
                 break;
             }
@@ -406,6 +408,7 @@ const std::function<void()>& onEmptyInput = nullptr)
             saveQueryToHistory(quickPattern, ctx.filterHistory);
             onSuccess();
         } else {
+			std::cout << "\033[1A\033[K";
             handleEmpty();
         }
     }
@@ -541,7 +544,8 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
 	
 	rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
 	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
-	
+	std::cout << "\033[1B\033[K";
+	reset_custom_keybindingsForSelect();
     const ReadlineAndPromptTheme ft = getFilterTheme("", false);
     const std::string prompt =
         ft.filter  + "FilterTerms" +

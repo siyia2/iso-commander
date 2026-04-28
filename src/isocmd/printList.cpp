@@ -139,8 +139,8 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     // --- Pending Processes ---
     if (hasPendingProcess && !pendingIndices.empty()) {
         output.append("\n");
-        output.append(c.bracketBg).append("Pending for [")
-              .append(c.procText).append("proc")
+        output.append(c.bracketBg).append("Pending Indices [")
+              .append(c.procText).append("P")
               .append(UI::Palette::BoldReset).append(c.bracketBg).append("]: ");
 
         output.append(!isImgMode ? c.iso : c.img);

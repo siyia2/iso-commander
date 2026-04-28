@@ -494,14 +494,45 @@ int toggleList_handler(int, int) {
 }
 
 /**
+ * @brief Readline key handler for the '/' key.
+ * * Replaces the current line buffer with "/" and signals an immediate 
+ * return. This is typically used to enter a search or filtering mode 
+ * within the selection interface.
+ */
+int filter_handler(int, int) {
+    rl_replace_line("/", 0);
+    rl_done = 1;
+    return 0;
+}
+
+/**
+ * @brief Readline key handler for processing commands.
+ * * Replaces the current line buffer with "proc" and signals an immediate 
+ * return. This facilitates a single-keypress trigger to begin processing 
+ * the currently pending items.
+ */
+int proc_handler(int, int) {
+    rl_replace_line("proc", 0);
+    rl_done = 1;
+    return 0;
+}
+
+/**
+ * @brief Readline key handler for the clear command.
+ * * Replaces the current line buffer with "clr" and signals an immediate 
+ * return. This is used to reset pending selections.
+ */
+int clr_handler(int, int) {
+    rl_replace_line("clr", 0);
+    rl_done = 1;
+    return 0;
+}
+
+/**
  * @brief Readline key handler for the Page Down key.
  *
  * Simulates entering the "p" (previous page) command and immediately
  * returns from the readline prompt without requiring Enter.
- *
- * @param Unused readline count parameter.
- * @param Unused readline key parameter.
- * @return Always returns 0.
  */
 int pgdn_handler(int, int) {
     rl_replace_line("PgDn", 0);
@@ -514,10 +545,6 @@ int pgdn_handler(int, int) {
  *
  * Simulates entering the "n" (next page) command and immediately
  * returns from the readline prompt without requiring Enter.
- *
- * @param Unused readline count parameter.
- * @param Unused readline key parameter.
- * @return Always returns 0.
  */
 int pgup_handler(int, int) {
     rl_replace_line("PgUp", 0);
@@ -539,6 +566,9 @@ void setup_custom_keybindingsForSelect(void) {
 
     /* Map printable characters to feature toggles */
     rl_bind_keyseq("*", flno_handler);
+    rl_bind_keyseq("/", filter_handler);
+    rl_bind_keyseq("P", proc_handler);
+    rl_bind_keyseq("C", clr_handler);
     rl_bind_keyseq("~", toggleList_handler);
     rl_bind_keyseq("<", toggleExit_handler);
     rl_bind_keyseq("?", toggleHelp_handler);
@@ -557,8 +587,11 @@ void reset_custom_keybindingsForSelect(void) {
     rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
 
     /* Restore standard printable characters to default self-insert */
+    rl_bind_keyseq("*", rl_insert);
+    rl_bind_keyseq("/", rl_insert);
+    rl_bind_keyseq("P", rl_insert);
+    rl_bind_keyseq("C", rl_insert);
+    rl_bind_keyseq("~", rl_insert);
     rl_bind_keyseq("<", rl_insert);
     rl_bind_keyseq("?", rl_insert);
-    rl_bind_keyseq("*", rl_insert);
-    rl_bind_keyseq("~", rl_insert);
 }

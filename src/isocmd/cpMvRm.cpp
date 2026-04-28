@@ -3,6 +3,7 @@
 #include "../headers.h"
 #include "../display.h"
 #include "../themes.h"
+#include "../readline.h"
 
 /**
  * @brief Constructs a list of formatted strings representing ISO files for display.
@@ -87,6 +88,8 @@ static std::string validateLinuxPath(const std::string& path) {
 bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::vector<std::vector<int>>& indexChunks,
 bool& umountMvRmBreak, bool& abortDel) {
     rl_attempted_completion_function = nullptr;
+    
+    reset_custom_keybindingsForSelect();
 
     const CpMvRmColors colors = getCpMvRmColors();
 
@@ -188,6 +191,12 @@ bool& overwriteExisting) {
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
     sortFilesCaseInsensitive(entries);
     clearScrollBuffer();
+    
+	rl_bind_keyseq("*", rl_insert);
+	rl_bind_keyseq("/", rl_insert);
+	rl_bind_keyseq("P", rl_insert);
+	rl_bind_keyseq("C", rl_insert);
+	rl_bind_keyseq("~", rl_insert);
 
     bool shouldContinue = true;
     std::string userInput;
@@ -223,7 +232,7 @@ bool& overwriteExisting) {
                 green + "ISO" +
                 blue + " to be " +
                 operationColor + operationDescription +
-                blue + " into, ? ↵ for help, < ↵ to return:\n" +
+                blue + " into, ? ↵ help, < ↵ return:\n" +
                 reset;
 
             userInput = handlePaginatedDisplay(

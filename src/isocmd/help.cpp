@@ -67,14 +67,12 @@ void helpSelections() {
     printSection(tc, "\n2. Selecting Items:", std::string(UI::Palette::BoldReset) +
         "   • Single/Multiple : " + std::string(UI::Palette::Purple) + "'1' or '1 5 6'\n" + std::string(UI::Palette::BoldReset) +
         "   • Range/Combine   : " + std::string(UI::Palette::Purple) + "'1-3' or '1-3 5 7-9'\n" + std::string(UI::Palette::BoldReset) +
-        "   • Pending/All     : " + std::string(UI::Palette::Purple) + "'1-3 5;' or '00' " + std::string(UI::Palette::Yellow) +"('00' for mount/umount only)");
+        "   • Pending/All     : " + std::string(UI::Palette::Purple) + "'1-3 5;' or '00' " + std::string(UI::Palette::Yellow) +"('00' ↔ mnt/umnt)");
 
     printSection(tc, "\n3. Special Commands:",
-        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~' / '*' " + std::string(UI::Palette::BoldReset) + "         : Toggle Compact/Full or Filename-only lists\n" + std::string(UI::Palette::BoldReset) +
-        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'/' / '/t' " + std::string(UI::Palette::BoldReset) + "        : Filter list / Direct filter (e.g., '/term1;term2', both require ↵)\n" + std::string(UI::Palette::BoldReset) +
-        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgUp'/'PgDn'/'g' " + std::string(UI::Palette::BoldReset) + " : Pagination (Next, Previous, Go to page)\n" + std::string(UI::Palette::BoldReset) +
-        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'proc'/'clr' " + std::string(UI::Palette::BoldReset) + "      : Process or Clear pending items");
-
+    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~'|'*'|'/'" + std::string(UI::Palette::BoldReset) + "        : View (Full/Compact) | Filenames (¬umount) | Filter (e.g. term1;term2)\n" +
+    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgUp'|'PgDn'|'g' " + std::string(UI::Palette::BoldReset) + " : Pagination (Next, Previous, Go to page)\n" +
+    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process or Clear pending items");
     printSection(tc, "\n4. Tips:",
         "   • Indexes correspond only to their generated list\n"
         "   • Indexes^ refer to the original unfiltered list\n"
@@ -110,16 +108,16 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         // 3. Cleanup/Display (convert2iso specific)
         printSection(tc, std::string(UI::Palette::Cyan) + "| Tab completion: Supports !, ?, and * command prefixes |", "");
 
-        std::string displayCmds = "   " + std::string(UI::Palette::BoldReset) + "•" + std::string(UI::Palette::Yellow) + " !clr / !clr_paths / !clr_filter" + std::string(UI::Palette::BoldReset) + " : Clear corresponding cache/database\n";
+        std::string displayCmds = "   " + std::string(UI::Palette::BoldReset) + "•" + std::string(UI::Palette::Yellow) + " '!clr'|'!clr_paths'|'!clr_filter'" + std::string(UI::Palette::BoldReset) + " : Clear corresponding cache|database\n";
         
         displayCmds += "   " + std::string(UI::Palette::BoldReset) + "•" + std::string(UI::Palette::Blue) + " ";
         
         // Aligned spacing for both conditions
         if (!import2ISO) {
-            displayCmds += "ls / ?config / ?stats           " + std::string(UI::Palette::BoldReset) + ": Display cached image entries/config/stats\n";
+            displayCmds += "'ls'|'?config'|'?stats'           " + std::string(UI::Palette::BoldReset) + ": Display cached image entries|config|stats\n";
         } else {
             // Added extra spaces to compensate for the missing "ls / " string (5 chars)
-            displayCmds += "?config / ?stats                " + std::string(UI::Palette::BoldReset) + ": Display config/stats\n";
+            displayCmds += "'?config'|'?stats'                " + std::string(UI::Palette::BoldReset) + ": Display config|stats\n";
         }
 
         printSection(tc, "3. Cleanup/Display Commands:", displayCmds);
@@ -128,7 +126,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         std::string configCmds = std::string(UI::Palette::BoldReset) +
             "   A. Pagination     : " + std::string(UI::Palette::Purple) + "'*pagination:{number}' (0 to disable)\n" + std::string(UI::Palette::BoldReset) +
             "   B. List Modes     : " + std::string(UI::Palette::Purple) + "'*fl_m' or '*cl_m', multiple → *fl_moucw (fl → full | cl → compact)\n                         (m → mount , u → umount, o → cp_mv_rm, w → write2usb, c → convert2iso)\n" + std::string(UI::Palette::BoldReset) +
-            "   C. Filenames Only : " + std::string(UI::Palette::Purple) + "'*flno:on' or '*flno:off' " + std::string(UI::Palette::Yellow) + "(:on overrides List Modes, umount excluded)\n" + std::string(UI::Palette::BoldReset) +
+            "   C. Filenames Only : " + std::string(UI::Palette::Purple) + "'*flno:on' or '*flno:off' " + std::string(UI::Palette::Yellow) + "(:on overrides List Modes, ¬umount)\n" + std::string(UI::Palette::BoldReset) +
             "   D. Appearance     : " + std::string(UI::Palette::Purple) + "'*skin:{color}' or '*theme:{name}'";
         
         if (import2ISO) {

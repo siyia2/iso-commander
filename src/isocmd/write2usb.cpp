@@ -534,11 +534,15 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         g_completerData.sortedIsos = &sortedIsos;
         g_completerData.usbDevices = &usbDevices;
-
+		rl_bind_keyseq("*", rl_insert);
+		rl_bind_keyseq("/", rl_insert);
+		rl_bind_keyseq("P", rl_insert);
+		rl_bind_keyseq("C", rl_insert);
+		rl_bind_keyseq("~", rl_insert);
         devicePromptStream << "\n" << wt.rl_labelCol << "Mappings" 
                           << wt.rl_primaryCol << " ↵ as " 
                           << wt.rl_highlightCol << "INDEX>DEVICE" 
-                          << wt.rl_primaryCol << ", ? ↵ for help, < ↵ to return: " 
+                          << wt.rl_primaryCol << ", ? ↵ help, < ↵ return: " 
                           << wt.rl_resetCol;
 
         std::string devicePrompt = devicePromptStream.str();
