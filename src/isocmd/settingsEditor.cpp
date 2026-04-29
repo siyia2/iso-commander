@@ -70,9 +70,21 @@ void interactiveConfigEditor(const std::string& configPath) {
         if (input.empty()) break;
 
         if (input == "q" || input == "Q") {
-            flushCache(configPath);
-            break;
-        }
+			std::string confirmPrompt = std::string("\001") + std::string(tc.warning) + "\002" + 
+									   "\nSave any changes and exit? (y/n): \001" + 
+									   std::string(tc.reset) + "\002";
+			
+			std::unique_ptr<char, decltype(&std::free)> confirmInput(readline(confirmPrompt.c_str()), &std::free);
+			
+			if (confirmInput) {
+				std::string confirm = trim(confirmInput.get());
+				if (confirm == "y" || confirm == "Y") {
+					flushCache(configPath);
+					break;
+				}
+			}
+			continue;
+		}
 
         if (input == "r" || input == "R") {
             std::string confirmPrompt = std::string("\001") + std::string(tc.warning) + "\002" + 
