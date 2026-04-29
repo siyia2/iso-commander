@@ -86,45 +86,56 @@ void helpSelections() {
  */
 void helpSearches(bool isCpMv, bool import2ISO) {
     const ThemeColors tc;
-    std::string titleStr = isCpMv ? "Cp/Mv FolderPath" : (import2ISO ? "Import2ISO FolderPath" : "Convert2ISO FolderPath");
+    std::string titleStr = isCpMv ? "Cp/Mv FolderPath" : (import2ISO ? "ImportISO FolderPath" : "Convert2ISO FolderPath");
     setupHelp("Help Guide For " + titleStr + " Prompt", tc);
 
     // 1. Hotkeys
     std::string keys = std::string(UI::Palette::BoldReset) + "   • Quick Return  : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n";
     if (!isCpMv) keys += std::string(UI::Palette::BoldReset) + "   • Cancel Search : " + std::string(UI::Palette::Yellow) + "Ctrl+c\n";
-    keys += std::string(UI::Palette::BoldReset) + "   • Clear Line    : " + std::string(UI::Palette::Yellow) + "Ctrl+u";
+    keys += std::string(UI::Palette::BoldReset) + "   • Clear Line    : " + std::string(UI::Palette::Yellow) + "Ctrl+u\n";
+    keys += std::string(UI::Palette::BoldReset) + "   • Declutter     : " + std::string(UI::Palette::Yellow) + "Ctrl+l";
     printSection(tc, "1. Hotkeys:", keys);
 
     // 2. Selecting FolderPaths
-    printSection(tc, "\n2. Selecting FolderPaths (↵):",
-        std::string("   • Single/Multiple : '/dir/' or '/dir1/;/dir2/'\n") +
-        (isCpMv ? "   • Overwrite       : Append -o (e.g., '/dir/ -o')\n" : ""));
+    std::string paths =
+        "   • Single/Multiple : '/dir/' or '/dir1/;/dir2/'\n";
+    if (isCpMv)
+        paths += "   • Overwrite       : Append -o (e.g., '/dir/ -o')";
+    printSection(tc, "\n2. Selecting FolderPaths (↵):", paths);
 
     if (isCpMv) {
         // 3. Tips (Cp/Mv specific)
-        printSection(tc, "3. Tips:", "   • 'mv' to a single destination on the same device is instant\n"
-                                     "   • 'mv' to multiple destinations uses cp and remove (slower)");
+        printSection(tc, "\n3. Tips:",
+            "   • 'mv' to a single destination on the same device is instant\n"
+            "   • 'mv' to multiple destinations uses cp and remove (slower)");
     } else {
-        // 3. Cleanup/Display (convert2iso specific)
-        printSection(tc, std::string(UI::Palette::Cyan) + "| Tab completion: Supports ? and ! command prefixes |", "");
+        // 3. Cleanup/Display (convert2iso / import2iso specific)
+        std::string displayCmds;
 
-        // --- Swapped Ordering: ? Stats first, then ! Clear commands ---
-        
-        // 1. Setup Stats Line (?)
-        std::string displayCmds = "   " + std::string(UI::Palette::BoldReset) + "•" + std::string(UI::Palette::Blue) + " ";
-        
         if (!import2ISO) {
-            displayCmds += "'ls'|'?stats'           " + std::string(UI::Palette::BoldReset) + "           : Display cached image entries|stats\n";
+            displayCmds =
+                "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) +
+                "'ls'|'?stats'         " + std::string(UI::Palette::BoldReset) + " : Display cached entries|stats\n";
         } else {
-            displayCmds += "'?stats'                " + std::string(UI::Palette::BoldReset) + "           : Display stats\n";
+            displayCmds =
+                "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) +
+                "'?stats'              " + std::string(UI::Palette::BoldReset) + " : Display stats\n";
         }
 
-        // 2. Setup Clear Line (!)
-        displayCmds += "   " + std::string(UI::Palette::BoldReset) + "•" + std::string(UI::Palette::Yellow) + " '!clr'|'!clr_paths'|'!clr_filter'" + std::string(UI::Palette::BoldReset) + "  : Clear corresponding cache|database";
+        displayCmds +=
+			"   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
+			"'!clr'                " + std::string(UI::Palette::BoldReset) +
+			(import2ISO ? " : Delete isoDatabase\n" : " : Clear corresponding imageCache\n") +
+			"   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
+			"'!clr_paths'          " + std::string(UI::Palette::BoldReset) + " : Clear paths cache\n" +
+			"   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
+			"'!clr_filter'         " + std::string(UI::Palette::BoldReset) + " : Clear filter cache";
 
         printSection(tc, "3. Cleanup/Display Commands (↵):", displayCmds);
-    }
 
+        printSection(tc, "\n   Note:",
+            "   " + std::string(UI::Palette::BoldReset) + "Tab completion supports ? and ! command prefixes");
+    }
     pressEnterToReturn();
 }
 
