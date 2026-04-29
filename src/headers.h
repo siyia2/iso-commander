@@ -189,6 +189,7 @@ void clearScrollBuffer();
 //------------------
 void updateDatabaseAfterOperations(const std::string& filePathsStr, std::atomic<bool>& newISOFound);
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
+void sortAfterFilenamesOnlyFlag();
 void clearMessageAfterTimeoutInMain(int timeoutSeconds, std::atomic<bool>& isAtMain, std::atomic<bool>& isImportRunning, std::atomic<bool>& messageActive, std::atomic<bool>& stopMessage);
 void monitorAndClearMessage(std::atomic<bool>& isRunning, std::atomic<bool>& messageActive, std::atomic<bool>& stopSignal, std::atomic<bool>& isAtMain);
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname);
