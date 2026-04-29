@@ -152,7 +152,7 @@ void editSetting(const std::string& configPath, const std::string& key) {
         std::cout << "\n" << tc.highlight << "=== Edit Setting ===\n\n" << tc.reset;
         std::cout << tc.label << "Setting: " << tc.reset << tc.warning << key << tc.reset << "\n";
         std::cout << tc.label << "Current: " << tc.reset << tc.highlight << current << tc.reset << "\n";
-        std::cout << tc.data << "\nDescription: " << entry->comment << tc.reset << "\n\n";
+        std::cout << "\nDescription: " << entry->comment << tc.reset << "\n\n";
 
         // --- Dynamic Hint Block ---
         std::cout << tc.label << "Valid values: " << tc.reset;
