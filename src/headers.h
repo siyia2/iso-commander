@@ -157,13 +157,9 @@ void pressEnterToReturn();
 void pressEnterToContinue();
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered, size_t& currentPage, std::atomic<bool>& isImportRunning);
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks, std::atomic<bool>* isComplete, bool* verbose, const std::string& operation);
-void displayConfigurationOptions(const std::string& configPath);
 void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize, const std::unordered_map<std::string, std::string>& transformationCache, const std::vector<std::string>& globalIsoFileList);
 void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages);
-void setDisplayMode(const std::string& inputSearch);
-void updateFilenamesOnly(const std::string& configPath, const std::string& inputSearch);
 void syncCache(const std::string& filePath);
-void updateUIAppearance(const std::string& configPath, const std::string& inputSearch);
 
 //------------------
 // Void Functions (Input Handling)
@@ -193,7 +189,6 @@ void clearScrollBuffer();
 //------------------
 void updateDatabaseAfterOperations(const std::string& filePathsStr, std::atomic<bool>& newISOFound);
 void sortFilesCaseInsensitive(std::vector<std::string>& files);
-void updatePagination(const std::string& inputSearch, const std::string& configPath);
 void clearMessageAfterTimeoutInMain(int timeoutSeconds, std::atomic<bool>& isAtMain, std::atomic<bool>& isImportRunning, std::atomic<bool>& messageActive, std::atomic<bool>& stopMessage);
 void monitorAndClearMessage(std::atomic<bool>& isRunning, std::atomic<bool>& messageActive, std::atomic<bool>& stopSignal, std::atomic<bool>& isAtMain);
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname);
