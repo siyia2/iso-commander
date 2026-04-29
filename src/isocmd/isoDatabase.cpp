@@ -593,7 +593,7 @@ void updateAutoUpdateConfig(const std::string& configPath, const std::string& in
  * @brief Handles database management commands and statistics display
  * 
  * Processes various database-related commands including stats display,
- * cache clearing, configuration updates, and theme changes.
+ * cache clearing, and theme changes.
  * 
  * @param inputSearch Command string to process
  * @param promptFlag Flag controlling prompt behavior

@@ -754,8 +754,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
 /**
  * @brief Dispatches special command inputs during BIN/IMG/MDF/NRG/CHD/DAA/GBI search UI interaction.
  *
- * Acts as a command router for the search interface, handling configuration changes,
- * UI settings, pagination control, cache operations, help output, and display mode switching.
+ * Acts as a command router for the search interface, handling cache operations and help output.
  *
  * Some commands trigger downstream actions such as cache listing and file selection workflows.
  *
