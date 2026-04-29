@@ -31,7 +31,6 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache) {
 
 void interactiveConfigEditor(const std::string& configPath) {
     signal(SIGINT, SIG_IGN);
-    disable_ctrl_d();
     syncCache(configPath);
 
     while (true) {
