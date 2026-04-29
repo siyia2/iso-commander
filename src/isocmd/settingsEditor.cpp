@@ -136,19 +136,23 @@ void interactiveConfigEditor(const std::string& configPath) {
 			// Edit in ascending order for predictability
 			std::vector<int> ordered(choices.begin(), choices.end());
 			std::sort(ordered.begin(), ordered.end());
-			for (int choice : ordered)
-				editSetting(configPath, CONFIG_ORDERED_DEFAULTS[choice - 1].key);
+			for (int choice : ordered) {
+				// If user signals abort (Ctrl+D), we stop the for-loop immediately
+				if (!editSetting(configPath, CONFIG_ORDERED_DEFAULTS[choice - 1].key)) {
+					break; 
+				}
+			}
 		}
-    }
+	}
 }
 
-void editSetting(const std::string& configPath, const std::string& key) {
+bool editSetting(const std::string& configPath, const std::string& key) {
     auto tc = resolveOptionsTheme();
     const ConfigEntry* entry = nullptr;
     for (const auto& e : CONFIG_ORDERED_DEFAULTS) { 
         if (e.key == key) { entry = &e; break; } 
     }
-    if (!entry) return;
+    if (!entry) return true;
 
     // Move current value outside the loop so we can compare changes
     std::string current = g_configCache.count(key) ? g_configCache[key] : entry->defaultValue;
@@ -190,9 +194,9 @@ void editSetting(const std::string& configPath, const std::string& key) {
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
         
         // Handle Cancel (Ctrl+D or Empty Enter)
-        if (!rawInput) return;
+        if (!rawInput) return false;
         std::string newVal = trim(rawInput.get());
-        if (newVal.empty() || newVal == current) return;
+        if (newVal.empty() || newVal == current) return true;
 
         // Validation Check
         if (entry->validate && !entry->validate(newVal)) {
@@ -215,4 +219,5 @@ void editSetting(const std::string& configPath, const std::string& key) {
         pressEnterToContinue();
         break; // Exit the loop and return to the main menu
     }
+    return true;
 }
