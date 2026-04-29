@@ -362,7 +362,7 @@ SemanticUIColors resolveOptionsTheme() {
             .reset     = UI::Palette::BoldReset,
             .path      = {},
             .highlight = UI::Palette::Blue,
-            .data      = {},
+            .data      = UI::Palette::BoldReset,
             .str       = {}
         };
     }
@@ -374,7 +374,7 @@ SemanticUIColors resolveOptionsTheme() {
         .reset     = UI::Palette::BoldReset,
         .path      = {},
         .highlight = theme->accent,
-        .data      = {},
+        .data      = theme->accent,
         .str       = {}
     };
 }

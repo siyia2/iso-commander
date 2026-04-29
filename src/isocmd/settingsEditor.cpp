@@ -47,11 +47,11 @@ void interactiveConfigEditor(const std::string& configPath) {
 			}
 			std::string val = g_configCache.count(entry.key) ? g_configCache[entry.key] : entry.defaultValue;
 			
-			std::string_view valColor = (index == 1) ? color : std::string_view(tc.highlight);
+			std::string_view valColor = (index == 1) ? color : std::string_view(tc.data);
 			
 			std::cout << tc.warning << std::right << std::setw(2) << index++ << ". " << tc.reset
 					  << tc.label << std::left << std::setw(32) << entry.key << tc.reset
-					  << tc.data << "= " << tc.reset
+					  << "= " << tc.reset
 					  << valColor << val << tc.reset << "\n";
 		}
         
