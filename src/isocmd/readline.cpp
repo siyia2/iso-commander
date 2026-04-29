@@ -522,7 +522,7 @@ int clr_handler(int, int) {
 /**
  * @brief Readline key handler for the Page Down key.
  *
- * Simulates entering the "p" (previous page) command and immediately
+ * Simulates entering the deprecated "prev" (previous page) command and immediately
  * returns from the readline prompt without requiring Enter.
  */
 int pgdn_handler(int, int) {
@@ -534,7 +534,7 @@ int pgdn_handler(int, int) {
 /**
  * @brief Readline key handler for the Page Up key.
  *
- * Simulates entering the "n" (next page) command and immediately
+ * Simulates entering the deprecated "next" (next page) command and immediately
  * returns from the readline prompt without requiring Enter.
  */
 int pgup_handler(int, int) {
