@@ -55,7 +55,6 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
  */
 static std::string validateLinuxPath(const std::string& path) {
     const CpMvRmColors colors = getCpMvRmColors();
-
     auto makeError = [&](const std::string& msg) -> std::string {
         return msg + std::string(UI::Palette::RL_Reset);
     };
@@ -71,11 +70,18 @@ static std::string validateLinuxPath(const std::string& path) {
         return makeError(std::string(colors.error_label) + "Error: Path " + std::string(colors.error_path) + "'" + path + "'" + std::string(colors.error_label) + " is blank.");
 
     struct stat pathStat;
-    if (stat(path.c_str(), &pathStat) != 0)
+    if (stat(path.c_str(), &pathStat) != 0) {
+        if (errno == EACCES || errno == EPERM)
+            return makeError(std::string(colors.error_label) + "Error: Permission denied accessing path " + std::string(colors.error_path) + "'" + path + "'" + std::string(colors.error_label) + ".");
         return makeError(std::string(colors.error_label) + "Error: Path " + std::string(colors.error_path) + "'" + path + "'" + std::string(colors.error_label) + " does not exist.");
+    }
 
     if (!S_ISDIR(pathStat.st_mode))
         return makeError(std::string(colors.error_label) + "Error: " + std::string(colors.error_path) + "'" + path + "'" + std::string(colors.error_label) + " is not a directory.");
+
+    // Verify the directory is actually accessible (readable + executable)
+    if (access(path.c_str(), R_OK | X_OK) != 0)
+        return makeError(std::string(colors.error_label) + "Error: Permission denied accessing path " + std::string(colors.error_path) + "'" + path + "'" + std::string(colors.error_label) + ".");
 
     return "";
 }
