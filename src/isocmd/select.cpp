@@ -316,6 +316,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 needsClrScrn = true;
                 continue;
             } else {
+				reset_custom_keybindingsForSelect();
                 currentPage = 0;
                 return;
             }
@@ -483,6 +484,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                 need2Sort = false;
                 continue;
             } else {
+				reset_custom_keybindingsForSelect();
                 currentPage = 0;
                 need2Sort = false;
                 break; 
