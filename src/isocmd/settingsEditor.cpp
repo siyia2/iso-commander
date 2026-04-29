@@ -72,7 +72,7 @@ void interactiveConfigEditor(const std::string& configPath) {
 
         if (input == "q" || input == "Q") {
 			std::string confirmPrompt = std::string("\001") + std::string(tc.warning) + "\002" + 
-									   "\nSave any changes to file and exit? (y/n): \001" + 
+									   "\nSave any changes to disk and exit? (y/n): \001" + 
 									   std::string(tc.reset) + "\002";
 			
 			std::unique_ptr<char, decltype(&std::free)> confirmInput(readline(confirmPrompt.c_str()), &std::free);
@@ -80,7 +80,10 @@ void interactiveConfigEditor(const std::string& configPath) {
 			if (confirmInput) {
 				std::string confirm = trim(confirmInput.get());
 				if (confirm == "y" || confirm == "Y") {
-					flushCache(configPath);
+					if (!flushCache(configPath)) {
+						pressEnterToContinue();
+						continue;  // Failed — return to menu
+					}
 					break;
 				}
 			}
