@@ -60,10 +60,12 @@ void interactiveConfigEditor(const std::string& configPath) {
                   << tc.reset << " Edit | " << tc.warning << "r" << tc.reset << " Reset | " 
                   << tc.warning << "q" << tc.reset << " Save&Exit | " << tc.warning << "↵" << tc.reset << " Exit\n";
 
-		std::string prompt = 
-			std::string("\n\001") + std::string(UI::Palette::Yellow) + "\002Action" + 
-			"\001" + std::string(tc.label) + "\002 ↵ : " + 
-			"\001" + std::string(tc.reset) + "\002";
+		std::string prompt = std::format(
+			"\n\001{}\002Action\001{}\002 ↵ : \001{}\002",
+			UI::Palette::Yellow, 
+			tc.label, 
+			tc.reset
+		);
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
         if (!rawInput) break;
 
@@ -71,9 +73,11 @@ void interactiveConfigEditor(const std::string& configPath) {
         if (input.empty()) break;
 
         if (input == "q" || input == "Q") {
-			std::string confirmPrompt = std::string("\001") + std::string(tc.warning) + "\002" + 
-									   "\nSave settings to disk and exit? (y/n): \001" + 
-									   std::string(tc.reset) + "\002";
+			std::string confirmPrompt = std::format(
+				"\001{}\002\nSave settings to disk and exit? (y/n): \001{}\002",
+				tc.highlight, 
+				tc.reset
+			);
 			
 			std::unique_ptr<char, decltype(&std::free)> confirmInput(readline(confirmPrompt.c_str()), &std::free);
 			
@@ -91,9 +95,11 @@ void interactiveConfigEditor(const std::string& configPath) {
 		}
 
         if (input == "r" || input == "R") {
-            std::string confirmPrompt = std::string("\001") + std::string(tc.warning) + "\002" + 
-                                       "\nReset all settings to defaults? (y/n): \001" + 
-                                       std::string(tc.reset) + "\002";
+            std::string confirmPrompt = std::format(
+				"\001{}\002\nReset all settings to defaults? (y/n): \001{}\002",
+				tc.warning, 
+				tc.reset
+			);
             
             std::unique_ptr<char, decltype(&std::free)> confirmInput(readline(confirmPrompt.c_str()), &std::free);
             
@@ -172,8 +178,14 @@ void editSetting(const std::string& configPath, const std::string& key) {
         }
         std::cout << "\n";
 
-        std::string prompt = std::string("\001") + std::string(UI::Palette::Green) + "\002Value\001" + std::string(tc.label) + "\002 ↵" + 
-        " | ↵ return: \001" + std::string(tc.reset) + "\002";
+		std::string prompt = std::format(
+			"\001{}\002Value\001{}\002 ↵ | ↵ \001{}\002Skip\001{}\002: \001{}\002",
+			UI::Palette::Green, 
+			tc.label, 
+			UI::Palette::Yellow, 
+			tc.reset, 
+			tc.reset
+		);
         
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
         
