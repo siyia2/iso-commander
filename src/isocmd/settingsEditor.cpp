@@ -72,7 +72,7 @@ void interactiveConfigEditor(const std::string& configPath) {
 
         if (input == "q" || input == "Q") {
 			std::string confirmPrompt = std::string("\001") + std::string(tc.warning) + "\002" + 
-									   "\nSave any changes to disk and exit? (y/n): \001" + 
+									   "\nSave settings to disk and exit? (y/n): \001" + 
 									   std::string(tc.reset) + "\002";
 			
 			std::unique_ptr<char, decltype(&std::free)> confirmInput(readline(confirmPrompt.c_str()), &std::free);
