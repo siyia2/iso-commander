@@ -760,7 +760,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
  *
  * @return true if the input was handled as a special command, otherwise false.
  */
-bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input, const std::string& configPath,
+bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
                                                   bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa,
                                                   const std::string& fileExtension,
                                                   std::vector<std::string>& files, const std::string& fileType,
@@ -891,7 +891,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
 
         bool list = false;
         
-        if (dispatchSpecialCommandForBinImgMdfNrgSearch(inputSearch, configPath, modeMdf, modeNrg, modeChd, modeDaa,
+        if (dispatchSpecialCommandForBinImgMdfNrgSearch(inputSearch, modeMdf, modeNrg, modeChd, modeDaa,
                                    fileExtension, files, fileType,
                                    newISOFound, list, isImportRunning))
             continue;
