@@ -108,7 +108,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
                                      "   • 'mv' to multiple destinations uses cp and remove (slower)");
     } else {
         // 3. Cleanup/Display (convert2iso specific)
-        printSection(tc, std::string(UI::Palette::Cyan) + "| Tab completion: Supports ! and ? command prefixes |", "");
+        printSection(tc, std::string(UI::Palette::Cyan) + "| Tab completion: Supports ? and ! command prefixes |", "");
 
         // --- Swapped Ordering: ? Stats first, then ! Clear commands ---
         
