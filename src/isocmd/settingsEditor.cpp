@@ -82,7 +82,7 @@ void interactiveConfigEditor(const std::string& configPath) {
 				if (confirm == "y" || confirm == "Y") {
 					if (!flushCache(configPath)) {
 						pressEnterToContinue();
-						continue;  // Failed — return to menu
+						continue;
 					}
 					break;
 				}
