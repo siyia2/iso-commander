@@ -41,19 +41,19 @@ void interactiveConfigEditor(const std::string& configPath) {
         std::cout  << tc.warning << "Config File: " << tc.reset << configPath << "\n";
 
         int index = 1;
-        for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
-            // If there's a section header, print it without affecting the index padding
-            if (!entry.section.empty()) {
-                std::cout << tc.accent << "\n--- " << entry.section << " ---\n" << tc.reset;
-            }
-
-            std::string val = g_configCache.count(entry.key) ? g_configCache[entry.key] : entry.defaultValue;
-            
-            std::cout << tc.warning << std::right << std::setw(2) << index++ << ". " << tc.reset
-                      << tc.label << std::left << std::setw(32) << entry.key << tc.reset
-                      << tc.data << "= " << tc.reset
-                      << tc.highlight << val << tc.reset << "\n";
-        }
+		for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
+			if (!entry.section.empty()) {
+				std::cout << tc.accent << "\n--- " << entry.section << " ---\n" << tc.reset;
+			}
+			std::string val = g_configCache.count(entry.key) ? g_configCache[entry.key] : entry.defaultValue;
+			
+			std::string_view valColor = (index == 1) ? color : std::string_view(tc.highlight);
+			
+			std::cout << tc.warning << std::right << std::setw(2) << index++ << ". " << tc.reset
+					  << tc.label << std::left << std::setw(32) << entry.key << tc.reset
+					  << tc.data << "= " << tc.reset
+					  << valColor << val << tc.reset << "\n";
+		}
         
 
         std::cout << "\n" << tc.accent << "Actions (↵): " << tc.warning << "1-" << (index-1) 
