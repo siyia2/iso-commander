@@ -74,6 +74,8 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
             std::thread(sortJob, std::ref(binImgFilesCache), std::ref(binImgCacheMutex)).detach();
             std::thread(sortJob, std::ref(mdfMdsFilesCache), std::ref(mdfMdsCacheMutex)).detach();
             std::thread(sortJob, std::ref(nrgFilesCache), std::ref(nrgCacheMutex)).detach();
+            std::thread(sortJob, std::ref(chdFilesCache), std::ref(chdCacheMutex)).detach();
+            std::thread(sortJob, std::ref(daaGbiFilesCache), std::ref(daaGbiCacheMutex)).detach();
         }
         
         if (isConversion) need2Sort = true;
