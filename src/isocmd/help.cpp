@@ -110,31 +110,28 @@ void helpSearches(bool isCpMv, bool import2ISO) {
             "   • 'mv' to multiple destinations uses cp and remove (slower)");
     } else {
         // 3. Cleanup/Display (convert2iso / import2iso specific)
-        std::string displayCmds;
+        std::string displayCmds =
+            "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
+            "'!clr'                " + std::string(UI::Palette::BoldReset) +
+            (import2ISO ? " : Delete isoDatabase\n" : " : Clear corresponding imageCache\n") +
+            "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
+            "'!clr_paths'          " + std::string(UI::Palette::BoldReset) + " : Clear paths cache\n" +
+            "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
+            "'!clr_filter'         " + std::string(UI::Palette::BoldReset) + " : Clear filter cache\n";
 
         if (!import2ISO) {
-            displayCmds =
+            displayCmds +=
                 "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) +
-                "'ls'|'?stats'         " + std::string(UI::Palette::BoldReset) + " : Display cached entries|stats\n";
+                "'ls'|'?stats'         " + std::string(UI::Palette::BoldReset) + " : Display cached entries|stats";
         } else {
-            displayCmds =
+            displayCmds +=
                 "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) +
-                "'?stats'              " + std::string(UI::Palette::BoldReset) + " : Display stats\n";
+                "'?stats'              " + std::string(UI::Palette::BoldReset) + " : Display stats";
         }
-
-        displayCmds +=
-			"   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
-			"'!clr'                " + std::string(UI::Palette::BoldReset) +
-			(import2ISO ? " : Delete isoDatabase\n" : " : Clear corresponding imageCache\n") +
-			"   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
-			"'!clr_paths'          " + std::string(UI::Palette::BoldReset) + " : Clear paths cache\n" +
-			"   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
-			"'!clr_filter'         " + std::string(UI::Palette::BoldReset) + " : Clear filter cache";
-
         printSection(tc, "3. Cleanup/Display Commands (↵):", displayCmds);
-
-        printSection(tc, "\n   Note:",
-            "   " + std::string(UI::Palette::BoldReset) + "Tab completion supports ? and ! command prefixes");
+        printSection(tc, "\n4. Tips:",
+            "   • " + std::string(UI::Palette::BoldReset) + "Tab completion supports ! and ? command prefixes\n"
+            "   • " + std::string(UI::Palette::BoldReset) + "Invalid paths => non-existent paths");
     }
     pressEnterToReturn();
 }
