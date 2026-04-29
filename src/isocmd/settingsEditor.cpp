@@ -111,13 +111,25 @@ void interactiveConfigEditor(const std::string& configPath) {
             continue;
         }
 
-        // Safe numeric check
-        if (std::all_of(input.begin(), input.end(), ::isdigit)) {
-            int choice = std::stoi(input);
-            if (choice >= 1 && choice <= (int)CONFIG_ORDERED_DEFAULTS.size()) {
-                editSetting(CONFIG_ORDERED_DEFAULTS[choice - 1].key);
-            }
-        }
+		{
+			// Build a dummy vector sized to CONFIG_ORDERED_DEFAULTS for bounds checking
+			std::vector<std::string> slots(CONFIG_ORDERED_DEFAULTS.size());
+			std::unordered_set<std::string> errors;
+			std::unordered_set<int> choices;
+
+			tokenizeInput(input, slots, errors, choices);
+			if (!errors.empty()) std::cout << "\n";
+			for (const auto& err : errors)
+				std::cout << err << "\n";
+			if (!errors.empty())
+				pressEnterToContinue();
+
+			// Edit in ascending order for predictability
+			std::vector<int> ordered(choices.begin(), choices.end());
+			std::sort(ordered.begin(), ordered.end());
+			for (int choice : ordered)
+				editSetting(CONFIG_ORDERED_DEFAULTS[choice - 1].key);
+		}
     }
 }
 
