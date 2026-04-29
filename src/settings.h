@@ -307,7 +307,7 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "thread_cap_for_database_cleanup",
         "16",
-        "Thread cap for DB cleanup within the global pool",
+        "Thread cap for ISO DB cleanup within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
