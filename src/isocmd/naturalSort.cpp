@@ -149,3 +149,32 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
         chunks = std::move(newChunks);
     }
 }
+
+/**
+ * Triggered when the 'filenamesOnly' flag is toggled.
+ * Re-sorts all internal file caches in the background to maintain 
+ * UI responsiveness without blocking the main thread.
+ */
+void sortAfterFilenamesOnlyFlag() {
+    // Define the sorting job locally. 
+    // This lambda is copied into each thread's internal storage.
+    auto sortJob = [](std::vector<std::string>& list, std::mutex& mtx) {
+        std::lock_guard<std::mutex> lock(mtx);
+        sortFilesCaseInsensitive(list);
+    };
+
+    // Dispatching threads using std::ref to ensure we work on the original 
+    // data structures rather than passing them by value (which would fail/copy).
+    
+    std::thread(sortJob, std::ref(globalIsoFileList), std::ref(updateListMutex)).detach();
+    
+    std::thread(sortJob, std::ref(binImgFilesCache),  std::ref(binImgCacheMutex)).detach();
+    
+    std::thread(sortJob, std::ref(mdfMdsFilesCache),  std::ref(mdfMdsCacheMutex)).detach();
+    
+    std::thread(sortJob, std::ref(nrgFilesCache),     std::ref(nrgCacheMutex)).detach();
+    
+    std::thread(sortJob, std::ref(chdFilesCache),     std::ref(chdCacheMutex)).detach();
+    
+    std::thread(sortJob, std::ref(daaGbiFilesCache),  std::ref(daaGbiCacheMutex)).detach();
+}

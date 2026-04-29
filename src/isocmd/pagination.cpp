@@ -9,7 +9,6 @@
  * @brief Logic for terminal pagination, navigation commands, and display toggles.
  */
 
-
 /**
  * @brief Processes standard navigation and help commands for the main application loop.
  * * Handles 'n' (next), 'p' (prev), 'g<num>' (go to), and special toggles like '*' 
@@ -65,17 +64,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
         if (!isUnmount) {
             displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
             
-            auto sortJob = [](std::vector<std::string>& list, std::mutex& mtx) {
-                std::lock_guard<std::mutex> lock(mtx);
-                sortFilesCaseInsensitive(list);
-            };
-
-            std::thread(sortJob, std::ref(globalIsoFileList), std::ref(updateListMutex)).detach();
-            std::thread(sortJob, std::ref(binImgFilesCache), std::ref(binImgCacheMutex)).detach();
-            std::thread(sortJob, std::ref(mdfMdsFilesCache), std::ref(mdfMdsCacheMutex)).detach();
-            std::thread(sortJob, std::ref(nrgFilesCache), std::ref(nrgCacheMutex)).detach();
-            std::thread(sortJob, std::ref(chdFilesCache), std::ref(chdCacheMutex)).detach();
-            std::thread(sortJob, std::ref(daaGbiFilesCache), std::ref(daaGbiCacheMutex)).detach();
+            sortAfterFilenamesOnlyFlag();
         }
         
         if (isConversion) need2Sort = true;

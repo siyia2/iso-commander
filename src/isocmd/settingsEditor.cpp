@@ -72,7 +72,7 @@ void interactiveConfigEditor(const std::string& configPath) {
 
         if (input == "q" || input == "Q") {
 			std::string confirmPrompt = std::string("\001") + std::string(tc.warning) + "\002" + 
-									   "\nSave any changes and exit? (y/n): \001" + 
+									   "\nSave any changes to file and exit? (y/n): \001" + 
 									   std::string(tc.reset) + "\002";
 			
 			std::unique_ptr<char, decltype(&std::free)> confirmInput(readline(confirmPrompt.c_str()), &std::free);
@@ -194,6 +194,9 @@ void editSetting(const std::string& configPath, const std::string& key) {
 		if (!configFile.is_open()) printConfigError(configPath);
         
         std::cout << "\n" << tc.label << "✓ Updated successfully." << tc.reset << "\n";
+        if (key == "filenames_only") {
+			sortAfterFilenamesOnlyFlag();
+		}
         pressEnterToContinue();
         break; // Exit the loop and return to the main menu
     }
