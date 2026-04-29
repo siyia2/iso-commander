@@ -73,8 +73,8 @@ void helpSelections() {
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~'" + std::string(UI::Palette::BoldReset) + "                : Toggle view Full/Compact\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'*'" + std::string(UI::Palette::BoldReset) + "                : Toggle view FilenamesOnly (¬filtered, ¬umount)\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'/'" + std::string(UI::Palette::BoldReset) + "                : Filter (e.g. term1;term2)\n" +
-    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgUp'|'PgDn'|'g' " + std::string(UI::Palette::BoldReset) + " : Pagination (Next, Previous, Go to page)\n" +
-    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process or Clear pending indices");
+    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process|Clear pending items\n" +
+    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgUp'|'PgDn'|'g' " + std::string(UI::Palette::BoldReset) + " : Pagination Next|Previous|Go to| page");
     printSection(tc, "\n4. Tips:",
         "   • Indexes correspond only to their generated list\n"
         "   • Indexes^ refer to the original unfiltered list\n"
@@ -110,17 +110,19 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         // 3. Cleanup/Display (convert2iso specific)
         printSection(tc, std::string(UI::Palette::Cyan) + "| Tab completion: Supports ! and ? command prefixes |", "");
 
-        std::string displayCmds = "   " + std::string(UI::Palette::BoldReset) + "•" + std::string(UI::Palette::Yellow) + " '!clr'|'!clr_paths'|'!clr_filter'" + std::string(UI::Palette::BoldReset) + " : Clear corresponding cache|database\n";
+        // --- Swapped Ordering: ? Stats first, then ! Clear commands ---
         
-        displayCmds += "   " + std::string(UI::Palette::BoldReset) + "•" + std::string(UI::Palette::Blue) + " ";
+        // 1. Setup Stats Line (?)
+        std::string displayCmds = "   " + std::string(UI::Palette::BoldReset) + "•" + std::string(UI::Palette::Blue) + " ";
         
-        // Aligned spacing for both conditions
         if (!import2ISO) {
-            displayCmds += "'ls'|'?stats'           " + std::string(UI::Palette::BoldReset) + "          : Display cached image entries|stats";
+            displayCmds += "'ls'|'?stats'           " + std::string(UI::Palette::BoldReset) + "          : Display cached image entries|stats\n";
         } else {
-            // Added extra spaces to compensate for the missing "ls / " string (5 chars)
-            displayCmds += "'?stats'               " + std::string(UI::Palette::BoldReset) + "           : Display stats";
+            displayCmds += "'?stats'                " + std::string(UI::Palette::BoldReset) + "           : Display stats\n";
         }
+
+        // 2. Setup Clear Line (!)
+        displayCmds += "   " + std::string(UI::Palette::BoldReset) + "•" + std::string(UI::Palette::Yellow) + " '!clr'|'!clr_paths'|'!clr_filter'" + std::string(UI::Palette::BoldReset) + "  : Clear corresponding cache|database";
 
         printSection(tc, "3. Cleanup/Display Commands (↵):", displayCmds);
     }
