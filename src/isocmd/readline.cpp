@@ -440,6 +440,10 @@ int clear_screen_and_buffer(int, int) {
     return 0;
 }
 
+//=============================================================================
+// Event Driven Keys Section
+//=============================================================================
+
 /**
  * @brief Readline key handler for the '*' key.
  * * Replaces the current line buffer with '*' and signals Readline to 
