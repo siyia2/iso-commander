@@ -59,27 +59,25 @@ void printSection(const ThemeColors& tc, std::string_view head, const std::strin
 void helpSelections() {
     const ThemeColors tc;
     setupHelp("Help Guide For Lists", tc);
-
     printSection(tc, "1. Hotkeys:", std::string(UI::Palette::BoldReset) +
         "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u");
-
     printSection(tc, "\n2. Selecting Items (↵):", std::string(UI::Palette::BoldReset) +
         "   • Single/Multiple : " + std::string(UI::Palette::Purple) + "'1' or '1 5 6'\n" + std::string(UI::Palette::BoldReset) +
         "   • Range/Combine   : " + std::string(UI::Palette::Purple) + "'1-3' or '1-3 5 7-9'\n" + std::string(UI::Palette::BoldReset) +
-        "   • Pending/All     : " + std::string(UI::Palette::Purple) + "'1-3 5;' or '00' " + std::string(UI::Palette::Yellow) +"('00' ↔ mount/umount)");
-
+        "   • Pending/All     : " + std::string(UI::Palette::Purple) + "'1-3 5;' or '00' " + std::string(UI::Palette::Yellow) + "('00' ↔ mount/umount)");
     printSection(tc, "\n3. Special Keys:",
-    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~'" + std::string(UI::Palette::BoldReset) + "                : Toggle view Full/Compact\n" +
-    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'*'" + std::string(UI::Palette::BoldReset) + "                : Toggle view FilenamesOnly (¬filtered, ¬umount)\n" +
+    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~'" + std::string(UI::Palette::BoldReset) + "                : View Full/Compact\n" +
+    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'*'" + std::string(UI::Palette::BoldReset) + "                : View FilenamesOnly (¬filtered, ¬umount)\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'/'" + std::string(UI::Palette::BoldReset) + "                : Filter (e.g. term1;term2)\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process|Clear pending items\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgUp'|'PgDn'|'g' " + std::string(UI::Palette::BoldReset) + " : Pagination Next|Previous|Go to| page");
+    printSection(tc, "\n   Legend:",
+        "   " + std::string(UI::Palette::BoldReset) + "¬ : not for    ↔ : only for");
     printSection(tc, "\n4. Tips:",
         "   • Indexes correspond only to their generated list\n"
         "   • Indexes^ refer to the original unfiltered list\n"
-        "   • Filtering is adaptive, incremental, and unconstrained by pagination");
-
+        "   • Filtering spans all pages and is incremental");
     pressEnterToReturn();
 }
 
