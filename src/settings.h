@@ -27,9 +27,9 @@
 struct ConfigEntry {
     std::string key;
     std::string defaultValue;
-    std::string comment; // Third in your list
-    std::string section; // Fourth in your list
-    std::function<bool(const std::string&)> validate; // Fifth in your list
+    std::string comment;
+    std::string section;
+    std::function<bool(const std::string&)> validate;
 };
 
 // ============================================================================
@@ -189,7 +189,7 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "auto_update",
         "off",
-        "Enable background metadata updates from folder path history (on/off)",
+        "Enable background metadata updates from folder path history on startup (on/off)",
         "General Settings",
         isOnOff
     },
@@ -212,14 +212,14 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "folder_path_history_lines",
         "30",
-        "Max unique folder paths to persist in history",
+        "Max unique FolderPaths to persist in history",
         "History Settings",
         [](const std::string& v) { return isNum(v, 1, 5000); }
     },
     {
         "filter_history_lines",
         "15",
-        "Max unique search filters to persist in history",
+        "Max unique FilterTerms to persist in history",
         "",
         [](const std::string& v) { return isNum(v, 1, 1000); }
     },
@@ -272,56 +272,56 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "thread_cap_for_mount",
         "16",
-        "Max concurrent mounting tasks using the global pool",
+        "Max concurrent mounting tasks within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
     {
         "thread_cap_for_umount",
         "32",
-        "Max concurrent unmounting tasks using the global pool",
+        "Max concurrent unmounting tasks within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
     {
         "thread_cap_for_cp_mv",
         "8",
-        "Max concurrent copy/move tasks using the global pool",
+        "Max concurrent copy/move tasks within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
     {
         "thread_cap_for_rm",
         "32",
-        "Max concurrent removal tasks using the global pool",
+        "Max concurrent removal tasks within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
     {
         "thread_cap_for_convert2iso",
         "8",
-        "Max concurrent ISO conversions using the global pool",
+        "Max concurrent ISO conversions within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
     {
         "thread_cap_for_database_cleanup",
         "16",
-        "Max concurrent DB maintenance tasks using the global pool",
+        "Thread cap for DB cleanup within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
     {
         "thread_cap_for_list_sorting",
         "4",
-        "Max concurrent UI list sorting using the global pool",
+        "Thread cap for UI list sorting within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 64); }
     },
     {
         "thread_cap_for_list_filtering",
         "4",
-        "Max concurrent UI list filtering using the global pool",
+        "Thread cap for UI list filtering within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 64); }
     },
