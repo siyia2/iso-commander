@@ -553,43 +553,6 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
 }
 
 /**
- * @brief Updates the auto-update configuration setting
- * 
- * Modifies the auto_update setting in the configuration file and updates
- * the in-memory cache.
- * 
- * @param configPath Path to the configuration file
- * @param inputSearch Command string containing the new setting ("*auto:on" or "*auto:off")
- */
-void updateAutoUpdateConfig(const std::string& configPath, const std::string& inputSearch) {
-    signal(SIGINT, SIG_IGN); 
-    disable_ctrl_d();
-
-    auto db = resolveDatabaseTheme();
-
-    fs::path p(configPath);
-    if (!fs::exists(p.parent_path()) && !p.parent_path().empty()) 
-        fs::create_directories(p.parent_path());
-
-    syncCache(configPath);
-
-    bool isEnabling = (inputSearch == "*auto:on");
-    g_configCache["auto_update"] = isEnabling ? "on" : "off";
-
-    if (writeConfig(configPath, g_configCache)) {
-        std::cout << "\n" << db.reset << "Automatic background updates have been "
-                  << (isEnabling ? db.label : db.error) << (isEnabling ? "enabled" : "disabled")
-                  << db.reset << ".\033[J" << db.reset << "\n";
-    } else {
-        std::cerr << "\n" << db.error << "Error: Unable to access configuration file: " 
-                  << db.warning << "'" << configPath << "'" 
-                  << db.error << ".\033[J" << db.reset << "\n";
-    }
-
-    pressEnterToContinue();
-}
-
-/**
  * @brief Handles database management commands and statistics display
  * 
  * Processes various database-related commands including stats display,
