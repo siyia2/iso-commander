@@ -307,21 +307,21 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "thread_cap_for_database_cleanup",
         "16",
-        "Thread cap for ISO DB cleanup within the global pool",
+        "Max concurrent threads for ISO DB cleanup within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
     {
         "thread_cap_for_list_sorting",
         "4",
-        "Thread cap for UI list sorting within the global pool",
+        "Max concurrent threads for UI list sorting within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 64); }
     },
     {
         "thread_cap_for_list_filtering",
         "4",
-        "Thread cap for UI list filtering within the global pool",
+        "Max concurrent threads for UI list filtering within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 64); }
     },
