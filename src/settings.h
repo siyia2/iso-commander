@@ -277,6 +277,13 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
     {
+        "thread_cap_for_rm",
+        "32",
+        "Max concurrent removal tasks using the global pool",
+        "",
+        [](const std::string& v) { return isNum(v, 1, 128); }
+    },
+    {
         "thread_cap_for_convert2iso",
         "8",
         "Max concurrent ISO conversions using the global pool",
@@ -301,13 +308,6 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
         "thread_cap_for_database_cleanup",
         "16",
         "Max concurrent DB maintenance tasks using the global pool",
-        "",
-        [](const std::string& v) { return isNum(v, 1, 128); }
-    },
-    {
-        "thread_cap_for_rm",
-        "32",
-        "Max concurrent removal tasks using the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
