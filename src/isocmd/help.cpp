@@ -70,7 +70,8 @@ void helpSelections() {
         "   • Pending/All     : " + std::string(UI::Palette::Purple) + "'1-3 5;' or '00' " + std::string(UI::Palette::Yellow) +"('00' ↔ mount/umount)");
 
     printSection(tc, "\n3. Special Keys:",
-    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~'|'*'" + std::string(UI::Palette::BoldReset) + "            : View (Full/Compact)|FilenamesOnly (¬filtered, ¬umount)\n" +
+    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~'" + std::string(UI::Palette::BoldReset) + "                : Toggle view Full/Compact\n" +
+    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'*'" + std::string(UI::Palette::BoldReset) + "                : Toggle view FilenamesOnly (¬filtered, ¬umount)\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'/'" + std::string(UI::Palette::BoldReset) + "                : Filter (e.g. term1;term2)\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgUp'|'PgDn'|'g' " + std::string(UI::Palette::BoldReset) + " : Pagination (Next, Previous, Go to page)\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process or Clear pending indices");
