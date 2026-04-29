@@ -298,14 +298,14 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
         }
         
         if (iso.size > deviceSize) {
-            errMsg.append(wt.infoLabel).append("'").append(iso.filename).append("'")
+            errMsg.append(wt.warnLabel).append("'").append(wt.fileCol).append(iso.filename)
                   .append(wt.rl_resetCol).append(wt.bold).append(" (")
-                  .append(wt.warnLabel).append(iso.sizeStr).append(wt.rl_resetCol).append(wt.bold)
-                  .append(") is too large for ")
-                  .append(wt.errPath).append("'").append(device)
-                  .append(" <").append(driveName).append(">'")
+                  .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol).append(wt.bold)
+                  .append(")").append(wt.warnLabel).append("'").append(wt.bold).append(" is too large for ")
+                  .append(wt.errPath).append("'").append(device).append(wt.bold)
+                  .append(" <").append(driveName).append(">")
                   .append(wt.rl_resetCol).append(wt.bold).append(" (")
-                  .append(wt.warnLabel).append(deviceSizeStr).append(wt.rl_resetCol).append(wt.bold).append(")")
+                  .append(wt.sizeCol).append(deviceSizeStr).append(wt.rl_resetCol).append(")").append(wt.warnLabel).append("'")
                   .append(wt.rl_resetCol);
             validationErrors.push_back(std::move(errMsg));
             continue;
