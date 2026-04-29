@@ -91,11 +91,11 @@ void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& c
     MAX_HISTORY_PATTERN_LINES = getVal("filter_history_lines",         15);
     MAX_USEFUL_THREADS        = getVal("combined_thread_cap",               32);
     CPMV_THREAD_CAP           = getVal("thread_cap_for_cp_mv",             8);
+    RM_THREAD_CAP             = getVal("thread_cap_for_rm",               32);
     CONV_THREAD_CAP           = getVal("thread_cap_for_convert2iso",       8);
     MOUNT_THREAD_CAP          = getVal("thread_cap_for_mount",            16);
-    CLEAN_THREAD_CAP          = getVal("thread_cap_for_database_cleanup", 16);
     UMOUNT_THREAD_CAP         = getVal("thread_cap_for_umount",           32); 
-    RM_THREAD_CAP             = getVal("thread_cap_for_rm",               32);
+    CLEAN_THREAD_CAP          = getVal("thread_cap_for_database_cleanup", 16);
     SORT_THREAD_CAP           = getVal("thread_cap_for_list_sorting",      4);
     FILTER_THREAD_CAP         = getVal("thread_cap_for_list_filtering",    4);
 }
