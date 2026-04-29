@@ -58,7 +58,7 @@ void interactiveConfigEditor(const std::string& configPath) {
 
         std::cout << "\n" << tc.accent << "Actions (↵): " << tc.warning << "1-" << (index-1) 
                   << tc.reset << " Edit | " << tc.warning << "r" << tc.reset << " Reset | " 
-                  << tc.warning << "q" << tc.reset << " Save&Exit | " << tc.warning << "↵" << tc.reset << " Exit\n";
+                  << tc.warning << "q" << tc.reset << " Save&Return | " << tc.warning << "↵" << tc.reset << " Return\n";
 
 		std::string prompt = std::format(
 			"\n\001{}\002Action\001{}\002 ↵ : \001{}\002",
@@ -74,7 +74,7 @@ void interactiveConfigEditor(const std::string& configPath) {
 
         if (input == "q" || input == "Q") {
 			std::string confirmPrompt = std::format(
-				"\001{}\002\nSave settings to disk and exit? (y/n): \001{}\002",
+				"\001{}\002\nSave settings to disk and return? (y/n): \001{}\002",
 				tc.highlight, 
 				tc.reset
 			);
