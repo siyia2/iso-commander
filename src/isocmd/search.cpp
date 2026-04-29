@@ -772,10 +772,6 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input, const
         displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
         return true;
     }
-    if (input == "?config") {
-        displayConfigurationOptions(configPath);
-        return true;
-    }
     if (input == "!clr_paths" || input == "!clr_filter") {
         clearHistory(input);
         return true;

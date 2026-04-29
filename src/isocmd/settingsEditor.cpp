@@ -38,6 +38,7 @@ void interactiveConfigEditor(const std::string& configPath) {
         clearScrollBuffer();
         auto tc = resolveOptionsTheme();
         std::cout << "\n" << tc.highlight << "=== Settings Editor ===\n\n" << tc.reset;
+        std::cout  << tc.warning << "Config File: " << tc.reset << configPath << "\n";
 
         int index = 1;
         for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {

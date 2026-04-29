@@ -259,32 +259,3 @@ void updateConfigSettings(const std::string& inputSearch, const std::string& con
 
     pressEnterToContinue();
 }
-
-/**
- * @brief UI Function: Displays the current config file content to the user.
- */
-void displayConfigurationOptions(const std::string& configPath) {
-    syncCache(configPath);
-
-    std::ifstream configFile(configPath);
-    if (!configFile.is_open()) { printConfigError(configPath); pressEnterToContinue(); return; }
-    
-    clearScrollBuffer();
-
-    auto tc = resolveOptionsTheme();
-    
-    std::cout << "\n" << tc.highlight << "==== Current Configuration ====\n\n" << tc.reset;
-
-    std::string line; 
-    int lineNum = 1;
-    while (std::getline(configFile, line)) {
-        std::string trimmed = trim(line);
-        if (!trimmed.empty() && trimmed[0] != '#') {
-            std::cout << tc.warning << lineNum++ << ". " 
-                      << tc.label << trimmed << tc.reset << "\n";
-        }
-    }
-    
-    std::cout << "\n" << tc.warning << "Path: " << tc.reset << configPath << "\n";
-    pressEnterToReturn();
-}

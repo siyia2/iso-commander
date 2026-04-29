@@ -16,7 +16,7 @@ static char last_common_prefix[1024] = "";
  * @brief List of available special commands for completion.
  */
 const char* special_cmds[] = {
-    "!clr", "!clr_paths", "!clr_filter", "?config", "?stats",
+    "!clr", "!clr_paths", "!clr_filter", "?stats",
     NULL
 };
 

@@ -609,8 +609,6 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     
     if (inputSearch == "?stats") {
         displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
-    } else if (inputSearch == "?config") {
-        displayConfigurationOptions(configPath);
     } else if (inputSearch == "!clr") {
         std::ofstream ofs(databaseFilePath, std::ofstream::out | std::ofstream::trunc);
         if (!ofs) {

@@ -115,10 +115,10 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         
         // Aligned spacing for both conditions
         if (!import2ISO) {
-            displayCmds += "'ls'|'?config'|'?stats'           " + std::string(UI::Palette::BoldReset) + ": Display cached image entries|config|stats";
+            displayCmds += "'ls'|'?stats'           " + std::string(UI::Palette::BoldReset) + "          : Display cached image entries|stats";
         } else {
             // Added extra spaces to compensate for the missing "ls / " string (5 chars)
-            displayCmds += "'?config'|'?stats'                " + std::string(UI::Palette::BoldReset) + ": Display config|stats";
+            displayCmds += "'?stats'               " + std::string(UI::Palette::BoldReset) + "           : Display stats";
         }
 
         printSection(tc, "3. Cleanup/Display Commands (↵):", displayCmds);
