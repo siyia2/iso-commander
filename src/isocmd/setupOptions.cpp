@@ -47,17 +47,45 @@ std::map<std::string, std::string> readConfig(const std::string& configPath) {
 }
 
 /**
- * @brief Self-Healing logic: Checks for missing keys OR bad values and resets them.
+ * @brief Self-Healing logic: Checks for missing keys, bad values, OR wrong ordering.
  */
 static bool ensureDefaults(std::map<std::string, std::string>& configMap, const std::string& configPath) {
     bool needsUpdate = false;
+
+    // Check for missing keys or invalid values
     for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
         auto it = configMap.find(entry.key);
-        if (it == configMap.end() || (entry.validate && !entry.validate(it->second))) { 
-            configMap[entry.key] = entry.defaultValue; 
-            needsUpdate = true; 
+        if (it == configMap.end() || (entry.validate && !entry.validate(it->second))) {
+            configMap[entry.key] = entry.defaultValue;
+            needsUpdate = true;
         }
     }
+
+    // Check if on-disk ordering matches CONFIG_ORDERED_DEFAULTS
+    if (!needsUpdate) {
+        std::ifstream inFile(configPath);
+        if (inFile.is_open()) {
+            std::vector<std::string> diskKeys;
+            std::string line;
+            while (std::getline(inFile, line)) {
+                line = trim(line);
+                if (line.empty() || line[0] == '#') continue;
+                size_t equalPos = line.find('=');
+                if (equalPos != std::string::npos)
+                    diskKeys.push_back(trim(line.substr(0, equalPos)));
+            }
+            inFile.close();
+
+            // Build expected key order from CONFIG_ORDERED_DEFAULTS
+            std::vector<std::string> expectedKeys;
+            for (const auto& entry : CONFIG_ORDERED_DEFAULTS)
+                expectedKeys.push_back(entry.key);
+
+            if (diskKeys != expectedKeys)
+                needsUpdate = true;
+        }
+    }
+
     if (needsUpdate) return writeConfig(configPath, configMap);
     return true;
 }
