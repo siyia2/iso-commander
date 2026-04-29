@@ -144,6 +144,7 @@ int clear_screen_and_buffer(int, int);
 //------------------
 // Void Functions (UI)
 //------------------
+void interactiveConfigEditor(const std::string& configPath);
 void printMenu();
 void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound);
 void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning);
