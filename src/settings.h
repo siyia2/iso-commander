@@ -265,7 +265,7 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "combined_thread_cap",
         "32",
-        "Global thread pool limit; excess tasks are queued",
+        "Global thread pool limit; excess tasks are queued; changes take effect on restart",
         "Thread Configuration",
         [](const std::string& v) { return isNum(v, 1, 256); }
     },
