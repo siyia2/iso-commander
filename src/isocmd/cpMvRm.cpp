@@ -232,7 +232,7 @@ bool& overwriteExisting) {
                 green + "ISO" +
                 blue + " to be " +
                 operationColor + operationDescription +
-                blue + " into, ? ↵ help, < ↵ return:\n" +
+                blue + " into, ? help, < return:\n" +
                 reset;
 
             userInput = handlePaginatedDisplay(
