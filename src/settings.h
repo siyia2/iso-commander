@@ -352,7 +352,7 @@ void interactiveConfigEditor(const std::string& configPath);
  * @param configPath Filesystem path to the configuration file.
  * @param key        The configuration key to edit.
  */
-void editSetting(const std::string& key);
+void editSetting(const std::string& configPath,const std::string& key);
 
 /**
  * @brief Applies thread pool and history limit settings to global variables.
