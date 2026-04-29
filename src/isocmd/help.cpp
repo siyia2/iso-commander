@@ -116,7 +116,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         std::string displayCmds = "   " + std::string(UI::Palette::BoldReset) + "•" + std::string(UI::Palette::Blue) + " ";
         
         if (!import2ISO) {
-            displayCmds += "'ls'|'?stats'           " + std::string(UI::Palette::BoldReset) + "          : Display cached image entries|stats\n";
+            displayCmds += "'ls'|'?stats'           " + std::string(UI::Palette::BoldReset) + "           : Display cached image entries|stats\n";
         } else {
             displayCmds += "'?stats'                " + std::string(UI::Palette::BoldReset) + "           : Display stats\n";
         }
