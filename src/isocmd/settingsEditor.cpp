@@ -128,12 +128,12 @@ void interactiveConfigEditor(const std::string& configPath) {
 			std::vector<int> ordered(choices.begin(), choices.end());
 			std::sort(ordered.begin(), ordered.end());
 			for (int choice : ordered)
-				editSetting(CONFIG_ORDERED_DEFAULTS[choice - 1].key);
+				editSetting(configPath, CONFIG_ORDERED_DEFAULTS[choice - 1].key);
 		}
     }
 }
 
-void editSetting(const std::string& key) {
+void editSetting(const std::string& configPath, const std::string& key) {
     auto tc = resolveOptionsTheme();
     const ConfigEntry* entry = nullptr;
     for (const auto& e : CONFIG_ORDERED_DEFAULTS) { 
@@ -188,7 +188,10 @@ void editSetting(const std::string& key) {
 
         // --- Success Case ---
         g_configCache[key] = newVal;
-        applyConfigEffects(g_configCache); 
+        applyConfigEffects(g_configCache);
+        
+        std::ifstream configFile(configPath);
+		if (!configFile.is_open()) printConfigError(configPath);
         
         std::cout << "\n" << tc.label << "✓ Updated successfully." << tc.reset << "\n";
         pressEnterToContinue();
