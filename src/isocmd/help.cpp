@@ -107,7 +107,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
                                      "   • 'mv' to multiple destinations uses cp and remove (slower)");
     } else {
         // 3. Cleanup/Display (convert2iso specific)
-        printSection(tc, std::string(UI::Palette::Cyan) + "| Tab completion: Supports !, ?, and * command prefixes |", "");
+        printSection(tc, std::string(UI::Palette::Cyan) + "| Tab completion: Supports ! and ? command prefixes |", "");
 
         std::string displayCmds = "   " + std::string(UI::Palette::BoldReset) + "•" + std::string(UI::Palette::Yellow) + " '!clr'|'!clr_paths'|'!clr_filter'" + std::string(UI::Palette::BoldReset) + " : Clear corresponding cache|database\n";
         
@@ -115,26 +115,13 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         
         // Aligned spacing for both conditions
         if (!import2ISO) {
-            displayCmds += "'ls'|'?config'|'?stats'           " + std::string(UI::Palette::BoldReset) + ": Display cached image entries|config|stats\n";
+            displayCmds += "'ls'|'?config'|'?stats'           " + std::string(UI::Palette::BoldReset) + ": Display cached image entries|config|stats";
         } else {
             // Added extra spaces to compensate for the missing "ls / " string (5 chars)
-            displayCmds += "'?config'|'?stats'                " + std::string(UI::Palette::BoldReset) + ": Display config|stats\n";
+            displayCmds += "'?config'|'?stats'                " + std::string(UI::Palette::BoldReset) + ": Display config|stats";
         }
 
         printSection(tc, "3. Cleanup/Display Commands (↵):", displayCmds);
-
-        // 4. Configuration
-        std::string configCmds = std::string(UI::Palette::BoldReset) +
-            "   A. Pagination     : " + std::string(UI::Palette::Purple) + "'*pagination:{number}' (0 to disable)\n" + std::string(UI::Palette::BoldReset) +
-            "   B. List Modes     : " + std::string(UI::Palette::Purple) + "'*fl_m' or '*cl_m', multiple → *fl_moucw (fl → full | cl → compact)\n                         (m → mount , u → umount, o → cp_mv_rm, w → write2usb, c → convert2iso)\n" + std::string(UI::Palette::BoldReset) +
-            "   C. Filenames Only : " + std::string(UI::Palette::Purple) + "'*flno:on' or '*flno:off' " + std::string(UI::Palette::Yellow) + "(:on overrides List Modes, ¬umount)\n" + std::string(UI::Palette::BoldReset) +
-            "   D. Appearance     : " + std::string(UI::Palette::Purple) + "'*skin:{color}' or '*theme:{name}'";
-        
-        if (import2ISO) {
-            configCmds += std::string(UI::Palette::BoldReset) + "\n   E. Auto-Update    : " + std::string(UI::Palette::Purple) + "'*auto:on' or '*auto:off'";
-        }
-
-        printSection(tc, std::string(UI::Palette::Orange) + "4. Configuration Commands (Persistent ↵):", configCmds);
     }
 
     pressEnterToReturn();

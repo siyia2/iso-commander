@@ -17,15 +17,6 @@ static char last_common_prefix[1024] = "";
  */
 const char* special_cmds[] = {
     "!clr", "!clr_paths", "!clr_filter", "?config", "?stats",
-    "*pagination:", "*fl_m", "*cl_m", "*fl_u", "*cl_u", "*fl_o", "*cl_o", 
-    "*fl_w", "*cl_w", "*fl_c", "*cl_c", "*flno:on", "*flno:off", 
-    "*auto:on", "*auto:off",
-    "*skin:green", "*skin:cyan", "*skin:white", 
-    "*skin:purple", "*skin:amber", "*skin:rose",
-    "*theme:original", "*theme:classic", "*theme:high_contrast", 
-    "*theme:neon", "*theme:ocean", "*theme:sunset", 
-    "*theme:forest", "*theme:midnight", "*theme:mono", 
-    "*theme:retro", "*theme:crimson", "*theme:dracula", "*theme:tokyo",
     NULL
 };
 
@@ -62,7 +53,7 @@ char** my_special_completion_entry(const char* text, int start, int end) {
     (void)start;
     (void)end;
 
-    if (text[0] == '!' || text[0] == '?' || text[0] == '*') {
+    if (text[0] == '!' || text[0] == '?') {
         return rl_completion_matches(text, command_generator);
     }
 

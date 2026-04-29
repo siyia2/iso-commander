@@ -87,7 +87,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
             return refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
         }
 
-        if (input.starts_with("*") || input.starts_with("?") || input.starts_with("!") || isValidInput(input)) {
+        if (input.starts_with("?") || input.starts_with("!")) {
             databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
             return;
         }
@@ -776,28 +776,8 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input, const
         displayConfigurationOptions(configPath);
         return true;
     }
-    if (input.starts_with("*pagination:")) {
-        updatePagination(input, configPath);
-        return true;
-    }
-    if (input == "*flno:on" || input == "*flno:off") {
-        updateFilenamesOnly(configPath, input);
-        return true;
-    }
-    if (input.starts_with("*skin:")) {
-        updateUIAppearance(configPath, input);
-        return true;
-    }
-    if (input.starts_with("*theme:")) {
-        updateUIAppearance(configPath, input);
-        return true;
-    }
     if (input == "!clr_paths" || input == "!clr_filter") {
         clearHistory(input);
-        return true;
-    }
-    if (isValidInput(input)) {
-        setDisplayMode(input);
         return true;
     }
     if (input == "?") {

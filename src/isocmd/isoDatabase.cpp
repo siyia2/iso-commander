@@ -629,17 +629,6 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
         }
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
         clearHistory(inputSearch);
-    } else if (inputSearch == "*auto:on" || inputSearch == "*auto:off") {
-        updateAutoUpdateConfig(configPath, inputSearch);
-    } else if (inputSearch == "*flno:on" || inputSearch == "*flno:off") {
-        needSortingAfterflno = true;
-        updateFilenamesOnly(configPath, inputSearch);
-    } else if (inputSearch.substr(0, 12) == "*pagination:") {
-        updatePagination(inputSearch, configPath);
-    } else if (inputSearch.substr(0, 6) == "*skin:" || inputSearch.substr(0, 7) == "*theme:") {
-        updateUIAppearance(configPath, inputSearch);
-    } else if (isValidInput(inputSearch)) {
-        setDisplayMode(inputSearch);
     }
 
     refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
