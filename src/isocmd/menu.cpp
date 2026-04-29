@@ -203,7 +203,7 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
  */
 void printMenu() {
     std::cout << color << "+-------------------------+\n"
-              << "|       Menu Options       |\n"
+              << "|      Menu Options        |\n"
               << "+-------------------------+\n"
               << "|1. ManageISO             |\n"
               << "+-------------------------+\n"
