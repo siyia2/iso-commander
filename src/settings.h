@@ -270,6 +270,20 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
         [](const std::string& v) { return isNum(v, 1, 256); }
     },
     {
+        "thread_cap_for_mount",
+        "16",
+        "Max concurrent mounting tasks using the global pool",
+        "",
+        [](const std::string& v) { return isNum(v, 1, 128); }
+    },
+    {
+        "thread_cap_for_umount",
+        "32",
+        "Max concurrent unmounting tasks using the global pool",
+        "",
+        [](const std::string& v) { return isNum(v, 1, 128); }
+    },
+    {
         "thread_cap_for_cp_mv",
         "8",
         "Max concurrent copy/move tasks using the global pool",
@@ -287,20 +301,6 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
         "thread_cap_for_convert2iso",
         "8",
         "Max concurrent ISO conversions using the global pool",
-        "",
-        [](const std::string& v) { return isNum(v, 1, 128); }
-    },
-    {
-        "thread_cap_for_mount",
-        "16",
-        "Max concurrent mounting tasks using the global pool",
-        "",
-        [](const std::string& v) { return isNum(v, 1, 128); }
-    },
-    {
-        "thread_cap_for_umount",
-        "32",
-        "Max concurrent unmounting tasks using the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
