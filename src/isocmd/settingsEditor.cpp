@@ -166,20 +166,20 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 
         // --- Dynamic Hint Block ---
         std::cout << tc.label << "Valid values: " << tc.reset;
-        if (key == "skin") {
-            std::cout << "green, cyan, white, purple, amber, rose\n";
-        } else if (key == "theme") {
-            std::cout << "original, classic, high_contrast, neon, ocean, sunset,\n"
-                      << "              forest, midnight, mono, retro, crimson, dracula, tokyo\n";
-        } else if (key.find("_list") != std::string::npos) {
-            std::cout << "full, compact\n";
-        } else if (key == "auto_update" || key == "filenames_only") {
-            std::cout << "on, off\n";
-        } else if (key == "pagination" || key.find("thread_cap") != std::string::npos || key.find("_lines") != std::string::npos) {
-            std::cout << "numeric value (integer " << (key == "pagination" ? ">= 0" : "> 0") << ")\n";
-        } else {
-            std::cout << "Refer to description above\n";
-        }
+		if (key == "skin") {
+			std::cout << "green, cyan, white, purple, amber, rose\n";
+		} else if (key == "theme") {
+			std::cout << "original, classic, high_contrast, neon, ocean, sunset,\n"
+					  << "              forest, midnight, mono, retro, crimson, dracula, tokyo\n";
+		} else if (key == "auto_update" || key == "filenames_only") {
+			std::cout << "on, off\n";
+		} else if (key == "pagination" || key.find("thread_cap") != std::string::npos || key.find("_lines") != std::string::npos) {
+			std::cout << "numeric value (integer " << (key == "pagination" ? ">= 0" : "> 0") << ")\n";
+		} else if (key.find("_list") != std::string::npos) {
+			std::cout << "full, compact\n";
+		} else {
+			std::cout << "Refer to description above\n";
+		}
         std::cout << "\n";
 
 		std::string prompt = std::format(
