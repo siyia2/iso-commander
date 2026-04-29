@@ -116,14 +116,14 @@ Sub-limits draw from this pool; tasks queue if the pool is full.
 tab(@);
 lb l.
 combined_thread_cap@Global thread pool limit (Default: 32)
-thread_cap_for_cp_mv@Max concurrent copy/move tasks (Default: 8)
-thread_cap_for_convert2iso@Max concurrent ISO conversions (Default: 8)
 thread_cap_for_mount@Max concurrent mounting tasks (Default: 16)
 thread_cap_for_umount@Max concurrent unmounting tasks (Default: 32)
-thread_cap_for_database_cleanup@Max concurrent database maintenance tasks (Default: 16)
+thread_cap_for_cp_mv@Max concurrent copy/move tasks (Default: 8)
 thread_cap_for_rm@Max concurrent file removal tasks (Default: 32)
-thread_cap_for_list_sorting@Max concurrent UI list sorting tasks (Default: 4)
-thread_cap_for_list_filtering@Max concurrent UI list filtering tasks (Default: 4)
+thread_cap_for_convert2iso@Max concurrent ISO conversions (Default: 8)
+thread_cap_for_database_cleanup@Thread cap for ISO database cleanup (Default: 16)
+thread_cap_for_list_sorting@Thread cap for UI list sorting (Default: 4)
+thread_cap_for_list_filtering@Thread cap for UI list filtering (Default: 4)
 .TE
 
 .SH FILES
