@@ -3,111 +3,7 @@
 #include "../headers.h"
 #include "../display.h"
 #include "../themes.h"
-
-/**
- * @struct ConfigEntry
- * @brief Metadata for a single configuration setting.
- */
-struct ConfigEntry {
-    std::string key;           ///< The key string in the config file (e.g., "pagination")
-    std::string defaultValue;  ///< Fallback value if the key is missing
-    std::string comment;       ///< Description written above the key in the file
-    std::string section;       ///< If not empty, starts a new section header in the file
-    std::function<bool(const std::string&)> validate; ///< Validation logic for the value
-};
-
-// --- Validation Helpers ---
-auto isOnOff = [](const std::string& v) { return v == "on" || v == "off"; };
-auto isDisplay = [](const std::string& v) { return v == "full" || v == "compact"; };
-auto isNum = [](const std::string& v, int min, int max) {
-    try { 
-        size_t pos;
-        int n = std::stoi(v, &pos); 
-        if (pos != v.length()) return false; 
-        return n >= min && n <= max; 
-    } catch (...) { 
-        return false; 
-    }
-};
-
-/**
- * @brief Canonical list of all supported configuration settings with validation.
- */
-static const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
-    {"skin", "white", "Menu accent color (green/cyan/white/purple/amber/rose)", "Theme Settings",
-        [](const std::string& v){ 
-            return v == "green" || v == "cyan" || v == "white" || 
-                   v == "purple" || v == "amber" || v == "rose"; 
-        }},
-    {"theme", "original", "List and prompt color theme (original/classic/high_contrast/neon/ocean/sunset/forest/midnight/mono/retro/crimson/dracula/tokyo)", "",
-        [](const std::string& v){
-            static const std::unordered_set<std::string> valid = {
-                "original","classic","high_contrast","neon","ocean","tokyo",
-                "sunset","forest","midnight","mono","retro","crimson","dracula"
-            };
-            return valid.count(v) > 0;
-        }
-    },
-
-    {"auto_update", "off", "Enable background metadata updates from folder path history (on/off)", "General Settings", isOnOff},
-    {"filenames_only", "off", "Display only filenames instead of full paths (on/off)", "", isOnOff},
-    {"pagination", "25", "Items per page in list view (0 to disable)", "", [](const std::string& v){ return isNum(v, 0, 1000); }},
-
-    {"folder_path_history_lines", "30", "Max unique folder paths to persist in history", "History Settings", [](const std::string& v){ return isNum(v, 1, 5000); }},
-    {"filter_history_lines", "15", "Max unique search filters to persist in history", "", [](const std::string& v){ return isNum(v, 1, 1000); }},
-
-    {"mount_list", "compact", "Display mode for mount operations (full/compact)", "Display Modes", isDisplay},
-    {"umount_list", "full", "Display mode for unmount operations (full/compact)", "", isDisplay},
-    {"cp_mv_rm_list", "full", "Display mode for file operations (full/compact)", "", isDisplay},
-    {"write2usb_list", "compact", "Display mode for write2usb operations (full/compact)", "", isDisplay},
-    {"convert2iso_lists", "compact", "Display mode for convert2iso operations (full/compact)", "", isDisplay},
-
-    {"combined_thread_cap", "32", "Global thread pool limit; excess tasks are queued", "Thread Configuration", [](const std::string& v){ return isNum(v, 1, 256); }},
-    {"thread_cap_for_cp_mv", "8", "Max concurrent copy/move tasks using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
-    {"thread_cap_for_convert2iso", "8", "Max concurrent ISO conversions using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
-    {"thread_cap_for_mount", "16", "Max concurrent mounting tasks using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
-    {"thread_cap_for_umount", "32", "Max concurrent unmounting tasks using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
-    {"thread_cap_for_database_cleanup", "16", "Max concurrent DB maintenance tasks using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
-    {"thread_cap_for_rm", "32", "Max concurrent removal tasks using the global pool", "", [](const std::string& v){ return isNum(v, 1, 128); }},
-    {"thread_cap_for_list_sorting", "4", "Max concurrent UI list sorting using the global pool", "", [](const std::string& v){ return isNum(v, 1, 64); }},
-    {"thread_cap_for_list_filtering", "4", "Max concurrent UI list filtering using the global pool", "", [](const std::string& v){ return isNum(v, 1, 64); }},
-};
-
-// ---------------------------------------------------------------------------
-// Internal Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * @brief Utility to remove leading/trailing whitespace from strings.
- */
-static std::string trim(std::string str) {
-    if(str.empty()) return str;
-    str.erase(0, str.find_first_not_of(" \t"));
-    size_t last = str.find_last_not_of(" \t");
-    if (last != std::string::npos) str.erase(last + 1);
-    return str;
-}
-
-/**
- * @brief Prints a standardised config-file access error then flushes to stderr.
- */
-static void printConfigError(const std::string& configPath) {
-    auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
-    std::cerr << "\n" << error
-              << "Error: Unable to access configuration file: "
-              << warning << "'" << configPath << "'"
-              << error << ".\033[J\n" << reset;
-}
-
-/**
- * @brief Commits a mutated cache to disk, printing an error on failure.
- * @return true if the write succeeded.
- */
-static bool flushCache(const std::string& configPath) {
-    if (writeConfig(configPath, g_configCache)) return true;
-    printConfigError(configPath);
-    return false;
-}
+#include "../settings.h"
 
 // ---------------------------------------------------------------------------
 // Core Config I/O
@@ -181,7 +77,7 @@ void syncCache(const std::string& filePath) {
 /**
  * @brief Synchronizes configuration map values with internal global variables.
  */
-static void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap) {
+void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap) {
     auto getVal = [&](const std::string& key, size_t defaultVal) -> size_t {
         auto it = configMap.find(key);
         if (it == configMap.end()) return defaultVal;

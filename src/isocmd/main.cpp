@@ -3,6 +3,7 @@
 #include "../headers.h"
 #include "../display.h"
 #include "../themes.h"
+#include "../settings.h"
 
 /**
  * @brief Outputs the current program version to the standard output.
@@ -177,6 +178,11 @@ int main(int argc, char *argv[]) {
                     clearScrollBuffer();
                     break;
                 case '4':
+                    isAtMain = isAtISOList = false;
+                    interactiveConfigEditor(configPath);
+                    clearScrollBuffer();
+                    break;
+                case '5':
                     exitProgram = true;
                     clearScrollBuffer();
                     break;
