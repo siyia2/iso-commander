@@ -214,6 +214,7 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         if (e.key == key) { entry = &e; break; } 
     }
     if (!entry) return true;
+    reset_custom_keybindingsForSettingsEditor();
 
     // Move current value outside the loop so we can compare changes
     std::string current = g_configCache.count(key) ? g_configCache[key] : entry->defaultValue;
