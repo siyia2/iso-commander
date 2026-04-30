@@ -53,9 +53,11 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache) {
  * - **Multi-Editing:** Supports tokenized input to edit multiple settings in sequence.
  * - **Validation:** Integrates @c editSetting for per-key input validation.
  * - **Persistence:** Changes are held in @c g_configCache (volatile) until the user 
- *   explicitly triggers a Save ('q') which calls @c flushCache.
- * - **Signal Handling:** Temporarily ignores @c SIGINT (Ctrl+C) to prevent accidental 
- *   exit without saving; restores normal behavior on exit.
+ *   explicitly triggers a Save ('s') which calls @c flushCache.
+ * - **Cleanup (RAII):** Automatically restores terminal state and custom keybindings 
+ *   upon function exit, regardless of whether the exit was via user command or error.
+ * - **Signal Handling:** Temporarily ignores @c SIGINT (Ctrl+C) to protect session 
+ *   integrity during active editing.
  * 
  * @param configPath The filesystem path to the @c .conf file to be read and written.
  */
