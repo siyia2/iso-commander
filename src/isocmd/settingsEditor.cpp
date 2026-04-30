@@ -6,7 +6,19 @@
 #include "../settings.h"
 
 /**
- * @brief Helper to apply configuration from cache to global variables.
+ * @brief Synchronizes global runtime variables with values from the configuration cache.
+ * 
+ * This function acts as the bridge between the raw string-based @c g_configCache 
+ * and the actual functional variables used by the application (UI toggles, 
+ * thread limits, and skinning).
+ * 
+ * @details The function performs the following updates:
+ * - **Threading & History:** Forwards the cache to @c applyThreadCapsAndHistoryLimits.
+ * - **UI State:** Sets @c displayConfig flags for list modes (full/compact) and filename visibility.
+ * - **Visuals:** Updates the global @c skin and @c globalTheme; triggers @c getskin() to refresh color palettes.
+ * - **Pagination:** Safely parses and updates @c ITEMS_PER_PAGE.
+ * 
+ * @param cache A map containing the key-value pairs to be applied to the system state.
  */
 void applyConfigEffects(const std::map<std::string, std::string>& cache) {
     // Thread caps and history
@@ -29,6 +41,23 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache) {
     }
 }
 
+/**
+ * @brief Launches the interactive Terminal User Interface (TUI) for configuration management.
+ * 
+ * Provides a structured, menu-driven environment where users can view current settings,
+ * modify them by index, reset to defaults, or save changes to disk.
+ * 
+ * @details **Workflow features:**
+ * - **Sectioning:** Groups settings visually based on their defined section in @c CONFIG_ORDERED_DEFAULTS.
+ * - **Multi-Editing:** Supports tokenized input to edit multiple settings in sequence.
+ * - **Validation:** Integrates @c editSetting for per-key input validation.
+ * - **Persistence:** Changes are held in @c g_configCache (volatile) until the user 
+ *   explicitly triggers a Save ('q') which calls @c flushCache.
+ * - **Signal Handling:** Temporarily ignores @c SIGINT (Ctrl+C) to prevent accidental 
+ *   exit without saving; restores normal behavior on exit.
+ * 
+ * @param configPath The filesystem path to the @c .conf file to be read and written.
+ */
 void interactiveConfigEditor(const std::string& configPath) {
     signal(SIGINT, SIG_IGN);
     syncCache(configPath);
@@ -57,7 +86,7 @@ void interactiveConfigEditor(const std::string& configPath) {
 
         std::cout << "\n" << tc.accent << "Actions (↵): " << tc.warning << "1-" << (index-1) 
                   << tc.reset << " Edit | " << tc.warning << "r" << tc.reset << " Reset | " 
-                  << tc.warning << "q" << tc.reset << " Save&Return | " << tc.warning << "↵" << tc.reset << " Return\n";
+                  << tc.warning << "s" << tc.reset << " SaveToDisk | " << tc.warning << "↵" << tc.reset << " Return\n";
 
 		std::string prompt = std::format(
 			"\n\001{}\002Action\001{}\002 ↵ : \001{}\002",
@@ -71,9 +100,9 @@ void interactiveConfigEditor(const std::string& configPath) {
         std::string input = trim(rawInput.get());
         if (input.empty()) break;
 
-        if (input == "q" || input == "Q") {
+        if (input == "s" || input == "S") {
 			std::string confirmPrompt = std::format(
-				"\001{}\002\nSave settings to disk and return? (y/n): \001{}\002",
+				"\001{}\002\nSave settings to disk? (y/n): \001{}\002",
 				tc.highlight, 
 				tc.reset
 			);
@@ -82,12 +111,11 @@ void interactiveConfigEditor(const std::string& configPath) {
 			
 			if (confirmInput) {
 				std::string confirm = trim(confirmInput.get());
-				if (confirm == "y" || confirm == "Y") {
-					if (!flushCache(configPath)) {
-						pressEnterToContinue();
-						continue;
+				if (!confirm.empty() && std::tolower(confirm[0]) == 'y') {
+					if (flushCache(configPath)) {
+						std::cout << tc.highlight << "\n[✔] Settings saved to disk.\n" << tc.reset;
 					}
-					break;
+					pressEnterToContinue();
 				}
 			}
 			continue;
@@ -112,7 +140,10 @@ void interactiveConfigEditor(const std::string& configPath) {
                     // Apply changes immediately to global state/UI
                     applyConfigEffects(g_configCache);
                     
-                    std::cout << tc.label << "\nAll settings reset to defaults.\n" << tc.reset;
+                    // REFRESH THE THEME HERE
+					tc = resolveOptionsTheme();
+                    
+                    std::cout << tc.label << " [+] Defaults applied (save to disk with 's').\n" << tc.reset;
                     pressEnterToContinue();
                 }
             }
@@ -255,20 +286,26 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         }
 
         // --- Success Case ---
-        g_configCache[key] = newVal;
-        applyConfigEffects(g_configCache);
-        
-        // Save the update to the physical file immediately
-        saveConfigToFile(configPath);
-        
-        std::cout << "\n" << tc.label << "✓ Updated and saved to: " << tc.reset << configPath << "\n";
-        
-        if (key == "filenames_only") {
-            sortAfterFilenamesOnlyFlag();
-        }
-        
-        pressEnterToContinue();
-        break; // Exit loop
-    }
-    return true;
+		g_configCache[key] = newVal;
+		applyConfigEffects(g_configCache);
+		saveConfigToFile(configPath);
+		
+		// REFRESH THE THEME HERE
+		tc = resolveOptionsTheme();
+
+		// Compact check: attempt to open for append to verify write access
+		if (std::ofstream(configPath, std::ios::app)) {
+			std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n", tc.label, tc.reset, configPath);
+		} else {
+			printConfigError(configPath);
+			std::cout << tc.warning << "Notice:" << tc.error << " Setting update is temporary (Disk write failed)" << tc.warning << ".\n" << tc.reset;
+		}
+		
+		// Ensures lists are sorted after filenamesOnly list mode
+		if (key == "filenames_only") sortAfterFilenamesOnlyFlag();
+
+		pressEnterToContinue();
+		break;
+		}
+	return true;
 }
