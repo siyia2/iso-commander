@@ -118,8 +118,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
 
         // Write to a temp file in the same directory as the database,
         // then atomically rename into place
-        std::filesystem::path dbDir = std::filesystem::path(databaseFilePath).parent_path();
-        std::string tmpPath = (dbDir / "iso_commander_database_saved_XXXXXX").string();
+        std::string tmpPath = (std::filesystem::path(databaseFilePath).parent_path() / "iso_commander_database_saved_XXXXXX").string();
         int tmpFd = mkstemp(tmpPath.data());
         if (tmpFd == -1) return;
 
@@ -494,7 +493,7 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
 
     // Write to a temp file in the same directory as the database, then atomically rename into place
     // Placing the temp file on the same filesystem as the target guarantees rename() is truly atomic
-    std::string tmpPath = (std::filesystem::path(databaseDirectory) / "iso_commander_database_saved_XXXXXX").string();
+    std::string tmpPath = (std::filesystem::path(databaseFilePath).parent_path() / "iso_commander_database_saved_XXXXXX").string();
     int tmpFd = mkstemp(tmpPath.data());
     if (tmpFd == -1) return false;
 
