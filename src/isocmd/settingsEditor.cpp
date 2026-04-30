@@ -113,6 +113,8 @@ void interactiveConfigEditor(const std::string& configPath) {
 				std::string confirm = trim(confirmInput.get());
 				if (!confirm.empty() && std::tolower(confirm[0]) == 'y') {
 					if (flushCache(configPath)) {
+						// REFRESH THE THEME
+						tc = resolveOptionsTheme();
 						std::cout << tc.highlight << "\n[✔] Settings saved to disk.\n" << tc.reset;
 					}
 					pressEnterToContinue();
@@ -140,10 +142,10 @@ void interactiveConfigEditor(const std::string& configPath) {
                     // Apply changes immediately to global state/UI
                     applyConfigEffects(g_configCache);
                     
-                    // REFRESH THE THEME HERE
+                    // REFRESH THE THEME
 					tc = resolveOptionsTheme();
                     
-                    std::cout << tc.label << " [+] Defaults applied (save to disk with 's').\n" << tc.reset;
+                    std::cout << tc.label << "[+] Defaults applied — save with 's' to persist.\n" << tc.reset;
                     pressEnterToContinue();
                 }
             }
@@ -271,7 +273,6 @@ bool editSetting(const std::string& configPath, const std::string& key) {
             std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n", 
                                      tc.label, tc.reset, configPath);
         } else {
-            // flushCache already calls printConfigError(configPath) on failure
             std::cout << tc.warning << "Notice: " << tc.error 
                       << "Setting update is memory-only (Disk write failed)." 
                       << tc.reset << "\n";
@@ -283,7 +284,7 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         }
 
         pressEnterToContinue();
-        break; // Exit the retry loop
+        break;
 	}
 	return true;
 }
