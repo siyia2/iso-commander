@@ -123,14 +123,12 @@ inline int lockFileDescriptor                  = -1;
 bool readUserConfigUpdates(const std::string& filePath);
 bool paginationSet(const std::string& filePath);
 bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& isFiltered, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, bool& need2Sort, std::atomic<bool>& isAtISOList);
-bool isValidInput(const std::string& input);
 bool isHistoryFileEmpty(const std::string& filePath);
 bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning);
 bool isValidDirectory(const std::string& path);
 bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atomic<bool>& newISOFound);
 bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning);
 bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& needsClrScrn, bool& filterHistory, const std::string& operation, const std::string& operationColor, const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage);
-bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg);
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
 bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config);
 
@@ -144,7 +142,6 @@ int clear_screen_and_buffer(int, int);
 //------------------
 // Void Functions (UI)
 //------------------
-void interactiveConfigEditor(const std::string& configPath);
 void printMenu();
 void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound,std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads);
 void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning);
@@ -174,14 +171,12 @@ void restoreInput();
 void restoreReadline();
 void disableReadlineForConfirmation();
 void setupReadlineToIgnoreCtrlC();
-char** completion_cb(const char* text, int start, int end);
 
 //------------------
 // Void Functions (Signal Handling)
 //------------------
 void signalHandler(int signum);
 void setupSignalHandlerCancellations();
-void signalHandlerCancellations(int signal);
 void clearScrollBuffer();
 
 //------------------
@@ -247,7 +242,6 @@ std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& s
 //------------------
 // Return Type Functions
 //------------------
-std::map<std::string, std::string> readConfig(const std::string& configPath);
 std::map<std::string, std::string> readUserConfigLists(const std::string& filePath);
 std::string trimWhitespace(const std::string& str);
 std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view path, const std::string& location);
@@ -255,7 +249,6 @@ std::string userDestDirCpMv(const std::vector<std::string>& isoFiles, std::vecto
 std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std::unordered_set<std::string>& uniqueErrorMessages, const std::string& promptPrefix, const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn);
 std::string formatFileSize(uint64_t size);
 std::string formatSpeed(double mbPerSec);
-std::vector<std::string> filterFiles(const std::vector<std::string>& files, const std::string& query);
 std::tuple<std::string, std::string, std::string> parseMountPointComponents(std::string_view dir);
 uint64_t getBlockDeviceSize(const std::string& device);
 size_t calculateTotalBytesForConversions(const std::vector<std::string>& filesToProcess, bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa);
