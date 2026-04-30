@@ -103,8 +103,8 @@ void interactiveConfigEditor(const std::string& configPath) {
         if (input == "s" || input == "S") {
 			std::string confirmPrompt = std::format(
 				"\001{}\002\nSave settings to disk? (y/n): \001{}\002",
-				tc.highlight, 
-				tc.reset
+				color, 
+				UI::Palette::BoldReset
 			);
 			
 			std::unique_ptr<char, decltype(&std::free)> confirmInput(readline(confirmPrompt.c_str()), &std::free);
@@ -126,8 +126,8 @@ void interactiveConfigEditor(const std::string& configPath) {
         if (input == "r" || input == "R") {
             std::string confirmPrompt = std::format(
 				"\001{}\002\nReset all settings to defaults? (y/n): \001{}\002",
-				tc.warning, 
-				tc.reset
+				color, 
+				UI::Palette::BoldReset
 			);
             
             std::unique_ptr<char, decltype(&std::free)> confirmInput(readline(confirmPrompt.c_str()), &std::free);
