@@ -11,12 +11,16 @@ namespace {
 }
 
 /**
- * @brief Removes non-existent ISO paths from the database and in-memory cache
- * 
- * This function reads the database file, checks each path for existence using
- * parallel filesystem access, and rewrites the database with only valid paths.
- * 
- * @param globalIsoFileList Reference to the in-memory list of ISO files to update
+ * @brief Removes non-existent ISO paths from the database and in-memory cache.
+ *
+ * Reads the database file under a shared lock, then checks each path for
+ * existence in parallel via a thread pool. If any paths are missing, writes
+ * the surviving entries to a temporary file in the same directory as the
+ * database and atomically renames it into place — ensuring readers always
+ * see either the complete old file or the complete new one, never a partial
+ * write. Updates the in-memory list only if at least one path was removed.
+ *
+ * @param globalIsoFileList  Reference to the in-memory list of ISO files to update.
  */
 void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileList)
 {
@@ -24,8 +28,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
     bool anyRemoved = false;
     {
         std::lock_guard<std::mutex> fileLock(dbFileMutex);
-
-        int fd = open(databaseFilePath.c_str(), O_RDWR, 0644);
+        int fd = open(databaseFilePath.c_str(), O_RDONLY);
         if (fd == -1) {
             if (errno == ENOENT) {
                 std::lock_guard<std::mutex> lock(updateListMutex);
@@ -33,18 +36,16 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
             }
             return;
         }
-
         struct FdGuard {
             int fd;
             ~FdGuard() { if (fd != -1) { flock(fd, LOCK_UN); close(fd); } }
             void release() { fd = -1; }
         } fdGuard{fd};
 
-        if (flock(fd, LOCK_EX) == -1) return;
+        if (flock(fd, LOCK_SH) == -1) return;
 
         int dupFd = dup(fd);
         if (dupFd == -1) return;
-
         FILE* file = fdopen(dupFd, "r");
         if (!file) { close(dupFd); return; }
 
@@ -59,24 +60,25 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         free(linePtr);
         fclose(file);
 
+        // Release the read lock and close the original fd — we're done reading
+        fdGuard.release();
+        flock(fd, LOCK_UN);
+        close(fd);
+
         if (cache.empty()) return;
 
         ThreadPool& pool = getStaticThreadPool();
-
         std::vector<int> pathExists(cache.size(), 0);
         std::atomic<size_t> existingCount{0};
-        
+
         const size_t numThread = std::min({
             pool.threadCount(),
             static_cast<size_t>(CLEAN_THREAD_CAP),
             cache.size()
         });
-
         const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
-
         std::vector<std::future<void>> futures;
         futures.reserve(numThread);
-
         for (size_t i = 0; i < numThread; ++i) {
             const size_t start = i * chunkSize;
             const size_t end   = std::min(cache.size(), start + chunkSize);
@@ -91,7 +93,6 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
                     }
                 }));
         }
-
         for (auto& f : futures) f.get();
 
         if (existingCount == cache.size()) return;
@@ -106,8 +107,8 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
             }
         }
         anyRemoved = true;
-        
 
+        // Build output before touching any file
         std::string buf;
         buf.reserve(totalBufferSize);
         for (const auto& path : retained) {
@@ -115,16 +116,30 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
             buf += '\n';
         }
 
-        if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) return;
+        // Write to a temp file in the same directory as the database,
+        // then atomically rename into place
+        std::filesystem::path dbDir = std::filesystem::path(databaseFilePath).parent_path();
+        std::string tmpPath = (dbDir / "iso_db_XXXXXX").string();
+        int tmpFd = mkstemp(tmpPath.data());
+        if (tmpFd == -1) return;
 
-        ssize_t written = ::write(fd, buf.data(), buf.size());
-        if (written == -1 || static_cast<size_t>(written) != buf.size()) return;
-		isoListDirty.store(true);
-        fdGuard.release();
-        flock(fd, LOCK_UN);
-        close(fd);
+        auto cleanupTmp = [&]() {
+            close(tmpFd);
+            ::unlink(tmpPath.c_str());
+        };
+
+        if (fchmod(tmpFd, 0644) == -1) { cleanupTmp(); return; }
+        if (::write(tmpFd, buf.data(), buf.size()) != static_cast<ssize_t>(buf.size())) { cleanupTmp(); return; }
+        if (fsync(tmpFd) == -1) { cleanupTmp(); return; }
+        close(tmpFd);
+
+        if (::rename(tmpPath.c_str(), databaseFilePath.c_str()) == -1) {
+            ::unlink(tmpPath.c_str());
+            return;
+        }
+
+        isoListDirty.store(true);
     }
-
     if (anyRemoved) {
         std::lock_guard<std::mutex> lock(updateListMutex);
         globalIsoFileList = std::move(retained);
@@ -399,8 +414,10 @@ void loadFromDatabase(std::vector<std::string>& outList) {
  * @brief Saves new ISO file paths to the database, merging with existing entries.
  *
  * Deduplicates incoming paths against the existing cache, appends new entries,
- * and trims to maxDatabaseSize if needed. Rewrites the entire database file
- * atomically under an exclusive lock.
+ * and trims to maxDatabaseSize if needed. Writes the new database contents to a
+ * temporary file in the same directory as the database, then atomically renames
+ * it into place — ensuring readers always see either the complete old file or the
+ * complete new one, never a partial write.
  *
  * @param globalIsoFileList  Const reference to vector of ISO file paths to add.
  * @param newISOFound        Set to true if at least one new entry was added,
@@ -418,33 +435,37 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
         return false;
     }
     std::lock_guard<std::mutex> fileLock(dbFileMutex);
-    int fd = open(cachePath.c_str(), O_RDWR | O_CREAT, 0644);
-    if (fd == -1) return false;
-    if (flock(fd, LOCK_EX) == -1) {
-        close(fd);
-        return false;
-    }
+
+    // Open the existing DB file (read-only) to load current cache
     std::vector<std::string> existingCache;
-    struct stat fileStat;
-    if (fstat(fd, &fileStat) == 0 && fileStat.st_size > 0) {
-        std::vector<char> buffer(fileStat.st_size);
-        ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
-        if (bytesRead > 0 && bytesRead <= fileStat.st_size) {
-            char* start = buffer.data();
-            char* end = buffer.data() + bytesRead;
-            while (start < end) {
-                char* lineEnd = std::find(start, end, '\n');
-                std::string line(start, lineEnd);
-                if (!line.empty() && line.back() == '\r') {
-                    line.pop_back();
+    int fd = open(cachePath.c_str(), O_RDONLY);
+    if (fd != -1) {
+        if (flock(fd, LOCK_SH) == 0) {
+            struct stat fileStat;
+            if (fstat(fd, &fileStat) == 0 && fileStat.st_size > 0) {
+                std::vector<char> buffer(fileStat.st_size);
+                ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
+                if (bytesRead > 0 && bytesRead <= fileStat.st_size) {
+                    char* start = buffer.data();
+                    char* end = buffer.data() + bytesRead;
+                    while (start < end) {
+                        char* lineEnd = std::find(start, end, '\n');
+                        std::string line(start, lineEnd);
+                        if (!line.empty() && line.back() == '\r') {
+                            line.pop_back();
+                        }
+                        if (!line.empty()) {
+                            existingCache.push_back(std::move(line));
+                        }
+                        start = (lineEnd < end) ? lineEnd + 1 : end;
+                    }
                 }
-                if (!line.empty()) {
-                    existingCache.push_back(std::move(line));
-                }
-                start = (lineEnd < end) ? lineEnd + 1 : end;
             }
+            flock(fd, LOCK_UN);
         }
+        close(fd);
     }
+
     std::unordered_set<std::string> existingSet(existingCache.begin(), existingCache.end());
     std::vector<std::string> newEntries;
     bool localNewISOFound = false;
@@ -456,30 +477,52 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
     }
     if (newEntries.empty()) {
         newISOFound.store(false);
-        flock(fd, LOCK_UN);
-        close(fd);
         return false;
     }
+
     std::vector<std::string> combinedCache = existingCache;
     combinedCache.insert(combinedCache.end(), newEntries.begin(), newEntries.end());
     if (combinedCache.size() > maxDatabaseSize) {
         combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - maxDatabaseSize));
     }
-    if (ftruncate(fd, 0) == -1 || lseek(fd, 0, SEEK_SET) == -1) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        return false;
-    }
+
+    // Build output string before touching any file
     std::string output;
+    output.reserve(combinedCache.size() * 64);
     for (const auto& entry : combinedCache)
         output += entry + "\n";
-    if (::write(fd, output.data(), output.size()) == -1) {
-        flock(fd, LOCK_UN);
-        close(fd);
+
+    // Write to a temp file in the same directory as the database, then atomically rename into place
+    // Placing the temp file on the same filesystem as the target guarantees rename() is truly atomic
+    std::string tmpPath = (std::filesystem::path(databaseDirectory) / "iso_db_XXXXXX").string();
+    int tmpFd = mkstemp(tmpPath.data());
+    if (tmpFd == -1) return false;
+
+    auto cleanupTmp = [&]() {
+        close(tmpFd);
+        ::unlink(tmpPath.c_str());
+    };
+
+    if (fchmod(tmpFd, 0644) == -1) {
+        cleanupTmp();
         return false;
     }
-    flock(fd, LOCK_UN);
-    close(fd);
+    if (::write(tmpFd, output.data(), output.size()) != static_cast<ssize_t>(output.size())) {
+        cleanupTmp();
+        return false;
+    }
+    if (fsync(tmpFd) == -1) {
+        cleanupTmp();
+        return false;
+    }
+    close(tmpFd);
+
+    // Atomic rename: either the old file survives or the new one is in place — never a torn write
+    if (::rename(tmpPath.c_str(), cachePath.c_str()) == -1) {
+        ::unlink(tmpPath.c_str());
+        return false;
+    }
+
     newISOFound.store(localNewISOFound);
     isoListDirty.store(true);
     return true;
