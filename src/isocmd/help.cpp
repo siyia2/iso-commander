@@ -71,7 +71,7 @@ void helpSelections(bool& isAtISOListForHelp) {
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'*'" + std::string(UI::Palette::BoldReset) + "                : View FilenamesOnly (¬filtered, ¬umount)\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'/'" + std::string(UI::Palette::BoldReset) + "                : Filter (e.g. term1;term2)\n" +
     (isAtISOListForHelp ? 
-        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'R'" + std::string(UI::Palette::BoldReset) + "                : Update ISO list from stored FolderPaths\n" 
+        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'R'" + std::string(UI::Palette::BoldReset) + "                : Refresh ISO list from stored FolderPaths\n" 
         : "") +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process|Clear pending items\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgUp'|'PgDn'|'g' " + std::string(UI::Palette::BoldReset) + " : Pagination Next|Previous|Go to| page");
