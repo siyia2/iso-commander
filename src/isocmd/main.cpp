@@ -98,11 +98,11 @@ int main(int argc, char *argv[]) {
 
     /// Start background database import if auto-update is enabled
     if (search) {
-        isImportRunning = true;
+        isImportRunning.store(true);
         backgroundThreads.emplace_back([&] { backgroundDatabaseImport(isImportRunning, newISOFound, stopImport); });
         /// Mark update as already executed if history file exists
         if (!(isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath)))
-            updateHasRun = true;
+            updateHasRun.store(true);
     }
     paginationSet(configPath);
 
@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
         std::string choice(input.get());
         if (choice == "1") {
             isAtMain = isAtISOList = false;
-            submenu1(updateHasRun, isAtISOList, isImportRunning, newISOFound);
+            submenu1(updateHasRun, isAtISOList, isImportRunning, newISOFound, stopImport, backgroundThreads);
         } else if (choice.length() == 1) {
             switch (choice[0]) {
                 case '2':

@@ -56,7 +56,7 @@ void printSection(const ThemeColors& tc, std::string_view head, const std::strin
 /**
  * @brief Displays an interactive help guide detailing how to select and filter items within lists.
  */
-void helpSelections() {
+void helpSelections(bool& isAtISOListForHelp) {
     const ThemeColors tc;
     setupHelp("Help Guide For Lists", tc);
     printSection(tc, "1. Hotkeys:", std::string(UI::Palette::BoldReset) +
@@ -70,6 +70,9 @@ void helpSelections() {
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~'" + std::string(UI::Palette::BoldReset) + "                : View Full/Compact\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'*'" + std::string(UI::Palette::BoldReset) + "                : View FilenamesOnly (¬filtered, ¬umount)\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'/'" + std::string(UI::Palette::BoldReset) + "                : Filter (e.g. term1;term2)\n" +
+    (isAtISOListForHelp ? 
+        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'R'" + std::string(UI::Palette::BoldReset) + "                : Update ISO list from stored FolderPaths\n" 
+        : "") +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process|Clear pending items\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgUp'|'PgDn'|'g' " + std::string(UI::Palette::BoldReset) + " : Pagination Next|Previous|Go to| page");
     printSection(tc, "\n   Legend:",

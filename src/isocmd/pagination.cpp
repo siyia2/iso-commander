@@ -54,8 +54,12 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
     }
     
     if (command == "?") {
+		bool isAtISOListForHelp = false;
+		if (isAtISOList) {
+			isAtISOListForHelp = true;
+		}
         isAtISOList.store(false);
-        helpSelections();
+        helpSelections(isAtISOListForHelp);
         needsClrScrn = true;
         return true;
     }

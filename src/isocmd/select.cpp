@@ -194,7 +194,8 @@ void refreshListAfterAutoUpdate(int timeoutMS, std::atomic<bool>& isAtISOList, s
  * - Pagination and help display are handled inline via processPaginationHelpAndDisplay.
  * - Loops until the user explicitly returns or EOF (Ctrl-D) is received.
  */
-void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
+void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, 
+std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads) {
 	
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
@@ -307,6 +308,16 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             needsClrScrn = false;
             continue; 
         }
+		
+		// Initiate a manual list refresh
+        if (inputString == "R" && !isImportRunning.load() && !isUnmount && !globalIsoFileList.empty()) {
+			isImportRunning.store(true);
+			backgroundThreads.emplace_back([&isImportRunning, &newISOFound, &stopImport] { 
+				backgroundDatabaseImport(isImportRunning, newISOFound, stopImport); 
+			});
+			updateHasRun.store(true);
+			continue;
+		}
         
         if (inputString == "<") {
             if (isFiltered) {

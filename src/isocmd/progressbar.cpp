@@ -2,6 +2,7 @@
 
 #include "../headers.h"
 #include "../themes.h"
+#include "../readline.h"
 
 /**
  * @file progress_bar.cpp
@@ -204,6 +205,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             std::cout << "\n\n";
 
             restoreInput(&oldt, oldf);
+            reset_custom_keybindingsForSelect();
 
             // --- Verbose Prompt (Readline safe) ---
             const std::string prompt = "\001" + std::string(color) + "\002" +

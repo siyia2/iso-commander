@@ -522,6 +522,16 @@ int clr_handler(int, int) {
     rl_done = 1;
     return 0;
 }
+/**
+ * @brief Readline key handler for the clear command.
+ * * Replaces the current line buffer with "R" and signals an immediate 
+ * return. This is used to reset pending selections.
+ */
+int refresh_handler(int, int) {
+    rl_replace_line("R", 0);
+    rl_done = 1;
+    return 0;
+}
 
 /**
  * @brief Readline key handler for the Page Down key.
@@ -564,6 +574,7 @@ void setup_custom_keybindingsForSelect(void) {
     rl_bind_keyseq("/", filter_handler);
     rl_bind_keyseq("P", proc_handler);
     rl_bind_keyseq("C", clr_handler);
+    rl_bind_keyseq("R", refresh_handler);
     rl_bind_keyseq("~", toggleList_handler);
     rl_bind_keyseq("<", toggleExit_handler);
     rl_bind_keyseq("?", toggleHelp_handler);
@@ -586,6 +597,7 @@ void reset_custom_keybindingsForSelect(void) {
     rl_bind_keyseq("/", rl_insert);
     rl_bind_keyseq("P", rl_insert);
     rl_bind_keyseq("C", rl_insert);
+    rl_bind_keyseq("R", rl_insert);
     rl_bind_keyseq("~", rl_insert);
     rl_bind_keyseq("<", rl_insert);
     rl_bind_keyseq("?", rl_insert);
