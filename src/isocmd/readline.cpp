@@ -602,3 +602,20 @@ void reset_custom_keybindingsForSelect(void) {
     rl_bind_keyseq("<", rl_insert);
     rl_bind_keyseq("?", rl_insert);
 }
+
+/**
+ * @brief Restores Readline keybindings to their original state Cp/Mv/Write2usb variant.
+ *
+ * Reverts character keys to standard text insertion (rl_insert). 
+ * This should be called after the file selection UI is closed 
+ * to prevent breaking standard input.
+ */
+void reset_custom_keybindingsForCpMvWrite2Usb(void) {
+	/* Restore standard printable characters to default self-insert */
+	rl_bind_keyseq("*", rl_insert);
+	rl_bind_keyseq("/", rl_insert);
+	rl_bind_keyseq("P", rl_insert);
+	rl_bind_keyseq("R", rl_insert);
+	rl_bind_keyseq("C", rl_insert);
+	rl_bind_keyseq("~", rl_insert);
+}

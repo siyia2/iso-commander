@@ -198,12 +198,7 @@ bool& overwriteExisting) {
     sortFilesCaseInsensitive(entries);
     clearScrollBuffer();
     
-	rl_bind_keyseq("*", rl_insert);
-	rl_bind_keyseq("/", rl_insert);
-	rl_bind_keyseq("P", rl_insert);
-	rl_bind_keyseq("R", rl_insert);
-	rl_bind_keyseq("C", rl_insert);
-	rl_bind_keyseq("~", rl_insert);
+	reset_custom_keybindingsForCpMvWrite2Usb();
 
     bool shouldContinue = true;
     std::string userInput;
