@@ -177,54 +177,26 @@ void interactiveConfigEditor(const std::string& configPath) {
 }
 
 /**
- * @brief Persists the current configuration cache to a physical file.
- * 
- * This function reconstructs the configuration file by iterating through the 
- * global @c CONFIG_ORDERED_DEFAULTS. It ensures the file remains organized 
- * with section headers and descriptive comments. Values are sourced from 
- * @c g_configCache, falling back to defined defaults if a key is missing.
- * 
- * @param configPath The filesystem path to the configuration file to be written.
- * @note This operation uses @c std::ios::trunc, overwriting the existing file 
- *       to ensure consistency between the memory cache and disk.
- */
-void saveConfigToFile(const std::string& configPath) {
-    std::ofstream outFile(configPath, std::ios::trunc);
-    if (!outFile.is_open()) return;
-
-    for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
-        // Write section header if it exists
-        if (!entry.section.empty()) {
-            outFile << "\n# === " << entry.section << " ===\n";
-        }
-
-        // Write the comment
-        outFile << "# " << entry.comment << "\n";
-
-        // Get value from cache, or use default if not present
-        std::string value = g_configCache.count(entry.key) ? g_configCache[entry.key] : entry.defaultValue;
-        outFile << entry.key << "=" << value << "\n\n";
-    }
-    outFile.close();
-}
-
-/**
  * @brief Provides an interactive CLI interface to modify a specific configuration setting.
  * 
  * Displays the current value, description, and valid input hints for a given key.
  * The function enters a retry loop until the user provides valid input or cancels.
  * 
- * @details The workflow includes:
- * - Finding the setting definition in @c CONFIG_ORDERED_DEFAULTS.
- * - Prompting the user via @c readline with dynamic hints based on the key type.
- * - Validating input using the entry's specific validation logic.
- * - On success: updating @c g_configCache, applying side effects via 
- *   @c applyConfigEffects, and persisting changes to disk via @c saveConfigToFile.
+ * @details **Workflow features:**
+ * - **Key Discovery:** Locates the setting definition within @c CONFIG_ORDERED_DEFAULTS.
+ * - **Dynamic UX:** Prompts via @c readline with context-aware hints (colors, toggles, or numeric ranges).
+ * - **Validation:** Enforces input integrity using the entry's specific validation lambda.
+ * - **Hot-Reloading:** On success, updates @c g_configCache, applies runtime side effects via 
+ *   @c applyConfigEffects, and immediately refreshes the local UI theme context.
+ * - **Persistence:** Persists changes to disk via @c flushCache, ensuring the global 
+ *   @c writeConfig format (headers and comments) is strictly maintained.
+ * - **Side Effects:** Triggers specialized logic, such as @c sortAfterFilenamesOnlyFlag, 
+ *   if the modified key requires a UI state refresh.
  * 
- * @param configPath Path to the configuration file (used for saving updates).
+ * @param configPath Path to the configuration file (used for standardized disk I/O).
  * @param key The specific configuration identifier to edit.
- * @return true if the operation was completed or skipped (Empty Enter).
- * @return false if the operation was explicitly cancelled (Ctrl+D / EOF).
+ * @return true if the operation was successfully updated or skipped (Empty Enter).
+ * @return false if the operation was explicitly aborted via @c Ctrl+D (EOF).
  */
 bool editSetting(const std::string& configPath, const std::string& key) {
     auto tc = resolveOptionsTheme();
@@ -286,26 +258,32 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         }
 
         // --- Success Case ---
-		g_configCache[key] = newVal;
-		applyConfigEffects(g_configCache);
-		saveConfigToFile(configPath);
-		
-		// REFRESH THE THEME HERE
-		tc = resolveOptionsTheme();
+        g_configCache[key] = newVal;
+        applyConfigEffects(g_configCache);
+        
+        // Use the standardized helper to write to disk and handle errors
+        bool saved = flushCache(configPath);
+        
+        // Refresh the local theme context in case 'skin' or 'theme' was changed
+        tc = resolveOptionsTheme();
 
-		// Compact check: attempt to open for append to verify write access
-		if (std::ofstream(configPath, std::ios::app)) {
-			std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n", tc.label, tc.reset, configPath);
-		} else {
-			printConfigError(configPath);
-			std::cout << tc.warning << "Notice:" << tc.error << " Setting update is temporary (Disk write failed)" << tc.warning << ".\n" << tc.reset;
-		}
-		
-		// Ensures lists are sorted after filenamesOnly list mode
-		if (key == "filenames_only") sortAfterFilenamesOnlyFlag();
+        if (saved) {
+            std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n", 
+                                     tc.label, tc.reset, configPath);
+        } else {
+            // flushCache already calls printConfigError(configPath) on failure
+            std::cout << tc.warning << "Notice: " << tc.error 
+                      << "Setting update is memory-only (Disk write failed)." 
+                      << tc.reset << "\n";
+        }
+        
+        // Specific side-effect for filename display toggle
+        if (key == "filenames_only") {
+            sortAfterFilenamesOnlyFlag();
+        }
 
-		pressEnterToContinue();
-		break;
-		}
+        pressEnterToContinue();
+        break; // Exit the retry loop
+	}
 	return true;
 }
