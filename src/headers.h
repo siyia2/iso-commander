@@ -148,6 +148,7 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
 void print_ascii();
 void helpSelections(bool& isAtISOListForHelp);
 void helpSearches(bool isCpMv, bool import2ISO);
+void helpSettingsEditor();
 void helpMappings();
 void pressEnterToTry();
 void pressEnterToReturn();
