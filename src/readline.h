@@ -60,5 +60,13 @@ void setup_custom_keybindingsForSelect(void);
  */
 void reset_custom_keybindingsForSelect(void);
 
+/**
+ * @brief Restores standard Readline behavior for modified keys Cp/Mv/Write2Usb variant.
+ * * Unbinds custom selection handlers and restores default functions, such 
+ * as standard character insertion, to ensure 
+ * normal terminal behavior elsewhere in the application.
+ */
+void reset_custom_keybindingsForCpMvWrite2Usb(void);
+
 #endif
 #endif // READLINE_H
