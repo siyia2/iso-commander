@@ -86,10 +86,10 @@ void interactiveConfigEditor(const std::string& configPath) {
 
         std::cout << "\n" << tc.accent << "Actions (↵): " << tc.warning << "1-" << (index-1) 
                   << tc.reset << " Edit | " << tc.warning << "r" << tc.reset << " Reset | " 
-                  << tc.warning << "s" << tc.reset << " SaveToDisk | " << tc.warning << "↵" << tc.reset << " Return\n";
+                  << tc.warning << "s" << tc.reset << " SaveToDisk | " << tc.warning << "?" << tc.reset << " help" << tc.reset << "\n";
 
 		std::string prompt = std::format(
-			"\n\001{}\002Action\001{}\002 ↵ : \001{}\002",
+			"\n\001{}\002Action\001{}\002 ↵ | ↵ Return: \001{}\002",
 			UI::Palette::Yellow, 
 			tc.label, 
 			tc.reset
@@ -99,6 +99,11 @@ void interactiveConfigEditor(const std::string& configPath) {
 
         std::string input = trim(rawInput.get());
         if (input.empty()) break;
+        
+        if (input == "?") {
+			helpSettingsEditor();
+			continue;
+		}
 
         if (input == "s" || input == "S") {
 			std::string confirmPrompt = std::format(

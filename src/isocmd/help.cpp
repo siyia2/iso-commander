@@ -85,6 +85,24 @@ void helpSelections(bool& isAtISOListForHelp) {
 }
 
 /**
+ * @brief Displays a help guide for the settings editor.
+ */
+void helpSettingsEditor() {
+    const ThemeColors tc;
+    setupHelp("Help Guide For Settings Editor", tc);
+    printSection(tc, "1. Hotkeys:", std::string(UI::Palette::BoldReset) +
+        "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
+        "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u");
+    printSection(tc, "\n2. Selecting Edits (↵):", std::string(UI::Palette::BoldReset) +
+        "   • Single/Multiple : " + std::string(UI::Palette::Purple) + "'1' or '1 5 6'\n" + std::string(UI::Palette::BoldReset) +
+        "   • Range/Combine   : " + std::string(UI::Palette::Purple) + "'1-3' or '1-3 5 7-9'" + std::string(UI::Palette::BoldReset));
+        printSection(tc, "\n4. Tips:",
+        "   • On reset defaults are not auto-saved to disk\n"
+        "   • Succesful edits are saved to disk automatically\n");
+    pressEnterToReturn();
+}
+
+/**
  * @brief Displays a help guide for directory-related prompts (Copy/Move and ISO convert2iso).
  */
 void helpSearches(bool isCpMv, bool import2ISO) {
