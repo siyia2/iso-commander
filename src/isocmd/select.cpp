@@ -265,11 +265,10 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
                     break;
                 }
             } else {
-				rl_bind_keyseq("R", rl_insert);
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning))
                     break;
             }
-
+			if (isUnmount) rl_bind_keyseq("R", rl_insert);
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
