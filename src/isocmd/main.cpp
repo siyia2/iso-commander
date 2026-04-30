@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
         std::string choice(input.get());
         if (choice == "1") {
             isAtMain = isAtISOList = false;
-            submenu1(updateHasRun, isAtISOList, isImportRunning, newISOFound, stopImport, backgroundThreads);
+            submenu1(updateHasRun, isAtISOList, isImportRunning, newISOFound, stopImport, backgroundThreads, search);
         } else if (choice.length() == 1) {
             switch (choice[0]) {
                 case '2':
