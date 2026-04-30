@@ -4,6 +4,7 @@
 #include "../display.h"
 #include "../themes.h"
 #include "../settings.h"
+#include "../readline.h"
 
 /**
  * @brief Synchronizes global runtime variables with values from the configuration cache.
@@ -59,6 +60,10 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache) {
  * @param configPath The filesystem path to the @c .conf file to be read and written.
  */
 void interactiveConfigEditor(const std::string& configPath) {
+    struct SettingsGuard {
+        ~SettingsGuard() { reset_custom_keybindingsForSettingsEditor(); }
+    } guard;
+
     signal(SIGINT, SIG_IGN);
     syncCache(configPath);
 
@@ -66,74 +71,77 @@ void interactiveConfigEditor(const std::string& configPath) {
         clearScrollBuffer();
         auto tc = resolveOptionsTheme();
         std::cout << "\n" << tc.highlight << "=== Settings Editor ===\n\n" << tc.reset;
-        std::cout  << tc.warning << "Config File: " << tc.reset << configPath << "\n";
+        std::cout << tc.warning << "Config File: " << tc.reset << configPath << "\n";
 
         int index = 1;
-		for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
-			if (!entry.section.empty()) {
-				std::cout << tc.accent << "\n--- " << entry.section << " ---\n" << tc.reset;
-			}
-			std::string val = g_configCache.count(entry.key) ? g_configCache[entry.key] : entry.defaultValue;
-			
-			std::string_view valColor = (index == 1) ? color : std::string_view(tc.data);
-			
-			std::cout << tc.warning << std::right << std::setw(2) << index++ << ". " << tc.reset
-					  << tc.label << std::left << std::setw(32) << entry.key << tc.reset
-					  << "= " << tc.reset
-					  << valColor << val << tc.reset << "\n";
-		}
-        
-
-        std::cout << "\n" << tc.accent << "Actions (↵): " << tc.warning << "1-" << (index-1) 
-                  << tc.reset << " Edit | " << tc.warning << "r" << tc.reset << " Reset | " 
+        for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
+            if (!entry.section.empty()) {
+                std::cout << tc.accent << "\n--- " << entry.section << " ---\n" << tc.reset;
+            }
+            std::string val = g_configCache.count(entry.key) ? g_configCache[entry.key] : entry.defaultValue;
+            
+            std::string_view valColor = (index == 1) ? color : std::string_view(tc.data);
+            
+            std::cout << tc.warning << std::right << std::setw(2) << index++ << ". " << tc.reset
+                      << tc.label << std::left << std::setw(32) << entry.key << tc.reset
+                      << "= " << tc.reset
+                      << valColor << val << tc.reset << "\n";
+        }
+		setup_custom_keybindingsForSettingsEditor();
+        std::cout << "\n" << tc.accent << "Actions: " << tc.warning << "1-" << (index-1) 
+                  << tc.reset << " ↵ Edit | " << tc.warning << "r" << tc.reset << " Reset | " 
                   << tc.warning << "s" << tc.reset << " SaveToDisk | " << tc.warning << "?" << tc.reset << " help" << tc.reset << "\n";
 
-		std::string prompt = std::format(
-			"\n\001{}\002Action\001{}\002 ↵ | ↵ Return: \001{}\002",
-			UI::Palette::Yellow, 
-			tc.label, 
-			tc.reset
-		);
+        std::string prompt = std::format(
+            "\n\001{}\002Action\001{}\002 ↵ | < \001{}\002Exit\001{}\002: \001{}\002",
+            UI::Palette::Yellow,
+            tc.label,
+            UI::Palette::Red, 
+            tc.label,
+            tc.reset
+        );
+
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
         if (!rawInput) break;
 
         std::string input = trim(rawInput.get());
-        if (input.empty()) break;
+        if (input == "<") break;
         
         if (input == "?") {
-			helpSettingsEditor();
-			continue;
-		}
+            helpSettingsEditor();
+            continue;
+        }
 
         if (input == "s" || input == "S") {
-			std::string confirmPrompt = std::format(
-				"\001{}\002\nSave settings to disk? (y/n): \001{}\002",
-				color, 
-				UI::Palette::BoldReset
-			);
-			
-			std::unique_ptr<char, decltype(&std::free)> confirmInput(readline(confirmPrompt.c_str()), &std::free);
-			
-			if (confirmInput) {
-				std::string confirm = trim(confirmInput.get());
-				if (!confirm.empty() && std::tolower(confirm[0]) == 'y') {
-					if (flushCache(configPath)) {
-						// REFRESH THE THEME
-						tc = resolveOptionsTheme();
-						std::cout << tc.highlight << "\n[✔] Settings saved to disk.\n" << tc.reset;
-					}
-					pressEnterToContinue();
-				}
-			}
-			continue;
-		}
+			reset_custom_keybindingsForSettingsEditor();
+            std::string confirmPrompt = std::format(
+                "\001{}\002\nSave settings to disk? (y/n): \001{}\002",
+                color, 
+                UI::Palette::BoldReset
+            );
+            
+            std::unique_ptr<char, decltype(&std::free)> confirmInput(readline(confirmPrompt.c_str()), &std::free);
+            
+            if (confirmInput) {
+                std::string confirm = trim(confirmInput.get());
+                if (!confirm.empty() && std::tolower(confirm[0]) == 'y') {
+                    if (flushCache(configPath)) {
+                        tc = resolveOptionsTheme();
+                        std::cout << tc.highlight << "\n[✔] Settings saved to disk.\n" << tc.reset;
+                    }
+                    pressEnterToContinue();
+                }
+            }
+            continue;
+        }
 
         if (input == "r" || input == "R") {
+			reset_custom_keybindingsForSettingsEditor();
             std::string confirmPrompt = std::format(
-				"\001{}\002\nReset all settings to defaults? (y/n): \001{}\002",
-				color, 
-				UI::Palette::BoldReset
-			);
+                "\001{}\002\nReset all settings to defaults? (y/n): \001{}\002",
+                color, 
+                UI::Palette::BoldReset
+            );
             
             std::unique_ptr<char, decltype(&std::free)> confirmInput(readline(confirmPrompt.c_str()), &std::free);
             
@@ -143,13 +151,8 @@ void interactiveConfigEditor(const std::string& configPath) {
                     for (const auto& e : CONFIG_ORDERED_DEFAULTS) {
                         g_configCache[e.key] = e.defaultValue;
                     }
-                    
-                    // Apply changes immediately to global state/UI
                     applyConfigEffects(g_configCache);
-                    
-                    // REFRESH THE THEME
-					tc = resolveOptionsTheme();
-                    
+                    tc = resolveOptionsTheme();
                     std::cout << tc.label << "\n[+] Defaults applied — save with 's' to persist.\n" << tc.reset;
                     pressEnterToContinue();
                 }
@@ -157,30 +160,27 @@ void interactiveConfigEditor(const std::string& configPath) {
             continue;
         }
 
-		{
-			// Build a dummy vector sized to CONFIG_ORDERED_DEFAULTS for bounds checking
-			std::vector<std::string> slots(CONFIG_ORDERED_DEFAULTS.size());
-			std::unordered_set<std::string> errors;
-			std::unordered_set<int> choices;
+        {
+            std::vector<std::string> slots(CONFIG_ORDERED_DEFAULTS.size());
+            std::unordered_set<std::string> errors;
+            std::unordered_set<int> choices;
 
-			tokenizeInput(input, slots, errors, choices);
-			if (!errors.empty()) std::cout << "\n";
-			for (const auto& err : errors)
-				std::cout << err << "\n";
-			if (!errors.empty())
-				pressEnterToContinue();
+            tokenizeInput(input, slots, errors, choices);
+            if (!errors.empty()) std::cout << "\n";
+            for (const auto& err : errors)
+                std::cout << err << "\n";
+            if (!errors.empty())
+                pressEnterToContinue();
 
-			// Edit in ascending order for predictability
-			std::vector<int> ordered(choices.begin(), choices.end());
-			std::sort(ordered.begin(), ordered.end());
-			for (int choice : ordered) {
-				// If user signals abort (Ctrl+D), we stop the for-loop immediately
-				if (!editSetting(configPath, CONFIG_ORDERED_DEFAULTS[choice - 1].key)) {
-					break; 
-				}
-			}
-		}
-	}
+            std::vector<int> ordered(choices.begin(), choices.end());
+            std::sort(ordered.begin(), ordered.end());
+            for (int choice : ordered) {
+                if (!editSetting(configPath, CONFIG_ORDERED_DEFAULTS[choice - 1].key)) {
+                    break; 
+                }
+            }
+        }
+    }
 }
 
 /**

@@ -444,155 +444,124 @@ int clear_screen_and_buffer(int, int) {
 // Event Driven Key Section
 //=============================================================================
 
-/**
- * @brief Readline key handler for the '*' key.
- * * Replaces the current line buffer with '*' and signals Readline to 
- * finish the current input session immediately without an Enter keypress.
- */
-int flno_handler(int, int) {
-    rl_replace_line("*", 0);
-    rl_done = 1;  
-    return 0;
-}
+/* --- Navigation & View Handlers --- */
 
-/**
- * @brief Readline key handler for the '<' key.
- * * Sets the input buffer to '<' to signal an exit command and terminates
- * the Readline loop immediately.
- */
-int toggleExit_handler(int, int) {
-    rl_replace_line("<", 0);
+int pgup_handler(int, int) {
+    rl_replace_line("PgUp", 0);
     rl_done = 1;
     return 0;
 }
 
-/**
- * @brief Readline key handler for the '?' key.
- * * Replaces the input with '?' to trigger the help interface and 
- * returns control to the calling function immediately.
- */
-int toggleHelp_handler(int, int) {
-    rl_replace_line("?", 0);
+int pgdn_handler(int, int) {
+    rl_replace_line("PgDn", 0);
     rl_done = 1;
     return 0;
 }
 
-/**
- * @brief Readline key handler for the '~' key.
- * * Replaces the input with '~' to toggle the list view mode and
- * exits the prompt without requiring a newline.
- */
 int toggleList_handler(int, int) {
     rl_replace_line("~", 0);
     rl_done = 1;
     return 0;
 }
 
-/**
- * @brief Readline key handler for the '/' key.
- * * Replaces the current line buffer with "/" and signals an immediate 
- * return. This is typically used to enter a search or filtering mode 
- * within the selection interface.
- */
-int filter_handler(int, int) {
-    rl_replace_line("/", 0);
-    rl_done = 1;
-    return 0;
-}
+/* --- Action & Command Handlers --- */
 
-/**
- * @brief Readline key handler for processing commands.
- * * Replaces the current line buffer with "proc" and signals an immediate 
- * return. This facilitates a single-keypress trigger to begin processing 
- * the currently pending items.
- */
 int proc_handler(int, int) {
     rl_replace_line("proc", 0);
     rl_done = 1;
     return 0;
 }
 
-/**
- * @brief Readline key handler for the clear command.
- * * Replaces the current line buffer with "clr" and signals an immediate 
- * return. This is used to reset pending selections.
- */
 int clr_handler(int, int) {
     rl_replace_line("clr", 0);
     rl_done = 1;
     return 0;
 }
-/**
- * @brief Readline key handler for the clear command.
- * * Replaces the current line buffer with "R" and signals an immediate 
- * return. This is used to reset pending selections.
- */
+
 int refresh_handler(int, int) {
     rl_replace_line("R", 0);
     rl_done = 1;
     return 0;
 }
 
-/**
- * @brief Readline key handler for the Page Down key.
- *
- * Simulates entering the deprecated "p" (previous page) command and immediately
- * returns from the readline prompt without requiring Enter.
- */
-int pgdn_handler(int, int) {
-    rl_replace_line("PgDn", 0);
-    rl_done = 1;  // ← returns immediately, no Enter needed
+int filter_handler(int, int) {
+    rl_replace_line("/", 0);
+    rl_done = 1;
+    return 0;
+}
+
+int toggleFlno_handler(int, int) {
+    rl_replace_line("*", 0);
+    rl_done = 1;
+    return 0;
+}
+
+/* --- Settings & State Handlers --- */
+
+int save_handler(int, int) {
+    rl_replace_line("s", 0);
+    rl_done = 1;
+    return 0;
+}
+
+int reset_handler(int, int) {
+    rl_replace_line("r", 0);
+    rl_done = 1;
+    return 0;
+}
+
+/* --- Global Utility Handlers --- */
+
+int help_handler(int, int) {
+    rl_replace_line("?", 0);
+    rl_done = 1;
+    return 0;
+}
+
+int exit_handler(int, int) {
+    rl_replace_line("<", 0);
+    rl_done = 1;
     return 0;
 }
 
 /**
- * @brief Readline key handler for the Page Up key.
- *
- * Simulates entering the deprecated "n" (next page) command and immediately
- * returns from the readline prompt without requiring Enter.
- */
-int pgup_handler(int, int) {
-    rl_replace_line("PgUp", 0);
-    rl_done = 1;  // ← returns immediately, no Enter needed
-    return 0;
-}
-
-/**
- * @brief Configures custom keybindings for a specialized file selection UI.
- *
- * This function intercepts standard keypresses (PageUp/Down, *, ~, <, ?) 
- * and maps them to custom handlers. This transforms the standard Readline 
- * prompt into a single-keypress command interface.
+ * @brief Keybindings for the main File Selection interface.
  */
 void setup_custom_keybindingsForSelect(void) {
-    /* Map Page Up and Page Down to custom handlers */
+    // Navigation
     rl_bind_keyseq("\\e[5~", pgup_handler);
     rl_bind_keyseq("\\e[6~", pgdn_handler);
 
-    /* Map printable characters to feature toggles */
-    rl_bind_keyseq("*", flno_handler);
+    // Commands
+    rl_bind_keyseq("*", toggleFlno_handler);
     rl_bind_keyseq("/", filter_handler);
     rl_bind_keyseq("P", proc_handler);
     rl_bind_keyseq("C", clr_handler);
     rl_bind_keyseq("R", refresh_handler);
     rl_bind_keyseq("~", toggleList_handler);
-    rl_bind_keyseq("<", toggleExit_handler);
-    rl_bind_keyseq("?", toggleHelp_handler);
+    rl_bind_keyseq("<", exit_handler);
+    rl_bind_keyseq("?", help_handler);
 }
 
 /**
- * @brief Restores Readline keybindings to their original state.
- *
- * Reverts navigation keys to history scrolling and returns character keys 
- * to standard text insertion (rl_insert). This should be called after 
- * the file selection UI is closed to prevent breaking standard input.
+ * @brief Keybindings for the Settings Editor.
+ */
+void setup_custom_keybindingsForSettingsEditor(void) {
+    rl_bind_keyseq("r", reset_handler);
+    rl_bind_keyseq("s", save_handler);
+    rl_bind_keyseq("?", help_handler);
+    rl_bind_keyseq("<", exit_handler);
+}
+
+/**
+ * @brief Restores all bindings used in the Selection UI to defaults.
  */
 void reset_custom_keybindingsForSelect(void) {
-    /* Restore Page Up and Page Down to history navigation */
+    // Restore navigation to history
     rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
     rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
 
-    /* Restore standard printable characters to default self-insert */
+    // Restore characters to standard insertion
     rl_bind_keyseq("*", rl_insert);
     rl_bind_keyseq("/", rl_insert);
     rl_bind_keyseq("P", rl_insert);
@@ -604,18 +573,23 @@ void reset_custom_keybindingsForSelect(void) {
 }
 
 /**
- * @brief Restores Readline keybindings to their original state Cp/Mv/Write2usb variant.
- *
- * Reverts character keys to standard text insertion (rl_insert). 
- * This should be called after the file selection UI is closed 
- * to prevent breaking standard input.
+ * @brief Restores bindings used in File Operations (Cp/Mv/USB).
  */
 void reset_custom_keybindingsForCpMvWrite2Usb(void) {
-	/* Restore standard printable characters to default self-insert */
-	rl_bind_keyseq("*", rl_insert);
-	rl_bind_keyseq("/", rl_insert);
-	rl_bind_keyseq("P", rl_insert);
-	rl_bind_keyseq("R", rl_insert);
-	rl_bind_keyseq("C", rl_insert);
-	rl_bind_keyseq("~", rl_insert);
+    rl_bind_keyseq("*", rl_insert);
+    rl_bind_keyseq("/", rl_insert);
+    rl_bind_keyseq("P", rl_insert);
+    rl_bind_keyseq("R", rl_insert);
+    rl_bind_keyseq("C", rl_insert);
+    rl_bind_keyseq("~", rl_insert);
+}
+
+/**
+ * @brief Restores bindings used in the Settings Editor.
+ */
+void reset_custom_keybindingsForSettingsEditor(void) {
+    rl_bind_keyseq("r", rl_insert);
+    rl_bind_keyseq("s", rl_insert);
+    rl_bind_keyseq("?", rl_insert);
+    rl_bind_keyseq("<", rl_insert);
 }
