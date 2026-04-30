@@ -308,9 +308,16 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
             needsClrScrn = false;
             continue; 
         }
+        
+        if (inputString[0] == 'R' && isImportRunning.load()) {
+			std::cout << "\033[1B\033[K";
+			needsClrScrn = false;
+			continue;
+		}
 		
 		// Initiate a manual list refresh
         if (inputString == "R" && !isImportRunning.load() && !isUnmount && !globalIsoFileList.empty()) {
+			needsClrScrn =true;
 			isImportRunning.store(true);
 			backgroundThreads.emplace_back([&isImportRunning, &newISOFound, &stopImport] { 
 				backgroundDatabaseImport(isImportRunning, newISOFound, stopImport); 
