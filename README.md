@@ -20,6 +20,7 @@ Database folder location: `/root/.local/share/isocmd/database/` || `~/.local/sha
 * Minimizes disk thrashing.
 * Optimizes file access performance.
 * Optional automatic imports to database.
+* Resilient atomic database writes.
 
 
 🖥️ Advanced Terminal Interface:
