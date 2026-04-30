@@ -46,25 +46,41 @@ char** completion_cb(const char* text, int start, int end);
 
 /**
  * @brief Initializes and binds custom key sequences for file selection.
- * * Maps physical keys (like PageUp/PageDown) and character keys (*, <, ?, ~)
- * to their respective internal handlers to allow single-key navigation 
- * without requiring the Enter key.
+ * 
+ * Maps physical keys (PageUp/PageDown) and character keys (*, /, P, C, R, ~, <, ?)
+ * to internal handlers, enabling a "hotkey" style interface that triggers 
+ * actions immediately without the Enter key.
  */
 void setup_custom_keybindingsForSelect(void);
 
 /**
- * @brief Restores standard Readline behavior for modified keys.
- * * Unbinds custom selection handlers and restores default functions, such 
- * as history navigation and standard character insertion, to ensure 
- * normal terminal behavior elsewhere in the application.
+ * @brief Restores standard Readline behavior after file selection.
+ * 
+ * Reverts navigation keys to history scrolling and character keys back to 
+ * standard text insertion to prevent "hotkeys" from leaking into other prompts.
  */
 void reset_custom_keybindingsForSelect(void);
 
 /**
- * @brief Restores standard Readline behavior for modified keys Cp/Mv/Write2Usb variant.
- * * Unbinds custom selection handlers and restores default functions, such 
- * as standard character insertion, to ensure 
- * normal terminal behavior elsewhere in the application.
+ * @brief Initializes and binds custom key sequences for the Settings Editor.
+ * 
+ * Maps 's' (save), 'r' (reset), and '?' (help) to their respective handlers 
+ * for quick single-key configuration management.
+ */
+void setup_custom_keybindingsForSettingsEditor(void);
+
+/**
+ * @brief Restores standard Readline behavior after exiting the Settings Editor.
+ * 
+ * Resets 's', 'r', and '?' to standard character insertion.
+ */
+void reset_custom_keybindingsForSettingsEditor(void);
+
+/**
+ * @brief Restores standard Readline behavior after Copy, Move, or USB operations.
+ * 
+ * Cleans up specific character bindings (*, /, P, R, C, ~) used during 
+ * high-level file operations to ensure the terminal returns to normal input mode.
  */
 void reset_custom_keybindingsForCpMvWrite2Usb(void);
 
