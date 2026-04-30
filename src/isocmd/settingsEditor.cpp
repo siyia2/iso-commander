@@ -145,7 +145,7 @@ void interactiveConfigEditor(const std::string& configPath) {
                     // REFRESH THE THEME
 					tc = resolveOptionsTheme();
                     
-                    std::cout << tc.label << "[+] Defaults applied — save with 's' to persist.\n" << tc.reset;
+                    std::cout << tc.label << "\n[+] Defaults applied — save with 's' to persist.\n" << tc.reset;
                     pressEnterToContinue();
                 }
             }
