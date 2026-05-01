@@ -4,15 +4,14 @@
 #define MDF_H
 
 // C++ Standard Library Headers
+#include <cstddef>
 #include <cstring>
-#include <filesystem>
 #include <fstream>
+#include <cstddef>
 
 // C / System Headers
 #include <sys/stat.h>
 #include <unistd.h>
-
-namespace fs = std::filesystem;
 
 // Special thanks to the original author of mdf2iso:
 

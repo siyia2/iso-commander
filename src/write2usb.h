@@ -7,13 +7,15 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <iostream>
 #include <string>
-#include <utility> // For std::move
+#include <utility>
 
 // System Headers
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <sys/ioctl.h>
+#include <cstdio>
 
 namespace fs = std::filesystem;
 

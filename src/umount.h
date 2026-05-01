@@ -3,16 +3,14 @@
 #ifndef UMOUNT_H
 #define UMOUNT_H
 
-#include "themes.h"
-
 // C++ Standard Library Headers
+#include <atomic>
 #include <filesystem>
 #include <unordered_set>
+#include <vector>
 
-// Third-Party Library Headers
-#include <libmount/libmount.h>
-
-namespace fs = std::filesystem;
+// Project Headers
+#include "themes.h"
 
 /**
  * @brief Canonical list of all supported configuration settings with validation.

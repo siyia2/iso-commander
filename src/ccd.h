@@ -4,11 +4,8 @@
 #define CCD_H
 
 // C++ Standard Library Headers
-#include <cstring>
-#include <filesystem>
-#include <fstream>
-
-namespace fs = std::filesystem;
+#include <cstddef>
+#include <cstdint>
 
 // Special thanks to the original authors of ccd2iso:
 

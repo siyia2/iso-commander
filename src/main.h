@@ -9,49 +9,41 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <ctime>
 
 // C / System Headers
 #include <fcntl.h>
 #include <unistd.h>
-
-// --- Configuration & File State ---
+#include <csignal>
 
 /**
- * Reads and applies general user configuration updates from a file.
+ * CONFIGURATION & PERSISTENCE
+ * Logic for reading, parsing, and validating user preferences and history.
  */
+
+// Applies configuration key-pairs to the running state
 bool readUserConfigUpdates(const std::string& filePath);
 
-/**
- * Retrieves a key-value map of configuration settings.
- */
+// Returns a map of all valid config entries
 std::map<std::string, std::string> readUserConfigLists(const std::string& filePath);
 
-/**
- * Checks if pagination is enabled in the config file.
- */
+// Specific check for UI pagination status
 bool paginationSet(const std::string& filePath);
 
-/**
- * Determines if the history file is currently empty.
- */
+// Validation for history state
 bool isHistoryFileEmpty(const std::string& filePath);
 
 
-// --- Main Menu & UI Display ---
-
 /**
- * Prints the decorative ASCII art banner.
+ * USER INTERFACE & NAVIGATION
+ * Functions responsible for rendering the visual state and managing submenus.
  */
+
+// Visual decorative elements
 void print_ascii();
-
-/**
- * Displays the primary application menu options.
- */
 void printMenu();
 
-/**
- * Handles the logic and state transitions for the first submenu.
- */
+// Primary navigation logic for the ISO list and scanning
 void submenu1(
     std::atomic<bool>& updateHasRun, 
     std::atomic<bool>& isAtISOList, 
@@ -62,26 +54,19 @@ void submenu1(
     bool& search
 );
 
-/**
- * Handles logic for the second submenu (typically settings or status).
- */
+// Secondary navigation logic for settings and global status
 void submenu2(
     std::atomic<bool>& newISOFound, 
     std::atomic<bool>& isImportRunning
 );
 
 
-// --- Messaging & System Commands ---
-
 /**
- * Logic for managing Mount/Unmount lifecycle via CLI arguments.
+ * ASYNCHRONOUS UI MONITORING
+ * Threaded workers that manage temporary UI states like status messages.
  */
-int handleMountUmountCommands(int argc, char* argv[]);
 
-/**
- * Clears status messages from the UI after a specific duration, 
- * provided the user is at the main screen and no imports are blocking.
- */
+// Clears the status bar after a timeout if the user is in the Main view
 void clearMessageAfterTimeoutInMain(
     int timeoutSeconds, 
     std::atomic<bool>& isAtMain, 
@@ -90,14 +75,20 @@ void clearMessageAfterTimeoutInMain(
     std::atomic<bool>& stopMessage
 );
 
-/**
- * A background-compatible monitor to clear UI messages based on signals.
- */
+// Dedicated monitor thread to react to message clear signals
 void monitorAndClearMessage(
     std::atomic<bool>& isRunning, 
     std::atomic<bool>& messageActive, 
     std::atomic<bool>& stopSignal, 
     std::atomic<bool>& isAtMain
 );
+
+
+/**
+ * EXTERNAL COMMAND INTERFACE
+ * Entry point for non-interactive CLI usage.
+ */
+
+int handleMountUmountCommands(int argc, char* argv[]);
 
 #endif // CONFIG_UI_OPS_H

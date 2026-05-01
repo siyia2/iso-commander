@@ -4,22 +4,30 @@
 #define SEARCHES_H
 
 // C++ Standard Library Headers
+#include <string>
 #include <atomic>
 #include <cstdint>
-#include <filesystem>
-#include <string>
-
-namespace fs = std::filesystem;
 
 /**
- * Displays usage help for search operations.
+ * SEARCH DOCUMENTATION & HELP
+ */
+
+/**
+ * @brief Displays usage help for search operations.
  * @param isCpMv Whether the current context is Copy/Move.
  * @param import2ISO Whether the context is ISO conversion.
  */
 void helpSearches(bool isCpMv, bool import2ISO);
 
+
 /**
- * Retrieves and prints statistics about the SQLite database.
+ * DATABASE MANAGEMENT & TELEMETRY
+ */
+
+/**
+ * @brief Retrieves and prints statistics about the SQLite database.
+ * @param databaseFilePath Path to the .db file.
+ * @param maxDatabaseSize Size limit for warning thresholds.
  */
 void displayDatabaseStatistics(
     const std::string& databaseFilePath, 
@@ -27,7 +35,10 @@ void displayDatabaseStatistics(
 );
 
 /**
- * Processes special CLI switches/commands related to database management.
+ * @brief Processes special CLI switches related to database maintenance.
+ * 
+ * Handles internal commands like --refresh or --cleanup passed via the
+ * search input field.
  */
 void databaseSwitches(
     std::string& inputSearch, 

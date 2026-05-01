@@ -25,10 +25,7 @@
 
 // C++ Standard Library Headers
 #include <cstring>
-#include <filesystem>
-
-namespace fs = std::filesystem;
-
+#include <cstdint>
 
 // ── Type aliases ───────────────────────────────────────────────────────────
 typedef uint8_t  u8;

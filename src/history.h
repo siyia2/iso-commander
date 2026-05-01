@@ -3,16 +3,7 @@
 #ifndef HISTORY_H
 #define HISTORY_H
 
-// C++ Standard Library Headers
-#include <filesystem>
-
-// Third-Party Library Headers
-#include <readline/history.h>
-#include <readline/readline.h>
-
-// C / System Headers
-#include <sys/file.h>
-#include <sys/stat.h>
+#include <string>
 
 void loadHistory(bool& filterHistory);
 void saveHistory(bool& filterHistory);

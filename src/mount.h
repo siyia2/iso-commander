@@ -4,6 +4,7 @@
 #define MOUNT_H
 
 // C++ Standard Library Headers
+#include <atomic>
 #include <filesystem>
 #include <unordered_set>
 #include <vector>
@@ -11,12 +12,6 @@
 // Project Headers
 #include "display.h"
 #include "themes.h"
-
-// Third-Party Library Headers
-#include <libmount/libmount.h>
-
-// C / System Headers
-#include <sys/stat.h>
 
 namespace fs = std::filesystem;
 

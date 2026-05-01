@@ -6,8 +6,8 @@
 // C++ Standard Library Headers
 #include <cstdio>
 #include <cstring>
-#include <filesystem>
 #include <fstream>
+#include <memory>
 #include <vector>
 
 // Third-Party Library Headers
@@ -18,7 +18,6 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
-namespace fs = std::filesystem;
 
 /**
  * @brief Custom deleter for CHD file handles

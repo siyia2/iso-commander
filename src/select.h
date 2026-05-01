@@ -4,11 +4,11 @@
 #define SELECT_H
 
 // C++ Standard Library Headers
-#include <atomic>
-#include <memory>
 #include <string>
-#include <unordered_set>
 #include <vector>
+#include <unordered_set>
+#include <atomic>
+#include <cstddef>
 
 /**
  * @brief Shared display state for the ISO list view and its background refresh thread.
