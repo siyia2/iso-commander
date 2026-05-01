@@ -46,27 +46,8 @@ inline size_t RM_THREAD_CAP     = 32;
 inline size_t SORT_THREAD_CAP   = 4;
 inline size_t FILTER_THREAD_CAP = 4;
 
-// Mutex Protection
+// Mutex Protection For Verbose Sets
 inline std::mutex globalSetsMutex;
-inline std::mutex updateListMutex;
-inline std::mutex binImgCacheMutex;
-inline std::mutex mdfMdsCacheMutex;
-inline std::mutex nrgCacheMutex;
-inline std::mutex chdCacheMutex;
-inline std::mutex daaGbiCacheMutex;
-inline std::mutex couNtMutex;
-
-// Data Caches
-inline std::vector<std::string> globalIsoFileList;
-inline thread_local std::unordered_map<std::string, std::string> transformationCache;
-inline thread_local std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> cachedParsesForUmount;
-inline std::vector<std::string> binImgFilesCache;
-inline std::vector<std::string> mdfMdsFilesCache;
-inline std::vector<std::string> nrgFilesCache;
-inline std::vector<std::string> chdFilesCache;
-inline std::vector<std::string> daaGbiFilesCache;
-inline std::map<std::string, std::string> g_configCache;
-inline std::string g_cachedPath;
 
 // File Paths
 inline const std::string databaseDirectory = std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.local/share/isocmd/database/";

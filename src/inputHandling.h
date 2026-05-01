@@ -10,6 +10,9 @@
 #include <termios.h>
 #include <readline/readline.h> 
 #include <cstdlib>
+#include <memory>
+#include <memory>
+#include <iomanip>
 
 void flushStdin();
 void disable_ctrl_d();

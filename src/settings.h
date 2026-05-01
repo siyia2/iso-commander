@@ -10,11 +10,12 @@
  * support for sections, comments, and automatic validation.
  */
 
-#include "./globals.h"
+#include "./caches.h"
 #include <functional>
 #include <iostream>
 #include <format>
 #include <fstream>
+#include <unordered_set>
 
 // ============================================================================
 // Data Structures
@@ -141,7 +142,7 @@ bool writeConfig(const std::string& configPath, const std::map<std::string, std:
  * @return true if the write operation succeeded, false otherwise.
  */
 inline bool flushCache(const std::string& configPath) {
-    if (writeConfig(configPath, g_configCache)) return true;
+    if (writeConfig(configPath, GlobalCaches::g_configCache)) return true;
     printConfigError(configPath);
     return false;
 }
