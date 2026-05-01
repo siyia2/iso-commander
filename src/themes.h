@@ -8,8 +8,9 @@
 #ifndef THEMES_H
 #define THEMES_H
 
-#include <cstring>
+// C++ Standard Library Headers
 #include <algorithm>
+#include <cstring>
 #include <iterator>
 
 namespace UI {

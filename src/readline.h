@@ -3,14 +3,16 @@
 #ifndef READLINE_H
 #define READLINE_H
 
-#include "write2usb.h"
-#include <unordered_set>
-#include <iostream>
-#include <sys/stat.h>
-#include <unistd.h>
+// C++ Standard Library Headers
 #include <vector>
-#include <readline/readline.h>
+#include <filesystem>
+
+// Third-Party Library Headers
 #include <readline/history.h>
+#include <readline/readline.h>
+
+// C / System Headers
+#include <sys/stat.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -91,7 +93,16 @@ void reset_custom_keybindingsForSettingsEditor(void);
  */
 void reset_custom_keybindingsForCpMvWrite2Usb(void);
 
+/**
+ * @brief Block asigned readline key bindings.
+ * 
+ */
 int prevent_readline_keybindings(int, int);
+
+/**
+ * @brief Maps ctrl+l to clearScrollbuffer function.
+ * 
+ */
 int clear_screen_and_buffer(int, int);
 
 #endif

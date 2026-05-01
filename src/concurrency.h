@@ -3,9 +3,10 @@
 #ifndef CONCURRENCY_H
 #define CONCURRENCY_H
 
-#include <thread>
+// C++ Standard Library Headers
 #include <algorithm>
 #include <mutex>
+#include <thread>
 
 //=======================================
 // GLOBAL CONCURRENCY SETTINGS AND MUTEX

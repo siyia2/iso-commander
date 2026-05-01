@@ -3,12 +3,20 @@
 #ifndef MOUNT_H
 #define MOUNT_H
 
-#include "display.h"
-#include <unordered_set>
-#include "themes.h"
-#include <libmount/libmount.h>
-#include <sys/stat.h>
+// C++ Standard Library Headers
 #include <filesystem>
+#include <unordered_set>
+#include <vector>
+
+// Project Headers
+#include "display.h"
+#include "themes.h"
+
+// Third-Party Library Headers
+#include <libmount/libmount.h>
+
+// C / System Headers
+#include <sys/stat.h>
 
 namespace fs = std::filesystem;
 

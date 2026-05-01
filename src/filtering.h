@@ -3,9 +3,13 @@
 #ifndef FILTERING_H
 #define FILTERING_H
 
-#include <readline/readline.h>
-#include <readline/history.h>
+// C++ Standard Library Headers
+#include <iostream>
 #include <numeric>
+
+// Third-Party Library Headers
+#include <readline/history.h>
+#include <readline/readline.h>
 
 /**
  * @brief Stores a single level of filter state for nested filtering support.

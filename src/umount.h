@@ -4,9 +4,13 @@
 #define UMOUNT_H
 
 #include "themes.h"
-#include <libmount/libmount.h>
-#include <unordered_set>
+
+// C++ Standard Library Headers
 #include <filesystem>
+#include <unordered_set>
+
+// Third-Party Library Headers
+#include <libmount/libmount.h>
 
 namespace fs = std::filesystem;
 

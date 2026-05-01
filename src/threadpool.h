@@ -3,14 +3,13 @@
 #ifndef THREAD_POOL_H
 #define THREAD_POOL_H
 
-#include "./concurrency.h"
-#include <memory>
-#include <atomic>
+// C++ Standard Library Headers
 #include <functional>
-#include <condition_variable>
 #include <future>
-#include <algorithm>
-#include <mutex>
+#include <memory>
+
+// Related/Project Headers
+#include "./concurrency.h"
 
 /**
  * @brief A thread-safe, non-blocking Michael-Scott Lock-Free Queue.

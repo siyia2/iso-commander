@@ -3,9 +3,10 @@
 #ifndef GLOBALS_H
 #define GLOBALS_H
 
-#include <string>
+// C++ Standard Library Headers
 #include <atomic>
 #include <cstdlib>
+#include <string>
 #include <unordered_set>
 #include <vector>
 

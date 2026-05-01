@@ -3,7 +3,9 @@
 #ifndef CONVERT
 #define CONVERT
 
+// C++ Standard Library Headers
 #include <filesystem>
+#include <fstream>
 
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
 

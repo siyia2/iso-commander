@@ -3,9 +3,10 @@
 #ifndef CCD_H
 #define CCD_H
 
-#include <fstream>
+// C++ Standard Library Headers
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 
 namespace fs = std::filesystem;
 

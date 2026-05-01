@@ -3,16 +3,19 @@
 #ifndef INPUTHANDLING_H
 #define INPUTHANDLING_H
 
+// C++ Standard Library Headers
+#include <cstdio>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
-#include <functional>
+#include <memory>
+
+// Third-Party Library Headers
+#include <readline/readline.h>
+
+// C / System Headers
 #include <signal.h>
 #include <termios.h>
-#include <readline/readline.h> 
-#include <cstdlib>
-#include <memory>
-#include <memory>
-#include <iomanip>
 
 void flushStdin();
 void disable_ctrl_d();

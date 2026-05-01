@@ -3,10 +3,12 @@
 #ifndef CACHES_H
 #define CACHES_H
 
+// C++ Standard Library Headers
 #include <map>
+#include <mutex>
+#include <string>
 #include <unordered_map>
 #include <vector>
-#include <mutex>
 
 namespace GlobalCaches {
     // Thread-local caches

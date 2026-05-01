@@ -10,13 +10,16 @@
  * support for sections, comments, and automatic validation.
  */
 
-#include "./caches.h"
-#include <functional>
-#include <iostream>
+// C++ Standard Library Headers
+#include <filesystem>
 #include <format>
 #include <fstream>
-#include <filesystem>
+#include <functional>
+#include <iostream>
 #include <unordered_set>
+
+// Project Headers
+#include "./caches.h"
 
 namespace fs = std::filesystem;
 
