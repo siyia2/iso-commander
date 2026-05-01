@@ -3,7 +3,14 @@
 #ifndef THREAD_POOL_H
 #define THREAD_POOL_H
 
-#include "./headers.h"
+#include "./globals.h"
+#include <memory>
+#include <atomic>
+#include <functional>
+#include <condition_variable>
+#include <future>
+#include <algorithm>
+#include <mutex>
 
 /**
  * @brief A thread-safe, non-blocking Michael-Scott Lock-Free Queue.

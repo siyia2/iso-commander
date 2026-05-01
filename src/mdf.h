@@ -3,6 +3,10 @@
 #ifndef MDF_H
 #define MDF_H
 
+#include <sys/stat.h>
+#include <unistd.h>
+#include <cstring>
+#include <fstream>
 
 // Special thanks to the original author of mdf2iso:
 

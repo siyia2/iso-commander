@@ -3,7 +3,14 @@
 #ifndef READLINE_H
 #define READLINE_H
 
-#include "write.h"
+#include "write2usb.h"
+#include <unordered_set>
+#include <iostream>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <vector>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -83,6 +90,9 @@ void reset_custom_keybindingsForSettingsEditor(void);
  * high-level file operations to ensure the terminal returns to normal input mode.
  */
 void reset_custom_keybindingsForCpMvWrite2Usb(void);
+
+int prevent_readline_keybindings(int, int);
+int clear_screen_and_buffer(int, int);
 
 #endif
 #endif // READLINE_H

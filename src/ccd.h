@@ -3,6 +3,8 @@
 #ifndef CCD_H
 #define CCD_H
 
+#include <fstream>
+#include <cstring>
 
 // Special thanks to the original authors of ccd2iso:
 

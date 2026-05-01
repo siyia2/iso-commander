@@ -3,6 +3,10 @@
 #ifndef FILTERING_H
 #define FILTERING_H
 
+#include <readline/readline.h>
+#include <readline/history.h>
+#include <numeric>
+
 /**
  * @brief Stores a single level of filter state for nested filtering support.
  * @details Each entry on the filtering stack captures a snapshot of which items

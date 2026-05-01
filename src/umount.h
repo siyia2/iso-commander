@@ -4,6 +4,7 @@
 #define UMOUNT_H
 
 #include "themes.h"
+#include <libmount/libmount.h>
 
 /**
  * @brief Canonical list of all supported configuration settings with validation.
@@ -40,5 +41,8 @@ struct VerboseMessageFormatter {
         return buf;
     }
 };
+
+void unmountISO(const std::vector<std::string>& isoDirs, std::unordered_set<std::string>& unmountedFiles, 
+std::unordered_set<std::string>& unmountedErrors, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool silentMode);
 
 #endif // UMOUNT_H

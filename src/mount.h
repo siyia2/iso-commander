@@ -5,6 +5,8 @@
 
 #include "display.h"
 #include "themes.h"
+#include <libmount/libmount.h>
+#include <sys/stat.h>
 
 /**
  * @brief Canonical list of all supported configuration settings with validation.
@@ -95,5 +97,8 @@ private:
         return (displayConfig::toggleNamesOnly) ? file : dir + "/" + file;
     }
 };
+
+void mountIsoFiles(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& mountedFiles, std::unordered_set<std::string>& skippedMessages, 
+std::unordered_set<std::string>& mountedFails, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool silentMode);
 
 #endif // MOUNT_H

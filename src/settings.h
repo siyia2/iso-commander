@@ -10,7 +10,11 @@
  * support for sections, comments, and automatic validation.
  */
 
-#include "./headers.h"
+#include "./globals.h"
+#include <functional>
+#include <iostream>
+#include <format>
+#include <fstream>
 
 // ============================================================================
 // Data Structures
@@ -119,6 +123,8 @@ inline void printConfigError(const std::string& configPath) {
               << warning << "'" << configPath << "'"
               << error << ".\033[J\n" << reset;
 }
+
+bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config);
 
 // ============================================================================
 // Disk I/O Operations

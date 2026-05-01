@@ -4,6 +4,11 @@
 #define CHD_COMMON_H
 
 #include <chd.h>
+#include <fstream>
+#include <cstring>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 /**
  * @brief Custom deleter for CHD file handles

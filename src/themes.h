@@ -8,7 +8,9 @@
 #ifndef THEMES_H
 #define THEMES_H
 
-#include "headers.h"
+#include <cstring>
+#include <algorithm>
+#include <iterator>
 
 namespace UI {
 
