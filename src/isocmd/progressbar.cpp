@@ -10,6 +10,17 @@
 #include "../state.h"
 #include "../themes.h"
 
+// Third-Party Library Headers
+#include <readline/history.h>
+#include <readline/readline.h>
+
+#include <csignal>
+#include <termios.h>
+#include <iostream>
+#include <iomanip>
+#include <memory>
+#include <chrono>
+
 /**
  * @file progress_bar.cpp
  * @brief Terminal progress bar implementation with input blocking and themed output.

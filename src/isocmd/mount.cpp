@@ -7,6 +7,12 @@
 #include "../stringManipulation.h"
 #include "../threadpool.h"
 
+// Third-Party Library Headers
+#include <libmount/libmount.h>
+
+// C / System Headers
+#include <sys/stat.h>
+
 /**
  * @brief Provides default LSan suppression rules for known third-party leaks.
  *

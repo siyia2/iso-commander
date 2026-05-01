@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <filesystem>
+#include <fstream>
+
 // Project Headers
 #include "../caches.h"
 #include "../concurrency.h"

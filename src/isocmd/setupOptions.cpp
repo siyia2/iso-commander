@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <filesystem>
+#include <fstream>
+
 // Project Headers
 #include "../caches.h"
 #include "../concurrency.h"
@@ -7,6 +11,8 @@
 #include "../state.h"
 #include "../themes.h"
 #include "../settings.h"
+
+namespace fs = std::filesystem;
 
 // ---------------------------------------------------------------------------
 // Core Config I/O

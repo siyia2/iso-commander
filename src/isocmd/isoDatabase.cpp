@@ -1,5 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <csignal>
+#include <iostream>
+#include <fstream>
+
+// C / System Headers
+#include <sys/file.h>
+
 // Project Headers
 #include "../caches.h"
 #include "../concurrency.h"

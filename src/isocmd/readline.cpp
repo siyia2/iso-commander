@@ -7,6 +7,13 @@
 #include "../state.h"
 #include "../themes.h"
 
+// C / System Headers
+#include <sys/stat.h>
+
+// Third-Party Library Headers
+#include <readline/history.h>
+#include <readline/readline.h>
+
 /**
  * @file readline_completion.cpp
  * @brief Custom GNU Readline completion and pagination logic for CLI commands and device mapping.

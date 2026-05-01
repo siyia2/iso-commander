@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Third-Party Library Headers
+#include <libmount/libmount.h>
+
 // Project Headers
 #include "../concurrency.h"
 #include "../display.h"
 #include "../state.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
-#include "../threadpool.h"
 #include "../umount.h"
 
 /**

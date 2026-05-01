@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <filesystem>
+
 // Project Headers
 #include "../ccd.h"
 #include "../mdf.h"
 #include "../state.h"
+
+namespace fs = std::filesystem;
 
 // Special thanks to the original authors of the conversion tools:
 

@@ -15,6 +15,14 @@
 #include "../threadpool.h"
 #include "../verbose.h"
 
+// Third-Party Library Headers
+#include <readline/history.h>
+#include <readline/readline.h>
+
+#include <filesystem>
+
+namespace fs = std::filesystem;
+
 /**
  * @file database_operations.cpp
  * @brief Database operations and file scanning functionality for ISO and disc image files

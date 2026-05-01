@@ -1,9 +1,14 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
+// C++ Standard Library Headers
+#include <filesystem>
+
 // Project Headers
 #include "../chd.h"
 #include "../concurrency.h"
 #include "../state.h"
+
+namespace fs = std::filesystem;
 
 /**
  * @brief Converts a CHD (Compressed Hunks of Data) file to a raw ISO image.

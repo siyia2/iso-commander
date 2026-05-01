@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <csignal>
+
 // Project Headers
 #include "../caches.h"
 #include "../databaseOps.h"

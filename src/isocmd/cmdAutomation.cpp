@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <iostream>
+
 // Project Headers
 #include "../inputHandling.h"
 #include "../mount.h"

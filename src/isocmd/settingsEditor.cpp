@@ -1,5 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <csignal>
+#include <filesystem>
+#include <format>
+
+// Third-Party Library Headers
+#include <readline/history.h>
+#include <readline/readline.h>
+
 // Project Headers
 #include "../caches.h"
 #include "../display.h"
@@ -11,6 +20,8 @@
 #include "../themes.h"
 #include "../settings.h"
 #include "../tokenize.h"
+
+namespace fs = std::filesystem;
 
 /**
  * @brief Synchronizes global runtime variables with values from the configuration cache.

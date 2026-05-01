@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <csignal>
+#include <iostream>
+
 // Project Headers
 #include "../inputHandling.h"
 #include "../pausePrompt.h"

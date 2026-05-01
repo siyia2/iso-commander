@@ -34,11 +34,19 @@
 */
 
 // ─── large-file support ────────────────────────────────────────────────────
+
 #define _FILE_OFFSET_BITS 64
+
+// ___________________________________________________________________________
+
+// C++ Standard Library Headers
+#include <filesystem>
 
 // Project Headers
 #include "../daa2iso.h"
 #include "../state.h"
+
+namespace fs = std::filesystem;
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  LZMA decoder (Igor Pavlov / 7-zip SDK, minimal subset)

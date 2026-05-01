@@ -12,6 +12,13 @@
 #include "../tokenize.h"
 #include "../umount.h"
 
+// Third-Party Library Headers
+#include <readline/history.h>
+#include <readline/readline.h>
+
+#include <csignal>
+#include <iostream>
+
 /**
  * @file operations.cpp
  * @brief High-level processing functions for mounting, file management (Cp/Mv/Rm), and format conversions.

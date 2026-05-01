@@ -3,7 +3,6 @@
 // Project Headers
 #include "../caches.h"
 #include "../display.h"
-#include "../state.h"
 
 /**
  * @brief Converts a string to lowercase in-place.

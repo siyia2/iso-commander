@@ -11,6 +11,16 @@
 #include "../themes.h"
 #include "../settings.h"
 
+// Third-Party Library Headers
+#include <readline/history.h>
+#include <readline/readline.h>
+
+#include <csignal>
+#include <cstring>
+
+#include <filesystem>
+namespace fs = std::filesystem;
+
 /**
  * @brief Outputs the current program version to the standard output.
  * * Uses ANSI bold escape sequences to highlight the version string.

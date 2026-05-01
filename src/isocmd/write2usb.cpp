@@ -1,5 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Header
+#include <csignal>
+#include <fstream>
+#include <cstdio>
+#include <cstring>
+
+// Third-Party Library Headers
+#include <readline/history.h>
+#include <readline/readline.h>
+
 // Project Headers
 #include "../display.h"
 #include "../inputHandling.h"

@@ -9,6 +9,9 @@
 #include "../themes.h"
 #include "../verbose.h"
 
+#include <readline/readline.h>
+#include <readline/history.h>
+
 void helpSelections(bool& isAtISOListForHelp);
 
 /**
