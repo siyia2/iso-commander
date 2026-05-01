@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../globals.h"
-#include "../concurrency.h"
+#include "../state.h"
 #include "../mdf.h"
 #include "../ccd.h"
 
@@ -38,8 +37,8 @@
 
 
 bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
-    if (g_operationCancelled.load()) {
-        g_operationCancelled.store(true);
+    if (GlobalState::g_operationCancelled.load()) {
+        GlobalState::g_operationCancelled.store(true);
         return false;
     }
         
@@ -54,8 +53,8 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
         return false;
     }
     
-    if (g_operationCancelled.load()) {
-        g_operationCancelled.store(true);
+    if (GlobalState::g_operationCancelled.load()) {
+        GlobalState::g_operationCancelled.store(true);
         return false;
     }
     
@@ -101,10 +100,10 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
     std::vector<char> sectorBuffer(sector_data);
     
     while (source_length > 0) {
-        if (g_operationCancelled.load()) {
+        if (GlobalState::g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
-            g_operationCancelled.store(true);
+            GlobalState::g_operationCancelled.store(true);
             return false;
         }
         
@@ -116,10 +115,10 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
         
         mdfFile.seekg(static_cast<std::streamoff>(seek_ecc), std::ios::cur);
         
-        if (g_operationCancelled.load()) {
+        if (GlobalState::g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
-            g_operationCancelled.store(true);
+            GlobalState::g_operationCancelled.store(true);
             return false;
         }
         
@@ -165,8 +164,8 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
  
 
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes) {
-    if (g_operationCancelled.load()) {
-        g_operationCancelled.store(true);
+    if (GlobalState::g_operationCancelled.load()) {
+        GlobalState::g_operationCancelled.store(true);
         return false;
     }
         
@@ -179,10 +178,10 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
     size_t sectorNum = 0;
     
     while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
-        if (g_operationCancelled.load()) {
+        if (GlobalState::g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
-            g_operationCancelled.store(true);
+            GlobalState::g_operationCancelled.store(true);
             return false;
         }
         size_t bytesWritten = 0;
@@ -203,10 +202,10 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
             default:
                 return false;
         }
-        if (g_operationCancelled.load()) {
+        if (GlobalState::g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
-            g_operationCancelled.store(true);
+            GlobalState::g_operationCancelled.store(true);
             return false;
         }
         if (!isoFile || bytesWritten != DATA_SIZE) {
@@ -215,10 +214,10 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
         if (completedBytes) {
             completedBytes->fetch_add(bytesWritten, std::memory_order_relaxed);
         }
-        if (g_operationCancelled.load()) {
+        if (GlobalState::g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(isoPath);
-            g_operationCancelled.store(true);
+            GlobalState::g_operationCancelled.store(true);
             return false;
         }
         
@@ -251,8 +250,8 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
 
 
 bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<size_t>* completedBytes) {
-    if (g_operationCancelled.load()) {
-        g_operationCancelled.store(true);
+    if (GlobalState::g_operationCancelled.load()) {
+        GlobalState::g_operationCancelled.store(true);
         return false;
     }
     
@@ -276,8 +275,8 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
     nrgFile.clear();
     nrgFile.seekg(307200, std::ios::beg);
     
-    if (g_operationCancelled.load()) {
-        g_operationCancelled.store(true);
+    if (GlobalState::g_operationCancelled.load()) {
+        GlobalState::g_operationCancelled.store(true);
         return false;
     }
     
@@ -290,10 +289,10 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
     std::vector<char> buffer(BUFFER_SIZE);
     
     while (nrgFile) {
-        if (g_operationCancelled.load()) {
+        if (GlobalState::g_operationCancelled.load()) {
             isoFile.close();
             fs::remove(outputFile);
-            g_operationCancelled.store(true);
+            GlobalState::g_operationCancelled.store(true);
             return false;
         }
         
@@ -301,10 +300,10 @@ bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile
         std::streamsize bytesRead = nrgFile.gcount();
         
         if (bytesRead > 0) {
-            if (g_operationCancelled.load()) {
+            if (GlobalState::g_operationCancelled.load()) {
                 isoFile.close();
                 fs::remove(outputFile);
-                g_operationCancelled.store(true);
+                GlobalState::g_operationCancelled.store(true);
                 return false;
             }
             

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../globals.h"
+#include "../state.h"
 #include "../display.h"
 #include "../filtering.h"
 #include "../themes.h"
@@ -38,7 +38,7 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
     
-    bool needToReload = isoListDirty.exchange(false);
+    bool needToReload = GlobalState::isoListDirty.exchange(false);
     std::vector<std::string> freshList;
     
     if (needToReload) {
@@ -59,9 +59,9 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
 			syncFilteringStackForIso(GlobalCaches::globalIsoFileList, filteringStack, filteredFiles, isFiltered);
 		}
 
-        if (needSortingAfterflno) {
+        if (GlobalState::needSortingAfterflno) {
             sortFilesCaseInsensitive(GlobalCaches::globalIsoFileList);
-            needSortingAfterflno = false;
+            GlobalState::needSortingAfterflno = false;
         }
 
         if (umountMvRmBreak) {
@@ -235,7 +235,7 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
         ? (need2Sort = true, GlobalCaches::daaGbiFilesCache)
     : files;
             
-    if (!list || (list && needSortingAfterflno)) {
+    if (!list || (list && GlobalState::needSortingAfterflno)) {
         if (need2Sort) {
             sortFilesCaseInsensitive(files);
             if (fileType == "bin" || fileType == "img") {
@@ -255,7 +255,7 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
                 sortFilesCaseInsensitive(GlobalCaches::daaGbiFilesCache);
             }
         }
-        needSortingAfterflno = false;
+        GlobalState::needSortingAfterflno = false;
         need2Sort = false;
     }
     

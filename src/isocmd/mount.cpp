@@ -2,6 +2,7 @@
 
 #include "../threadpool.h"
 #include "../mount.h"
+#include "../state.h"
 #include "../concurrency.h"
 #include "../stringManipulation.h"
 
@@ -247,7 +248,7 @@ void mountIsoFiles(
 
     for (const auto& isoFile : isoFiles) {
 
-        if (g_operationCancelled.load(std::memory_order_relaxed)) {
+        if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
             recordFail(isoFile, "cxl");
             maybeFlush();
             continue;

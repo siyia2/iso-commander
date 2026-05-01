@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../sort.h"
-#include "../globals.h"
+#include "../state.h"
 #include "../caches.h"
 #include "../display.h"
 #include "../themes.h"
@@ -43,7 +43,7 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache) {
     if (cache.count("theme")) { globalTheme = cache.at("theme"); }
     
     if (cache.count("pagination")) {
-        try { ITEMS_PER_PAGE = std::stoul(cache.at("pagination")); } catch (...) {}
+        try { GlobalState::ITEMS_PER_PAGE = std::stoul(cache.at("pagination")); } catch (...) {}
     }
 }
 

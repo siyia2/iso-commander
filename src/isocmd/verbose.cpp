@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../globals.h"
+#include "../state.h"
 #include "../caches.h"
 #include "../display.h"
 #include "../themes.h"
@@ -353,7 +353,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
         printErrorMessages();
     }
 
-    const bool saveSuccess = g_operationCancelled ? false : saveToDatabase(allIsoFiles, newISOFound);
+    const bool saveSuccess = GlobalState::g_operationCancelled ? false : saveToDatabase(allIsoFiles, newISOFound);
     const auto end_time = std::chrono::high_resolution_clock::now();
 
     if (!promptFlag) return;
@@ -362,7 +362,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
     std::cout << vt.bold << "\nTotal time taken: " << std::fixed << std::setprecision(1)
               << total_elapsed << " seconds\n";
 
-    if (g_operationCancelled) {
+    if (GlobalState::g_operationCancelled) {
         std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "Cancelled" << vt.green << "]" << vt.bold << "\n";
     } else if (!allIsoFiles.empty() && newISOFound.load() && !saveSuccess) {
         std::cout << "\n" << vt.red << "Database Refresh failed: [" << vt.yellow << "Unable to access the database file" << vt.red << "]" << vt.bold << "\n";
@@ -439,7 +439,7 @@ void verboseSearchResults(const std::string& fileExtension,
     auto end_time = std::chrono::high_resolution_clock::now();
 
     // Case: Files were found
-    if (!fileNames.empty() && !g_operationCancelled.load()) {
+    if (!fileNames.empty() && !GlobalState::g_operationCancelled.load()) {
         std::cout << "\n\n"
                   << vt.green << fileNames.size() << " "
                   << vt.orange << "{" << fileExtension << "} "
@@ -450,7 +450,7 @@ void verboseSearchResults(const std::string& fileExtension,
     }
 
     // Case: No new files were found, but files exist in cache
-    if (!newFilesFound && !files.empty() && !list && !g_operationCancelled.load()) {
+    if (!newFilesFound && !files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
         std::cout << "\n\n"
                   << vt.red << "0 "
@@ -464,7 +464,7 @@ void verboseSearchResults(const std::string& fileExtension,
     }
 
     // Case: No files were found
-    if (files.empty() && !list && !g_operationCancelled.load()) {
+    if (files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
         std::cout << "\n\n"
                   << vt.red << "0" << vt.orange << " {" << fileExtension << "} "

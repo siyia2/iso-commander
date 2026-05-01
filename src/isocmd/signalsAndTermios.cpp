@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../globals.h"
+#include "../state.h"
 #include "../inputHandling.h"
 
 /**
@@ -83,7 +83,7 @@ void setupReadlineToIgnoreCtrlC() {
 void signalHandlerCancellations(int signal) {
     if (signal == SIGINT) {
         // Atomic flag used by worker threads to stop processing
-        g_operationCancelled = true;
+        GlobalState::g_operationCancelled = true;
     }
 }
 
@@ -111,8 +111,8 @@ void signalHandler(int signum) {
     clearScrollBuffer();
 
     // Release global lock if held
-    if (lockFileDescriptor != -1) {
-        close(lockFileDescriptor);
+    if (GlobalState::lockFileDescriptor != -1) {
+        close(GlobalState::lockFileDescriptor);
     }
 
     exit(signum);

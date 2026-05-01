@@ -9,6 +9,7 @@
 #include "../tokenize.h"
 #include "../pausePrompt.h"
 #include "../inputHandling.h"
+#include "../state.h"
 
 /**
  * @file operations.cpp
@@ -29,7 +30,7 @@
  */
 void processInputForMountOrUmount(const std::string& input, const std::vector<std::string>& files, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& operationBreak, bool& verbose, bool isUnmount) {
     setupSignalHandlerCancellations();
-    g_operationCancelled.store(false);
+    GlobalState::g_operationCancelled.store(false);
 
     std::unordered_set<int> indicesToProcess;
     std::vector<int> selectedIndices;
@@ -249,7 +250,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
                                                        operationColor, operationDescription, umountMvRmBreak,
                                                        filterHistory, isDelete, isCopy, abortDel, overwriteExisting);
 
-    g_operationCancelled.store(false);
+    GlobalState::g_operationCancelled.store(false);
 
     if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
         uniqueErrorMessages.clear();
@@ -406,7 +407,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
-    g_operationCancelled.store(false);
+    GlobalState::g_operationCancelled.store(false);
     std::unordered_set<int> processedIndices;
 
     if (!(input.empty() || std::all_of(input.begin(), input.end(), isspace))) {

@@ -7,6 +7,7 @@
 #include "../history.h"
 #include "../databaseOps.h"
 #include "../pausePrompt.h"
+#include "../state.h"
 #include "../inputHandling.h"
 #include "../concurrency.h"
 
@@ -33,7 +34,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
     bool anyRemoved = false;
     {
         std::lock_guard<std::mutex> fileLock(dbFileMutex);
-        int fd = open(databaseFilePath.c_str(), O_RDONLY);
+        int fd = open(GlobalState::databaseFilePath.c_str(), O_RDONLY);
         if (fd == -1) {
             if (errno == ENOENT) {
                 std::lock_guard<std::mutex> lock(GlobalCaches::updateListMutex);
@@ -123,7 +124,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
 
         // Write to a temp file in the same directory as the database,
         // then atomically rename into place
-        std::string tmpPath = (std::filesystem::path(databaseFilePath).parent_path() / "iso_commander_database_saved_XXXXXX").string();
+        std::string tmpPath = (std::filesystem::path(GlobalState::databaseFilePath).parent_path() / "iso_commander_database_saved_XXXXXX").string();
         int tmpFd = mkstemp(tmpPath.data());
         if (tmpFd == -1) return;
 
@@ -137,12 +138,12 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         if (fsync(tmpFd) == -1) { cleanupTmp(); return; }
         close(tmpFd);
 
-        if (::rename(tmpPath.c_str(), databaseFilePath.c_str()) == -1) {
+        if (::rename(tmpPath.c_str(), GlobalState::databaseFilePath.c_str()) == -1) {
             ::unlink(tmpPath.c_str());
             return;
         }
 
-        isoListDirty.store(true);
+        GlobalState::isoListDirty.store(true);
     }
     if (anyRemoved) {
         std::lock_guard<std::mutex> lock(GlobalCaches::updateListMutex);
@@ -204,12 +205,12 @@ std::string getHomeDirectory() {
  * @return false if no new entries were found, or if an I/O error occurred.
  */
 bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atomic<bool>& newISOFound) {
-    std::filesystem::path cachePath = databaseDirectory;
-    cachePath /= databaseFilename;
-    if (!std::filesystem::exists(databaseDirectory) && !std::filesystem::create_directories(databaseDirectory)) {
+    std::filesystem::path cachePath = GlobalState::databaseDirectory;
+    cachePath /= GlobalState::databaseFilename;
+    if (!std::filesystem::exists(GlobalState::databaseDirectory) && !std::filesystem::create_directories(GlobalState::databaseDirectory)) {
         return false;
     }
-    if (!std::filesystem::is_directory(databaseDirectory)) {
+    if (!std::filesystem::is_directory(GlobalState::databaseDirectory)) {
         return false;
     }
     std::lock_guard<std::mutex> fileLock(dbFileMutex);
@@ -260,8 +261,8 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
 
     std::vector<std::string> combinedCache = existingCache;
     combinedCache.insert(combinedCache.end(), newEntries.begin(), newEntries.end());
-    if (combinedCache.size() > maxDatabaseSize) {
-        combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - maxDatabaseSize));
+    if (combinedCache.size() > GlobalState::maxDatabaseSize) {
+        combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - GlobalState::maxDatabaseSize));
     }
 
     // Build output string before touching any file
@@ -272,7 +273,7 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
 
     // Write to a temp file in the same directory as the database, then atomically rename into place
     // Placing the temp file on the same filesystem as the target guarantees rename() is truly atomic
-    std::string tmpPath = (std::filesystem::path(databaseFilePath).parent_path() / "iso_commander_database_saved_XXXXXX").string();
+    std::string tmpPath = (std::filesystem::path(GlobalState::databaseFilePath).parent_path() / "iso_commander_database_saved_XXXXXX").string();
     int tmpFd = mkstemp(tmpPath.data());
     if (tmpFd == -1) return false;
 
@@ -302,7 +303,7 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
     }
 
     newISOFound.store(localNewISOFound);
-    isoListDirty.store(true);
+    GlobalState::isoListDirty.store(true);
     return true;
 }
 
@@ -420,7 +421,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     bool localPromptFlag = false;
     
     {
-        std::ifstream file(historyFilePath);
+        std::ifstream file(GlobalState::historyFilePath);
         if (!file.is_open()) {
             isImportRunning.store(false);
             return;
@@ -496,7 +497,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
 void loadFromDatabase(std::vector<std::string>& outList) {
     std::lock_guard<std::mutex> fileLock(dbFileMutex);
     
-    int fd = open(databaseFilePath.c_str(), O_RDONLY);
+    int fd = open(GlobalState::databaseFilePath.c_str(), O_RDONLY);
     if (fd == -1) return;
     
     if (flock(fd, LOCK_SH) == -1) {
@@ -553,7 +554,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
     auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveDatabaseTheme();
 
     try {
-        for (const auto& path : {databaseFilePath, historyFilePath, filterHistoryFilePath}) {
+        for (const auto& path : {GlobalState::databaseFilePath, GlobalState::historyFilePath, GlobalState::filterHistoryFilePath}) {
             if (!std::filesystem::exists(path)) {
                 std::ofstream createFile(path);
             }
@@ -568,14 +569,14 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
         
         std::cout << "\n" << label << "Capacity: " << data << std::fixed << std::setprecision(0) 
                   << fileSizeInKB << "KB/" << cachesizeInKb << "KB (" << std::setprecision(1) << usagePercentage << "%)"
-                  << "\n" << label << "Entries: " << data << countNonEmptyLines(databaseFilePath) 
+                  << "\n" << label << "Entries: " << data << countNonEmptyLines(GlobalState::databaseFilePath) 
                   << "\n" << label << "Location: " << data << "'" << databaseFilePath << "'" << reset << "\n";
 
         std::cout << "\n" << accent << "=== History Database ===" << reset << "\n"
-                  << "\n" << label << "FolderPath Entries: " << data << countNonEmptyLines(historyFilePath) << "/" << MAX_HISTORY_LINES
-                  << "\n" << label << "Location: " << data << "'" << historyFilePath << "'"
-                  << "\n\n" << label << "FilterTerm Entries: " << data << countNonEmptyLines(filterHistoryFilePath) << "/" << MAX_HISTORY_PATTERN_LINES
-                  << "\n" << label << "Location: " << data << "'" << filterHistoryFilePath << "'" << std::endl;
+                  << "\n" << label << "FolderPath Entries: " << data << countNonEmptyLines(GlobalState::historyFilePath) << "/" << GlobalState::MAX_HISTORY_LINES
+                  << "\n" << label << "Location: " << data << "'" << GlobalState::historyFilePath << "'"
+                  << "\n\n" << label << "FilterTerm Entries: " << data << countNonEmptyLines(GlobalState::filterHistoryFilePath) << "/" << GlobalState::MAX_HISTORY_PATTERN_LINES
+                  << "\n" << label << "Location: " << data << "'" << GlobalState::filterHistoryFilePath << "'" << std::endl;
         
         std::cout << "\n" << accent << "=== Buffered Entries ===" << reset << "\n";
         
@@ -592,7 +593,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
 
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "\n" << error << "Error: Unable to access configuration file: "
-                  << warning << "'" << configPath << "'"
+                  << warning << "'" << GlobalState::configPath << "'"
                   << error << ".\n" << reset;
     }
     
@@ -618,12 +619,12 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     auto db = resolveDatabaseTheme();
     
     if (inputSearch == "?stats") {
-        displayDatabaseStatistics(databaseFilePath, maxDatabaseSize);
+        displayDatabaseStatistics(GlobalState::databaseFilePath, GlobalState::maxDatabaseSize);
     } else if (inputSearch == "!clr") {
-        std::ofstream ofs(databaseFilePath, std::ofstream::out | std::ofstream::trunc);
+        std::ofstream ofs(GlobalState::databaseFilePath, std::ofstream::out | std::ofstream::trunc);
         if (!ofs) {
             std::cerr << "\n" << db.error << "Error clearing ISO database: " 
-                      << db.path << "'" << databaseFilePath << "'" 
+                      << db.path << "'" << GlobalState::databaseFilePath << "'" 
                       << db.error << ". File missing or inaccessible.\033[J" << std::endl;
             
             pressEnterToContinue();

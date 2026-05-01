@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../globals.h"
+#include "../state.h"
 #include "../display.h"
 #include "../themes.h"
 #include "../convert.h"
@@ -72,7 +72,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     };
 
     for (const std::string& inputPath : imageFiles) {
-        if (g_operationCancelled.load(std::memory_order_relaxed)) break;
+        if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) break;
 
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
         const std::string displayPath  = (!displayConfig::toggleNamesOnly ? directory + "/" : "") + fileNameOnly;
@@ -127,7 +127,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             continue;
         }
 
-        if (g_operationCancelled.load(std::memory_order_relaxed)) break;
+        if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) break;
 
         bool conversionSuccess = false;
         if (modeMdf)       conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
@@ -167,7 +167,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
         } else {
             if (fs::exists(outputPath)) fs::remove(outputPath);
 
-            bool isCancelled = g_operationCancelled.load(std::memory_order_relaxed);
+            bool isCancelled = GlobalState::g_operationCancelled.load(std::memory_order_relaxed);
             std::string msg;
             msg.reserve(128);
             msg.append(themes.errLabel).append("Convert2ISO: ")

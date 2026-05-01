@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../globals.h"
+#include "../state.h"
 #include "../display.h"
 #include "../filtering.h"
 #include "../select.h"
@@ -10,6 +10,8 @@
 #include "../verbose.h"
 #include "../databaseOps.h"
 #include "../inputHandling.h"
+#include "../concurrency.h"
+#include "../state.h"
 
 /**
  * @brief Routes the user input to the specific logic for mounting, unmounting, writing, or file manipulation.
@@ -250,7 +252,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
         enable_ctrl_d();
         setupSignalHandlerCancellations();
         setup_custom_keybindingsForSelect();
-        g_operationCancelled.store(false);
+        GlobalState::g_operationCancelled.store(false);
         resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
         filterHistory = false;
         clear_history();
@@ -361,7 +363,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
         }
 
         const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : GlobalCaches::globalIsoFileList);
-        size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
+        size_t totalPages = (GlobalState::ITEMS_PER_PAGE != 0) ? ((currentList.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE) : 0;
         bool need2Sort = false;
         
         bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, isMount, isUnmount, write, isConversion, need2Sort, isAtISOList);
@@ -455,7 +457,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         enable_ctrl_d();
         setupSignalHandlerCancellations();
         setup_custom_keybindingsForSelect();
-        g_operationCancelled.store(false);
+        GlobalState::g_operationCancelled.store(false);
         bool verbose = false; 
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         
@@ -540,7 +542,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
         std::atomic<bool> isAtISOList{false};
         
-        size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
+        size_t totalPages = (GlobalState::ITEMS_PER_PAGE != 0) ? ((files.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE) : 0;
         bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, false, false, false, true, need2Sort, isAtISOList);
         
         if (validCommand) continue;

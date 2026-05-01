@@ -6,6 +6,7 @@
 #include "../themes.h"
 #include "../concurrency.h"
 #include "../stringManipulation.h"
+#include "../state.h"
 
 /**
  * @brief Checks if a directory is empty.
@@ -111,7 +112,7 @@ void unmountISO(
 
     for (const auto& isoDir : isoDirs) {
 
-        if (g_operationCancelled.load(std::memory_order_relaxed)) {
+        if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
             if (!silentMode)
                 errorMessages.push_back(
                     formatDirForDisplay(isoDir, messageFormatter, "cancel"));

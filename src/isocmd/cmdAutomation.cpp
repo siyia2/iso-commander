@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../globals.h"
+#include "../state.h"
 #include "../mount.h"
 #include "../umount.h"
 #include "../inputHandling.h"
@@ -74,7 +74,7 @@ static void scanDirectoryForISOs(const fs::path& dir,
                                  bool silentMode) {
     try {
         for (const auto& entry : fs::directory_iterator(dir)) {
-            if (g_operationCancelled.load()) return;
+            if (GlobalState::g_operationCancelled.load()) return;
             if (entry.is_symlink()) continue;
 
             if (entry.is_regular_file()) {
@@ -163,7 +163,7 @@ static int handleMount(const ParsedArgs& args) {
     bool hasErrors = false;
 
     for (const auto& rawPath : args.paths) {
-        if (g_operationCancelled.load()) {
+        if (GlobalState::g_operationCancelled.load()) {
             verboseWarn(args.silentMode, "Operation cancelled by user.");
             return 1;
         }
@@ -214,12 +214,12 @@ static int handleMount(const ParsedArgs& args) {
         }
     }
 
-    if (g_operationCancelled.load()) {
+    if (GlobalState::g_operationCancelled.load()) {
         verboseWarn(args.silentMode, "Mount operation cancelled by user.");
     }
 
     if (isoFiles.empty()) {
-        if (!g_operationCancelled.load())
+        if (!GlobalState::g_operationCancelled.load())
             verboseWarn(args.silentMode, "\nNo ISO files found to mount.");
         return hasErrors ? 1 : 0;
     }
@@ -271,7 +271,7 @@ static int handleUmount(const ParsedArgs& args) {
                     .append(" for ISO mount points (surface scan)..."));
         try {
             for (const auto& entry : fs::directory_iterator(mntPath)) {
-                if (g_operationCancelled.load()) return;
+                if (GlobalState::g_operationCancelled.load()) return;
                 if (entry.is_directory()) {
                     const std::string name = entry.path().filename().string();
                     if (name.rfind("iso_", 0) == 0)
@@ -290,13 +290,13 @@ static int handleUmount(const ParsedArgs& args) {
 
     if (scanAllMnt) {
         collectFromMnt("/mnt");
-        if (g_operationCancelled.load()) {
+        if (GlobalState::g_operationCancelled.load()) {
             verboseWarn(args.silentMode, "Operation cancelled by user.");
             return 1;
         }
     } else {
         for (const auto& rawPath : args.paths) {
-            if (g_operationCancelled.load()) {
+            if (GlobalState::g_operationCancelled.load()) {
                 verboseWarn(args.silentMode, "Operation cancelled by user.");
                 return 1;
             }
@@ -340,12 +340,12 @@ static int handleUmount(const ParsedArgs& args) {
         }
     }
 
-    if (g_operationCancelled.load()) {
+    if (GlobalState::g_operationCancelled.load()) {
         verboseWarn(args.silentMode, "Umount operation cancelled by user.");
     }
 
     if (mountPoints.empty()) {
-        if (!g_operationCancelled.load())
+        if (!GlobalState::g_operationCancelled.load())
             verboseWarn(args.silentMode, "\nNo ISO mount points found to unmount.");
         return hasErrors ? 1 : 0;
     }
@@ -390,7 +390,7 @@ static int handleUmount(const ParsedArgs& args) {
  */
 int handleMountUmountCommands(int argc, char* argv[]) {
     setupSignalHandlerCancellations();
-    g_operationCancelled.store(false);
+    GlobalState::g_operationCancelled.store(false);
 
     if (argc < 2) {
         errMsg("No arguments provided.");

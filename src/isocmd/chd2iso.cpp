@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
-#include "../globals.h"
+#include "../concurrency.h"
+#include "../state.h"
 #include "../chd.h"
 
 /**
@@ -30,17 +31,17 @@
  * 
  * @return true if conversion completed successfully, false on error or cancellation.
  * 
- * @note The conversion can be cancelled by setting g_operationCancelled to true.
+ * @note The conversion can be cancelled by setting GlobalState::g_operationCancelled to true.
  *       If cancelled, the partial ISO file is removed.
  * 
  * @note For large files, two independent CHD handles are opened internally;
  *       the original handle is used only for header reading and offset detection.
  * 
- * @see g_operationCancelled Global cancellation flag.
+ * @see GlobalState::g_operationCancelled Global cancellation flag.
  */
 bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
                      std::atomic<size_t>* completedBytes) {
-    if (g_operationCancelled.load()) return false;
+    if (GlobalState::g_operationCancelled.load()) return false;
 
     chd_file* rawChd = nullptr;
     if (chd_open(chdPath.c_str(), CHD_OPEN_READ, nullptr, &rawChd) != CHDERR_NONE)
@@ -104,7 +105,7 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
         std::vector<uint8_t> hunkUserData(userDataPerHunk);
 
         for (uint32_t hunk = 0; hunk < header->totalhunks; ++hunk) {
-            if (g_operationCancelled.load()) {
+            if (GlobalState::g_operationCancelled.load()) {
                 isoFile.close();
                 fs::remove(isoPath);
                 return false;
@@ -167,7 +168,7 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
             std::vector<uint8_t> userDataBuffer(userDataPerHunk);
 
             for (uint32_t hunk = start; hunk < end && !errorOccurred; ++hunk) {
-                if (g_operationCancelled.load()) {
+                if (GlobalState::g_operationCancelled.load()) {
                     errorOccurred = true;
                     return;
                 }
@@ -194,7 +195,7 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
     }
     unmap();
 
-    if (errorOccurred || g_operationCancelled.load()) {
+    if (errorOccurred || GlobalState::g_operationCancelled.load()) {
         fs::remove(isoPath);
         return false;
     }

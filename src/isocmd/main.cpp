@@ -4,6 +4,7 @@
 #include "../themes.h"
 #include "../caches.h"
 #include "../main.h"
+#include "../state.h"
 #include "../concurrency.h"
 #include "../settings.h"
 #include "../readline.h"
@@ -74,14 +75,14 @@ int main(int argc, char *argv[]) {
      * If lock fails, displays a user-friendly error message and exits.
      */
     const char* lockFile = "/tmp/isocmd.lock";
-    lockFileDescriptor = open(lockFile, O_CREAT | O_RDWR, 0666);
+    GlobalState::lockFileDescriptor = open(lockFile, O_CREAT | O_RDWR, 0666);
     struct flock fl = { F_WRLCK, SEEK_SET, 0, 0, 0 };
-    if (fcntl(lockFileDescriptor, F_SETLK, &fl) == -1) {
+    if (fcntl(GlobalState::lockFileDescriptor, F_SETLK, &fl) == -1) {
         std::cerr << UI::Palette::Red << "error: " << UI::Palette::Yellow
                   << "failed to setup transaction (unable to lock database)\n  "
                   << UI::Palette::BoldReset << "if you're sure isocmd isn't already running, you can remove '/tmp/isocmd.lock'\n"
                   << UI::Palette::Reset;
-        close(lockFileDescriptor);
+        close(GlobalState::lockFileDescriptor);
         return 1;
     }
 
@@ -97,8 +98,8 @@ int main(int argc, char *argv[]) {
      * - `search` controls whether auto-update scanning is enabled
      * - `config` contains user-defined folder paths and settings
      */
-    bool exitProgram = false, search = readUserConfigUpdates(configPath);
-    std::map<std::string, std::string> config = readUserConfigLists(configPath);
+    bool exitProgram = false, search = readUserConfigUpdates(GlobalState::configPath);
+    std::map<std::string, std::string> config = readUserConfigLists(GlobalState::configPath);
     std::vector<std::thread> backgroundThreads;
 
     /// Start background database import if auto-update is enabled
@@ -106,10 +107,10 @@ int main(int argc, char *argv[]) {
         isImportRunning.store(true);
         backgroundThreads.emplace_back([&] { backgroundDatabaseImport(isImportRunning, newISOFound, stopImport); });
         /// Mark update as already executed if history file exists
-        if (!(isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath)))
+        if (!(isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath)))
             updateHasRun.store(true);
     }
-    paginationSet(configPath);
+    paginationSet(GlobalState::configPath);
 
     /**
      * @brief Main interactive loop
@@ -120,7 +121,7 @@ int main(int argc, char *argv[]) {
         /// Prevent default readline keybindings from interfering
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
-        g_operationCancelled = false;
+        GlobalState::g_operationCancelled = false;
         isAtMain = true;
         isAtISOList = false;
         clearScrollBuffer();
@@ -133,7 +134,7 @@ int main(int argc, char *argv[]) {
          * 2. No stored folder paths available for scanning (one-time message)
          */
         static bool messagePrinted = false;
-        if (search && !isHistoryFileEmpty(historyFilePath) && isImportRunning) {
+        if (search && !isHistoryFileEmpty(GlobalState::historyFilePath) && isImportRunning) {
             std::cout << UI::Palette::Dim << "[Auto-Update: running in the background...]\n" << UI::Palette::Reset;
             messageActive = true;
             if (!monitorThreadSpawned.exchange(true))
@@ -141,7 +142,7 @@ int main(int argc, char *argv[]) {
                                                std::ref(isImportRunning), std::ref(messageActive),
                                                std::ref(stopMessage), std::ref(isAtMain));
         } else if ((search && !messagePrinted && !updateHasRun) &&
-                   (isHistoryFileEmpty(historyFilePath) || !fs::is_regular_file(historyFilePath))) {
+                   (isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath))) {
             std::cout << UI::Palette::Dim << "[Auto-Update: no stored FolderPaths to scan...]\n" << UI::Palette::Reset;
             messagePrinted = true;
             messageActive = true;
@@ -184,7 +185,7 @@ int main(int argc, char *argv[]) {
                     break;
                 case '4':
                     isAtMain = isAtISOList = false;
-                    interactiveConfigEditor(configPath);
+                    interactiveConfigEditor(GlobalState::configPath);
                     clearScrollBuffer();
                     break;
                 case '5':
@@ -202,7 +203,7 @@ int main(int argc, char *argv[]) {
     stopImport = stopMessage = true;
     for (auto& t : backgroundThreads) if (t.joinable()) t.join();
     std::cout << UI::Palette::Reset << std::flush;
-    close(lockFileDescriptor);
+    close(GlobalState::lockFileDescriptor);
     unlink(lockFile);
     return 0;
     /// @}

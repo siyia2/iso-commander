@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../globals.h"
+#include "../state.h"
 #include "../readline.h"
 #include "../themes.h"
 #include "../inputHandling.h"
@@ -102,14 +102,14 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     int start_index = 1;
     int items_to_display;
 
-    if (ITEMS_PER_PAGE <= 0) {
+    if (GlobalState::ITEMS_PER_PAGE <= 0) {
         items_to_display = num_matches;
     } else {
-        total_pages = ((size_t)num_matches + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
+        total_pages = ((size_t)num_matches + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE;
         if (current_page >= total_pages) current_page = 0;
-        start_index = current_page * (int)ITEMS_PER_PAGE + 1;
+        start_index = current_page * (int)GlobalState::ITEMS_PER_PAGE + 1;
         int remaining = num_matches - (start_index - 1);
-        items_to_display = (remaining > (int)ITEMS_PER_PAGE) ? (int)ITEMS_PER_PAGE : remaining;
+        items_to_display = (remaining > (int)GlobalState::ITEMS_PER_PAGE) ? (int)GlobalState::ITEMS_PER_PAGE : remaining;
     }
 
     // --- Header printing using raw pointers ---
@@ -127,7 +127,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     }
 
     // Advance page for next call (identical)
-    if (ITEMS_PER_PAGE > 0 && (size_t)num_matches > ITEMS_PER_PAGE) {
+    if (GlobalState::ITEMS_PER_PAGE > 0 && (size_t)num_matches > GlobalState::ITEMS_PER_PAGE) {
         current_page++;
         if (current_page >= total_pages) current_page = 0;
     }
@@ -267,7 +267,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     }
 
     // --- Footer pagination ---
-    if (ITEMS_PER_PAGE > 0 && (size_t)num_matches > ITEMS_PER_PAGE) {
+    if (GlobalState::ITEMS_PER_PAGE > 0 && (size_t)num_matches > GlobalState::ITEMS_PER_PAGE) {
         printf("\n%s[%d/%d matches — press %sTab%s for next page]%s\n",
                rc.label, start_index + items_to_display - 1, num_matches,
                rc.hint, rc.label, rc.reset);

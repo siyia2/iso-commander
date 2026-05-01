@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../globals.h"
+#include "../state.h"
 #include "../display.h"
 #include "../themes.h"
 #include "../sort.h"
@@ -114,16 +114,16 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
 
 	const PrintListTheme c = getListColors();
 	
-    bool disablePagination = (ITEMS_PER_PAGE <= 0 || entries.size() <= ITEMS_PER_PAGE);
-    size_t totalPages = disablePagination ? 1 : ((entries.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE);
+    bool disablePagination = (GlobalState::ITEMS_PER_PAGE <= 0 || entries.size() <= GlobalState::ITEMS_PER_PAGE);
+    size_t totalPages = disablePagination ? 1 : ((entries.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE);
     size_t currentPage = 0; 
     size_t totalEntries = entries.size();
 
     while (true) {
         if (setupEnvironmentFn) setupEnvironmentFn();
 
-        size_t start = disablePagination ? 0 : (currentPage * ITEMS_PER_PAGE);
-        size_t end = disablePagination ? totalEntries : std::min(start + ITEMS_PER_PAGE, totalEntries);
+        size_t start = disablePagination ? 0 : (currentPage * GlobalState::ITEMS_PER_PAGE);
+        size_t end = disablePagination ? totalEntries : std::min(start + GlobalState::ITEMS_PER_PAGE, totalEntries);
 
         clearScrollBuffer();
         displayErrors(uniqueErrorMessages);

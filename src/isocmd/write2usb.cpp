@@ -9,7 +9,9 @@
 #include "../readline.h"
 #include "../display.h"
 #include "../themes.h"
+#include "../state.h"
 
+namespace fs = std::filesystem;
 
 std::vector<ProgressInfo> progressData; ///< Shared progress state for all active write tasks.
 
@@ -455,11 +457,11 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         disable_ctrl_d();
         clearScrollBuffer();
         
-        if ((selectedIsos.size() > ITEMS_PER_PAGE) && (ITEMS_PER_PAGE > 0)) {
+        if ((selectedIsos.size() > GlobalState::ITEMS_PER_PAGE) && (GlobalState::ITEMS_PER_PAGE > 0)) {
             std::cout << "\n" << wt.warnCol << "ISO selections for " 
                       << UI::Palette::Yellow << "write2usb" 
                       << wt.warnCol << " cannot exceed the current pagination limit of " 
-                      << wt.indexCol << ITEMS_PER_PAGE 
+                      << wt.indexCol << GlobalState::ITEMS_PER_PAGE 
                       << wt.warnCol << "!" 
                       << wt.rl_resetCol << "\n";
 
@@ -635,7 +637,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
             restoreReadline();
             setupSignalHandlerCancellations();
-            g_operationCancelled.store(false);
+            GlobalState::g_operationCancelled.store(false);
             return validPairs;
         }
 
@@ -667,7 +669,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     progressData.clear();
     progressData.reserve(validPairs.size());
     
-    g_operationCancelled.store(false);
+    GlobalState::g_operationCancelled.store(false);
     
     for (const auto& [iso, device] : validPairs) {
         progressData.push_back(ProgressInfo{
@@ -722,7 +724,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
             if (prog.completed)                   std::cout << wt.colorSuccess << "DONE";
             else if (prog.failed)                 std::cout << wt.colorFailure << "FAIL";
-            else if (g_operationCancelled.load()) std::cout << wt.colorWarning << "CXL";
+            else if (GlobalState::g_operationCancelled.load()) std::cout << wt.colorWarning << "CXL";
             else                                  std::cout << prog.progress << "%";
 
             std::cout << wt.bold << " [" << wt.headerCol << currentSize << "/" << wt.sizeCol << prog.totalSize << wt.bold << "] "
@@ -733,7 +735,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     auto displayProgress = [&]() {
         while (!isProcessingComplete.load(std::memory_order_acquire) && 
-              !g_operationCancelled.load(std::memory_order_acquire)) {
+              !GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             std::cout << "\033[u";
             displayAllProgress();
@@ -749,7 +751,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             if (success) {
                 progressData[i].completed.store(true);
                 completedTasks.fetch_add(1);
-            } else if (!g_operationCancelled.load()) {
+            } else if (!GlobalState::g_operationCancelled.load()) {
                 progressData[i].failed.store(true);
             }
         }));
@@ -780,7 +782,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     std::string operation = std::string(UI::Palette::Yellow) + "write2usb" + wt.rl_resetCol;
 
     std::cout << "\r" << wt.colorStatus << "Status: " << operation << " → " 
-              << (!g_operationCancelled.load() 
+              << (!GlobalState::g_operationCancelled.load() 
                   ? (failedTasksValue > 0 
                      ? (completedTasksValue > 0 
                         ? wt.colorWarning + "PARTIAL"
@@ -826,7 +828,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
    const WriteTheme wt = getWriteTheme();
 
     setupSignalHandlerCancellations();
-    g_operationCancelled.store(false);
+    GlobalState::g_operationCancelled.store(false);
 
     tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
     if (indicesToProcess.empty()) {
@@ -891,7 +893,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
  * completion state are written atomically to @c progressData[progressIndex].
  *
  * Speed is recalculated every 500 ms using a sliding byte window.
- * The write loop checks @c g_operationCancelled before each iteration and
+ * The write loop checks @c GlobalState::g_operationCancelled before each iteration and
  * exits cleanly without marking the task as failed when a cancellation is
  * detected. @c fsync is called on the device fd only if the write was not
  * cancelled, avoiding unnecessary I/O on a partial transfer.
@@ -976,7 +978,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     uint64_t localBytesWritten = 0;
 
     try {
-        while (localBytesWritten < paddedSize && !g_operationCancelled.load()) {
+        while (localBytesWritten < paddedSize && !GlobalState::g_operationCancelled.load()) {
             uint64_t remaining   = paddedSize - localBytesWritten;
             size_t   bytesToRead = static_cast<size_t>(std::min<uint64_t>(bufferSize, remaining));
 
@@ -1029,20 +1031,20 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             }
         }
     } catch (...) {
-        if (!g_operationCancelled.load()) {
+        if (!GlobalState::g_operationCancelled.load()) {
             progressData[progressIndex].failed.store(true);
         }
         return false;
     }
 
-    if (!g_operationCancelled.load()) {
+    if (!GlobalState::g_operationCancelled.load()) {
         if (fsync(dev_fd) != 0) {
             progressData[progressIndex].failed.store(true);
             return false;
         }
     }
 
-    if (!g_operationCancelled.load() && localBytesWritten >= paddedSize) {
+    if (!GlobalState::g_operationCancelled.load() && localBytesWritten >= paddedSize) {
         auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - startTime);
         double seconds  = totalElapsed.count() / 1000.0;

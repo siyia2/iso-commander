@@ -12,6 +12,7 @@
 #include "../databaseOps.h"
 #include "../pausePrompt.h"
 #include "../inputHandling.h"
+#include "../state.h"
 
 std::mutex couNtMutex;
 
@@ -58,7 +59,7 @@ bool isValidDirectory(const std::string& path) {
  *                      was added to the database.
  *
  * @note Recursively calls itself on help request ('?') or exceptions.
- *       Cancellable via Ctrl+C through g_operationCancelled.
+ *       Cancellable via Ctrl+C through GlobalState::g_operationCancelled.
  */
 void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
     try {
@@ -66,7 +67,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
         setupSignalHandlerCancellations();
         resetReadlinePagination();
         rl_attempted_completion_function = my_special_completion_entry;
-        g_operationCancelled.store(false);
+        GlobalState::g_operationCancelled.store(false);
         
         const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
@@ -188,7 +189,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
 
             for (auto& future : futures) {
                 future.wait();
-                if (g_operationCancelled.load()) break;
+                if (GlobalState::g_operationCancelled.load()) break;
             }
         }
         
@@ -260,7 +261,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
         for (auto it = std::filesystem::recursive_directory_iterator(path, options); 
              it != std::filesystem::recursive_directory_iterator(); ++it) {
             
-            if (g_operationCancelled.load()) {
+            if (GlobalState::g_operationCancelled.load()) {
                 if (!g_CancelledMessageAdded.exchange(true)) {
                     std::lock_guard<std::mutex> lock(traverseErrorsMutex);
                     uniqueErrorMessages.clear(); 
@@ -550,7 +551,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
     std::unordered_set<std::string> localFileNames;
     std::atomic<bool> g_CancelledMessageAdded{false};
     
-    g_operationCancelled.store(false);
+    GlobalState::g_operationCancelled.store(false);
     disableInput();
     
     try {
@@ -560,8 +561,8 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
         bool blacklistDaa = (mode == "daa");
         
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-            if (g_operationCancelled.load()) {
-                if (g_operationCancelled.load()) {
+            if (GlobalState::g_operationCancelled.load()) {
+                if (GlobalState::g_operationCancelled.load()) {
 					std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
 					
 					// Re-check under the lock to prevent races between threads
@@ -663,7 +664,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
                                    std::unordered_set<std::string>& invalidDirectoryPaths, 
                                    std::unordered_set<std::string>& processedErrorsFind) {
     setupSignalHandlerCancellations();
-    g_operationCancelled.store(false);
+    GlobalState::g_operationCancelled.store(false);
     
     disableInput();
     
@@ -739,7 +740,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
                 std::unordered_set<std::string> threadResult = future.get();
                 fileNames.insert(threadResult.begin(), threadResult.end());
             }
-            if (g_operationCancelled.load()) break;
+            if (GlobalState::g_operationCancelled.load()) break;
         }
     } 
     
@@ -783,7 +784,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
                                                   std::atomic<bool>& isImportRunning) {
     
     if (input == "?stats") {
-        displayDatabaseStatistics(databaseFilePath, maxDatabaseSize);
+        displayDatabaseStatistics(GlobalState::databaseFilePath, GlobalState::maxDatabaseSize);
         return true;
     }
     if (input == "!clr_paths" || input == "!clr_filter") {
@@ -858,7 +859,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
         setupSignalHandlerCancellations();
         resetReadlinePagination();
         rl_attempted_completion_function = my_special_completion_entry;
-        g_operationCancelled.store(false);
+        GlobalState::g_operationCancelled.store(false);
         clearScrollBuffer();
         clear_history();
         bool filterHistory = false;
@@ -943,7 +944,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
 
         if (!newFilesFound) continue;
 
-        if (!files.empty() && !g_operationCancelled.load())
+        if (!files.empty() && !GlobalState::g_operationCancelled.load())
             selectForImageFiles(fileType, files, newISOFound, list, isImportRunning);
     }
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <poll.h>
-#include "../globals.h"
+#include "../state.h"
 #include "../themes.h"
 #include "../readline.h"
 #include "../inputHandling.h"
@@ -184,7 +184,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
             const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
             const size_t failedTasksValue    = failedTasks->load(std::memory_order_acquire);
-            const bool wasCancelled          = g_operationCancelled.load(std::memory_order_acquire);
+            const bool wasCancelled          = GlobalState::g_operationCancelled.load(std::memory_order_acquire);
             bool snapTo100 = (!wasCancelled && failedTasksValue == 0);
 
             // --- Status Summary ---

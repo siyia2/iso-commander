@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../globals.h"
+#include "../state.h"
 #include "../display.h"
 #include "../themes.h"
 #include "../concurrency.h"
@@ -11,6 +11,8 @@
 #include "../history.h"
 #include "../verbose.h"
 #include "../stringManipulation.h"
+
+namespace fs = std::filesystem;
 
 void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages);
 
@@ -117,7 +119,7 @@ bool& umountMvRmBreak, bool& abortDel) {
     std::string reset = std::string(UI::Palette::BoldReset);
 
     bool isPageTurn = false;
-    bool disablePagination = (ITEMS_PER_PAGE <= 0 || isoFiles.size() <= ITEMS_PER_PAGE);
+    bool disablePagination = (GlobalState::ITEMS_PER_PAGE <= 0 || isoFiles.size() <= GlobalState::ITEMS_PER_PAGE);
 
     auto setupEnv = [&]() {
         if (!disablePagination) {
@@ -332,7 +334,7 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
     const size_t bufferSize = 8 * 1024 * 1024;
     std::vector<char> buffer(bufferSize);
 
-    if (g_operationCancelled.load()) return false;
+    if (GlobalState::g_operationCancelled.load()) return false;
 
     std::ifstream input(src, std::ios::binary);
     if (!input) {
@@ -346,7 +348,7 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
         return false;
     }
 
-    while (!g_operationCancelled.load()) {
+    while (!GlobalState::g_operationCancelled.load()) {
         input.read(buffer.data(), buffer.size());
         std::streamsize bytesRead = input.gcount();
         if (bytesRead == 0) break;
@@ -360,7 +362,7 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
         completedBytes->fetch_add(bytesRead, std::memory_order_relaxed);
     }
 
-    if (g_operationCancelled.load()) {
+    if (GlobalState::g_operationCancelled.load()) {
         ec = std::make_error_code(std::errc::operation_canceled);
         output.close();
         fs::remove(dst, ec);
@@ -418,7 +420,7 @@ std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, 
 
     const std::string displaySrc = (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile;
 
-    if (g_operationCancelled.load()) {
+    if (GlobalState::g_operationCancelled.load()) {
         std::string msg;
         msg.reserve(128);
         msg.append(colors.error_label).append("Error deleting: ")
@@ -467,7 +469,7 @@ const std::string& destFile, size_t fileSize, std::atomic<size_t>* completedByte
 std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages,
 const std::function<void(const fs::path&)>& changeOwnership) {
 
-    if (g_operationCancelled.load()) {
+    if (GlobalState::g_operationCancelled.load()) {
         logOperationResult(false, true, {}, "moving", srcDir, srcFile, destDirProcessed, destFile,
                            verboseIsos, verboseErrors, completedTasks, failedTasks, operationSuccessful, batchInsertMessages);
         return false;
@@ -510,7 +512,7 @@ const std::function<void(const fs::path&)>& changeOwnership) {
         logOperationResult(true, false, {}, "moving", srcDir, srcFile, destDirProcessed, destFile,
                            verboseIsos, verboseErrors, completedTasks, failedTasks, operationSuccessful, batchInsertMessages);
     } else {
-        logOperationResult(false, g_operationCancelled.load(), ec, "moving", srcDir, srcFile, destDirProcessed, destFile,
+        logOperationResult(false, GlobalState::g_operationCancelled.load(), ec, "moving", srcDir, srcFile, destDirProcessed, destFile,
                            verboseIsos, verboseErrors, completedTasks, failedTasks, operationSuccessful, batchInsertMessages);
     }
     return success;
@@ -526,7 +528,7 @@ std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful,
     std::error_code ec;
     bool success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
     if (success) changeOwnership(destPath);
-    logOperationResult(success, g_operationCancelled.load(), ec, "moving", srcDir, srcFile, destDirProcessed, destFile,
+    logOperationResult(success, GlobalState::g_operationCancelled.load(), ec, "moving", srcDir, srcFile, destDirProcessed, destFile,
                        verboseIsos, verboseErrors, completedTasks, failedTasks, operationSuccessful, batchInsertMessages);
     return success;
 }
@@ -541,7 +543,7 @@ std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful,
     std::error_code ec;
     bool success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
     if (success) changeOwnership(destPath);
-    logOperationResult(success, g_operationCancelled.load(), ec, "copying", srcDir, srcFile, destDirProcessed, destFile,
+    logOperationResult(success, GlobalState::g_operationCancelled.load(), ec, "copying", srcDir, srcFile, destDirProcessed, destFile,
                        verboseIsos, verboseErrors, completedTasks, failedTasks, operationSuccessful, batchInsertMessages);
     return success;
 }

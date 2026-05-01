@@ -5,7 +5,7 @@
 #include "../concurrency.h"
 #include "../settings.h"
 #include "../caches.h"
-#include "../globals.h"
+#include "../state.h"
 
 // ---------------------------------------------------------------------------
 // Core Config I/O
@@ -117,8 +117,9 @@ void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& c
         } catch (...) { return defaultVal; }
     };
     
-    MAX_HISTORY_LINES         = getVal("folder_path_history_lines",    30);
-    MAX_HISTORY_PATTERN_LINES = getVal("filter_history_lines",         15);
+    GlobalState::MAX_HISTORY_LINES         = getVal("folder_path_history_lines",    30);
+    GlobalState::MAX_HISTORY_PATTERN_LINES = getVal("filter_history_lines",         15);
+    
     GlobalConcurrency::MAX_USEFUL_THREADS        = getVal("combined_thread_cap",               32);
     GlobalConcurrency::MOUNT_THREAD_CAP          = getVal("thread_cap_for_mount",            16);
     GlobalConcurrency::UMOUNT_THREAD_CAP         = getVal("thread_cap_for_umount",           32); 
@@ -155,7 +156,7 @@ bool paginationSet(const std::string& filePath) {
             if (entry.key == "pagination") {
                 if (entry.validate && entry.validate(it->second)) {
                     try { 
-                        ITEMS_PER_PAGE = std::stoi(it->second); 
+                        GlobalState::ITEMS_PER_PAGE = std::stoi(it->second); 
                         return true; 
                     } catch (...) { return false; }
                 }

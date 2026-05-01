@@ -37,6 +37,7 @@
 #define _FILE_OFFSET_BITS 64
 
 #include "../daa2iso.h"
+#include "../state.h"
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  LZMA decoder (Igor Pavlov / 7-zip SDK, minimal subset)
@@ -839,7 +840,7 @@ bool convertDaaToIso(const std::string &inputFile,
                      const std::string &outputFile,
                      std::atomic<size_t> *completedBytes)
 {
-    if (g_operationCancelled.load()) return false;
+    if (GlobalState::g_operationCancelled.load()) return false;
 
     DaaContext ctx;
     ctx.outputPath     = outputFile;
@@ -990,7 +991,7 @@ bool convertDaaToIso(const std::string &inputFile,
         u32  last_chunk = daas - 1;
 
         for (u32 i = 0; i < daas; i++) {
-            if (g_operationCancelled.load()) {
+            if (GlobalState::g_operationCancelled.load()) {
                 free(daa_data);
                 return daa_fail(ctx);
             }

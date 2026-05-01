@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../globals.h"
+#include "../state.h"
 #include "../themes.h"
 #include "../history.h"
 #include "../pausePrompt.h"
@@ -63,7 +63,7 @@ bool isHistoryFileEmpty(const std::string& filePath) {
  */
 void loadHistory(bool& filterHistory) {
     clear_history();
-    std::string targetFilePath = !filterHistory ? historyFilePath : filterHistoryFilePath;
+    std::string targetFilePath = !filterHistory ? GlobalState::historyFilePath : GlobalState::filterHistoryFilePath;
 
     if (!std::filesystem::exists(targetFilePath)) {
         return;
@@ -104,8 +104,8 @@ void loadHistory(bool& filterHistory) {
  * * @param filterHistory Boolean toggle; determines which database file to write to.
  */
 void saveHistory(bool& filterHistory) {
-    std::string targetFilePath = !filterHistory ? historyFilePath : filterHistoryFilePath;
-    size_t maxLines = !filterHistory ? MAX_HISTORY_LINES : MAX_HISTORY_PATTERN_LINES;
+    std::string targetFilePath = !filterHistory ? GlobalState::historyFilePath : GlobalState::filterHistoryFilePath;
+    size_t maxLines = !filterHistory ? GlobalState::MAX_HISTORY_LINES : GlobalState::MAX_HISTORY_PATTERN_LINES;
 
     std::filesystem::path dirPath = std::filesystem::path(targetFilePath).parent_path();
     if (!dirPath.empty() && !std::filesystem::exists(dirPath)) {
