@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Project Headers
-#include "../inputHandling.h"
-#include "../write2usb.h"
-#include "../readline.h"
-#include "../state.h"
-#include "../themes.h"
-
 // C / System Headers
 #include <sys/stat.h>
 
 // Third-Party Library Headers
 #include <readline/history.h>
 #include <readline/readline.h>
+
+// Project Headers
+#include "../inputHandling.h"
+#include "../write2usb.h"
+#include "../readline.h"
+#include "../state.h"
+#include "../themes.h"
 
 /**
  * @file readline_completion.cpp

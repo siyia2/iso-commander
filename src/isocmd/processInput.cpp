@@ -1,5 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <csignal>
+#include <iostream>
+
+// Third-Party Library Headers
+#include <readline/history.h>
+#include <readline/readline.h>
+
 // Project Headers
 #include "../concurrency.h"
 #include "../inputHandling.h"
@@ -11,13 +19,6 @@
 #include "../threadpool.h"
 #include "../tokenize.h"
 #include "../umount.h"
-
-// Third-Party Library Headers
-#include <readline/history.h>
-#include <readline/readline.h>
-
-#include <csignal>
-#include <iostream>
 
 /**
  * @file operations.cpp

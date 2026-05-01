@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Third-Party Library Headers
+#include <readline/readline.h>
+#include <readline/history.h>
+
 // Project Headers
 #include "../display.h"
 #include "../inputHandling.h"
@@ -8,9 +12,6 @@
 #include "../stringManipulation.h"
 #include "../themes.h"
 #include "../verbose.h"
-
-#include <readline/readline.h>
-#include <readline/history.h>
 
 void helpSelections(bool& isAtISOListForHelp);
 

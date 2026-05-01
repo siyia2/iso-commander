@@ -1,5 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <filesystem>
+
+// Third-Party Library Headers
+#include <readline/history.h>
+#include <readline/readline.h>
+
 // Project Headers
 #include "../caches.h"
 #include "../concurrency.h"
@@ -14,12 +21,6 @@
 #include "../themes.h"
 #include "../threadpool.h"
 #include "../verbose.h"
-
-// Third-Party Library Headers
-#include <readline/history.h>
-#include <readline/readline.h>
-
-#include <filesystem>
 
 namespace fs = std::filesystem;
 

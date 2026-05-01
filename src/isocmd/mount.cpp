@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Third-Party Library Headers
+#include <libmount/libmount.h>
+
+// C / System Headers
+#include <sys/stat.h>
+
 // Project Headers
 #include "../concurrency.h"
 #include "../mount.h"
 #include "../state.h"
 #include "../stringManipulation.h"
 #include "../threadpool.h"
-
-// Third-Party Library Headers
-#include <libmount/libmount.h>
-
-// C / System Headers
-#include <sys/stat.h>
 
 /**
  * @brief Provides default LSan suppression rules for known third-party leaks.
