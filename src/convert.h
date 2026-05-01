@@ -3,6 +3,8 @@
 #ifndef CONVERT
 #define CONVERT
 
+#include <filesystem>
+
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
 
 // CHD2ISO

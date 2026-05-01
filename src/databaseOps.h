@@ -3,8 +3,11 @@
 #ifndef DATABASEOPS_H
 #define DATABASEOPS_H
 
-#include "./globals.h"
 #include <sys/stat.h>
+#include <filesystem>
+#include <unordered_set>
+#include <vector>
+#include <atomic>
 
 void loadFromDatabase(std::vector<std::string>& globalIsoFileList);
 void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound);

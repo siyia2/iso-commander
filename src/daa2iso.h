@@ -23,8 +23,11 @@
 #ifndef DAA2ISO_H
 #define DAA2ISO_H
 
-#include "./globals.h"
 #include <cstring>
+#include <filesystem>
+
+namespace fs = std::filesystem;
+
 
 // ── Type aliases ───────────────────────────────────────────────────────────
 typedef uint8_t  u8;

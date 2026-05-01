@@ -3,6 +3,8 @@
 #ifndef MAIN_H
 #define MAIN_H
 
+#include <thread>
+
 bool readUserConfigUpdates(const std::string& filePath);
 bool paginationSet(const std::string& filePath);
 bool isHistoryFileEmpty(const std::string& filePath);

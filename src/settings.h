@@ -15,7 +15,10 @@
 #include <iostream>
 #include <format>
 #include <fstream>
+#include <filesystem>
 #include <unordered_set>
+
+namespace fs = std::filesystem;
 
 // ============================================================================
 // Data Structures

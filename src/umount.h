@@ -5,6 +5,10 @@
 
 #include "themes.h"
 #include <libmount/libmount.h>
+#include <unordered_set>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 /**
  * @brief Canonical list of all supported configuration settings with validation.

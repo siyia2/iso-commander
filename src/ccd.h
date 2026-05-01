@@ -5,6 +5,9 @@
 
 #include <fstream>
 #include <cstring>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 // Special thanks to the original authors of ccd2iso:
 

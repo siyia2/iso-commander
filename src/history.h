@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <csignal>
+#include <filesystem>
 #include <readline/readline.h>
 #include <readline/history.h>
 

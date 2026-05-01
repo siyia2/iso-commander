@@ -7,6 +7,9 @@
 #include <unistd.h>
 #include <cstring>
 #include <fstream>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 // Special thanks to the original author of mdf2iso:
 

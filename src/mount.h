@@ -4,9 +4,13 @@
 #define MOUNT_H
 
 #include "display.h"
+#include <unordered_set>
 #include "themes.h"
 #include <libmount/libmount.h>
 #include <sys/stat.h>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 /**
  * @brief Canonical list of all supported configuration settings with validation.

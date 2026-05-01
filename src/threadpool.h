@@ -3,7 +3,6 @@
 #ifndef THREAD_POOL_H
 #define THREAD_POOL_H
 
-#include "./globals.h"
 #include "./concurrency.h"
 #include <memory>
 #include <atomic>

@@ -11,6 +11,9 @@
 #include <cstdint>
 #include <atomic>
 #include <string>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 /**
  * @brief Information about an ISO image file.
