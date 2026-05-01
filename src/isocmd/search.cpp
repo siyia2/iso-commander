@@ -15,8 +15,6 @@
 #include "../threadpool.h"
 #include "../verbose.h"
 
-std::mutex couNtMutex;
-
 /**
  * @file database_operations.cpp
  * @brief Database operations and file scanning functionality for ISO and disc image files
@@ -283,7 +281,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
             if (promptFlag && entry.is_regular_file()) {
                 totalFiles.fetch_add(1, std::memory_order_acq_rel); 
                 if (totalFiles % 100 == 0) { 
-                    std::lock_guard<std::mutex> lock(couNtMutex); 
+                    std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex); 
                     std::cout << "\r" << dt.bold << "Total files processed: " << totalFiles << std::flush;
                 }
             }
@@ -586,7 +584,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                 totalFiles.fetch_add(1, std::memory_order_acq_rel);
                 
                 if (totalFiles % 100 == 0) {
-                    std::lock_guard<std::mutex> lock(couNtMutex);
+                    std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
                     std::cout << "\r" << dt.bold << "Total files processed: " << totalFiles << std::flush;
                 }
                 
@@ -623,7 +621,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
     }
     
     {
-        std::lock_guard<std::mutex> lock(couNtMutex);
+        std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
         std::cout << "\r" << dt.bold << "Total files processed: " << totalFiles << dt.reset;
     }
     
