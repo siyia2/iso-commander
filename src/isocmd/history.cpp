@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
+#include "../globals.h"
 #include "../themes.h"
+#include "../history.h"
+#include "../pausePrompt.h"
+#include "../inputHandling.h"
 
 /**
  * @brief Validates if a folder path history file is effectively empty.

@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
+#include "../sort.h"
 #include "../display.h"
 #include "../themes.h"
 #include "../settings.h"
 #include "../readline.h"
+#include "../tokenize.h"
+#include "../pausePrompt.h"
+#include "../inputHandling.h"
 
 /**
  * @brief Synchronizes global runtime variables with values from the configuration cache.
@@ -41,6 +44,9 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache) {
         try { ITEMS_PER_PAGE = std::stoul(cache.at("pagination")); } catch (...) {}
     }
 }
+
+void helpSettingsEditor();
+void syncCache(const std::string& filePath);
 
 /**
  * @brief Launches the interactive Terminal User Interface (TUI) for configuration management.

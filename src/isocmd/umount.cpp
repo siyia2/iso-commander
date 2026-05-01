@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
 #include "../threadpool.h"
 #include "../display.h"
 #include "../umount.h"
 #include "../themes.h"
+#include "../stringManipulation.h"
 
 /**
  * @brief Checks if a directory is empty.

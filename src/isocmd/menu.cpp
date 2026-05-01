@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
 #include "../themes.h"
+#include "../readline.h"
+#include "../inputHandling.h"
+#include <thread>
+#include <chrono>
+#include <atomic>
+#include <vector>
 
 /**
  * @brief Renders a multi-colored ASCII art banner to the terminal.
@@ -39,6 +44,10 @@ void print_ascii() {
     std::cout << rows[6] << R"( | |\__ \| (_) | | (_| (_) | |\/| | |\/| |/ _ \ | .` || |) | _||   / )" << "\n";
     std::cout << rows[7] << R"(|___|___/ \___/   \___\___/|_|  |_|_|  |_/_/ \_\|_|\_||___/|___|_|_\ )" << "\n\n" << reset;
 }
+
+void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, 
+std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& stopImport, 
+std::vector<std::thread>& backgroundThreads, bool& search);
 
 /**
  * @brief Displays the ISO management submenu and handles user input for file operations.
@@ -122,6 +131,8 @@ std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads, bool
         }
     }
 }
+
+void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning);
 
 /**
  * @brief Displays the conversion submenu for transforming non-ISO disk images into ISO format.

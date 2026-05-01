@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
 #include "../threadpool.h"
-#include "../mdf.h"
-#include "../ccd.h"
-#include "../themes.h"
-#include "../daa2iso.h"
-#include "../chd.h"
-#include <chd.h>
+#include "../mount.h"
+#include "../readline.h"
+#include "../umount.h"
+#include "../process.h"
+#include "../tokenize.h"
+#include "../pausePrompt.h"
+#include "../inputHandling.h"
 
 /**
  * @file operations.cpp

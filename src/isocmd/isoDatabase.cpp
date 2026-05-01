@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
 #include "../display.h"
 #include "../threadpool.h"
 #include "../themes.h"
+#include "../history.h"
+#include "../databaseOps.h"
+#include "../pausePrompt.h"
+#include "../inputHandling.h"
 
 // Local ISO Database mutex
 namespace {
@@ -184,232 +187,6 @@ std::string getHomeDirectory() {
 }
 
 /**
- * @brief Passes successfully operated ISO file paths to the database.
- *
- * Accepts a semicolon-separated list of destination paths produced by a
- * completed copy or move operation. Each non-empty path is collected and
- * forwarded to saveToDatabase() in a single batch call.
- *
- * @param filePathsStr  Semicolon-delimited string of destination ISO paths.
- * @param newISOFound   Atomic flag set to @c true by saveToDatabase() if at
- *                      least one new ISO entry is added.
- *
- * @note Paths are assumed valid — they were written successfully by the
- *       preceding operation. No filesystem validation is performed.
- */
-void updateDatabaseAfterOperations(const std::string& filePathsStr, 
-                                    std::atomic<bool>& newISOFound) {
-    std::vector<std::string> allIsoFiles;
-    std::istringstream iss(filePathsStr);
-    std::string path;
-
-    while (std::getline(iss, path, ';')) {
-        if (!path.empty())
-            allIsoFiles.push_back(std::move(path));
-    }
-
-    if (!allIsoFiles.empty()) {
-        saveToDatabase(allIsoFiles, newISOFound);
-	}
-	newISOFound.store(false);
-}
-
-/**
- * @brief Reduces hierarchical paths by grouping related directories
- * 
- * This function groups paths by their first 3 directory levels and reduces
- * redundant parent paths to optimize directory traversal.
- * 
- * @param paths Vector of semicolon-delimited path strings
- * @return Vector of reduced/optimized path strings
- */
-std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string>& paths) {
-    std::map<std::string, std::vector<std::string>> pathGroups;
-    std::vector<std::string> allPaths;
-    
-    for (const auto& pathEntry : paths) {
-        std::istringstream iss(pathEntry);
-        std::string path;
-        while (std::getline(iss, path, ';')) {
-            if (!path.empty() && path[0] == '/') {
-                if (path.back() != '/') path += '/';
-                allPaths.push_back(path);
-            }
-        }
-    }
-    
-    for (const auto& path : allPaths) {
-        size_t slashCount = 0, pos = 0;
-        
-        for (size_t i = 1; i < path.length() && slashCount < 3; ++i) {
-            if (path[i] == '/') {
-                pos = i;
-                slashCount++;
-            }
-        }
-        
-        std::string key = (slashCount >= 3) ? path.substr(0, pos + 1) : path;
-        pathGroups[key].push_back(path);
-    }
-    
-    std::vector<std::string> finalPaths;
-    for (const auto& [prefix, groupPaths] : pathGroups) {
-        finalPaths.push_back((groupPaths.size() > 1) ? prefix : groupPaths[0]);
-    }
-    
-    std::sort(finalPaths.begin(), finalPaths.end());
-    std::vector<std::string> result;
-    
-    for (const auto& path : finalPaths) {
-        int levels = std::count(path.begin() + 1, path.end(), '/');
-        
-        bool isRedundant = (levels <= 2) && 
-            std::any_of(finalPaths.begin(), finalPaths.end(), 
-                [&path](const std::string& other) {
-                    return other != path && other.starts_with(path);
-                });
-        
-        if (!isRedundant) {
-            result.push_back(path);
-        }
-    }
-    
-    return result;
-}
-
-/**
- * @brief Performs background ISO file import without blocking the UI.
- *
- * Reads history paths, reduces them hierarchically, traverses directories
- * to find ISO files, and saves them to the database. Checks a stop flag
- * between major phases to allow prompt exit on program termination.
- * Traverse tasks themselves run to completion once started.
- *
- * @param isImportRunning Atomic flag indicating if import is in progress.
- * @param newISOFound Atomic flag set to true if new ISOs were found.
- * @param stopImport Stop flag checked between phases to allow early exit on program termination.
- */
-void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& stopImport) {
-    std::vector<std::string> paths;
-    int localMaxDepth = -1;
-    bool localPromptFlag = false;
-    
-    {
-        std::ifstream file(historyFilePath);
-        if (!file.is_open()) {
-            isImportRunning.store(false);
-            return;
-        }
-        std::string line;
-        while (std::getline(file, line)) {
-            if (stopImport.load()) { isImportRunning.store(false); return; }
-            std::istringstream iss(line);
-            std::string path;
-            while (std::getline(iss, path, ';')) {
-                if (!path.empty() && path[0] == '/') {
-                    if (path.back() != '/') path += '/';
-                    if (std::find(paths.begin(), paths.end(), path) == paths.end())
-                        paths.push_back(path);
-                }
-            }
-        }
-    }
-    
-    if (stopImport.load()) { isImportRunning.store(false); return; }
-
-    if (paths.size() > 1) {
-        auto it = std::find(paths.begin(), paths.end(), "/");
-        if (it != paths.end()) paths.erase(it);
-    }
-    
-    std::vector<std::string> finalPaths = hierarchicalPathReduction(paths);
-    
-    if (finalPaths.empty()) { isImportRunning.store(false); return; }
-
-    if (stopImport.load()) { isImportRunning.store(false); return; }
-
-    std::vector<std::string> allIsoFiles;
-    std::atomic<size_t> totalFiles{0};
-    std::unordered_set<std::string> uniqueErrorMessages;
-    std::mutex processMutex;
-    std::mutex traverseErrorMutex;
-    
-    auto& pool = getStaticThreadPool();
-    std::vector<std::future<void>> futures;
-    
-    for (const auto& path : finalPaths) {
-        if (stopImport.load()) { isImportRunning.store(false); return; }
-        if (isValidDirectory(path)) {
-            futures.emplace_back(pool.enqueue([&, path]() {
-                traverse(path, allIsoFiles, uniqueErrorMessages,
-                         totalFiles, processMutex, traverseErrorMutex,
-                         localMaxDepth, localPromptFlag);
-            }));
-        }
-    }
-    
-    for (auto& future : futures) {
-		if (future.valid()) {
-			while (future.wait_for(std::chrono::milliseconds(50)) != std::future_status::ready) {
-				if (stopImport.load()) { isImportRunning.store(false); return; }
-			}
-		}
-	}
-    
-    if (stopImport.load()) { isImportRunning.store(false); return; }
-	std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-    saveToDatabase(allIsoFiles, newISOFound);
-    isImportRunning.store(false);
-    newISOFound.store(false);
-}
-
-/**
- * @brief Loads ISO database from file into memory
- * 
- * @param outList Reference to vector that will receive the loaded ISO paths
- */
-void loadFromDatabase(std::vector<std::string>& outList) {
-    std::lock_guard<std::mutex> fileLock(dbFileMutex);
-    
-    int fd = open(databaseFilePath.c_str(), O_RDONLY);
-    if (fd == -1) return;
-    
-    if (flock(fd, LOCK_SH) == -1) {
-        close(fd);
-        return;
-    }
-    
-    struct stat fileStat;
-    if (fstat(fd, &fileStat) == -1 || fileStat.st_size == 0) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        outList.clear();
-        return;
-    }
-    
-    std::vector<char> buffer(fileStat.st_size);
-    ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
-    
-    flock(fd, LOCK_UN);
-    close(fd);
-    
-    if (bytesRead <= 0 || bytesRead > fileStat.st_size) return;
-    
-    std::vector<std::string> loadedFiles;
-    char* start = buffer.data();
-    char* end = buffer.data() + bytesRead;
-    
-    while (start < end) {
-        char* lineEnd = std::find(start, end, '\n');
-        std::string line(start, lineEnd);
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (!line.empty()) loadedFiles.push_back(std::move(line));
-        start = (lineEnd < end) ? lineEnd + 1 : end;
-    }
-    outList = std::move(loadedFiles);
-}
-
-/**
  * @brief Saves new ISO file paths to the database, merging with existing entries.
  *
  * Deduplicates incoming paths against the existing cache, appends new entries,
@@ -525,6 +302,234 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
     newISOFound.store(localNewISOFound);
     isoListDirty.store(true);
     return true;
+}
+
+/**
+ * @brief Passes successfully operated ISO file paths to the database.
+ *
+ * Accepts a semicolon-separated list of destination paths produced by a
+ * completed copy or move operation. Each non-empty path is collected and
+ * forwarded to saveToDatabase() in a single batch call.
+ *
+ * @param filePathsStr  Semicolon-delimited string of destination ISO paths.
+ * @param newISOFound   Atomic flag set to @c true by saveToDatabase() if at
+ *                      least one new ISO entry is added.
+ *
+ * @note Paths are assumed valid — they were written successfully by the
+ *       preceding operation. No filesystem validation is performed.
+ */
+void updateDatabaseAfterOperations(const std::string& filePathsStr, 
+                                    std::atomic<bool>& newISOFound) {
+    std::vector<std::string> allIsoFiles;
+    std::istringstream iss(filePathsStr);
+    std::string path;
+
+    while (std::getline(iss, path, ';')) {
+        if (!path.empty())
+            allIsoFiles.push_back(std::move(path));
+    }
+
+    if (!allIsoFiles.empty()) {
+        saveToDatabase(allIsoFiles, newISOFound);
+	}
+	newISOFound.store(false);
+}
+
+/**
+ * @brief Reduces hierarchical paths by grouping related directories
+ * 
+ * This function groups paths by their first 3 directory levels and reduces
+ * redundant parent paths to optimize directory traversal.
+ * 
+ * @param paths Vector of semicolon-delimited path strings
+ * @return Vector of reduced/optimized path strings
+ */
+std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string>& paths) {
+    std::map<std::string, std::vector<std::string>> pathGroups;
+    std::vector<std::string> allPaths;
+    
+    for (const auto& pathEntry : paths) {
+        std::istringstream iss(pathEntry);
+        std::string path;
+        while (std::getline(iss, path, ';')) {
+            if (!path.empty() && path[0] == '/') {
+                if (path.back() != '/') path += '/';
+                allPaths.push_back(path);
+            }
+        }
+    }
+    
+    for (const auto& path : allPaths) {
+        size_t slashCount = 0, pos = 0;
+        
+        for (size_t i = 1; i < path.length() && slashCount < 3; ++i) {
+            if (path[i] == '/') {
+                pos = i;
+                slashCount++;
+            }
+        }
+        
+        std::string key = (slashCount >= 3) ? path.substr(0, pos + 1) : path;
+        pathGroups[key].push_back(path);
+    }
+    
+    std::vector<std::string> finalPaths;
+    for (const auto& [prefix, groupPaths] : pathGroups) {
+        finalPaths.push_back((groupPaths.size() > 1) ? prefix : groupPaths[0]);
+    }
+    
+    std::sort(finalPaths.begin(), finalPaths.end());
+    std::vector<std::string> result;
+    
+    for (const auto& path : finalPaths) {
+        int levels = std::count(path.begin() + 1, path.end(), '/');
+        
+        bool isRedundant = (levels <= 2) && 
+            std::any_of(finalPaths.begin(), finalPaths.end(), 
+                [&path](const std::string& other) {
+                    return other != path && other.starts_with(path);
+                });
+        
+        if (!isRedundant) {
+            result.push_back(path);
+        }
+    }
+    
+    return result;
+}
+
+bool isValidDirectory(const std::string& path);
+
+/**
+ * @brief Performs background ISO file import without blocking the UI.
+ *
+ * Reads history paths, reduces them hierarchically, traverses directories
+ * to find ISO files, and saves them to the database. Checks a stop flag
+ * between major phases to allow prompt exit on program termination.
+ * Traverse tasks themselves run to completion once started.
+ *
+ * @param isImportRunning Atomic flag indicating if import is in progress.
+ * @param newISOFound Atomic flag set to true if new ISOs were found.
+ * @param stopImport Stop flag checked between phases to allow early exit on program termination.
+ */
+void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& stopImport) {
+    std::vector<std::string> paths;
+    int localMaxDepth = -1;
+    bool localPromptFlag = false;
+    
+    {
+        std::ifstream file(historyFilePath);
+        if (!file.is_open()) {
+            isImportRunning.store(false);
+            return;
+        }
+        std::string line;
+        while (std::getline(file, line)) {
+            if (stopImport.load()) { isImportRunning.store(false); return; }
+            std::istringstream iss(line);
+            std::string path;
+            while (std::getline(iss, path, ';')) {
+                if (!path.empty() && path[0] == '/') {
+                    if (path.back() != '/') path += '/';
+                    if (std::find(paths.begin(), paths.end(), path) == paths.end())
+                        paths.push_back(path);
+                }
+            }
+        }
+    }
+    
+    if (stopImport.load()) { isImportRunning.store(false); return; }
+
+    if (paths.size() > 1) {
+        auto it = std::find(paths.begin(), paths.end(), "/");
+        if (it != paths.end()) paths.erase(it);
+    }
+    
+    std::vector<std::string> finalPaths = hierarchicalPathReduction(paths);
+    
+    if (finalPaths.empty()) { isImportRunning.store(false); return; }
+
+    if (stopImport.load()) { isImportRunning.store(false); return; }
+
+    std::vector<std::string> allIsoFiles;
+    std::atomic<size_t> totalFiles{0};
+    std::unordered_set<std::string> uniqueErrorMessages;
+    std::mutex processMutex;
+    std::mutex traverseErrorMutex;
+    
+    auto& pool = getStaticThreadPool();
+    std::vector<std::future<void>> futures;
+    
+    for (const auto& path : finalPaths) {
+        if (stopImport.load()) { isImportRunning.store(false); return; }
+        if (isValidDirectory(path)) {
+            futures.emplace_back(pool.enqueue([&, path]() {
+                traverse(path, allIsoFiles, uniqueErrorMessages,
+                         totalFiles, processMutex, traverseErrorMutex,
+                         localMaxDepth, localPromptFlag);
+            }));
+        }
+    }
+    
+    for (auto& future : futures) {
+		if (future.valid()) {
+			while (future.wait_for(std::chrono::milliseconds(50)) != std::future_status::ready) {
+				if (stopImport.load()) { isImportRunning.store(false); return; }
+			}
+		}
+	}
+    
+    if (stopImport.load()) { isImportRunning.store(false); return; }
+	
+    saveToDatabase(allIsoFiles, newISOFound);
+    isImportRunning.store(false);
+    newISOFound.store(false);
+}
+
+/**
+ * @brief Loads ISO database from file into memory
+ * 
+ * @param outList Reference to vector that will receive the loaded ISO paths
+ */
+void loadFromDatabase(std::vector<std::string>& outList) {
+    std::lock_guard<std::mutex> fileLock(dbFileMutex);
+    
+    int fd = open(databaseFilePath.c_str(), O_RDONLY);
+    if (fd == -1) return;
+    
+    if (flock(fd, LOCK_SH) == -1) {
+        close(fd);
+        return;
+    }
+    
+    struct stat fileStat;
+    if (fstat(fd, &fileStat) == -1 || fileStat.st_size == 0) {
+        flock(fd, LOCK_UN);
+        close(fd);
+        outList.clear();
+        return;
+    }
+    
+    std::vector<char> buffer(fileStat.st_size);
+    ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
+    
+    flock(fd, LOCK_UN);
+    close(fd);
+    
+    if (bytesRead <= 0 || bytesRead > fileStat.st_size) return;
+    
+    std::vector<std::string> loadedFiles;
+    char* start = buffer.data();
+    char* end = buffer.data() + bytesRead;
+    
+    while (start < end) {
+        char* lineEnd = std::find(start, end, '\n');
+        std::string line(start, lineEnd);
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!line.empty()) loadedFiles.push_back(std::move(line));
+        start = (lineEnd < end) ? lineEnd + 1 : end;
+    }
+    outList = std::move(loadedFiles);
 }
 
 /**

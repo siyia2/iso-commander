@@ -1,9 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
 #include "../threadpool.h"
 #include "../themes.h"
+#include "../searches.h"
 #include "../readline.h"
+#include "../verbose.h"
+#include "../stringManipulation.h"
+#include "../history.h"
+#include "../databaseOps.h"
+#include "../pausePrompt.h"
+#include "../inputHandling.h"
+
 
 /**
  * @file database_operations.cpp
@@ -25,6 +32,7 @@
 bool isValidDirectory(const std::string& path) {
     return std::filesystem::is_directory(path);
 }
+
 
 //=============================================================================
 // ISO Section
@@ -453,6 +461,8 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
     clearScrollBuffer();
 }
 
+void toLowerInPlace(std::string& str);
+
 /**
  * @brief Filters filesystem entries based on disc image mode.
  *
@@ -750,6 +760,8 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
     
     return *currentCache;
 }
+
+void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning);
 
 /**
  * @brief Dispatches special command inputs during BIN/IMG/MDF/NRG/CHD/DAA/GBI search UI interaction.

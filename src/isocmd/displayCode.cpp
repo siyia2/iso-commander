@@ -1,9 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
+#include "../globals.h"
 #include "../display.h"
 #include "../filtering.h"
 #include "../themes.h"
+#include "../sort.h"
+#include "../databaseOps.h"
+#include "../pausePrompt.h"
+#include "../inputHandling.h"
+
+void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, 
+bool& hasPendingProcess, bool& isFiltered, size_t& currentPage, std::atomic<bool>& isImportRunning);
 
 /**
  * @brief Loads ISO files from the database and updates the display.

@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
+#include "../stringManipulation.h"
+#include "../inputHandling.h"
+#include "../pausePrompt.h"
 #include "../threadpool.h"
-#include "../write.h"
+#include "../write2usb.h"
+#include "../tokenize.h"
 #include "../readline.h"
 #include "../display.h"
 #include "../themes.h"
+
 
 std::vector<ProgressInfo> progressData; ///< Shared progress state for all active write tasks.
 
@@ -406,6 +410,9 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
     return deviceMap;
 }
 
+void helpMappings();
+void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages);
+
 /**
  * @brief Interactive loop that collects and validates ISO-to-device mappings from the user.
  *
@@ -639,6 +646,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 		pressEnterToContinue();
     }
 }
+
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
 
 /**
  * @brief Dispatches ISO-to-device write tasks to the thread pool and tracks progress.

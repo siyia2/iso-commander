@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
+#include "../globals.h"
 #include "../readline.h"
 #include "../themes.h"
+#include "../inputHandling.h"
 
 /**
  * @file readline_completion.cpp

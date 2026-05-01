@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
+#include "../globals.h"
+#include "../inputHandling.h"
 
 /**
  * @brief Disables EOF (Ctrl+D) processing in the terminal.

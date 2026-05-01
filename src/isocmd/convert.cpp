@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
+#include "../globals.h"
 #include "../display.h"
 #include "../themes.h"
+#include "../convert.h"
+#include "../stringManipulation.h"
 
 /**
  * @brief Checks if a file exists at the specified path.
@@ -12,6 +14,8 @@
 bool fileExists(const std::string& fullPath) {
     return std::filesystem::exists(fullPath);
 }
+
+void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname);
 
 /**
  * @brief Batch converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD, DAA, GBI) to ISO format.

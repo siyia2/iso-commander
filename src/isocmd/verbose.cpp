@@ -1,8 +1,63 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
+#include "../globals.h"
 #include "../display.h"
 #include "../themes.h"
+#include "../sort.h"
+#include "../verbose.h"
+#include "../databaseOps.h"
+#include "../inputHandling.h"
+
+/**
+ * @brief Waits for the user to press Enter or Ctrl+D before allowing another attempt.
+ *
+ * Uses raw fd read to correctly handle both Enter and Ctrl+D regardless of
+ * tty VEOF state, avoiding buffering issues with std::cin in canonical mode.
+ */
+void pressEnterToTry() {
+    enable_ctrl_d();
+    std::cout << color << "\n↵ to try again..." << UI::Palette::BoldReset;
+    std::cout.flush();
+    char ch;
+    while (read(STDIN_FILENO, &ch, 1) > 0) {
+        if (ch == '\n' || ch == 4) break;
+    }
+    tcflush(STDIN_FILENO, TCIFLUSH);
+}
+
+/**
+ * @brief Waits for the user to press Enter or Ctrl+D before returning to a previous menu or state.
+ *
+ * Uses raw fd read to correctly handle both Enter and Ctrl+D regardless of
+ * tty VEOF state, avoiding buffering issues with std::cin in canonical mode.
+ */
+void pressEnterToReturn() {
+    enable_ctrl_d();
+    std::cout << color << "\n↵ to return..." << UI::Palette::BoldReset;
+    std::cout.flush();
+    char ch;
+    while (read(STDIN_FILENO, &ch, 1) > 0) {
+        if (ch == '\n' || ch == 4) break;
+    }
+    tcflush(STDIN_FILENO, TCIFLUSH);
+}
+
+/**
+ * @brief Waits for the user to press Enter or Ctrl+D before continuing program execution.
+ *
+ * Uses raw fd read to correctly handle both Enter and Ctrl+D regardless of
+ * tty VEOF state, avoiding buffering issues with std::cin in canonical mode.
+ */
+void pressEnterToContinue() {
+    enable_ctrl_d();
+    std::cout << color << "\n↵ to continue..." << UI::Palette::BoldReset;
+    std::cout.flush();
+    char ch;
+    while (read(STDIN_FILENO, &ch, 1) > 0) {
+        if (ch == '\n' || ch == 4) break;
+    }
+    tcflush(STDIN_FILENO, TCIFLUSH);
+}
 
 /**
  * @brief Performs a high-visibility print of operation results categorized by sets.
@@ -257,6 +312,8 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
     return count;
 }
 
+bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atomic<bool>& newISOFound);
+
 /**
  * @brief Handles verbose output and result logic for the ISO database refresh process.
  * @details Summarizes time taken, files imported, and displays any path errors encountered.
@@ -424,55 +481,3 @@ void verboseSearchResults(const std::string& fileExtension,
     pressEnterToContinue();
     clearScrollBuffer();
 }
-
-/**
- * @brief Waits for the user to press Enter or Ctrl+D before allowing another attempt.
- *
- * Uses raw fd read to correctly handle both Enter and Ctrl+D regardless of
- * tty VEOF state, avoiding buffering issues with std::cin in canonical mode.
- */
-void pressEnterToTry() {
-    enable_ctrl_d();
-    std::cout << color << "\n↵ to try again..." << UI::Palette::BoldReset;
-    std::cout.flush();
-    char ch;
-    while (read(STDIN_FILENO, &ch, 1) > 0) {
-        if (ch == '\n' || ch == 4) break;
-    }
-    tcflush(STDIN_FILENO, TCIFLUSH);
-}
-
-/**
- * @brief Waits for the user to press Enter or Ctrl+D before returning to a previous menu or state.
- *
- * Uses raw fd read to correctly handle both Enter and Ctrl+D regardless of
- * tty VEOF state, avoiding buffering issues with std::cin in canonical mode.
- */
-void pressEnterToReturn() {
-    enable_ctrl_d();
-    std::cout << color << "\n↵ to return..." << UI::Palette::BoldReset;
-    std::cout.flush();
-    char ch;
-    while (read(STDIN_FILENO, &ch, 1) > 0) {
-        if (ch == '\n' || ch == 4) break;
-    }
-    tcflush(STDIN_FILENO, TCIFLUSH);
-}
-
-/**
- * @brief Waits for the user to press Enter or Ctrl+D before continuing program execution.
- *
- * Uses raw fd read to correctly handle both Enter and Ctrl+D regardless of
- * tty VEOF state, avoiding buffering issues with std::cin in canonical mode.
- */
-void pressEnterToContinue() {
-    enable_ctrl_d();
-    std::cout << color << "\n↵ to continue..." << UI::Palette::BoldReset;
-    std::cout.flush();
-    char ch;
-    while (read(STDIN_FILENO, &ch, 1) > 0) {
-        if (ch == '\n' || ch == 4) break;
-    }
-    tcflush(STDIN_FILENO, TCIFLUSH);
-}
-

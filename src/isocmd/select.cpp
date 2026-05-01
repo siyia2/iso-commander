@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
+#include "../globals.h"
 #include "../display.h"
 #include "../filtering.h"
 #include "../select.h"
 #include "../themes.h"
 #include "../readline.h"
+#include "../verbose.h"
+#include "../databaseOps.h"
+#include "../inputHandling.h"
 
 /**
  * @brief Routes the user input to the specific logic for mounting, unmounting, writing, or file manipulation.

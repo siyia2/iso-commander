@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
-#include "../display.h"
+#include "../databaseOps.h"
 #include "../themes.h"
+#include "../main.h"
 #include "../settings.h"
+#include "../readline.h"
+#include "../inputHandling.h"
 
 /**
  * @brief Outputs the current program version to the standard output.
@@ -13,6 +15,7 @@
 void printVersionNumber(const std::string& version) {    
     std::cout << UI::Palette::BoldReset << "Iso Commander v" << version << UI::Palette::Reset << "\n";
 }
+
 
 /**
  * @brief Entry point for the isocmd application - an ISO management and mounting utility.

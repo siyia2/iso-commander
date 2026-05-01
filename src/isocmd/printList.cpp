@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
+#include "../globals.h"
 #include "../display.h"
 #include "../filtering.h"
 #include "../themes.h"
+#include "../umount.h"
+#include "../stringManipulation.h"
 
 /**
  * @file list_renderer.cpp

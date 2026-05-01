@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
-#include "../headers.h"
+#include "../globals.h"
 #include "../chd.h"
 
 /**

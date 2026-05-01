@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
+#include "../globals.h"
 #include "../mdf.h"
 #include "../ccd.h"
-
 
 // Special thanks to the original authors of the conversion tools:
 

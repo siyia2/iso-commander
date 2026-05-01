@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
 #include "../display.h"
 #include "../threadpool.h"
 #include "../filtering.h"
 #include "../themes.h"
+#include "../history.h"
 #include "../readline.h"
+#include "../stringManipulation.h"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
-#include "../write.h"
+#include "../write2usb.h"
 #include "../mdf.h"
 #include "../daa2iso.h"
 #include "../ccd.h"
 #include "../chd.h"
-#include <chd.h>
 
 //=============================================================================
 // Write2Usb Section
@@ -153,6 +151,8 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
     }
     return totalSize;
 }
+
+void toLowerInPlace(std::string& str);
 
 /**
  * @brief Calculate the total estimated output size in bytes for a batch of disc image conversions.

@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "../daa2iso.h"
+
 /*
  * daa2iso.cpp  –  Convert PowerISO DAA / gBurner GBI disk images to ISO
  *
  * Original reverse-engineering and algorithms by Luigi Auriemma (aluigi.org)
  * C++ Linux port + library API (no Windows deps, no encryption/password) – 2026
  *
- * License: GPL-2.0 or
-    (at your option) any later version (same as the original work)
+ * License: GPL-2.0 or (at your option) any later version (same as original)
  *
- *
- * Use as library: include this file or link against it.
- *   bool convertDaaToIso(const std::string& inputFile,
- *                        const std::string& outputFile,
- *                        std::atomic<size_t>* completedBytes);
+ * Thread-safety fix: all previously static/global mutable state
+ * (tinflate tables, powerisuxn counter) moved into DaaContext so that
+ * multiple concurrent conversions cannot corrupt each other.
  */
 
 /*
@@ -44,8 +43,6 @@
 #define _LARGEFILE64_SOURCE
 #define _FILE_OFFSET_BITS 64
 
-#include "../headers.h"
-
 // Use 64-bit file I/O on Linux
 #define off_t   off64_t
 #define fopen   fopen64
@@ -53,14 +50,6 @@
 #define ftell   ftello64
 
 namespace fs = std::filesystem;
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  Type aliases
-// ═══════════════════════════════════════════════════════════════════════════
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  LZMA decoder (Igor Pavlov / 7-zip SDK, minimal subset)
@@ -73,10 +62,6 @@ typedef uint64_t u64;
 typedef size_t SizeT;
 typedef int    SRes;
 
-typedef enum { LZMA_FINISH_ANY, LZMA_FINISH_END } ELzmaFinishMode;
-typedef enum { LZMA_STATUS_NOT_SPECIFIED, LZMA_STATUS_FINISHED_WITH_MARK,
-               LZMA_STATUS_NOT_FINISHED, LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK } ELzmaStatus;
-
 typedef void *(*ISzAlloc_Alloc)(void *, size_t);
 typedef void  (*ISzAlloc_Free) (void *, void *);
 struct ISzAlloc { ISzAlloc_Alloc Alloc; ISzAlloc_Free Free; };
@@ -84,7 +69,6 @@ static void *SzAlloc(void *, size_t sz) { return malloc(sz);  }
 static void  SzFree (void *, void *p)   { free(p);            }
 static ISzAlloc g_Alloc = { SzAlloc, SzFree };
 
-// Bit-reader helper
 #define kNumBitModelTotalBits 11
 #define kBitModelTotal        (1 << kNumBitModelTotalBits)
 #define kNumMoveBits          5
@@ -141,8 +125,6 @@ static void LzmaDec_Free(CLzmaDec *p, ISzAlloc *alloc) {
     alloc->Free(alloc, p->probs); p->probs = nullptr;
 }
 
-#define LZMA_DIC_MIN (1 << 12)
-
 static void LzmaDec_InitProbs(CLzmaDec *p) {
     for (u32 i = 0; i < p->numProbs; i++) p->probs[i] = kBitModelTotal >> 1;
     p->needInitProbs = 0;
@@ -166,7 +148,6 @@ static void LzmaDec_Init(CLzmaDec *p) {
     LzmaDec_InitState(p);
 }
 
-#define NORMALIZE_CHECK if (p->range < (1 << 24)) { if (p->buf == bufLimit) return SZ_ERROR_DATA; p->range <<= 8; p->code = (p->code << 8) | (*p->buf++); }
 #define NORMALIZE if (p->range < (1 << 24)) { p->range <<= 8; p->code = (p->code << 8) | (*p->buf++); }
 
 #define GET_BIT2(prob, mi, A0, A1) \
@@ -204,10 +185,9 @@ static void LzmaDec_Init(CLzmaDec *p) {
 #define RepLenCoder   792
 #define Literal       952
 
-#define kNumStates      12
-#define kNumLenToBitModelTotal   10
-#define kMatchMinLen    2
-#define kMatchSpecLenStart 274
+#define kNumStates             12
+#define kNumLenToBitModelTotal 10
+#define kMatchMinLen           2
 
 static u32 lzma_decode_full(CLzmaDec *p, const u8 *in, u32 insz, u8 *out, u32 outsz) {
     p->dic        = out;
@@ -217,7 +197,7 @@ static u32 lzma_decode_full(CLzmaDec *p, const u8 *in, u32 insz, u8 *out, u32 ou
     p->code = 0;
     p->range = 0xFFFFFFFF;
     for (int i = 0; i < 5; i++) p->code = (p->code << 8) | (*p->buf++);
-    const u8 *bufEnd = in + insz;
+    (void)insz;
 
     unsigned state  = 0;
     u32 rep0 = 1, rep1 = 1, rep2 = 1, rep3 = 1;
@@ -457,11 +437,12 @@ static u32 lzma_decode_full(CLzmaDec *p, const u8 *in, u32 insz, u8 *out, u32 ou
             p->processedPos++;
         }
     }
-    (void)bufEnd;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  tinflate – Luigi Auriemma's modified tiny inflate (btype table swapped)
+//  NOTE: All previously static/global tinflate state is now per-instance,
+//        stored in DaaContext, and passed explicitly to every function.
 // ═══════════════════════════════════════════════════════════════════════════
 
 #define TINF_OK         0
@@ -485,11 +466,14 @@ struct TINF_DATA {
     TINF_TREE      dtree;
 };
 
-static TINF_TREE sltree, sdtree;
-static u8        length_bits[30];
-static u16       length_base[30];
-static u8        dist_bits[30];
-static u16       dist_base[30];
+// Per-context tinflate tables (replaces the old static globals)
+struct TinfTables {
+    TINF_TREE sltree, sdtree;
+    u8        length_bits[30];
+    u16       length_base[30];
+    u8        dist_bits[30];
+    u16       dist_base[30];
+};
 
 static const u8 clcidx[] = {
     16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15
@@ -523,6 +507,13 @@ static void tinf_build_tree(TINF_TREE *t, const u8 *lengths, unsigned num) {
     t->table[0] = 0;
     for (sum = 0, i = 0; i < 16; ++i) { offs[i] = sum; sum += t->table[i]; }
     for (i = 0; i < num; ++i) if (lengths[i]) t->trans[offs[lengths[i]]++] = i;
+}
+
+static void tinf_init(TinfTables &tt) {
+    tinf_build_fixed_trees(&tt.sltree, &tt.sdtree);
+    tinf_build_bits_base(tt.length_bits, tt.length_base, 4, 3);
+    tinf_build_bits_base(tt.dist_bits,   tt.dist_base,   2, 1);
+    tt.length_bits[28] = 0; tt.length_base[28] = 258;
 }
 
 static int tinf_getbit(TINF_DATA *d) {
@@ -563,24 +554,24 @@ static int tinf_decode_trees(TINF_DATA *d, TINF_TREE *lt, TINF_TREE *dt) {
         int sym = tinf_decode_symbol(d, &code_tree);
         switch (sym) {
         case 16: {
-			u8 prev = lengths[num-1];
-			length = tinf_read_bits(d,2,3);
-			if ((num+length)>(288+32)) return TINF_DATA_ERROR;
-			for (; length; --length) lengths[num++] = prev;
-			break;
-		}
-		case 17: {
-			length = tinf_read_bits(d,3,3);
-			if ((num+length)>(288+32)) return TINF_DATA_ERROR;
-			for (; length; --length) lengths[num++] = 0;
-			break;
-		}
-		case 18: {
-			length = tinf_read_bits(d,7,11);
-			if ((num+length)>(288+32)) return TINF_DATA_ERROR;
-			for (; length; --length) lengths[num++] = 0;
-			break;
-		}
+            u8 prev = lengths[num-1];
+            length = tinf_read_bits(d,2,3);
+            if ((num+length)>(288+32)) return TINF_DATA_ERROR;
+            for (; length; --length) lengths[num++] = prev;
+            break;
+        }
+        case 17: {
+            length = tinf_read_bits(d,3,3);
+            if ((num+length)>(288+32)) return TINF_DATA_ERROR;
+            for (; length; --length) lengths[num++] = 0;
+            break;
+        }
+        case 18: {
+            length = tinf_read_bits(d,7,11);
+            if ((num+length)>(288+32)) return TINF_DATA_ERROR;
+            for (; length; --length) lengths[num++] = 0;
+            break;
+        }
         default: if ((num+1)>(288+32)) return TINF_DATA_ERROR;
                  lengths[num++] = sym; break;
         }
@@ -590,7 +581,8 @@ static int tinf_decode_trees(TINF_DATA *d, TINF_TREE *lt, TINF_TREE *dt) {
     return TINF_OK;
 }
 
-static int tinf_inflate_block_data(TINF_DATA *d, TINF_TREE *lt, TINF_TREE *dt) {
+static int tinf_inflate_block_data(TINF_DATA *d, TINF_TREE *lt, TINF_TREE *dt,
+                                    const TinfTables &tt) {
     while (1) {
         int sym = tinf_decode_symbol(d, lt);
         if (sym == 256) break;
@@ -599,9 +591,9 @@ static int tinf_inflate_block_data(TINF_DATA *d, TINF_TREE *lt, TINF_TREE *dt) {
             *d->dest++ = sym; *d->destLen += 1;
         } else {
             sym -= 257;
-            int length = tinf_read_bits(d, length_bits[sym], length_base[sym]);
+            int length = tinf_read_bits(d, tt.length_bits[sym], tt.length_base[sym]);
             int dist   = tinf_decode_symbol(d, dt);
-            int offs   = tinf_read_bits(d, dist_bits[dist], dist_base[dist]);
+            int offs   = tinf_read_bits(d, tt.dist_bits[dist], tt.dist_base[dist]);
             if ((*d->destLen+length) > d->destSize) return TINF_DATA_ERROR;
             for (int i = 0; i < length; ++i) d->dest[i] = d->dest[i-offs];
             d->dest += length; *d->destLen += length;
@@ -623,22 +615,16 @@ static int tinf_inflate_uncompressed_block(TINF_DATA *d) {
     return TINF_OK;
 }
 
-static void tinf_init() {
-    tinf_build_fixed_trees(&sltree, &sdtree);
-    tinf_build_bits_base(length_bits, length_base, 4, 3);
-    tinf_build_bits_base(dist_bits,   dist_base,   2, 1);
-    length_bits[28] = 0; length_base[28] = 258;
-}
-
-static int tinf_uncompress(void *dest, unsigned *destLen,
+static int tinf_uncompress(TinfTables &tt,
+                            void *dest, unsigned *destLen,
                             const void *source, unsigned sourceLen,
                             const unsigned swapped_btype[3]) {
     TINF_DATA d;
-    d.source    = (const u8 *)source;
-    d.bitcount  = 0;
-    d.dest      = (u8 *)dest;
-    d.destLen   = destLen;
-    d.sourceLen = 0;
+    d.source     = (const u8 *)source;
+    d.bitcount   = 0;
+    d.dest       = (u8 *)dest;
+    d.destLen    = destLen;
+    d.sourceLen  = 0;
     d.sourceSize = sourceLen;
     d.destSize   = *destLen;
     *destLen = 0;
@@ -648,70 +634,15 @@ static int tinf_uncompress(void *dest, unsigned *destLen,
         unsigned btype = tinf_read_bits(&d, 2, 0);
         int res;
         if      (btype == swapped_btype[0]) res = tinf_inflate_uncompressed_block(&d);
-        else if (btype == swapped_btype[1]) res = tinf_inflate_block_data(&d, &sltree, &sdtree);
+        else if (btype == swapped_btype[1]) res = tinf_inflate_block_data(&d, &tt.sltree, &tt.sdtree, tt);
         else if (btype == swapped_btype[2]) {
             if (tinf_decode_trees(&d, &d.ltree, &d.dtree) != TINF_OK) return TINF_DATA_ERROR;
-            res = tinf_inflate_block_data(&d, &d.ltree, &d.dtree);
+            res = tinf_inflate_block_data(&d, &d.ltree, &d.dtree, tt);
         } else return TINF_DATA_ERROR;
         if (res != TINF_OK) return TINF_DATA_ERROR;
     } while (!bfinal);
     return TINF_OK;
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  DAA structures
-// ═══════════════════════════════════════════════════════════════════════════
-
-#pragma pack(4)
-struct daa_t {
-    u8  sign[16];
-    u32 size_offset;
-    u32 version;
-    u32 data_offset;
-    u32 b1;
-    u32 b0;
-    u32 chunksize;
-    u64 isosize;
-    u64 daasize;
-    u8  hdata[16];
-    u32 crc;
-};
-#pragma pack(1)
-struct daa_data_t { u8 n1, n2, n3; };
-#pragma pack()
-
-enum { TYPE_DAA, TYPE_GBI, TYPE_NONE };
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  Endian helpers (parameterised)
-// ═══════════════════════════════════════════════════════════════════════════
-
-static inline void swap32_if_be(u32 *n, int endian) {
-    if (!endian) return;
-    u32 t = *n;
-    *n = ((t&0xff000000)>>24)|((t&0x00ff0000)>>8)|((t&0x0000ff00)<<8)|((t&0x000000ff)<<24);
-}
-static inline void swap64_if_be(u64 *n, int endian) {
-    if (!endian) return;
-    u64 t = *n;
-    *n = ((u64)(t&0xff00000000000000ULL)>>56) | ((u64)(t&0x00ff000000000000ULL)>>40)
-       | ((u64)(t&0x0000ff0000000000ULL)>>24) | ((u64)(t&0x000000ff00000000ULL)>> 8)
-       | ((u64)(t&0x00000000ff000000ULL)<< 8) | ((u64)(t&0x0000000000ff0000ULL)<<24)
-       | ((u64)(t&0x000000000000ff00ULL)<<40) | ((u64)(t&0x00000000000000ffULL)<<56);
-}
-static inline void swap_daa_if_be(daa_t *d, int endian) {
-    if (!endian) return;
-    swap32_if_be(&d->size_offset, 1);
-    swap32_if_be(&d->version, 1);
-    swap32_if_be(&d->data_offset, 1);
-    swap32_if_be(&d->b1, 1);
-    swap32_if_be(&d->b0, 1);
-    swap32_if_be(&d->chunksize, 1);
-    swap64_if_be(&d->isosize, 1);
-    swap64_if_be(&d->daasize, 1);
-    swap32_if_be(&d->crc, 1);
-}
-
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  DAA obfuscation functions
@@ -763,13 +694,16 @@ static void poweriso_is_shit(u8 *chunk, int chunksize) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  Bit-reader for v1.10 index table (static powerisuxn, reset per conversion)
+//  Bit-reader for v1.10 index table
+//  powerisuxn is now passed by reference (stored in DaaContext) instead of
+//  being a static global, making concurrent calls fully independent.
 // ═══════════════════════════════════════════════════════════════════════════
-static int powerisuxn = 0;
+
+static const u8 powerisux[] = "\x0A\x35\x2D\x3F\x08\x33\x09\x15";
 
 static unsigned daa2iso_read_bits(unsigned bits, const u8 *in, unsigned in_bits,
-                                   unsigned lame, int lame_increase) {
-    static const u8 powerisux[] = "\x0A\x35\x2D\x3F\x08\x33\x09\x15";
+                                   unsigned lame, int lame_increase,
+                                   int &powerisuxn) {
     unsigned seek_bits, rem, seek = 0, ret = 0;
     u32 mask = 0xffffffff;
     if (bits > 32) return 0;
@@ -790,13 +724,8 @@ static unsigned daa2iso_read_bits(unsigned bits, const u8 *in, unsigned in_bits,
     return ret & mask;
 }
 
-// Helper to reset the bit-reader's internal counter before a new conversion.
-static void reset_bit_reader() {
-    powerisuxn = 0;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
-//  Case‑insensitive suffix check
+//  Case-insensitive suffix check
 // ═══════════════════════════════════════════════════════════════════════════
 
 static u8 *find_ext(u8 *fname, const char *ext) {
@@ -812,28 +741,35 @@ static u8 *find_ext(u8 *fname, const char *ext) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  Library context and helpers
+//  Library context
+//  TinfTables and powerisuxn are per-instance — no shared mutable state.
 // ═══════════════════════════════════════════════════════════════════════════
 
 struct DaaContext {
-    FILE       *fdi          = nullptr;
-    FILE       *fdo          = nullptr;
+    FILE       *fdi            = nullptr;
+    FILE       *fdo            = nullptr;
     std::string outputPath;
 
-    int         multi        = 0;
-    int         multinum     = 0;
+    int         multi          = 0;
+    int         multinum       = 0;
     char       *multi_filename = nullptr;
 
-    int         endian       = 0;
-    int         daagbi       = TYPE_DAA;
+    int         endian         = 0;
+    int         daagbi         = TYPE_DAA;
     unsigned    swapped_btype[3] = {0, 1, 2};
 
-    u8         *in           = nullptr;
-    u32         insz         = 0;
-    u8         *out_buf      = nullptr;
-    u32         outsz        = 0;
+    u8         *in             = nullptr;
+    u32         insz           = 0;
+    u8         *out_buf        = nullptr;
+    u32         outsz          = 0;
 
-    CLzmaDec    lzma         = {};
+    CLzmaDec    lzma           = {};
+
+    // Per-instance tinflate tables (was static globals — race condition fix)
+    TinfTables  tinf           = {};
+
+    // Per-instance bit-reader counter (was static global — race condition fix)
+    int         powerisuxn     = 0;
 
     std::atomic<size_t> *completedBytes = nullptr;
 
@@ -864,15 +800,15 @@ static FILE *ctx_next_volume(DaaContext &ctx) {
     if (!fd) throw DaaError("cannot open next volume");
 
     daa_t daa;
-    if (fread(&daa, 1, sizeof(daa), fd) != sizeof(daa)) { 
-        fclose(fd); throw DaaError("volume header read error"); 
+    if (fread(&daa, 1, sizeof(daa), fd) != sizeof(daa)) {
+        fclose(fd); throw DaaError("volume header read error");
     }
     swap_daa_if_be(&daa, ctx.endian);
     if (strncmp((char*)daa.sign,"DAA VOL",16) && strncmp((char*)daa.sign,"GBI VOL",16)) {
         fclose(fd); throw DaaError("wrong DAA VOL signature");
     }
-    if (fseek(fd, daa.size_offset, SEEK_SET)) { 
-        fclose(fd); throw DaaError("fseek on volume"); 
+    if (fseek(fd, daa.size_offset, SEEK_SET)) {
+        fclose(fd); throw DaaError("fseek on volume");
     }
     ctx.multinum++;
     return fd;
@@ -882,24 +818,22 @@ static void ctx_read(DaaContext &ctx, void *data, unsigned size) {
     if (size == 0) return;
     unsigned len = (unsigned)fread(data, 1, size, ctx.fdi);
     if (len == size) return;
-    
+
     if (!ctx.multi) throw DaaError("incomplete input file");
-    
+
     fclose(ctx.fdi);
     ctx.fdi = ctx_next_volume(ctx);
     ctx_read(ctx, (u8*)data + len, size - len);
 }
 
 static void ctx_alloc(u8 **data, unsigned wantsize, unsigned *currsize) {
-
     unsigned actual_wantsize = wantsize + 16;
     if (actual_wantsize <= *currsize && *data) return;
 
     u8 *tmp = (u8*)realloc(*data, actual_wantsize);
     if (!tmp) throw DaaError("out of memory");
-    
+
     memset(tmp + wantsize, 0, 16);
-    
     *data = tmp;
     *currsize = actual_wantsize;
 }
@@ -919,27 +853,28 @@ bool convertDaaToIso(const std::string &inputFile,
                      std::atomic<size_t> *completedBytes)
 {
     if (g_operationCancelled.load()) return false;
- 
-    reset_bit_reader();
-    tinf_init();
- 
+
     DaaContext ctx;
     ctx.outputPath     = outputFile;
     ctx.completedBytes = completedBytes;
- 
+
+    // Initialise per-instance state (replaces reset_bit_reader / tinf_init globals)
+    ctx.powerisuxn = 0;
+    tinf_init(ctx.tinf);
+
     { int e = 1; ctx.endian = (*(char*)&e) ? 0 : 1; }
- 
+
     ctx.fdi = fopen(inputFile.c_str(), "rb");
     if (!ctx.fdi) return false;
- 
+
     ctx.fdo = fopen(outputFile.c_str(), "wb");
     if (!ctx.fdo) return daa_fail(ctx);
- 
+
     try {
         daa_t daa;
         ctx_read(ctx, &daa, sizeof(daa));
         swap_daa_if_be(&daa, ctx.endian);
- 
+
         if (!strncmp((char*)daa.sign,"DAA",16) || !strncmp((char*)daa.sign,"\xb8\xbd\xb6",3))
             ctx.daagbi = TYPE_DAA;
         else if (!strncmp((char*)daa.sign,"GBI",16))
@@ -949,18 +884,18 @@ bool convertDaaToIso(const std::string &inputFile,
                 throw DaaError("must choose the first DAA file, not a volume");
             throw DaaError("unknown DAA signature");
         }
- 
+
         if ((daa.version != 0x100 && daa.version != 0x110) || daa.b1 != 1)
             throw DaaError("unsupported DAA version");
- 
+
         LzmaDec_Construct(&ctx.lzma);
- 
+
         daa_data_t *daa_data = nullptr;
         u32 daas = 0, daas_mem = 0, daa_dataz = 0;
         int ztype=1, bitpos=0, bitsize=0, bittype=0;
         int dolame=0, dolzma=0, dolamebits=0, lzma_filter=0, ver110_btype=0;
         u32 ver110_y = 0;
- 
+
         if (daa.version == 0x100) {
             daas_mem = daa.data_offset - daa.size_offset;
             daa_data = (daa_data_t*)malloc(daas_mem + 16);
@@ -970,7 +905,7 @@ bool convertDaaToIso(const std::string &inputFile,
             ver110_y = daa.chunksize;
             daa.data_offset &= 0xffffff;
             daa.chunksize    = (daa.chunksize & 0xfff) << 14;
- 
+
             bittype = daa.hdata[5] & 7;
             bitsize = daa.hdata[5] >> 3;
             if (bitsize) bitsize += 10;
@@ -979,42 +914,42 @@ bool convertDaaToIso(const std::string &inputFile,
                 for (bitsize=0; len>(unsigned)bittype; bitsize++, len>>=1);
             }
             daas_mem = daa.data_offset - daa.size_offset;
- 
+
             u32 bits_per_entry = (u32)(bittype + bitsize);
             if (bits_per_entry == 0) throw DaaError("invalid header bits");
             daas = (u32)(((u64)daas_mem << 3) / bits_per_entry);
- 
+
             if (ver110_y & 0x4000) {
                 daas_mem += 0x10000;
                 daa_dataz = *(u32*)(daa.hdata + 1);
                 swap32_if_be(&daa_dataz, ctx.endian);
             }
- 
+
             daa_data = (daa_data_t*)malloc(daas_mem + 16);
             if (!daa_data) throw DaaError("out of memory (daa_data v110)");
             memset(daa_data, 0, daas_mem + 16);
- 
+
             dolamebits   = (ver110_y & 0x20000)   ? 1 : 0;
             dolame       = (ver110_y & 0x8000000)  ? 1 : 0;
             dolzma       = (ver110_y & 0x100000)   ? 1 : 0;
- 
+
             ver110_btype = (ver110_y >> 0x17) & 3;
             if (ctx.daagbi == TYPE_GBI) ver110_btype ^= 1;
- 
+
             if (dolzma) {
                 lzma_filter = daa.hdata[6];
                 if (LzmaDec_Allocate(&ctx.lzma, daa.hdata + 7, LZMA_PROPS_SIZE, &g_Alloc) != SZ_OK)
                     throw DaaError("LZMA property allocation failed");
             }
         }
- 
+
         switch (ver110_btype) {
             case 0: ctx.swapped_btype[0]=0; ctx.swapped_btype[1]=1; ctx.swapped_btype[2]=2; break;
             case 1: ctx.swapped_btype[0]=1; ctx.swapped_btype[1]=2; ctx.swapped_btype[2]=0; break;
             case 2: ctx.swapped_btype[0]=0; ctx.swapped_btype[1]=2; ctx.swapped_btype[2]=1; break;
             case 3: ctx.swapped_btype[0]=1; ctx.swapped_btype[1]=0; ctx.swapped_btype[2]=2; break;
         }
- 
+
         while ((u64)ftell(ctx.fdi) < daa.size_offset) {
             u32 rec_type, rec_len;
             ctx_read(ctx, &rec_type, 4); swap32_if_be(&rec_type, ctx.endian);
@@ -1023,7 +958,7 @@ bool convertDaaToIso(const std::string &inputFile,
             else if (rec_type == 3) throw DaaError("password-protected DAA not supported");
             if (fseek(ctx.fdi, rec_len - 8, SEEK_CUR)) throw DaaError("fseek on pre-data record");
         }
- 
+
         {
             fseek(ctx.fdi, 0, SEEK_END);
             u64 tot = (u64)ftell(ctx.fdi);
@@ -1043,54 +978,54 @@ bool convertDaaToIso(const std::string &inputFile,
                 ctx.multi_filename[plen] = '\0';
             }
         }
- 
+
         if (fseek(ctx.fdi, daa.size_offset, SEEK_SET)) throw DaaError("fseek to size_offset");
- 
+
         if (daa_dataz) {
             ctx_alloc(&ctx.in, daa_dataz, &ctx.insz);
             ctx_read(ctx, ctx.in, daa_dataz);
             unsigned destLen = daas_mem;
-            if (tinf_uncompress((u8*)daa_data, &destLen, ctx.in, daa_dataz, ctx.swapped_btype) != TINF_OK)
+            if (tinf_uncompress(ctx.tinf, (u8*)daa_data, &destLen, ctx.in, daa_dataz, ctx.swapped_btype) != TINF_OK)
                 throw DaaError("failed to decompress index table");
             u32 bits_per_entry = (u32)(bittype + bitsize);
             daas = (u32)(((u64)destLen << 3) / bits_per_entry);
         } else {
             ctx_read(ctx, daa_data, daas_mem);
         }
- 
+
         if (ctx.daagbi == TYPE_GBI) gburner_lame((u8*)daa_data, daas_mem, daa.crc & 0xff);
         if (dolame)                  poweriso_lame((u8*)daa_data, daas_mem, daa.isosize);
- 
+
         if (fseek(ctx.fdi, daa.data_offset, SEEK_SET)) throw DaaError("fseek to data_offset");
- 
+
         ctx_alloc(&ctx.out_buf, daa.chunksize, &ctx.outsz);
         u64  tot        = 0;
         u32  last_chunk = daas - 1;
- 
+
         for (u32 i = 0; i < daas; i++) {
             if (g_operationCancelled.load()) {
                 free(daa_data);
                 return daa_fail(ctx);
             }
- 
+
             u32 len;
             if (daa.version == 0x100) {
                 len   = ((u32)daa_data[i].n1<<16) | daa_data[i].n2 | ((u32)daa_data[i].n3<<8);
                 ztype = (len >= daa.chunksize) ? -1 : 1;
             } else {
-                len   = daa2iso_read_bits(bitsize,(u8*)daa_data,bitpos,dolamebits,0);
+                len   = daa2iso_read_bits(bitsize,(u8*)daa_data,bitpos,dolamebits,0,ctx.powerisuxn);
                 bitpos += bitsize;
                 len  += LZMA_PROPS_SIZE;
-                ztype = (int)daa2iso_read_bits(bittype,(u8*)daa_data,bitpos,dolamebits,1);
+                ztype = (int)daa2iso_read_bits(bittype,(u8*)daa_data,bitpos,dolamebits,1,ctx.powerisuxn);
                 bitpos += bittype;
                 if (len >= daa.chunksize) ztype = -1;
             }
- 
+
             if (len > 0x1000000) throw DaaError("excessive chunk length");
- 
+
             ctx_alloc(&ctx.in, len, &ctx.insz);
             ctx_read(ctx, ctx.in, len);
- 
+
             u32 outlen;
             switch (ztype) {
                 case -1:
@@ -1105,7 +1040,7 @@ bool convertDaaToIso(const std::string &inputFile,
                     break;
                 case 1: {
                     unsigned destLen = ctx.outsz;
-                    if (tinf_uncompress(ctx.out_buf, &destLen, ctx.in, len, ctx.swapped_btype) != TINF_OK)
+                    if (tinf_uncompress(ctx.tinf, ctx.out_buf, &destLen, ctx.in, len, ctx.swapped_btype) != TINF_OK)
                         throw DaaError("INFLATE decompression failed");
                     outlen = destLen;
                     break;
@@ -1113,7 +1048,7 @@ bool convertDaaToIso(const std::string &inputFile,
                 default:
                     throw DaaError("unknown compression type");
             }
- 
+
             if (i == last_chunk) {
                 if ((tot + outlen) > daa.isosize)
                     outlen = (u32)(daa.isosize - tot);
@@ -1121,22 +1056,22 @@ bool convertDaaToIso(const std::string &inputFile,
                 if (outlen != daa.chunksize)
                     throw DaaError("chunk size mismatch");
             }
- 
+
             if (fwrite(ctx.out_buf, 1, outlen, ctx.fdo) != outlen)
                 throw DaaError("write failed");
- 
+
             tot += outlen;
             if (completedBytes)
                 completedBytes->fetch_add(outlen, std::memory_order_relaxed);
         }
- 
+
         if (tot != daa.isosize) throw DaaError("output size mismatch");
- 
+
         free(daa_data);
         fclose(ctx.fdo); ctx.fdo = nullptr;
         fclose(ctx.fdi); ctx.fdi = nullptr;
         return true;
- 
+
     } catch (const DaaError &e) {
         fprintf(stderr, "\nError: %s\n", e.msg);
         return daa_fail(ctx);

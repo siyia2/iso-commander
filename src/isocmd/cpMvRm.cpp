@@ -1,9 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
+#include "../globals.h"
 #include "../display.h"
 #include "../themes.h"
+#include "../pausePrompt.h"
 #include "../readline.h"
+#include "../inputHandling.h"
+#include "../sort.h"
+#include "../history.h"
+#include "../verbose.h"
+#include "../stringManipulation.h"
+
+void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages);
 
 /**
  * @brief Constructs a list of formatted strings representing ISO files for display.
@@ -85,6 +93,9 @@ static std::string validateLinuxPath(const std::string& path) {
 
     return "";
 }
+
+std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std::unordered_set<std::string>& uniqueErrorMessages, const std::string& promptPrefix, 
+const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn);
 
 /**
  * @brief Orchestrates the user confirmation prompt for file deletion operations.
@@ -184,6 +195,8 @@ bool& umountMvRmBreak, bool& abortDel) {
         }
     }
 }
+
+void helpSearches(bool isCpMv, bool import2ISO);
 
 /**
  * @brief Prompts the user for a destination directory for Copy or Move operations.
@@ -531,6 +544,8 @@ std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful,
                        verboseIsos, verboseErrors, completedTasks, failedTasks, operationSuccessful, batchInsertMessages);
     return success;
 }
+
+void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname);
 
 /**
  * @brief High-level handler that iterates through ISO files to perform CP, MV, or RM.

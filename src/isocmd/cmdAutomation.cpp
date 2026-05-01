@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
-#include "../themes.h"
+#include "../globals.h"
+#include "../mount.h"
+#include "../umount.h"
+#include "../inputHandling.h"
 
 // ─── Palette helpers ─────────────────────────────────────────────────────────
 
