@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <cstdio>
+
 // Project Headers
 #include "../ccd.h"
 #include "../chd.h"

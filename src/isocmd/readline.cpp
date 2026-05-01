@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C / System Headers
+#include <cstdio>
 #include <sys/stat.h>
 
 // Third-Party Library Headers
