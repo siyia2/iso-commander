@@ -8,7 +8,7 @@
 #include "../inputHandling.h"
 #include "../pausePrompt.h"
 #include "../readline.h"
-#include "../searches.h"
+#include "../search.h"
 #include "../state.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
