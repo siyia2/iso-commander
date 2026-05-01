@@ -37,7 +37,6 @@
 #define _FILE_OFFSET_BITS 64
 
 #include "../daa2iso.h"
-#include "../concurrency.h"
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  LZMA decoder (Igor Pavlov / 7-zip SDK, minimal subset)
