@@ -5,6 +5,7 @@
 #include "../themes.h"
 #include "../convert.h"
 #include "../caches.h"
+#include "../concurrency.h"
 #include "../stringManipulation.h"
 
 /**
@@ -55,7 +56,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     std::vector<std::string> localSuccessMsgs, localFailedMsgs, localSkippedMsgs;
 
     auto batchInsertMessages = [&]() {
-        std::lock_guard<std::mutex> lock(globalSetsMutex);
+        std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
         if (!localSuccessMsgs.empty()) {
             successOuts.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
             localSuccessMsgs.clear();
@@ -85,7 +86,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             localFailedMsgs.push_back(std::move(msg));
 
             {
-                std::lock_guard<std::mutex> lock(globalSetsMutex);
+                std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
                 auto& cache = modeNrg ? GlobalCaches::nrgFilesCache :
                               (modeMdf ? GlobalCaches::mdfMdsFilesCache :
                                (modeChd ? GlobalCaches::chdFilesCache :

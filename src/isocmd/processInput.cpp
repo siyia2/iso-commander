@@ -4,6 +4,7 @@
 #include "../mount.h"
 #include "../readline.h"
 #include "../umount.h"
+#include "../concurrency.h"
 #include "../process.h"
 #include "../tokenize.h"
 #include "../pausePrompt.h"
@@ -66,7 +67,7 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
 
     ThreadPool& pool = getStaticThreadPool();
     const size_t poolSize = pool.threadCount();
-    const size_t cap = isUnmount ? UMOUNT_THREAD_CAP : MOUNT_THREAD_CAP;
+    const size_t cap = isUnmount ? GlobalConcurrency::UMOUNT_THREAD_CAP : GlobalConcurrency::MOUNT_THREAD_CAP;
     size_t numThreads = std::max(size_t(2), std::min({selectedIndices.size(), cap, poolSize}));
 
     if ((selectedIndices.size() + numThreads - 1) / numThreads > 100)
@@ -238,7 +239,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
 
     ThreadPool& pool = getStaticThreadPool();
     const size_t poolSize = pool.threadCount();
-    const size_t cap = isDelete ? RM_THREAD_CAP : CPMV_THREAD_CAP;
+    const size_t cap = isDelete ? GlobalConcurrency::RM_THREAD_CAP : GlobalConcurrency::CPMV_THREAD_CAP;
     const size_t numThreads = std::max(size_t(2), std::min({processedIndices.size(), cap, poolSize}));
 
     std::vector<std::vector<int>> indexChunks = groupFilesIntoChunksForCpMvRm(processedIndices, isoFiles, numThreads, isDelete);
@@ -423,7 +424,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 
     ThreadPool& pool = getStaticThreadPool();
     const size_t poolSize = pool.threadCount();
-    const size_t numThreads = std::max(size_t(2), std::min({processedIndices.size(), CONV_THREAD_CAP, poolSize}));
+    const size_t numThreads = std::max(size_t(2), std::min({processedIndices.size(), GlobalConcurrency::CONV_THREAD_CAP, poolSize}));
 
     std::vector<std::vector<size_t>> indexChunks;
     const size_t totalFiles = processedIndices.size();

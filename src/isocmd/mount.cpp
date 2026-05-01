@@ -2,6 +2,7 @@
 
 #include "../threadpool.h"
 #include "../mount.h"
+#include "../concurrency.h"
 #include "../stringManipulation.h"
 
 /**
@@ -177,7 +178,7 @@ void mountIsoFiles(
                 auto [dir, file] = extractDirectoryAndFilename(isoFile, "mount");
                 fails.push_back(formatter.formatError(dir, file, "needsRoot"));
             }
-            std::lock_guard<std::mutex> lock(globalSetsMutex);
+            std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
             mountedFails.insert(fails.begin(), fails.end());
         }
         failedTasks->fetch_add(isoFiles.size(), std::memory_order_relaxed);
@@ -190,7 +191,7 @@ void mountIsoFiles(
     libmnt_context* ctx = mnt_new_context();
     if (!ctx) {
         if (!silentMode) {
-            std::lock_guard<std::mutex> lock(globalSetsMutex);
+            std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
             mountedFails.insert("\033[1;91mFailed to create mount context.\033[0m");
         }
         return;
@@ -218,7 +219,7 @@ void mountIsoFiles(
 
     auto flushBuffers = [&]() {
         if (silentMode) return;
-        std::lock_guard<std::mutex> lock(globalSetsMutex);
+        std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
         mountedFiles.insert(tempMountedFiles.begin(), tempMountedFiles.end());
         skippedMessages.insert(tempSkippedMessages.begin(), tempSkippedMessages.end());
         mountedFails.insert(tempMountedFails.begin(), tempMountedFails.end());

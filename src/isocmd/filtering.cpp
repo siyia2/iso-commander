@@ -4,6 +4,7 @@
 #include "../threadpool.h"
 #include "../filtering.h"
 #include "../themes.h"
+#include "../concurrency.h"
 #include "../caches.h"
 #include "../history.h"
 #include "../readline.h"
@@ -157,7 +158,7 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
     const size_t numThreads = std::min({
         pool.threadCount(), 
         files.size(), 
-        static_cast<size_t>(FILTER_THREAD_CAP)
+        static_cast<size_t>(GlobalConcurrency::FILTER_THREAD_CAP)
     });
     
     const size_t chunkSize  = (files.size() + numThreads - 1) / numThreads;

@@ -3,6 +3,7 @@
 #include "../globals.h"
 #include "../display.h"
 #include "../themes.h"
+#include "../concurrency.h"
 #include "../pausePrompt.h"
 #include "../readline.h"
 #include "../inputHandling.h"
@@ -599,7 +600,7 @@ std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::strin
 
     auto batchInsertMessages = [&]() {
         if (verboseIsos.size() >= BATCH_SIZE || verboseErrors.size() >= BATCH_SIZE) {
-            std::lock_guard<std::mutex> lock(globalSetsMutex);
+            std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
             operationErrors.insert(verboseErrors.begin(), verboseErrors.end());
             operationIsos.insert(verboseIsos.begin(), verboseIsos.end());
             verboseIsos.clear();
@@ -747,7 +748,7 @@ std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::strin
     executeOperation(isoFilesToOperate);
 
     {
-        std::lock_guard<std::mutex> lock(globalSetsMutex);
+        std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
         operationErrors.insert(verboseErrors.begin(), verboseErrors.end());
         operationIsos.insert(verboseIsos.begin(), verboseIsos.end());
     }

@@ -4,6 +4,7 @@
 #include "../themes.h"
 #include "../caches.h"
 #include "../main.h"
+#include "../concurrency.h"
 #include "../settings.h"
 #include "../readline.h"
 #include "../inputHandling.h"

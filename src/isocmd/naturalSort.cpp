@@ -3,6 +3,7 @@
 #include "../display.h"
 #include "../threadpool.h"
 #include "../caches.h"
+#include "../concurrency.h"
 
 /**
  * @brief Compares two strings using natural order (e.g., "file2.txt" < "file10.txt").
@@ -74,7 +75,7 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
     bool namesOnly = displayConfig::toggleNamesOnly;
     
     ThreadPool& pool = getStaticThreadPool();
-    const size_t numThreads = std::min(pool.threadCount(), SORT_THREAD_CAP);
+    const size_t numThreads = std::min(pool.threadCount(), GlobalConcurrency::SORT_THREAD_CAP);
     
     const size_t n = files.size();
     size_t numChunks = std::min<size_t>(numThreads * 2, n / 1000 + 1);

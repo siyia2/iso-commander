@@ -4,6 +4,7 @@
 #include "../display.h"
 #include "../umount.h"
 #include "../themes.h"
+#include "../concurrency.h"
 #include "../stringManipulation.h"
 
 /**
@@ -75,7 +76,7 @@ void unmountISO(
 
     auto flushTemporaryBuffers = [&]() {
         if (silentMode) return;
-        std::lock_guard<std::mutex> lock(globalSetsMutex);
+        std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
         if (!successMessages.empty()) {
             unmountedFiles.insert(successMessages.begin(), successMessages.end());
             successMessages.clear();

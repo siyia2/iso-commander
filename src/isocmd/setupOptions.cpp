@@ -2,6 +2,7 @@
 
 #include "../display.h"
 #include "../themes.h"
+#include "../concurrency.h"
 #include "../settings.h"
 #include "../caches.h"
 #include "../globals.h"
@@ -118,15 +119,15 @@ void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& c
     
     MAX_HISTORY_LINES         = getVal("folder_path_history_lines",    30);
     MAX_HISTORY_PATTERN_LINES = getVal("filter_history_lines",         15);
-    MAX_USEFUL_THREADS        = getVal("combined_thread_cap",               32);
-    MOUNT_THREAD_CAP          = getVal("thread_cap_for_mount",            16);
-    UMOUNT_THREAD_CAP         = getVal("thread_cap_for_umount",           32); 
-    CPMV_THREAD_CAP           = getVal("thread_cap_for_cp_mv",             8);
-    RM_THREAD_CAP             = getVal("thread_cap_for_rm",               32);
-    CONV_THREAD_CAP           = getVal("thread_cap_for_convert2iso",       8);
-    CLEAN_THREAD_CAP          = getVal("thread_cap_for_database_cleanup", 16);
-    SORT_THREAD_CAP           = getVal("thread_cap_for_list_sorting",      4);
-    FILTER_THREAD_CAP         = getVal("thread_cap_for_list_filtering",    4);
+    GlobalConcurrency::MAX_USEFUL_THREADS        = getVal("combined_thread_cap",               32);
+    GlobalConcurrency::MOUNT_THREAD_CAP          = getVal("thread_cap_for_mount",            16);
+    GlobalConcurrency::UMOUNT_THREAD_CAP         = getVal("thread_cap_for_umount",           32); 
+    GlobalConcurrency::CPMV_THREAD_CAP           = getVal("thread_cap_for_cp_mv",             8);
+    GlobalConcurrency::RM_THREAD_CAP             = getVal("thread_cap_for_rm",               32);
+    GlobalConcurrency::CONV_THREAD_CAP           = getVal("thread_cap_for_convert2iso",       8);
+    GlobalConcurrency::CLEAN_THREAD_CAP          = getVal("thread_cap_for_database_cleanup", 16);
+    GlobalConcurrency::SORT_THREAD_CAP           = getVal("thread_cap_for_list_sorting",      4);
+    GlobalConcurrency::FILTER_THREAD_CAP         = getVal("thread_cap_for_list_filtering",    4);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../globals.h"
+#include "../concurrency.h"
 #include "../mdf.h"
 #include "../ccd.h"
 

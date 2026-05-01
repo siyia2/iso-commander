@@ -8,6 +8,7 @@
 #include "../databaseOps.h"
 #include "../pausePrompt.h"
 #include "../inputHandling.h"
+#include "../concurrency.h"
 
 // Local ISO Database mutex
 namespace {
@@ -77,7 +78,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
 
         const size_t numThread = std::min({
             pool.threadCount(),
-            static_cast<size_t>(CLEAN_THREAD_CAP),
+            static_cast<size_t>(GlobalConcurrency::CLEAN_THREAD_CAP),
             cache.size()
         });
         const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
