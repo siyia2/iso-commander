@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../threadpool.h"
+#include "../caches.h"
 #include "../themes.h"
 #include "../searches.h"
 #include "../readline.h"
@@ -11,6 +12,7 @@
 #include "../pausePrompt.h"
 #include "../inputHandling.h"
 
+std::mutex couNtMutex;
 
 /**
  * @file database_operations.cpp
@@ -425,28 +427,28 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
     if (modeDaa) {
         extensions = {".daa", ".gbi"};
         cacheType = "DAA/GBI";
-        cacheIsEmpty = daaGbiFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(daaGbiFilesCache);
+        cacheIsEmpty = GlobalCaches::daaGbiFilesCache.empty();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalCaches::daaGbiFilesCache);
     } else if (modeChd) {
         extensions = {".chd"};
         cacheType = "CHD";
-        cacheIsEmpty = chdFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(chdFilesCache);
+        cacheIsEmpty = GlobalCaches::chdFilesCache.empty();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalCaches::chdFilesCache);
     } else if (modeMdf) {
         extensions = {".mdf"};
         cacheType = "MDF";
-        cacheIsEmpty = mdfMdsFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(mdfMdsFilesCache);
+        cacheIsEmpty = GlobalCaches::mdfMdsFilesCache.empty();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalCaches::mdfMdsFilesCache);
     } else if (modeNrg) {
         extensions = {".nrg"};
         cacheType = "NRG";
-        cacheIsEmpty = nrgFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(nrgFilesCache);
+        cacheIsEmpty = GlobalCaches::nrgFilesCache.empty();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalCaches::nrgFilesCache);
     } else {
         extensions = {".bin", ".img"};
         cacheType = "BIN/IMG";
-        cacheIsEmpty = binImgFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(binImgFilesCache);
+        cacheIsEmpty = GlobalCaches::binImgFilesCache.empty();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalCaches::binImgFilesCache);
     }
 
     if (cacheIsEmpty) {
@@ -592,15 +594,15 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                         
                         bool isInCache = false;
                         if (mode == "nrg") {
-                            isInCache = (std::find(nrgFilesCache.begin(), nrgFilesCache.end(), fileName) != nrgFilesCache.end());
+                            isInCache = (std::find(GlobalCaches::nrgFilesCache.begin(), GlobalCaches::nrgFilesCache.end(), fileName) != GlobalCaches::nrgFilesCache.end());
                         } else if (mode == "mdf") {
-                            isInCache = (std::find(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), fileName) != mdfMdsFilesCache.end());
+                            isInCache = (std::find(GlobalCaches::mdfMdsFilesCache.begin(), GlobalCaches::mdfMdsFilesCache.end(), fileName) != GlobalCaches::mdfMdsFilesCache.end());
                         } else if (mode == "bin") {
-                            isInCache = (std::find(binImgFilesCache.begin(), binImgFilesCache.end(), fileName) != binImgFilesCache.end());
+                            isInCache = (std::find(GlobalCaches::binImgFilesCache.begin(), GlobalCaches::binImgFilesCache.end(), fileName) != GlobalCaches::binImgFilesCache.end());
                         } else if (mode == "chd") {
-                            isInCache = (std::find(chdFilesCache.begin(), chdFilesCache.end(), fileName) != chdFilesCache.end());
+                            isInCache = (std::find(GlobalCaches::chdFilesCache.begin(), GlobalCaches::chdFilesCache.end(), fileName) != GlobalCaches::chdFilesCache.end());
                         } else if (mode == "daa") {
-                            isInCache = (std::find(daaGbiFilesCache.begin(), daaGbiFilesCache.end(), fileName) != daaGbiFilesCache.end());
+                            isInCache = (std::find(GlobalCaches::daaGbiFilesCache.begin(), GlobalCaches::daaGbiFilesCache.end(), fileName) != GlobalCaches::daaGbiFilesCache.end());
                         }
                         
                         if (!isInCache && localFileNames.insert(fileName).second) {
@@ -666,20 +668,20 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
     
     std::vector<std::string>* currentCache = nullptr;
     if (mode == "bin") {
-        currentCacheOld = binImgFilesCache.size();
-        currentCache = &binImgFilesCache;
+        currentCacheOld = GlobalCaches::binImgFilesCache.size();
+        currentCache = &GlobalCaches::binImgFilesCache;
     } else if (mode == "mdf") {
-        currentCacheOld = mdfMdsFilesCache.size();
-        currentCache = &mdfMdsFilesCache;
+        currentCacheOld = GlobalCaches::mdfMdsFilesCache.size();
+        currentCache = &GlobalCaches::mdfMdsFilesCache;
     } else if (mode == "nrg") {
-        currentCacheOld = nrgFilesCache.size();
-        currentCache = &nrgFilesCache;
+        currentCacheOld = GlobalCaches::nrgFilesCache.size();
+        currentCache = &GlobalCaches::nrgFilesCache;
     } else if (mode == "chd") {
-        currentCacheOld = chdFilesCache.size();
-        currentCache = &chdFilesCache;
+        currentCacheOld = GlobalCaches::chdFilesCache.size();
+        currentCache = &GlobalCaches::chdFilesCache;
     } else if (mode == "daa") {
-        currentCacheOld = daaGbiFilesCache.size();
-        currentCache = &daaGbiFilesCache;
+        currentCacheOld = GlobalCaches::daaGbiFilesCache.size();
+        currentCache = &GlobalCaches::daaGbiFilesCache;
     } else {
         restoreInput();
         return {};
@@ -780,7 +782,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
                                                   std::atomic<bool>& isImportRunning) {
     
     if (input == "?stats") {
-        displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
+        displayDatabaseStatistics(databaseFilePath, maxDatabaseSize);
         return true;
     }
     if (input == "!clr_paths" || input == "!clr_filter") {
@@ -799,7 +801,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
     if (input == "ls") {
         list = true;
         ramCacheList(files, list, fileExtension,
-                     binImgFilesCache, mdfMdsFilesCache, nrgFilesCache, chdFilesCache, daaGbiFilesCache,
+                     GlobalCaches::binImgFilesCache, GlobalCaches::mdfMdsFilesCache, GlobalCaches::nrgFilesCache, GlobalCaches::chdFilesCache, GlobalCaches::daaGbiFilesCache,
                      modeMdf, modeNrg, modeChd, modeDaa);
         if (!files.empty())
             selectForImageFiles(fileType, files, newISOFound, list, isImportRunning);
@@ -848,12 +850,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
     const bool modeDaa = (fileType == "daa");
 
     std::vector<std::string> files;
-    files.reserve(100);
-    binImgFilesCache.reserve(100);
-    mdfMdsFilesCache.reserve(100);
-    nrgFilesCache.reserve(100);
-    chdFilesCache.reserve(100);
-    daaGbiFilesCache.reserve(100);
+    files.reserve(1000);
 
     auto initIterationState = [&]() {
         enable_ctrl_d();

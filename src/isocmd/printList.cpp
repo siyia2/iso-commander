@@ -3,6 +3,7 @@
 #include "../globals.h"
 #include "../display.h"
 #include "../filtering.h"
+#include "../caches.h"
 #include "../themes.h"
 #include "../umount.h"
 #include "../stringManipulation.h"
@@ -65,7 +66,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     
     IntBuf<> ib1, ib2, ib3, ib4; 
     const size_t maxDigits = ib1.format(endIndex).length();
-    const bool isIsoWithAutoUpdate = (isImportRunning.load() && isIsoMode && !globalIsoFileList.empty());
+    const bool isIsoWithAutoUpdate = (isImportRunning.load() && isIsoMode && !GlobalCaches::globalIsoFileList.empty());
 
     // --- Output Buffering ---
     std::string output;

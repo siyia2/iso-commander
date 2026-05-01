@@ -3,6 +3,7 @@
 #include "../display.h"
 #include "../threadpool.h"
 #include "../themes.h"
+#include "../caches.h"
 #include "../history.h"
 #include "../databaseOps.h"
 #include "../pausePrompt.h"
@@ -34,7 +35,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         int fd = open(databaseFilePath.c_str(), O_RDONLY);
         if (fd == -1) {
             if (errno == ENOENT) {
-                std::lock_guard<std::mutex> lock(updateListMutex);
+                std::lock_guard<std::mutex> lock(GlobalCaches::updateListMutex);
                 globalIsoFileList.clear();
             }
             return;
@@ -143,7 +144,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         isoListDirty.store(true);
     }
     if (anyRemoved) {
-        std::lock_guard<std::mutex> lock(updateListMutex);
+        std::lock_guard<std::mutex> lock(GlobalCaches::updateListMutex);
         globalIsoFileList = std::move(retained);
     }
 }
@@ -543,9 +544,7 @@ void loadFromDatabase(std::vector<std::string>& outList) {
  * @param transformationCache Map of transformation cache entries
  * @param globalIsoFileList Vector of ISO files in memory
  */
-void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize, 
-                                const std::unordered_map<std::string, std::string>& transformationCache, 
-                                const std::vector<std::string>& globalIsoFileList) {
+void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
     clearScrollBuffer();
@@ -580,15 +579,15 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
         std::cout << "\n" << accent << "=== Buffered Entries ===" << reset << "\n";
         
         std::cout << str << "\nSTR → RAM: " << data
-                  << (transformationCache.size() + cachedParsesForUmount.size()) << "\n";
+                  << (GlobalCaches::transformationCache.size() + GlobalCaches::cachedParsesForUmount.size()) << "\n";
         
-        std::cout << "\n" << label << "ISO → RAM: " << data << globalIsoFileList.size() << "\n";
+        std::cout << "\n" << label << "ISO → RAM: " << data << GlobalCaches::globalIsoFileList.size() << "\n";
         
-        std::cout << "\n" << warning << "BIN/IMG → RAM: " << data << binImgFilesCache.size() << "\n"
-                  << warning << "DAA/GBI → RAM: " << data << daaGbiFilesCache.size() << "\n"
-                  << warning << "CHD → RAM: " << data << chdFilesCache.size() << "\n"
-                  << warning << "MDF → RAM: " << data << mdfMdsFilesCache.size() << "\n"
-                  << warning << "NRG → RAM: " << data << nrgFilesCache.size() << "\n";
+        std::cout << "\n" << warning << "BIN/IMG → RAM: " << data << GlobalCaches::binImgFilesCache.size() << "\n"
+                  << warning << "DAA/GBI → RAM: " << data << GlobalCaches::daaGbiFilesCache.size() << "\n"
+                  << warning << "CHD → RAM: " << data << GlobalCaches::chdFilesCache.size() << "\n"
+                  << warning << "MDF → RAM: " << data << GlobalCaches::mdfMdsFilesCache.size() << "\n"
+                  << warning << "NRG → RAM: " << data << GlobalCaches::nrgFilesCache.size() << "\n";
 
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "\n" << error << "Error: Unable to access configuration file: "
@@ -618,7 +617,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     auto db = resolveDatabaseTheme();
     
     if (inputSearch == "?stats") {
-        displayDatabaseStatistics(databaseFilePath, maxDatabaseSize, transformationCache, globalIsoFileList);
+        displayDatabaseStatistics(databaseFilePath, maxDatabaseSize);
     } else if (inputSearch == "!clr") {
         std::ofstream ofs(databaseFilePath, std::ofstream::out | std::ofstream::trunc);
         if (!ofs) {
@@ -629,11 +628,11 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
             pressEnterToContinue();
         } else {
             ofs.close();
-			transformationCache.clear();
+			GlobalCaches::transformationCache.clear();
             
             std::cout << "\n" << db.highlight << "ISO database cleared successfully." << "\033[J" << std::endl;
             pressEnterToContinue();
-            std::vector<std::string>().swap(globalIsoFileList);
+            std::vector<std::string>().swap(GlobalCaches::globalIsoFileList);
         }
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
         clearHistory(inputSearch);

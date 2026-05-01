@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../sort.h"
+#include "../globals.h"
+#include "../caches.h"
 #include "../display.h"
 #include "../themes.h"
 #include "../settings.h"
@@ -86,7 +88,7 @@ void interactiveConfigEditor(const std::string& configPath) {
             if (!entry.section.empty()) {
                 std::cout << tc.accent << "\n--- " << entry.section << " ---\n" << tc.reset;
             }
-            std::string val = g_configCache.count(entry.key) ? g_configCache[entry.key] : entry.defaultValue;
+            std::string val = GlobalCaches::g_configCache.count(entry.key) ? GlobalCaches::g_configCache[entry.key] : entry.defaultValue;
             
             std::string_view valColor = (index == 1) ? color : std::string_view(tc.data);
             
@@ -157,9 +159,9 @@ void interactiveConfigEditor(const std::string& configPath) {
                 std::string confirm = trim(confirmInput.get());
                 if (confirm == "y" || confirm == "Y") {
                     for (const auto& e : CONFIG_ORDERED_DEFAULTS) {
-                        g_configCache[e.key] = e.defaultValue;
+                        GlobalCaches::g_configCache[e.key] = e.defaultValue;
                     }
-                    applyConfigEffects(g_configCache);
+                    applyConfigEffects(GlobalCaches::g_configCache);
                     tc = resolveOptionsTheme();
                     std::cout << tc.label << "\n[+] Defaults applied — save with 's' to persist.\n" << tc.reset;
                     pressEnterToContinue();
@@ -223,7 +225,7 @@ bool editSetting(const std::string& configPath, const std::string& key) {
     reset_custom_keybindingsForSettingsEditor();
 
     // Move current value outside the loop so we can compare changes
-    std::string current = g_configCache.count(key) ? g_configCache[key] : entry->defaultValue;
+    std::string current = GlobalCaches::g_configCache.count(key) ? GlobalCaches::g_configCache[key] : entry->defaultValue;
 
     while (true) {
         clearScrollBuffer();
@@ -274,8 +276,8 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         }
 
         // --- Success Case ---
-        g_configCache[key] = newVal;
-        applyConfigEffects(g_configCache);
+        GlobalCaches::g_configCache[key] = newVal;
+        applyConfigEffects(GlobalCaches::g_configCache);
         
         // Use the standardized helper to write to disk and handle errors
         bool saved = flushCache(configPath);

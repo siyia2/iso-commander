@@ -3,6 +3,8 @@
 #include "../display.h"
 #include "../themes.h"
 #include "../settings.h"
+#include "../caches.h"
+#include "../globals.h"
 
 // ---------------------------------------------------------------------------
 // Core Config I/O
@@ -94,10 +96,10 @@ static bool ensureDefaults(std::map<std::string, std::string>& configMap, const 
  * Eliminates redundant disk reads by checking if we already have the data.
  */
 void syncCache(const std::string& filePath) {
-    if (g_configCache.empty() || g_cachedPath != filePath) {
-        g_configCache = readConfig(filePath);
-        ensureDefaults(g_configCache, filePath);
-        g_cachedPath = filePath;
+    if (GlobalCaches::g_configCache.empty() || GlobalCaches::g_cachedPath != filePath) {
+        GlobalCaches::g_configCache = readConfig(filePath);
+        ensureDefaults(GlobalCaches::g_configCache, filePath);
+        GlobalCaches::g_cachedPath = filePath;
     }
 }
 
@@ -136,8 +138,8 @@ void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& c
  */
 bool readUserConfigUpdates(const std::string& filePath) {
     syncCache(filePath);
-    auto it = g_configCache.find("auto_update");
-    return (it != g_configCache.end() && it->second == "on");
+    auto it = GlobalCaches::g_configCache.find("auto_update");
+    return (it != GlobalCaches::g_configCache.end() && it->second == "on");
 }
 
 /**
@@ -145,9 +147,9 @@ bool readUserConfigUpdates(const std::string& filePath) {
  */
 bool paginationSet(const std::string& filePath) {
     syncCache(filePath);
-    auto it = g_configCache.find("pagination");
+    auto it = GlobalCaches::g_configCache.find("pagination");
     
-    if (it != g_configCache.end()) {
+    if (it != GlobalCaches::g_configCache.end()) {
         for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
             if (entry.key == "pagination") {
                 if (entry.validate && entry.validate(it->second)) {
@@ -174,18 +176,18 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
  
     syncCache(filePath);
  
-    displayConfig::toggleFullListMount       = (g_configCache["mount_list"]       == "full");
-    displayConfig::toggleFullListUmount      = (g_configCache["umount_list"]      == "full");
-    displayConfig::toggleFullListCpMvRm      = (g_configCache["cp_mv_rm_list"]    == "full");
-    displayConfig::toggleFullListWrite2usb       = (g_configCache["write2usb_list"]       == "full");
-    displayConfig::toggleFullListConvert2iso = (g_configCache["convert2iso_lists"] == "full");
-    displayConfig::toggleNamesOnly           = (g_configCache["filenames_only"]   == "on");
+    displayConfig::toggleFullListMount       = (GlobalCaches::g_configCache["mount_list"]       == "full");
+    displayConfig::toggleFullListUmount      = (GlobalCaches::g_configCache["umount_list"]      == "full");
+    displayConfig::toggleFullListCpMvRm      = (GlobalCaches::g_configCache["cp_mv_rm_list"]    == "full");
+    displayConfig::toggleFullListWrite2usb   = (GlobalCaches::g_configCache["write2usb_list"]       == "full");
+    displayConfig::toggleFullListConvert2iso = (GlobalCaches::g_configCache["convert2iso_lists"] == "full");
+    displayConfig::toggleNamesOnly           = (GlobalCaches::g_configCache["filenames_only"]   == "on");
  
-    skin        = g_configCache["skin"];
+    skin        = GlobalCaches::g_configCache["skin"];
     color       = getskin();
-    globalTheme = g_configCache["theme"];
+    globalTheme = GlobalCaches::g_configCache["theme"];
  
-    applyThreadCapsAndHistoryLimits(g_configCache);
+    applyThreadCapsAndHistoryLimits(GlobalCaches::g_configCache);
     
-    return g_configCache;
+    return GlobalCaches::g_configCache;
 }

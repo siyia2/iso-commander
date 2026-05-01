@@ -2,6 +2,7 @@
 
 #include "../databaseOps.h"
 #include "../themes.h"
+#include "../caches.h"
 #include "../main.h"
 #include "../settings.h"
 #include "../readline.h"
@@ -43,12 +44,12 @@ int main(int argc, char *argv[]) {
     /// @}
     
     // Generous reserve for future lists
-    globalIsoFileList.reserve(1000);
-    binImgFilesCache.reserve(1000);
-	mdfMdsFilesCache.reserve(1000);
-	nrgFilesCache.reserve(1000);
-	chdFilesCache.reserve(1000);
-	daaGbiFilesCache.reserve(1000);
+    GlobalCaches::globalIsoFileList.reserve(1000);
+    GlobalCaches::binImgFilesCache.reserve(1000);
+	GlobalCaches::mdfMdsFilesCache.reserve(1000);
+	GlobalCaches::nrgFilesCache.reserve(1000);
+	GlobalCaches::chdFilesCache.reserve(1000);
+	GlobalCaches::daaGbiFilesCache.reserve(1000);
 	
     setupReadlineToIgnoreCtrlC();
 

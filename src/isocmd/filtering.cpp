@@ -4,6 +4,7 @@
 #include "../threadpool.h"
 #include "../filtering.h"
 #include "../themes.h"
+#include "../caches.h"
 #include "../history.h"
 #include "../readline.h"
 #include "../stringManipulation.h"
@@ -581,7 +582,7 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
     const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage)
 {
     const std::vector<std::string>& baseSource =
-        isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+        isFiltered ? filteredFiles : (isUnmount ? isoDirs : GlobalCaches::globalIsoFileList);
 
     return runSharedFilterFlow(inputString, {
         .files          = &filteredFiles,

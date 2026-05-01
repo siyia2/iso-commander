@@ -2,6 +2,7 @@
 
 #include "../display.h"
 #include "../threadpool.h"
+#include "../caches.h"
 
 /**
  * @brief Compares two strings using natural order (e.g., "file2.txt" < "file10.txt").
@@ -165,15 +166,15 @@ void sortAfterFilenamesOnlyFlag() {
     // Dispatching threads using std::ref to ensure we work on the original 
     // data structures rather than passing them by value (which would fail/copy).
     
-    std::thread(sortJob, std::ref(globalIsoFileList), std::ref(updateListMutex)).detach();
+    std::thread(sortJob, std::ref(GlobalCaches::globalIsoFileList), std::ref(GlobalCaches::updateListMutex)).detach();
     
-    std::thread(sortJob, std::ref(binImgFilesCache),  std::ref(binImgCacheMutex)).detach();
+    std::thread(sortJob, std::ref(GlobalCaches::binImgFilesCache),  std::ref(GlobalCaches::binImgCacheMutex)).detach();
     
-    std::thread(sortJob, std::ref(mdfMdsFilesCache),  std::ref(mdfMdsCacheMutex)).detach();
+    std::thread(sortJob, std::ref(GlobalCaches::mdfMdsFilesCache),  std::ref(GlobalCaches::mdfMdsCacheMutex)).detach();
     
-    std::thread(sortJob, std::ref(nrgFilesCache),     std::ref(nrgCacheMutex)).detach();
+    std::thread(sortJob, std::ref(GlobalCaches::nrgFilesCache),     std::ref(GlobalCaches::nrgCacheMutex)).detach();
     
-    std::thread(sortJob, std::ref(chdFilesCache),     std::ref(chdCacheMutex)).detach();
+    std::thread(sortJob, std::ref(GlobalCaches::chdFilesCache),     std::ref(GlobalCaches::chdCacheMutex)).detach();
     
-    std::thread(sortJob, std::ref(daaGbiFilesCache),  std::ref(daaGbiCacheMutex)).detach();
+    std::thread(sortJob, std::ref(GlobalCaches::daaGbiFilesCache),  std::ref(GlobalCaches::daaGbiCacheMutex)).detach();
 }

@@ -4,6 +4,7 @@
 #include "../display.h"
 #include "../filtering.h"
 #include "../select.h"
+#include "../caches.h"
 #include "../themes.h"
 #include "../readline.h"
 #include "../verbose.h"
@@ -44,7 +45,7 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
     if (isMount || isUnmount) {
         isAtISOList.store(false);
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : 
-                                                    (isUnmount ? isoDirs : globalIsoFileList);
+                                                    (isUnmount ? isoDirs : GlobalCaches::globalIsoFileList);
         
         if (isUnmount) {
             umountMvRmBreak = true;
@@ -54,11 +55,11 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
                             operationFails, uniqueErrorMessages, umountMvRmBreak, verbose, isUnmount);
     } else if (write) {
         isAtISOList.store(false);
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalCaches::globalIsoFileList;
         writeToUsb(inputString, activeList, uniqueErrorMessages);
     } else {
         isAtISOList.store(false);
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalCaches::globalIsoFileList;
         processInputForCpMvRm(inputString, activeList, operation, operationFiles, operationFails, 
                              uniqueErrorMessages, umountMvRmBreak, filterHistory, verbose, newISOFound);
     }
@@ -257,7 +258,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
         if (!isFiltered) originalPage = currentPage;
 
         if (!isUnmount) {
-            removeNonExistentPathsFromDatabase(globalIsoFileList);
+            removeNonExistentPathsFromDatabase(GlobalCaches::globalIsoFileList);
             isAtISOList.store(true);
         }
 
@@ -276,7 +277,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
             umountMvRmBreak = false;
         }
         // Launch a detached thread for automatic list updating if startup auto-update is running
-        if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
+        if (updateHasRun.load() && !isUnmount && !GlobalCaches::globalIsoFileList.empty()) {
             std::thread(refreshListAfterAutoUpdate, 500,
                         std::ref(isAtISOList), std::ref(isImportRunning),
                         std::ref(updateHasRun), std::ref(newISOFound),
@@ -319,7 +320,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
 		}
 		
 		// Initiate a manual list refresh
-        if (inputString == "R" && !isImportRunning.load() && !isUnmount && !globalIsoFileList.empty()) {
+        if (inputString == "R" && !isImportRunning.load() && !isUnmount && !GlobalCaches::globalIsoFileList.empty()) {
 			needsClrScrn =true;
 			// Set to false to distinguish from regular auto-update
 			search = false;
@@ -359,7 +360,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
             continue;
         }
 
-        const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
+        const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : GlobalCaches::globalIsoFileList);
         size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
         bool need2Sort = false;
         
@@ -490,15 +491,15 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             clearScrollBuffer();
             if (isFiltered) {
                 if (fileType == "bin" || fileType == "img") {
-                    files = binImgFilesCache;
+                    files = GlobalCaches::binImgFilesCache;
                 } else if (fileType == "mdf") {
-                    files = mdfMdsFilesCache;
+                    files = GlobalCaches::mdfMdsFilesCache;
                 } else if (fileType == "nrg") {
-                    files = nrgFilesCache;
+                    files = GlobalCaches::nrgFilesCache;
                 } else if (fileType == "chd") {
-                    files = chdFilesCache;
+                    files = GlobalCaches::chdFilesCache;
                 } else if (fileType == "daa") {
-                    files = daaGbiFilesCache;
+                    files = GlobalCaches::daaGbiFilesCache;
                 }
                 needsClrScrn = true;
                 isFiltered = false; 
