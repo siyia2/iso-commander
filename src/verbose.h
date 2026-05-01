@@ -4,14 +4,14 @@
 #define VERBOSE_H
 
 // C++ Standard Library Headers
+#include <atomic>
+#include <chrono>
 #include <csignal>
 #include <functional>
 #include <iostream>
-#include <unordered_set>
 #include <string>
+#include <unordered_set>
 #include <vector>
-#include <atomic>
-#include <chrono>
 
 // Third-Party Library Headers
 #include <readline/history.h>
