@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../state.h"
+// Project Headers
 #include "../inputHandling.h"
+#include "../state.h"
 
 /**
  * @brief Disables EOF (Ctrl+D) processing in the terminal.

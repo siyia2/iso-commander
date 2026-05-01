@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../threadpool.h"
-#include "../display.h"
-#include "../umount.h"
-#include "../themes.h"
+// Project Headers
 #include "../concurrency.h"
-#include "../stringManipulation.h"
+#include "../display.h"
 #include "../state.h"
+#include "../stringManipulation.h"
+#include "../themes.h"
+#include "../threadpool.h"
+#include "../umount.h"
 
 /**
  * @brief Checks if a directory is empty.

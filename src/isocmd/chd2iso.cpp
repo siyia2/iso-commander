@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
+// Project Headers
+#include "../chd.h"
 #include "../concurrency.h"
 #include "../state.h"
-#include "../chd.h"
 
 /**
  * @brief Converts a CHD (Compressed Hunks of Data) file to a raw ISO image.

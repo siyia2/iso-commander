@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../themes.h"
-#include "../pausePrompt.h"
+// Project Headers
 #include "../inputHandling.h"
+#include "../pausePrompt.h"
+#include "../themes.h"
 
 namespace {
 

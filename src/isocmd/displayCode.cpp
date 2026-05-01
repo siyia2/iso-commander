@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../state.h"
+// Project Headers
+#include "../caches.h"
+#include "../databaseOps.h"
 #include "../display.h"
 #include "../filtering.h"
-#include "../themes.h"
-#include "../caches.h"
-#include "../sort.h"
-#include "../databaseOps.h"
-#include "../pausePrompt.h"
 #include "../inputHandling.h"
+#include "../pausePrompt.h"
+#include "../sort.h"
+#include "../state.h"
+#include "../themes.h"
 
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, 
 bool& hasPendingProcess, bool& isFiltered, size_t& currentPage, std::atomic<bool>& isImportRunning);

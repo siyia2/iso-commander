@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../state.h"
-#include "../display.h"
+// Project Headers
 #include "../caches.h"
+#include "../display.h"
+#include "../state.h"
 
 /**
  * @brief Converts a string to lowercase in-place.

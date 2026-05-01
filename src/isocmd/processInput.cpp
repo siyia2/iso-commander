@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../threadpool.h"
-#include "../mount.h"
-#include "../readline.h"
-#include "../umount.h"
+// Project Headers
 #include "../concurrency.h"
-#include "../process.h"
-#include "../tokenize.h"
-#include "../pausePrompt.h"
 #include "../inputHandling.h"
+#include "../mount.h"
+#include "../pausePrompt.h"
+#include "../process.h"
+#include "../readline.h"
 #include "../state.h"
+#include "../threadpool.h"
+#include "../tokenize.h"
+#include "../umount.h"
 
 /**
  * @file operations.cpp

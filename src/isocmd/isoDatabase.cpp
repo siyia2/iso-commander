@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../display.h"
-#include "../threadpool.h"
-#include "../themes.h"
+// Project Headers
 #include "../caches.h"
-#include "../history.h"
+#include "../concurrency.h"
 #include "../databaseOps.h"
+#include "../display.h"
+#include "../history.h"
+#include "../inputHandling.h"
 #include "../pausePrompt.h"
 #include "../state.h"
-#include "../inputHandling.h"
-#include "../concurrency.h"
+#include "../themes.h"
+#include "../threadpool.h"
 
 // Local ISO Database mutex
 namespace {

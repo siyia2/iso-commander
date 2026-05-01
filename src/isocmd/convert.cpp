@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../state.h"
-#include "../display.h"
-#include "../themes.h"
-#include "../convert.h"
+// Project Headers
 #include "../caches.h"
 #include "../concurrency.h"
+#include "../convert.h"
+#include "../display.h"
+#include "../state.h"
 #include "../stringManipulation.h"
+#include "../themes.h"
 
 /**
  * @brief Checks if a file exists at the specified path.

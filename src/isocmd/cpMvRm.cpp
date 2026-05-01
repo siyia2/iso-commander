@@ -1,20 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../state.h"
-#include "../display.h"
-#include "../themes.h"
+// Project Headers
 #include "../concurrency.h"
+#include "../display.h"
+#include "../history.h"
+#include "../inputHandling.h"
 #include "../pausePrompt.h"
 #include "../readline.h"
-#include "../inputHandling.h"
 #include "../sort.h"
-#include "../history.h"
-#include "../verbose.h"
+#include "../state.h"
 #include "../stringManipulation.h"
-
-namespace fs = std::filesystem;
-
-void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages);
+#include "../themes.h"
+#include "../verbose.h"
 
 /**
  * @brief Constructs a list of formatted strings representing ISO files for display.
@@ -320,6 +317,8 @@ bool& overwriteExisting) {
     resetReadlinePagination();
     return userDestDir;
 }
+
+namespace fs = std::filesystem;
 
 /**
  * @brief Performs a binary file copy with real-time progress tracking and cancellation support.

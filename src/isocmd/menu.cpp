@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../themes.h"
-#include "../readline.h"
-#include "../inputHandling.h"
-#include <thread>
-#include <chrono>
+// C++ Standard Library Headers
 #include <atomic>
+#include <chrono>
+#include <thread>
 #include <vector>
+
+// Project Headers
+#include "../inputHandling.h"
+#include "../readline.h"
+#include "../themes.h"
 
 /**
  * @brief Renders a multi-colored ASCII art banner to the terminal.

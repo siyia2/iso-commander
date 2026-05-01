@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../sort.h"
-#include "../state.h"
+// Project Headers
 #include "../caches.h"
 #include "../display.h"
+#include "../inputHandling.h"
+#include "../pausePrompt.h"
+#include "../readline.h"
+#include "../sort.h"
+#include "../state.h"
 #include "../themes.h"
 #include "../settings.h"
-#include "../readline.h"
 #include "../tokenize.h"
-#include "../pausePrompt.h"
-#include "../inputHandling.h"
 
 /**
  * @brief Synchronizes global runtime variables with values from the configuration cache.

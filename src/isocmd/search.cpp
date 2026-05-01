@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../threadpool.h"
+// Project Headers
 #include "../caches.h"
-#include "../themes.h"
-#include "../searches.h"
-#include "../readline.h"
-#include "../verbose.h"
 #include "../concurrency.h"
-#include "../stringManipulation.h"
-#include "../history.h"
 #include "../databaseOps.h"
-#include "../pausePrompt.h"
+#include "../history.h"
 #include "../inputHandling.h"
+#include "../pausePrompt.h"
+#include "../readline.h"
+#include "../searches.h"
 #include "../state.h"
+#include "../stringManipulation.h"
+#include "../themes.h"
+#include "../threadpool.h"
+#include "../verbose.h"
 
 std::mutex couNtMutex;
 

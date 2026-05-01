@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../display.h"
-#include "../threadpool.h"
-#include "../filtering.h"
-#include "../themes.h"
-#include "../concurrency.h"
+// Project Headers
 #include "../caches.h"
+#include "../concurrency.h"
+#include "../display.h"
+#include "../filtering.h"
 #include "../history.h"
 #include "../readline.h"
 #include "../stringManipulation.h"
+#include "../themes.h"
+#include "../threadpool.h"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

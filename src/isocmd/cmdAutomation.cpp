@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../state.h"
-#include "../mount.h"
-#include "../umount.h"
+// Project Headers
 #include "../inputHandling.h"
+#include "../mount.h"
+#include "../state.h"
+#include "../umount.h"
 
 // ─── Palette helpers ─────────────────────────────────────────────────────────
 

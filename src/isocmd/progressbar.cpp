@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C / System Headers
+#include <fcntl.h>
 #include <poll.h>
+
+// Project Headers
+#include "../inputHandling.h"
+#include "../readline.h"
 #include "../state.h"
 #include "../themes.h"
-#include "../readline.h"
-#include "../inputHandling.h"
 
 /**
  * @file progress_bar.cpp

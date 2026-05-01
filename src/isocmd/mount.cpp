@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../threadpool.h"
+// Project Headers
+#include "../concurrency.h"
 #include "../mount.h"
 #include "../state.h"
-#include "../concurrency.h"
 #include "../stringManipulation.h"
+#include "../threadpool.h"
 
 /**
  * @brief Provides default LSan suppression rules for known third-party leaks.

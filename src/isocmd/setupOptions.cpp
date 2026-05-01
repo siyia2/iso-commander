@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../display.h"
-#include "../themes.h"
-#include "../concurrency.h"
-#include "../settings.h"
+// Project Headers
 #include "../caches.h"
+#include "../concurrency.h"
+#include "../display.h"
 #include "../state.h"
+#include "../themes.h"
+#include "../settings.h"
 
 // ---------------------------------------------------------------------------
 // Core Config I/O

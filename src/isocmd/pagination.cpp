@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../state.h"
+// Project Headers
 #include "../display.h"
-#include "../themes.h"
-#include "../sort.h"
-#include "../stringManipulation.h"
 #include "../inputHandling.h"
+#include "../sort.h"
+#include "../state.h"
+#include "../stringManipulation.h"
+#include "../themes.h"
+#include "../verbose.h"
 
 void helpSelections(bool& isAtISOListForHelp);
 
@@ -95,8 +97,6 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 
     return false;
 }
-
-void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages);
 
 /**
  * @brief A self-contained loop for displaying and navigating paginated entries during 

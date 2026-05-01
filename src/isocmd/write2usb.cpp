@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../stringManipulation.h"
+// Project Headers
+#include "../display.h"
 #include "../inputHandling.h"
 #include "../pausePrompt.h"
-#include "../threadpool.h"
-#include "../write2usb.h"
-#include "../tokenize.h"
 #include "../readline.h"
-#include "../display.h"
-#include "../themes.h"
 #include "../state.h"
+#include "../stringManipulation.h"
+#include "../themes.h"
+#include "../threadpool.h"
+#include "../tokenize.h"
+#include "../write2usb.h"
 
 namespace fs = std::filesystem;
 

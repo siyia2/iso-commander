@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../databaseOps.h"
-#include "../themes.h"
+// Project Headers
 #include "../caches.h"
-#include "../main.h"
-#include "../state.h"
 #include "../concurrency.h"
-#include "../settings.h"
-#include "../readline.h"
+#include "../databaseOps.h"
 #include "../inputHandling.h"
+#include "../main.h"
+#include "../readline.h"
+#include "../state.h"
+#include "../themes.h"
+#include "../settings.h"
 
 /**
  * @brief Outputs the current program version to the standard output.

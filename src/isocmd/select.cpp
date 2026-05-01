@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../state.h"
+// Project Headers
+#include "../caches.h"
+#include "../concurrency.h"
+#include "../databaseOps.h"
 #include "../display.h"
 #include "../filtering.h"
-#include "../select.h"
-#include "../caches.h"
-#include "../themes.h"
-#include "../readline.h"
-#include "../verbose.h"
-#include "../databaseOps.h"
 #include "../inputHandling.h"
-#include "../concurrency.h"
+#include "../readline.h"
+#include "../select.h"
 #include "../state.h"
+#include "../themes.h"
+#include "../verbose.h"
 
 /**
  * @brief Routes the user input to the specific logic for mounting, unmounting, writing, or file manipulation.

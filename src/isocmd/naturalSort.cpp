@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../display.h"
-#include "../threadpool.h"
+// Project Headers
 #include "../caches.h"
 #include "../concurrency.h"
+#include "../display.h"
+#include "../threadpool.h"
 
 /**
  * @brief Compares two strings using natural order (e.g., "file2.txt" < "file10.txt").

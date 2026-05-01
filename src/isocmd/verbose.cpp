@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../state.h"
+// Project Headers
 #include "../caches.h"
-#include "../display.h"
-#include "../themes.h"
-#include "../sort.h"
-#include "../verbose.h"
 #include "../databaseOps.h"
+#include "../display.h"
 #include "../inputHandling.h"
+#include "../sort.h"
+#include "../state.h"
+#include "../themes.h"
+#include "../verbose.h"
 
 /**
  * @brief Waits for the user to press Enter or Ctrl+D before allowing another attempt.

@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../state.h"
+// C++ Standard Library Headers
+#include <charconv>
+
+// Project Headers
+#include "../caches.h"
 #include "../display.h"
 #include "../filtering.h"
-#include "../caches.h"
+#include "../state.h"
+#include "../stringManipulation.h"
 #include "../themes.h"
 #include "../umount.h"
-#include "../stringManipulation.h"
 
 /**
  * @file list_renderer.cpp
