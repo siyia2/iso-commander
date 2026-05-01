@@ -8,6 +8,7 @@
 #include <string>
 
 // C / System Headers
+#include <fcntl.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 
