@@ -2,6 +2,7 @@
 
 #include "../globals.h"
 #include "../display.h"
+#include "../caches.h"
 
 /**
  * @brief Converts a string to lowercase in-place.
@@ -48,7 +49,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
     
     // Cache lookup for processed directory paths
     std::string dirKey(originalDir);
-	if (auto it = transformationCache.find(dirKey); it != transformationCache.end()) {
+	if (auto it = GlobalCaches::transformationCache.find(dirKey); it != GlobalCaches::transformationCache.end()) {
 		return {it->second, std::move(filename)};
     }
     
@@ -82,7 +83,7 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
         start = end + 1;
     }
     
-    transformationCache[dirKey] = processedDir;
+    GlobalCaches::transformationCache[dirKey] = processedDir;
     return {processedDir, std::move(filename)};
 }
 
@@ -95,26 +96,26 @@ std::pair<std::string, std::string> extractDirectoryAndFilename(std::string_view
  */
 std::tuple<std::string, std::string, std::string> parseMountPointComponents(std::string_view dir) {
     std::string dir_str(dir);
-    if (auto it = cachedParsesForUmount.find(dir_str); it != cachedParsesForUmount.end()) {
+    if (auto it = GlobalCaches::cachedParsesForUmount.find(dir_str); it != GlobalCaches::cachedParsesForUmount.end()) {
         return it->second;
     }
     
     size_t underscorePos = dir.find('_');
     if (underscorePos == std::string_view::npos) {
-        return cachedParsesForUmount[dir_str] = {dir_str, "", ""};
+        return GlobalCaches::cachedParsesForUmount[dir_str] = {dir_str, "", ""};
     }
     
     std::string directoryPart(dir.substr(0, underscorePos + 1));
     size_t lastTildePos = dir.find_last_of('~');
     
     if (lastTildePos == std::string_view::npos || lastTildePos <= underscorePos) {
-        return cachedParsesForUmount[dir_str] = {directoryPart, std::string(dir.substr(underscorePos + 1)), ""};
+        return GlobalCaches::cachedParsesForUmount[dir_str] = {directoryPart, std::string(dir.substr(underscorePos + 1)), ""};
     }
     
     std::string filenamePart(dir.substr(underscorePos + 1, lastTildePos - underscorePos - 1));
     std::string hashPart(dir.substr(lastTildePos));
     
-    return cachedParsesForUmount[dir_str] = {directoryPart, filenamePart, hashPart};
+    return GlobalCaches::cachedParsesForUmount[dir_str] = {directoryPart, filenamePart, hashPart};
 }
 
 /**

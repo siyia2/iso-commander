@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../globals.h"
+#include "../caches.h"
 #include "../display.h"
 #include "../themes.h"
 #include "../sort.h"
@@ -206,7 +207,7 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
         needsClrScrn = true;
     }
 
-    if (!isUnmount && globalIsoFileList.empty()) {
+    if (!isUnmount && GlobalCaches::globalIsoFileList.empty()) {
         clearScrollBuffer();
         needsClrScrn = true;
         
@@ -325,7 +326,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
 	
 	if (newISOFound.load()) {
-		loadFromDatabase(globalIsoFileList);
+		loadFromDatabase(GlobalCaches::globalIsoFileList);
 		newISOFound.store(false);
 	}
     
@@ -372,7 +373,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
     } else if (allIsoFiles.empty()) {
         std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No ISO found" << vt.green << "]" << vt.bold << "\n";
     } else if (!allIsoFiles.empty() && saveSuccess && newISOFound.load()) {
-        int result = countDifferentEntries(allIsoFiles, globalIsoFileList);
+        int result = countDifferentEntries(allIsoFiles, GlobalCaches::globalIsoFileList);
         std::cout << "\n" << vt.green << "Database Refresh: [" << vt.magenta << result << " ISO imported" << vt.green << "]" << vt.bold << "\n";
     }
 

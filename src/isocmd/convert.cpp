@@ -4,6 +4,7 @@
 #include "../display.h"
 #include "../themes.h"
 #include "../convert.h"
+#include "../caches.h"
 #include "../stringManipulation.h"
 
 /**
@@ -85,10 +86,10 @@ void convertToISO(const std::vector<std::string>& imageFiles,
 
             {
                 std::lock_guard<std::mutex> lock(globalSetsMutex);
-                auto& cache = modeNrg ? nrgFilesCache :
-                              (modeMdf ? mdfMdsFilesCache :
-                               (modeChd ? chdFilesCache :
-                                (modeDaa ? daaGbiFilesCache : binImgFilesCache)));
+                auto& cache = modeNrg ? GlobalCaches::nrgFilesCache :
+                              (modeMdf ? GlobalCaches::mdfMdsFilesCache :
+                               (modeChd ? GlobalCaches::chdFilesCache :
+                                (modeDaa ? GlobalCaches::daaGbiFilesCache : GlobalCaches::binImgFilesCache)));
                 cache.erase(std::remove(cache.begin(), cache.end(), inputPath), cache.end());
             }
 
