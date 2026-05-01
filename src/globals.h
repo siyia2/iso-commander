@@ -19,36 +19,6 @@
 //==============================
 namespace fs = std::filesystem;
 
-//==============================
-// GLOBAL VARIABLES & CONSTANTS
-//==============================
-// Thread Management
-inline unsigned int maxThreads = std::max(2u, std::thread::hardware_concurrency());
-
-// Operation thread caps for static pool
-
-// Global cap for static threads
-inline size_t MAX_USEFUL_THREADS = 32;
-
-// High I/O
-inline size_t CPMV_THREAD_CAP   = 8;
-inline size_t CONV_THREAD_CAP   = 8;
-
-// Moderate I/O
-inline size_t MOUNT_THREAD_CAP  = 16;
-inline size_t CLEAN_THREAD_CAP  = 16;
-
-// Low I/O
-inline size_t UMOUNT_THREAD_CAP = 32;
-inline size_t RM_THREAD_CAP     = 32;
-
-// Low I/O but fast
-inline size_t SORT_THREAD_CAP   = 4;
-inline size_t FILTER_THREAD_CAP = 4;
-
-// Mutex Protection For Verbose Sets
-inline std::mutex globalSetsMutex;
-
 // File Paths
 inline const std::string databaseDirectory = std::string(std::getenv("HOME") ? std::getenv("HOME") : "") + "/.local/share/isocmd/database/";
 inline const std::string databaseFilename  = "iso_commander_database.txt";

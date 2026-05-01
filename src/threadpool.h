@@ -4,6 +4,7 @@
 #define THREAD_POOL_H
 
 #include "./globals.h"
+#include "./concurrency.h"
 #include <memory>
 #include <atomic>
 #include <functional>
@@ -284,7 +285,7 @@ public:
  * initialization and a guaranteed destruction order relative to other global objects.
  */
 inline ThreadPool& getStaticThreadPool() {
-    static ThreadPool instance(std::min({static_cast<size_t>(maxThreads), MAX_USEFUL_THREADS}));
+    static ThreadPool instance(std::min({static_cast<size_t>(GlobalConcurrency::maxThreads), GlobalConcurrency::MAX_USEFUL_THREADS}));
     return instance;
 }
 
