@@ -8,9 +8,6 @@
  *
  * License: GPL-2.0 or (at your option) any later version (same as original)
  *
- * Thread-safety fix: all previously static/global mutable state
- * (tinflate tables, powerisuxn counter) moved into DaaContext so that
- * multiple concurrent conversions cannot corrupt each other.
  */
 
 /*
