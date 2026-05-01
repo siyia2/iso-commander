@@ -144,7 +144,7 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     { "convert2iso_lists", "compact", "Display mode for convert2iso operations", "", isDisplay },
 
     // --- Thread Configuration ---
-    { "combined_thread_cap", "32", "Global thread pool limit", "Thread Configuration", [](const std::string& v) { return isNum(v, 1, 256); } },
+    { "combined_thread_cap", "32", "Global thread pool limit; requires restart to take effect", "Thread Configuration", [](const std::string& v) { return isNum(v, 1, 256); } },
     { "thread_cap_for_mount", "16", "Max concurrent mounting tasks", "", [](const std::string& v) { return isNum(v, 1, 128); } },
     { "thread_cap_for_umount", "32", "Max concurrent unmounting tasks", "", [](const std::string& v) { return isNum(v, 1, 128); } },
     { "thread_cap_for_cp_mv", "8", "Max concurrent copy/move tasks", "", [](const std::string& v) { return isNum(v, 1, 128); } },
