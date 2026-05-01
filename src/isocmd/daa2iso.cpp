@@ -34,20 +34,10 @@
 */
 
 // ─── large-file support ────────────────────────────────────────────────────
-#define _LARGE_FILES
-#define __USE_LARGEFILE64
-#define __USE_FILE_OFFSET64
-#define _LARGEFILE_SOURCE
-#define _LARGEFILE64_SOURCE
 #define _FILE_OFFSET_BITS 64
 
 #include "../daa2iso.h"
-
-// Use 64-bit file I/O on Linux
-#define off_t   off64_t
-#define fopen   fopen64
-#define fseek   fseeko64
-#define ftell   ftello64
+#include "../concurrency.h"
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  LZMA decoder (Igor Pavlov / 7-zip SDK, minimal subset)
