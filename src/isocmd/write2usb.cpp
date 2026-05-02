@@ -318,7 +318,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
             errMsg.append(wt.warnLabel).append("'").append(wt.fileCol).append(iso.filename)
                   .append(wt.rl_resetCol).append(wt.bold).append(" (")
                   .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol).append(wt.bold)
-                  .append(")").append(wt.warnLabel).append("'").append(wt.bold).append(" is too large for ")
+                  .append(")").append(wt.warnLabel).append("'").append(wt.errLabel).append(" is too large for ")
                   .append(wt.errPath).append("'").append(device).append(wt.bold)
                   .append(" <").append(driveName).append(">")
                   .append(wt.rl_resetCol).append(wt.bold).append(" (")
