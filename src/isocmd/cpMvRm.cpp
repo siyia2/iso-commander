@@ -119,17 +119,13 @@ bool& umountMvRmBreak, bool& abortDel) {
     rl_attempted_completion_function = nullptr;
     
     reset_custom_keybindingsForRm();
-
     const CpMvRmColors colors = getCpMvRmColors();
-
     std::string green = std::string(colors.prompt_green);
     std::string blue  = std::string(colors.prompt_blue);
     std::string red   = std::string(UI::Palette::Red);
     std::string reset = std::string(UI::Palette::BoldReset);
-
     bool isPageTurn = false;
     bool disablePagination = (GlobalState::ITEMS_PER_PAGE <= 0 || isoFiles.size() <= GlobalState::ITEMS_PER_PAGE);
-
     auto setupEnv = [&]() {
         if (!disablePagination) {
             rl_bind_key('\f', clear_screen_and_buffer);
@@ -137,10 +133,8 @@ bool& umountMvRmBreak, bool& abortDel) {
             rl_bind_key('\f', [](int, int) -> int { return 0; });
         }
     };
-
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
     sortFilesCaseInsensitive(entries);
-
     std::string promptPrefix = "\n";
     std::string promptSuffix =
         "\n\001" + blue + "\002The selected \001" +
@@ -149,49 +143,50 @@ bool& umountMvRmBreak, bool& abortDel) {
         red + "\002*PERMANENTLY DELETED FROM DISK*\001" +
         blue + "\002. Proceed? (y/n):\001" +
         reset + "\002 ";
-
+    std::string readlinePrompt = blue + "The selected " +
+        green + "ISO" +
+        blue + " will be " +
+        red + "*PERMANENTLY DELETED FROM DISK*" +
+        blue + ". Proceed? (y/n):" +
+        reset + " ";
+    if (disablePagination) {
+        displayErrors(uniqueErrorMessages);
+        std::cout << promptPrefix;
+        std::ostringstream batch;
+        const size_t BATCH_SIZE = 100;
+        for (size_t i = 0; i < entries.size(); i += BATCH_SIZE) {
+            batch.str(""); batch.clear();
+            size_t end = std::min(i + BATCH_SIZE, entries.size());
+            for (size_t j = i; j < end; ++j) batch << entries[j];
+            std::cout << batch.str();
+        }
+        std::cout << "\n";
+        std::cout.flush();
+    }
     while (true) {
         std::string userInput;
-
         if (disablePagination) {
-            displayErrors(uniqueErrorMessages);
-            std::cout << promptPrefix;
-
-            std::ostringstream batch;
-            const size_t BATCH_SIZE = 100;
-            for (size_t i = 0; i < entries.size(); i += BATCH_SIZE) {
-                batch.str(""); batch.clear();
-                size_t end = std::min(i + BATCH_SIZE, entries.size());
-                for (size_t j = i; j < end; ++j) batch << entries[j];
-                std::cout << batch.str();
-            }
-
-            std::cout << promptSuffix;
-            std::cout.flush();
-
-            char* input = readline("");
+            std::unique_ptr<char, decltype(&free)> input(readline(readlinePrompt.c_str()), free);
             if (!input) {
                 userInput = "EOF_SIGNAL";
-            } else {
-                userInput = std::string(input);
-                free(input);
+            } else if (userInput.empty()) {
+				std::cout << "\033[1A\033[K";
+				continue;
+			} else {
+                userInput = std::string(input.get());
             }
         } else {
             userInput = handlePaginatedDisplay(
                 entries, uniqueErrorMessages, promptPrefix, promptSuffix, setupEnv, isPageTurn
             );
         }
-
         rl_bind_key('\f', prevent_readline_keybindings);
-
         if (userInput.empty()) continue;
-
         if (userInput == "EOF_SIGNAL") {
             umountMvRmBreak = false;
             abortDel = true;
             return false;
         }
-
         if (!isPageTurn) {
             if (userInput == "Y" || userInput == "y") {
                 umountMvRmBreak = true;
@@ -199,7 +194,6 @@ bool& umountMvRmBreak, bool& abortDel) {
             } else {
                 umountMvRmBreak = false;
                 abortDel = true;
-
                 std::cout << "\n" << UI::Palette::Red << "rm" << colors.abort << " operation aborted by user." << UI::Palette::BoldReset << "\n";
                 pressEnterToContinue();
                 return false;
