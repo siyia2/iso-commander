@@ -15,12 +15,23 @@ void toLowerInPlace(std::string& str) {
 }
 
 /**
- * @brief Parses a complex mount point name into structural components.
- * @details Splits strings formatted as "directory_filename~hash". 
- * Uses a transparent cache lookup to avoid allocations on repeat calls.
+ * @brief Decomposes a file path into a directory and filename, applying shortening logic to the directory.
  * 
- * @param dir The directory string view to parse.
- * @return A tuple of views {Directory_, Filename, Hash} pointing to cache-owned memory.
+ * @details This function separates the filename from the directory path. Depending on the 'location' 
+ * and global configuration, the directory path is either returned as-is or processed through a 
+ * "shortening" algorithm that truncates path components at special characters or a maximum length.
+ * 
+ * To optimize performance and avoid redundant string manipulations, the results of shortened 
+ * directories are stored in a global cache (GlobalCaches::transformationCache).
+ * 
+ * @param path The full input path to process.
+ * @param location A string key used to check if full-path display is toggled for specific UI contexts.
+ * @return A pair of string_views:
+ *         - first: The processed (shortened or original) directory.
+ *         - second: The original filename.
+ * 
+ * @note The directory string_view points to memory owned either by the input 'path' (if unshortened) 
+ * or the 'GlobalCaches::transformationCache' (if shortened).
  */
 std::pair<std::string_view, std::string_view> extractDirectoryAndFilename(std::string_view path, const std::string& location) {
     const auto lastSlashPos = path.find_last_of("/\\");
