@@ -276,12 +276,6 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
             }
             // Reset manual-update key for mountpoint-lists
 			if (isUnmount) rl_bind_keyseq("R", rl_insert);
-			// Disable PgUp&PgDn when pagination is not enabled
-			if (GlobalState::ITEMS_PER_PAGE == 0) {
-				rl_bind_keyseq((char *)"\\e[5~", rl_get_previous_history);
-				rl_bind_keyseq((char *)"\\e[6~", rl_get_next_history);
-			}
-			
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
@@ -294,6 +288,12 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
         }
         
         std::cout << "\033[1A\033[K";
+        
+		// Disable PgUp&PgDn when pagination is not enabled
+		if (GlobalState::ITEMS_PER_PAGE == 0) {
+			rl_bind_keyseq("\\e[5~", rl_insert);
+			rl_bind_keyseq("\\e[6~", rl_insert);
+		}
 
 		const ReadlineAndPromptTheme pt = getPromptTheme();
 
@@ -323,12 +323,6 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
         }
         
         if (inputString[0] == 'R' && isImportRunning.load()) {
-			std::cout << "\033[1B\033[K";
-			needsClrScrn = false;
-			continue;
-		}
-		
-		if (GlobalState::ITEMS_PER_PAGE == 0 && (inputString == "PgUp" || inputString == "PgDn")) {
 			std::cout << "\033[1B\033[K";
 			needsClrScrn = false;
 			continue;
@@ -393,6 +387,8 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
         if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn, 
                                     filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage)) {
 										std::cout << "\033[1B\033[K";
+										// Disable PgUp&PgDn when pagination is not enabled
+			
                 continue;
         }
 
@@ -485,6 +481,12 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 		}
 		
 		std::cout << "\033[1A\033[K";
+		
+		// Disable PgUp&PgDn when pagination is not enabled
+		if (GlobalState::ITEMS_PER_PAGE == 0) {
+			rl_bind_keyseq("\\e[5~", rl_insert);
+			rl_bind_keyseq("\\e[6~", rl_insert);
+		}
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
         
@@ -503,12 +505,6 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         if (!rawInput) break;
         
         std::string inputString(rawInput.get());
-        
-        if (GlobalState::ITEMS_PER_PAGE == 0 && (inputString == "PgUp" || inputString == "PgDn")) {
-			std::cout << "\033[1B\033[K";
-			needsClrScrn = false;
-			continue;
-		}
         
         if (inputString == "<") {
             clearScrollBuffer();
