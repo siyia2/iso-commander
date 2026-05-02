@@ -11,10 +11,23 @@
 #include <unordered_map>
 #include <vector>
 
+// Project Headers
+#include "./stringManipulation.h"
+
 namespace GlobalCaches {
     // Thread-local caches
-    inline thread_local std::unordered_map<std::string, std::string> transformationCache;
-    inline thread_local std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>> cachedParsesForUmount;
+    inline thread_local std::unordered_map<
+        std::string, 
+        std::string, 
+        StringViewHash, 
+        std::equal_to<>
+    > transformationCache;
+    inline thread_local std::unordered_map<
+        std::string, 
+        std::tuple<std::string, std::string, std::string>, 
+        StringViewHash, 
+        std::equal_to<>
+    > cachedParsesForUmount;
     
     inline std::map<std::string, std::string> g_configCache;
 	inline std::string g_cachedPath;
