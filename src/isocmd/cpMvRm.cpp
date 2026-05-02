@@ -634,13 +634,14 @@ std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::strin
     auto executeOperation = [&](const std::vector<std::string>& files) {
         for (const auto& operateIso : files) {
             fs::path srcPath(operateIso);
+            // extractDirectoryAndFilename returns string_views
             auto [srcDir, srcFile] = extractDirectoryAndFilename(srcPath.string(), "cp_mv_rm");
 
             struct stat st;
             size_t fileSize = (stat(srcPath.c_str(), &st) == 0) ? st.st_size : 0;
 
             if (isDelete) {
-                performDeleteOperation(srcPath, srcDir, srcFile, fileSize,
+                performDeleteOperation(srcPath, std::string(srcDir), std::string(srcFile), fileSize,
                                        completedBytes, completedTasks, failedTasks,
                                        verboseIsos, verboseErrors, operationSuccessful,
                                        batchInsertMessages);
@@ -657,7 +658,7 @@ std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::strin
 
                 if (fs::absolute(srcPath) == fs::absolute(destPath)) {
                     std::string operation = isMove ? "move" : "copy";
-                    reportErrorCpMvRm("same_file", srcDir, srcFile, "", "", operation,
+                    reportErrorCpMvRm("same_file", std::string(srcDir), std::string(srcFile), "", "", operation,
                               verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
                     continue;
                 }
@@ -665,7 +666,7 @@ std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::strin
                 std::error_code ec;
                 if (!fs::exists(dst, ec) || !fs::is_directory(dst, ec)) {
                     std::string operation = isCopy ? "copying" : "moving";
-                    reportErrorCpMvRm("invalid_dest", srcDir, srcFile, dst, "Invalid destination",
+                    reportErrorCpMvRm("invalid_dest", std::string(srcDir), std::string(srcFile), dst, "Invalid destination",
                               operation, verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
                     continue;
                 }
@@ -673,7 +674,7 @@ std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::strin
                 ++validDestinations;
 
                 if (!fs::exists(srcPath)) {
-                    reportErrorCpMvRm("source_missing", srcDir, srcFile, "", "", "",
+                    reportErrorCpMvRm("source_missing", std::string(srcDir), std::string(srcFile), "", "", "",
                               verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
                     continue;
                 }
@@ -681,13 +682,13 @@ std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::strin
                 if (fs::exists(destPath)) {
                     if (overwriteExisting) {
                         if (!fs::remove(destPath, ec)) {
-                            reportErrorCpMvRm("overwrite_failed", "", "", destDirProcessed, ec.message(), "",
+                            reportErrorCpMvRm("overwrite_failed", "", "", std::string(destDirProcessed), ec.message(), "",
                                       verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
                             continue;
                         }
                     } else {
                         std::string operation = isCopy ? "copying" : "moving";
-                        reportErrorCpMvRm("file_exists", srcDir, srcFile, destDirProcessed, "",
+                        reportErrorCpMvRm("file_exists", std::string(srcDir), std::string(srcFile), std::string(destDirProcessed), "",
                                   operation, verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
                         continue;
                     }
@@ -697,12 +698,11 @@ std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::strin
 
                 if (isMove && destDirs.size() > 1) {
                     success = performMultiDestMoveOperation(
-                        srcPath, destPath, srcDir, srcFile, destDirProcessed, destFile,
+                        srcPath, destPath, std::string(srcDir), std::string(srcFile), std::string(destDirProcessed), std::string(destFile),
                         completedBytes, completedTasks, failedTasks, verboseIsos, verboseErrors,
                         operationSuccessful, batchInsertMessages, changeOwnership);
                     if (success) {
                         atLeastOneCopySucceeded = true;
-                        // Record successful destination for multi‑dest move (each copy)
                         if (successfulDestPaths && destPathsMutex) {
                             std::lock_guard<std::mutex> lock(*destPathsMutex);
                             successfulDestPaths->push_back(destPath.string());
@@ -710,7 +710,7 @@ std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::strin
                     }
                 } else if (isMove) {
                     success = performMoveOperation(
-                        srcPath, destPath, srcDir, srcFile, destDirProcessed, destFile,
+                        srcPath, destPath, std::string(srcDir), std::string(srcFile), std::string(destDirProcessed), std::string(destFile),
                         fileSize, completedBytes, completedTasks, failedTasks, verboseIsos, verboseErrors,
                         operationSuccessful, batchInsertMessages, changeOwnership);
                     if (success) {
@@ -721,7 +721,7 @@ std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::strin
                     }
                 } else {  // isCopy
                     success = performCopyOperation(
-                        srcPath, destPath, srcDir, srcFile, destDirProcessed, destFile,
+                        srcPath, destPath, std::string(srcDir), std::string(srcFile), std::string(destDirProcessed), std::string(destFile),
                         completedBytes, completedTasks, failedTasks, verboseIsos, verboseErrors,
                         operationSuccessful, batchInsertMessages, changeOwnership);
                     if (success) {
@@ -736,7 +736,7 @@ std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::strin
             if (isMove && destDirs.size() > 1 && validDestinations > 0 && atLeastOneCopySucceeded) {
                 std::error_code deleteEc;
                 if (!fs::remove(srcPath, deleteEc)) {
-                    reportErrorCpMvRm("remove_after_move", srcDir, srcFile, "", deleteEc.message(), "",
+                    reportErrorCpMvRm("remove_after_move", std::string(srcDir), std::string(srcFile), "", deleteEc.message(), "",
                               verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
                 }
             }
@@ -752,7 +752,7 @@ std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::strin
             if (fs::exists(isoPath)) {
                 isoFilesToOperate.push_back(iso);
             } else {
-                reportErrorCpMvRm("missing_file", isoDir, isoFile, "", "", "",
+                reportErrorCpMvRm("missing_file", std::string(isoDir), std::string(isoFile), "", "", "",
                           verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
             }
         }
