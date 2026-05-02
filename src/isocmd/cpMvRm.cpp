@@ -391,7 +391,6 @@ bool& overwriteExisting) {
     return userDestDir;
 }
 
-
 namespace fs = std::filesystem;
 
 /**
