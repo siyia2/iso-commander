@@ -114,87 +114,74 @@ const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn
  * @details Handles paginated or batch display of files marked for deletion and captures user input.
  * * @return True if the user confirms deletion (Y), false otherwise.
  */
-bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages, std::vector<std::vector<int>>& indexChunks,
-bool& umountMvRmBreak, bool& abortDel) {
-    rl_attempted_completion_function = nullptr;
+bool handleDeleteOperation(const std::vector<std::string>& isoFiles, 
+                           std::unordered_set<std::string>& uniqueErrorMessages, 
+                           std::vector<std::vector<int>>& indexChunks, 
+                           bool& umountMvRmBreak, 
+                           bool& abortDel) {
     
+    rl_attempted_completion_function = nullptr;
     reset_custom_keybindingsForRm();
+    
     const CpMvRmColors colors = getCpMvRmColors();
-    std::string green = std::string(colors.prompt_green);
-    std::string blue  = std::string(colors.prompt_blue);
-    std::string red   = std::string(UI::Palette::Red);
-    std::string reset = std::string(UI::Palette::BoldReset);
-    bool isPageTurn = false;
-    bool disablePagination = (GlobalState::ITEMS_PER_PAGE <= 0 || isoFiles.size() <= GlobalState::ITEMS_PER_PAGE);
-    auto setupEnv = [&]() {
-        if (!disablePagination) {
-            rl_bind_key('\f', clear_screen_and_buffer);
-        } else {
-            rl_bind_key('\f', [](int, int) -> int { return 0; });
-        }
-    };
+    std::string green = "\001" + std::string(colors.prompt_green) + "\002";
+    std::string blue  = "\001" + std::string(colors.prompt_blue) + "\002";
+    std::string red   = "\001" + std::string(UI::Palette::Red) + "\002";
+    std::string reset = "\001" + std::string(UI::Palette::BoldReset) + "\002";
+
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
     sortFilesCaseInsensitive(entries);
+
+    // Setup prompt components
     std::string promptPrefix = "\n";
     std::string promptSuffix =
-        "\n\001" + blue + "\002The selected \001" +
-        green + "\002ISO\001" +
-        blue + "\002 will be \001" +
-        red + "\002*PERMANENTLY DELETED FROM DISK*\001" +
-        blue + "\002. Proceed? (y/n):\001" +
-        reset + "\002 ";
-    std::string readlinePrompt = blue + "The selected " +
+        blue + "The selected " +
         green + "ISO" +
         blue + " will be " +
         red + "*PERMANENTLY DELETED FROM DISK*" +
-        blue + ". Proceed? (y/n):" +
-        reset + " ";
-    if (disablePagination) {
-        displayErrors(uniqueErrorMessages);
-        std::cout << promptPrefix;
-        std::ostringstream batch;
-        const size_t BATCH_SIZE = 100;
-        for (size_t i = 0; i < entries.size(); i += BATCH_SIZE) {
-            batch.str(""); batch.clear();
-            size_t end = std::min(i + BATCH_SIZE, entries.size());
-            for (size_t j = i; j < end; ++j) batch << entries[j];
-            std::cout << batch.str();
-        }
-        std::cout << "\n";
-        std::cout.flush();
-    }
+        blue + ". Proceed? (y/n): " +
+        reset;
+
+    bool isPageTurn = false;
+
+    // Environment setup for Readline inside the loop
+    auto setupEnv = [&]() {
+        // Only enable Ctrl+L (clear) if pagination is actually being used, 
+        // or always enable it to re-draw the list from the top.
+        rl_bind_key('\f', [](int count, int key) -> int {
+            clear_screen_and_buffer(count, key);
+            rl_on_new_line();
+            rl_replace_line("", 0);
+            rl_done = 1; 
+            return 0;
+        });
+    };
+
     while (true) {
-        std::string userInput;
-        if (disablePagination) {
-            std::unique_ptr<char, decltype(&free)> input(readline(readlinePrompt.c_str()), free);
-            if (!input) {
-                userInput = "EOF_SIGNAL";
-            } else if (input.get()[0] == '\0') {
-				std::cout << "\033[1A\033[K";
-				continue;
-			} else {
-                userInput = std::string(input.get());
-            }
-        } else {
-            userInput = handlePaginatedDisplay(
-                entries, uniqueErrorMessages, promptPrefix, promptSuffix, setupEnv, isPageTurn
-            );
-        }
+        std::string userInput = handlePaginatedDisplay(
+            entries, uniqueErrorMessages, promptPrefix, promptSuffix, setupEnv, isPageTurn
+        );
+
+        // Cleanup keybindings after returning
         rl_bind_key('\f', prevent_readline_keybindings);
-        if (userInput.empty()) continue;
+
         if (userInput == "EOF_SIGNAL") {
             umountMvRmBreak = false;
             abortDel = true;
             return false;
         }
-        if (!isPageTurn) {
-            if (userInput == "Y" || userInput == "y") {
+
+        if (!isPageTurn && !userInput.empty()) {
+            std::string choice = trimWhitespace(userInput);
+            
+            if (choice == "Y" || choice == "y") {
                 umountMvRmBreak = true;
                 return true;
             } else {
                 umountMvRmBreak = false;
                 abortDel = true;
-                std::cout << "\n" << UI::Palette::Red << "rm" << colors.abort << " operation aborted by user." << UI::Palette::BoldReset << "\n";
+                std::cout << "\n" << UI::Palette::Red << "rm" << colors.abort 
+                          << " operation aborted by user." << UI::Palette::BoldReset << "\n";
                 pressEnterToContinue();
                 return false;
             }
@@ -253,9 +240,9 @@ bool& overwriteExisting) {
             std::string blue  = "\001" + std::string(colors.prompt_blue) + "\002";
             std::string reset = "\001" + std::string(UI::Palette::BoldReset) + "\002";
 
-            std::string promptPrefix = "";
+            std::string promptPrefix = "\n";
             std::string promptSuffix =
-                "\n" + green + "FolderPaths" +
+                green + "FolderPaths" +
                 blue + " ↵ for selected " +
                 green + "ISO" +
                 blue + " to be " +
