@@ -234,28 +234,28 @@ bool& overwriteExisting) {
             const CpMvRmColors colors = getCpMvRmColors();
 
             std::string green = "\001" + std::string(colors.prompt_green) + "\002";
-            std::string blue  = "\001" + std::string(colors.prompt_blue) + "\002";
-            std::string reset = "\001" + std::string(UI::Palette::BoldReset) + "\002";
+			std::string blue  = "\001" + std::string(colors.prompt_blue) + "\002";
+			std::string reset = "\001" + std::string(UI::Palette::BoldReset) + "\002";
+			std::string opColor = "\001" + operationColor + "\002";
 
-            std::string promptPrefix = "\n";
-            std::string promptSuffix =
-                "\n" + green + "FolderPaths" +
-                blue + " ↵ for selected " +
-                green + "ISO" +
-                blue + " to be " +
-                operationColor + operationDescription +
-                blue + " into, ? help, < return:\n" +
-                reset;
+			std::string promptPrefix = "\n";
+			std::string promptSuffix =
+				"\n" + green + "FolderPaths" +
+				blue + " ↵ for selected " +
+				green + "ISO" +
+				blue + " to be " +
+				opColor + operationDescription +
+				blue + " into, ? help, < return:\n" +
+				reset;
 
-            std::string readlinePrompt =
-                std::string(colors.prompt_green) + "FolderPaths" +
-                std::string(colors.prompt_blue) + " ↵ for selected " +
-                std::string(colors.prompt_green) + "ISO" +
-                std::string(colors.prompt_blue) + " to be " +
-                operationColor + operationDescription +
-                std::string(colors.prompt_blue) + " into, ? help, < return:\n" +
-                std::string(UI::Palette::BoldReset);
-
+			std::string readlinePrompt =
+				"\001" + std::string(colors.prompt_green) + "\002FolderPaths" +
+				"\001" + std::string(colors.prompt_blue) + "\002 ↵ for selected " +
+				"\001" + std::string(colors.prompt_green) + "\002ISO" +
+				"\001" + std::string(colors.prompt_blue) + "\002 to be " +
+				"\001" + operationColor + "\002" + operationDescription +
+				"\001" + std::string(colors.prompt_blue) + "\002 into, ? help, < return:\n" +
+				"\001" + std::string(UI::Palette::BoldReset) + "\002";
             auto setupEnv = [&]() {
                 enable_ctrl_d();
                 setupSignalHandlerCancellations();
