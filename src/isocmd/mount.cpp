@@ -184,7 +184,7 @@ void mountIsoFiles(
             fails.reserve(isoFiles.size());
             for (const auto& isoFile : isoFiles) {
                 auto [dir, file] = extractDirectoryAndFilename(isoFile, "mount");
-                fails.push_back(formatter.formatError(dir, file, "needsRoot"));
+                fails.push_back(formatter.formatError(std::string(dir), std::string(file), "needsRoot"));
             }
             std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
             mountedFails.insert(fails.begin(), fails.end());
@@ -248,7 +248,7 @@ void mountIsoFiles(
     auto recordFail = [&](const std::string& isoFile, const char* reason) {
         if (!silentMode) {
             auto [dir, file] = extractDirectoryAndFilename(isoFile, "mount");
-            tempMountedFails.push_back(formatter.formatError(dir, file, reason));
+            tempMountedFails.push_back(formatter.formatError(std::string(dir), std::string(file), reason));
         }
         failedTasks->fetch_add(1, std::memory_order_relaxed);
     };
@@ -283,7 +283,8 @@ void mountIsoFiles(
         if (mountPointCache.count(mountPoint)) {
             if (!silentMode)
                 tempSkippedMessages.push_back(
-                    formatter.formatSkipped(isoDir, isoName, mntDir, mntName));
+					formatter.formatSkipped(std::string(isoDir), std::string(isoName), std::string(mntDir), std::string(mntName))
+				);
             completedTasks->fetch_add(1, std::memory_order_relaxed);
             maybeFlush();
             continue;
@@ -312,8 +313,7 @@ void mountIsoFiles(
             if (!silentMode) {
                 const char* rawFsType = mnt_context_get_fstype(ctx);
                 const std::string fsType = rawFsType ? rawFsType : "unknown";
-                tempMountedFiles.push_back(
-                    formatter.formatMountSuccess(isoDir, isoName, mntDir, mntName, fsType));
+                formatter.formatMountSuccess(std::string(isoDir), std::string(isoName), std::string(mntDir), std::string(mntName), fsType);
             }
             mountPointCache.emplace(mountPoint);
             completedTasks->fetch_add(1, std::memory_order_relaxed);

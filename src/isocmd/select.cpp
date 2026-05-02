@@ -288,6 +288,12 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
         }
         
         std::cout << "\033[1A\033[K";
+        
+		// Disable PgUp&PgDn when pagination is not enabled
+		if (GlobalState::ITEMS_PER_PAGE == 0) {
+			rl_bind_keyseq("\\e[5~", rl_insert);
+			rl_bind_keyseq("\\e[6~", rl_insert);
+		}
 
 		const ReadlineAndPromptTheme pt = getPromptTheme();
 
@@ -381,6 +387,8 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
         if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn, 
                                     filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage)) {
 										std::cout << "\033[1B\033[K";
+										// Disable PgUp&PgDn when pagination is not enabled
+			
                 continue;
         }
 
@@ -473,6 +481,12 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 		}
 		
 		std::cout << "\033[1A\033[K";
+		
+		// Disable PgUp&PgDn when pagination is not enabled
+		if (GlobalState::ITEMS_PER_PAGE == 0) {
+			rl_bind_keyseq("\\e[5~", rl_insert);
+			rl_bind_keyseq("\\e[6~", rl_insert);
+		}
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
         

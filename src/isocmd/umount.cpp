@@ -29,22 +29,29 @@ bool isDirectoryEmpty(const std::string& path) {
 
 /**
  * @brief Formats a mount point path for console output.
- * @details Uses parseMountPointComponents to break the path into segments and
- * applies ANSI styling based on the user's display configuration.
- * * @param isoDir The directory path to format.
+ * @details Breaks the path into segments using parseMountPointComponents. 
+ * Converts non-owning string_views into a styled, owning std::string based 
+ * on ANSI palette settings and user display configuration.
+ * 
+ * @param isoDir The directory path to format.
  * @param fmt Reference to the VerboseMessageFormatter.
- * @param messageKey The key for the specific message template (e.g., "success", "error").
- * @return A styled string ready for display.
+ * @param messageKey The key for the specific message template.
+ * @return A fully constructed, styled string ready for display.
  */
 static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessageFormatter& fmt, const char* messageKey) {
     auto dirParts = parseMountPointComponents(isoDir);
-    std::string formattedDir = std::get<1>(dirParts);
+    
+    std::string formattedDir{std::get<1>(dirParts)};
     std::string_view squareColor = UI::Palette::DimGray;
 
     if (displayConfig::toggleFullListUmount) {
-		formattedDir = std::get<0>(dirParts) + formattedDir 
-					   + std::string(squareColor) + std::get<2>(dirParts) + std::string(UI::Palette::BoldReset);
-	}
+        formattedDir = std::string(std::get<0>(dirParts)) 
+                       + formattedDir 
+                       + std::string(squareColor) 
+                       + std::string(std::get<2>(dirParts)) 
+                       + std::string(UI::Palette::BoldReset);
+    }
+    
     return fmt.format(messageKey, formattedDir);
 }
 

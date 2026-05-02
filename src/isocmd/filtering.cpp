@@ -525,7 +525,7 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
 	
 	rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
 	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
-	std::cout << "\033[1B\033[K";
+	std::cout << "\n";
 	reset_custom_keybindingsForSelect();
     const ReadlineAndPromptTheme ft = getFilterTheme("", false);
     const std::string prompt =
