@@ -274,6 +274,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning))
                     break;
             }
+            // Reset manual-update key for mountpoint-lists
 			if (isUnmount) rl_bind_keyseq("R", rl_insert);
             std::cout << "\n\n";
             umountMvRmBreak = false;
@@ -412,6 +413,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
+    
+    // Reset manual-update key for image lists
+    rl_bind_keyseq("R", rl_insert);
 
     std::unordered_set<std::string> processedErrors, successOuts, skippedOuts, failedOuts;
     std::vector<std::string> pendingIndices;
