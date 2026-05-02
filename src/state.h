@@ -30,7 +30,6 @@ namespace GlobalState {
     inline int MAX_HISTORY_LINES         = 100;
     inline int MAX_HISTORY_PATTERN_LINES = 50;
     
-    // constexpr is perfect here for compile-time constant POD types
     inline constexpr uintmax_t maxDatabaseSize = 1024 * 1024 * 1; // 1MB
 
     // State Management
