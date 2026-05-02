@@ -118,12 +118,12 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                                   const std::function<void()>& setupEnvironmentFn, 
                                   bool& isPageTurn) {
 
-	const PrintListTheme c = getListColors();
-	
+    const PrintListTheme c = getListColors();
+    
     bool disablePagination = (GlobalState::ITEMS_PER_PAGE <= 0 || entries.size() <= GlobalState::ITEMS_PER_PAGE);
-    size_t totalPages = disablePagination ? 1 : ((entries.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE);
-    size_t currentPage = 0; 
     size_t totalEntries = entries.size();
+    size_t totalPages = disablePagination ? 1 : ((totalEntries + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE);
+    size_t currentPage = 0; 
 
     while (true) {
         if (setupEnvironmentFn) setupEnvironmentFn();
@@ -134,33 +134,40 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
         clearScrollBuffer();
         displayErrors(uniqueErrorMessages);
 
-        std::ostringstream pageContent;
+        // 1. One newline above the list
+        std::cout << "\n";
 
+        // 2. Display Pagination Header (Only if enabled)
         if (!disablePagination) {
-            pageContent
-                << c.head << "Page "
-                << c.accent << (currentPage + 1)
-                << c.head << "/" << c.num << totalPages
-                << c.head << " (Items ("
-                << c.accent << (start + 1) << "-" << end
-                << c.head << ")/" << c.num << totalEntries
-                << c.head << ")"
-                << UI::Palette::BoldReset << "\n\n";
+            std::cout << c.head << "Page "
+                      << c.accent << (currentPage + 1)
+                      << c.head << "/" << c.num << totalPages
+                      << c.head << " (Items ("
+                      << c.accent << (start + 1) << "-" << end
+                      << c.head << ")/" << c.num << totalEntries
+                      << c.head << ")"
+                      << UI::Palette::BoldReset << "\n\n";
         }
 
+        // 3. Print the entries directly to stdout
         for (size_t i = start; i < end; ++i) {
-            pageContent << entries[i];
+            std::cout << entries[i];
         }
 
+        // 4. Display Pagination Footer (Only if enabled and more than 1 page)
         if (!disablePagination && totalPages > 1) {
-            pageContent << "\n" << c.head << "Pagination: ";
-            if (currentPage > 0)                pageContent << "[PgDn] Previous | ";
-            if (currentPage < totalPages - 1)  pageContent << "[PgUp] Next | ";
-            pageContent << "[g<num>] ↵ Go to | " << UI::Palette::BoldReset << "\n";
+            std::cout << "\n" << c.head << "Pagination: ";
+            if (currentPage > 0)               std::cout << "[PgDn] Previous | ";
+            if (currentPage < totalPages - 1)  std::cout << "[PgUp] Next | ";
+            std::cout << "[g<num>] ↵ Go to | " << UI::Palette::BoldReset << "\n"; 
         }
 
-        std::string prompt = promptPrefix + pageContent.str() + promptSuffix;
-        std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+        // 5. Construct the final prompt
+        // If pagination is disabled, we remove the extra newline that typically 
+        // sits above the prompt to tighten the layout.
+        std::string finalPrompt = promptPrefix + promptSuffix;
+        
+        std::unique_ptr<char, decltype(&std::free)> input(readline(finalPrompt.c_str()), &std::free);
 
         if (!input.get()) return "EOF_SIGNAL";
 
@@ -170,24 +177,31 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
             bool isNavigation = false;
 
             if (userInput.size() >= 2 && userInput[0] == 'g' && std::isdigit(userInput[1])) {
+				isNavigation = true;
                 try {
                     size_t requestedPage = std::stoul(userInput.substr(1));
-                    isPageTurn = true;
-                    isNavigation = true;
                     if (requestedPage >= 1 && requestedPage <= totalPages) {
                         currentPage = requestedPage - 1;
+                        isPageTurn = true;
+                        isNavigation = true;
                     }
-                } catch (...) { isNavigation = true; }
+                } catch (...) {}
             }
-            else if (userInput == "PgUp") {
-                isPageTurn = true;
-                isNavigation = true;
-                if (currentPage < totalPages - 1) currentPage++;
+            else if (userInput == "PgUp" && !disablePagination) {
+				isNavigation = true;
+                if (currentPage < totalPages - 1) {
+                    currentPage++;
+                    isPageTurn = true;
+                    isNavigation = true;
+                }
             }
-            else if (userInput == "PgDn") {
-                isPageTurn = true;
-                isNavigation = true;
-                if (currentPage > 0) currentPage--;
+            else if (userInput == "PgDn" && !disablePagination) {
+				isNavigation = true;
+                if (currentPage > 0) {
+                    currentPage--;
+                    isPageTurn = true;
+                    isNavigation = true;
+                }
             }
 
             if (isNavigation) continue;

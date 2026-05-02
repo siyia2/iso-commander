@@ -228,17 +228,24 @@ bool& overwriteExisting) {
             bool isPageTurn = false;
 
             auto setupEnv = [&]() {
-                enable_ctrl_d();
-                setupSignalHandlerCancellations();
-                rl_bind_key('\f', clear_screen_and_buffer);
-                rl_bind_key('\t', rl_complete);
-                if (!isCopy) umountMvRmBreak = true;
-                if (!isPageTurn) {
-                    clear_history();
-                    filterHistory = false;
-                    loadHistory(filterHistory);
-                }
-            };
+				enable_ctrl_d();
+				setupSignalHandlerCancellations();
+				rl_bind_key('\f', [](int count, int key) -> int {
+					clear_screen_and_buffer(count, key); // Clear function
+					rl_on_new_line();                    // Reset readline's internal cursor state
+					rl_replace_line("", 0);              // Clear the current input buffer
+					rl_done = 1;                         // Force readline to exit and return to the loop
+					return 0;
+				});
+
+				rl_bind_key('\t', rl_complete);
+				if (!isCopy) umountMvRmBreak = true;
+				if (!isPageTurn) {
+					clear_history();
+					filterHistory = false;
+					loadHistory(filterHistory);
+				}
+			};
 
             const CpMvRmColors colors = getCpMvRmColors();
 
@@ -246,7 +253,7 @@ bool& overwriteExisting) {
             std::string blue  = "\001" + std::string(colors.prompt_blue) + "\002";
             std::string reset = "\001" + std::string(UI::Palette::BoldReset) + "\002";
 
-            std::string promptPrefix = "\n";
+            std::string promptPrefix = "";
             std::string promptSuffix =
                 "\n" + green + "FolderPaths" +
                 blue + " ↵ for selected " +
