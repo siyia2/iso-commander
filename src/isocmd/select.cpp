@@ -313,12 +313,6 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
         
         std::string inputString(rawInput.get());
         
-        if (GlobalState::ITEMS_PER_PAGE == 0 && (inputString == "PgUp" || inputString == "PgDn")) {
-			std::cout << "\033[1B\033[K";
-			needsClrScrn = false;
-			continue;
-		}
-        
         if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
 			needsClrScrn = false;
 			continue;
@@ -329,6 +323,12 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
         }
         
         if (inputString[0] == 'R' && isImportRunning.load()) {
+			std::cout << "\033[1B\033[K";
+			needsClrScrn = false;
+			continue;
+		}
+		
+		if (GlobalState::ITEMS_PER_PAGE == 0 && (inputString == "PgUp" || inputString == "PgDn")) {
 			std::cout << "\033[1B\033[K";
 			needsClrScrn = false;
 			continue;
