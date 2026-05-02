@@ -65,8 +65,9 @@ void reset_custom_keybindingsForSelect(void);
 void setup_custom_keybindingsForSettingsEditor(void);
 void reset_custom_keybindingsForSettingsEditor(void);
 
-// --- File Operations Mode (Cp/Mv/USB/RM) ---
+// --- File Operations Mode (Cp/Mv/USB) ---
 void reset_custom_keybindingsForCpMvWrite2Usb(void);
+// --- File Operations Mode (RM) ---
 void reset_custom_keybindingsForRm(void);
 
 #endif // READLINE_H
