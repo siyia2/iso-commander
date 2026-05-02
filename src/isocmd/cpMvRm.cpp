@@ -437,48 +437,65 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
 /**
  * @brief Removes a single ISO file from the disk and logs the outcome.
  */
-void performDeleteOperation(const fs::path& srcPath, const std::string& srcDir, const std::string& srcFile, size_t fileSize, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks,
-std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages) {
+void performDeleteOperation(const fs::path& srcPath, std::string_view srcDir, std::string_view srcFile, 
+                            size_t fileSize, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, 
+                            std::atomic<size_t>* failedTasks, std::vector<std::string>& verboseIsos, 
+                            std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, 
+                            const std::function<void()>& batchInsertMessages) {
 
     const CpMvRmColors colors = getCpMvRmColors();
 
-    const std::string displaySrc = (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile;
+    // Optimize display path construction
+    std::string displaySrc;
+    if (!displayConfig::toggleNamesOnly) {
+        displaySrc.reserve(srcDir.size() + srcFile.size() + 1);
+        displaySrc.append(srcDir).append("/").append(srcFile);
+    } else {
+        displaySrc = std::string(srcFile);
+    }
 
-    if (GlobalState::g_operationCancelled.load()) {
+    if (GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
         std::string msg;
-        msg.reserve(128);
+        msg.reserve(128 + displaySrc.size());
         msg.append(colors.error_label).append("Error deleting: ")
            .append(colors.error_path).append("'").append(displaySrc).append("'")
            .append(UI::Palette::BoldReset).append(colors.error_label).append(": Cancelled.")
-           .append(UI::Palette::BoldReset).append(UI::Palette::BoldReset);
+           .append(UI::Palette::BoldReset);
+        
         verboseErrors.push_back(std::move(msg));
         failedTasks->fetch_add(1, std::memory_order_acq_rel);
-        operationSuccessful.store(false);
+        operationSuccessful.store(false, std::memory_order_release);
         batchInsertMessages();
         return;
     }
 
     std::error_code ec;
+    // fs::remove returns true if the file was deleted, false if it didn't exist
     if (fs::remove(srcPath, ec)) {
-        completedBytes->fetch_add(fileSize);
+        completedBytes->fetch_add(fileSize, std::memory_order_relaxed);
+        
         std::string msg;
-        msg.reserve(128);
+        msg.reserve(128 + displaySrc.size());
         msg.append(colors.success_label).append("Deleted: ")
            .append(colors.success_path).append("'").append(displaySrc).append("'")
            .append(UI::Palette::BoldReset).append(colors.success_label).append(".")
            .append(UI::Palette::BoldReset);
+           
         verboseIsos.push_back(std::move(msg));
         completedTasks->fetch_add(1, std::memory_order_acq_rel);
     } else {
         std::string msg;
-        msg.reserve(128);
+        msg.reserve(128 + displaySrc.size() + (ec ? ec.message().size() : 20));
         msg.append(colors.error_label).append("Error deleting: ")
            .append(colors.error_path).append("'").append(displaySrc).append("'")
-           .append(UI::Palette::BoldReset).append(colors.error_label).append(": ").append(ec.message()).append(".")
-           .append(UI::Palette::BoldReset).append(UI::Palette::BoldReset);
+           .append(UI::Palette::BoldReset).append(colors.error_label).append(": ")
+           .append(ec ? ec.message() : "File not found")
+           .append(".")
+           .append(UI::Palette::BoldReset);
+           
         verboseErrors.push_back(std::move(msg));
         failedTasks->fetch_add(1, std::memory_order_acq_rel);
-        operationSuccessful.store(false);
+        operationSuccessful.store(false, std::memory_order_release);
     }
     batchInsertMessages();
 }
