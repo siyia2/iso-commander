@@ -118,7 +118,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles, std::unorde
 bool& umountMvRmBreak, bool& abortDel) {
     rl_attempted_completion_function = nullptr;
     
-    reset_custom_keybindingsForSelect();
+    reset_custom_keybindingsForRm();
 
     const CpMvRmColors colors = getCpMvRmColors();
 
