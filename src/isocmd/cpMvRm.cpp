@@ -216,29 +216,20 @@ bool& overwriteExisting) {
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
     sortFilesCaseInsensitive(entries);
     clearScrollBuffer();
-    
-	reset_custom_keybindingsForCpMvWrite2Usb();
+
+    reset_custom_keybindingsForCpMvWrite2Usb();
 
     bool shouldContinue = true;
     std::string userInput;
+    bool disablePagination = (GlobalState::ITEMS_PER_PAGE <= 0 || isoFiles.size() <= GlobalState::ITEMS_PER_PAGE);
+
+    static const std::vector<std::string>* s_entries = nullptr;
+    s_entries = &entries;
 
     while (shouldContinue) {
         resetReadlinePagination();
         if (!isDelete) {
             bool isPageTurn = false;
-
-            auto setupEnv = [&]() {
-                enable_ctrl_d();
-                setupSignalHandlerCancellations();
-                rl_bind_key('\f', clear_screen_and_buffer);
-                rl_bind_key('\t', rl_complete);
-                if (!isCopy) umountMvRmBreak = true;
-                if (!isPageTurn) {
-                    clear_history();
-                    filterHistory = false;
-                    loadHistory(filterHistory);
-                }
-            };
 
             const CpMvRmColors colors = getCpMvRmColors();
 
@@ -256,9 +247,85 @@ bool& overwriteExisting) {
                 blue + " into, ? help, < return:\n" +
                 reset;
 
-            userInput = handlePaginatedDisplay(
-                entries, uniqueErrorMessages, promptPrefix, promptSuffix, setupEnv, isPageTurn
-            );
+            std::string readlinePrompt =
+                std::string(colors.prompt_green) + "FolderPaths" +
+                std::string(colors.prompt_blue) + " ↵ for selected " +
+                std::string(colors.prompt_green) + "ISO" +
+                std::string(colors.prompt_blue) + " to be " +
+                operationColor + operationDescription +
+                std::string(colors.prompt_blue) + " into, ? help, < return:\n" +
+                std::string(UI::Palette::BoldReset);
+
+            auto setupEnv = [&]() {
+                enable_ctrl_d();
+                setupSignalHandlerCancellations();
+                if (!disablePagination) {
+                    rl_bind_key('\f', clear_screen_and_buffer);
+                } else {
+                    rl_bind_key('\f', [](int count, int key) -> int {
+                        (void)count; (void)key;
+                        clearScrollBuffer();
+                        std::cout << "\n";
+                        std::ostringstream batch;
+                        const size_t BATCH_SIZE = 100;
+                        for (size_t i = 0; i < s_entries->size(); i += BATCH_SIZE) {
+                            batch.str("");
+                            batch.clear();
+                            size_t end = std::min(i + BATCH_SIZE, s_entries->size());
+                            for (size_t j = i; j < end; ++j)
+                                batch << (*s_entries)[j];
+                            std::cout << batch.str();
+                        }
+                        std::cout << "\n";
+                        std::cout.flush();
+                        rl_on_new_line();
+                        rl_forced_update_display();
+                        return 0;
+                    });
+                }
+                rl_bind_key('\t', rl_complete);
+                if (!isCopy) umountMvRmBreak = true;
+                if (!isPageTurn) {
+                    clear_history();
+                    filterHistory = false;
+                    loadHistory(filterHistory);
+                }
+            };
+
+            if (disablePagination) {
+                displayErrors(uniqueErrorMessages);
+                std::cout << promptPrefix;
+                std::ostringstream batch;
+                const size_t BATCH_SIZE = 100;
+                for (size_t i = 0; i < entries.size(); i += BATCH_SIZE) {
+                    batch.str(""); batch.clear();
+                    size_t end = std::min(i + BATCH_SIZE, entries.size());
+                    for (size_t j = i; j < end; ++j) batch << entries[j];
+                    std::cout << batch.str();
+                }
+                std::cout << "\n";
+                std::cout.flush();
+
+                setupEnv();
+                while (true) {
+                    std::unique_ptr<char, decltype(&free)> input(readline(readlinePrompt.c_str()), free);
+                    if (!input) {
+                        userInput = "EOF_SIGNAL";
+                        break;
+                    } else if (input.get()[0] == '\0') {
+                        std::cout << "\033[2A\033[K";
+                        continue;
+                    } else {
+                        userInput = std::string(input.get());
+                        break;
+                    }
+                }
+            } else {
+                setupEnv();
+                userInput = handlePaginatedDisplay(
+                    entries, uniqueErrorMessages, promptPrefix, promptSuffix, setupEnv, isPageTurn
+                );
+            }
 
             rl_bind_key('\f', prevent_readline_keybindings);
             rl_bind_key('\t', prevent_readline_keybindings);
@@ -323,6 +390,7 @@ bool& overwriteExisting) {
     resetReadlinePagination();
     return userDestDir;
 }
+
 
 namespace fs = std::filesystem;
 
