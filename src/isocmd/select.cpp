@@ -413,9 +413,6 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
-    
-    // Reset manual-update key for image lists
-    rl_bind_keyseq("R", rl_insert);
 
     std::unordered_set<std::string> processedErrors, successOuts, skippedOuts, failedOuts;
     std::vector<std::string> pendingIndices;
@@ -461,6 +458,8 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         enable_ctrl_d();
         setupSignalHandlerCancellations();
         setup_custom_keybindingsForSelect();
+        // Reset manual-update key for image lists
+		rl_bind_keyseq("R", rl_insert);
         GlobalState::g_operationCancelled.store(false);
         bool verbose = false; 
         resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
