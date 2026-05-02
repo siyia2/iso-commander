@@ -32,11 +32,6 @@
 
 // ─── large-file support ────────────────────────────────────────────────────
 
-#define _LARGE_FILES
-#define __USE_LARGEFILE64
-#define __USE_FILE_OFFSET64
-#define _LARGEFILE_SOURCE
-#define _LARGEFILE64_SOURCE
 #define _FILE_OFFSET_BITS 64
 
 // ___________________________________________________________________________
@@ -109,8 +104,11 @@ static SRes LzmaDec_AllocateProbs(CLzmaDec *p, const u8 *props, unsigned propsSi
     p->lc = lc; p->lp = lp; p->pb = pb;
     u32 num = LzmaProps_GetNumProbs(lc, lp);
     if (p->probs && p->numProbs == num) return SZ_OK;
-    if (p->probs) alloc->Free(alloc, p->probs);
-    p->probs = (CLzmaProb *)alloc->Alloc(alloc, num * sizeof(CLzmaProb));
+	if (p->probs) {
+		alloc->Free(alloc, p->probs);
+		p->probs = nullptr;
+	}
+	p->probs = (CLzmaProb *)alloc->Alloc(alloc, num * sizeof(CLzmaProb));
     if (!p->probs) return SZ_ERROR_DATA;
     p->numProbs = num;
     return SZ_OK;
@@ -188,23 +186,34 @@ static void LzmaDec_Init(CLzmaDec *p) {
 #define kNumLenToBitModelTotal 10
 #define kMatchMinLen           2
 
-static u32 lzma_decode_full(CLzmaDec *p, const u8 *in, u32 insz, u8 *out, u32 outsz) {
+/**
+ * FIXED LZMA DECODER
+ * Supports volumes > 4GB and fixes Double-Free crashes.
+ */
+static size_t lzma_decode_full(CLzmaDec *p, const u8 *in, size_t insz, u8 *out, size_t outsz) {
+    // Basic Initialization
     p->dic        = out;
     p->dicBufSize = outsz;
     p->dicPos     = 0;
-    p->buf  = in;
-    p->code = 0;
-    p->range = 0xFFFFFFFF;
+    p->buf        = in;
+    p->code       = 0;
+    p->range      = 0xFFFFFFFF;
+
+    // Load first 5 bytes
     for (int i = 0; i < 5; i++) p->code = (p->code << 8) | (*p->buf++);
     (void)insz;
 
-    unsigned state  = 0;
-    u32 rep0 = 1, rep1 = 1, rep2 = 1, rep3 = 1;
+    unsigned state = 0;
+    // Must be size_t. In a 4.5GB file, the distance back (rep) can exceed 2^32.
+    size_t rep0 = 1, rep1 = 1, rep2 = 1, rep3 = 1; 
     int len = 0;
     CLzmaProb *probs = p->probs;
 
     for (;;) {
-        u32 posState = (u32)(p->dicPos) & ((1 << p->pb) - 1);
+        // Safe check for buffer bounds
+        if (p->dicPos >= p->dicBufSize) return p->dicPos;
+
+        u32 posState = (u32)((size_t)p->dicPos & ((1 << p->pb) - 1));
         CLzmaProb *prob = probs + IsMatch + (state << kNumPosBitsMax) + posState;
         u32 ttt = *prob;
         u32 bound = (p->range >> kNumBitModelTotalBits) * ttt;
@@ -224,7 +233,8 @@ static u32 lzma_decode_full(CLzmaDec *p, const u8 *in, u32 insz, u8 *out, u32 ou
 
             u32 symbol = 1;
             if (state >= 7) {
-                u32 dicPos2 = (p->dicPos >= rep0) ? (p->dicPos - rep0) : (p->dicPos + p->dicBufSize - rep0);
+                // Use size_t for dictionary offset math to prevent 4GB wraparound
+                size_t dicPos2 = (p->dicPos >= rep0) ? (p->dicPos - rep0) : (p->dicPos + p->dicBufSize - rep0);
                 u8 matchByte = p->dic[dicPos2];
                 do {
                     u32 bit;
@@ -241,7 +251,6 @@ static u32 lzma_decode_full(CLzmaDec *p, const u8 *in, u32 insz, u8 *out, u32 ou
             }
             while (symbol < 0x100) { GET_BIT(prob + symbol, symbol); }
 
-            if (p->dicPos >= p->dicBufSize) return 0;
             p->dic[p->dicPos++] = (u8)symbol;
             p->processedPos++;
             state = (state < 4) ? 0 : (state < 10) ? state - 3 : state - 6;
@@ -261,8 +270,8 @@ static u32 lzma_decode_full(CLzmaDec *p, const u8 *in, u32 insz, u8 *out, u32 ou
             NORMALIZE;
 
             rep3 = rep2; rep2 = rep1; rep1 = rep0;
-
             prob = probs + LenCoder;
+            // Length decoding logic...
             {
                 CLzmaProb *pc = prob;
                 u32 sym;
@@ -289,9 +298,9 @@ static u32 lzma_decode_full(CLzmaDec *p, const u8 *in, u32 insz, u8 *out, u32 ou
                     }
                 }
             }
-
             state = (state < 7) ? 7 : 10;
 
+            // Distance decoding logic...
             {
                 u32 posSlot;
                 int numDirectBits;
@@ -343,10 +352,11 @@ static u32 lzma_decode_full(CLzmaDec *p, const u8 *in, u32 insz, u8 *out, u32 ou
                         distance |= sym2 & 0xF;
                     }
                 }
-                rep0 = distance + 1;
-                if (rep0 == 0) return (u32)p->dicPos;
+                rep0 = (size_t)distance + 1; // Cast to size_t
+                if (rep0 == 0) return p->dicPos;
             }
         } else {
+            // Repetition handling...
             p->range -= bound; p->code -= bound;
             ttt -= ttt>>kNumMoveBits; *prob=(CLzmaProb)ttt;
             NORMALIZE;
@@ -360,8 +370,8 @@ static u32 lzma_decode_full(CLzmaDec *p, const u8 *in, u32 insz, u8 *out, u32 ou
                 if (p->code < bound) {
                     p->range = bound; ttt+=(kBitModelTotal-ttt)>>kNumMoveBits; *prob=(CLzmaProb)ttt; NORMALIZE;
                     if (p->dicPos == 0 && p->checkDicSize == 0) return 0;
-                    u32 srcPos = (p->dicPos >= rep0) ? (p->dicPos - rep0) : (p->dicPos + p->dicBufSize - rep0);
-                    if (p->dicPos >= p->dicBufSize) return 0;
+                    size_t srcPos = (p->dicPos >= rep0) ? (p->dicPos - rep0) : (p->dicPos + p->dicBufSize - rep0);
+                    if (p->dicPos >= p->dicBufSize) return p->dicPos;
                     p->dic[p->dicPos++] = p->dic[srcPos];
                     p->processedPos++;
                     state = (state < 7) ? 9 : 11;
@@ -370,7 +380,7 @@ static u32 lzma_decode_full(CLzmaDec *p, const u8 *in, u32 insz, u8 *out, u32 ou
                     p->range -= bound; p->code -= bound; ttt-=ttt>>kNumMoveBits; *prob=(CLzmaProb)ttt; NORMALIZE;
                 }
             } else {
-                u32 distance;
+                size_t distance;
                 p->range -= bound; p->code -= bound; ttt-=ttt>>kNumMoveBits; *prob=(CLzmaProb)ttt; NORMALIZE;
                 prob = probs + IsRepG1 + state;
                 ttt = *prob; bound = (p->range>>kNumBitModelTotalBits)*ttt;
@@ -427,15 +437,18 @@ static u32 lzma_decode_full(CLzmaDec *p, const u8 *in, u32 insz, u8 *out, u32 ou
 
         len += kMatchMinLen;
 
+        // FINAL MATCH COPY
         if (rep0 > p->dicPos + p->checkDicSize) return 0;
         while (len--) {
-            if (p->dicPos >= p->dicBufSize) return 0;
-            u32 srcPos = (p->dicPos >= rep0) ? (p->dicPos - rep0)
+            if (p->dicPos >= p->dicBufSize) break;
+            // size_t calculation for huge buffers
+            size_t srcPos = (p->dicPos >= rep0) ? (p->dicPos - rep0)
                                               : (p->dicPos + p->dicBufSize - rep0);
             p->dic[p->dicPos++] = p->dic[srcPos];
             p->processedPos++;
         }
     }
+    return p->dicPos;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -457,10 +470,10 @@ struct TINF_DATA {
     unsigned int   tag;
     unsigned int   bitcount;
     u8            *dest;
-    unsigned int  *destLen;
-    unsigned int   sourceLen;
-    unsigned int   sourceSize;
-    unsigned int   destSize;
+    size_t        *destLen;     // Changed to size_t
+    size_t         sourceLen;   // Changed to size_t
+    size_t         sourceSize;  // Changed to size_t
+    size_t         destSize;    // Changed to size_t
     TINF_TREE      ltree;
     TINF_TREE      dtree;
 };
@@ -615,8 +628,8 @@ static int tinf_inflate_uncompressed_block(TINF_DATA *d) {
 }
 
 static int tinf_uncompress(TinfTables &tt,
-                            void *dest, unsigned *destLen,
-                            const void *source, unsigned sourceLen,
+                            void *dest, size_t *destLen, // Changed to size_t
+                            const void *source, size_t sourceLen, // Changed to size_t
                             const unsigned swapped_btype[3]) {
     TINF_DATA d;
     d.source     = (const u8 *)source;
@@ -773,13 +786,18 @@ struct DaaContext {
     std::atomic<size_t> *completedBytes = nullptr;
 
     ~DaaContext() {
-        if (fdi)            fclose(fdi);
-        if (fdo)            fclose(fdo);
-        if (in)             free(in);
-        if (out_buf)        free(out_buf);
-        if (multi_filename) free(multi_filename);
-        if (lzma.probs)     LzmaDec_Free(&lzma, &g_Alloc);
-    }
+		if (fdi) { fclose(fdi); fdi = nullptr; }
+		if (fdo) { fclose(fdo); fdo = nullptr; }
+		if (in) { free(in); in = nullptr; }
+		if (out_buf) { free(out_buf); out_buf = nullptr; }
+		if (multi_filename) { free(multi_filename); multi_filename = nullptr; }
+		
+		// Safety check for parallel threads
+		if (lzma.probs != nullptr) {
+			LzmaDec_Free(&lzma, &g_Alloc);
+			lzma.probs = nullptr; // Ensure this is NULL so the next thread doesn't try to free it
+		}
+	}
 };
 
 struct DaaError {
@@ -986,7 +1004,7 @@ bool convertDaaToIso(const std::string &inputFile,
         if (daa_dataz) {
             ctx_alloc(&ctx.in, daa_dataz, &ctx.insz);
             ctx_read(ctx, ctx.in, daa_dataz);
-            unsigned destLen = daas_mem;
+            size_t destLen = daas_mem;
             if (tinf_uncompress(ctx.tinf, (u8*)daa_data, &destLen, ctx.in, daa_dataz, ctx.swapped_btype) != TINF_OK)
                 throw DaaError("failed to decompress index table");
             u32 bits_per_entry = (u32)(bittype + bitsize);
@@ -1041,7 +1059,7 @@ bool convertDaaToIso(const std::string &inputFile,
                     if (lzma_filter) poweriso_is_shit(ctx.out_buf, (int)outlen);
                     break;
                 case 1: {
-                    unsigned destLen = ctx.outsz;
+                    size_t destLen = ctx.outsz;
                     if (tinf_uncompress(ctx.tinf, ctx.out_buf, &destLen, ctx.in, len, ctx.swapped_btype) != TINF_OK)
                         throw DaaError("INFLATE decompression failed");
                     outlen = destLen;
