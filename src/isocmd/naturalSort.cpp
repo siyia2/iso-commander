@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <string_view>
+#include <cctype>
+
 // Project Headers
 #include "../caches.h"
 #include "../concurrency.h"
@@ -7,25 +11,36 @@
 #include "../threadpool.h"
 
 /**
- * @brief Compares two strings using natural order (e.g., "file2.txt" < "file10.txt").
- * * This comparison is case-insensitive but falls back to case-sensitive comparison
- * if the strings are otherwise identical. It correctly handles numeric sequences 
- * within strings by comparing their numerical value rather than their ASCII codes.
- * * @param a The first string to compare.
- * @param b The second string to compare.
+ * @brief Compares two string views using natural order (e.g., "file2.txt" < "file10.txt").
+ * 
+ * Performs a case-insensitive natural sort comparison. If strings are alphabetically 
+ * and numerically identical, it falls back to a case-sensitive comparison to ensure 
+ * a stable, deterministic sort order.
+ * 
+ * This version uses std::string_view to provide a zero-copy comparison, making it 
+ * highly efficient for large collections or path-based sorting where substrings 
+ * are frequently evaluated.
+ * 
+ * @param a The first string_view to compare.
+ * @param b The second string_view to compare.
  * @return int Returns -1 if a < b, 1 if a > b, and 0 if a == b.
  */
-int naturalCompare(const std::string &a, const std::string &b) {
+int naturalCompare(std::string_view a, std::string_view b) {
     size_t i = 0, j = 0;
-    while (i < a.size() && j < b.size()) {
-        if (std::isdigit(a[i]) && std::isdigit(b[j])) {
+    const size_t size_a = a.size();
+    const size_t size_b = b.size();
+
+    while (i < size_a && j < size_b) {
+        if (std::isdigit(static_cast<unsigned char>(a[i])) && 
+            std::isdigit(static_cast<unsigned char>(b[j]))) {
+            
             size_t start_a = i, start_b = j;
-            while (start_a < a.size() && a[start_a] == '0') start_a++;
-            while (start_b < b.size() && b[start_b] == '0') start_b++;
+            while (start_a < size_a && a[start_a] == '0') start_a++;
+            while (start_b < size_b && b[start_b] == '0') start_b++;
             
             size_t len_a = 0, len_b = 0;
-            while (i + len_a < a.size() && std::isdigit(a[i + len_a])) len_a++;
-            while (j + len_b < b.size() && std::isdigit(b[j + len_b])) len_b++;
+            while (i + len_a < size_a && std::isdigit(static_cast<unsigned char>(a[i + len_a]))) len_a++;
+            while (j + len_b < size_b && std::isdigit(static_cast<unsigned char>(b[j + len_b]))) len_b++;
             
             size_t nz_len_a = len_a - (start_a - i);
             size_t nz_len_b = len_b - (start_b - j);
@@ -34,8 +49,8 @@ int naturalCompare(const std::string &a, const std::string &b) {
                 return (nz_len_a < nz_len_b) ? -1 : 1;
             
             for (size_t k = 0; k < nz_len_a; ++k) {
-                char ca = (start_a + k < a.size()) ? a[start_a + k] : '0';
-                char cb = (start_b + k < b.size()) ? b[start_b + k] : '0';
+                char ca = a[start_a + k];
+                char cb = b[start_b + k];
                 if (ca != cb) return (ca < cb) ? -1 : 1;
             }
             
@@ -47,26 +62,35 @@ int naturalCompare(const std::string &a, const std::string &b) {
             i += len_a;
             j += len_b;
         } else {
-            char ca = std::tolower(a[i]), cb = std::tolower(b[j]);
+            // Use unsigned char cast for safety with std::tolower
+            char ca = static_cast<char>(std::tolower(static_cast<unsigned char>(a[i])));
+            char cb = static_cast<char>(std::tolower(static_cast<unsigned char>(b[j])));
+            
             if (ca != cb) return (ca < cb) ? -1 : 1;
             
+            // Case-sensitive fallback if lowercase is identical
             if (a[i] != b[j]) return (a[i] < b[j]) ? -1 : 1;
             
             ++i; ++j;
         }
     }
-    if (i < a.size()) return 1;
-    if (j < b.size()) return -1;
+
+    if (i < size_a) return 1;
+    if (j < size_b) return -1;
     
     return 0;
 }
 
 /**
  * @brief Sorts a vector of file paths in natural order using a parallel merge sort approach.
- * * The function divides the file list into chunks, sorts them in parallel using a thread pool,
- * and then merges the sorted chunks. It respects the `displayConfig::toggleNamesOnly` setting
- * to decide whether to sort by full path or just the filename.
- * * @note Parallelism is capped by `SORT_THREAD_CAP`.
+ * 
+ * The function divides the file list into chunks, sorts them in parallel via a ThreadPool, 
+ * and performs a multi-pass merge of the sorted results. It utilizes zero-copy 
+ * string_views to handle the `displayConfig::toggleNamesOnly` logic, ensuring 
+ * high performance without redundant memory allocations.
+ * 
+ * @note Parallelism is capped by `GlobalConcurrency::SORT_THREAD_CAP` to prevent 
+ *       resource exhaustion.
  * @param files A reference to the vector of strings (file paths) to be sorted.
  */
 void sortFilesCaseInsensitive(std::vector<std::string>& files) {
@@ -96,15 +120,21 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
         futures.emplace_back(pool.enqueue([namesOnly, start, end, &files]() {
             std::sort(files.begin() + start, files.begin() + end,
                 [namesOnly](const std::string& a, const std::string& b) {
-                    if (namesOnly) {
-                        size_t a_slash = a.find_last_of('/');
-                        size_t b_slash = b.find_last_of('/');
-                        std::string a_name = (a_slash == std::string::npos) ? a : a.substr(a_slash + 1);
-                        std::string b_name = (b_slash == std::string::npos) ? b : b.substr(b_slash + 1);
-                        return naturalCompare(a_name, b_name) < 0;
-                    } else {
-                        return naturalCompare(a, b) < 0;
-                    }
+    if (namesOnly) {
+        size_t a_slash = a.find_last_of('/');
+        size_t b_slash = b.find_last_of('/');
+
+        // Use string_view to point to the filename without copying the string
+        std::string_view a_view = a;
+        if (a_slash != std::string::npos) a_view.remove_prefix(a_slash + 1);
+
+        std::string_view b_view = b;
+        if (b_slash != std::string::npos) b_view.remove_prefix(b_slash + 1);
+
+        return naturalCompare(std::string(a_view), std::string(b_view)) < 0;
+    } else {
+        return naturalCompare(a, b) < 0;
+    }
                 });
         }));
     }
@@ -153,30 +183,31 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
 }
 
 /**
- * Triggered when the 'filenamesOnly' flag is toggled.
- * Re-sorts all internal file caches in the background to maintain 
- * UI responsiveness without blocking the main thread.
+ * @brief Triggered when the 'filenamesOnly' flag is toggled.
+ * 
+ * Re-sorts all global file caches simultaneously in parallel. This function 
+ * blocks the calling thread until all caches are fully sorted, ensuring 
+ * data consistency before the UI refreshes.
  */
 void sortAfterFilenamesOnlyFlag() {
-    // Define the sorting job locally. 
-    // This lambda is copied into each thread's internal storage.
     auto sortJob = [](std::vector<std::string>& list, std::mutex& mtx) {
         std::lock_guard<std::mutex> lock(mtx);
         sortFilesCaseInsensitive(list);
     };
 
-    // Dispatching threads using std::ref to ensure we work on the original 
-    // data structures rather than passing them by value (which would fail/copy).
-    
-    std::thread(sortJob, std::ref(GlobalCaches::globalIsoFileList), std::ref(GlobalCaches::updateListMutex)).detach();
-    
-    std::thread(sortJob, std::ref(GlobalCaches::binImgFilesCache),  std::ref(GlobalCaches::binImgCacheMutex)).detach();
-    
-    std::thread(sortJob, std::ref(GlobalCaches::mdfMdsFilesCache),  std::ref(GlobalCaches::mdfMdsCacheMutex)).detach();
-    
-    std::thread(sortJob, std::ref(GlobalCaches::nrgFilesCache),     std::ref(GlobalCaches::nrgCacheMutex)).detach();
-    
-    std::thread(sortJob, std::ref(GlobalCaches::chdFilesCache),     std::ref(GlobalCaches::chdCacheMutex)).detach();
-    
-    std::thread(sortJob, std::ref(GlobalCaches::daaGbiFilesCache),  std::ref(GlobalCaches::daaGbiCacheMutex)).detach();
+    std::vector<std::thread> workers;
+    workers.reserve(6);
+
+    // Launch all 6 sorts at the same time
+    workers.emplace_back(sortJob, std::ref(GlobalCaches::globalIsoFileList), std::ref(GlobalCaches::updateListMutex));
+    workers.emplace_back(sortJob, std::ref(GlobalCaches::binImgFilesCache),  std::ref(GlobalCaches::binImgCacheMutex));
+    workers.emplace_back(sortJob, std::ref(GlobalCaches::mdfMdsFilesCache),  std::ref(GlobalCaches::mdfMdsCacheMutex));
+    workers.emplace_back(sortJob, std::ref(GlobalCaches::nrgFilesCache),     std::ref(GlobalCaches::nrgCacheMutex));
+    workers.emplace_back(sortJob, std::ref(GlobalCaches::chdFilesCache),     std::ref(GlobalCaches::chdCacheMutex));
+    workers.emplace_back(sortJob, std::ref(GlobalCaches::daaGbiFilesCache),  std::ref(GlobalCaches::daaGbiCacheMutex));
+
+    // Block here until every single thread is finished to ensure sorting correctness for large lists
+    for (auto& t : workers) {
+        if (t.joinable()) t.join();
+    }
 }

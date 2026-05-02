@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
 #include <cstdio>
 
 // Third-Party Library Headers
@@ -29,7 +30,8 @@ void helpSelections(bool& isAtISOListForHelp);
  * * @return true if a pagination/help command was handled (caller should usually continue the loop).
  * @return false if the command was not recognized as a pagination/help command.
  */
-bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& isFiltered, bool& needsClrScrn, const bool isMount, const bool isUnmount, const bool isWrite, const bool isConversion, bool& need2Sort, std::atomic<bool>& isAtISOList) {
+bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage, bool& isFiltered, bool& needsClrScrn, const bool isMount, 
+const bool isUnmount, const bool isWrite, const bool isConversion, bool& need2Sort, std::atomic<bool>& isAtISOList) {
     
     if (command.find("//") != std::string::npos) {
         return true;

@@ -1,5 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <csignal>
+#include <termios.h>
+#include <iostream>
+#include <iomanip>
+#include <memory>
+#include <chrono>
+
 // C / System Headers
 #include <fcntl.h>
 #include <poll.h>
@@ -13,13 +21,6 @@
 // Third-Party Library Headers
 #include <readline/history.h>
 #include <readline/readline.h>
-
-#include <csignal>
-#include <termios.h>
-#include <iostream>
-#include <iomanip>
-#include <memory>
-#include <chrono>
 
 /**
  * @file progress_bar.cpp

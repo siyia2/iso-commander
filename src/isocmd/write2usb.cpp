@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Header
+// C++ Standard Library Headers
 #include <csignal>
 #include <fstream>
 #include <cstdio>
