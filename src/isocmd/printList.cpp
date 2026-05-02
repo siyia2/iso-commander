@@ -108,7 +108,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
             output.append(":").append(UI::Palette::BoldReset).append(c.square); 
             output.append(ib2.format(filteringStack.back().originalIndices[i] + 1));
-            output.append(UI::Palette::BoldReset).append(c.square).append("^ ");
+            output.append(UI::Palette::BoldReset).append(c.square).append("^ ").append(UI::Palette::BoldReset);
         } else {
             output.append(". ").append(UI::Palette::BoldReset);
         }
@@ -125,7 +125,8 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         else if (isMountedMode) {
             auto [dirPart, pathPart, hashPart] = parseMountPointComponents(item);
             if (showFullUmount) {
-                output.append(c.mnt).append(dirPart).append(UI::Palette::BoldReset)
+                output.append(c.mnt)
+					  .append(dirPart).append(UI::Palette::BoldReset)
                       .append(c.iso).append(pathPart)
                       .append(c.square).append(hashPart);
             } else {
