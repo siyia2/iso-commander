@@ -191,8 +191,7 @@ void clearHistory(const std::string& inputSearch) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    const MainTheme* theme = getActiveTheme();
-    const bool isOrig = (globalTheme == "original");
+    auto hc = resolveDatabaseTheme();
 
     const std::string basePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/";
     std::string filePath;
@@ -205,21 +204,21 @@ void clearHistory(const std::string& inputSearch) {
         filePath = basePath + "iso_commander_filter_database.txt";
         historyType = "FilterTerm";
     } else {
-        std::cerr << "\n" << (isOrig ? UI::Palette::Red : theme->secondary) << "Invalid command: " 
-                  << (isOrig ? UI::Palette::Yellow : theme->warning) << "'" << inputSearch << "'" 
-                  << (isOrig ? UI::Palette::Red : theme->secondary) << ".\033[J" << std::endl;
+        std::cerr << "\n" << (hc.error) << "Invalid command: " 
+                  << (hc.warning) << "'" << inputSearch << "'" 
+                  << (hc.error) << ".\033[J" << std::endl;
         return;
     }
 
     std::ofstream ofs(filePath, std::ofstream::out | std::ofstream::trunc);
     if (!ofs) {
-        std::cerr << "\n" << (isOrig ? UI::Palette::Red : theme->secondary) 
+        std::cerr << "\n" << (hc.error) 
                   << "Error clearing " << historyType << " database: " 
-                  << (isOrig ? UI::Palette::Yellow : theme->warning) << "'" << filePath << "'" 
-                  << (isOrig ? UI::Palette::Red : theme->secondary) << ". File missing or inaccessible.\033[J" << std::endl;
+                  << (hc.warning) << "'" << filePath << "'" 
+                  << (hc.error) << ". File missing or inaccessible.\033[J" << std::endl;
     } else {
         ofs.close();
-        std::cout << "\n" << (isOrig ? UI::Palette::Green : theme->accent) 
+        std::cout << "\n" << (hc.highlight) 
                   << historyType << " database cleared successfully.\033[J" << std::endl;
         clear_history();
     }
