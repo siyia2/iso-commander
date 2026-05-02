@@ -10,17 +10,6 @@
 #include <utility>
 #include <vector>
 
-// Transparent hasher to allow find(string_view) without allocations
-struct StringViewHash {
-    using is_transparent = void; 
-    size_t operator()(std::string_view sv) const {
-        return std::hash<std::string_view>{}(sv);
-    }
-    size_t operator()(const std::string& s) const {
-        return std::hash<std::string>{}(s);
-    }
-};
-
 // --- Path & Component Parsing ---
 
 /**
@@ -29,13 +18,18 @@ struct StringViewHash {
  * @param location Contextual hint or fallback location.
  * @return A pair where .first is the Directory and .second is the Filename.
  */
-std::pair<std::string_view, std::string_view> extractDirectoryAndFilename(std::string_view path, const std::string& location);
+std::pair<std::string, std::string> extractDirectoryAndFilename(
+    std::string_view path, 
+    const std::string& location
+);
 
 /**
  * Parses a mount point string into its constituent parts.
  * @return A tuple containing (Device, MountPoint, FilesystemType).
  */
-std::tuple<std::string_view, std::string_view, std::string_view> parseMountPointComponents(std::string_view dir);
+std::tuple<std::string, std::string, std::string> parseMountPointComponents(
+    std::string_view dir
+);
 
 
 // --- Content Cleaning & Transformation ---

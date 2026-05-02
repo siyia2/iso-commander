@@ -16,23 +16,21 @@
 namespace fs = std::filesystem;
 
 /**
- * @brief High-performance formatter for mount-related terminal output.
- * @details Utilizes a persistent internal buffer to minimize heap allocations 
- * and leverages std::string_view for zero-copy parameter passing. This ensures 
- * that verbose logging remains fast even during high-volume batch operations.
+ * @brief Canonical list of all supported configuration settings with validation.
+ * @details Provides high-performance string formatting for ISO mount operations, 
+ * utilizing a pre-allocated internal buffer to minimize heap allocations during output.
  */
 struct VerbosityFormatter {
     const SemanticUIColors tc;
     std::string outputBuffer;
 
     VerbosityFormatter() : tc(resolveVerboseTheme()) {
-        outputBuffer.reserve(512); // Reused for every call
+        outputBuffer.reserve(512);
     }
 
-    // Use std::string_view for all parameters to avoid caller-side allocations
-    std::string formatMountSuccess(std::string_view isoDir, std::string_view isoFile,
-                                   std::string_view mntDir, std::string_view mntFile,
-                                   std::string_view fsType = "") {
+    std::string formatMountSuccess(const std::string& isoDir, const std::string& isoFile,
+                                   const std::string& mntDir, const std::string& mntFile,
+                                   const std::string& fsType = "") {
         outputBuffer.clear();
         outputBuffer.append(tc.label).append("ISO: ")
                     .append(tc.path).append("'").append(getPath(isoDir, isoFile)).append("'")
@@ -46,8 +44,8 @@ struct VerbosityFormatter {
         return outputBuffer.append(tc.reset);
     }
 
-    std::string formatError(std::string_view isoDir, std::string_view isoFile,
-                            std::string_view errorCode) {
+    std::string formatError(const std::string& isoDir, const std::string& isoFile,
+                            const std::string& errorCode) {
         outputBuffer.clear();
         return outputBuffer.append(tc.error).append("Failed to mnt: ")
                     .append(tc.warning).append("'").append(getPath(isoDir, isoFile)).append("'")
@@ -56,8 +54,8 @@ struct VerbosityFormatter {
                     .append(tc.reset);
     }
 
-    std::string formatDetailedError(std::string_view isoDir, std::string_view isoFile,
-                                    std::string_view errorDetail) {
+    std::string formatDetailedError(const std::string& isoDir, const std::string& isoFile,
+                                    const std::string& errorDetail) {
         outputBuffer.clear();
         return outputBuffer.append(tc.error).append("Failed to mnt: ")
                     .append(tc.warning).append("'").append(getPath(isoDir, isoFile)).append("'")
@@ -66,8 +64,8 @@ struct VerbosityFormatter {
                     .append(tc.reset);
     }
 
-    std::string formatSkipped(std::string_view isoDir, std::string_view isoFile,
-                              std::string_view mntDir, std::string_view mntFile) {
+    std::string formatSkipped(const std::string& isoDir, const std::string& isoFile,
+                              const std::string& mntDir, const std::string& mntFile) {
         outputBuffer.clear();
         return outputBuffer.append(tc.warning).append("ISO: ")
                     .append(tc.path).append("'").append(getPath(isoDir, isoFile)).append("'")
@@ -77,8 +75,8 @@ struct VerbosityFormatter {
                     .append(tc.reset);
     }
 
-    std::string formatMountFailure(std::string_view isoDir, std::string_view isoFile,
-                                   std::string_view errorType, std::string_view mountTarget = "") {
+    std::string formatMountFailure(const std::string& isoDir, const std::string& isoFile,
+                                   const std::string& errorType, const std::string& mountTarget = "") {
         outputBuffer.clear();
         outputBuffer.append(tc.error).append("Failed to mnt: ")
                     .append(tc.warning).append("'").append(getPath(isoDir, isoFile)).append("'")
@@ -93,7 +91,7 @@ struct VerbosityFormatter {
         return outputBuffer.append(tc.reset);
     }
 
-    std::string formatMountSkipped(std::string_view isoDir, std::string_view isoFile) {
+    std::string formatMountSkipped(const std::string& isoDir, const std::string& isoFile) {
         outputBuffer.clear();
         return outputBuffer.append(tc.warning).append("ISO: ")
                     .append(tc.path).append("'").append(getPath(isoDir, isoFile)).append("'")
@@ -102,15 +100,8 @@ struct VerbosityFormatter {
     }
 
 private:
-    // Helper now returns std::string because it might perform concatenation
-    std::string getPath(std::string_view dir, std::string_view file) const {
-        if (displayConfig::toggleNamesOnly) {
-            return std::string(file);
-        }
-        std::string fullPath;
-        fullPath.reserve(dir.size() + file.size() + 1);
-        fullPath.append(dir).append("/").append(file);
-        return fullPath;
+    std::string getPath(const std::string& dir, const std::string& file) const {
+        return (displayConfig::toggleNamesOnly) ? file : dir + "/" + file;
     }
 };
 

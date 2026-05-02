@@ -13,21 +13,18 @@
 #include "themes.h"
 
 /**
- * @brief Formatter for unmount-specific verbose terminal messages.
- * @details Generates ANSI color-coded strings for unmounting operations, 
- * utilizing std::string_view and buffer reservation to ensure high performance 
- * and minimal heap allocations during batch processing.
+ * @brief Canonical list of all supported configuration settings with validation.
+ * @details Formats terminal output messages for unmounting operations using 
+ * ANSI color codes and theme-aware styling.
  */
 struct VerboseMessageFormatter {
     const SemanticUIColors tc;
 
     VerboseMessageFormatter() : tc(resolveVerboseTheme()) {}
 
-    // Change parameters to std::string_view to avoid caller-side allocations
-    std::string format(std::string_view messageType, std::string_view path) const {
+    std::string format(const std::string& messageType, const std::string& path) {
         std::string buf;
-        // Pre-calculating a safe minimum size prevents multiple reallocations during append
-        buf.reserve(128 + path.size()); 
+        buf.reserve(256);
 
         auto appendError = [&](std::string_view tag) {
             buf.append(tc.error).append("Failed to unmount: ")
@@ -37,10 +34,9 @@ struct VerboseMessageFormatter {
                .append(tc.reset);
         };
 
-        // Comparison of string_view with "literals" is highly optimized in C++20
         if (messageType == "success") {
             buf.append(tc.label).append("Unmounted: ")
-               .append(tc.path).append("'").append(path).append("'") // Removed redundant tc.path
+               .append(tc.path).append("'").append(path).append(tc.path).append("'")
                .append(tc.label).append(".")
                .append(tc.reset);
         }
