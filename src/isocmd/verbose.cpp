@@ -224,34 +224,18 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
 /**
  * @brief Generates and logs color-coded error messages for file operations (CP, MV, RM).
  * @details Utilizes the current theme to construct a human-readable error string 
- * using std::string_view for zero-copy efficiency. Updates atomic task counters 
- * and triggers the batch message insertion callback.
- * 
- * @param errorType The category of error (e.g., "same_file", "invalid_dest").
- * @param srcDir Source directory view.
- * @param srcFile Source filename view.
- * @param destDir Destination directory view.
- * @param errorDetail Specific system error message or description.
- * @param operation The action being performed ("copy", "move", "delete").
+ * and updates atomic operation counters.
  */
-void reportErrorCpMvRm(std::string_view errorType, std::string_view srcDir, std::string_view srcFile, 
-                       std::string_view destDir, std::string_view errorDetail, std::string_view operation, 
+void reportErrorCpMvRm(const std::string& errorType, const std::string& srcDir, const std::string& srcFile, 
+                       const std::string& destDir, const std::string& errorDetail, const std::string& operation, 
                        std::vector<std::string>& verboseErrors, std::atomic<size_t>* failedTasks, 
                        std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertFunc) {
     
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
-
-    // build displaySrc once using append to avoid extra temporary strings
-    std::string displaySrc;
-    if (!displayConfig::toggleNamesOnly) {
-        displaySrc.reserve(srcDir.size() + srcFile.size() + 1);
-        displaySrc.append(srcDir).append("/").append(srcFile);
-    } else {
-        displaySrc = std::string(srcFile);
-    }
+    const std::string displaySrc = (!displayConfig::toggleNamesOnly ? srcDir + "/" : "") + srcFile;
 
     std::string errorMsg;
-    errorMsg.reserve(256 + displaySrc.size() + errorDetail.size());
+    errorMsg.reserve(256);
 
     if (errorType == "same_file") {
         errorMsg.append(vt.red).append("Cannot ").append(operation).append(" file to itself: ")

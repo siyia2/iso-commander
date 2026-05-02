@@ -80,7 +80,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
         if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) break;
 
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
-        const std::string displayPath = (!displayConfig::toggleNamesOnly ? std::string(directory) + "/" : "") + std::string(fileNameOnly);
+        const std::string displayPath  = (!displayConfig::toggleNamesOnly ? directory + "/" : "") + fileNameOnly;
 
         if (!fs::exists(inputPath)) {
             std::string msg;
@@ -150,7 +150,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                 successfulOutputPaths->push_back(outputPath);
             }
 
-            std::string fileNameLower{fileNameOnly};
+            std::string fileNameLower = fileNameOnly;
             toLowerInPlace(fileNameLower);
             std::string_view fileType = fileNameLower.ends_with(".bin") ? "BIN" :
                                         fileNameLower.ends_with(".img") ? "IMG" :

@@ -598,21 +598,6 @@ void reset_custom_keybindingsForCpMvWrite2Usb(void) {
 /**
  * @brief Restores bindings used in the Settings Editor.
  */
-void reset_custom_keybindingsForRm(void) {
-    // Restore characters to standard insertion
-    rl_bind_keyseq("*", rl_insert);
-    rl_bind_keyseq("/", rl_insert);
-    rl_bind_keyseq("P", rl_insert);
-    rl_bind_keyseq("C", rl_insert);
-    rl_bind_keyseq("R", rl_insert);
-    rl_bind_keyseq("~", rl_insert);
-    rl_bind_keyseq("<", rl_insert);
-    rl_bind_keyseq("?", rl_insert);
-}
-
-/**
- * @brief Restores bindings used in the Settings Editor.
- */
 void reset_custom_keybindingsForSettingsEditor(void) {
     rl_bind_keyseq("r", rl_insert);
     rl_bind_keyseq("s", rl_insert);
