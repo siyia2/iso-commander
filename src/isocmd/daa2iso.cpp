@@ -32,6 +32,11 @@
 
 // ─── large-file support ────────────────────────────────────────────────────
 
+#define _LARGE_FILES
+#define __USE_LARGEFILE64
+#define __USE_FILE_OFFSET64
+#define _LARGEFILE_SOURCE
+#define _LARGEFILE64_SOURCE
 #define _FILE_OFFSET_BITS 64
 
 // ___________________________________________________________________________
@@ -788,7 +793,9 @@ static FILE *ctx_next_volume(DaaContext &ctx) {
         throw DaaError("multi_filename not initialised");
 
     char *toadd = ctx.multi_filename + strlen(ctx.multi_filename);
-    sprintf(toadd, fmts[ctx.multi - 1], ctx.multinum);
+    int written = snprintf(toadd, 32, fmts[ctx.multi - 1], ctx.multinum);
+	if (written < 0 || written >= 32)
+		throw DaaError("volume filename overflow");
 
     FILE *fd = fopen(ctx.multi_filename, "rb");
     if (!fd) throw DaaError("cannot open next volume");
@@ -967,9 +974,10 @@ bool convertDaaToIso(const std::string &inputFile,
                     if (!p) p=(u8*)fi+strlen(fi);
                 }
                 size_t plen = (u8*)p - (u8*)fi;
-                ctx.multi_filename = (char*)malloc(plen + 16);
-                memcpy(ctx.multi_filename, fi, plen);
-                ctx.multi_filename[plen] = '\0';
+                // Replace plen + 16 with plen + 32 to be safe
+				ctx.multi_filename = (char*)malloc(plen + 32);
+				memcpy(ctx.multi_filename, fi, plen);
+				ctx.multi_filename[plen] = '\0';
             }
         }
 
