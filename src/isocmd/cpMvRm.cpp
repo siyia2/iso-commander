@@ -110,9 +110,17 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std:
 const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn);
 
 /**
- * @brief Orchestrates the user confirmation prompt for file deletion operations.
- * @details Handles paginated or batch display of files marked for deletion and captures user input.
- * * @return True if the user confirms deletion (Y), false otherwise.
+ * @brief Orchestrates user confirmation for permanent file deletion.
+ * 
+ * Uses handlePaginatedDisplay to show the list of files and captures a Y/N 
+ * confirmation. Handles terminal environment setup and internal signal state.
+ * 
+ * @param isoFiles The list of ISO file paths.
+ * @param uniqueErrorMessages Set for storing/displaying UI errors.
+ * @param indexChunks Chunks for formatting the ISO list display.
+ * @param umountMvRmBreak [out] Set to true if the operation should proceed.
+ * @param abortDel [out] Set to true if the user explicitly cancels.
+ * @return True if the user confirmed with 'Y', false otherwise.
  */
 bool handleDeleteOperation(const std::vector<std::string>& isoFiles, 
                            std::unordered_set<std::string>& uniqueErrorMessages, 
@@ -192,9 +200,25 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
 void helpSearches(bool isCpMv, bool import2ISO);
 
 /**
- * @brief Prompts the user for a destination directory for Copy or Move operations.
- * @details Validates the input path, handles pagination, and processes flags such as overwrite (-o).
- * * @return The validated destination directory path string.
+ * @brief Prompts for a destination directory or routes to deletion confirmation.
+ * 
+ * In Copy/Move mode: Validates Linux paths, handles pagination, processes 
+ * overwrite flags (-o), and manages Readline history.
+ * In Delete mode: Proxies the request to handleDeleteOperation.
+ * 
+ * @param isoFiles List of source files.
+ * @param indexChunks Chunks for list display formatting.
+ * @param uniqueErrorMessages Set for UI error persistence.
+ * @param userDestDir [out] The resulting validated path(s).
+ * @param operationColor UI color string for the prompt.
+ * @param operationDescription "copy", "move", or "delete".
+ * @param umountMvRmBreak [out] Control flag for the parent loop.
+ * @param filterHistory Flag for history management.
+ * @param isDelete Boolean toggle for Delete vs Copy/Move mode.
+ * @param isCopy Boolean toggle for Copy vs Move.
+ * @param abortDel [out] Set to true if operation is canceled.
+ * @param overwriteExisting [out] Set to true if "-o" flag is detected.
+ * @return The validated destination string, empty if canceled, or "EOF_SIGNAL".
  */
 std::string userDestDirCpMv(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages,
 std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel,
