@@ -4,7 +4,14 @@
  * daa2iso.cpp  –  Convert PowerISO DAA / gBurner GBI disk images to ISO
  *
  * Original reverse-engineering and algorithms by Luigi Auriemma (aluigi.org)
- * C++ Linux port + library API (no Windows deps, no encryption/password) – 2026
+ *
+ * C++ Linux port + Library API (no Windows dependencies) — 2026
+ *
+ * Enhancements:
+ *  - Full 64-bit architecture support for files > 4GB (size_t/u64 migration)
+ *  - Thread-safe refactor: all global/static state moved to per-instance 
+ *    context for concurrent processing.
+ *  - Removed legacy Windows dependencies and password/encryption logic.
  *
  * License: GPL-2.0 or (at your option) any later version (same as original)
  *
