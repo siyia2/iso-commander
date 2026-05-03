@@ -19,33 +19,43 @@
 // C / System Headers
 #include <termios.h>
 
+
+/**
+ * @brief Holds verbose output sets for operation results and user input.
+ *
+ * @details Aggregates messages produced during batch operations into four
+ * categorised sets, which are consumed by verbosePrint() at the end of
+ * each operation.
+ *
+ *   - operationCompleted        Success messages.
+ *   - operationFailed           Failure messages.
+ *   - operationSkipped          Skip messages.
+ *   - uniqueErrorTokenMessages  Deduplicated user-input validation error tokens.
+ *
+ * Declared inline so the single definition lives in the header.
+ * All concurrent writes must be protected by GlobalConcurrency::globalSetsMutex.
+ */
+struct VerboseSets {
+    std::unordered_set<std::string> operationCompleted;
+    std::unordered_set<std::string> operationFailed;
+    std::unordered_set<std::string> operationSkipped;
+    std::unordered_set<std::string> uniqueErrorTokenMessages;
+};
+
+inline VerboseSets verboseSets;
+
 // --- Output & Logging Functions ---
 
 /**
  * Prints set contents based on the provided verbosity level.
  */
-void verbosePrint(
-    std::unordered_set<std::string>& primarySet,
-    std::unordered_set<std::string>& secondarySet,
-    std::unordered_set<std::string>& tertiarySet,
-    std::unordered_set<std::string>& errorSet,
-    int verboseLevel
-);
-
-/**
- * Resets all tracking sets to clear state for the next operation.
- */
-void resetVerboseSets(
-    std::unordered_set<std::string>& processedErrors,
-    std::unordered_set<std::string>& successOuts,
-    std::unordered_set<std::string>& skippedOuts,
-    std::unordered_set<std::string>& failedOuts
-);
+void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet, 
+std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& errorSet, int printType);
 
 /**
  * Outputs a list of unique error messages collected during execution.
  */
-void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages);
+void displayErrors();
 
 
 // --- Search & Discovery ---

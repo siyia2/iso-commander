@@ -80,10 +80,6 @@ void loadAndDisplayImageFiles(
 void processInputForMountOrUmount(
     const std::string &input,
     const std::vector<std::string> &files,
-    std::unordered_set<std::string> &operationFiles,
-    std::unordered_set<std::string> &skippedMessages,
-    std::unordered_set<std::string> &operationFails,
-    std::unordered_set<std::string> &uniqueErrorMessages,
     bool &operationBreak,
     bool &verbose,
     bool isUnmount
@@ -96,9 +92,6 @@ void processInputForCpMvRm(
     const std::string &input,
     const std::vector<std::string> &isoFiles,
     const std::string &process,
-    std::unordered_set<std::string> &operationIsos,
-    std::unordered_set<std::string> &operationErrors,
-    std::unordered_set<std::string> &uniqueErrorMessages,
     bool &umountMvRmBreak,
     bool &filterHistory,
     bool &verbose,
@@ -115,10 +108,6 @@ void processInputForConversions(
     const bool &modeNrg,
     const bool &modeChd,
     const bool &modeDaa,
-    std::unordered_set<std::string> &processedErrors,
-    std::unordered_set<std::string> &successOuts,
-    std::unordered_set<std::string> &skippedOuts,
-    std::unordered_set<std::string> &failedOuts,
     bool &verbose,
     bool &needsClrScrn,
     std::atomic<bool> &newISOFound
@@ -129,8 +118,7 @@ void processInputForConversions(
  */
 void writeToUsb(
     const std::string &input,
-    const std::vector<std::string> &isoFiles,
-    std::unordered_set<std::string> &uniqueErrorMessages
+    const std::vector<std::string> &isoFiles
 );
 
 
@@ -190,10 +178,6 @@ void handleFilteringConvert2ISO(
  * Finalizes and displays the results of a selection session.
  */
 void handleSelectIsoFilesResults(
-    std::unordered_set<std::string> &uniqueErrorMessages,
-    std::unordered_set<std::string> &operationFiles,
-    std::unordered_set<std::string> &operationFails,
-    std::unordered_set<std::string> &skippedMessages,
     const std::string &operation,
     bool &verbose,
     bool isMount,

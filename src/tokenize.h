@@ -25,7 +25,6 @@
 void tokenizeInput(
     const std::string& input, 
     const std::vector<std::string>& isoFiles, 
-    std::unordered_set<std::string>& uniqueErrorMessages, 
     std::unordered_set<int>& processedIndices
 );
 

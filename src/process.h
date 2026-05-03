@@ -20,8 +20,6 @@
 void handleIsoFileOperation(
     const std::vector<std::string>& isoFiles, 
     const std::vector<std::string>& isoFilesCopy, 
-    std::unordered_set<std::string>& operationIsos,
-    std::unordered_set<std::string>& operationErrors, 
     const std::string& userDestDir, 
     bool isMove, 
     bool isCopy, 
@@ -39,9 +37,6 @@ void handleIsoFileOperation(
  */
 void convertToISO(
     const std::vector<std::string>& imageFiles, 
-    std::unordered_set<std::string>& successOuts, 
-    std::unordered_set<std::string>& skippedOuts, 
-    std::unordered_set<std::string>& failedOuts, 
     const bool& modeMdf, 
     const bool& modeNrg, 
     const bool& modeChd, 
@@ -103,7 +98,6 @@ size_t calculateTotalBytesForConversions(
 std::string userDestDirCpMv(
     const std::vector<std::string>& isoFiles, 
     std::vector<std::vector<int>>& indexChunks, 
-    std::unordered_set<std::string>& uniqueErrorMessages, 
     std::string& userDestDir, 
     std::string& operationColor, 
     std::string& operationDescription, 
