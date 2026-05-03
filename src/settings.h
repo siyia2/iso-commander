@@ -42,7 +42,8 @@ inline auto isDisplay = [](const std::string& v) {
 };
 
 /**
- * @brief Validates numeric configuration values within a specified range.
+ * @brief Validates that a string represents a plain non-negative integer within [min, max].
+ * Rejects leading zeros, signs, decimals, or any non-digit characters.
  */
 inline auto isNum = [](const std::string& v, int min, int max) -> bool {
     if (v.empty() || !std::all_of(v.begin(), v.end(), ::isdigit)) return false;
