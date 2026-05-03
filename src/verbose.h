@@ -44,6 +44,19 @@ struct VerboseSets {
 
 inline VerboseSets verboseSets;
 
+/**
+ * @brief Resets the global verbose tracking state.
+ * 
+ * Clears all entries from the global verboseSets instance, including 
+ * completed, failed, and skipped operations, plus unique error messages.
+ */
+inline void clearGlobalVerboseSets() {
+    verboseSets.operationCompleted.clear();
+    verboseSets.operationFailed.clear();
+    verboseSets.operationSkipped.clear();
+    verboseSets.uniqueErrorTokenMessages.clear();
+}
+
 // --- Output & Logging Functions ---
 
 /**
