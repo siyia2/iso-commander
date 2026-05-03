@@ -10,6 +10,7 @@
 #include "../stringManipulation.h"
 #include "../themes.h"
 #include "../umount.h"
+#include "../verbose.h"
 
 /**
  * @brief Checks if a directory is empty.
@@ -57,20 +58,23 @@ static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessage
 
 /**
  * @brief Performs unmount operations on a list of ISO mount points.
- * @details Uses the Linux umount2 system call with MNT_DETACH (lazy unmount). 
- * It handles root permission checks, cancellation signals, and cleans up 
- * empty mount point directories. Results are collected in thread-safe sets.
- * * @param isoDirs Vector of directory paths to unmount.
- * @param unmountedFiles Set to store successful unmount messages.
- * @param unmountedErrors Set to store error/cancellation messages.
- * @param completedTasks Atomic counter for successful operations.
- * @param failedTasks Atomic counter for failed operations.
- * @param silentMode If true, suppresses message formatting and set insertion.
+ * @details Uses the Linux umount2 system call with MNT_DETACH (lazy unmount).
+ * Handles root permission checks and cancellation signals, and cleans up
+ * empty mount point directories after a successful unmount.
+ *
+ * Results are written directly to the global verboseSets:
+ *   - verboseSets.operationCompleted  Success messages.
+ *   - verboseSets.operationFailed     Failure messages (root_error, cancel, error).
+ *
+ * @param isoDirs        Vector of mount point directories to unmount.
+ * @param completedTasks Atomic counter incremented for each successful unmount.
+ * @param failedTasks    Atomic counter incremented for each failure (including cancellation).
+ * @param silentMode     Suppresses all message generation; only counters are updated.
+ *
+ * @warning Requires root (geteuid() == 0). Without it every entry gets "root_error".
  */
 void unmountISO(
     const std::vector<std::string>& isoDirs,
-    std::unordered_set<std::string>& unmountedFiles,
-    std::unordered_set<std::string>& unmountedErrors,
     std::atomic<size_t>* completedTasks,
     std::atomic<size_t>* failedTasks,
     bool silentMode)
@@ -78,26 +82,23 @@ void unmountISO(
     const bool hasRoot = (geteuid() == 0);
     VerboseMessageFormatter messageFormatter;
     std::vector<std::string> errorMessages, successMessages;
-
     constexpr size_t kBatchSize = 50;
     if (!silentMode) {
         errorMessages.reserve(kBatchSize);
         successMessages.reserve(kBatchSize);
     }
-
     auto flushTemporaryBuffers = [&]() {
         if (silentMode) return;
         std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
         if (!successMessages.empty()) {
-            unmountedFiles.insert(successMessages.begin(), successMessages.end());
+            verboseSets.operationCompleted.insert(successMessages.begin(), successMessages.end());
             successMessages.clear();
         }
         if (!errorMessages.empty()) {
-            unmountedErrors.insert(errorMessages.begin(), errorMessages.end());
+            verboseSets.operationFailed.insert(errorMessages.begin(), errorMessages.end());
             errorMessages.clear();
         }
     };
-
     auto maybeFlush = [&]() {
         if (!silentMode &&
             (successMessages.size() >= kBatchSize ||
@@ -106,9 +107,6 @@ void unmountISO(
         }
     };
 
-    // ----------------------------------------------------------------
-    // Early-out: no root → bulk-increment and flush error messages
-    // ----------------------------------------------------------------
     if (!hasRoot) {
         if (!silentMode) {
             for (const auto& isoDir : isoDirs)
@@ -119,9 +117,7 @@ void unmountISO(
         failedTasks->fetch_add(isoDirs.size(), std::memory_order_relaxed);
         return;
     }
-
     for (const auto& isoDir : isoDirs) {
-
         if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
             if (!silentMode)
                 errorMessages.push_back(
@@ -130,10 +126,7 @@ void unmountISO(
             maybeFlush();
             continue;
         }
-
-        // MNT_DETACH allows lazy unmount even if the mount point is busy
         const int result = umount2(isoDir.c_str(), MNT_DETACH);
-
         if (result == 0 || isDirectoryEmpty(isoDir)) {
             rmdir(isoDir.c_str());
             completedTasks->fetch_add(1, std::memory_order_relaxed);
@@ -146,9 +139,7 @@ void unmountISO(
                 errorMessages.push_back(
                     formatDirForDisplay(isoDir, messageFormatter, "error"));
         }
-
         maybeFlush();
     }
-
     flushTemporaryBuffers();
 }

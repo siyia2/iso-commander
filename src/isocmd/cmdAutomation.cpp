@@ -239,7 +239,6 @@ static int handleMount(const ParsedArgs& args) {
     std::atomic<size_t> completedTasks{0}, failedTasks{0};
 
     mountIsoFiles(std::vector<std::string>(isoFiles.begin(), isoFiles.end()),
-                  mountedFiles, skippedMessages, mountedFails,
                   &completedTasks, &failedTasks, args.silentMode);
 
     if (!args.silentMode) {
@@ -365,7 +364,6 @@ static int handleUmount(const ParsedArgs& args) {
     std::atomic<size_t> completedTasks{0}, failedTasks{0};
 
     unmountISO(std::vector<std::string>(mountPoints.begin(), mountPoints.end()),
-               unmountedFiles, unmountedErrors,
                &completedTasks, &failedTasks, args.silentMode);
 
     if (!args.silentMode) {

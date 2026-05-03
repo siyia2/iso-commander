@@ -3,6 +3,7 @@
 // Project Headers
 #include "../themes.h"
 #include "../tokenize.h"
+#include "../verbose.h"
 
 /**
  * @brief Checks if a string has a leading zero.
@@ -33,12 +34,11 @@ bool isNumeric(const std::string& str) {
  * the current file list size and handles various formatting errors.
  * * @param input The raw input string from the user.
  * @param isoFiles The vector of available files to validate indices against.
- * @param uniqueErrorMessages Set to store color-coded, categorized error strings.
+ * @param uniqueErrorTokenMessages Set to store color-coded, categorized error strings.
  * @param processedIndices Set to store the successfully parsed unique indices.
  */
 void tokenizeInput(const std::string& input, 
                    const std::vector<std::string>& isoFiles, 
-                   std::unordered_set<std::string>& uniqueErrorMessages, 
                    std::unordered_set<int>& processedIndices) {
     
     std::istringstream iss(input);
@@ -137,14 +137,14 @@ void tokenizeInput(const std::string& input,
 	};
 
 	if (!invalidInputs.empty()) {
-		uniqueErrorMessages.insert(formatCategory(sc.error, "Invalid input", "Invalid inputs", invalidInputs));
+		verboseSets.uniqueErrorTokenMessages.insert(formatCategory(sc.error, "Invalid input", "Invalid inputs", invalidInputs));
 	}
 
 	if (!invalidIndices.empty()) {
-		uniqueErrorMessages.insert(formatCategory(sc.error, "Invalid index", "Invalid indexes", invalidIndices));
+		verboseSets.uniqueErrorTokenMessages.insert(formatCategory(sc.error, "Invalid index", "Invalid indexes", invalidIndices));
 	}
 
 	if (!invalidRanges.empty()) {
-		uniqueErrorMessages.insert(formatCategory(sc.error, "Invalid range", "Invalid ranges", invalidRanges));
+		verboseSets.uniqueErrorTokenMessages.insert(formatCategory(sc.error, "Invalid range", "Invalid ranges", invalidRanges));
 	}
 }

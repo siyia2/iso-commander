@@ -12,6 +12,7 @@
 #include "../state.h"
 #include "../stringManipulation.h"
 #include "../threadpool.h"
+#include "../verbose.h"
 
 /**
  * @brief Provides default LSan suppression rules for known third-party leaks.
@@ -153,10 +154,12 @@ static std::string mountPointSuffix(const std::string& isoPath) {
  *
  * Mount points: /mnt/iso_<stem>~<5-char base-36 FNV-1a suffix>.
  *
+ * Results are written directly to the global verboseSets:
+ *   - verboseSets.operationCompleted  Success messages (FS type included).
+ *   - verboseSets.operationSkipped    Already-mounted messages.
+ *   - verboseSets.operationFailed     Failure messages (needsRoot, cxl, missingISO, badFS, mkdir).
+ *
  * @param isoFiles        Absolute paths to ISO files to process.
- * @param mountedFiles    Output: success messages (FS type included).
- * @param skippedMessages Output: already-mounted messages.
- * @param mountedFails    Output: failure messages (needsRoot, cxl, missingISO, badFS, mkdir).
  * @param completedTasks  Incremented for successes and skips.
  * @param failedTasks     Incremented for any failure (including cancellation).
  * @param silentMode      Suppresses all message generation; only counters are updated.
@@ -165,18 +168,12 @@ static std::string mountPointSuffix(const std::string& isoPath) {
  */
 void mountIsoFiles(
     const std::vector<std::string>& isoFiles,
-    std::unordered_set<std::string>& mountedFiles,
-    std::unordered_set<std::string>& skippedMessages,
-    std::unordered_set<std::string>& mountedFails,
     std::atomic<size_t>* completedTasks,
     std::atomic<size_t>* failedTasks,
     bool silentMode)
 {
     const bool hasRoot = (geteuid() == 0);
 
-    // ----------------------------------------------------------------
-    // Early-out: no root → everything fails fast, no libmount needed
-    // ----------------------------------------------------------------
     if (!hasRoot) {
         if (!silentMode) {
             VerbosityFormatter formatter;
@@ -187,20 +184,17 @@ void mountIsoFiles(
                 fails.push_back(formatter.formatError(std::string(dir), std::string(file), "needsRoot"));
             }
             std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
-            mountedFails.insert(fails.begin(), fails.end());
+            verboseSets.operationFailed.insert(fails.begin(), fails.end());
         }
         failedTasks->fetch_add(isoFiles.size(), std::memory_order_relaxed);
         return;
     }
 
-    // ----------------------------------------------------------------
-    // Allocate a single context for the whole batch (perf)
-    // ----------------------------------------------------------------
     libmnt_context* ctx = mnt_new_context();
     if (!ctx) {
         if (!silentMode) {
             std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
-            mountedFails.insert("\033[1;91mFailed to create mount context.\033[0m");
+            verboseSets.operationFailed.insert("\033[1;91mFailed to create mount context.\033[0m");
         }
         return;
     }
@@ -209,38 +203,36 @@ void mountIsoFiles(
         ~CtxGuard() { mnt_free_context(c); }
     } ctxGuard{ctx};
 
-    // Mount point cache: pre-populated from /proc/mounts, updated in-loop
-    // so duplicate paths within the same batch are detected immediately.
-    auto mountPointCache = buildMountPointCache();  // non-const: must be updated on success
+    auto mountPointCache = buildMountPointCache();
 
-    std::vector<std::string> tempMountedFiles;
-    std::vector<std::string> tempSkippedMessages;
-    std::vector<std::string> tempMountedFails;
+    std::vector<std::string> tempCompleted;
+    std::vector<std::string> tempSkipped;
+    std::vector<std::string> tempFailed;
     VerbosityFormatter formatter;
 
     constexpr size_t kBatchSize = 50;
     if (!silentMode) {
-        tempMountedFiles.reserve(kBatchSize);
-        tempSkippedMessages.reserve(kBatchSize);
-        tempMountedFails.reserve(kBatchSize);
+        tempCompleted.reserve(kBatchSize);
+        tempSkipped.reserve(kBatchSize);
+        tempFailed.reserve(kBatchSize);
     }
 
     auto flushBuffers = [&]() {
         if (silentMode) return;
         std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
-        mountedFiles.insert(tempMountedFiles.begin(), tempMountedFiles.end());
-        skippedMessages.insert(tempSkippedMessages.begin(), tempSkippedMessages.end());
-        mountedFails.insert(tempMountedFails.begin(), tempMountedFails.end());
-        tempMountedFiles.clear();
-        tempSkippedMessages.clear();
-        tempMountedFails.clear();
+        verboseSets.operationCompleted.insert(tempCompleted.begin(), tempCompleted.end());
+        verboseSets.operationSkipped.insert(tempSkipped.begin(), tempSkipped.end());
+        verboseSets.operationFailed.insert(tempFailed.begin(), tempFailed.end());
+        tempCompleted.clear();
+        tempSkipped.clear();
+        tempFailed.clear();
     };
 
     auto maybeFlush = [&]() {
         if (!silentMode &&
-            (tempMountedFiles.size()    >= kBatchSize ||
-             tempSkippedMessages.size() >= kBatchSize ||
-             tempMountedFails.size()    >= kBatchSize)) {
+            (tempCompleted.size() >= kBatchSize ||
+             tempSkipped.size()   >= kBatchSize ||
+             tempFailed.size()    >= kBatchSize)) {
             flushBuffers();
         }
     };
@@ -248,7 +240,7 @@ void mountIsoFiles(
     auto recordFail = [&](const std::string& isoFile, const char* reason) {
         if (!silentMode) {
             auto [dir, file] = extractDirectoryAndFilename(isoFile, "mount");
-            tempMountedFails.push_back(formatter.formatError(std::string(dir), std::string(file), reason));
+            tempFailed.push_back(formatter.formatError(std::string(dir), std::string(file), reason));
         }
         failedTasks->fetch_add(1, std::memory_order_relaxed);
     };
@@ -282,9 +274,9 @@ void mountIsoFiles(
 
         if (mountPointCache.count(mountPoint)) {
             if (!silentMode)
-                tempSkippedMessages.push_back(
-					formatter.formatSkipped(std::string(isoDir), std::string(isoName), std::string(mntDir), std::string(mntName))
-				);
+                tempSkipped.push_back(
+                    formatter.formatSkipped(std::string(isoDir), std::string(isoName), std::string(mntDir), std::string(mntName))
+                );
             completedTasks->fetch_add(1, std::memory_order_relaxed);
             maybeFlush();
             continue;
@@ -300,7 +292,6 @@ void mountIsoFiles(
             continue;
         }
 
-        // Reset and reuse the shared context (perf)
         mnt_reset_context(ctx);
         mnt_context_set_source(ctx, isoFile.c_str());
         mnt_context_set_target(ctx, mountPoint.c_str());
@@ -313,7 +304,9 @@ void mountIsoFiles(
             if (!silentMode) {
                 const char* rawFsType = mnt_context_get_fstype(ctx);
                 const std::string fsType = rawFsType ? rawFsType : "unknown";
-                formatter.formatMountSuccess(std::string(isoDir), std::string(isoName), std::string(mntDir), std::string(mntName), fsType);
+                tempCompleted.push_back(
+                    formatter.formatMountSuccess(std::string(isoDir), std::string(isoName), std::string(mntDir), std::string(mntName), fsType)
+                );
             }
             mountPointCache.emplace(mountPoint);
             completedTasks->fetch_add(1, std::memory_order_relaxed);

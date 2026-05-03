@@ -16,6 +16,7 @@
 #include "../process.h"
 #include "../readline.h"
 #include "../state.h"
+#include "../verbose.h"
 #include "../threadpool.h"
 #include "../tokenize.h"
 #include "../umount.h"
@@ -29,15 +30,15 @@
  * @brief Orchestrates the mounting or unmounting of ISO files using a static thread pool and progress tracking.
  * @param input Raw user input string (indices or "00").
  * @param files List of available files.
- * @param operationFiles Set to populate with successfully processed files.
- * @param skippedMessages Set to track items skipped during the operation.
- * @param operationFails Set to track failed file paths.
- * @param uniqueErrorMessages Set to collect unique error strings.
+ * @param operationCompleted Set to populate with successfully processed files.
+ * @param operationSkipped Set to track items skipped during the operation.
+ * @param operationFailed Set to track failed file paths.
+ * @param uniqueErrorTokenMessages Set to collect unique error strings.
  * @param operationBreak Boolean flag to control outer loop flow.
  * @param verbose Toggle for detailed progress output.
  * @param isUnmount True for unmount operation, false for mount.
  */
-void processInputForMountOrUmount(const std::string& input, const std::vector<std::string>& files, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, bool& operationBreak, bool& verbose, bool isUnmount) {
+void processInputForMountOrUmount(const std::string& input, const std::vector<std::string>& files, bool& operationBreak, bool& verbose, bool isUnmount) {
     setupSignalHandlerCancellations();
     GlobalState::g_operationCancelled.store(false);
 
@@ -48,7 +49,7 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
         for (int i = 1; i <= static_cast<int>(files.size()); ++i)
             indicesToProcess.insert(i);
     } else {
-        tokenizeInput(input, files, uniqueErrorMessages, indicesToProcess);
+        tokenizeInput(input, files, indicesToProcess);
         if (indicesToProcess.empty()) {
             if (isUnmount) operationBreak = false;
             return;
@@ -113,9 +114,9 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
                 chunkStr.push_back(files[idx - 1]);
 
             if (isUnmount)
-                unmountISO(chunkStr, operationFiles, operationFails, &completedTasks, &failedTasks, false);
+                unmountISO(chunkStr, &completedTasks, &failedTasks, false);
             else
-                mountIsoFiles(chunkStr, operationFiles, skippedMessages, operationFails, &completedTasks, &failedTasks, false);
+                mountIsoFiles(chunkStr, &completedTasks, &failedTasks, false);
         }));
     }
 
@@ -213,7 +214,7 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
  * @param process Operation type ("cp", "mv", or "rm").
  * @param operationIsos Set to track successfully modified items.
  * @param operationErrors Set to track failed items.
- * @param uniqueErrorMessages Set for unique UI error reporting.
+ * @param uniqueErrorTokenMessages Set for unique UI error reporting.
  * @param umountMvRmBreak Flag for outer loop control; set to false if no tasks are completed.
  * @param filterHistory Flag indicating if the view is filtered.
  * @param verbose Detailed output toggle for progress updates.
@@ -223,7 +224,11 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
  * partial batches to complete while preventing new tasks from starting. Database 
  * synchronization is performed on the main thread after all tasks finish.
  */
-void processInputForCpMvRm(const std::string& input, const std::vector<std::string>& isoFiles, const std::string& process, std::unordered_set<std::string>& operationIsos, std::unordered_set<std::string>& operationErrors, std::unordered_set<std::string>& uniqueErrorMessages, bool& umountMvRmBreak, bool& filterHistory, bool& verbose, std::atomic<bool>& newISOFound) {
+void processInputForCpMvRm(const std::string& input, 
+						   const std::vector<std::string>& isoFiles, 
+						   const std::string& process, 
+						   bool& umountMvRmBreak, bool& filterHistory, 
+						   bool& verbose, std::atomic<bool>& newISOFound) {
     setupSignalHandlerCancellations();
 
     std::vector<std::string> successfulDestPaths;
@@ -240,7 +245,7 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
     std::string operationColor = std::string(isDelete ? UI::Palette::Red : (isCopy ? UI::Palette::Green : UI::Palette::Yellow));
 
-    tokenizeInput(input, isoFiles, uniqueErrorMessages, processedIndices);
+    tokenizeInput(input, isoFiles, processedIndices);
 
     if (processedIndices.empty()) {
         umountMvRmBreak = false;
@@ -255,17 +260,17 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     std::vector<std::vector<int>> indexChunks = groupFilesIntoChunksForCpMvRm(processedIndices, isoFiles, numThreads, isDelete);
 
     bool abortDel = false;
-    std::string processedUserDestDir = userDestDirCpMv(isoFiles, indexChunks, uniqueErrorMessages, userDestDir,
+    std::string processedUserDestDir = userDestDirCpMv(isoFiles, indexChunks, userDestDir,
                                                        operationColor, operationDescription, umountMvRmBreak,
                                                        filterHistory, isDelete, isCopy, abortDel, overwriteExisting);
 
     GlobalState::g_operationCancelled.store(false);
 
     if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
-        uniqueErrorMessages.clear();
+        verboseSets.uniqueErrorTokenMessages.clear();
         return;
     }
-    uniqueErrorMessages.clear();
+    verboseSets.uniqueErrorTokenMessages.clear();
     clearScrollBuffer();
 
     size_t totalBytes = 0;
@@ -315,22 +320,21 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
 
-    for (const auto& chunk : indexChunks) {
-        futures.emplace_back(pool.enqueue([chunk, &isoFiles, &operationIsos, &operationErrors,
-                                           &userDestDir, isMove, isCopy, isDelete,
-                                           &completedBytes, &completedTasks, &failedTasks,
-                                           &overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
-            std::vector<std::string> isoFilesInChunk;
-            isoFilesInChunk.reserve(chunk.size());
-            for (int idx : chunk)
-                isoFilesInChunk.push_back(isoFiles[idx - 1]);
-
-            handleIsoFileOperation(isoFilesInChunk, isoFiles, operationIsos, operationErrors,
-                                   userDestDir, isMove, isCopy, isDelete,
-                                   &completedBytes, &completedTasks, &failedTasks,
-                                   overwriteExisting, &successfulDestPaths, &destPathsMutex);
-        }));
-    }
+   for (const auto& chunk : indexChunks) {
+		futures.emplace_back(pool.enqueue([chunk, &isoFiles,
+										   &userDestDir, isMove, isCopy, isDelete,
+										   &completedBytes, &completedTasks, &failedTasks,
+										   &overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
+			std::vector<std::string> isoFilesInChunk;
+			isoFilesInChunk.reserve(chunk.size());
+			for (int idx : chunk)
+				isoFilesInChunk.push_back(isoFiles[idx - 1]);
+			handleIsoFileOperation(isoFilesInChunk, isoFiles,
+								   userDestDir, isMove, isCopy, isDelete,
+								   &completedBytes, &completedTasks, &failedTasks,
+								   overwriteExisting, &successfulDestPaths, &destPathsMutex);
+		}));
+	}
 
     for (auto& future : futures)
         future.wait();
@@ -402,10 +406,6 @@ void processInputForCpMvRm(const std::string& input, const std::vector<std::stri
 void processInputForConversions(const std::string& input, std::vector<std::string>& fileList,
                                const bool& modeMdf, const bool& modeNrg, const bool& modeChd,
                                const bool& modeDaa,
-                               std::unordered_set<std::string>& processedErrors,
-                               std::unordered_set<std::string>& successOuts,
-                               std::unordered_set<std::string>& skippedOuts,
-                               std::unordered_set<std::string>& failedOuts,
                                bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound)
 {
     std::vector<std::string> successfulOutputPaths;
@@ -420,7 +420,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     std::unordered_set<int> processedIndices;
 
     if (!(input.empty() || std::all_of(input.begin(), input.end(), isspace))) {
-        tokenizeInput(input, fileList, processedErrors, processedIndices);
+        tokenizeInput(input, fileList, processedIndices);
     } else return;
 
     if (processedIndices.empty()) {
@@ -490,7 +490,6 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
 
     for (const auto& chunk : indexChunks) {
         futures.emplace_back(pool.enqueue([chunk, &fileList,
-                                           &successOuts, &skippedOuts, &failedOuts,
                                            modeMdf, modeNrg, modeChd, modeDaa,
                                            &completedBytes, &completedTasks, &failedTasks,
                                            &successfulOutputPaths, &outPathsMutex]() {
@@ -498,8 +497,7 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
             imageFilesInChunk.reserve(chunk.size());
             for (size_t idx : chunk)
                 imageFilesInChunk.push_back(fileList[idx - 1]);
-
-            convertToISO(imageFilesInChunk, successOuts, skippedOuts, failedOuts,
+            convertToISO(imageFilesInChunk,
                          modeMdf, modeNrg, modeChd, modeDaa,
                          &completedBytes, &completedTasks, &failedTasks,
                          &successfulOutputPaths, &outPathsMutex);

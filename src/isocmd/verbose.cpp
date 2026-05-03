@@ -130,30 +130,23 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
             break;
         }
     }
-    
+    primarySet.clear();
+    secondarySet.clear();
+    tertiarySet.clear();
+    errorSet.clear();
     pressEnterToContinue();
-}
-
-/**
- * @brief Clears and deallocates memory for all verbose reporting sets.
- */
-void resetVerboseSets(std::unordered_set<std::string>& processedErrors, std::unordered_set<std::string>& successOuts, std::unordered_set<std::string>& skippedOuts, std::unordered_set<std::string>& failedOuts) {
-    processedErrors.clear();
-    successOuts.clear();
-    skippedOuts.clear();
-    failedOuts.clear();
 }
 
 /**
  * @brief Displays a collection of unique error messages generated during tokenization.
  */
-void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages) {
-    if (!uniqueErrorMessages.empty()) {
+void displayErrors() {
+    if (!verboseSets.uniqueErrorTokenMessages.empty()) {
         std::cout << "\n";
-        for (const auto& err : uniqueErrorMessages) {
+        for (const auto& err : verboseSets.uniqueErrorTokenMessages) {
             std::cout << err << "\n";
         }
-        uniqueErrorMessages.clear();
+        verboseSets.uniqueErrorTokenMessages.clear();
     }
 }
 
@@ -173,18 +166,14 @@ void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages) {
  * @param isUnmount Boolean indicating if the operation was an unmount.
  * @param needsClrScrn Output flag to signal if the screen should be cleared.
  */
-void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMessages, 
-                                 std::unordered_set<std::string>& operationFiles, 
-                                 std::unordered_set<std::string>& operationFails, 
-                                 std::unordered_set<std::string>& skippedMessages, 
-                                 const std::string& operation, bool& verbose, bool isMount, 
+void handleSelectIsoFilesResults(const std::string& operation, bool& verbose, bool isMount, 
                                  bool& isFiltered, bool& umountMvRmBreak, bool isUnmount, 
                                  bool& needsClrScrn) {
     
     const auto c = getVerboseTheme();
     
-    if (!uniqueErrorMessages.empty() && operationFiles.empty() && 
-         operationFails.empty() && skippedMessages.empty()) {
+    if (!verboseSets.uniqueErrorTokenMessages.empty() && verboseSets.operationFailed.empty() && 
+         verboseSets.operationFailed.empty() && verboseSets.operationSkipped.empty()) {
         
         clearScrollBuffer();
         needsClrScrn = true;
@@ -199,8 +188,8 @@ void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMes
         clearScrollBuffer();
         needsClrScrn = true;
         
-        std::unordered_set<std::string> conditionalSet = isMount ? skippedMessages : std::unordered_set<std::string>{};
-        verbosePrint(operationFiles, operationFails, conditionalSet, uniqueErrorMessages, isMount ? 2 : 1);
+       std::unordered_set<std::string> conditionalSet = isMount ? verboseSets.operationSkipped : std::unordered_set<std::string>{};
+        verbosePrint(verboseSets.operationCompleted, verboseSets.operationFailed, conditionalSet, verboseSets.uniqueErrorTokenMessages, isMount ? 2 : 1);
     }
 
     if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {

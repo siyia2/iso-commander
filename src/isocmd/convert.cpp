@@ -10,6 +10,7 @@
 #include "../convert.h"
 #include "../display.h"
 #include "../state.h"
+#include "../verbose.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
 
@@ -35,9 +36,6 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
  * collects successful output paths for later database indexing by the caller.
  */
 void convertToISO(const std::vector<std::string>& imageFiles,
-                  std::unordered_set<std::string>& successOuts,
-                  std::unordered_set<std::string>& skippedOuts,
-                  std::unordered_set<std::string>& failedOuts,
                   const bool& modeMdf,
                   const bool& modeNrg,
                   const bool& modeChd,
@@ -63,15 +61,15 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     auto batchInsertMessages = [&]() {
         std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
         if (!localSuccessMsgs.empty()) {
-            successOuts.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
+            verboseSets.operationCompleted.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
             localSuccessMsgs.clear();
         }
         if (!localFailedMsgs.empty()) {
-            failedOuts.insert(localFailedMsgs.begin(), localFailedMsgs.end());
+            verboseSets.operationFailed.insert(localFailedMsgs.begin(), localFailedMsgs.end());
             localFailedMsgs.clear();
         }
         if (!localSkippedMsgs.empty()) {
-            skippedOuts.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
+            verboseSets.operationSkipped.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
             localSkippedMsgs.clear();
         }
     };

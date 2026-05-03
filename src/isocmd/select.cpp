@@ -22,10 +22,10 @@
  * @param isFiltered Current list state.
  * @param filteredFiles Vector of currently filtered file paths.
  * @param isoDirs Vector of mounted directories.
- * @param operationFiles Set for tracking successful files.
- * @param operationFails Set for tracking failed files.
- * @param uniqueErrorMessages Set for tracking error strings.
- * @param skippedMessages Set for tracking skipped files.
+ * @param operationCompleted Set for tracking successful files.
+ * @param operationFailed Set for tracking failed files.
+ * @param uniqueErrorTokenMessages Set for tracking error strings.
+ * @param operationSkipped Set for tracking skipped files.
  * @param needsClrScrn Boolean to control screen refreshing.
  * @param operation The operation name string.
  * @param isAtISOList Atomic flag indicating if the UI is at the ISO list.
@@ -34,9 +34,7 @@
  * @param newISOFound Atomic flag for background refresh.
  */
 void processOperationForSelectedIsoFiles(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered, const std::vector<std::string>& filteredFiles, 
-										 std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, 
-										 std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, 
-										 std::unordered_set<std::string>& skippedMessages, bool& needsClrScrn, 
+										 std::vector<std::string>& isoDirs, bool& needsClrScrn, 
 										 const std::string& operation, std::atomic<bool>& isAtISOList, 
 										 bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
     
@@ -53,21 +51,18 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
             umountMvRmBreak = true;
         }
         
-        processInputForMountOrUmount(inputString, activeList, operationFiles, skippedMessages, 
-                            operationFails, uniqueErrorMessages, umountMvRmBreak, verbose, isUnmount);
+        processInputForMountOrUmount(inputString, activeList, umountMvRmBreak, verbose, isUnmount);
     } else if (write) {
         isAtISOList.store(false);
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalCaches::globalIsoFileList;
-        writeToUsb(inputString, activeList, uniqueErrorMessages);
+        writeToUsb(inputString, activeList);
     } else {
         isAtISOList.store(false);
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalCaches::globalIsoFileList;
-        processInputForCpMvRm(inputString, activeList, operation, operationFiles, operationFails, 
-                             uniqueErrorMessages, umountMvRmBreak, filterHistory, verbose, newISOFound);
+        processInputForCpMvRm(inputString, activeList, operation, umountMvRmBreak, filterHistory, verbose, newISOFound);
     }
     
-    handleSelectIsoFilesResults(uniqueErrorMessages, operationFiles, operationFails, skippedMessages, 
-                               operation, verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn);
+    handleSelectIsoFilesResults(operation, verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn);
 }
 
 /**
@@ -127,7 +122,11 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
  * @return true If the "proc" command was executed.
  * @return false Otherwise.
  */
-bool handlePendingProcess(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingProcess,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
+bool handlePendingProcess(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingProcess,bool isMount,bool isUnmount, 
+						  bool write,bool isFiltered, std::vector<std::string>& filteredFiles,
+						  std::vector<std::string>& isoDirs, bool& needsClrScrn, const std::string& operation, 
+						  std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, 
+						  bool& filterHistory, std::atomic<bool>& newISOFound) {
     
     if (hasPendingProcess && !pendingIndices.empty() && inputString == "proc") {
         std::string combinedIndices = "";
@@ -139,8 +138,7 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
         }
         
         processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered, 
-                     filteredFiles, isoDirs, operationFiles, 
-                     operationFails, uniqueErrorMessages, skippedMessages,
+                     filteredFiles, isoDirs,
                      needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
                      filterHistory, newISOFound);
 
@@ -206,7 +204,6 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
     
-    std::unordered_set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
     static std::vector<std::string> isoDirs;
 
     isoDirs.reserve(1000);
@@ -253,7 +250,6 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
         setupSignalHandlerCancellations();
         setup_custom_keybindingsForSelect();
         GlobalState::g_operationCancelled.store(false);
-        resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
         filterHistory = false;
         clear_history();
 
@@ -378,7 +374,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
         if (validCommand) continue;
 
         bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isMount, isUnmount, write, isFiltered, 
-                                                    filteredFiles, isoDirs, operationFiles, skippedMessages, operationFails, uniqueErrorMessages,
+                                                    filteredFiles, isoDirs,
                                                     needsClrScrn, operation, isAtISOList, umountMvRmBreak, filterHistory, newISOFound);
         if (pendingExecuted) {
             continue;
@@ -398,8 +394,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
         }
 
         processOperationForSelectedIsoFiles(inputString, isMount, isUnmount, write, isFiltered, 
-                                           filteredFiles, isoDirs, operationFiles, 
-                                           operationFails, uniqueErrorMessages, skippedMessages,
+                                           filteredFiles, isoDirs,
                                            needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
                                            filterHistory, newISOFound);
     }
@@ -422,7 +417,6 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
 
-    std::unordered_set<std::string> processedErrors, successOuts, skippedOuts, failedOuts;
     std::vector<std::string> pendingIndices;
     bool hasPendingProcess = false;
     
@@ -470,7 +464,6 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 		rl_bind_keyseq("R", rl_insert);
         GlobalState::g_operationCancelled.store(false);
         bool verbose = false; 
-        resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
         
         if (!isFiltered) originalPage = currentPage;
         
@@ -577,13 +570,12 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                                        (fileType == "mdf"),
                                        (fileType == "nrg"),
                                        (fileType == "chd"),
-                                       (fileType == "daa"),
-                                       processedErrors, successOuts, skippedOuts, failedOuts, 
+                                       (fileType == "daa"), 
                                        verbose, needsClrScrn, newISOFound);
             
             needsClrScrn = true;
             if (verbose) {
-                verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3);
+                verbosePrint(verboseSets.uniqueErrorTokenMessages, verboseSets.operationCompleted, verboseSets.operationSkipped, verboseSets.operationFailed, 3);
             }
             continue;
         }       
@@ -604,11 +596,10 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                                        (fileType == "nrg"),
                                        (fileType == "chd"),
                                        (fileType == "daa"),
-                                       processedErrors, successOuts, skippedOuts, failedOuts, 
                                        verbose, needsClrScrn, newISOFound);
             needsClrScrn = true;
             if (verbose) {
-                verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3);
+                verbosePrint(verboseSets.uniqueErrorTokenMessages, verboseSets.operationCompleted, verboseSets.operationSkipped, verboseSets.operationFailed, 3);
                 needsClrScrn = true;
             }
         }

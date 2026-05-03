@@ -21,6 +21,7 @@
 #include "../threadpool.h"
 #include "../tokenize.h"
 #include "../write2usb.h"
+#include "../verbose.h"
 
 namespace fs = std::filesystem;
 
@@ -424,7 +425,7 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 }
 
 void helpMappings();
-void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages);
+void displayErrors();
 
 /**
  * @brief Interactive loop that collects and validates ISO-to-device mappings from the user.
@@ -439,13 +440,13 @@ void displayErrors(std::unordered_set<std::string>& uniqueErrorMessages);
  * the user is shown a destructive-write warning and must confirm with @c y/Y.
  *
  * @param selectedIsos          ISOs chosen by the user for writing.
- * @param uniqueErrorMessages   Accumulator for error strings to display at the top
+ * @param uniqueErrorTokenMessages   Accumulator for error strings to display at the top
  *                              of the screen on re-entry (passed through to
  *                              @ref displayErrors).
  * @return Validated (IsoInfo, device) pairs ready for @ref performWriteOperation,
  *         or an empty vector if the user aborted.
  */
-std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos, std::unordered_set<std::string>& uniqueErrorMessages) {
+std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos) {
     auto setupReadline = []() {
         rl_completion_display_matches_hook = [](char **matches, int num_matches, int max_length) {
             (void)matches;
@@ -480,7 +481,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             return {};
         }
 
-        displayErrors(uniqueErrorMessages);
+        displayErrors();
 
         std::vector<IsoInfo> sortedIsos = selectedIsos;
         std::sort(sortedIsos.begin(), sortedIsos.end(), [](const IsoInfo& a, const IsoInfo& b) {
@@ -826,13 +827,13 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
  * Parses @p input to resolve ISO indices, verifies each file exists on disk,
  * then delegates to @ref collectDeviceMappings for device selection and
  * @ref performWriteOperation for the actual write.  Missing or inaccessible
- * files are recorded in @p uniqueErrorMessages and skipped.
+ * files are recorded in @p uniqueErrorTokenMessages and skipped.
  *
  * @param input                 Raw selection string from the main menu (e.g. @c "1 3-5").
  * @param isoFiles              Full ordered list of available ISO paths.
- * @param uniqueErrorMessages   Error accumulator shared with the calling context.
+ * @param uniqueErrorTokenMessages   Error accumulator shared with the calling context.
  */
-void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles, std::unordered_set<std::string>& uniqueErrorMessages) {
+void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles) {
     clearScrollBuffer();
     std::unordered_set<int> indicesToProcess;
     
@@ -841,7 +842,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     setupSignalHandlerCancellations();
     GlobalState::g_operationCancelled.store(false);
 
-    tokenizeInput(input, isoFiles, uniqueErrorMessages, indicesToProcess);
+    tokenizeInput(input, isoFiles, indicesToProcess);
     if (indicesToProcess.empty()) {
         return;
     }
@@ -850,7 +851,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     for (int idx : indicesToProcess) {
         try {
             if (!std::filesystem::exists(isoFiles[idx - 1])) {
-                uniqueErrorMessages.insert(
+                verboseSets.uniqueErrorTokenMessages.insert(
                     std::string(UI::Palette::Purple) + "Missing: " + 
                     std::string(wt.colorWarning) + "'" + isoFiles[idx - 1] + "'" + 
                     std::string(UI::Palette::Purple) + "."
@@ -866,7 +867,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
                 static_cast<size_t>(idx)
             });
         } catch (const std::filesystem::filesystem_error& e) {
-            uniqueErrorMessages.insert(
+            verboseSets.uniqueErrorTokenMessages.insert(
                 std::string(wt.colorFailure) + "Error accessing ISO file: " + e.what() + "."
             );
             continue;
@@ -878,7 +879,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
         return;
     }
 
-    auto validPairs = collectDeviceMappings(selectedIsos, uniqueErrorMessages);
+    auto validPairs = collectDeviceMappings(selectedIsos);
     if (validPairs.empty()) {
         clear_history();
         return;

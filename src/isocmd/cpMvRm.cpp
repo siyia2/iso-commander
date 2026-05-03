@@ -106,7 +106,7 @@ static std::string validateLinuxPath(const std::string& path) {
     return "";
 }
 
-std::string handlePaginatedDisplay(const std::vector<std::string>& entries, std::unordered_set<std::string>& uniqueErrorMessages, const std::string& promptPrefix, 
+std::string handlePaginatedDisplay(const std::vector<std::string>& entries, const std::string& promptPrefix, 
 const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn);
 
 /**
@@ -116,14 +116,13 @@ const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn
  * confirmation. Handles terminal environment setup and internal signal state.
  * 
  * @param isoFiles The list of ISO file paths.
- * @param uniqueErrorMessages Set for storing/displaying UI errors.
+ * @param uniqueErrorTokenMessages Set for storing/displaying UI errors.
  * @param indexChunks Chunks for formatting the ISO list display.
  * @param umountMvRmBreak [out] Set to true if the operation should proceed.
  * @param abortDel [out] Set to true if the user explicitly cancels.
  * @return True if the user confirmed with 'Y', false otherwise.
  */
 bool handleDeleteOperation(const std::vector<std::string>& isoFiles, 
-                           std::unordered_set<std::string>& uniqueErrorMessages, 
                            std::vector<std::vector<int>>& indexChunks, 
                            bool& umountMvRmBreak, 
                            bool& abortDel) {
@@ -167,7 +166,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
 
     while (true) {
         std::string userInput = handlePaginatedDisplay(
-            entries, uniqueErrorMessages, promptPrefix, promptSuffix, setupEnv, isPageTurn
+            entries, promptPrefix, promptSuffix, setupEnv, isPageTurn
         );
 
         // Cleanup keybindings after returning
@@ -208,7 +207,7 @@ void helpSearches(bool isCpMv, bool import2ISO);
  * 
  * @param isoFiles List of source files.
  * @param indexChunks Chunks for list display formatting.
- * @param uniqueErrorMessages Set for UI error persistence.
+ * @param uniqueErrorTokenMessages Set for UI error persistence.
  * @param userDestDir [out] The resulting validated path(s).
  * @param operationColor UI color string for the prompt.
  * @param operationDescription "copy", "move", or "delete".
@@ -220,7 +219,7 @@ void helpSearches(bool isCpMv, bool import2ISO);
  * @param overwriteExisting [out] Set to true if "-o" flag is detected.
  * @return The validated destination string, empty if canceled, or "EOF_SIGNAL".
  */
-std::string userDestDirCpMv(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks, std::unordered_set<std::string>& uniqueErrorMessages,
+std::string userDestDirCpMv(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks,
 std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel,
 bool& overwriteExisting) {
     rl_attempted_completion_function = nullptr;
@@ -275,7 +274,7 @@ bool& overwriteExisting) {
                 reset;
 
             userInput = handlePaginatedDisplay(
-                entries, uniqueErrorMessages, promptPrefix, promptSuffix, setupEnv, isPageTurn
+                entries, promptPrefix, promptSuffix, setupEnv, isPageTurn
             );
 
             rl_bind_key('\f', prevent_readline_keybindings);
@@ -317,7 +316,7 @@ bool& overwriteExisting) {
             }
 
             if (!pathsValid) {
-                uniqueErrorMessages.insert(invalidPathError);
+                verboseSets.uniqueErrorTokenMessages.insert(invalidPathError);
                 userDestDir = "";
                 resetReadlinePagination();
                 continue;
@@ -329,7 +328,7 @@ bool& overwriteExisting) {
             saveHistory(filterHistory);
             shouldContinue = false;
         } else {
-            bool proceedWithDelete = handleDeleteOperation(isoFiles, uniqueErrorMessages, indexChunks, umountMvRmBreak, abortDel);
+            bool proceedWithDelete = handleDeleteOperation(isoFiles, indexChunks, umountMvRmBreak, abortDel);
             if (!proceedWithDelete) {
                 userDestDir = "";
                 shouldContinue = false;
@@ -667,9 +666,9 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
  *       copies succeed, and at least one copy was successful.
  * @note Ownership is restored using the real user ID from sudo/setuid context.
  */
-void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std::vector<std::string>& isoFilesCopy, std::unordered_set<std::string>& operationIsos,
-std::unordered_set<std::string>& operationErrors, const std::string& userDestDir, bool isMove, bool isCopy, bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks,
-std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::string>* successfulDestPaths,std::mutex* destPathsMutex) {
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std::vector<std::string>& isoFilesCopy, const std::string& userDestDir, bool isMove, bool isCopy, 
+							bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks,
+							std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::string>* successfulDestPaths,std::mutex* destPathsMutex) {
 
     std::atomic<bool> operationSuccessful(true);
 
@@ -686,8 +685,8 @@ std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::strin
     auto batchInsertMessages = [&]() {
         if (verboseIsos.size() >= BATCH_SIZE || verboseErrors.size() >= BATCH_SIZE) {
             std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
-            operationErrors.insert(verboseErrors.begin(), verboseErrors.end());
-            operationIsos.insert(verboseIsos.begin(), verboseIsos.end());
+            verboseSets.operationFailed.insert(verboseErrors.begin(), verboseErrors.end());
+            verboseSets.operationCompleted.insert(verboseIsos.begin(), verboseIsos.end());
             verboseIsos.clear();
             verboseErrors.clear();
         }
@@ -836,7 +835,7 @@ std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::strin
 
     {
         std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
-        operationErrors.insert(verboseErrors.begin(), verboseErrors.end());
-        operationIsos.insert(verboseIsos.begin(), verboseIsos.end());
+        verboseSets.operationFailed.insert(verboseErrors.begin(), verboseErrors.end());
+        verboseSets.operationCompleted.insert(verboseIsos.begin(), verboseIsos.end());
     }
 }

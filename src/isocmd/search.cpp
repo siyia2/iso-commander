@@ -884,12 +884,11 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
         int currentCacheOld = 0;
         std::vector<std::string> directoryPaths;
         std::unordered_set<std::string> uniquePaths, processedErrors, processedErrorsFind;
-        std::unordered_set<std::string> successOuts, skippedOuts, failedOuts, invalidDirectoryPaths, fileNames;
+        std::unordered_set<std::string> invalidDirectoryPaths, fileNames;
         bool filterHistory = false;
 
         initIterationState();
-        resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
-        
+                
         const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
         std::string prompt;

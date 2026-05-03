@@ -114,7 +114,6 @@ const bool isUnmount, const bool isWrite, const bool isConversion, bool& need2So
  * @return The user's non-navigation input string, or "EOF_SIGNAL" on Ctrl+D.
  */
 std::string handlePaginatedDisplay(const std::vector<std::string>& entries, 
-                                  std::unordered_set<std::string>& uniqueErrorMessages, 
                                   const std::string& promptPrefix, 
                                   const std::string& promptSuffix, 
                                   const std::function<void()>& setupEnvironmentFn, 
@@ -134,7 +133,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
         size_t end = disablePagination ? totalEntries : std::min(start + GlobalState::ITEMS_PER_PAGE, totalEntries);
 
         clearScrollBuffer();
-        displayErrors(uniqueErrorMessages);
+        displayErrors();
 
         // 1. One newline above the list
         std::cout << "\n";

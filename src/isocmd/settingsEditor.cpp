@@ -19,6 +19,7 @@
 #include "../state.h"
 #include "../themes.h"
 #include "../settings.h"
+#include "../verbose.h"
 #include "../tokenize.h"
 
 namespace fs = std::filesystem;
@@ -187,11 +188,11 @@ void interactiveConfigEditor(const std::string& configPath) {
             std::unordered_set<std::string> errors;
             std::unordered_set<int> choices;
 
-            tokenizeInput(input, slots, errors, choices);
-            if (!errors.empty()) std::cout << "\n";
-            for (const auto& err : errors)
+            tokenizeInput(input, slots, choices);
+            if (!verboseSets.uniqueErrorTokenMessages.empty()) std::cout << "\n";
+            for (const auto& err : verboseSets.uniqueErrorTokenMessages)
                 std::cout << err << "\n";
-            if (!errors.empty())
+            if (!verboseSets.uniqueErrorTokenMessages.empty())
                 pressEnterToContinue();
 
             std::vector<int> ordered(choices.begin(), choices.end());
