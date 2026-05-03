@@ -116,7 +116,6 @@ const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn
  * confirmation. Handles terminal environment setup and internal signal state.
  * 
  * @param isoFiles The list of ISO file paths.
- * @param uniqueErrorTokenMessages Set for storing/displaying UI errors.
  * @param indexChunks Chunks for formatting the ISO list display.
  * @param umountMvRmBreak [out] Set to true if the operation should proceed.
  * @param abortDel [out] Set to true if the user explicitly cancels.

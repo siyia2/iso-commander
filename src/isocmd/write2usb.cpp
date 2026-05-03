@@ -278,59 +278,60 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
     std::vector<std::pair<IsoInfo, std::string>> validPairs;
     
     for (const auto& devicePair : deviceMap) {
-        size_t index = devicePair.first;
-        const std::string& device = devicePair.second;
-        const auto& iso = selectedIsos[index - 1];
-        
-        uint64_t deviceSize = getBlockDeviceSize(device);
-        std::string deviceSizeStr = formatFileSize(deviceSize);
-        std::string driveName = getDriveName(device);
-        
-        std::string errMsg;
-        errMsg.reserve(256);
+		size_t index = devicePair.first;
+		const std::string& device = devicePair.second;
+		const auto& iso = selectedIsos[index - 1];
 
-        if (!isUsbDevice(device)) {
-            errMsg.append(wt.errPath).append("'").append(device).append("'")
-                  .append(wt.rl_resetCol).append(wt.errLabel).append(" is not a removable USB device")
-                  .append(wt.rl_resetCol);
-            validationErrors.push_back(std::move(errMsg));
-            continue;
-        }
-        
-        if (isDeviceMounted(device)) {
-            errMsg.append(wt.errPath).append("'").append(device).append("'")
-                  .append(wt.rl_resetCol).append(wt.errLabel).append(" or its partitions are mounted")
-                  .append(wt.rl_resetCol);
-            validationErrors.push_back(std::move(errMsg));
-            continue;
-        }
-        
-        if (deviceSize == 0) {
-            errMsg.append(wt.errLabel).append("Failed to get size for ")
-                  .append(wt.errPath).append("'").append(device).append("'")
-                  .append(wt.rl_resetCol).append(wt.errLabel).append(" check permissions")
-                  .append(wt.rl_resetCol);
-            validationErrors.push_back(std::move(errMsg));
-            permissions = true;
-            continue;
-        }
-        
-        if (iso.size > deviceSize) {
-            errMsg.append(wt.warnLabel).append("'").append(wt.fileCol).append(iso.filename)
-                  .append(wt.rl_resetCol).append(wt.bold).append(" (")
-                  .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol).append(wt.bold)
-                  .append(")").append(wt.warnLabel).append("'").append(wt.errLabel).append(" is too large for ")
-                  .append(wt.errPath).append("'").append(device).append(wt.bold)
-                  .append(" <").append(driveName).append(">")
-                  .append(wt.rl_resetCol).append(wt.bold).append(" (")
-                  .append(wt.sizeCol).append(deviceSizeStr).append(wt.rl_resetCol).append(")").append(wt.warnLabel).append("'")
-                  .append(wt.rl_resetCol);
-            validationErrors.push_back(std::move(errMsg));
-            continue;
-        }
-        
-        validPairs.emplace_back(iso, device);
-    }
+		if (!isUsbDevice(device)) {
+			std::string errMsg;
+			errMsg.append(wt.errPath).append("'").append(device).append("'")
+				  .append(wt.rl_resetCol).append(wt.errLabel).append(" is not a removable USB device")
+				  .append(wt.rl_resetCol);
+			validationErrors.push_back(std::move(errMsg));
+			continue;
+		}
+
+		if (isDeviceMounted(device)) {
+			std::string errMsg;
+			errMsg.append(wt.errPath).append("'").append(device).append("'")
+				  .append(wt.rl_resetCol).append(wt.errLabel).append(" or its partitions are mounted")
+				  .append(wt.rl_resetCol);
+			validationErrors.push_back(std::move(errMsg));
+			continue;
+		}
+
+		uint64_t deviceSize = getBlockDeviceSize(device);
+
+		if (deviceSize == 0) {
+			std::string errMsg;
+			errMsg.append(wt.errLabel).append("Failed to get size for ")
+				  .append(wt.errPath).append("'").append(device).append("'")
+				  .append(wt.rl_resetCol).append(wt.errLabel).append(" check permissions")
+				  .append(wt.rl_resetCol);
+			validationErrors.push_back(std::move(errMsg));
+			permissions = true;
+			continue;
+		}
+
+		if (iso.size > deviceSize) {
+			std::string deviceSizeStr = formatFileSize(deviceSize);
+			std::string driveName = getDriveName(device);
+			std::string errMsg;
+			errMsg.append(wt.warnLabel).append("'").append(wt.fileCol).append(iso.filename)
+				  .append(wt.rl_resetCol).append(wt.bold).append(" (")
+				  .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol).append(wt.bold)
+				  .append(")").append(wt.warnLabel).append("'").append(wt.errLabel).append(" is too large for ")
+				  .append(wt.errPath).append("'").append(device).append(wt.bold)
+				  .append(" <").append(driveName).append(">")
+				  .append(wt.rl_resetCol).append(wt.bold).append(" (")
+				  .append(wt.sizeCol).append(deviceSizeStr).append(wt.rl_resetCol).append(")").append(wt.warnLabel).append("'")
+				  .append(wt.rl_resetCol);
+			validationErrors.push_back(std::move(errMsg));
+			continue;
+		}
+
+		validPairs.emplace_back(iso, device);
+	}
     
     if (!validationErrors.empty()) {
         std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.rl_resetCol << wt.bold << "\n";

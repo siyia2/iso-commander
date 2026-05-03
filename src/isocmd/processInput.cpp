@@ -4,6 +4,8 @@
 #include <csignal>
 #include <iostream>
 
+#include <sys/stat.h>
+
 // Third-Party Library Headers
 #include <readline/history.h>
 #include <readline/readline.h>
@@ -102,19 +104,17 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     );
 
     for (const auto& idxChunk : indexChunks) {
-        futures.emplace_back(pool.enqueue([&, idxChunk]() {
-
-            std::vector<std::string> chunkStr;
-            chunkStr.reserve(idxChunk.size());
-            for (int idx : idxChunk)
-                chunkStr.push_back(files[idx - 1]);
-
-            if (isUnmount)
-                unmountISO(chunkStr, &completedTasks, &failedTasks, false);
-            else
-                mountIsoFiles(chunkStr, &completedTasks, &failedTasks, false);
-        }));
-    }
+		futures.emplace_back(pool.enqueue([&]() {
+			std::vector<std::string> chunkStr;
+			chunkStr.reserve(idxChunk.size());
+			for (int idx : idxChunk)
+				chunkStr.push_back(files[idx - 1]);
+			if (isUnmount)
+				unmountISO(chunkStr, &completedTasks, &failedTasks, false);
+			else
+				mountIsoFiles(chunkStr, &completedTasks, &failedTasks, false);
+		}));
+	}
 
     for (auto& future : futures)
         future.wait();
@@ -267,14 +267,13 @@ void processInputForCpMvRm(const std::string& input,
     clearScrollBuffer();
 
     size_t totalBytes = 0;
-    {
-        std::vector<std::string> filesToProcess;
-        filesToProcess.reserve(processedIndices.size());
-        for (const auto& chunk : indexChunks)
-            for (int idx : chunk)
-                filesToProcess.push_back(isoFiles[idx - 1]);
-        totalBytes = getTotalFileSize(filesToProcess);
-    }
+	for (const auto& chunk : indexChunks) {
+		for (int idx : chunk) {
+			struct ::stat st;
+			if (::stat(isoFiles[idx - 1].c_str(), &st) == 0)
+				totalBytes += st.st_size;
+		}
+	}
 
     size_t totalTasks = processedIndices.size();
 
@@ -314,7 +313,7 @@ void processInputForCpMvRm(const std::string& input,
     futures.reserve(indexChunks.size());
 
    for (const auto& chunk : indexChunks) {
-		futures.emplace_back(pool.enqueue([chunk, &isoFiles,
+		futures.emplace_back(pool.enqueue([&chunk, &isoFiles,
 										   &userDestDir, isMove, isCopy, isDelete,
 										   &completedBytes, &completedTasks, &failedTasks,
 										   &overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
