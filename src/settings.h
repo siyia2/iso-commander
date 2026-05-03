@@ -45,13 +45,15 @@ inline auto isDisplay = [](const std::string& v) {
  * @brief Validates numeric configuration values within a specified range.
  */
 inline auto isNum = [](const std::string& v, int min, int max) -> bool {
-    try { 
+    if (v.empty() || !std::all_of(v.begin(), v.end(), ::isdigit)) return false;
+    if (v.size() > 1 && v[0] == '0') return false;
+    try {
         size_t pos;
-        int n = std::stoi(v, &pos); 
+        int n = std::stoi(v, &pos);
         if (pos != v.length()) return false;
-        return n >= min && n <= max; 
-    } catch (...) { 
-        return false; 
+        return n >= min && n <= max;
+    } catch (...) {
+        return false;
     }
 };
 

@@ -70,4 +70,8 @@ void reset_custom_keybindingsForCpMvWrite2Usb(void);
 // --- File Operations Mode (RM) ---
 void reset_custom_keybindingsForRm(void);
 
+// --- Search Prompts ---
+void setup_custom_keybindingsForSearches(void);
+void reset_custom_keybindingsForSearches(void);
+
 #endif // READLINE_H
