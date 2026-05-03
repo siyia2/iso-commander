@@ -116,13 +116,16 @@ void syncCache(const std::string& filePath) {
  */
 void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap) {
     auto getVal = [&](const std::string& key, size_t defaultVal) -> size_t {
-        auto it = configMap.find(key);
-        if (it == configMap.end()) return defaultVal;
-        try { 
-            int v = std::stoi(it->second); 
-            return (v >= 0) ? static_cast<size_t>(v) : defaultVal; 
-        } catch (...) { return defaultVal; }
-    };
+		auto it = configMap.find(key);
+		if (it == configMap.end()) return defaultVal;
+		const std::string& s = it->second;
+		if (s.empty() || !std::all_of(s.begin(), s.end(), ::isdigit)) return defaultVal;
+		if (s.size() > 1 && s[0] == '0') return defaultVal;  // reject leading zeros
+		try {
+			int v = std::stoi(s);
+			return (v >= 0) ? static_cast<size_t>(v) : defaultVal;
+		} catch (...) { return defaultVal; }
+	};
     
     GlobalState::MAX_HISTORY_LINES         		 = getVal("folder_path_history_lines",    30);
     GlobalState::MAX_HISTORY_PATTERN_LINES 		 = getVal("filter_history_lines",         15);
