@@ -63,9 +63,12 @@ void pressEnterToContinue() {
 
 /**
  * @brief Performs a high-visibility print of operation results categorized by sets.
- * @details Handles signal management, terminal cleanup, and sorted output of 
+ * @details Handles signal management, terminal cleanup, and sorted output of
  * success, warning, and error strings based on a specific operation context.
- * * @param primarySet Main data set (usually processed items).
+ * Strings are sorted case-insensitively and printed via string_view to avoid
+ * heap allocation or copying from the underlying sets.
+ *
+ * @param primarySet Main data set (usually processed items).
  * @param secondarySet Supporting data set (usually successes).
  * @param tertiarySet Additional context (usually skipped items).
  * @param errorSet Set of error strings.
@@ -79,57 +82,56 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
     auto printSortedSet = [&](std::unordered_set<std::string>& set, bool isError = false) {
-        if (!set.empty()) {
-            std::vector<std::string> vec(
-                std::make_move_iterator(set.begin()), 
-                std::make_move_iterator(set.end())
-            );
-            
-            sortFilesCaseInsensitive(vec);
-            std::cout << "\n";
-            
-            for (const auto& item : vec) {
-                if (isError) {
-                    std::cerr << vt.red << item << vt.reset << "\n";
-                } else {
-                    std::cout << item << "\n";
+        if (set.empty()) return;
+
+        std::vector<std::string_view> views;
+        views.reserve(set.size());
+        for (const auto& s : set)
+            views.emplace_back(s);
+
+        std::sort(views.begin(), views.end(), [](std::string_view a, std::string_view b) {
+            return std::lexicographical_compare(
+                a.begin(), a.end(), b.begin(), b.end(),
+                [](char x, char y) {
+                    return std::tolower((unsigned char)x) < std::tolower((unsigned char)y);
                 }
-            }
+            );
+        });
+
+        std::cout << "\n";
+        for (std::string_view item : views) {
+            if (isError)
+                std::cerr << vt.red << item << vt.reset << "\n";
+            else
+                std::cout << item << "\n";
         }
     };
 
     switch (printType) {
         case 0:
-        {
-            printSortedSet(primarySet, false);
-            printSortedSet(secondarySet, false);
-            printSortedSet(errorSet, true); 
+            printSortedSet(primarySet);
+            printSortedSet(secondarySet);
+            printSortedSet(errorSet, true);
             break;
-        }
         case 1:
-        {
-            printSortedSet(primarySet, false);
-            printSortedSet(secondarySet, false);
-            printSortedSet(errorSet, false);
+            printSortedSet(primarySet);
+            printSortedSet(secondarySet);
+            printSortedSet(errorSet);
             break;
-        }
         case 2:
-        {
-            printSortedSet(primarySet, false);
+            printSortedSet(primarySet);
             printSortedSet(tertiarySet, true);
             printSortedSet(secondarySet, true);
             printSortedSet(errorSet, true);
             break;
-        }
         case 3:
-        {
-            printSortedSet(secondarySet, false);
-            printSortedSet(tertiarySet, false);
-            printSortedSet(errorSet, false);
-            printSortedSet(primarySet, false);
+            printSortedSet(secondarySet);
+            printSortedSet(tertiarySet);
+            printSortedSet(errorSet);
+            printSortedSet(primarySet);
             break;
-        }
     }
+
     primarySet.clear();
     secondarySet.clear();
     tertiarySet.clear();
