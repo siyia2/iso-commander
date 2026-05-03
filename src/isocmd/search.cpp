@@ -959,7 +959,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
                       << dt.reset << std::endl;
         }
 
-        verboseSearchResults(fileExtension, fileNames, invalidDirectoryPaths,
+        verboseImageSearchResults(fileExtension, fileNames, invalidDirectoryPaths,
                              newFilesFound, list, currentCacheOld, files,
                              start_time, processedErrorsFind, directoryPaths);
 

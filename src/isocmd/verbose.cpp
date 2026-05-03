@@ -63,16 +63,25 @@ void pressEnterToContinue() {
 
 /**
  * @brief Performs a high-visibility print of operation results categorized by sets.
- * @details Handles signal management, terminal cleanup, and sorted output of
- * success, warning, and error strings based on a specific operation context.
- * Strings are sorted case-insensitively and printed via string_view to avoid
- * heap allocation or copying from the underlying sets.
- *
- * @param primarySet Main data set (usually processed items).
- * @param secondarySet Supporting data set (usually successes).
- * @param tertiarySet Additional context (usually skipped items).
- * @param errorSet Set of error strings.
- * @param printType UI mode: 0 (Unmounted), 1 (Ops), 2 (Mounted), 3 (Conversion).
+ * 
+ * Orchestrates a specialized results screen by managing terminal state and 
+ * displaying sorted batches of success, warning, and error messages.
+ * 
+ * @details **Implementation Highlights:**
+ * - **Signal Safety:** Ignores @c SIGINT and @c Ctrl+D to ensure results are 
+ *   read before returning to the main menu.
+ * - **Memory Efficiency:** Uses @c std::string_view to sort and print data 
+ *   without additional heap allocations or string copying.
+ * - **Case-Insensitive Logic:** Implements @c std::lexicographical_compare with 
+ *   @c std::tolower to provide a user-friendly sorted order.
+ * - **Stream Routing:** Directs error-type items to @c std::cerr with 
+ *   color-coding from @c VerboseAndDatabaseTheme.
+ * 
+ * @param primarySet   Main data set (e.g., successful unmounts or conversions).
+ * @param secondarySet Supporting data (e.g., already unmounted or skipped items).
+ * @param tertiarySet  Additional context (e.g., specific warning categories).
+ * @param errorSet     Set of explicit failure strings.
+ * @param printType    Layout mode: 0 (Umount), 1 (Basic Ops), 2 (Mount), 3 (Conversion).
  */
 void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet, std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& errorSet, int printType) {
     signal(SIGINT, SIG_IGN);
@@ -150,19 +159,25 @@ void displayErrors() {
 
 /**
  * @brief Processes and displays the results of ISO file selection operations.
- * * Handles error messaging, verbose output, and screen refresh logic after
- * a mount, unmount, or file operation has been attempted.
- * * @param uniqueErrorMessages Set of unique error strings collected during the operation.
- * @param operationFiles Set of files successfully operated on.
- * @param operationFails Set of files that failed the operation.
- * @param skippedMessages Set of messages for files that were skipped.
- * @param operation String representing the current operation (e.g., "mv", "rm").
- * @param verbose Boolean flag for detailed output.
- * @param isMount Boolean indicating if the operation was a mount.
- * @param isFiltered Boolean indicating if a filter is currently active.
- * @param umountMvRmBreak Flag to trigger screen break on destructive actions.
- * @param isUnmount Boolean indicating if the operation was an unmount.
- * @param needsClrScrn Output flag to signal if the screen should be cleared.
+ * 
+ * Evaluates the state of @c verboseSets to determine if an operation (Mount, Unmount, 
+ * Move, or Remove) succeeded, failed, or received invalid input. 
+ * 
+ * @details **Logic flow:**
+ * - **Error Handling:** Detects "No valid input" if only errors exist without successes.
+ * - **Verbose Output:** Delegates to @c verbosePrint if the @p verbose flag is set, 
+ *   switching layout modes based on @p isMount.
+ * - **State Management:** Sets @p needsClrScrn to signal the caller to refresh the TUI.
+ * - **History Management:** Clears Readline history on destructive filtered operations 
+ *   (mv, rm, umount) to prevent re-running commands on non-existent indices.
+ * 
+ * @param operation      The current action string (e.g., "mv", "rm", "umount").
+ * @param verbose        If true, triggers the detailed results screen.
+ * @param isMount        Determines the @c verbosePrint layout mode (Mount vs Ops).
+ * @param isFiltered     Indicates if a search filter is currently active.
+ * @param umountMvRmBreak Flag used to trigger a screen break/history clear.
+ * @param isUnmount      Special case flag to skip the "No ISO available" check.
+ * @param[out] needsClrScrn Set to true if the function performed terminal output.
  */
 void handleSelectIsoFilesResults(const std::string& operation, bool& verbose, bool isMount, 
                                  bool& isFiltered, bool& umountMvRmBreak, bool isUnmount, 
@@ -215,17 +230,27 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose, bo
 }
 
 /**
- * @brief Generates and logs color-coded error messages for file operations (CP, MV, RM).
- * @details Utilizes the current theme to construct a human-readable error string 
- * using std::string_view for zero-copy efficiency. Updates atomic task counters 
- * and triggers the batch message insertion callback.
+ * @brief Generates and logs color-coded error messages for filesystem operations.
  * 
- * @param errorType The category of error (e.g., "same_file", "invalid_dest").
- * @param srcDir Source directory view.
- * @param srcFile Source filename view.
- * @param destDir Destination directory view.
- * @param errorDetail Specific system error message or description.
- * @param operation The action being performed ("copy", "move", "delete").
+ * Constructs a human-readable error string tailored to the operation (CP, MV, or RM)
+ * and the specific failure type. The output is formatted according to the current 
+ * @c VerboseAndDatabaseTheme.
+ * 
+ * @details **Efficiency & Safety:**
+ * - Uses @c std::string_view to minimize string copying.
+ * - Employs @c std::string::reserve to reduce reallocations during formatting.
+ * - Thread-safe updates of task counters using @c std::memory_order_acq_rel.
+ * 
+ * @param errorType   Category of failure (e.g., "same_file", "source_missing").
+ * @param srcDir      Path view of the source directory.
+ * @param srcFile     Filename view of the source file.
+ * @param destDir     Path view of the destination directory.
+ * @param errorDetail Specific system error or errno description.
+ * @param operation   The user-facing label for the action ("copy", "move", "delete").
+ * @param[out] verboseErrors The log container where the formatted error is stored.
+ * @param[in,out] failedTasks Atomic counter incremented upon error.
+ * @param[in,out] operationSuccessful Atomic flag set to false on failure.
+ * @param batchInsertFunc Callback triggered to notify the UI of a new error entry.
  */
 void reportErrorCpMvRm(std::string_view errorType, std::string_view srcDir, std::string_view srcFile, 
                        std::string_view destDir, std::string_view errorDetail, std::string_view operation, 
@@ -320,8 +345,29 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
 bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atomic<bool>& newISOFound);
 
 /**
- * @brief Handles verbose output and result logic for the ISO database refresh process.
- * @details Summarizes time taken, files imported, and displays any path errors encountered.
+ * @brief Finalizes the ISO database refresh by reporting results and syncing global state.
+ * 
+ * Acts as the terminal stage of the database update pipeline. It calculates performance 
+ * metrics, logs errors, persists the new list to disk, and refreshes the UI cache.
+ * 
+ * @details **Workflow & Safety:**
+ * - **Signal Guarding:** Temporarily ignores @c SIGINT and disables @c Ctrl+D to prevent 
+ *   database corruption during the critical write-to-disk phase.
+ * - **Persistence:** Dispatches data to @c saveToDatabase unless the operation was 
+ *   explicitly cancelled via @c GlobalState::g_operationCancelled.
+ * - **Cache Sync:** If new files are found, it triggers @c loadFromDatabase to reconcile 
+ *   the in-memory @c globalIsoFileList with the newly saved disk state.
+ * - **User Feedback:** Provides a color-coded summary of elapsed time, file counts, 
+ *   and specific failure reasons (e.g., lack of valid paths or locked database).
+ * 
+ * @param allIsoFiles      Full list of discovered ISO paths to be saved.
+ * @param totalFiles       Atomic counter of total files scanned (including non-ISOs).
+ * @param validPaths       Collection of base directories successfully traversed.
+ * @param invalidPaths     Set of directories skipped due to permissions or existence errors.
+ * @param uniqueErrorMessages Deduplicated log of system-level I/O errors.
+ * @param promptFlag       Boolean toggle for verbose UI reporting.
+ * @param start_time       Point of origin for the refresh operation for duration calculation.
+ * @param newISOFound      Atomic toggle indicating if the scan resulted in delta changes.
  */
 void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& filterHistory, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound) {
     signal(SIGINT, SIG_IGN);
@@ -386,7 +432,23 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
 }
 
 /**
- * @brief Prints directory paths and specific errors encountered during a filesystem search.
+ * @brief Logs deduplicated filesystem errors and invalid search paths to the terminal.
+ * 
+ * This diagnostic utility formats and displays issues encountered during a crawl, 
+ * such as permission-denied errors or non-existent directories. It ensures a 
+ * clean UI by handling line breaks and punctuation dynamically.
+ * 
+ * @details **Operational Side Effects:**
+ * - **Signal Immunity:** Temporarily ignores @c SIGINT to prevent display corruption 
+ *   during the error-dumping phase.
+ * - **Memory Cleanup:** Automatically @b clears both @p processedErrorsFind and 
+ *   @p invalidDirectoryPaths upon completion to prepare for the next search cycle.
+ * - **Stream Redirection:** Invalid paths are sent to @c std::cerr to distinguish 
+ *   structural errors from standard output summaries.
+ * 
+ * @param[in,out] invalidDirectoryPaths Set of paths that were inaccessible or invalid.
+ * @param[in]     directoryPaths        The list of source directories (used for state checks).
+ * @param[in,out] processedErrorsFind   Deduplicated collection of formatted error strings.
  */
 void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const std::vector<std::string>& directoryPaths, std::unordered_set<std::string>& processedErrorsFind) {
     signal(SIGINT, SIG_IGN);
@@ -423,9 +485,34 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
 }
 
 /**
- * @brief Displays a summary of image file search results, including cache status and time elapsed.
+ * @brief Renders a color-coded summary of image discovery results and cache deltas.
+ * 
+ * Provides the user with a detailed report following a search for specific image 
+ * extensions. It highlights the difference between newly discovered files and 
+ * existing cached entries.
+ * 
+ * @details **Reporting Features:**
+ * - **Delta Visualization:** Clearly distinguishes between @p fileNames (newly found) 
+ *   and @p currentCacheOld (existing state).
+ * - **Dynamic Hints:** If no new files are found but a cache exists, it provides 
+ *   a context-aware "ls" command hint to the user.
+ * - **Error Aggregation:** Integrates with @c verboseFind to list invalid directory 
+ *   paths and system I/O errors encountered during the crawl.
+ * - **Terminal Locking:** Disables interrupt signals and EOF inputs during the 
+ *   reporting phase to ensure the "Press Enter to Continue" prompt is respected.
+ * 
+ * @param fileExtension      The target format extension (e.g., ".bin/.img").
+ * @param fileNames          Set of unique file paths discovered in the current run.
+ * @param invalidDirectoryPaths Set of paths that failed permission/existence checks.
+ * @param newFilesFound      Toggle indicating if the current crawl added new data.
+ * @param list               Flag to suppress output if the list view is already active.
+ * @param currentCacheOld    The size of the cache prior to the current search.
+ * @param files              The current working list of cached files.
+ * @param start_time         Timestamp of the search initiation for duration logic.
+ * @param processedErrorsFind Log of specific filesystem errors.
+ * @param directoryPaths     List of base directories that were scanned.
  */
-void verboseSearchResults(const std::string& fileExtension,
+void verboseImageSearchResults(const std::string& fileExtension,
                           std::unordered_set<std::string>& fileNames,
                           std::unordered_set<std::string>& invalidDirectoryPaths,
                           bool newFilesFound,

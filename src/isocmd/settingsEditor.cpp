@@ -67,20 +67,17 @@ void syncCache(const std::string& filePath);
  * @brief Launches the interactive Terminal User Interface (TUI) for configuration management.
  * 
  * Provides a structured, menu-driven environment where users can view current settings,
- * modify them by index, reset to defaults, or save changes to disk.
+ * modify them by index, or reset the entire configuration to defaults.
  * 
  * @details **Workflow features:**
- * - **Sectioning:** Groups settings visually based on their defined section in @c CONFIG_ORDERED_DEFAULTS.
- * - **Multi-Editing:** Supports tokenized input to edit multiple settings in sequence.
- * - **Validation:** Integrates @c editSetting for per-key input validation.
- * - **Persistence:** Changes are held in @c g_configCache (volatile) until the user 
- *   explicitly triggers a Save ('s') which calls @c flushCache.
- * - **Cleanup (RAII):** Automatically restores terminal state and custom keybindings 
- *   upon function exit, regardless of whether the exit was via user command or error.
- * - **Signal Handling:** Temporarily ignores @c SIGINT (Ctrl+C) to protect session 
- *   integrity during active editing.
+ * - **Sectioning:** Groups settings visually based on the sections defined in @c CONFIG_ORDERED_DEFAULTS.
+ * - **Input Handling:** Utilizes GNU Readline for robust command input, supporting both single indices and tokenized multi-edits.
+ * - **Validation:** Delegates to @c editSetting for per-key value validation and atomic updates.
+ * - **Persistence:** Synchronizes with @c g_configCache. Note that a full reset triggers an immediate @c flushCache to disk upon confirmation.
+ * - **Cleanup (RAII):** Employs a local @c SettingsGuard to ensure terminal keybindings are restored even if the loop breaks unexpectedly.
+ * - **Signal Handling:** Temporarily ignores @c SIGINT to prevent accidental session termination during configuration.
  * 
- * @param configPath The filesystem path to the @c .conf file to be read and written.
+ * @param configPath The filesystem path to the @c .conf file used for synchronization.
  */
 void interactiveConfigEditor(const std::string& configPath) {
     struct SettingsGuard {
@@ -192,24 +189,24 @@ void interactiveConfigEditor(const std::string& configPath) {
 /**
  * @brief Provides an interactive CLI interface to modify a specific configuration setting.
  * 
- * Displays the current value, description, and valid input hints for a given key.
- * The function enters a retry loop until the user provides valid input or cancels.
+ * Displays current values, descriptions, and dynamic input hints. The function 
+ * loops until valid input is received, the change is skipped, or the session is aborted.
  * 
  * @details **Workflow features:**
- * - **Key Discovery:** Locates the setting definition within @c CONFIG_ORDERED_DEFAULTS.
- * - **Dynamic UX:** Prompts via @c readline with context-aware hints (colors, toggles, or numeric ranges).
- * - **Validation:** Enforces input integrity using the entry's specific validation lambda.
- * - **Hot-Reloading:** On success, updates @c g_configCache, applies runtime side effects via 
- *   @c applyConfigEffects, and immediately refreshes the local UI theme context.
- * - **Persistence:** Persists changes to disk via @c flushCache, ensuring the global 
- *   @c writeConfig format (headers and comments) is strictly maintained.
- * - **Side Effects:** Triggers specialized logic, such as @c sortAfterFilenamesOnlyFlag, 
- *   if the modified key requires a UI state refresh.
+ * - **Key Discovery:** Locates the @c ConfigEntry definition for metadata and default values.
+ * - **Dynamic UX:** Displays context-aware hints for themes, skins, and numeric ranges.
+ * - **Validation:** Enforces integrity via the entry's @c validate lambda before acceptance.
+ * - **Hot-Reloading:** Updates @c g_configCache and immediately triggers @c applyConfigEffects 
+ *   to reflect changes in the running session (e.g., instant theme switching).
+ * - **Persistence:** Attempts to persist changes via @c flushCache. If disk I/O fails, 
+ *   the user is notified that the change is "memory-only."
+ * - **State Refresh:** Triggers @c sortAfterFilenamesOnlyFlag if the filenames display 
+ *   toggle is modified to ensure UI consistency.
  * 
- * @param configPath Path to the configuration file (used for standardized disk I/O).
- * @param key The specific configuration identifier to edit.
- * @return true if the operation was successfully updated or skipped (Empty Enter).
- * @return false if the operation was explicitly aborted via @c Ctrl+D (EOF).
+ * @param configPath Path to the @c .conf file for persistence.
+ * @param key The unique configuration key to be modified.
+ * @return true if the setting was updated, matched the current value, or was skipped.
+ * @return false if the user aborted the prompt (e.g., via Ctrl+D).
  */
 bool editSetting(const std::string& configPath, const std::string& key) {
     auto tc = resolveOptionsTheme();

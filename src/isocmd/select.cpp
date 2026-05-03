@@ -14,20 +14,32 @@
 #include "../verbose.h"
 
 /**
- * @brief Routes the user input to the specific logic for mounting, unmounting, writing, or file manipulation.
- * * @param inputString Raw user input from readline.
- * @param isMount Operation is a mount.
- * @param isUnmount Operation is an unmount.
- * @param write Operation is a USB write.
- * @param isFiltered Current list state.
- * @param filteredFiles Vector of currently filtered file paths.
- * @param isoDirs Vector of mounted directories.
- * @param needsClrScrn Boolean to control screen refreshing.
- * @param operation The operation name string.
- * @param isAtISOList Atomic flag indicating if the UI is at the ISO list.
- * @param umountMvRmBreak Boolean to break list view on specific actions.
- * @param filterHistory Flag for filtering history state.
- * @param newISOFound Atomic flag for background refresh.
+ * @brief Routes validated user input to specific filesystem or mounting logic.
+ * 
+ * This function acts as a dispatcher, determining the "active" file list based on 
+ * the current UI state (filtered vs. global) and the nature of the operation.
+ * 
+ * @details **State Transitions:**
+ * - **List Selection:** Prioritizes @p filteredFiles if @p isFiltered is true. 
+ *   Otherwise, defaults to @c globalIsoFileList (or @p isoDirs for unmounting).
+ * - **UI Locking:** Sets @p isAtISOList to @c false to prevent concurrent UI 
+ *   refreshes during blocking operations.
+ * - **Destructive Safety:** Sets @p umountMvRmBreak to force a view refresh 
+ *   following operations that modify the source list (move, remove, unmount).
+ * 
+ * @param inputString      Raw user string (usually indices or paths).
+ * @param isMount          True if the intent is to mount the selection.
+ * @param isUnmount        True if the intent is to unmount the selection.
+ * @param write            True if the intent is a USB bitstream write.
+ * @param[in,out] isFiltered Updated if the operation invalidates the current filter.
+ * @param filteredFiles    The subset of files currently visible in the UI.
+ * @param isoDirs          The list of currently active mount points.
+ * @param[out] needsClrScrn Set to true to trigger a full TUI redraw.
+ * @param operation        String identifier for logging and UI feedback.
+ * @param isAtISOList      Atomic toggle to signal the UI is busy processing.
+ * @param umountMvRmBreak  Flag to interrupt the persistent loop on destructive actions.
+ * @param filterHistory    Flag to clear/update the readline search history.
+ * @param newISOFound      Atomic signal for background filesystem watchers.
  */
 void processOperationForSelectedIsoFiles(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered, const std::vector<std::string>& filteredFiles, 
 										 std::vector<std::string>& isoDirs, bool& needsClrScrn, 
@@ -62,13 +74,25 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
 }
 
 /**
- * @brief Parses input for semicolon-delimited indices to be processed later.
- * * @param inputString Raw user input.
- * @param pendingIndices Vector to store indices for delayed processing.
- * @param hasPendingProcess Flag indicating if pending items exist.
- * @param needsClrScrn Flag to control screen refreshing.
- * @return true If indices were successfully added to the pending queue.
- * @return false If the input format was invalid for induction.
+ * @brief Parses and queues semicolon-delimited indices for batch processing.
+ * 
+ * Separates "induction" input (e.g., `1 2 3;`) from direct commands. This allows
+ * the user to stage multiple indices into a pending queue without executing 
+ * them immediately.
+ * 
+ * @details **Parsing Rules:**
+ * - **Trigger:** Requires a semicolon (`;`) to initiate induction logic.
+ * - **Sanity Check:** Aborts if a forward slash (`/`) is found, assuming the 
+ *   input is a direct file path rather than an index list.
+ * - **Deduplication:** Uses an internal @c std::unordered_set to ensure only 
+ *   unique indices are added to the @p pendingIndices vector.
+ * 
+ * @param inputString          The raw line from @c readline.
+ * @param[out] pendingIndices  Vector where unique staged tokens are appended.
+ * @param[out] hasPendingProcess Set to true if at least one new index was queued.
+ * @param[out] needsClrScrn    Signals the UI to refresh to show the updated queue.
+ * @return **true** if the input was valid induction syntax and was queued.
+ * @return **false** if the input should be treated as a standard command.
  */
 bool handlePendingInduction(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& needsClrScrn) {
     if (inputString.find(';') == std::string::npos || inputString.find('/') != std::string::npos) {
@@ -111,12 +135,26 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
 }
 
 /**
- * @brief Triggers the batch processing of indices stored in the pending queue.
- * * @param inputString The command string (expects "proc").
- * @param pendingIndices The queue of file indices.
- * @param hasPendingProcess State flag for pending operations.
- * @return true If the "proc" command was executed.
- * @return false Otherwise.
+ * @brief Executes a batch operation by serializing and routing queued indices.
+ * 
+ * Converts the @p pendingIndices vector into a space-delimited string and 
+ * dispatches it to @c processOperationForSelectedIsoFiles. This acts as the 
+ * "commit" phase for staged user selections.
+ * 
+ * @details **Workflow:**
+ * - **Command Guard:** Only executes if @p inputString exactly matches "proc".
+ * - **Serialization:** Concatenates all queued tokens into a single command-line 
+ *   compatible string.
+ * - **Execution:** Routes the combined input through the standard operation 
+ *   logic (Mount, Unmount, Write, or CP/MV/RM).
+ * 
+ * @param inputString      User command (must be "proc" to trigger).
+ * @param pendingIndices   The collection of staged index tokens.
+ * @param hasPendingProcess Flag indicating if a queue currently exists.
+ * @param[in] isMount,isUnmount,write Operational context flags.
+ * @param[out] needsClrScrn Set to true upon successful routing to refresh the UI.
+ * @return **true** if the "proc" command was recognized and executed.
+ * @return **false** if the queue was empty or the command was invalid.
  */
 bool handlePendingProcess(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingProcess,bool isMount,bool isUnmount, 
 						  bool write,bool isFiltered, std::vector<std::string>& filteredFiles,
@@ -145,15 +183,27 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
 }
 
 /**
- * @brief Background thread function to refresh the ISO list when data changes.
- *
- * @param timeoutS Polling interval in seconds (typically 500ms).
- * @param isAtISOList Flag indicating if the list view is currently active.
- * @param isImportRunning Flag preventing refresh during active imports.
- * @param updateHasRun Atomic trigger indicating a refresh is needed.
- * @param newISOFound Atomic flag cleared after the refresh completes.
- * @param state Shared ownership of the display state (filteredFiles, pagination,
- *              etc.), allowing the thread to safely outlive the caller.
+ * @brief Background worker thread that synchronizes the TUI with filesystem changes.
+ * 
+ * Polling function that waits for an update signal and refreshes the display 
+ * without interrupting the user's current Readline input session.
+ * 
+ * @details **Concurrency & UI Logic:**
+ * - **Thread Safety:** Utilizes @c std::shared_ptr<RefreshState> to ensure the 
+ *   thread accesses valid data even if the parent scope has exited.
+ * - **Input Protection:** Only triggers a refresh if @c isImportRunning is false 
+ *   to avoid race conditions or database locks.
+ * - **Readline Integration:** Calls @c rl_on_new_line() and @c rl_redisplay() 
+ *   to gracefully repaint the prompt underneath the new list output.
+ * - **Auto-Termination:** Once the refresh logic executes, the thread clears 
+ *   atomic flags and terminates (non-looping design).
+ * 
+ * @param timeoutMS        Interval to wait before checking state (in milliseconds).
+ * @param isAtISOList      Atomic flag; refresh only occurs if the user is in the list view.
+ * @param isImportRunning  Atomic flag preventing refresh during active I/O tasks.
+ * @param updateHasRun     Atomic signal used to acknowledge the refresh request.
+ * @param newISOFound      Atomic signal cleared upon completion.
+ * @param state            Shared state container for UI indices, pagination, and filters.
  */
 void refreshListAfterAutoUpdate(int timeoutMS, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, 
                                 std::atomic<bool>& updateHasRun, std::atomic<bool>& newISOFound,
@@ -178,21 +228,31 @@ void refreshListAfterAutoUpdate(int timeoutMS, std::atomic<bool>& isAtISOList, s
 }
 
 /**
- * @brief Interactive file selection for ISO operations (mount, umount, cp, mv, rm, write2usb).
+ * @brief Interactive TUI for batch ISO operations (mount, umount, cp, mv, rm, write2usb).
  *
  * Provides a paginated, multi-layer filterable interface for selecting ISO files
- * (or mounted ISOs for umount) and executing system operations. Key behaviours:
+ * and executing system operations. 
  *
- * - Displays either the global ISO file list or the mounted-ISO list depending
- *   on the operation, with background auto-refresh when new ISOs are detected.
- *   Display state is owned via a shared_ptr (RefreshState), allowing a detached
- *   refresh thread to safely outlive the function without dangling references.
- * - Supports stacked filtering with filter history, allowing successive narrowing
- *   of the displayed list; '<' unwinds the filter state or returns to the caller.
- * - Implements a two-phase pending/deferred execution model: selections can be
- *   staged into a pending list and reviewed before the operation is committed.
- * - Pagination and help display are handled inline via processPaginationHelpAndDisplay.
- * - Loops until the user explicitly returns or EOF (Ctrl-D) is received.
+ * @details **Key Behaviors:**
+ * - **Dynamic Context:** Automatically toggles between the global ISO database and active 
+ *   mount points based on the @p operation.
+ * - **Thread-Safe Refresh:** Utilizes @c std::shared_ptr<RefreshState> to share UI state 
+ *   with a detached background refresh thread, preventing use-after-free errors.
+ * - **Stacked Filtering:** Supports successive narrowing of results. The @c '<' command 
+ *   unwinds the filter stack or returns to the previous menu.
+ * - **Two-Phase Execution:** Implements an "Induction" model where indices are staged 
+ *   into @c pendingIndices (delimited by @c ';') and executed via the @c "proc" command.
+ * - **Terminal Integrity:** Manages @c Readline keybindings and uses ANSI escape 
+ *   sequences to maintain a static-feeling interface during input.
+ *
+ * @param operation         Target system action ("mount", "umount", "rm", etc.).
+ * @param updateHasRun      Atomic signal for background list updates.
+ * @param isAtISOList       Atomic flag used to gate background thread UI painting.
+ * @param isImportRunning   Prevents UI refresh during active database imports.
+ * @param newISOFound       Trigger for the refresh thread to repaint the list.
+ * @param stopImport        Atomic signal to cancel background import tasks.
+ * @param backgroundThreads Container for managing detached worker lifetimes.
+ * @param search            Context flag for manual vs. automatic database refreshes.
  */
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, 
 std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads, bool& search) {
@@ -400,14 +460,26 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
 }
 
 /**
- * @brief Interactive file selection and conversion controller for disk image formats.
+ * @brief TUI controller for converting proprietary disk images to standard ISO format.
  *
- * Provides a terminal-based interface for browsing, filtering, and selecting
- * BIN/IMG, MDF, NRG, CHD and DAA/GBI image files. Supports pagination, batch selection,
- * and command-based input for triggering conversions.
+ * Provides a paginated, filterable interface for selecting non-standard disk images 
+ * (BIN, MDF, NRG, CHD, DAA) and dispatching them to specific conversion backends.
  *
- * Handles user interaction, cache restoration, pending selection processing,
- * and dispatches selected files to the appropriate conversion utilities.
+ * @details **Operational Logic:**
+ * - **Dynamic Context:** Configures the UI theme and conversion tool (e.g., nrg2iso) 
+ *   dynamically based on the @p fileType parameter.
+ * - **Cache Management:** On filter exit ('<'), it performs "Cache Restoration" by 
+ *   reloading data from @c GlobalCaches to ensure data integrity.
+ * - **Input Sanitization:** Includes specific guards against malformed semicolon 
+ *   induction strings and empty inputs to prevent UI flickering or logic errors.
+ * - **Batch Processing:** Supports staging multiple files via @c handlePendingInduction 
+ *   before committing the conversion batch with the "proc" command.
+ *
+ * @param fileType         The format category (e.g., "bin", "mdf", "nrg").
+ * @param[in,out] files    The working list of files to display and process.
+ * @param newISOFound      Atomic signal to notify the system when a new ISO is created.
+ * @param list             UI flag indicating if the list view is active.
+ * @param isImportRunning  Atomic gate to prevent concurrent database access.
  */
 void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {
 

@@ -257,18 +257,17 @@ bool isDeviceMounted(const std::string& device) {
  * Each candidate pair is checked in order:
  *  -# Device is a removable USB device (via @ref isUsbDevice).
  *  -# Device is not currently mounted (via @ref isDeviceMounted).
- *  -# Device size can be determined; sets @p permissions flag on failure.
- *  -# ISO fits on the device (ISO size ≤ device size).
+ *  -# Device size can be determined; sets @p permissions flag to true on failure.
+ *  -# ISO capacity check (ISO size <= device size).
  *
- * All failures are collected and printed before prompting the user to retry.
- * The function returns an empty vector when any validation errors occur,
- * requiring the caller to loop.
+ * @note If any validation error occurs, all errors are printed, signal handlers are 
+ *       temporarily adjusted, and an empty vector is returned to trigger a retry.
  *
- * @param deviceMap     Pairs of (1-based ISO index, device path) to validate.
- * @param selectedIsos  Ordered list of ISOs corresponding to the indices.
- * @param permissions   Set to @c true when a size query fails due to permissions;
- *                      the caller can use this to adjust the retry prompt.
- * @return Valid (IsoInfo, device) pairs, or an empty vector if any errors occurred.
+ * @param deviceMap      Pairs of (1-based ISO index, device path) to validate.
+ * @param selectedIsos   Ordered list of ISOs corresponding to the indices.
+ * @param[in,out] permissions Set to true if a size query fails (permissions issue); 
+ *                            used to determine the type of user prompt.
+ * @return A vector of valid (IsoInfo, device) pairs, or an empty vector if validation failed.
  */
 std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<std::pair<size_t, std::string>>& deviceMap, const std::vector<IsoInfo>& selectedIsos, bool& permissions) {
     
@@ -363,8 +362,8 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
  *
  * @param pairString   Raw user input string containing semicolon-separated mappings.
  * @param selectedIsos Ordered list of ISO paths used to validate index bounds.
- * @param errors       Output vector populated with human-readable error messages.
- * @return Vector of valid (1-based index, device path) pairs; may be empty on error.
+ * @param[out] errors  Vector that will be cleared and populated with human-readable error messages.
+ * @return Vector of valid (1-based index, device path) pairs extracted from the input.
  */
 std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::string& pairString, const std::vector<std::string>& selectedIsos, std::vector<std::string>& errors) {
     

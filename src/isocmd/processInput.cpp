@@ -4,6 +4,7 @@
 #include <csignal>
 #include <iostream>
 
+// C / System Headers
 #include <sys/stat.h>
 
 // Third-Party Library Headers
@@ -30,11 +31,12 @@
 
 /**
  * @brief Orchestrates the mounting or unmounting of ISO files using a static thread pool and progress tracking.
- * @param input Raw user input string (indices or "00").
- * @param files List of available files.
- * @param operationBreak Boolean flag to control outer loop flow.
- * @param verbose Toggle for detailed progress output.
- * @param isUnmount True for unmount operation, false for mount.
+ * 
+ * @param input Raw user input string (comma/space separated indices or "00" for all).
+ * @param files The master list of available ISO file paths.
+ * @param operationBreak [out] Boolean flag updated to control the caller's execution loop (e.g., on empty input or failed unmount).
+ * @param verbose Toggle for detailed per-file progress output.
+ * @param isUnmount Set to true for unmounting, false for mounting.
  */
 void processInputForMountOrUmount(const std::string& input, const std::vector<std::string>& files, bool& operationBreak, bool& verbose, bool isUnmount) {
     setupSignalHandlerCancellations();
@@ -205,17 +207,13 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
  * for the affected directories. This ensures the database is fully indexed before 
  * returning control to the user.
  *
- * @param input Raw user input (e.g., "1-3, 5").
- * @param isoFiles Master list of files.
- * @param process Operation type ("cp", "mv", or "rm").
- * @param umountMvRmBreak Flag for outer loop control; set to false if no tasks are completed.
- * @param filterHistory Flag indicating if the view is filtered.
- * @param verbose Detailed output toggle for progress updates.
- * @param newISOFound Atomic flag for filesystem changes.
- *
- * @note Cancellation via SIGINT (Ctrl+C) is caught during the execution phase, allowing 
- * partial batches to complete while preventing new tasks from starting. Database 
- * synchronization is performed on the main thread after all tasks finish.
+ * @param input Raw user input string (indices, ranges, or keywords).
+ * @param isoFiles Master list of files used for index mapping.
+ * @param process Operation type string: "cp", "mv", or "rm".
+ * @param[out] umountMvRmBreak Flag set to false if no tasks were successfully processed.
+ * @param filterHistory Indicates if the current file list is a filtered view.
+ * @param verbose Toggle for real-time console progress output.
+ * @param[in,out] newISOFound Atomic flag triggered to true if the filesystem was modified.
  */
 void processInputForCpMvRm(const std::string& input, 
 						   const std::vector<std::string>& isoFiles, 
@@ -371,26 +369,19 @@ void processInputForCpMvRm(const std::string& input,
  * both byte-level progress and task completion/failure counts.
  *
  * @section post_processing Post-Conversion Sync
- * Upon completion of all threads, the function joins the progress display and performs
- * a cleanup of signal handlers. If any conversions were successful, it constructs the
- * exact expected ISO output paths (same stem as input, `.iso` extension) and calls
- * `updateDatabaseAfterOperations` directly — bypassing directory traversal entirely —
- * to index only the newly created files. This avoids costly scans of large directories
- * and ensures the database is updated synchronously before returning.
+ * Upon completion, the function joins the progress display and cleans up signal handlers. 
+ * If successful, it constructs output paths and calls @ref updateDatabaseAfterOperations 
+ * to index ONLY the new files, avoiding a full directory scan.
  *
  * @param input         Raw user selection string (e.g., "1,3-5").
  * @param fileList      Master vector of all non‑ISO image paths.
- * @param modeMdf       If `true`, treat input files as Alcohol 120% MDF images.
- * @param modeNrg       If `true`, treat input files as Nero NRG images.
- * @param modeChd       If `true`, treat input files as MAME CHD compressed images.
- * @param modeDaa       If `true`, treat input files as PowerISO DAA and gBurner GBI compressed images.
- * @param processedErrors Set to record any parsing errors (invalid indices/patterns).
- * @param verbose       If `true`, extra progress details are displayed.
- * @param needsClrScrn  Reference flag set to `true` if the terminal should be cleared.
- * @param newISOFound   Atomic flag set to `true` when at least one new ISO is indexed.
- *
- * @note Cancellation via SIGINT (Ctrl+C) is handled gracefully; database updates
- *       only trigger if at least one file was successfully converted.
+ * @param modeMdf       Use Alcohol 120% MDF conversion logic.
+ * @param modeNrg       Use Nero NRG conversion logic.
+ * @param modeChd       Use MAME CHD conversion logic.
+ * @param modeDaa       Use PowerISO DAA / gBurner GBI logic.
+ * @param verbose       Toggle for real-time progress details.
+ * @param needsClrScrn  [out] Set to true if the UI requires a refresh.
+ * @param newISOFound   [in,out] Atomic flag set to true if the database was updated.
  */
 void processInputForConversions(const std::string& input, std::vector<std::string>& fileList,
                                const bool& modeMdf, const bool& modeNrg, const bool& modeChd,
