@@ -440,9 +440,6 @@ void displayErrors();
  * the user is shown a destructive-write warning and must confirm with @c y/Y.
  *
  * @param selectedIsos          ISOs chosen by the user for writing.
- * @param uniqueErrorTokenMessages   Accumulator for error strings to display at the top
- *                              of the screen on re-entry (passed through to
- *                              @ref displayErrors).
  * @return Validated (IsoInfo, device) pairs ready for @ref performWriteOperation,
  *         or an empty vector if the user aborted.
  */
@@ -831,10 +828,10 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
  *
  * @param input                 Raw selection string from the main menu (e.g. @c "1 3-5").
  * @param isoFiles              Full ordered list of available ISO paths.
- * @param uniqueErrorTokenMessages   Error accumulator shared with the calling context.
  */
 void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles) {
     clearScrollBuffer();
+    verboseSets.uniqueErrorTokenMessages.clear();
     std::unordered_set<int> indicesToProcess;
     
    const WriteTheme wt = getWriteTheme();
