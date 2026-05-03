@@ -250,47 +250,41 @@ void reportErrorCpMvRm(std::string_view errorType, std::string_view srcDir, std:
 
     if (errorType == "same_file") {
         errorMsg.append(vt.red).append("Cannot ").append(operation).append(" file to itself: ")
-                .append(vt.red).append("'").append(srcDir).append("/").append(srcFile).append("'")
+                .append(vt.red).append("'").append(vt.yellow).append(srcDir).append("/").append(srcFile).append(vt.red).append("'")
                 .append(vt.reset).append(vt.red).append(".")
-                .append(vt.reset);
-    }
-    else if (errorType == "invalid_dest") {
-        errorMsg.append(vt.red).append("Error ").append(operation).append(": ")
-                .append(vt.red).append("'").append(displaySrc).append("'")
-                .append(vt.reset).append(vt.red).append(" to '").append(destDir).append("': ").append(errorDetail).append(".")
                 .append(vt.reset);
     }
     else if (errorType == "source_missing") {
         errorMsg.append(vt.red).append("Source file no longer exists: ")
-                .append(vt.red).append("'").append(displaySrc).append("'")
+                .append(vt.red).append("'").append(vt.yellow).append(displaySrc).append(vt.red).append("'")
                 .append(vt.reset).append(vt.red).append(".")
                 .append(vt.reset);
     }
     else if (errorType == "overwrite_failed") {
         errorMsg.append(vt.red).append("Failed to overwrite: ")
-                .append(vt.red).append("'").append(destDir).append("/").append(srcFile).append("'")
+                .append(vt.red).append("'").append(vt.yellow).append(destDir).append("/").append(srcFile).append(vt.red).append("'")
                 .append(vt.reset).append(vt.red).append(" - ").append(errorDetail).append(".")
                 .append(vt.reset);
     }
     else if (errorType == "file_exists") {
         errorMsg.append(vt.red).append("Error ").append(operation).append(": ")
-                .append(vt.red).append("'").append(displaySrc).append("'")
-                .append(vt.reset).append(vt.red).append(" to '").append(destDir).append("/': File exists (")
-                .append(vt.red).append("enable overwrites")
+                .append(vt.red).append("'").append(vt.yellow).append(displaySrc).append(vt.red).append("'")
+                .append(vt.reset).append(vt.red).append(" to '").append(vt.yellow).append(destDir).append("/': File exists ")
+                .append(vt.red).append("(enable overwrites")
                 .append(vt.reset).append(vt.red).append(").")
                 .append(vt.reset);
     }
     else if (errorType == "remove_after_move") {
         errorMsg.append(vt.red).append("Move completed but failed to remove source file: ")
-                .append(vt.red).append("'").append(displaySrc).append("'")
+                .append(vt.red).append("'").append(vt.yellow).append(displaySrc).append(vt.red).append("'")
                 .append(vt.reset).append(vt.red).append(" - ").append(errorDetail)
                 .append(vt.reset);
     }
     else if (errorType == "missing_file") {
         errorMsg.append(vt.purple).append("Missing: ")
-                .append(vt.red).append("'").append(displaySrc).append("'")
-                .append(vt.reset).append(vt.purple).append(".")
-                .append(vt.reset);
+				.append(vt.purple).append("'")
+				.append(vt.yellow).append(displaySrc)
+				.append(vt.purple).append("'");
     }
     else {
         errorMsg.append(vt.red).append("Error: ").append(errorDetail)
