@@ -153,11 +153,11 @@ void interactiveConfigEditor(const std::string& configPath) {
                     }
                     applyConfigEffects(GlobalCaches::g_configCache);
                     tc = resolveOptionsTheme();
-                    std::cout << tc.label << "\n[+] Defaults applied.\n" << tc.reset;
+                    std::cout << tc.label << "[+] Defaults applied.\n" << tc.reset;
                     if (!confirm.empty() && std::tolower(confirm[0]) == 'y') {
 						if (flushCache(configPath)) {
 							tc = resolveOptionsTheme();
-							std::cout << tc.highlight << "[✔] Settings saved to disk.\n" << tc.reset;
+							std::cout << tc.highlight << "\n[✔] Settings saved to disk.\n" << tc.reset;
 						}
 						pressEnterToContinue();
 					}
