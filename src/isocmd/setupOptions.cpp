@@ -124,8 +124,8 @@ void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& c
         } catch (...) { return defaultVal; }
     };
     
-    GlobalState::MAX_HISTORY_LINES         = getVal("folder_path_history_lines",    30);
-    GlobalState::MAX_HISTORY_PATTERN_LINES = getVal("filter_history_lines",         15);
+    GlobalState::MAX_HISTORY_LINES         		 = getVal("folder_path_history_lines",    30);
+    GlobalState::MAX_HISTORY_PATTERN_LINES 		 = getVal("filter_history_lines",         15);
     
     GlobalConcurrency::MAX_USEFUL_THREADS        = getVal("combined_thread_cap",               32);
     GlobalConcurrency::MOUNT_THREAD_CAP          = getVal("thread_cap_for_mount",            16);

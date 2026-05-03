@@ -140,9 +140,9 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     // --- Footer ---
     if (!disablePagination) {
         output.append("\n").append(c.head).append("Pagination: ");
-        if (effectivePage > 0) output.append("[PgDn] Previous | ");
-        if (effectivePage < totalPages - 1) output.append("[PgUp] Next | ");
-        output.append("[g<num>] ↵ Go to | ").append(UI::Palette::BoldReset).append("\n");
+        if (effectivePage > 0) output.append("[PgUp] Previous | ");
+        if (effectivePage < totalPages - 1) output.append("[PgDn] Next | ");
+        output.append("[g<num>] ↵ GoTo | ").append(UI::Palette::BoldReset).append("\n");
     }
 
     // --- Pending Processes ---

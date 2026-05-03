@@ -41,7 +41,7 @@ const bool isUnmount, const bool isWrite, const bool isConversion, bool& need2So
         currentPage = totalPages - 1;
     }
     
-    if (command == "PgUp") {
+    if (command == "PgDn") {
         if (totalPages > 0 && currentPage < totalPages - 1) {
             currentPage++;
             needsClrScrn = true;
@@ -49,7 +49,7 @@ const bool isUnmount, const bool isWrite, const bool isConversion, bool& need2So
         return true;
     }
 
-    if (command == "PgDn") {
+    if (command == "PgUp") {
         if (currentPage > 0) {
             currentPage--;
             needsClrScrn = true;
@@ -158,9 +158,9 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
         // 4. Display Pagination Footer (Only if enabled and more than 1 page)
         if (!disablePagination && totalPages > 1) {
             std::cout << "\n" << c.head << "Pagination: ";
-            if (currentPage > 0)               std::cout << "[PgDn] Previous | ";
-            if (currentPage < totalPages - 1)  std::cout << "[PgUp] Next | ";
-            std::cout << "[g<num>] ↵ Go to | " << UI::Palette::BoldReset << "\n"; 
+            if (currentPage > 0)               std::cout << "[PgUp] Previous | ";
+            if (currentPage < totalPages - 1)  std::cout << "[PgDn] Next | ";
+            std::cout << "[g<num>] ↵ GoTo | " << UI::Palette::BoldReset << "\n"; 
         }
 
         // 5. Construct the final prompt
@@ -188,7 +188,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                     }
                 } catch (...) {}
             }
-            else if (userInput == "PgUp" && !disablePagination) {
+            else if (userInput == "PgDn") {
 				isNavigation = true;
                 if (currentPage < totalPages - 1) {
                     currentPage++;
@@ -196,7 +196,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                     isNavigation = true;
                 }
             }
-            else if (userInput == "PgDn" && !disablePagination) {
+            else if (userInput == "PgUp") {
 				isNavigation = true;
                 if (currentPage > 0) {
                     currentPage--;
