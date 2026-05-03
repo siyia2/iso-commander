@@ -187,9 +187,15 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose, bo
     else if (verbose) {
         clearScrollBuffer();
         needsClrScrn = true;
-        
-       std::unordered_set<std::string> conditionalSet = isMount ? verboseSets.operationSkipped : std::unordered_set<std::string>{};
-        verbosePrint(verboseSets.operationCompleted, verboseSets.operationFailed, conditionalSet, verboseSets.uniqueErrorTokenMessages, isMount ? 2 : 1);
+       
+       std::unordered_set<std::string> emptySet;
+       verbosePrint(
+			verboseSets.operationCompleted,
+			verboseSets.operationFailed,
+			isMount ? verboseSets.operationSkipped : emptySet,
+			verboseSets.uniqueErrorTokenMessages,
+			isMount ? 2 : 1
+		);
     }
 
     if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {
