@@ -83,9 +83,9 @@ void verboseFind(
 );
 
 /**
- * Summarizes the results of a file search operation.
+ * Summarizes the results of image file search operation.
  */
-void verboseSearchResults(
+void verboseImageSearchResults(
     const std::string& fileExtension,
     std::unordered_set<std::string>& fileNames,
     std::unordered_set<std::string>& invalidDirectoryPaths,
