@@ -819,19 +819,23 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 }
 
 /**
- * @brief Entry point for the write-to-USB workflow.
+ * @brief Orchestrates the full write-to-USB workflow for one or more ISO files.
  *
- * Parses @p input to resolve ISO indices, verifies each file exists on disk,
- * then delegates to @ref collectDeviceMappings for device selection and
- * @ref performWriteOperation for the actual write.  Missing or inaccessible
- * files are recorded in @p uniqueErrorTokenMessages and skipped.
+ * Clears the scroll buffer, initializes signal handling, and resets the global
+ * cancellation flag before tokenizing @p input into a set of ISO indices. Each
+ * valid index is resolved to a full @ref IsoInfo record (path, filename, raw and
+ * formatted file size). The resolved list is passed to @ref collectDeviceMappings
+ * for interactive device selection; if no valid pairs are produced the readline
+ * history is cleared and the function returns early. Otherwise, control is
+ * delegated to @ref performWriteOperation, after which @c SIGINT is suppressed,
+ * Ctrl+D is disabled, and @ref pressEnterToContinue blocks until the user
+ * acknowledges completion.
  *
- * @param input                 Raw selection string from the main menu (e.g. @c "1 3-5").
- * @param isoFiles              Full ordered list of available ISO paths.
+ * @param input    Raw selection string from the main menu (e.g. @c "1 3-5").
+ * @param isoFiles Full ordered list of available ISO paths.
  */
 void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles) {
     clearScrollBuffer();
-    verboseSets.uniqueErrorTokenMessages.clear();
     std::unordered_set<int> indicesToProcess;
     
    const WriteTheme wt = getWriteTheme();
@@ -846,38 +850,21 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
 
     std::vector<IsoInfo> selectedIsos;
     for (int idx : indicesToProcess) {
-        try {
-            if (!std::filesystem::exists(isoFiles[idx - 1])) {
-                verboseSets.uniqueErrorTokenMessages.insert(
-                    std::string(UI::Palette::Purple) + "Missing: " + 
-                    std::string(wt.colorWarning) + "'" + isoFiles[idx - 1] + "'" + 
-                    std::string(UI::Palette::Purple) + "."
-                );
-                continue;
-            }
-
-            selectedIsos.emplace_back(IsoInfo{
-                isoFiles[idx - 1],
-                std::filesystem::path(isoFiles[idx - 1]).filename().string(),
-                std::filesystem::file_size(isoFiles[idx - 1]),
-                formatFileSize(std::filesystem::file_size(isoFiles[idx - 1])),
-                static_cast<size_t>(idx)
-            });
-        } catch (const std::filesystem::filesystem_error& e) {
-            verboseSets.uniqueErrorTokenMessages.insert(
-                std::string(wt.colorFailure) + "Error accessing ISO file: " + e.what() + "."
-            );
-            continue;
-        }
-    }
-
-    if (selectedIsos.empty()) {
-        clear_history();
-        return;
+        const std::string& path = isoFiles[idx - 1];     
+        // Directly resolve file info assuming existence
+        selectedIsos.emplace_back(IsoInfo{
+            path,
+            std::filesystem::path(path).filename().string(),
+            std::filesystem::file_size(path),
+            formatFileSize(std::filesystem::file_size(path)),
+            static_cast<size_t>(idx)
+        });
     }
 
     auto validPairs = collectDeviceMappings(selectedIsos);
+    // Return condition
     if (validPairs.empty()) {
+		// Clear Readline history just in case
         clear_history();
         return;
     }
