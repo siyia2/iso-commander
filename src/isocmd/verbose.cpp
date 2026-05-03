@@ -136,6 +136,9 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
     secondarySet.clear();
     tertiarySet.clear();
     errorSet.clear();
+    
+    clearGlobalVerboseSets();
+    
     pressEnterToContinue();
 }
 
