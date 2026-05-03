@@ -19,7 +19,6 @@
 // C / System Headers
 #include <termios.h>
 
-
 /**
  * @brief Holds verbose output sets for operation results and user input.
  *
