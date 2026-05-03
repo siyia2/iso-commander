@@ -819,19 +819,15 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 }
 
 /**
- * @brief Orchestrates the full write-to-USB workflow for one or more ISO files.
+ * @brief Entry point for the write-to-USB workflow.
  *
- * Clears the scroll buffer, initializes signal handling, and resets the global
- * cancellation flag before tokenizing @p input into a set of ISO indices. Each
- * valid index is resolved to a full @ref IsoInfo record (path, filename, raw and
- * formatted file size). The resolved list is passed to @ref collectDeviceMappings
- * for interactive device selection; if no valid pairs are produced the readline
- * history is cleared and the function returns early. Otherwise, control is
- * delegated to @ref performWriteOperation, after which @c SIGINT is suppressed,
- * Ctrl+D is disabled, and @ref pressEnterToContinue blocks until the user
- * acknowledges completion.
+ * This function orchestrates the full flashing process:
+ * 1. Parses the raw @p input string into unique ISO indices.
+ * 2. Resolves filesystem metadata (size, name) for each selected ISO.
+ * 3. Prompts the user for target device mappings via @ref collectDeviceMappings.
+ * 4. Executes the flashing process via @ref performWriteOperation.
  *
- * @param input    Raw selection string from the main menu (e.g. @c "1 3-5").
+ * @param input    Raw selection string from the main menu (e.g. "1 3-5").
  * @param isoFiles Full ordered list of available ISO paths.
  */
 void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles) {
@@ -850,7 +846,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
 
     std::vector<IsoInfo> selectedIsos;
     for (int idx : indicesToProcess) {
-        const std::string& path = isoFiles[idx - 1];     
+        const std::string& path = isoFiles[idx - 1];
         // Directly resolve file info assuming existence
         selectedIsos.emplace_back(IsoInfo{
             path,
@@ -861,10 +857,13 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
         });
     }
 
+    if (selectedIsos.empty()) {
+        clear_history();
+        return;
+    }
+
     auto validPairs = collectDeviceMappings(selectedIsos);
-    // Return condition
     if (validPairs.empty()) {
-		// Clear Readline history just in case
         clear_history();
         return;
     }
