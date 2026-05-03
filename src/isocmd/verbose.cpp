@@ -131,8 +131,6 @@ void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_se
             printSortedSet(primarySet);
             break;
     }
-
-    clearGlobalVerboseSets();
     
     pressEnterToContinue();
 }
