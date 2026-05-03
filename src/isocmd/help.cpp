@@ -80,7 +80,7 @@ void helpSelections(bool& isAtISOListForHelp) {
         "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'R'" + std::string(UI::Palette::BoldReset) + "                : Refresh ISO list from stored FolderPaths\n" 
         : "") +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process|Clear pending items\n" +
-    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgUp'|'PgDn'|'g' " + std::string(UI::Palette::BoldReset) + " : Pagination Next|Previous|GoTo page");
+    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgDn'|'PgUp'|'g' " + std::string(UI::Palette::BoldReset) + " : Pagination Next|Previous|GoTo page");
     printSection(tc, "\n   Legend:",
         "   " + std::string(UI::Palette::BoldReset) + "¬ : not for    ↔ : only for");
     printSection(tc, "\n4. Tips:",
