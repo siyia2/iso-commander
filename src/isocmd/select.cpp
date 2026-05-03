@@ -246,6 +246,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
     listSubtype = isMount ? "mount" : (write ? "write2usb" : "cp_mv_rm");
 
     while (true) {
+		clearGlobalVerboseSets();
         enable_ctrl_d();
         setupSignalHandlerCancellations();
         setup_custom_keybindingsForSelect();
@@ -457,6 +458,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
     }
     
     while (true) {
+		clearGlobalVerboseSets();
         enable_ctrl_d();
         setupSignalHandlerCancellations();
         setup_custom_keybindingsForSelect();
