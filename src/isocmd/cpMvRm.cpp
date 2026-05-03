@@ -405,8 +405,6 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
 
     const CpMvRmColors colors = getCpMvRmColors();
 
-    // 1. Build display source string
-    // We use std::string here because we are concatenating/modifying data
     std::string displaySrc;
     if (!displayConfig::toggleNamesOnly) {
         displaySrc.reserve(srcDir.size() + srcFile.size() + 1);
@@ -424,7 +422,7 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
         
         msg.append(colors.error_label).append("Error ").append(verb).append(": ")
            .append(colors.error_path).append("'").append(displaySrc).append("'")
-           .append(UI::Palette::BoldReset).append(colors.error_label).append(" to '").append(destDirProcessed).append("/': ")
+           .append(UI::Palette::BoldReset).append(colors.error_label).append(" to '").append(destDirProcessed).append("': ")
            .append(errorDetail).append(".")
            .append(UI::Palette::BoldReset);
 
@@ -445,7 +443,7 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
         msg.append(colors.success_label).append(pastVerb).append(": ")
            .append(colors.success_path).append("'").append(displaySrc).append("'")
            .append(UI::Palette::BoldReset).append(colors.success_label).append(" to ")
-           .append(colors.dest_path).append("'").append(destDirProcessed).append("/").append(destFile).append("'")
+           .append(colors.dest_path).append("'").append(destDirProcessed).append(destFile).append("'")
            .append(UI::Palette::BoldReset).append(".");
 
         verboseIsos.push_back(std::move(msg));
