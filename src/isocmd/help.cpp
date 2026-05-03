@@ -157,7 +157,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         }
         printSection(tc, "3. Cleanup/Display Commands (↵):", displayCmds);
         printSection(tc, "\n4. Tips:",
-            "   • " + std::string(UI::Palette::BoldReset) + "Tab completion supports ! and ? command prefixes\n"
+            "   • " + std::string(UI::Palette::BoldReset) + "Tab completion supports ! and * command prefixes\n"
             "   • " + std::string(UI::Palette::BoldReset) + "Invalid paths => non-existent paths");
     }
     pressEnterToReturn();
