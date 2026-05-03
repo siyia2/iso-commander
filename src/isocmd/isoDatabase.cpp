@@ -627,7 +627,7 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     
     auto db = resolveDatabaseTheme();
     
-    if (inputSearch == "?stats") {
+    if (inputSearch == "*stats") {
         displayDatabaseStatistics(GlobalState::databaseFilePath, GlobalState::maxDatabaseSize);
     } else if (inputSearch == "!clr") {
         std::ofstream ofs(GlobalState::databaseFilePath, std::ofstream::out | std::ofstream::trunc);

@@ -149,11 +149,11 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         if (!import2ISO) {
             displayCmds +=
                 "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) +
-                "'ls'|'?stats'         " + std::string(UI::Palette::BoldReset) + " : Display cached entries|stats";
+                "'ls'|'*stats'         " + std::string(UI::Palette::BoldReset) + " : Display cached entries|stats";
         } else {
             displayCmds +=
                 "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) +
-                "'?stats'              " + std::string(UI::Palette::BoldReset) + " : Display stats";
+                "'*stats'              " + std::string(UI::Palette::BoldReset) + " : Display stats";
         }
         printSection(tc, "3. Cleanup/Display Commands (↵):", displayCmds);
         printSection(tc, "\n4. Tips:",

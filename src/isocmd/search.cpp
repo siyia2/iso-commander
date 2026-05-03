@@ -70,10 +70,17 @@ bool isValidDirectory(const std::string& path) {
  *       Cancellable via Ctrl+C through GlobalState::g_operationCancelled.
  */
 void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
+    struct KeybindingGuard {
+        ~KeybindingGuard() {
+            reset_custom_keybindingsForSearches();
+        }
+    };
     try {
         enable_ctrl_d();
         setupSignalHandlerCancellations();
         resetReadlinePagination();
+        KeybindingGuard guard;
+        setup_custom_keybindingsForSearches();
         rl_attempted_completion_function = my_special_completion_entry;
         GlobalState::g_operationCancelled.store(false);
         
@@ -92,7 +99,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
               .append("\001").append(dt.green).append("\002.iso")
               .append("\001").append(dt.blue).append("\002 entries and import them into the ")
               .append("\001").append(dt.green).append("\002local")
-              .append("\001").append(dt.blue).append("\002 database, ? ↵ for help, ↵ to return:\n")
+              .append("\001").append(dt.blue).append("\002 database, ? help, ↵ return:\n")
               .append("\001").append(dt.reset).append("\002");
 
         char* rawSearchQuery = readline(prompt.c_str());
@@ -107,7 +114,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
             return refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
         }
 
-        if (input.starts_with("?") || input.starts_with("!")) {
+        if (input.starts_with("*") || input.starts_with("!")) {
             databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
             return;
         }
@@ -791,7 +798,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
                                                   std::atomic<bool>& newISOFound, bool& list,
                                                   std::atomic<bool>& isImportRunning) {
     
-    if (input == "?stats") {
+    if (input == "*stats") {
         displayDatabaseStatistics(GlobalState::databaseFilePath, GlobalState::maxDatabaseSize);
         return true;
     }
@@ -831,6 +838,12 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  * and conversion workflow when available.
  */
 void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning) {
+    struct KeybindingGuard {
+        ~KeybindingGuard() {
+            reset_custom_keybindingsForSearches();
+        }
+    } guard;
+        
     struct FileTypeConfig {
         std::string extension;
         std::string name;
@@ -867,6 +880,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
         setupSignalHandlerCancellations();
         resetReadlinePagination();
         rl_attempted_completion_function = my_special_completion_entry;
+        setup_custom_keybindingsForSearches();
         GlobalState::g_operationCancelled.store(false);
         clearScrollBuffer();
         clear_history();
@@ -898,7 +912,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
               .append("\001").append(dt.orange).append("\002").append(fileExtension)
               .append("\001").append(dt.blue).append("\002 entries and cache them into \001")
               .append("\001").append(dt.yellow).append("\002RAM\001")
-              .append("\001").append(dt.blue).append("\002, ? ↵ for help, ↵ to return:\n\001")
+              .append("\001").append(dt.blue).append("\002, ? help, ↵ return:\n\001")
               .append(dt.reset).append("\002");
         
         std::unique_ptr<char, decltype(&std::free)> mainSearch(readline(prompt.c_str()), &std::free);

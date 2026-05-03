@@ -27,7 +27,7 @@ static char last_common_prefix[1024] = "";
  * @brief List of available special commands for completion.
  */
 const char* special_cmds[] = {
-    "!clr", "!clr_paths", "!clr_filter", "?stats",
+    "!clr", "!clr_paths", "!clr_filter", "*stats",
     NULL
 };
 
@@ -64,7 +64,7 @@ char** my_special_completion_entry(const char* text, int start, int end) {
     (void)start;
     (void)end;
 
-    if (text[0] == '!' || text[0] == '?') {
+    if (text[0] == '!' || text[0] == '*') {
         return rl_completion_matches(text, command_generator);
     }
 
@@ -564,6 +564,13 @@ void setup_custom_keybindingsForSettingsEditor(void) {
 }
 
 /**
+ * @brief Keybindings for the Search Prompts.
+ */
+void setup_custom_keybindingsForSearches(void) {
+    rl_bind_keyseq("?", help_handler);
+}
+
+/**
  * @brief Restores all bindings used in the Selection UI to defaults.
  */
 void reset_custom_keybindingsForSelect(void) {
@@ -616,4 +623,8 @@ void reset_custom_keybindingsForSettingsEditor(void) {
     rl_bind_keyseq("r", rl_insert);
     rl_bind_keyseq("?", rl_insert);
     rl_bind_keyseq("<", rl_insert);
+}
+
+void reset_custom_keybindingsForSearches(void) {
+    rl_bind_keyseq("?", rl_insert);
 }
