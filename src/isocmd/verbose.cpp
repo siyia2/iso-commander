@@ -286,15 +286,15 @@ void reportErrorCpMvRm(std::string_view errorType, std::string_view srcDir, std:
     }
     else if (errorType == "overwrite_failed") {
         errorMsg.append(vt.red).append("Failed to overwrite: ")
-                .append(vt.red).append("'").append(vt.yellow).append(destDir).append("/").append(srcFile).append(vt.red).append("'")
+                .append(vt.red).append("'").append(vt.yellow).append(destDir).append(srcFile).append(vt.red).append("'")
                 .append(vt.reset).append(vt.red).append(" - ").append(errorDetail).append(".")
                 .append(vt.reset);
     }
     else if (errorType == "file_exists") {
         errorMsg.append(vt.red).append("Error ").append(operation).append(": ")
                 .append(vt.red).append("'").append(vt.yellow).append(displaySrc).append(vt.red).append("'")
-                .append(vt.reset).append(vt.red).append(" to '").append(vt.yellow).append(destDir).append("/': File exists ")
-                .append(vt.red).append("(enable overwrites")
+                .append(vt.reset).append(vt.red).append(" to '").append(vt.yellow).append(destDir).append("': File exists ")
+                .append(vt.red).append("(overwrite with -o")
                 .append(vt.reset).append(vt.red).append(").")
                 .append(vt.reset);
     }
