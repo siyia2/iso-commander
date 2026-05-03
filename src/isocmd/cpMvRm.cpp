@@ -406,7 +406,8 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
 
     const CpMvRmColors colors = getCpMvRmColors();
 
-    // 1. Build display source view/string once
+    // 1. Build display source string
+    // We use std::string here because we are concatenating/modifying data
     std::string displaySrc;
     if (!displayConfig::toggleNamesOnly) {
         displaySrc.reserve(srcDir.size() + srcFile.size() + 1);
@@ -416,10 +417,10 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
     }
 
     if (!success || ec) {
-        std::string_view errorDetail = cancelled ? "Cancelled" : ec.message();
+        // If this were string_view, it would point to a deleted temporary string.
+        std::string errorDetail = cancelled ? "Cancelled" : ec.message();
         
         std::string msg;
-        // Reserve enough space for paths, color codes (~80-100 chars), and labels
         msg.reserve(128 + displaySrc.size() + destDirProcessed.size() + errorDetail.size());
         
         msg.append(colors.error_label).append("Error ").append(verb).append(": ")
@@ -429,10 +430,14 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
            .append(UI::Palette::BoldReset);
 
         verboseErrors.push_back(std::move(msg));
-        failedTasks->fetch_add(1, std::memory_order_acq_rel);
+        
+        if (failedTasks) {
+            failedTasks->fetch_add(1, std::memory_order_acq_rel);
+        }
         operationSuccessful.store(false, std::memory_order_release);
+
     } else {
-        // Use string_view for the verb to avoid allocation
+        // Success case: pastVerb can stay string_view because literals ("Moved") live forever
         std::string_view pastVerb = (verb == "moving") ? "Moved" : "Copied";
         
         std::string msg;
@@ -445,10 +450,15 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
            .append(UI::Palette::BoldReset).append(".");
 
         verboseIsos.push_back(std::move(msg));
-        completedTasks->fetch_add(1, std::memory_order_acq_rel);
+        
+        if (completedTasks) {
+            completedTasks->fetch_add(1, std::memory_order_acq_rel);
+        }
     }
     
-    batchInsertMessages();
+    if (batchInsertMessages) {
+        batchInsertMessages();
+    }
 }
 
 /**
@@ -606,10 +616,10 @@ bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath,
 bool performMultiDestMoveOperation(
     const fs::path& srcPath, 
     const fs::path& destPath, 
-    std::string_view srcDir,           // Optimized
-    std::string_view srcFile,          // Optimized
-    std::string_view destDirProcessed, // Optimized
-    std::string_view destFile,         // Optimized
+    std::string_view srcDir,
+    std::string_view srcFile,
+    std::string_view destDirProcessed,
+    std::string_view destFile,
     std::atomic<size_t>* completedBytes, 
     std::atomic<size_t>* completedTasks, 
     std::atomic<size_t>* failedTasks, 
@@ -643,7 +653,7 @@ bool performMultiDestMoveOperation(
 bool performCopyOperation(
     const fs::path& srcPath, 
     const fs::path& destPath, 
-    std::string_view srcDir,           // No more const std::string&
+    std::string_view srcDir,
     std::string_view srcFile, 
     std::string_view destDirProcessed, 
     std::string_view destFile, 
