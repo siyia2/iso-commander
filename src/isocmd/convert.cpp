@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 
@@ -49,7 +50,6 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     namespace fs = std::filesystem;
     const size_t BATCH_SIZE = 50;
 
-    // Get themed strings from external function
     ConversionThemeStrings themes = getConversionThemeStrings();
 
     uid_t real_uid; gid_t real_gid;
@@ -78,14 +78,23 @@ void convertToISO(const std::vector<std::string>& imageFiles,
         if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) break;
 
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
-        const std::string displayPath = (!displayConfig::toggleNamesOnly ? std::string(directory) + "/" : "") + std::string(fileNameOnly);
+
+        // Build displayPath without an intermediate std::string when possible
+        std::string displayPath;
+        if (!displayConfig::toggleNamesOnly) {
+            displayPath.reserve(directory.size() + 1 + fileNameOnly.size());
+            displayPath.append(directory).append("/").append(fileNameOnly);
+        } else {
+            displayPath = fileNameOnly; // single assignment, no concat
+        }
 
         if (!fs::exists(inputPath)) {
             std::string msg;
-            msg.reserve(128);
+            msg.reserve(themes.missingLabel.size() * 2 + themes.errPath.size() +
+                        displayPath.size() + 32);
             msg.append(themes.missingLabel).append("Convert2ISO: ")
                .append(themes.errPath).append("'").append(displayPath).append("'")
-               .append(themes.missingLabel).append(": Missing file.");
+               .append(themes.missingLabel).append(": MissingFile.");
             localFailedMsgs.push_back(std::move(msg));
 
             {
@@ -102,13 +111,13 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             continue;
         }
 
-        std::ifstream file(inputPath);
-        if (!file.good()) {
+        if (!std::ifstream(inputPath)) {  // avoid keeping file handle open longer than needed
             std::string msg;
-            msg.reserve(128);
+            msg.reserve(themes.errLabel.size() * 2 + themes.errPath.size() +
+                        displayPath.size() + 48);
             msg.append(themes.errLabel).append("Convert2ISO: ")
                .append(themes.errPath).append("'").append(displayPath).append("'")
-               .append(themes.errLabel).append(": Cannot be read, check permissions.");
+               .append(themes.errLabel).append(": NoAccessCheckPermissions.");
             localFailedMsgs.push_back(std::move(msg));
 
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -116,10 +125,20 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             continue;
         }
 
-        std::string outputPath = inputPath.substr(0, inputPath.find_last_of(".")) + ".iso";
+        // Build outputPath in-place: replace extension with ".iso"
+        std::string outputPath;
+        {
+            const size_t dotPos = inputPath.find_last_of('.');
+            const size_t baseLen = (dotPos != std::string::npos) ? dotPos : inputPath.size();
+            outputPath.reserve(baseLen + 4);
+            outputPath.assign(inputPath, 0, baseLen);
+            outputPath.append(".iso");
+        }
+
         if (fileExists(outputPath)) {
             std::string msg;
-            msg.reserve(128);
+            msg.reserve(themes.skipLabel.size() * 2 + themes.skipPath.size() +
+                        displayPath.size() + 32);
             msg.append(themes.skipLabel).append("Convert2ISO: ")
                .append(themes.skipPath).append("'").append(displayPath).append("'")
                .append(themes.skipLabel).append(": ISOalrExists → Skipped.");
@@ -142,24 +161,37 @@ void convertToISO(const std::vector<std::string>& imageFiles,
         if (conversionSuccess) {
             [[maybe_unused]] int ret = chown(outputPath.c_str(), real_uid, real_gid);
 
-            // Record the successful output path
             if (successfulOutputPaths && outPathsMutex) {
                 std::lock_guard<std::mutex> lock(*outPathsMutex);
-                successfulOutputPaths->push_back(outputPath);
+                successfulOutputPaths->push_back(outputPath); // can't move; needed below
             }
 
-            std::string fileNameLower{fileNameOnly};
-            toLowerInPlace(fileNameLower);
-            std::string_view fileType = fileNameLower.ends_with(".bin") ? "BIN" :
-                                        fileNameLower.ends_with(".img") ? "IMG" :
-                                        fileNameLower.ends_with(".mdf") ? "MDF" :
-                                        fileNameLower.ends_with(".nrg") ? "NRG" :
-                                        fileNameLower.ends_with(".chd") ? "CHD" :
-                                        fileNameLower.ends_with(".daa") ? "DAA" :
-                                        fileNameLower.ends_with(".gbi") ? "GBI" : "Image";
+            // Determine file type from extension without copying the full filename
+            std::string_view fileType = "Image";
+            {
+                const size_t dotPos = fileNameOnly.find_last_of('.');
+                if (dotPos != std::string_view::npos) {
+                    std::string_view ext = std::string_view(fileNameOnly).substr(dotPos + 1);
+                    // Case-insensitive compare via known small set
+                    auto iequal = [](std::string_view a, const char* b) {
+                        if (a.size() != std::strlen(b)) return false;
+                        for (size_t i = 0; i < a.size(); ++i)
+                            if (std::tolower((unsigned char)a[i]) != b[i]) return false;
+                        return true;
+                    };
+                    if      (iequal(ext, "bin")) fileType = "BIN";
+                    else if (iequal(ext, "img")) fileType = "IMG";
+                    else if (iequal(ext, "mdf")) fileType = "MDF";
+                    else if (iequal(ext, "nrg")) fileType = "NRG";
+                    else if (iequal(ext, "chd")) fileType = "CHD";
+                    else if (iequal(ext, "daa")) fileType = "DAA";
+                    else if (iequal(ext, "gbi")) fileType = "GBI";
+                }
+            }
 
             std::string msg;
-            msg.reserve(128);
+            msg.reserve(themes.okLabel.size() * 2 + themes.okPath.size() +
+                        outputPath.size() + fileType.size() + 16);
             msg.append(themes.okLabel).append("Convert2ISO: ")
                .append(themes.okPath).append("'").append(outputPath).append("'")
                .append(themes.okLabel).append(": ").append(fileType).append(" → ISO.");
@@ -172,7 +204,8 @@ void convertToISO(const std::vector<std::string>& imageFiles,
 
             bool isCancelled = GlobalState::g_operationCancelled.load(std::memory_order_relaxed);
             std::string msg;
-            msg.reserve(128);
+            msg.reserve(themes.errLabel.size() * 2 + themes.errPath.size() +
+                        displayPath.size() + 24);
             msg.append(themes.errLabel).append("Convert2ISO: ")
                .append(themes.errPath).append("'").append(displayPath).append("'")
                .append(themes.errLabel).append(": ").append(isCancelled ? "Cancelled." : "Failed.");
