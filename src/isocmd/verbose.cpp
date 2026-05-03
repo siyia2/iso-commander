@@ -153,6 +153,7 @@ void displayErrors() {
         for (const auto& err : verboseSets.uniqueErrorTokenMessages) {
             std::cout << err << "\n";
         }
+        // Needed to remove verbose input erros from dry-runs in cp/mv/rm
         verboseSets.uniqueErrorTokenMessages.clear();
     }
 }
