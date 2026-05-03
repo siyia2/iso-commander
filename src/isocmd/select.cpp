@@ -349,7 +349,9 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
 		}
 
 		const ReadlineAndPromptTheme pt = getPromptTheme();
-
+		
+		if (isFiltered) rl_bind_keyseq("*", rl_insert);
+		
 		std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
 		std::string prompt = 
@@ -552,6 +554,8 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 		}
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
+        
+        if (isFiltered) rl_bind_keyseq("*", rl_insert);
         
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
