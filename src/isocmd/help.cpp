@@ -103,7 +103,7 @@ void helpSettingsEditor() {
         "   • Single/Multiple : " + std::string(UI::Palette::Purple) + "'1' or '1 5 6'\n" + std::string(UI::Palette::BoldReset) +
         "   • Range/Combine   : " + std::string(UI::Palette::Purple) + "'1-3' or '1-3 5 7-9'" + std::string(UI::Palette::BoldReset));
         printSection(tc, "\n4. Tips:",
-        "   • On reset defaults are not auto-saved to disk\n"
+        "   • On reset defaults are auto-saved to disk\n"
         "   • Succesful edits are auto-saved to disk");
     pressEnterToReturn();
 }

@@ -559,7 +559,6 @@ void setup_custom_keybindingsForSelect(void) {
  */
 void setup_custom_keybindingsForSettingsEditor(void) {
     rl_bind_keyseq("r", reset_handler);
-    rl_bind_keyseq("s", save_handler);
     rl_bind_keyseq("?", help_handler);
     rl_bind_keyseq("<", exit_handler);
 }
@@ -615,7 +614,6 @@ void reset_custom_keybindingsForRm(void) {
  */
 void reset_custom_keybindingsForSettingsEditor(void) {
     rl_bind_keyseq("r", rl_insert);
-    rl_bind_keyseq("s", rl_insert);
     rl_bind_keyseq("?", rl_insert);
     rl_bind_keyseq("<", rl_insert);
 }

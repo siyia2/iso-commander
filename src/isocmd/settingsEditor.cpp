@@ -92,6 +92,7 @@ void interactiveConfigEditor(const std::string& configPath) {
 
     while (true) {
         clearScrollBuffer();
+        verboseSets.uniqueErrorTokenMessages.clear();
         auto tc = resolveOptionsTheme();
         std::cout << "\n" << tc.highlight << "=== Settings Editor ===\n\n" << tc.reset;
         std::cout << tc.warning << "Config File: " << tc.reset << configPath << "\n";
@@ -112,8 +113,7 @@ void interactiveConfigEditor(const std::string& configPath) {
         }
 		setup_custom_keybindingsForSettingsEditor();
         std::cout << "\n" << tc.accent << "Actions: " << tc.warning << "1-" << (index-1) 
-                  << tc.reset << " ↵ Edit | " << tc.warning << "r" << tc.reset << " Reset | " 
-                  << tc.warning << "s" << tc.reset << " SaveToDisk | " << tc.warning << "?" << tc.reset << " help" << tc.reset << "\n";
+                  << tc.reset << " ↵ Edit | " << tc.warning << "r" << tc.reset << " Reset |" << tc.warning << " ?" << tc.reset << " help" << tc.reset << "\n";
 
         std::string prompt = std::format(
             "\n\001{}\002Action\001{}\002 ↵ | < \001{}\002Exit\001{}\002: \001{}\002",
@@ -135,29 +135,6 @@ void interactiveConfigEditor(const std::string& configPath) {
             continue;
         }
 
-        if (input == "s" || input == "S") {
-			reset_custom_keybindingsForSettingsEditor();
-            std::string confirmPrompt = std::format(
-                "\001{}\002\nSave settings to disk? (y/n): \001{}\002",
-                color, 
-                UI::Palette::BoldReset
-            );
-            
-            std::unique_ptr<char, decltype(&std::free)> confirmInput(readline(confirmPrompt.c_str()), &std::free);
-            
-            if (confirmInput) {
-                std::string confirm = trim(confirmInput.get());
-                if (!confirm.empty() && std::tolower(confirm[0]) == 'y') {
-                    if (flushCache(configPath)) {
-                        tc = resolveOptionsTheme();
-                        std::cout << tc.highlight << "\n[✔] Settings saved to disk.\n" << tc.reset;
-                    }
-                    pressEnterToContinue();
-                }
-            }
-            continue;
-        }
-
         if (input == "r" || input == "R") {
 			reset_custom_keybindingsForSettingsEditor();
             std::string confirmPrompt = std::format(
@@ -176,8 +153,14 @@ void interactiveConfigEditor(const std::string& configPath) {
                     }
                     applyConfigEffects(GlobalCaches::g_configCache);
                     tc = resolveOptionsTheme();
-                    std::cout << tc.label << "\n[+] Defaults applied — save with 's' to persist.\n" << tc.reset;
-                    pressEnterToContinue();
+                    std::cout << tc.label << "\n[+] Defaults applied.\n" << tc.reset;
+                    if (!confirm.empty() && std::tolower(confirm[0]) == 'y') {
+						if (flushCache(configPath)) {
+							tc = resolveOptionsTheme();
+							std::cout << tc.highlight << "[✔] Settings saved to disk.\n" << tc.reset;
+						}
+						pressEnterToContinue();
+					}
                 }
             }
             continue;
