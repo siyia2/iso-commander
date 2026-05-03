@@ -22,10 +22,6 @@
  * @param isFiltered Current list state.
  * @param filteredFiles Vector of currently filtered file paths.
  * @param isoDirs Vector of mounted directories.
- * @param operationCompleted Set for tracking successful files.
- * @param operationFailed Set for tracking failed files.
- * @param uniqueErrorTokenMessages Set for tracking error strings.
- * @param operationSkipped Set for tracking skipped files.
  * @param needsClrScrn Boolean to control screen refreshing.
  * @param operation The operation name string.
  * @param isAtISOList Atomic flag indicating if the UI is at the ISO list.

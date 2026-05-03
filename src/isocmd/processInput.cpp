@@ -30,10 +30,6 @@
  * @brief Orchestrates the mounting or unmounting of ISO files using a static thread pool and progress tracking.
  * @param input Raw user input string (indices or "00").
  * @param files List of available files.
- * @param operationCompleted Set to populate with successfully processed files.
- * @param operationSkipped Set to track items skipped during the operation.
- * @param operationFailed Set to track failed file paths.
- * @param uniqueErrorTokenMessages Set to collect unique error strings.
  * @param operationBreak Boolean flag to control outer loop flow.
  * @param verbose Toggle for detailed progress output.
  * @param isUnmount True for unmount operation, false for mount.
@@ -212,9 +208,6 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
  * @param input Raw user input (e.g., "1-3, 5").
  * @param isoFiles Master list of files.
  * @param process Operation type ("cp", "mv", or "rm").
- * @param operationIsos Set to track successfully modified items.
- * @param operationErrors Set to track failed items.
- * @param uniqueErrorTokenMessages Set for unique UI error reporting.
  * @param umountMvRmBreak Flag for outer loop control; set to false if no tasks are completed.
  * @param filterHistory Flag indicating if the view is filtered.
  * @param verbose Detailed output toggle for progress updates.
@@ -393,9 +386,6 @@ void processInputForCpMvRm(const std::string& input,
  * @param modeChd       If `true`, treat input files as MAME CHD compressed images.
  * @param modeDaa       If `true`, treat input files as PowerISO DAA and gBurner GBI compressed images.
  * @param processedErrors Set to record any parsing errors (invalid indices/patterns).
- * @param successOuts   Set populated with themed messages of successfully converted ISOs.
- * @param skippedOuts   Set populated with themed messages of skipped files.
- * @param failedOuts    Set populated with themed messages of failed conversions.
  * @param verbose       If `true`, extra progress details are displayed.
  * @param needsClrScrn  Reference flag set to `true` if the terminal should be cleared.
  * @param newISOFound   Atomic flag set to `true` when at least one new ISO is indexed.
