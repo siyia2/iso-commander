@@ -777,7 +777,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std:
             for (size_t i = 0; i < destDirs.size(); ++i) {
                 const auto& dst = destDirs[i];
                 fs::path destPath = fs::path(dst) / srcPath.filename();
-                auto [destDirProcessed, destFile] = extractDirectoryAndFilename(destPath.native(), "cp_mv_rm");
+                // Always use full destination Dir for operations
+                auto [_, destFile] = extractDirectoryAndFilename(destPath.native(), "cp_mv_rm");
+				const std::string& destDirProcessed = dst;
 
                 if (fs::absolute(srcPath) == fs::absolute(destPath)) {
                     std::string operation = isMove ? "move" : "copy";
