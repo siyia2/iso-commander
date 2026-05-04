@@ -50,68 +50,69 @@ void tokenizeInput(const std::string& input,
     std::unordered_set<std::string> invalidRanges;
 
     while (iss >> token) {
-        // Reject leading zeros
-        if (startsWithZero(token)) {
-            invalidIndices.insert(token);
-            continue;
-        }
+		// Check for range format (start-end)
+		size_t dashCount = std::count(token.begin(), token.end(), '-');
+		if (dashCount > 1) {
+			invalidInputs.insert(token);
+			continue;
+		}
 
-        // Check for range format (start-end)
-        size_t dashCount = std::count(token.begin(), token.end(), '-');
-        if (dashCount > 1) {
-            invalidInputs.insert(token);
-            continue;
-        }
-
-        size_t dashPos = token.find('-');
-        if (dashPos != std::string::npos) {
-            int start, end;
-            try {
-                start = std::stoi(token.substr(0, dashPos));
-                end = std::stoi(token.substr(dashPos + 1));
-            } catch (const std::invalid_argument&) {
-                invalidInputs.insert(token);
-                continue;
-            } catch (const std::out_of_range&) {
-                invalidRanges.insert(token);
-                continue;
-            }
-
-            // Validate range bounds
-            bool boundsInvalid = (start < 1 || static_cast<size_t>(start) > isoFiles.size() || 
-                                  end < 1 || static_cast<size_t>(end) > isoFiles.size());
-            
-            if (boundsInvalid) {
-                invalidRanges.insert(token);
-                continue;
-            }
-
-            // Process the range (supports both ascending and descending)
-            int step = (start <= end) ? 1 : -1;
-            for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
-                processedIndices.insert(i);
-            }
-        } 
-        // Handle single numeric index
-        else if (isNumeric(token)) {
-            try {
-                int num = std::stoi(token);
-                if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
-                    processedIndices.insert(num);
-                } else {
-                    invalidIndices.insert(token);
-                }
-            } catch (const std::invalid_argument&) {
-                invalidInputs.insert(token);
-            } catch (const std::out_of_range&) {
-                invalidIndices.insert(token);
-            }
-        } 
-        // Non-numeric, non-range tokens are garbage
-        else {
-            invalidInputs.insert(token);
-        }
-    }
+		size_t dashPos = token.find('-');
+		if (dashPos != std::string::npos) {
+			std::string startStr = token.substr(0, dashPos);
+			std::string endStr = token.substr(dashPos + 1);
+			if (startsWithZero(startStr) || startsWithZero(endStr)) {
+				invalidInputs.insert(token);
+				continue;
+			}
+			int start, end;
+			try {
+				start = std::stoi(startStr);
+				end = std::stoi(endStr);
+			} catch (const std::invalid_argument&) {
+				invalidInputs.insert(token);
+				continue;
+			} catch (const std::out_of_range&) {
+				invalidRanges.insert(token);
+				continue;
+			}
+			// Validate range bounds
+			bool boundsInvalid = (start < 1 || static_cast<size_t>(start) > isoFiles.size() ||
+								  end < 1 || static_cast<size_t>(end) > isoFiles.size());
+			if (boundsInvalid) {
+				invalidRanges.insert(token);
+				continue;
+			}
+			// Process the range (supports both ascending and descending)
+			int step = (start <= end) ? 1 : -1;
+			for (int i = start; (start <= end) ? (i <= end) : (i >= end); i += step) {
+				processedIndices.insert(i);
+			}
+		}
+		// Handle single numeric index
+		else if (isNumeric(token)) {
+			if (startsWithZero(token)) {
+				invalidIndices.insert(token);
+				continue;
+			}
+			try {
+				int num = std::stoi(token);
+				if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
+					processedIndices.insert(num);
+				} else {
+					invalidIndices.insert(token);
+				}
+			} catch (const std::invalid_argument&) {
+				invalidInputs.insert(token);
+			} catch (const std::out_of_range&) {
+				invalidIndices.insert(token);
+			}
+		}
+		// Non-numeric, non-range tokens are garbage
+		else {
+			invalidInputs.insert(token);
+		}
+	}
     
     SemanticUIColors sc = resolveVerboseTheme();
 
