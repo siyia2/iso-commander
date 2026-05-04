@@ -237,7 +237,21 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 		} else if (key == "auto_update" || key == "filenames_only") {
 			std::cout << "on, off\n";
 		} else if (key == "pagination" || key.find("thread_cap") != std::string::npos || key.find("_lines") != std::string::npos) {
-			std::cout << "numeric value (integer " << (key == "pagination" ? ">= 0" : "> 0") << ")\n";
+			int min = 1, max = 256;
+			if (key == "pagination")                          { min = 0;  max = 1000; }
+			else if (key == "folder_path_history_lines")      { min = 1;  max = 5000; }
+			else if (key == "filter_history_lines")           { min = 1;  max = 1000; }
+			else if (key == "combined_thread_cap")            { min = 1;  max = 256;  }
+			else if (key == "thread_cap_for_mount")           { min = 1;  max = 128;  }
+			else if (key == "thread_cap_for_umount")          { min = 1;  max = 128;  }
+			else if (key == "thread_cap_for_cp_mv")           { min = 1;  max = 128;  }
+			else if (key == "thread_cap_for_rm")              { min = 1;  max = 128;  }
+			else if (key == "thread_cap_for_convert2iso")     { min = 1;  max = 128;  }
+			else if (key == "thread_cap_for_database_cleanup"){ min = 1;  max = 128;  }
+			else if (key == "thread_cap_for_list_sorting")    { min = 1;  max = 64;   }
+			else if (key == "thread_cap_for_list_filtering")  { min = 1;  max = 64;   }
+
+			std::cout << "numeric value (integer, min - max: " << min << " - " << max << ")\n";
 		} else if (key.find("_list") != std::string::npos) {
 			std::cout << "full, compact\n";
 		} else {
