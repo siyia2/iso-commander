@@ -824,7 +824,8 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
  *
  * This function orchestrates the full flashing process:
  * 1. Parses the raw @p input string into unique ISO indices.
- * 2. Resolves filesystem metadata (size, name) for each selected ISO.
+ * 2. Resolves filesystem metadata (size, name) for each selected ISO,
+ *    skipping any files that are inaccessible or no longer present.
  * 3. Prompts the user for target device mappings via @ref collectDeviceMappings.
  * 4. Executes the flashing process via @ref performWriteOperation.
  *
@@ -846,15 +847,13 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     std::vector<IsoInfo> selectedIsos;
     for (int idx : indicesToProcess) {
 		const std::string& path = isoFiles[idx - 1];
+		std::filesystem::path fsPath(path);
 		std::error_code ec;
-		auto size = std::filesystem::file_size(path, ec);
-		if (ec) {
-			// skip the bad file
-			continue;
-		}
+		auto size = std::filesystem::file_size(fsPath, ec);
+		if (ec) continue;
 		selectedIsos.emplace_back(IsoInfo{
 			path,
-			std::filesystem::path(path).filename().string(),
+			fsPath.filename().string(),
 			size,
 			formatFileSize(size),
 			static_cast<size_t>(idx)
