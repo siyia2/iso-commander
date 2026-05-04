@@ -466,11 +466,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         disable_ctrl_d();
         clearScrollBuffer();
         
-        if ((selectedIsos.size() > GlobalState::ITEMS_PER_PAGE) && (GlobalState::ITEMS_PER_PAGE > 0)) {
+        ThreadPool& pool = getStaticThreadPool();
+        if (selectedIsos.size() > pool.threadCount()) {
             std::cout << "\n" << wt.warnCol << "ISO selections for " 
                       << UI::Palette::Yellow << "write2usb" 
-                      << wt.warnCol << " cannot exceed the current pagination limit of " 
-                      << wt.indexCol << GlobalState::ITEMS_PER_PAGE 
+                      << wt.warnCol << " cannot exceed the current global threadpool size of " 
+                      << wt.colorFailure << pool.threadCount() 
                       << wt.warnCol << "!" 
                       << wt.rl_resetCol << "\n";
 
@@ -834,8 +835,6 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     clearScrollBuffer();
     std::unordered_set<int> indicesToProcess;
     
-   const WriteTheme wt = getWriteTheme();
-
     setupSignalHandlerCancellations();
     GlobalState::g_operationCancelled.store(false);
 
