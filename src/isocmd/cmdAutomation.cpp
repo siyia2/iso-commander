@@ -8,6 +8,7 @@
 #include "../mount.h"
 #include "../state.h"
 #include "../umount.h"
+#include "../verbose.h"
 
 // ─── Palette helpers ─────────────────────────────────────────────────────────
 
@@ -235,16 +236,15 @@ static int handleMount(const ParsedArgs& args) {
                 .append(isoFiles.size() == 1 ? "" : "s")
                 .append("; Attempting to mount...\n"));
 
-    std::unordered_set<std::string> mountedFiles, skippedMessages, mountedFails;
     std::atomic<size_t> completedTasks{0}, failedTasks{0};
 
     mountIsoFiles(std::vector<std::string>(isoFiles.begin(), isoFiles.end()),
                   &completedTasks, &failedTasks, args.silentMode);
 
     if (!args.silentMode) {
-        for (const auto& msg : mountedFiles)    std::cout << msg << "\n";
-        for (const auto& msg : skippedMessages) std::cout << msg << "\n";
-        for (const auto& msg : mountedFails)    std::cout << msg << "\n";
+        for (const auto& msg : verboseSets.operationCompleted)    std::cout << msg << "\n";
+        for (const auto& msg : verboseSets.operationSkipped) std::cout << msg << "\n";
+        for (const auto& msg : verboseSets.operationFailed)    std::cout << msg << "\n";
         std::cout << "\nMount summary:\n"
                   << "  Successful: " << completedTasks.load() << "\n"
                   << "  Failed:     " << failedTasks.load()
@@ -360,15 +360,14 @@ static int handleUmount(const ParsedArgs& args) {
                 .append(mountPoints.size() == 1 ? "" : "s")
                 .append("; Attempting to unmount...\n"));
 
-    std::unordered_set<std::string> unmountedFiles, unmountedErrors;
     std::atomic<size_t> completedTasks{0}, failedTasks{0};
 
     unmountISO(std::vector<std::string>(mountPoints.begin(), mountPoints.end()),
                &completedTasks, &failedTasks, args.silentMode);
 
     if (!args.silentMode) {
-        for (const auto& msg : unmountedFiles)  std::cout << msg << "\n";
-        for (const auto& msg : unmountedErrors) std::cout << msg << "\n";
+        for (const auto& msg : verboseSets.operationCompleted)  std::cout << msg << "\n";
+        for (const auto& msg : verboseSets.operationFailed) std::cout << msg << "\n";
         std::cout << "\nUnmount summary:\n"
                   << "  Successful: " << completedTasks.load() << "\n"
                   << "  Failed:     " << failedTasks.load()
