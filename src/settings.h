@@ -49,9 +49,7 @@ inline auto isNum = [](const std::string& v, int min, int max) -> bool {
     if (v.empty() || !std::all_of(v.begin(), v.end(), ::isdigit)) return false;
     if (v.size() > 1 && v[0] == '0') return false;
     try {
-        size_t pos;
-        int n = std::stoi(v, &pos);
-        if (pos != v.length()) return false;
+        int n = std::stoi(v);
         return n >= min && n <= max;
     } catch (...) {
         return false;
@@ -209,7 +207,7 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "combined_thread_cap",
         "32",
-        "Global thread pool size limit; excess tasks are queued; takes effect on restart",
+        "Global thread pool size (requires restart to apply)",
         "Thread Configuration",
         [](const std::string& v) { return isNum(v, 1, 256); }
     },
