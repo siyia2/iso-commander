@@ -861,13 +861,11 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
 	}
 
     if (selectedIsos.empty()) {
-        clear_history();
         return;
     }
 
     auto validPairs = collectDeviceMappings(selectedIsos);
     if (validPairs.empty()) {
-        clear_history();
         return;
     }
 
@@ -876,7 +874,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     // Cleanup and wait for user acknowledgment
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
-
+	
     pressEnterToContinue();
 }
 
