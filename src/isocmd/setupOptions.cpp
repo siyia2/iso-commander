@@ -120,10 +120,9 @@ void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& c
 		if (it == configMap.end()) return defaultVal;
 		const std::string& s = it->second;
 		if (s.empty() || !std::all_of(s.begin(), s.end(), ::isdigit)) return defaultVal;
-		if (s.size() > 1 && s[0] == '0') return defaultVal;  // reject leading zeros
+		if (s.size() > 1 && s[0] == '0') return defaultVal;
 		try {
-			int v = std::stoi(s);
-			return (v >= 0) ? static_cast<size_t>(v) : defaultVal;
+			return static_cast<size_t>(std::stoull(s));
 		} catch (...) { return defaultVal; }
 	};
     

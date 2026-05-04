@@ -251,7 +251,7 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 			else if (key == "thread_cap_for_list_sorting")    { min = 1;  max = 64;   }
 			else if (key == "thread_cap_for_list_filtering")  { min = 1;  max = 64;   }
 
-			std::cout << "numeric value (integer, min - max: " << min << " - " << max << ")\n";
+			std::cout << "numeric value (min - max: " << min << " - " << max << ")\n";
 		} else if (key.find("_list") != std::string::npos) {
 			std::cout << "full, compact\n";
 		} else {
