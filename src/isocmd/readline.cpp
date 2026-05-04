@@ -568,6 +568,7 @@ void setup_custom_keybindingsForSettingsEditor(void) {
  */
 void setup_custom_keybindingsForSearches(void) {
     rl_bind_keyseq("?", help_handler);
+    rl_bind_keyseq("<", exit_handler);
 }
 
 /**
@@ -627,4 +628,5 @@ void reset_custom_keybindingsForSettingsEditor(void) {
 
 void reset_custom_keybindingsForSearches(void) {
     rl_bind_keyseq("?", rl_insert);
+    rl_bind_keyseq("<", rl_insert);
 }

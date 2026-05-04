@@ -99,7 +99,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
               .append("\001").append(dt.green).append("\002.iso")
               .append("\001").append(dt.blue).append("\002 entries and import them into the ")
               .append("\001").append(dt.green).append("\002local")
-              .append("\001").append(dt.blue).append("\002 database, ? help, ↵ return:\n")
+              .append("\001").append(dt.blue).append("\002 database, ? help, < return:\n")
               .append("\001").append(dt.reset).append("\002");
 
         char* rawSearchQuery = readline(prompt.c_str());
@@ -107,6 +107,8 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
 
         std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
         std::string input = trimWhitespace(searchQuery.get());
+        
+        if (input == "<") return;
 
         if (input == "?") {
             bool isCpMv = false, import2ISO = true;
@@ -124,7 +126,9 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
             std::cout << "\n";
         }
 
-        if (input.find_first_not_of(" \t\n\r") == std::string::npos) return;
+        if (input.find_first_not_of(" \t\n\r") == std::string::npos) {
+			return refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
+		}
 
         std::vector<std::string> validPaths;
         std::unordered_set<std::string> invalidPaths;
@@ -890,10 +894,6 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
         rl_bind_key('\t', rl_complete);
     };
 
-    auto isBlankInput = [](const char* s) {
-        return !s || s[0] == '\0' || std::all_of(s, s + strlen(s), [](char c){ return c == ' '; });
-    };
-
     while (true) {
         int currentCacheOld = 0;
         std::vector<std::string> directoryPaths;
@@ -912,14 +912,21 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
               .append("\001").append(dt.orange).append("\002").append(fileExtension)
               .append("\001").append(dt.blue).append("\002 entries and cache them into \001")
               .append("\001").append(dt.yellow).append("\002RAM\001")
-              .append("\001").append(dt.blue).append("\002, ? help, ↵ return:\n\001")
+              .append("\001").append(dt.blue).append("\002, ? help, < return:\n\001")
               .append(dt.reset).append("\002");
         
-        std::unique_ptr<char, decltype(&std::free)> mainSearch(readline(prompt.c_str()), &std::free);
+        char* rawSearchQuery = readline(prompt.c_str());
+        if (!rawSearchQuery) return;
 
-        if (isBlankInput(mainSearch.get())) break;
+        std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
 
-        const std::string inputSearch = trimWhitespace(mainSearch.get());
+        const std::string inputSearch = trimWhitespace(searchQuery.get());
+        
+        if (inputSearch == "<") return;
+        
+        if (inputSearch.find_first_not_of(" \t\n\r") == std::string::npos) {
+			continue;
+		}
 
         bool list = false;
         
