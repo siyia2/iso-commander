@@ -154,16 +154,16 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "folder_path_history_lines",
         "30",
-        "Max unique FolderPaths to persist in history",
+        "Max unique FolderPaths to persist in history (0 to disable)",
         "History Settings",
-        [](const std::string& v) { return isNum(v, 1, 5000); }
+        [](const std::string& v) { return isNum(v, 0, 5000); }
     },
     {
         "filter_history_lines",
         "15",
-        "Max unique FilterTerms to persist in history",
+        "Max unique FilterTerms to persist in history (0 to disable)",
         "",
-        [](const std::string& v) { return isNum(v, 1, 1000); }
+        [](const std::string& v) { return isNum(v, 0, 1000); }
     },
 
     // --- Display Modes ---
