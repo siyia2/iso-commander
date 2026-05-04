@@ -239,8 +239,8 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 		} else if (key == "pagination" || key.find("thread_cap") != std::string::npos || key.find("_lines") != std::string::npos) {
 			int min = 1, max = 256;
 			if (key == "pagination")                          { min = 0;  max = 1000; }
-			else if (key == "folder_path_history_lines")      { min = 1;  max = 5000; }
-			else if (key == "filter_history_lines")           { min = 1;  max = 1000; }
+			else if (key == "folder_path_history_lines")      { min = 0;  max = 5000; }
+			else if (key == "filter_history_lines")           { min = 0;  max = 1000; }
 			else if (key == "combined_thread_cap")            { min = 1;  max = 256;  }
 			else if (key == "thread_cap_for_mount")           { min = 1;  max = 128;  }
 			else if (key == "thread_cap_for_umount")          { min = 1;  max = 128;  }

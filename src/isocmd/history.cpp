@@ -143,6 +143,12 @@ void saveHistory(bool& filterHistory) {
         return;
     }
 
+    if (maxLines == 0) {
+        flock(fd, LOCK_UN);
+        close(fd);
+        return;
+    }
+
     HIST_ENTRY **histList = history_list();
     if (histList) {
         std::vector<std::string> finalLines;
