@@ -468,12 +468,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         
         ThreadPool& pool = getStaticThreadPool();
         if (selectedIsos.size() > pool.threadCount()) {
-            std::cout << "\n" << wt.warnCol << "ISO selections for " 
+            std::cout << "\n" << wt.colorFailure << "ISO selections for " 
                       << UI::Palette::Yellow << "write2usb" 
-                      << wt.warnCol << " cannot exceed the current global threadpool size of " 
-                      << wt.colorFailure << pool.threadCount() 
-                      << wt.warnCol << "!" 
-                      << wt.rl_resetCol << "\n";
+                      << wt.colorFailure << " cannot exceed the current global threadpool size of " 
+                      << wt.colorWarning << pool.threadCount() 
+                      << wt.colorFailure << "!" 
+                      << wt.speedCol << "\n";
 
             pressEnterToTry();
             return {};
