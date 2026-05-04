@@ -845,16 +845,21 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
 
     std::vector<IsoInfo> selectedIsos;
     for (int idx : indicesToProcess) {
-        const std::string& path = isoFiles[idx - 1];
-        // Directly resolve file info assuming existence
-        selectedIsos.emplace_back(IsoInfo{
-            path,
-            std::filesystem::path(path).filename().string(),
-            std::filesystem::file_size(path),
-            formatFileSize(std::filesystem::file_size(path)),
-            static_cast<size_t>(idx)
-        });
-    }
+		const std::string& path = isoFiles[idx - 1];
+		std::error_code ec;
+		auto size = std::filesystem::file_size(path, ec);
+		if (ec) {
+			// skip the bad file
+			continue;
+		}
+		selectedIsos.emplace_back(IsoInfo{
+			path,
+			std::filesystem::path(path).filename().string(),
+			size,
+			formatFileSize(size),
+			static_cast<size_t>(idx)
+		});
+	}
 
     if (selectedIsos.empty()) {
         clear_history();
