@@ -44,8 +44,8 @@ const bool isUnmount, const bool isWrite, const bool isConversion, bool& need2So
     if (command == "PgDn") {
         if (totalPages > 0 && currentPage < totalPages - 1) {
             currentPage++;
-            needsClrScrn = true;
         }
+        needsClrScrn = true;
         return true;
     }
 
@@ -54,6 +54,7 @@ const bool isUnmount, const bool isWrite, const bool isConversion, bool& need2So
             currentPage--;
             needsClrScrn = true;
         }
+        needsClrScrn = true;
         return true;
     }
 
