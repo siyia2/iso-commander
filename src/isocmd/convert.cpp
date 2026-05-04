@@ -94,7 +94,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                         displayPath.size() + 32);
             msg.append(themes.missingLabel).append("Convert2ISO: ")
                .append(themes.errPath).append("'").append(displayPath).append("'")
-               .append(themes.missingLabel).append(": MissingFile.");
+               .append(themes.missingLabel).append(": Failed → MissingFile.");
             localFailedMsgs.push_back(std::move(msg));
 
             {
@@ -117,7 +117,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                         displayPath.size() + 48);
             msg.append(themes.errLabel).append("Convert2ISO: ")
                .append(themes.errPath).append("'").append(displayPath).append("'")
-               .append(themes.errLabel).append(": LimitedAccess.");
+               .append(themes.errLabel).append(": Failed → NoAccess.");
             localFailedMsgs.push_back(std::move(msg));
 
             failedTasks->fetch_add(1, std::memory_order_acq_rel);

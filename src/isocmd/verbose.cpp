@@ -301,14 +301,14 @@ void reportErrorCpMvRm(std::string_view errorType, std::string_view srcDir, std:
     else if (errorType == "remove_after_move") {
         errorMsg.append(vt.red).append("Move completed but failed to remove source file: ")
                 .append(vt.red).append("'").append(vt.yellow).append(displaySrc).append(vt.red).append("'")
-                .append(vt.reset).append(vt.red).append(" - ").append(errorDetail)
+                .append(vt.reset).append(vt.red).append(" - ").append(errorDetail).append(".")
                 .append(vt.reset);
     }
     else if (errorType == "missing_file") {
         errorMsg.append(vt.purple).append("Missing: ")
 				.append(vt.purple).append("'")
 				.append(vt.yellow).append(displaySrc)
-				.append(vt.purple).append("'");
+				.append(vt.purple).append("'.");
     }
     else {
         errorMsg.append(vt.red).append("Error: ").append(errorDetail)
