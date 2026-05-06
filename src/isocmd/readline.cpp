@@ -7,7 +7,6 @@
 #include <sys/stat.h>
 
 // Third-Party Library Headers
-#include <readline/history.h>
 #include <readline/readline.h>
 
 // Project Headers

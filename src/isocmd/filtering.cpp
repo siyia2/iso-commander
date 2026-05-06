@@ -6,7 +6,6 @@
 
 // Third-Party Library Headers
 #include <readline/history.h>
-#include <readline/readline.h>
 
 // Project Headers
 #include "../caches.h"
