@@ -311,7 +311,7 @@ void processInputForCpMvRm(const std::string& input,
     futures.reserve(indexChunks.size());
 
    for (const auto& chunk : indexChunks) {
-		futures.emplace_back(pool.enqueue([&chunk, &isoFiles,
+		futures.emplace_back(pool.enqueue([chunk, &isoFiles,
 										   &userDestDir, isMove, isCopy, isDelete,
 										   &completedBytes, &completedTasks, &failedTasks,
 										   &overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
