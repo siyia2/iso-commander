@@ -25,6 +25,27 @@
 namespace fs = std::filesystem;
 
 /**
+ * DISK I/O & ERROR REPORTING
+ */
+
+void printConfigError(const std::string& configPath) {
+    auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
+    std::cerr << "\n" << error
+              << "Error: Unable to access configuration file: "
+              << warning << "'" << configPath << "'"
+              << error << ".\033[J\n" << reset;
+}
+
+/**
+ * @brief Commits the current in-memory configuration cache to disk.
+ */
+bool flushCache(const std::string& configPath) {
+    if (writeConfig(configPath, GlobalCaches::g_configCache)) return true;
+    printConfigError(configPath);
+    return false;
+}
+
+/**
  * @brief Synchronizes global runtime variables with values from the configuration cache.
  * 
  * This function acts as the bridge between the raw string-based @c g_configCache 

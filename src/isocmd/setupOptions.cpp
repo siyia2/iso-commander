@@ -14,6 +14,17 @@
 
 namespace fs = std::filesystem;
 
+/**
+ * @brief Removes leading and trailing whitespace from a string.
+ */
+inline std::string trim(std::string str) {
+    if (str.empty()) return str;
+    str.erase(0, str.find_first_not_of(" \t"));
+    size_t last = str.find_last_not_of(" \t");
+    if (last != std::string::npos) str.erase(last + 1);
+    return str;
+}
+
 // ---------------------------------------------------------------------------
 // Core Config I/O
 // ---------------------------------------------------------------------------
