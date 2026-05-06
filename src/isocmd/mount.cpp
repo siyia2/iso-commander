@@ -4,11 +4,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-// Third-Party Library Headers
-#include <libmount/libmount.h>
-
 // C / System Headers
 #include <sys/stat.h>
+
+// Third-Party Library Headers
+#include <libmount/libmount.h>
 
 // Project Headers
 #include "../concurrency.h"
