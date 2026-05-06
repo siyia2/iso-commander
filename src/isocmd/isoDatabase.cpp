@@ -7,6 +7,7 @@
 
 // C / System Headers
 #include <sys/file.h>
+#include <sys/stat.h>
 
 // Project Headers
 #include "../caches.h"

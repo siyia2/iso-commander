@@ -3,6 +3,9 @@
 // C++ Standard Library Headers
 #include <csignal>
 
+// C / System Headers
+#include <sys/stat.h>
+
 // Project Headers
 #include "../caches.h"
 #include "../databaseOps.h"
