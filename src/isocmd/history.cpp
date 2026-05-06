@@ -7,6 +7,7 @@
 #include <iostream>
 
 // C / System Headers
+#include <fcntl.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 
