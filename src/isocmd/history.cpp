@@ -5,16 +5,13 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <string>
 
 // C / System Headers
-#include <fcntl.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 
 // Third-Party Library Headers
 #include <readline/history.h>
-#include <readline/readline.h>
 
 // Project Headers
 #include "../history.h"
