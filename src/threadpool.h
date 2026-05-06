@@ -4,6 +4,7 @@
 #define THREAD_POOL_H
 
 // C++ Standard Library Headers
+#include <algorithm>
 #include <functional>
 #include <future>
 #include <memory>

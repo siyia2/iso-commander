@@ -4,20 +4,10 @@
 #define CHD_COMMON_H
 
 // C++ Standard Library Headers
-#include <cstdio>
-#include <cstring>
-#include <fstream>
 #include <memory>
-#include <vector>
 
 // Third-Party Library Headers
 #include <chd.h>
-
-
-// C / System Headers
-#include <fcntl.h>
-#include <sys/mman.h>
-
 
 /**
  * @brief Custom deleter for CHD file handles

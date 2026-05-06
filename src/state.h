@@ -5,7 +5,6 @@
 
 // C++ Standard Library Headers
 #include <atomic>
-#include <cstdlib>
 #include <string>
 #include <unordered_set>
 #include <vector>

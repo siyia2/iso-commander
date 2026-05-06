@@ -3,18 +3,8 @@
 #ifndef CONFIG_UI_OPS_H
 #define CONFIG_UI_OPS_H
 
-// C++ Standard Library Headers
-#include <atomic>
-#include <map>
-#include <string>
-#include <thread>
-#include <vector>
-#include <ctime>
-
 // C / System Headers
 #include <fcntl.h>
-#include <unistd.h>
-#include <csignal>
 
 /**
  * CONFIGURATION & PERSISTENCE

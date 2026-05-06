@@ -4,12 +4,8 @@
 #define SETTINGS_H
 
 // C++ Standard Library Headers
-#include <string>
-#include <vector>
-#include <map>
 #include <functional>
 #include <iostream>
-#include <unordered_set>
 
 /**
  * DATA STRUCTURES

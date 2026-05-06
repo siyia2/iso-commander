@@ -6,8 +6,6 @@
 // C++ Standard Library Headers
 #include <atomic>
 #include <filesystem>
-#include <unordered_set>
-#include <vector>
 
 // Project Headers
 #include "display.h"

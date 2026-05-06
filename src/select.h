@@ -3,13 +3,6 @@
 #ifndef SELECT_H
 #define SELECT_H
 
-// C++ Standard Library Headers
-#include <string>
-#include <vector>
-#include <unordered_set>
-#include <atomic>
-#include <cstddef>
-
 /**
  * @brief Shared display state for the ISO list view and its background refresh thread.
  */

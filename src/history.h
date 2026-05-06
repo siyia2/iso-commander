@@ -3,8 +3,6 @@
 #ifndef HISTORY_H
 #define HISTORY_H
 
-#include <string>
-
 void loadHistory(bool& filterHistory);
 void saveHistory(bool& filterHistory);
 void clearHistory(const std::string& inputSearch);

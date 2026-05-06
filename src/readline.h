@@ -5,8 +5,6 @@
 
 // C++ Standard Library Headers
 #include <vector>
-#include <string>
-#include <cstdio>
 
 /**
  * C-LINKAGE INTERFACE

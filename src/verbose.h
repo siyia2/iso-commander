@@ -9,15 +9,10 @@
 #include <csignal>
 #include <functional>
 #include <iostream>
-#include <string>
 #include <unordered_set>
-#include <vector>
 
 // Third-Party Library Headers
 #include <readline/history.h>
-
-// C / System Headers
-#include <termios.h>
 
 /**
  * @brief Holds verbose output sets for operation results and user input.

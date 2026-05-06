@@ -6,10 +6,7 @@
 // C++ Standard Library Headers
 #include <atomic>
 #include <filesystem>
-#include <mutex>
-#include <string>
 #include <unordered_set>
-#include <vector>
 
 // C / System Headers
 #include <sys/stat.h>

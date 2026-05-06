@@ -4,7 +4,6 @@
 #define CCD_H
 
 // C++ Standard Library Headers
-#include <cstddef>
 #include <cstdint>
 
 // Special thanks to the original authors of ccd2iso:

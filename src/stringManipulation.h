@@ -3,13 +3,6 @@
 #ifndef STRINGMANIPULATION_H
 #define STRINGMANIPULATION_H
 
-// C++ Standard Library Headers
-#include <string>
-#include <string_view>
-#include <tuple>
-#include <utility>
-#include <vector>
-
 // Transparent hasher to allow find(string_view) without allocations
 struct StringViewHash {
     using is_transparent = void; 
