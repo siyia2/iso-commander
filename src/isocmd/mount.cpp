@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <fcntl.h>
+#include <unistd.h>
+
 // Third-Party Library Headers
 #include <libmount/libmount.h>
 

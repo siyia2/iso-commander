@@ -1,7 +1,14 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 // C++ Standard Library Headers
+#include <cstring>
+#include <fcntl.h>
 #include <filesystem>
+#include <fstream>
+#include <unistd.h>
+
+// C / System Headers
+#include <sys/mman.h>
 
 // Project Headers
 #include "../chd.h"

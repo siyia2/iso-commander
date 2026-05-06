@@ -2,6 +2,12 @@
 
 // C++ Standard Library Headers
 #include <cstdio>
+#include <fstream>
+#include <vector>
+#include <unistd.h>
+
+// C / System Headers
+#include <sys/stat.h>
 
 // Project Headers
 #include "../ccd.h"

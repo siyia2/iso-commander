@@ -2,6 +2,11 @@
 
 // C++ Standard Library Headers
 #include <filesystem>
+#include <numeric>
+
+// Third-Party Library Headers
+#include <readline/history.h>
+#include <readline/readline.h>
 
 // Project Headers
 #include "../caches.h"

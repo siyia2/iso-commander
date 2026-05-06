@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
+#include <cstring>
 #include <filesystem>
+#include <fstream>
 
 // Project Headers
 #include "../ccd.h"
@@ -181,7 +183,6 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
     if (!isoFile) return false;
         
     CcdSector sector;
-    size_t sectorNum = 0;
     
     while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
         if (GlobalState::g_operationCancelled.load()) {
@@ -227,7 +228,6 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
             return false;
         }
         
-        sectorNum++;
     }
     return true;
 }
