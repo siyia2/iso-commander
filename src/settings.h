@@ -63,28 +63,9 @@ inline std::string trim(std::string str) {
     return str;
 }
 
-/**
- * DISK I/O & ERROR REPORTING
- */
-inline void printConfigError(const std::string& configPath) {
-    auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
-    std::cerr << "\n" << error
-              << "Error: Unable to access configuration file: "
-              << warning << "'" << configPath << "'"
-              << error << ".\033[J\n" << reset;
-}
-
 // Forward declaration for the actual writing logic
 bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config);
 
-/**
- * @brief Commits the current in-memory configuration cache to disk.
- */
-inline bool flushCache(const std::string& configPath) {
-    if (writeConfig(configPath, GlobalCaches::g_configCache)) return true;
-    printConfigError(configPath);
-    return false;
-}
 
 /**
  * INTERACTIVE EDITOR & APPLICATION LOGIC
