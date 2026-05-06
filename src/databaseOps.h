@@ -8,9 +8,6 @@
 #include <filesystem>
 #include <unordered_set>
 
-// C / System Headers
-#include <sys/stat.h>
-
 // --- Filesystem Traversal ---
 
 /**
