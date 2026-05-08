@@ -3,17 +3,6 @@
 #ifndef STRINGMANIPULATION_H
 #define STRINGMANIPULATION_H
 
-// Transparent hasher to allow find(string_view) without allocations
-struct StringViewHash {
-    using is_transparent = void; 
-    size_t operator()(std::string_view sv) const {
-        return std::hash<std::string_view>{}(sv);
-    }
-    size_t operator()(const std::string& s) const {
-        return std::hash<std::string>{}(s);
-    }
-};
-
 // --- Path & Component Parsing ---
 
 /**
