@@ -16,7 +16,6 @@
 // Project Headers
 #include "../caches.h"
 #include "../display.h"
-#include "/mnt/Data/AUR/iso-commander-6.9.0/src/stringManipulation.h"
 
 /**
  * @brief Converts a string to lowercase in-place.

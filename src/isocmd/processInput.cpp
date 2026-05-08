@@ -36,7 +36,6 @@
 #include "../threadpool.h"
 #include "../tokenize.h"
 #include "../umount.h"
-#include "/mnt/Data/AUR/iso-commander-6.9.0/src/themes.h"
 
 /**
  * @file operations.cpp

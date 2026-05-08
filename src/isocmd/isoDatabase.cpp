@@ -45,7 +45,6 @@
 #include "../state.h"
 #include "../themes.h"
 #include "../threadpool.h"
-#include "/mnt/Data/AUR/iso-commander-6.9.0/src/stringManipulation.h"
 
 // Local ISO Database mutex
 namespace {

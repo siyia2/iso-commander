@@ -21,7 +21,6 @@
 #include "../state.h"
 #include "../umount.h"
 #include "../verbose.h"
-#include "/mnt/Data/AUR/iso-commander-6.9.0/src/themes.h"
 
 // ─── Palette helpers ─────────────────────────────────────────────────────────
 

@@ -28,7 +28,6 @@
 #include "../sort.h"
 #include "../state.h"
 #include "../themes.h"
-#include "/mnt/Data/AUR/iso-commander-6.9.0/src/stringManipulation.h"
 
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, 
 bool& hasPendingProcess, bool& isFiltered, size_t& currentPage, std::atomic<bool>& isImportRunning);
