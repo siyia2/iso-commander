@@ -3,10 +3,6 @@
 #ifndef UMOUNT_H
 #define UMOUNT_H
 
-// C++ Standard Library Headers
-#include <atomic>
-#include <filesystem>
-
 // Project Headers
 #include "themes.h"
 

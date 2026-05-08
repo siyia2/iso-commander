@@ -3,10 +3,6 @@
 #ifndef SETTINGS_H
 #define SETTINGS_H
 
-// C++ Standard Library Headers
-#include <functional>
-#include <iostream>
-
 /**
  * DATA STRUCTURES
  */

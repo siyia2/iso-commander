@@ -3,9 +3,6 @@
 #ifndef CONFIG_UI_OPS_H
 #define CONFIG_UI_OPS_H
 
-// C / System Headers
-#include <fcntl.h>
-
 /**
  * CONFIGURATION & PERSISTENCE
  * Logic for reading, parsing, and validating user preferences and history.

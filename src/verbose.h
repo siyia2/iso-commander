@@ -6,13 +6,7 @@
 // C++ Standard Library Headers
 #include <atomic>
 #include <chrono>
-#include <csignal>
 #include <functional>
-#include <iostream>
-#include <unordered_set>
-
-// Third-Party Library Headers
-#include <readline/history.h>
 
 /**
  * @brief Holds verbose output sets for operation results and user input.

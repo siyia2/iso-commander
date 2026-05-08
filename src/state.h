@@ -7,8 +7,6 @@
 #include <atomic>
 #include <string>
 #include <unordered_set>
-#include <vector>
-
 
 //==============================
 // GLOBAL APPLICATION STATE

@@ -4,7 +4,6 @@
 #define DATABASEOPS_H
 
 // C++ Standard Library Headers
-#include <atomic>
 #include <filesystem>
 #include <unordered_set>
 

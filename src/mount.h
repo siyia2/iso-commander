@@ -3,10 +3,6 @@
 #ifndef MOUNT_H
 #define MOUNT_H
 
-// C++ Standard Library Headers
-#include <atomic>
-#include <filesystem>
-
 // Project Headers
 #include "display.h"
 #include "themes.h"

@@ -3,9 +3,6 @@
 #ifndef READLINE_H
 #define READLINE_H
 
-// C++ Standard Library Headers
-#include <vector>
-
 /**
  * C-LINKAGE INTERFACE
  * Required for callbacks passed to the GNU Readline C library.

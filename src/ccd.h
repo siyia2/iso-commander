@@ -3,9 +3,6 @@
 #ifndef CCD_H
 #define CCD_H
 
-// C++ Standard Library Headers
-#include <cstdint>
-
 // Special thanks to the original authors of ccd2iso:
 
 // Danny Kurniawan and Kerry Harris (ccd2iso).

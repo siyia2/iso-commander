@@ -3,10 +3,6 @@
 #ifndef SORT_H
 #define SORT_H
 
-// C++ Standard Library Headers
-#include <string>
-#include <vector>
-
 /**
  * Performs an in-place, case-insensitive lexicographical sort on a vector of strings.
  * Useful for ensuring file lists appear in alphabetical order regardless of casing.

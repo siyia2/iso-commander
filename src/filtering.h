@@ -3,14 +3,6 @@
 #ifndef FILTERING_H
 #define FILTERING_H
 
-// C++ Standard Library Headers
-#include <string>
-#include <iostream>
-
-// Third-Party Library Headers
-#include <readline/history.h>
-#include <readline/readline.h>
-
 /**
  * DATA STRUCTURES
  */
