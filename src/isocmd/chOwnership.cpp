@@ -2,11 +2,14 @@
 
 // C++ Standard Library Headers
 #include <string>
+#include <cstdlib>
 
 // C / System Headers
 #include <grp.h>
 #include <pwd.h>
 #include <unistd.h>
+#include <errno.h>
+#include <sys/types.h>
 
 /**
  * @brief Retrieves the identity of the user who invoked the process via sudo.

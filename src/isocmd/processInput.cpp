@@ -3,13 +3,27 @@
 // C++ Standard Library Headers
 #include <csignal>
 #include <iostream>
+#include <algorithm>
+#include <atomic>
+#include <filesystem>
+#include <future>
+#include <iterator>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 // C / System Headers
 #include <sys/stat.h>
+#include <ctype.h>
 
 // Third-Party Library Headers
 #include <readline/history.h>
-#include <readline/readline.h>
 
 // Project Headers
 #include "../concurrency.h"
@@ -17,12 +31,12 @@
 #include "../mount.h"
 #include "../pausePrompt.h"
 #include "../process.h"
-#include "../readline.h"
 #include "../state.h"
 #include "../verbose.h"
 #include "../threadpool.h"
 #include "../tokenize.h"
 #include "../umount.h"
+#include "/mnt/Data/AUR/iso-commander-6.9.0/src/themes.h"
 
 /**
  * @file operations.cpp

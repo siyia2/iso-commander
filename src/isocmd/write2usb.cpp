@@ -3,8 +3,37 @@
 // C++ Standard Library Headers
 #include <csignal>
 #include <fstream>
-#include <cstdio>
 #include <cstring>
+#include <algorithm>
+#include <atomic>
+#include <cctype>
+#include <chrono>
+#include <cstdlib>
+#include <exception>
+#include <filesystem>
+#include <future>
+#include <iomanip>
+#include <iostream>
+#include <memory>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <thread>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
+// C / System Headers
+#include <errno.h>
+#include <fcntl.h>
+#include <linux/fs.h>
+#include <stdint.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 // Third-Party Library Headers
 #include <readline/history.h>
@@ -21,7 +50,6 @@
 #include "../threadpool.h"
 #include "../tokenize.h"
 #include "../write2usb.h"
-#include "../verbose.h"
 
 namespace fs = std::filesystem;
 

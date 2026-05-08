@@ -4,17 +4,25 @@
 #include <cstdio>
 #include <fstream>
 #include <vector>
-#include <unistd.h>
+#include <iomanip>
+#include <sstream>
+#include <string>
 
 // C / System Headers
+#include <unistd.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <linux/fs.h>
+#include <stdint.h>
+#include <string.h>
+#include <sys/ioctl.h>
 
 // Project Headers
 #include "../ccd.h"
-#include "../chd.h"
 #include "../daa2iso.h"
 #include "../mdf.h"
 #include "../write2usb.h"
+#include "chd.h"
 
 //=============================================================================
 // Write2Usb Section

@@ -4,22 +4,48 @@
 #include <csignal>
 #include <iostream>
 #include <fstream>
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <filesystem>
+#include <functional>
+#include <future>
+#include <initializer_list>
+#include <iomanip>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 // C / System Headers
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 // Project Headers
 #include "../caches.h"
 #include "../concurrency.h"
 #include "../databaseOps.h"
-#include "../display.h"
 #include "../history.h"
 #include "../inputHandling.h"
 #include "../pausePrompt.h"
 #include "../state.h"
 #include "../themes.h"
 #include "../threadpool.h"
+#include "/mnt/Data/AUR/iso-commander-6.9.0/src/stringManipulation.h"
 
 // Local ISO Database mutex
 namespace {

@@ -2,6 +2,15 @@
 
 // C++ Standard Library Headers
 #include <charconv>
+#include <algorithm>
+#include <atomic>
+#include <cstddef>
+#include <iostream>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <utility>
+#include <vector>
 
 // Project Headers
 #include "../caches.h"
@@ -10,7 +19,6 @@
 #include "../state.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
-#include "../umount.h"
 
 /**
  * @file list_renderer.cpp

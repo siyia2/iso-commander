@@ -1,12 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+
 // C++ Standard Library Headers
 #include <csignal>
-#include <filesystem>
 #include <format>
+#include <algorithm>
+#include <cctype>
+#include <chrono>
+#include <cstdlib>
+#include <functional>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <unordered_set>
+#include <vector>
 
 // Third-Party Library Headers
-#include <readline/history.h>
 #include <readline/readline.h>
 
 // Project Headers

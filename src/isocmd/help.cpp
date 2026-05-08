@@ -3,6 +3,8 @@
 // C++ Standard Library Headers
 #include <csignal>
 #include <iostream>
+#include <string>
+#include <string_view>
 
 // Project Headers
 #include "../inputHandling.h"

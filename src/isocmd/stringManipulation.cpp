@@ -1,8 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <algorithm>
+#include <cctype>
+#include <functional>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <unordered_map>
+#include <utility>
+
+// C / System Headers
+#include <stddef.h>
+
 // Project Headers
 #include "../caches.h"
 #include "../display.h"
+#include "/mnt/Data/AUR/iso-commander-6.9.0/src/stringManipulation.h"
 
 /**
  * @brief Converts a string to lowercase in-place.

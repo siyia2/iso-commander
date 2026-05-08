@@ -2,6 +2,19 @@
 
 // C++ Standard Library Headers
 #include <csignal>
+#include <algorithm>
+#include <atomic>
+#include <filesystem>
+#include <functional>
+#include <iostream>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <tuple>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 // C / System Headers
 #include <sys/stat.h>
@@ -9,13 +22,13 @@
 // Project Headers
 #include "../caches.h"
 #include "../databaseOps.h"
-#include "../display.h"
 #include "../filtering.h"
 #include "../inputHandling.h"
 #include "../pausePrompt.h"
 #include "../sort.h"
 #include "../state.h"
 #include "../themes.h"
+#include "/mnt/Data/AUR/iso-commander-6.9.0/src/stringManipulation.h"
 
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, 
 bool& hasPendingProcess, bool& isFiltered, size_t& currentPage, std::atomic<bool>& isImportRunning);

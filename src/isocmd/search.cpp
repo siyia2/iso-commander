@@ -2,6 +2,27 @@
 
 // C++ Standard Library Headers
 #include <filesystem>
+#include <algorithm>
+#include <atomic>
+#include <cctype>
+#include <chrono>
+#include <cstdlib>
+#include <exception>
+#include <functional>
+#include <future>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
+// C / System Headers
+#include <signal.h>
 
 // Third-Party Library Headers
 #include <readline/history.h>

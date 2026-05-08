@@ -4,6 +4,19 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <algorithm>
+#include <atomic>
+#include <cctype>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
+// C / System Headers
+#include <sys/types.h>
+#include <unistd.h>
 
 // Project Headers
 #include "../caches.h"

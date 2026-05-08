@@ -45,6 +45,15 @@
 
 // C++ Standard Library Headers
 #include <filesystem>
+#include <atomic>
+#include <string>
+
+// C / System Headers
+#include <ctype.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 // Project Headers
 #include "../daa2iso.h"

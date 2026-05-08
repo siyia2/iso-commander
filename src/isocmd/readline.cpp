@@ -2,9 +2,13 @@
 
 // C++ Standard Library Headers
 #include <cstdio>
+#include <algorithm>
+#include <string>
+#include <vector>
 
 // C / System Headers
 #include <sys/stat.h>
+#include <string.h>
 
 // Third-Party Library Headers
 #include <readline/readline.h>

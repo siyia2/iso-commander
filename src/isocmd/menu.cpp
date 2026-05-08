@@ -6,17 +6,19 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+#include <cstring>
+#include <cstdlib>
+#include <memory>
+#include <string>
+#include <string_view>
 
-// Third-Party Library Headers
-#include <readline/history.h>
+// C / System Headers
 #include <readline/readline.h>
 
 // Project Headers
 #include "../inputHandling.h"
 #include "../readline.h"
 #include "../themes.h"
-
-#include <cstring>
 
 /**
  * @brief Renders a multi-colored ASCII art banner to the terminal.

@@ -3,6 +3,16 @@
 // C++ Standard Library Headers
 #include <filesystem>
 #include <fstream>
+#include <algorithm>
+#include <functional>
+#include <map>
+#include <string>
+#include <utility>
+#include <vector>
+
+// C / System Headers
+#include <ctype.h>
+#include <stddef.h>
 
 // Project Headers
 #include "../caches.h"

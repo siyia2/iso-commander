@@ -5,11 +5,20 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <algorithm>
+#include <cctype>
+#include <string>
+#include <string_view>
+#include <unordered_set>
+#include <vector>
 
 // C / System Headers
 #include <fcntl.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 // Third-Party Library Headers
 #include <readline/history.h>

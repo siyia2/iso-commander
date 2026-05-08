@@ -1,14 +1,33 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <algorithm>
+#include <atomic>
+#include <cctype>
+#include <chrono>
+#include <functional>
+#include <iomanip>
+#include <iostream>
+#include <iterator>
+#include <string>
+#include <string_view>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
 // C / System Headers
 #include <termios.h>
+#include <signal.h>
+#include <unistd.h>
+
+// Third-Party Library Headers
+#include <readline/history.h>
 
 // Project Headers
 #include "../caches.h"
 #include "../databaseOps.h"
 #include "../display.h"
 #include "../inputHandling.h"
-#include "../sort.h"
 #include "../state.h"
 #include "../themes.h"
 #include "../verbose.h"

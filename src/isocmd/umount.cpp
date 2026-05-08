@@ -1,7 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Third-Party Library Headers
-#include <libmount/libmount.h>
+// C++ Standard Library Headers
+#include <stddef.h>
+#include <sys/mount.h>
+#include <unistd.h>
+#include <atomic>
+#include <filesystem>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <unordered_set>
+#include <vector>
 
 // Project Headers
 #include "../concurrency.h"

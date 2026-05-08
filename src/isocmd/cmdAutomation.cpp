@@ -2,6 +2,18 @@
 
 // C++ Standard Library Headers
 #include <iostream>
+#include <algorithm>
+#include <atomic>
+#include <filesystem>
+#include <string>
+#include <string_view>
+#include <unordered_set>
+#include <vector>
+
+// C / System Headers
+#include <ctype.h>
+#include <stddef.h>
+#include <unistd.h>
 
 // Project Headers
 #include "../inputHandling.h"
@@ -9,6 +21,7 @@
 #include "../state.h"
 #include "../umount.h"
 #include "../verbose.h"
+#include "/mnt/Data/AUR/iso-commander-6.9.0/src/themes.h"
 
 // ─── Palette helpers ─────────────────────────────────────────────────────────
 

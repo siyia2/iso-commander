@@ -4,9 +4,24 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <atomic>
+#include <functional>
+#include <mutex>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 // C / System Headers
 #include <sys/stat.h>
+#include <ctype.h>
+#include <errno.h>
+#include <stddef.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 // Third-Party Library Headers
 #include <readline/history.h>

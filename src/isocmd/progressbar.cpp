@@ -2,25 +2,32 @@
 
 // C++ Standard Library Headers
 #include <csignal>
-#include <termios.h>
 #include <iostream>
 #include <iomanip>
 #include <memory>
 #include <chrono>
+#include <algorithm>
+#include <atomic>
+#include <cstdlib>
+#include <sstream>
+#include <string>
+#include <string_view>
 
 // C / System Headers
+#include <termios.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <stdint.h>
+#include <unistd.h>
+
+// Third-Party Library Headers
+#include <readline/readline.h>
 
 // Project Headers
 #include "../inputHandling.h"
 #include "../readline.h"
 #include "../state.h"
 #include "../themes.h"
-
-// Third-Party Library Headers
-#include <readline/history.h>
-#include <readline/readline.h>
 
 /**
  * @file progress_bar.cpp

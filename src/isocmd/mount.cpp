@@ -1,9 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <atomic>
+#include <cstddef>
+#include <filesystem>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
 // C / System Headers
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <stdint.h>
+#include <sys/types.h>
 
 // Third-Party Library Headers
 #include <libmount/libmount.h>
@@ -13,8 +28,9 @@
 #include "../mount.h"
 #include "../state.h"
 #include "../stringManipulation.h"
-#include "../threadpool.h"
 #include "../verbose.h"
+
+struct libmnt_context;
 
 /**
  * @brief Provides default LSan suppression rules for known third-party leaks.

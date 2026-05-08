@@ -1,5 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// C++ Standard Library Headers
+#include <stddef.h>
+#include <algorithm>
+#include <cctype>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <unordered_set>
+#include <vector>
+
 // Project Headers
 #include "../themes.h"
 #include "../tokenize.h"

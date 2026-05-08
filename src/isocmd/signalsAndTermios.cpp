@@ -4,11 +4,14 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <atomic>
+
+// C / System Headers
 #include <termios.h>
+#include <unistd.h>
 
 // Third-Party Library Headers
 #include <readline/readline.h>
-#include <readline/history.h>
 
 // Project Headers
 #include "../inputHandling.h"

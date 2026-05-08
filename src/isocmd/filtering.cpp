@@ -1,11 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
-#include <filesystem>
 #include <numeric>
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
+#include <exception>
+#include <functional>
+#include <future>
+#include <iostream>
+#include <iterator>
+#include <memory>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+// C / System Headers
+#include <string.h>
 
 // Third-Party Library Headers
 #include <readline/history.h>
+#include <readline/readline.h>
 
 // Project Headers
 #include "../caches.h"
