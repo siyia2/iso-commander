@@ -4,15 +4,14 @@
 #define CACHES_H
 
 // C++ Standard Library Headers
+#include <functional>
 #include <map>
 #include <mutex>
-#include <unordered_map>
-
 #include <string>
-#include <vector>
-#include <tuple>
 #include <string_view>
-#include <functional>
+#include <tuple>
+#include <unordered_map>
+#include <vector>
 
 // Transparent hasher to allow find(string_view) without allocations
 struct StringViewHash {
