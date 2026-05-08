@@ -3,14 +3,14 @@
 // C++ Standard Library Headers
 #include <atomic>
 #include <chrono>
-#include <iostream>
-#include <thread>
-#include <vector>
-#include <cstring>
 #include <cstdlib>
+#include <cstring>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <thread>
+#include <vector>
 
 // C / System Headers
 #include <readline/readline.h>

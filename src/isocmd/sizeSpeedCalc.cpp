@@ -3,19 +3,19 @@
 // C++ Standard Library Headers
 #include <cstdio>
 #include <fstream>
-#include <vector>
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <vector>
 
 // C / System Headers
-#include <unistd.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 // Project Headers
 #include "../ccd.h"

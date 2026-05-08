@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
+#include <atomic>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
-#include <atomic>
 #include <functional>
+#include <iostream>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -16,10 +16,10 @@
 #include <vector>
 
 // C / System Headers
-#include <sys/stat.h>
-#include <ctype.h>
 #include <errno.h>
+#include <ctype.h>
 #include <stddef.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 

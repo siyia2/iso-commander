@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
-#include <stddef.h>
-#include <sys/mount.h>
-#include <unistd.h>
 #include <atomic>
 #include <filesystem>
 #include <mutex>
@@ -12,6 +9,11 @@
 #include <tuple>
 #include <unordered_set>
 #include <vector>
+
+// C / System Headers
+#include <stddef.h>
+#include <sys/mount.h>
+#include <unistd.h>
 
 // Project Headers
 #include "../concurrency.h"

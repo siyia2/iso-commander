@@ -1,25 +1,24 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 // C++ Standard Library Headers
+#include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <algorithm>
-#include <atomic>
 #include <string>
 #include <thread>
 #include <vector>
 
 // C / System Headers
 #include <fcntl.h>
-#include <unistd.h>
 #include <sys/mman.h>
 #include <stdint.h>
+#include <unistd.h>
 
 // Project Headers
 #include "../chd.h"
 #include "../state.h"
-#include "chd.h"
 
 namespace fs = std::filesystem;
 

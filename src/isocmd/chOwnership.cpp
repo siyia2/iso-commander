@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
-#include <string>
 #include <cstdlib>
+#include <string>
 
 // C / System Headers
+#include <errno.h>
 #include <grp.h>
 #include <pwd.h>
-#include <unistd.h>
-#include <errno.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 /**
  * @brief Retrieves the identity of the user who invoked the process via sudo.

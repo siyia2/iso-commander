@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
-#include <algorithm>
 #include <functional>
 #include <map>
 #include <string>

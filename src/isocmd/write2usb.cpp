@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
-#include <csignal>
-#include <fstream>
-#include <cstring>
 #include <algorithm>
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <csignal>
 #include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <future>
 #include <iomanip>
 #include <iostream>
@@ -25,7 +25,6 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
-
 // C / System Headers
 #include <errno.h>
 #include <fcntl.h>

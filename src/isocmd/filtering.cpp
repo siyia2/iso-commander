@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
-#include <numeric>
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -11,6 +10,7 @@
 #include <iostream>
 #include <iterator>
 #include <memory>
+#include <numeric>
 #include <sstream>
 #include <string>
 #include <string_view>
