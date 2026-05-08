@@ -3,6 +3,12 @@
 #ifndef FILTERING_H
 #define FILTERING_H
 
+// C++ Standard Library Headers
+#include <cstddef>
+#include <string>
+#include <string_view>
+#include <vector>
+
 /**
  * DATA STRUCTURES
  */

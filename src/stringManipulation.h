@@ -3,6 +3,12 @@
 #ifndef STRINGMANIPULATION_H
 #define STRINGMANIPULATION_H
 
+// C++ Standard Library Headers
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <utility>
+
 // --- Path & Component Parsing ---
 
 /**

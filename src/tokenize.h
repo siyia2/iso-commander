@@ -4,7 +4,9 @@
 #define TOKENIZE_H
 
 // C++ Standard Library Headers
+#include <string>
 #include <unordered_set>
+#include <vector>
 
 /**
  * Parses a raw user input string into valid file indices.

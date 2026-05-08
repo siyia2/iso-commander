@@ -3,6 +3,11 @@
 #ifndef CONVERT
 #define CONVERT
 
+// C++ Standard Library Headers
+#include <atomic>
+#include <cstddef>
+#include <string>
+
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
 
 // CHD2ISO

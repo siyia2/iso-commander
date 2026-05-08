@@ -7,6 +7,10 @@
 #include <atomic>
 #include <chrono>
 #include <functional>
+#include <string>
+#include <string_view>
+#include <unordered_set>
+#include <vector>
 
 /**
  * @brief Holds verbose output sets for operation results and user input.

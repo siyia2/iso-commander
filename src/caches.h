@@ -8,6 +8,12 @@
 #include <mutex>
 #include <unordered_map>
 
+#include <string>
+#include <vector>
+#include <tuple>
+#include <string_view>
+#include <functional>
+
 // Transparent hasher to allow find(string_view) without allocations
 struct StringViewHash {
     using is_transparent = void; 

@@ -29,6 +29,10 @@
     59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.        
 */
 
+// C++ Standard Library Headers
+#include <cstddef>
+#include <cstring>
+#include <fstream>
 
 struct MdfTypeInfo {
     size_t seek_ecc;

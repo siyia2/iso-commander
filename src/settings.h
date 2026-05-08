@@ -3,6 +3,17 @@
 #ifndef SETTINGS_H
 #define SETTINGS_H
 
+// C++ Standard Library Headers
+#include <algorithm>
+#include <cctype>
+#include <cstddef>
+#include <functional>
+#include <map>
+#include <stdexcept>
+#include <string>
+#include <unordered_set>
+#include <vector>
+
 /**
  * DATA STRUCTURES
  */

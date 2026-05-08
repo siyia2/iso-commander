@@ -4,8 +4,12 @@
 #define DATABASEOPS_H
 
 // C++ Standard Library Headers
+#include <atomic>
 #include <filesystem>
+#include <mutex>
+#include <string>
 #include <unordered_set>
+#include <vector>
 
 // --- Filesystem Traversal ---
 

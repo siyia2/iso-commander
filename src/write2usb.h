@@ -5,6 +5,8 @@
 
 // C++ Standard Library Headers
 #include <atomic>
+#include <cstdint>
+#include <string>
 
 // --- Data Structures ---
 

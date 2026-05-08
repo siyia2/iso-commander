@@ -4,6 +4,8 @@
 #define CONCURRENCY_H
 
 // C++ Standard Library Headers
+#include <algorithm>
+#include <cstddef>
 #include <mutex>
 #include <thread>
 

@@ -3,6 +3,9 @@
 #ifndef CHD_COMMON_H
 #define CHD_COMMON_H
 
+// C++ Standard Library Headers
+#include <memory>
+
 // Third-Party Library Headers
 #include <chd.h>
 

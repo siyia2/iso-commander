@@ -3,6 +3,11 @@
 #ifndef SEARCHES_H
 #define SEARCHES_H
 
+// C++ Standard Library Headers
+#include <atomic>
+#include <cstdint>
+#include <string>
+
 /**
  * SEARCH DOCUMENTATION & HELP
  */

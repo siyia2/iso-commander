@@ -5,8 +5,8 @@
 
 // C++ Standard Library Headers
 #include <atomic>
+#include <cstdint>
 #include <string>
-#include <unordered_set>
 
 //==============================
 // GLOBAL APPLICATION STATE

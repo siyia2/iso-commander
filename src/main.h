@@ -3,6 +3,14 @@
 #ifndef CONFIG_UI_OPS_H
 #define CONFIG_UI_OPS_H
 
+// C++ Standard Library Headers
+#include <atomic>
+#include <cstddef>
+#include <map>
+#include <string>
+#include <thread>
+#include <vector>
+
 /**
  * CONFIGURATION & PERSISTENCE
  * Logic for reading, parsing, and validating user preferences and history.

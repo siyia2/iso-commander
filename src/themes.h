@@ -9,8 +9,9 @@
 #define THEMES_H
 
 // C++ Standard Library Headers
-#include <string>
 #include <algorithm>
+#include <string>
+#include <string_view>
 
 namespace UI {
 

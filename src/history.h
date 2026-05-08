@@ -3,6 +3,9 @@
 #ifndef HISTORY_H
 #define HISTORY_H
 
+// C++ Standard Library Headers
+#include <string>
+
 void loadHistory(bool& filterHistory);
 void saveHistory(bool& filterHistory);
 void clearHistory(const std::string& inputSearch);
