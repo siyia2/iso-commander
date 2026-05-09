@@ -201,9 +201,6 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
             } else {
                 umountMvRmBreak = false;
                 abortDel = true;
-                std::cout << "\n" << UI::Palette::Red << "rm" << colors.abort 
-                          << " operation aborted by user." << UI::Palette::BoldReset << "\n";
-                pressEnterToContinue();
                 return false;
             }
         }

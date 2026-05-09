@@ -680,10 +680,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         }
 
         restoreReadline();
-
-        std::cout << "\n" << UI::Palette::Yellow << "write2usb" << wt.colorWarning << " operation aborted by user." << wt.rl_resetCol << "\n";
-        
-		pressEnterToContinue();
     }
 }
 
