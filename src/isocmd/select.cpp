@@ -349,7 +349,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
-        
+        // Atomic flag to ensure only ONE watcher thread is ever detached per import session
         static std::atomic<bool> watcherRunning{false};
 		// Launch a detached thread for automatic list updating if startup auto-update or manual list refresh is running
 		if (isImportRunning.load() && !isUnmount && !GlobalCaches::globalIsoFileList.empty()) {
