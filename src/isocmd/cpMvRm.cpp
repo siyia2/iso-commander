@@ -91,7 +91,7 @@ std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>&
 static std::string validateLinuxPath(const std::string& path) {
     const CpMvRmColors colors = getCpMvRmColors();
     auto makeError = [&](const std::string& msg) -> std::string {
-        return msg + std::string(UI::Palette::RL_Reset);
+        return msg + std::string(UI::Palette::RL_BoldAlt);
     };
 
     if (path.empty() || path[0] != '/')
