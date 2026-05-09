@@ -130,6 +130,8 @@ inline constexpr UI::MainTheme RetroTheme      =  {  "\033[1;38;2;255;175;0m",  
 inline constexpr UI::MainTheme CrimsonTheme    =  {  "\033[1;38;2;252;37;37m",   "\033[1;38;2;239;64;64m",   "\033[1;38;2;255;140;140m", "\033[1;38;2;167;117;117m", "\033[1;38;2;255;200;200m", "\033[1;48;2;60;10;10m",   "\033[1;38;2;255;175;0m"   };
 inline constexpr UI::MainTheme DraculaTheme    =  {  "\033[1;38;2;189;147;249m", "\033[1;38;2;255;121;198m", "\033[1;38;2;80;250;123m",  "\033[1;38;2;110;128;185m", "\033[1;38;2;241;250;140m", "\033[1;48;2;40;42;54m",   "\033[1;38;2;255;184;108m" };
 inline constexpr UI::MainTheme TokyoNightTheme =  {  "\033[1;38;2;135;175;255m",  "\033[1;38;2;224;82;151m", "\033[1;38;2;158;206;106m", "\033[1;38;2;115;127;183m", "\033[1;38;2;224;175;104m", "\033[1;48;2;26;27;38m",   "\033[1;38;2;255;158;100m" };
+inline constexpr UI::MainTheme PaperTheme      =  {  "\033[1;38;2;74;56;0m",    "\033[1;38;2;192;57;43m",   "\033[1;38;2;123;77;176m",  "\033[1;38;2;136;128;112m", "\033[1;38;2;46;125;50m",   "\033[1;48;2;232;220;200m", "\033[1;38;2;180;83;9m"    };
+inline constexpr UI::MainTheme SakuraTheme     =  {  "\033[1;38;2;139;26;74m",  "\033[1;38;2;192;57;43m",   "\033[1;38;2;106;90;205m",  "\033[1;38;2;158;138;149m", "\033[1;38;2;46;125;85m",   "\033[1;48;2;240;221;232m", "\033[1;38;2;212;121;10m"  };
 
 // --- FUNCTION DECLARATIONS ---
 
@@ -165,7 +167,9 @@ inline const UI::MainTheme* getActiveTheme() {
         {"neon",          &NeonTheme},
         {"ocean",         &OceanTheme},
         {"original",      &OriginalTheme},
+        {"paper",         &PaperTheme},
         {"retro",         &RetroTheme},
+        {"sakura",        &SakuraTheme},
         {"sunset",        &SunsetTheme},
         {"tokyo",         &TokyoNightTheme},
     };
