@@ -190,63 +190,63 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     // --- Thread Configuration ---
     {
         "combined_thread_cap",
-        "32",
+        "16",
         "Global thread pool size (requires restart to apply)",
         "Thread Configuration",
         [](const std::string& v) { return isNum(v, 1, 256); }
     },
     {
         "thread_cap_for_mount",
-        "16",
+        "8",
         "Max concurrent mounting tasks within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
     {
         "thread_cap_for_umount",
-        "32",
+        "8",
         "Max concurrent unmounting tasks within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
     {
         "thread_cap_for_cp_mv",
-        "8",
+        "4",
         "Max concurrent copy/move tasks within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
     {
         "thread_cap_for_rm",
-        "32",
+        "8",
         "Max concurrent removal tasks within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
     {
         "thread_cap_for_convert2iso",
-        "8",
+        "4",
         "Max concurrent ISO conversions within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
     {
         "thread_cap_for_database_cleanup",
-        "16",
+        "4",
         "Max concurrent threads for ISO DB cleanup within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 128); }
     },
     {
         "thread_cap_for_list_sorting",
-        "4",
+        "2",
         "Max concurrent threads for UI list sorting within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 64); }
     },
     {
         "thread_cap_for_list_filtering",
-        "4",
+        "2",
         "Max concurrent threads for UI list filtering within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 64); }
