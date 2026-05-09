@@ -183,7 +183,7 @@ void helpMappings() {
 
     printSection(tc, "\n3. Tips:",
         "   • Tab-complete INDEX>DEVICE pairs for faster mapping\n"
-        "   • Partitions are not eligible for write2usb, only raw devices\n"
+        "   • Only raw devices are eligible for write2usb\n"
         "   • USB detection relies on '/sys/class/block/sd*/removable' kernel value");
 
     pressEnterToReturn();
