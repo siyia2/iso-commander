@@ -268,7 +268,7 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 			std::cout << "green, cyan, white, purple, amber, rose\n";
 		} else if (key == "theme") {
 			std::cout << "original, classic, high_contrast, neon, ocean, sunset, forest, midnight,\n"
-					  << "              mono, retro, crimson, dracula, tokyo, paper, sakura,\n";
+					  << "                                  mono, retro, crimson, dracula, tokyo, paper, sakura\n";
 		} else if (key == "auto_update" || key == "filenames_only") {
 			std::cout << "on, off\n";
 		} else if (key == "pagination" || key.find("thread_cap") != std::string::npos || key.find("_lines") != std::string::npos) {
