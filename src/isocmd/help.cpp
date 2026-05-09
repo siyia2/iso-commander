@@ -142,16 +142,16 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         std::string displayCmds =
             "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
             "'!clr'                " + std::string(UI::Palette::BoldReset) +
-            (import2ISO ? " : Delete isoDatabase\n" : " : Clear corresponding imageCache\n") +
+            (import2ISO ? " : Clear IsoDatabase\n" : " : Clear corresponding ImageCache\n") +
             "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
-            "'!clr_paths'          " + std::string(UI::Palette::BoldReset) + " : Clear paths cache\n" +
+            "'!clr_paths'          " + std::string(UI::Palette::BoldReset) + " : Clear FolderPath history\n" +
             "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
-            "'!clr_filter'         " + std::string(UI::Palette::BoldReset) + " : Clear filter cache\n";
+            "'!clr_filter'         " + std::string(UI::Palette::BoldReset) + " : Clear FilterTerm history\n";
 
         if (!import2ISO) {
             displayCmds +=
                 "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) +
-                "'ls'|'*stats'         " + std::string(UI::Palette::BoldReset) + " : Display cached entries|stats";
+                "'ls'|'*stats'         " + std::string(UI::Palette::BoldReset) + " : Display entries|stats";
         } else {
             displayCmds +=
                 "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) +
