@@ -349,13 +349,20 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
-        // Launch a detached thread for automatic list updating if startup auto-update or manual list refresh is running
-        if (isImportRunning.load() && !isUnmount && !GlobalCaches::globalIsoFileList.empty()) {
-            std::thread(refreshListAfterAutoUpdate, 500,
-                        std::ref(isAtISOList), std::ref(isImportRunning),
-                        std::ref(updateHasRun), std::ref(newISOFound),
-                        refreshState).detach();  // shared_ptr copied into thread, safe to detach
-        }
+        
+        static std::atomic<bool> watcherRunning{false};
+		// Launch a detached thread for automatic list updating if startup auto-update or manual list refresh is running
+		if (isImportRunning.load() && !isUnmount && !GlobalCaches::globalIsoFileList.empty()) {
+			bool watcherExpected = false;
+			if (watcherRunning.compare_exchange_strong(watcherExpected, true)) {
+				std::thread([refreshState, &isAtISOList, &isImportRunning,
+							 &updateHasRun, &newISOFound]() {
+					refreshListAfterAutoUpdate(500, isAtISOList, isImportRunning,
+											   updateHasRun, newISOFound, refreshState);
+					watcherRunning.store(false);  // release when done
+				}).detach();
+			}
+		}
         
         std::cout << "\033[1A\033[K";
         
@@ -401,13 +408,17 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
 		}
 		
 		// Initiate a manual list refresh
-        if (inputString == "R" && !isImportRunning.load() && !isUnmount && !GlobalCaches::globalIsoFileList.empty()) {
-			needsClrScrn =true;
-			// Set to false to distinguish from regular auto-update
+		if (inputString == "R" && !isUnmount && !GlobalCaches::globalIsoFileList.empty()) {
+			bool expected = false;
+			if (!isImportRunning.compare_exchange_strong(expected, true)) {
+				// Already running — swallow the keypress silently
+				needsClrScrn = false;
+				continue;
+			}
+			needsClrScrn = true;
 			search = false;
-			isImportRunning.store(true);
-			backgroundThreads.emplace_back([&isImportRunning, &newISOFound, &stopImport] { 
-				backgroundDatabaseImport(isImportRunning, newISOFound, stopImport); 
+			backgroundThreads.emplace_back([&isImportRunning, &newISOFound, &stopImport] {
+				backgroundDatabaseImport(isImportRunning, newISOFound, stopImport);
 			});
 			updateHasRun.store(true);
 			continue;
