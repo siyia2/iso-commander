@@ -237,7 +237,7 @@ void refreshListAfterAutoUpdate(int timeoutMS, std::atomic<bool>& isAtISOList, s
                 rl_on_new_line();
                 rl_redisplay();
             }
-            updateHasRun.store(false);
+            updateHasRun.store(true);
             newISOFound.store(false);
             break;
         }
@@ -350,7 +350,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
             umountMvRmBreak = false;
         }
         // Launch a detached thread for automatic list updating if startup auto-update is running
-        if (updateHasRun.load() && !isUnmount && !GlobalCaches::globalIsoFileList.empty()) {
+        if (isImportRunning.load() && !isUnmount && !GlobalCaches::globalIsoFileList.empty()) {
             std::thread(refreshListAfterAutoUpdate, 500,
                         std::ref(isAtISOList), std::ref(isImportRunning),
                         std::ref(updateHasRun), std::ref(newISOFound),
