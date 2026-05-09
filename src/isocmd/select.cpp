@@ -349,7 +349,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
-        // Launch a detached thread for automatic list updating if startup auto-update is running
+        // Launch a detached thread for automatic list updating if startup auto-update or manual list refresh is running
         if (isImportRunning.load() && !isUnmount && !GlobalCaches::globalIsoFileList.empty()) {
             std::thread(refreshListAfterAutoUpdate, 500,
                         std::ref(isAtISOList), std::ref(isImportRunning),
