@@ -191,7 +191,7 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "combined_thread_cap",
         "16",
-        "Global thread pool size (requires restart to apply)",
+        "Global thread pool size limit (requires restart to apply)",
         "Thread Configuration",
         [](const std::string& v) { return isNum(v, 1, 256); }
     },
