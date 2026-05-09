@@ -259,7 +259,7 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         std::cout << tc.label << "Current: " << tc.reset << tc.highlight << current << tc.reset << "\n";
         std::string displayComment = entry->comment;
         size_t pos = displayComment.find("\n# ");
-        if (pos != std::string::npos) displayComment.replace(pos, 3, "\n");
+        if (pos != std::string::npos) displayComment.replace(pos, 3, "\n             ");
         std::cout << "\nDescription: " << displayComment << tc.reset << "\n\n";
 
         // --- Dynamic Hint Block ---
@@ -267,8 +267,8 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 		if (key == "skin") {
 			std::cout << "green, cyan, white, purple, amber, rose\n";
 		} else if (key == "theme") {
-			std::cout << "original, classic, high_contrast, neon, ocean, sunset, forest, midnight,\n"
-					  << "                                  mono, retro, crimson, dracula, tokyo, paper, sakura\n";
+			std::cout << "original, classic, high_contrast, neon, ocean, sunset, forest,\n"
+					  << "               midnight,mono, retro, crimson, dracula, tokyo, paper, sakura\n";
 		} else if (key == "auto_update" || key == "filenames_only") {
 			std::cout << "on, off\n";
 		} else if (key == "pagination" || key.find("thread_cap") != std::string::npos || key.find("_lines") != std::string::npos) {
