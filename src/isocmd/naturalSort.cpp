@@ -109,10 +109,8 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
         return;
 
     bool namesOnly = displayConfig::toggleNamesOnly;
-    
     ThreadPool& pool = getStaticThreadPool();
     const size_t numThreads = std::min(pool.threadCount(), GlobalConcurrency::SORT_THREAD_CAP);
-    
     const size_t n = files.size();
     size_t numChunks = std::min<size_t>(numThreads * 2, n / 1000 + 1);
     size_t chunkSize = (n + numChunks - 1) / numChunks;
@@ -123,35 +121,27 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
     for (size_t i = 0; i < numChunks; ++i) {
         size_t start = i * chunkSize;
         size_t end = std::min(n, (i + 1) * chunkSize);
-        if (start >= end)
-            break;
+        if (start >= end) break;
 
         chunks.emplace_back(start, end);
-
         futures.emplace_back(pool.enqueue([namesOnly, start, end, &files]() {
             std::sort(files.begin() + start, files.begin() + end,
                 [namesOnly](const std::string& a, const std::string& b) {
-    if (namesOnly) {
-        size_t a_slash = a.find_last_of('/');
-        size_t b_slash = b.find_last_of('/');
-
-        // Use string_view to point to the filename without copying the string
-        std::string_view a_view = a;
-        if (a_slash != std::string::npos) a_view.remove_prefix(a_slash + 1);
-
-        std::string_view b_view = b;
-        if (b_slash != std::string::npos) b_view.remove_prefix(b_slash + 1);
-
-        return naturalCompare(std::string(a_view), std::string(b_view)) < 0;
-    } else {
-        return naturalCompare(a, b) < 0;
-    }
+                    if (namesOnly) {
+                        size_t a_slash = a.find_last_of('/');
+                        size_t b_slash = b.find_last_of('/');
+                        std::string_view a_view = a;
+                        if (a_slash != std::string::npos) a_view.remove_prefix(a_slash + 1);
+                        std::string_view b_view = b;
+                        if (b_slash != std::string::npos) b_view.remove_prefix(b_slash + 1);
+                        return naturalCompare(a_view, b_view) < 0;
+                    }
+                    return naturalCompare(a, b) < 0;
                 });
         }));
     }
 
-    for (auto& f : futures)
-        f.get();
+    for (auto& f : futures) f.get();
     futures.clear();
 
     while (chunks.size() > 1) {
@@ -163,7 +153,6 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
                 newChunks.push_back(chunks[i]);
                 break;
             }
-
             size_t start = chunks[i].first;
             size_t mid   = chunks[i].second;
             size_t end   = chunks[i + 1].second;
@@ -174,21 +163,19 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
                         if (namesOnly) {
                             size_t a_slash = a.find_last_of('/');
                             size_t b_slash = b.find_last_of('/');
-                            std::string a_name = (a_slash == std::string::npos) ? a : a.substr(a_slash + 1);
-                            std::string b_name = (b_slash == std::string::npos) ? b : b.substr(b_slash + 1);
-                            return naturalCompare(a_name, b_name) < 0;
-                        } else {
-                            return naturalCompare(a, b) < 0;
+                            std::string_view a_view = a;
+                            if (a_slash != std::string::npos) a_view.remove_prefix(a_slash + 1);
+                            std::string_view b_view = b;
+                            if (b_slash != std::string::npos) b_view.remove_prefix(b_slash + 1);
+                            return naturalCompare(a_view, b_view) < 0;
                         }
+                        return naturalCompare(a, b) < 0;
                     });
             }));
-
             newChunks.emplace_back(start, end);
         }
 
-        for (auto& f : mergeFutures)
-            f.get();
-
+        for (auto& f : mergeFutures) f.get();
         chunks = std::move(newChunks);
     }
 }
