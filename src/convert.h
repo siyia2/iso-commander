@@ -8,12 +8,13 @@
 #include <cstddef>
 #include <string>
 
+// CCD2ISO
 bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
 
 // CHD2ISO
 bool convertChdToIso(const std::string& chdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
 
-//DAA2ISO
+// DAA2ISO
 bool convertDaaToIso(const std::string &inputFile, const std::string &outputFile, std::atomic<size_t> *completedBytes);
 
 // MDF2ISO
