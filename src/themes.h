@@ -25,10 +25,10 @@ namespace UI {
         static constexpr std::string_view DimGray      = "\033[1;38;2;100;100;100m";
 
         static constexpr std::string_view Red          = "\033[1;38;2;255;40;40m";
-        static constexpr std::string_view Green        = "\033[1;38;2;0;255;50m"; 
+        static constexpr std::string_view Green        = "\033[1;38;2;0;255;50m";
         static constexpr std::string_view Yellow       = "\033[1;38;2;245;222;0m";
         static constexpr std::string_view Blue         = "\033[1;38;2;0;125;255m";
-        static constexpr std::string_view Magenta      = "\033[1;38;2;255;0;255m"; 
+        static constexpr std::string_view Magenta      = "\033[1;38;2;255;0;255m";
         static constexpr std::string_view Cyan         = "\033[1;38;2;103;233;235m";
         static constexpr std::string_view DarkCyan     = "\033[1;38;2;0;160;160m";
         static constexpr std::string_view Orange       = "\033[1;38;2;255;120;0m";
@@ -38,7 +38,7 @@ namespace UI {
         static constexpr std::string_view Rose         = "\033[1;38;2;255;121;198m";
         static constexpr std::string_view White        = "\033[1;38;2;215;215;215m";
         static constexpr std::string_view BGNavy       = "\033[1;48;2;0;0;175m";
-        
+
         // Readline-wrapped variants
         static constexpr std::string_view RL_Blue      = "\001\033[1;38;2;0;125;255m\002";
         static constexpr std::string_view RL_Green     = "\001\033[1;38;2;0;255;50m\002";
@@ -47,35 +47,35 @@ namespace UI {
         static constexpr std::string_view RL_BoldAlt   = "\001\033[0;1;38;2;200;200;200m\002";
     }
 
-	struct MainTheme { std::string_view primary, secondary, accent, muted, highlight, background, warning; 
+	struct MainTheme { std::string_view primary, secondary, accent, muted, highlight, background, warning;
 	};
 
-	struct PrintListTheme { std::string_view accent, head, num, iso, img, mnt, square, indexA, indexB, dir, bracketBg, procText; 
+	struct PrintListTheme { std::string_view accent, head, num, iso, img, mnt, square, indexA, indexB, dir, bracketBg, procText;
 	};
 
-	struct WriteTheme { std::string errLabel, errPath, warnLabel, infoLabel, bold, headerCol, indexCol, pathCol, fileCol, sizeCol, warnCol, 
-		colorSuccess, colorFailure, colorWarning, colorStatus, speedCol, deviceCol, rl_labelCol, rl_primaryCol, rl_highlightCol, rl_errorCol, rl_resetCol; 
+	struct WriteTheme { std::string errLabel, errPath, warnLabel, infoLabel, bold, headerCol, indexCol, pathCol, fileCol, sizeCol, warnCol,
+		colorSuccess, colorFailure, colorWarning, colorStatus, speedCol, deviceCol, rl_labelCol, rl_primaryCol, rl_highlightCol, rl_errorCol, rl_resetCol;
 	};
 
-	struct CpMvRmColors { std::string_view arrow, dir, iso, error_label, error_path, success_label, success_path, dest_path, abort, prompt_green, prompt_blue; 
+	struct CpMvRmColors { std::string_view arrow, dir, iso, error_label, error_path, success_label, success_path, dest_path, abort, prompt_green, prompt_blue;
 	};
 
-	struct ConversionThemeStrings { std::string_view errLabel, errPath, missingLabel, okLabel, okPath, skipLabel, skipPath; 
+	struct ConversionThemeStrings { std::string_view errLabel, errPath, missingLabel, okLabel, okPath, skipLabel, skipPath;
 	};
 
-	struct VerboseAndDatabaseTheme { std::string red, yellow, green, purple, magenta, blue, orange, bold, reset; 
+	struct VerboseAndDatabaseTheme { std::string red, yellow, green, purple, magenta, blue, orange, bold, reset;
 	};
 
-	struct ReadlineAndPromptTheme { std::string primary, filter, highlight, reset, iso, accent; 
+	struct ReadlineAndPromptTheme { std::string primary, filter, highlight, reset, iso, accent;
 	};
 
-	struct SemanticUIColors { std::string_view label, accent, warning, error, reset, path, highlight, data, str; 
+	struct SemanticUIColors { std::string_view label, accent, warning, error, reset, path, highlight, data, str;
 	};
 
-	struct ReadlineColors { const char* label, *hint, *dir, *file, *reset; 
+	struct ReadlineColors { const char* label, *hint, *dir, *file, *reset;
 	};
 
-	struct ProgressBarColors { const char* success, *failure, *warning, *status, *reset; 
+	struct ProgressBarColors { const char* success, *failure, *warning, *status, *reset;
 	};
 }
 
@@ -92,7 +92,7 @@ using ProgressBarColors       = UI::ProgressBarColors;
 
 // --- GLOBAL STATE ---
 
-inline std::string_view skin = "white"; 
+inline std::string_view skin = "white";
 inline std::string globalTheme = "original";
 inline std::string_view color;
 
@@ -129,8 +129,8 @@ inline constexpr UI::MainTheme RetroTheme      =  {  "\033[1;38;2;255;175;0m",  
 inline constexpr UI::MainTheme CrimsonTheme    =  {  "\033[1;38;2;252;37;37m",   "\033[1;38;2;239;64;64m",   "\033[1;38;2;255;140;140m", "\033[1;38;2;167;117;117m", "\033[1;38;2;255;200;200m", "\033[1;48;2;60;10;10m",   "\033[1;38;2;255;175;0m"   };
 inline constexpr UI::MainTheme DraculaTheme    =  {  "\033[1;38;2;189;147;249m", "\033[1;38;2;255;121;198m", "\033[1;38;2;80;250;123m",  "\033[1;38;2;110;128;185m", "\033[1;38;2;241;250;140m", "\033[1;48;2;40;42;54m",   "\033[1;38;2;255;184;108m" };
 inline constexpr UI::MainTheme TokyoNightTheme =  {  "\033[1;38;2;135;175;255m",  "\033[1;38;2;224;82;151m", "\033[1;38;2;158;206;106m", "\033[1;38;2;115;127;183m", "\033[1;38;2;224;175;104m", "\033[1;48;2;26;27;38m",   "\033[1;38;2;255;158;100m" };
-inline constexpr UI::MainTheme PaperTheme      =  {  "\033[1;38;2;74;56;0m",    "\033[1;38;2;192;57;43m",   "\033[1;38;2;123;77;176m",  "\033[1;38;2;136;128;112m", "\033[1;38;2;46;125;50m",   "\033[1;48;2;80;70;55m",    "\033[1;38;2;180;83;9m"    };
-inline constexpr UI::MainTheme SakuraTheme     =  {  "\033[1;38;2;139;26;74m",  "\033[1;38;2;192;57;43m",   "\033[1;38;2;106;90;205m",  "\033[1;38;2;158;138;149m", "\033[1;38;2;46;125;85m",   "\033[1;48;2;85;70;80m",    "\033[1;38;2;212;121;10m"  };
+inline constexpr UI::MainTheme PaperTheme      =  {  "\033[1;38;2;74;56;0m",    "\033[1;38;2;192;57;43m",   "\033[1;38;2;123;77;176m",  "\033[1;38;2;136;128;112m", "\033[1;38;2;46;125;50m",    "\033[1;48;2;50;42;30m",    "\033[1;38;2;180;83;9m"    };
+inline constexpr UI::MainTheme SakuraTheme     =  {  "\033[1;38;2;139;26;74m",  "\033[1;38;2;192;57;43m",   "\033[1;38;2;106;90;205m",  "\033[1;38;2;158;138;149m", "\033[1;38;2;46;125;85m",    "\033[1;48;2;50;35;45m",    "\033[1;38;2;212;121;10m"  };
 
 // --- FUNCTION DECLARATIONS ---
 
