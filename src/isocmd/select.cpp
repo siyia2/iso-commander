@@ -358,7 +358,6 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
 							 &updateHasRun, &newISOFound]() {
 					refreshListAfterAutoUpdate(500, isAtISOList, isImportRunning,
 											   updateHasRun, newISOFound, refreshState);
-					refreshState->forceRedraw.store(true);
 					watcherRunning.store(false);  // release when done
 				}).detach();
 			}
