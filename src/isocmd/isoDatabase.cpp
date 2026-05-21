@@ -188,7 +188,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
 
 /**
  * @brief Counts non-empty lines in a file for statistics display
- * 
+ *
  * @param filePath Path to the file to analyze
  * @return Number of non-empty lines, or -1 if file cannot be opened
  */
@@ -213,7 +213,7 @@ int countNonEmptyLines(const std::string& filePath) {
 
 /**
  * @brief Gets the user's home directory path
- * 
+ *
  * @return Home directory path string, or empty string if not found
  */
 std::string getHomeDirectory() {
@@ -356,7 +356,7 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
  * @note Paths are assumed valid — they were written successfully by the
  *       preceding operation. No filesystem validation is performed.
  */
-void updateDatabaseAfterOperations(const std::string& filePathsStr, 
+void updateDatabaseAfterOperations(const std::string& filePathsStr,
                                     std::atomic<bool>& newISOFound) {
     std::vector<std::string> allIsoFiles;
     std::istringstream iss(filePathsStr);
@@ -375,17 +375,17 @@ void updateDatabaseAfterOperations(const std::string& filePathsStr,
 
 /**
  * @brief Reduces hierarchical paths by grouping related directories
- * 
+ *
  * This function groups paths by their first 3 directory levels and reduces
  * redundant parent paths to optimize directory traversal.
- * 
+ *
  * @param paths Vector of semicolon-delimited path strings
  * @return Vector of reduced/optimized path strings
  */
 std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string>& paths) {
     std::map<std::string, std::vector<std::string>> pathGroups;
     std::vector<std::string> allPaths;
-    
+
     for (const auto& pathEntry : paths) {
         std::istringstream iss(pathEntry);
         std::string path;
@@ -396,43 +396,43 @@ std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string
             }
         }
     }
-    
+
     for (const auto& path : allPaths) {
         size_t slashCount = 0, pos = 0;
-        
+
         for (size_t i = 1; i < path.length() && slashCount < 3; ++i) {
             if (path[i] == '/') {
                 pos = i;
                 slashCount++;
             }
         }
-        
+
         std::string key = (slashCount >= 3) ? path.substr(0, pos + 1) : path;
         pathGroups[key].push_back(path);
     }
-    
+
     std::vector<std::string> finalPaths;
     for (const auto& [prefix, groupPaths] : pathGroups) {
         finalPaths.push_back((groupPaths.size() > 1) ? prefix : groupPaths[0]);
     }
-    
+
     std::sort(finalPaths.begin(), finalPaths.end());
     std::vector<std::string> result;
-    
+
     for (const auto& path : finalPaths) {
         int levels = std::count(path.begin() + 1, path.end(), '/');
-        
-        bool isRedundant = (levels <= 2) && 
-            std::any_of(finalPaths.begin(), finalPaths.end(), 
+
+        bool isRedundant = (levels <= 2) &&
+            std::any_of(finalPaths.begin(), finalPaths.end(),
                 [&path](const std::string& other) {
                     return other != path && other.starts_with(path);
                 });
-        
+
         if (!isRedundant) {
             result.push_back(path);
         }
     }
-    
+
     return result;
 }
 
@@ -454,7 +454,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     std::vector<std::string> paths;
     int localMaxDepth = -1;
     bool localPromptFlag = false;
-    
+
     {
         std::ifstream file(GlobalState::historyFilePath);
         if (!file.is_open()) {
@@ -475,16 +475,16 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
             }
         }
     }
-    
+
     if (stopImport.load()) { isImportRunning.store(false); return; }
 
     if (paths.size() > 1) {
         auto it = std::find(paths.begin(), paths.end(), "/");
         if (it != paths.end()) paths.erase(it);
     }
-    
+
     std::vector<std::string> finalPaths = hierarchicalPathReduction(paths);
-    
+
     if (finalPaths.empty()) { isImportRunning.store(false); return; }
 
     if (stopImport.load()) { isImportRunning.store(false); return; }
@@ -494,10 +494,10 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
     std::unordered_set<std::string> uniqueErrorMessages;
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
-    
+
     auto& pool = getStaticThreadPool();
     std::vector<std::future<void>> futures;
-    
+
     for (const auto& path : finalPaths) {
         if (stopImport.load()) { isImportRunning.store(false); return; }
         if (isValidDirectory(path)) {
@@ -508,7 +508,7 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
             }));
         }
     }
-    
+
     for (auto& future : futures) {
 		if (future.valid()) {
 			while (future.wait_for(std::chrono::milliseconds(50)) != std::future_status::ready) {
@@ -516,30 +516,30 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
 			}
 		}
 	}
-    
+
     if (stopImport.load()) { isImportRunning.store(false); return; }
-	
+
     saveToDatabase(allIsoFiles, newISOFound);
-    isImportRunning.store(false);
     newISOFound.store(false);
+    isImportRunning.store(false, std::memory_order_release);
 }
 
 /**
  * @brief Loads ISO database from file into memory
- * 
+ *
  * @param outList Reference to vector that will receive the loaded ISO paths
  */
 void loadFromDatabase(std::vector<std::string>& outList) {
     std::lock_guard<std::mutex> fileLock(dbFileMutex);
-    
+
     int fd = open(GlobalState::databaseFilePath.c_str(), O_RDONLY);
     if (fd == -1) return;
-    
+
     if (flock(fd, LOCK_SH) == -1) {
         close(fd);
         return;
     }
-    
+
     struct stat fileStat;
     if (fstat(fd, &fileStat) == -1 || fileStat.st_size == 0) {
         flock(fd, LOCK_UN);
@@ -547,19 +547,19 @@ void loadFromDatabase(std::vector<std::string>& outList) {
         outList.clear();
         return;
     }
-    
+
     std::vector<char> buffer(fileStat.st_size);
     ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
-    
+
     flock(fd, LOCK_UN);
     close(fd);
-    
+
     if (bytesRead <= 0 || bytesRead > fileStat.st_size) return;
-    
+
     std::vector<std::string> loadedFiles;
     char* start = buffer.data();
     char* end = buffer.data() + bytesRead;
-    
+
     while (start < end) {
         char* lineEnd = std::find(start, end, '\n');
         std::string line(start, lineEnd);
@@ -572,10 +572,10 @@ void loadFromDatabase(std::vector<std::string>& outList) {
 
 /**
  * @brief Displays database statistics including on-disk and RAM usage
- * 
+ *
  * Shows information about ISO database, history database, transformation cache,
  * and various file format caches.
- * 
+ *
  * @param databaseFilePath Path to the ISO database file
  * @param maxDatabaseSize Maximum allowed database size in bytes
  * @param transformationCache Map of transformation cache entries
@@ -596,15 +596,15 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
         }
 
         std::cout << "\n" << accent << "=== ISO Database ===" << reset << "\n";
-        
+
         std::uintmax_t fileSizeInBytes = std::filesystem::file_size(databaseFilePath);
         double fileSizeInKB = fileSizeInBytes / 1024.0;
         double cachesizeInKb = maxDatabaseSize / 1024.0;
         double usagePercentage = (fileSizeInBytes * 100.0) / maxDatabaseSize;
-        
-        std::cout << "\n" << label << "Capacity: " << data << std::fixed << std::setprecision(0) 
+
+        std::cout << "\n" << label << "Capacity: " << data << std::fixed << std::setprecision(0)
                   << fileSizeInKB << "KB/" << cachesizeInKb << "KB (" << std::setprecision(1) << usagePercentage << "%)"
-                  << "\n" << label << "Entries: " << data << countNonEmptyLines(GlobalState::databaseFilePath) 
+                  << "\n" << label << "Entries: " << data << countNonEmptyLines(GlobalState::databaseFilePath)
                   << "\n" << label << "Location: " << data << "'" << databaseFilePath << "'" << reset << "\n";
 
         std::cout << "\n" << accent << "=== History Database ===" << reset << "\n"
@@ -612,14 +612,14 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
                   << "\n" << label << "Location: " << data << "'" << GlobalState::historyFilePath << "'"
                   << "\n\n" << label << "FilterTerm Entries: " << data << countNonEmptyLines(GlobalState::filterHistoryFilePath) << "/" << GlobalState::MAX_HISTORY_PATTERN_LINES
                   << "\n" << label << "Location: " << data << "'" << GlobalState::filterHistoryFilePath << "'" << std::endl;
-        
+
         std::cout << "\n" << accent << "=== Buffered Entries ===" << reset << "\n";
-        
+
         std::cout << str << "\nSTR → RAM: " << data
                   << (GlobalCaches::transformationCache.size() + GlobalCaches::cachedParsesForUmount.size()) << "\n";
-        
+
         std::cout << "\n" << label << "ISO → RAM: " << data << GlobalCaches::globalIsoFileList.size() << "\n";
-        
+
         std::cout << "\n" << warning << "BIN/IMG → RAM: " << data << GlobalCaches::binImgFilesCache.size() << "\n"
                   << warning << "DAA/GBI → RAM: " << data << GlobalCaches::daaGbiFilesCache.size() << "\n"
                   << warning << "CHD → RAM: " << data << GlobalCaches::chdFilesCache.size() << "\n"
@@ -631,16 +631,16 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
                   << warning << "'" << GlobalState::configPath << "'"
                   << error << ".\n" << reset;
     }
-    
+
     pressEnterToReturn();
 }
 
 /**
  * @brief Handles database management commands and statistics display
- * 
+ *
  * Processes various database-related commands including stats display,
  * cache clearing, and theme changes.
- * 
+ *
  * @param inputSearch Command string to process
  * @param promptFlag Flag controlling prompt behavior
  * @param maxDepth Maximum directory traversal depth
@@ -650,23 +650,23 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
 void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& filterHistory, std::atomic<bool>& newISOFound) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
-    
+
     auto db = resolveDatabaseTheme();
-    
+
     if (inputSearch == "*stats") {
         displayDatabaseStatistics(GlobalState::databaseFilePath, GlobalState::maxDatabaseSize);
     } else if (inputSearch == "!clr") {
         std::ofstream ofs(GlobalState::databaseFilePath, std::ofstream::out | std::ofstream::trunc);
         if (!ofs) {
-            std::cerr << "\n" << db.error << "Error clearing ISO database: " 
-                      << db.path << "'" << GlobalState::databaseFilePath << "'" 
+            std::cerr << "\n" << db.error << "Error clearing ISO database: "
+                      << db.path << "'" << GlobalState::databaseFilePath << "'"
                       << db.error << ". File missing or inaccessible.\033[J" << std::endl;
-            
+
             pressEnterToContinue();
         } else {
             ofs.close();
 			GlobalCaches::transformationCache.clear();
-            
+
             std::cout << "\n" << db.highlight << "ISO database cleared successfully." << "\033[J" << std::endl;
             pressEnterToContinue();
             std::vector<std::string>().swap(GlobalCaches::globalIsoFileList);

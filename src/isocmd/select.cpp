@@ -333,6 +333,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
             removeNonExistentPathsFromDatabase(GlobalCaches::globalIsoFileList);
             isAtISOList.store(true);
         }
+
         if (needsClrScrn) {
             if (!isUnmount) {
                 if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning)) {
@@ -348,6 +349,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
+
         // Atomic flag to ensure only ONE watcher thread is ever detached per import session
         static std::atomic<bool> watcherRunning{false};
 		// Launch a detached thread for automatic list updating if startup auto-update or manual list refresh is running
@@ -363,11 +365,11 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
 			}
 		}
 
-		// Force redraw after imports to resolve stuck indicator
-		if (refreshState->forceRedraw.load() && !isImportRunning.load() && !isUnmount) {
-            refreshState->forceRedraw.store(false);
-            needsClrScrn = true;
-            continue;
+		// Force redraw after manual imports to resolve stuck indicator
+        if (refreshState->forceRedraw.load() && !isImportRunning.load() && !isUnmount) {
+                            refreshState->forceRedraw.store(false);
+                            needsClrScrn = true;
+                            continue;
         }
 
         std::cout << "\033[1A\033[K";
@@ -424,9 +426,22 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
 			needsClrScrn = true;
 			search = false;
 			backgroundThreads.emplace_back([&isImportRunning, &newISOFound, &stopImport, &refreshState] {
-			    refreshState->forceRedraw.store(true);
-				backgroundDatabaseImport(isImportRunning, newISOFound, stopImport);
-			});
+                auto makeDeadline = [] {
+                    return std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+                };
+                // Wait for any previous watcher to finish first
+                auto deadline = makeDeadline();
+                while (watcherRunning.load() && std::chrono::steady_clock::now() < deadline) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+                // Now wait for the new watcher to launch
+                deadline = makeDeadline();
+                while (!watcherRunning.load() && std::chrono::steady_clock::now() < deadline) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+                backgroundDatabaseImport(isImportRunning, newISOFound, stopImport);
+                refreshState->forceRedraw.store(true);
+            });
 			updateHasRun.store(true);
 			continue;
 		}
