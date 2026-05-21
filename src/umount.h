@@ -39,7 +39,7 @@ struct VerboseMessageFormatter {
         // Comparison of string_view with "literals" is highly optimized in C++20
         if (messageType == "success") {
             buf.append(tc.label).append("Unmounted: ")
-               .append(tc.path).append("'").append(path).append(tc.path).append("'") // Removed redundant tc.path
+               .append(tc.path).append("'").append(path).append(tc.path).append("'")
                .append(tc.label).append(".")
                .append(tc.reset);
         }
