@@ -21,6 +21,7 @@ struct RefreshState {
     std::string listSubtype;
     size_t currentPage;
     size_t originalPage;
+    std::atomic<bool> forceRedraw{false};
 };
 
 // --- Data Loading & List Display ---
