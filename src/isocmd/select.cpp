@@ -424,7 +424,8 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
 			}
 			needsClrScrn = true;
 			search = false;
-			backgroundThreads.emplace_back([&isImportRunning, &newISOFound, &stopImport] {
+			backgroundThreads.emplace_back([&isImportRunning, &newISOFound, &stopImport, &refreshState] {
+			    refreshState->forceRedraw.store(true);
 				backgroundDatabaseImport(isImportRunning, newISOFound, stopImport);
 			});
 			updateHasRun.store(true);
