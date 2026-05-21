@@ -364,7 +364,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
 			}
 		}
 
-		// Force redraw after manual import to resolve stuck indicator
+		// Force redraw after imports to resolve stuck indicator
 		if (refreshState->forceRedraw.load() && !isImportRunning.load() && !isUnmount) {
             refreshState->forceRedraw.store(false);
             needsClrScrn = true;
