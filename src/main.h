@@ -45,7 +45,6 @@ void submenu1(
     std::atomic<bool>& isAtISOList,
     std::shared_ptr<RefreshState> state,
     std::atomic<bool>& newISOFound,
-    std::atomic<bool>& stopImport,
     std::vector<std::thread>& backgroundThreads,
     bool& search
 );
