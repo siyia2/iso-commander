@@ -195,7 +195,10 @@ int main(int argc, char *argv[]) {
         char* rawInput = readline(("\n" + std::string(pt.primary) +
                                    "Choose an option:" + std::string(pt.reset) + " ").c_str());
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
-        if (!input) break; ///< Handle EOF (Ctrl+D)
+        if (!input) {
+            GlobalState::g_operationCancelled.store(true);
+            break; ///< Handle EOF (Ctrl+D)
+        }
 
         /**
          * @brief Menu option dispatch
