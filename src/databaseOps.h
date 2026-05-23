@@ -63,7 +63,6 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
  */
 void backgroundDatabaseImport(
     std::atomic<bool>& newISOFound,
-    std::atomic<bool>& stopImport,
     std::shared_ptr<RefreshState> state
 );
 
