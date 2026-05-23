@@ -358,12 +358,12 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         }
 
         // Atomic flag to ensure only ONE watcher thread is ever detached per import session
-        static std::atomic<bool> watcherRunning{false};
+        std::atomic<bool> watcherRunning{false};
         // Launch a detached thread for automatic list updating if startup auto-update or manual list refresh is running
         if (refreshState->isImportRunning.load() && !isUnmount) {
             bool watcherExpected = false;
             if (watcherRunning.compare_exchange_strong(watcherExpected, true)) {
-                std::thread([refreshState, &isAtISOList, &updateHasRun, &newISOFound]() {
+                std::thread([refreshState, &isAtISOList, &updateHasRun, &newISOFound, &watcherRunning]() {
                     refreshListAfterAutoUpdate(isAtISOList, updateHasRun, newISOFound, refreshState);
                     watcherRunning.store(false);
                 }).detach();
