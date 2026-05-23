@@ -237,7 +237,7 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
             return !state->isImportRunning.load(std::memory_order_acquire);
         });
     }
-    //std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     if (isAtISOList.load()) {
         loadAndDisplayIso(state->filteredFiles, state->isFiltered, state->listSubtype,
                           state->umountMvRmBreak, state->pendingIndices, state->hasPendingProcess,
