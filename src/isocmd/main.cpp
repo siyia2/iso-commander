@@ -200,7 +200,7 @@ int main(int argc, char *argv[]) {
         /**
          * @brief Menu option dispatch
          * - 1: Browse/select ISOs (submenu1)
-         * - 2: Manage recent ISOs (submenu2)
+         * - 2: Convert Image files to ISO (submenu2)
          * - 3: Refresh database from filesystem
          * - 4: Settings Editor
          * - 5: Exit application
