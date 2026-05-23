@@ -372,7 +372,7 @@ void processInputForCpMvRm(const std::string& input,
  * @param modeMdf         True if converting MDF images.
  * @param modeNrg         True if converting NRG images.
  * @param modeChd         True if converting CHD images.
- * @param modeDaa         True if converting DAA images.
+ * @param modeDaa         True if converting DAA/GBI images.
  * @param verbose         Toggle for detailed per-file progress output.
  * @param needsClrScrn    Set to true if the screen should be cleared on return.
  * @param[in,out] newISOFound  Atomic flag triggered to true if new ISOs were produced.
@@ -455,12 +455,11 @@ void processInputForConversions(const std::string&        input,
     futures.reserve(processedIndices.size());
 
     for (int idx : processedIndices) {
-        const std::string filePath = fileList[idx - 1];
         futures.emplace_back(pool.enqueue(
-            [filePath, modeMdf, modeNrg, modeChd, modeDaa,
+            [&fileList, idx, modeMdf, modeNrg, modeChd, modeDaa,
              &completedBytes, &completedTasks, &failedTasks,
              &successfulOutputPaths, &outPathsMutex]() {
-                convertToISO({filePath},
+                convertToISO({fileList[idx - 1]},
                              modeMdf, modeNrg, modeChd, modeDaa,
                              &completedBytes, &completedTasks, &failedTasks,
                              &successfulOutputPaths, &outPathsMutex);
