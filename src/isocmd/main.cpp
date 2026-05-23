@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
     /// Atomic booleans controlling concurrency and UI state between main thread and background workers.
     /// @{
     std::atomic<bool> messageActive{false}, isAtMain{true}, isAtISOList{false},
-                     updateHasRun{false}, newISOFound{false}, stopImport{false}, stopMessage{false},
+                     updateHasRun{false}, newISOFound{false}, stopMessage{false},
                      monitorThreadSpawned{false};
     /// @}
 
@@ -139,8 +139,8 @@ int main(int argc, char *argv[]) {
     if (search && (!(isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath)))) {
         importState = std::make_shared<RefreshState>();
         importState->isImportRunning.store(true);
-        backgroundThreads.emplace_back([&newISOFound, &stopImport, importState] {
-            backgroundDatabaseImport(newISOFound, stopImport, importState);
+        backgroundThreads.emplace_back([&newISOFound, importState] {
+            backgroundDatabaseImport(newISOFound, importState);
         });
         updateHasRun.store(true);
     }
@@ -195,10 +195,7 @@ int main(int argc, char *argv[]) {
         char* rawInput = readline(("\n" + std::string(pt.primary) +
                                    "Choose an option:" + std::string(pt.reset) + " ").c_str());
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
-        if (!input) {
-            GlobalState::g_operationCancelled.store(true);
-            break; ///< Handle EOF (Ctrl+D)
-        }
+        if (!input) break; ///< Handle EOF (Ctrl+D)
 
         /**
          * @brief Menu option dispatch
@@ -212,7 +209,7 @@ int main(int argc, char *argv[]) {
         if (choice == "1") {
             isAtMain = isAtISOList = false;
             submenu1(updateHasRun, isAtISOList, importState, newISOFound,
-                    stopImport, backgroundThreads, search);
+                     backgroundThreads, search);
         } else if (choice.length() == 1) {
             switch (choice[0]) {
                 case '2':
@@ -231,7 +228,6 @@ int main(int argc, char *argv[]) {
                     break;
                 case '5':
                     exitProgram = true;
-                    GlobalState::g_operationCancelled.store(true);
                     clearScrollBuffer();
                     break;
                 default: break;
@@ -240,9 +236,10 @@ int main(int argc, char *argv[]) {
     }
 
     /// @name Cleanup and Resource Release
-    /// Signal all background threads to stop, cancel ongoing searches, release lock file.
+    /// Signal all background threads to stop, cancel any ongoing searches, release lock file.
     /// @{
-    stopImport = stopMessage = true;
+    importState->stopImport = stopMessage = true;
+    GlobalState::g_operationCancelled.store(true);
     if (importState) {
         importState->isImportRunning.store(false);
         {

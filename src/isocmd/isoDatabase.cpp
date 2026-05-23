@@ -453,12 +453,10 @@ bool isValidDirectory(const std::string& path);
  * Signals completion via RefreshState::importCV to wake the watcher thread.
  *
  * @param newISOFound  Atomic flag set when new ISOs are discovered; cleared after save.
- * @param stopImport   Checked between phases and groups for early exit.
- * @param state        Shared state holding isImportRunning, importCV/mutex for signaling,
+ * @param state        Shared state holding isImportRunning, stopImport, importCV/mutex for signaling,
  *                     workerCV/mutex and activeWorkers for group synchronization.
  */
 void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
-                               std::atomic<bool>& stopImport,
                                std::shared_ptr<RefreshState> state) {
     std::vector<std::string> paths;
     int localMaxDepth = -1;
@@ -474,7 +472,7 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
         if (!file.is_open()) { signalDone(); return; }
         std::string line;
         while (std::getline(file, line)) {
-            if (stopImport.load()) { signalDone(); return; }
+            if (state->stopImport.load()) { signalDone(); return; }
             std::istringstream iss(line);
             std::string path;
             while (std::getline(iss, path, ';')) {
@@ -486,14 +484,14 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
             }
         }
     }
-    if (stopImport.load()) { signalDone(); return; }
+    if (state->stopImport.load()) { signalDone(); return; }
     if (paths.size() > 1) {
         auto it = std::find(paths.begin(), paths.end(), "/");
         if (it != paths.end()) paths.erase(it);
     }
     std::vector<std::string> finalPaths = hierarchicalPathReduction(paths);
     if (finalPaths.empty()) { signalDone(); return; }
-    if (stopImport.load()) { signalDone(); return; }
+    if (state->stopImport.load()) { signalDone(); return; }
 
     std::vector<std::string> allIsoFiles;
     std::atomic<size_t> totalFiles{0};
@@ -504,7 +502,7 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
     const size_t groupSize = std::max<size_t>(1, getStaticThreadPool().threadCount());
 
     for (size_t i = 0; i < finalPaths.size(); i += groupSize) {
-        if (stopImport.load()) break;
+        if (state->stopImport.load()) break;
 
         const size_t end = std::min(i + groupSize, finalPaths.size());
         std::vector<std::thread> threads;
@@ -513,7 +511,7 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
         state->activeWorkers.store(0, std::memory_order_relaxed);
 
         for (size_t j = i; j < end; ++j) {
-            if (stopImport.load()) break;
+            if (state->stopImport.load()) break;
             if (!isValidDirectory(finalPaths[j])) continue;
 
             state->activeWorkers.fetch_add(1, std::memory_order_relaxed);
@@ -537,7 +535,7 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
             std::unique_lock<std::mutex> lk(state->workerMutex);
             state->workerCV.wait(lk, [&] {
                 return state->activeWorkers.load(std::memory_order_acquire) == 0
-                    || stopImport.load();
+                    || state->stopImport.load();
             });
         }
 
@@ -545,7 +543,7 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
             if (t.joinable()) t.join();
     }
 
-    if (stopImport.load()) { signalDone(); return; }
+    if (state->stopImport.load()) { signalDone(); return; }
 
     saveToDatabase(allIsoFiles, newISOFound);
     newISOFound.store(false);

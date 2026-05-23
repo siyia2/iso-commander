@@ -269,7 +269,6 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  * @param isAtISOList       Guards background UI repaints; false when the user has navigated away from the ISO list.
  * @param isImportRunning   Prevents concurrent imports; also used as the CV predicate in the watcher thread.
  * @param newISOFound       Set by the import when new ISOs are discovered; cleared by the watcher after repainting.
- * @param stopImport        Atomic cancellation signal propagated into background import tasks.
  * @param backgroundThreads Joinable worker threads (manual R-press imports) retained for lifetime management.
  * @param search            Cleared on manual R-press to suppress automatic search re-entry after refresh.
  * @param refreshState      Shared UI state and CV passed from the startup import path to synchronize the
@@ -277,8 +276,8 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  */
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun,
                        std::atomic<bool>& isAtISOList, std::atomic<bool>& newISOFound,
-                       std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads,
-                       bool& search, std::shared_ptr<RefreshState> refreshState) {
+                       std::vector<std::thread>& backgroundThreads, bool& search,
+                       std::shared_ptr<RefreshState> refreshState) {
 
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
@@ -425,8 +424,8 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             needsClrScrn = true;
             search = false;
             refreshState->isImportRunning.store(true);
-            backgroundThreads.emplace_back([&newISOFound, &stopImport, refreshState] {
-                backgroundDatabaseImport(newISOFound, stopImport, refreshState);
+            backgroundThreads.emplace_back([&newISOFound, refreshState] {
+                backgroundDatabaseImport(newISOFound, refreshState);
                 refreshState->isWatcherRunning.store(false);
             });
             updateHasRun.store(true);

@@ -60,7 +60,7 @@ void print_ascii() {
 
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun,
     std::atomic<bool>& isAtISOList, std::atomic<bool>& newISOFound,
-    std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads,
+    std::vector<std::thread>& backgroundThreads,
     bool& search, std::shared_ptr<RefreshState> refreshState);
 
 /**
@@ -71,14 +71,13 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
  * @param updateHasRun      Indicates if the file list needs a refresh.
  * @param isAtISOList       Atomic flag used to track terminal state for background processes.
  * @param newISOFound       Signals if a new ISO has been discovered during background scans.
- * @param stopImport        Atomic flag to cancel ongoing import operations.
  * @param backgroundThreads Vector of threads for managing background worker lifetime.
  * @param search            Flag indicating whether auto-update scanning is enabled.
  * @param state             Shared state with import flag and CV for event coordination.
  */
 void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList,
     std::shared_ptr<RefreshState> refreshState, std::atomic<bool>& newISOFound,
-    std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads, bool& search) {
+    std::vector<std::thread>& backgroundThreads, bool& search) {
     while (true) {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
@@ -120,37 +119,37 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList,
                 case '1':
                     clearScrollBuffer();
                     selectForIsoFiles("mount", updateHasRun, isAtISOList, newISOFound,
-                                      stopImport, backgroundThreads, search, refreshState);
+                                      backgroundThreads, search, refreshState);
                     clearScrollBuffer();
                     break;
                 case '2':
                     clearScrollBuffer();
                     selectForIsoFiles("umount", updateHasRun, isAtISOList, newISOFound,
-                                      stopImport, backgroundThreads, search, refreshState);
+                                      backgroundThreads, search, refreshState);
                     clearScrollBuffer();
                     break;
                 case '3':
                     clearScrollBuffer();
                     selectForIsoFiles("rm", updateHasRun, isAtISOList, newISOFound,
-                                      stopImport, backgroundThreads, search, refreshState);
+                                      backgroundThreads, search, refreshState);
                     clearScrollBuffer();
                     break;
                 case '4':
                     clearScrollBuffer();
                     selectForIsoFiles("mv", updateHasRun, isAtISOList, newISOFound,
-                                      stopImport, backgroundThreads, search, refreshState);
+                                       backgroundThreads, search, refreshState);
                     clearScrollBuffer();
                     break;
                 case '5':
                     clearScrollBuffer();
                     selectForIsoFiles("cp", updateHasRun, isAtISOList, newISOFound,
-                                      stopImport, backgroundThreads, search, refreshState);
+                                      backgroundThreads, search, refreshState);
                     clearScrollBuffer();
                     break;
                 case '6':
                     clearScrollBuffer();
                     selectForIsoFiles("write2usb", updateHasRun, isAtISOList, newISOFound,
-                                      stopImport, backgroundThreads, search, refreshState);
+                                      backgroundThreads, search, refreshState);
                     clearScrollBuffer();
                     break;
             }
