@@ -29,6 +29,7 @@ struct RefreshState {
     std::atomic<bool> isImportRunning{false};
     std::atomic<bool> isWatcherRunning{false};
     std::atomic<bool> stopImport{false};
+    std::mutex printMutex;
     std::condition_variable workerCV;
     std::mutex workerMutex;
     std::atomic<size_t> activeWorkers{0};
