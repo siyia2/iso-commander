@@ -40,19 +40,19 @@ void printMenu();
 
 // Primary navigation logic for the ISO list and scanning
 void submenu1(
-    std::atomic<bool>& updateHasRun, 
-    std::atomic<bool>& isAtISOList, 
-    std::atomic<bool>& isImportRunning, 
+    std::atomic<bool>& updateHasRun,
+    std::atomic<bool>& isAtISOList,
+    std::shared_ptr<RefreshState> state,
     std::atomic<bool>& newISOFound,
-    std::atomic<bool>& stopImport, 
-    std::vector<std::thread>& backgroundThreads, 
+    std::atomic<bool>& stopImport,
+    std::vector<std::thread>& backgroundThreads,
     bool& search
 );
 
 // Secondary navigation logic for settings and global status
 void submenu2(
-    std::atomic<bool>& newISOFound, 
-    std::atomic<bool>& isImportRunning
+    std::atomic<bool>& newISOFound,
+    std::shared_ptr<RefreshState> state
 );
 
 
@@ -63,18 +63,18 @@ void submenu2(
 
 // Clears the status bar after a timeout if the user is in the Main view
 void clearMessageAfterTimeoutInMain(
-    int timeoutSeconds, 
-    std::atomic<bool>& isAtMain, 
-    std::atomic<bool>& isImportRunning, 
-    std::atomic<bool>& messageActive, 
+    int timeoutSeconds,
+    std::atomic<bool>& isAtMain,
+    std::shared_ptr<RefreshState> state,
+    std::atomic<bool>& messageActive,
     std::atomic<bool>& stopMessage
 );
 
 // Dedicated monitor thread to react to message clear signals
 void monitorAndClearMessage(
-    std::atomic<bool>& isRunning, 
-    std::atomic<bool>& messageActive, 
-    std::atomic<bool>& stopSignal, 
+    std::shared_ptr<RefreshState> state,
+    std::atomic<bool>& messageActive,
+    std::atomic<bool>& stopSignal,
     std::atomic<bool>& isAtMain
 );
 

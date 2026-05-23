@@ -11,6 +11,9 @@
 #include <unordered_set>
 #include <vector>
 
+// Project Headers
+#include "./select.h"
+
 // --- Filesystem Traversal ---
 
 /**
@@ -18,13 +21,13 @@
  * Uses mutexes for thread-safe updates to shared lists and error sets.
  */
 void traverse(
-    const std::filesystem::path& path, 
-    std::vector<std::string>& isoFiles, 
-    std::unordered_set<std::string>& uniqueErrorMessages, 
-    std::atomic<size_t>& totalFiles, 
-    std::mutex& traverseFilesMutex, 
-    std::mutex& traverseErrorsMutex, 
-    int maxDepth, 
+    const std::filesystem::path& path,
+    std::vector<std::string>& isoFiles,
+    std::unordered_set<std::string>& uniqueErrorMessages,
+    std::atomic<size_t>& totalFiles,
+    std::mutex& traverseFilesMutex,
+    std::mutex& traverseErrorsMutex,
+    int maxDepth,
     bool promptFlag
 );
 
@@ -40,9 +43,9 @@ void loadFromDatabase(std::vector<std::string>& globalIsoFileList);
  * Triggers a refresh logic to sync disk state with the database.
  */
 void refreshForDatabase(
-    bool promptFlag, 
-    int maxDepth, 
-    bool filterHistory, 
+    bool promptFlag,
+    int maxDepth,
+    bool filterHistory,
     std::atomic<bool>& newISOFound
 );
 
@@ -58,9 +61,9 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
  * Manages the asynchronous import process to ensure the UI/Main thread remains responsive.
  */
 void backgroundDatabaseImport(
-    std::atomic<bool>& isImportRunning, 
-    std::atomic<bool>& newISOFound, 
-    std::atomic<bool>& stopImport
+    std::atomic<bool>& newISOFound,
+    std::atomic<bool>& stopImport,
+    std::shared_ptr<RefreshState> state
 );
 
 #endif // DATABASEOPS_H

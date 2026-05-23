@@ -5,6 +5,7 @@
 
 // C++ Standard Library Headers
 #include <atomic>
+#include <condition_variable>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -21,7 +22,9 @@ struct RefreshState {
     std::string listSubtype;
     size_t currentPage;
     size_t originalPage;
-    std::atomic<bool> forceRedraw{false};
+    std::mutex importMutex;
+    std::condition_variable importCV;
+    std::atomic<bool> isImportRunning{false};
 };
 
 // --- Data Loading & List Display ---
@@ -38,7 +41,7 @@ bool loadAndDisplayIso(
     bool &hasPendingProcess,
     size_t &currentPage,
     size_t &originalPage,
-    std::atomic<bool> &isImportRunning
+    std::shared_ptr<RefreshState> state
 );
 
 /**
@@ -53,7 +56,7 @@ bool loadAndDisplayMountedISOs(
     bool &hasPendingProcess,
     size_t &currentPage,
     size_t &originalPage,
-    std::atomic<bool> &isImportRunning
+    std::shared_ptr<RefreshState> state
 );
 
 /**
@@ -68,7 +71,7 @@ void loadAndDisplayImageFiles(
     std::vector<std::string> &pendingIndices,
     bool &hasPendingProcess,
     size_t &currentPage,
-    std::atomic<bool> &isImportRunning
+    std::shared_ptr<RefreshState> state
 );
 
 
