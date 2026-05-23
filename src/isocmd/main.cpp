@@ -132,12 +132,12 @@ int main(int argc, char *argv[]) {
     std::map<std::string, std::string> config = readUserConfigLists(GlobalState::configPath);
     std::vector<std::thread> backgroundThreads;
 
-    // Store the shared_ptr to RefreshState for access to its isImportRunning
+    // Shared state for background import coordination (isImportRunning, stopImport, worker sync)
     std::shared_ptr<RefreshState> importState;
+    importState = std::make_shared<RefreshState>();
 
     /// Start background database import if auto-update is enabled and FolderPaths exist in history file
     if (search && (!(isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath)))) {
-        importState = std::make_shared<RefreshState>();
         importState->isImportRunning.store(true);
         backgroundThreads.emplace_back([&newISOFound, importState] {
             backgroundDatabaseImport(newISOFound, importState);
