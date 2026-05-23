@@ -25,6 +25,7 @@
 
 // Project Headers
 #include "../caches.h"
+#include "../threadpool.h"
 #include "../databaseOps.h"
 #include "../inputHandling.h"
 #include "../main.h"
@@ -70,6 +71,9 @@ int main(int argc, char *argv[]) {
                      updateHasRun{false}, newISOFound{false}, stopImport{false}, stopMessage{false},
                      monitorThreadSpawned{false};
     /// @}
+
+    // Initialize static thread pool early for improved performance
+    getStaticThreadPool();
 
     // Generous reserve for future lists
     GlobalCaches::globalIsoFileList.reserve(1000);
@@ -130,16 +134,14 @@ int main(int argc, char *argv[]) {
 
     // Store the shared_ptr to RefreshState for access to its isImportRunning
     std::shared_ptr<RefreshState> importState;
-    importState = std::make_shared<RefreshState>();
 
     /// Start background database import if auto-update is enabled
-    if (search) {
+    if (search && (!(isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath)))) {
+        importState = std::make_shared<RefreshState>();
         importState->isImportRunning.store(true);
         backgroundThreads.emplace_back([&newISOFound, &stopImport, importState] {
             backgroundDatabaseImport(newISOFound, stopImport, importState);
         });
-        /// Mark update as already executed if history file exists
-        if (!(isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath)))
             updateHasRun.store(true);
     }
     paginationSet(GlobalState::configPath);
@@ -234,9 +236,10 @@ int main(int argc, char *argv[]) {
     }
 
     /// @name Cleanup and Resource Release
-    /// Signal all background threads to stop, wait for completion, release lock file.
+    /// Signal all background threads to stop, cancel ongoing searches, release lock file.
     /// @{
     stopImport = stopMessage = true;
+    GlobalState::g_operationCancelled.store(true);
     if (importState) {
         importState->isImportRunning.store(false);
         {
