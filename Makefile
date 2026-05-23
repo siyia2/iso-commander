@@ -11,7 +11,7 @@ LDFLAGS_BASE  = -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
 
 # ---- Normal build ----
 CXXFLAGS_NORMAL = -O3 -flto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti
-LDFLAGS_NORMAL  = -Wl,--gc-sections -Wl,--strip-all
+LDFLAGS_NORMAL  = -Wl,--gc-sections
 
 # ---- Sanitizer build ----
 ifeq ($(SANITIZE),1)
@@ -49,7 +49,7 @@ ifeq ($(SANITIZE),1)
     # Keep it simple: don't strip, don't use LTO
     LDFLAGS_STAT = -static $(LDFLAGS_COMMON)
 else
-    LDFLAGS_STAT = -static $(LDFLAGS_COMMON) $(LDFLAGS_NORMAL)
+    LDFLAGS_STAT = -static $(LDFLAGS_COMMON) -Wl,--strip-all
 endif
 
 CXXFLAGS_STAT = $(CXXFLAGS_COMMON) -I./deps/libchdr/include
