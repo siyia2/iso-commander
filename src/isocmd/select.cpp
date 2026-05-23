@@ -361,7 +361,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         if (refreshState->isImportRunning.load() && !isUnmount) {
             bool watcherExpected = false;
             if (refreshState->isWatcherRunning.compare_exchange_strong(watcherExpected, true)) {
-                std::thread([refreshState, &isAtISOList, &updateHasRun, &newISOFound, &search]() {
+                std::thread([&isAtISOList, &updateHasRun, &newISOFound, refreshState]() {
                     refreshListAfterAutoUpdate(isAtISOList, updateHasRun, newISOFound, refreshState);
                         refreshState->isWatcherRunning.store(false);
                 }).detach();
