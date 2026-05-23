@@ -499,13 +499,13 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
 
-    const size_t groupSize = std::max(1u, GlobalConcurrency::maxThreads);
+    const size_t groupSize = std::max<size_t>(1, getStaticThreadPool().threadCount());
 
     for (size_t i = 0; i < finalPaths.size(); i += groupSize) {
         if (stopImport.load()) break;
 
-        std::vector<std::thread> threads;
         const size_t end = std::min(i + groupSize, finalPaths.size());
+        std::vector<std::thread> threads;
         threads.reserve(end - i);
 
         state->activeWorkers.store(0, std::memory_order_relaxed);
@@ -515,18 +515,22 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
             if (!isValidDirectory(finalPaths[j])) continue;
 
             state->activeWorkers.fetch_add(1, std::memory_order_relaxed);
-            threads.emplace_back([&, path = finalPaths[j]]() {
-                traverse(path, allIsoFiles, uniqueErrorMessages,
-                         totalFiles, processMutex, traverseErrorMutex,
-                         localMaxDepth, localPromptFlag);
-                if (state->activeWorkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-                    std::lock_guard<std::mutex> lk(state->workerMutex);
-                    state->workerCV.notify_one();
-                }
-            });
+
+            try {
+                threads.emplace_back([&, path = finalPaths[j]]() {
+                    traverse(path, allIsoFiles, uniqueErrorMessages,
+                             totalFiles, processMutex, traverseErrorMutex,
+                             localMaxDepth, localPromptFlag);
+                    if (state->activeWorkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                        std::lock_guard<std::mutex> lk(state->workerMutex);
+                        state->workerCV.notify_all();
+                    }
+                });
+            } catch (...) {
+                state->activeWorkers.fetch_sub(1, std::memory_order_relaxed);
+            }
         }
 
-        // If all paths in this group were invalid, no threads were spawned
         if (!threads.empty()) {
             std::unique_lock<std::mutex> lk(state->workerMutex);
             state->workerCV.wait(lk, [&] {
@@ -537,8 +541,6 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
 
         for (auto& t : threads)
             if (t.joinable()) t.join();
-
-        if (stopImport.load()) break;
     }
 
     if (stopImport.load()) { signalDone(); return; }
