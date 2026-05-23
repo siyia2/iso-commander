@@ -100,12 +100,12 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
               .append(ib1.format(totalItems)).append(c.head).append(")");
 
         if (isIsoWithAutoUpdate) {
-            output.append(UI::Palette::Dim).append("\n\n[↻ Syncing: New ISO → Restructure]");
+            output.append(UI::Palette::Dim).append("\n\n[↻ Syncing: NewISO → Restructure]");
         }
         output.append(UI::Palette::BoldReset).append("\n\n");
     }
     else if (isIsoWithAutoUpdate) {
-        output.append(UI::Palette::Dim).append("[↻ Syncing: New ISO → Restructure]\n\n");
+        output.append(UI::Palette::Dim).append("[↻ Syncing: NewISO → Restructure]\n\n");
     }
 
     // --- Main Item Loop ---

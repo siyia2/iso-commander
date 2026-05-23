@@ -180,7 +180,7 @@ int main(int argc, char *argv[]) {
             std::cout << UI::Palette::Dim << "[Auto-Update: no stored FolderPaths to scan...]\n" << UI::Palette::Reset;
             messagePrinted = true;
             messageActive = true;
-            backgroundThreads.emplace_back(clearMessageAfterTimeoutInMain, 8, std::ref(isAtMain),
+            backgroundThreads.emplace_back(clearMessageAfterTimeoutInMain, 4, std::ref(isAtMain),
                                            importState, std::ref(messageActive),
                                            std::ref(stopMessage));
         }
