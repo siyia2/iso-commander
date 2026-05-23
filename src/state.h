@@ -26,11 +26,11 @@ namespace GlobalState {
     // Configuration Limits
     inline int MAX_HISTORY_LINES         = 100;
     inline int MAX_HISTORY_PATTERN_LINES = 50;
-    
+
     inline constexpr uintmax_t maxDatabaseSize = 1024 * 1024 * 1; // 1MB
 
     // State Management
-    inline std::atomic<bool> isoListDirty{true}; 
+    inline std::atomic<bool> isoListDirty{true};
     inline std::atomic<bool> g_operationCancelled{false};
     inline bool needSortingAfterflno      = false;
     inline size_t ITEMS_PER_PAGE          = 25;

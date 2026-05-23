@@ -7,6 +7,8 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstddef>
+#include <mutex>
+#include <memory>
 #include <string>
 #include <vector>
 
