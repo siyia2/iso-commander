@@ -237,7 +237,6 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
             return !state->isImportRunning.load(std::memory_order_acquire);
         });
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     if (isAtISOList.load()) {
         loadAndDisplayIso(state->filteredFiles, state->isFiltered, state->listSubtype,
                           state->umountMvRmBreak, state->pendingIndices, state->hasPendingProcess,
@@ -366,7 +365,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             if (refreshState->isWatcherRunning.compare_exchange_strong(watcherExpected, true)) {
                 std::thread([refreshState, &isAtISOList, &updateHasRun, &newISOFound, &search]() {
                     refreshListAfterAutoUpdate(isAtISOList, updateHasRun, newISOFound, refreshState);
-                    if (search || !refreshState->isImportRunning.load(std::memory_order_acquire))
                         refreshState->isWatcherRunning.store(false);
                 }).detach();
             }

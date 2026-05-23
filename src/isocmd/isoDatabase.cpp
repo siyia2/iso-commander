@@ -463,6 +463,7 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
     bool localPromptFlag = false;
     auto signalDone = [&] {
         if (state) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
             state->isImportRunning.store(false, std::memory_order_release);
             state->importCV.notify_all();
         }
@@ -544,7 +545,6 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
     }
 
     if (state->stopImport.load()) { signalDone(); return; }
-
     saveToDatabase(allIsoFiles, newISOFound);
     newISOFound.store(false);
     signalDone();
