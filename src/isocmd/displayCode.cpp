@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>

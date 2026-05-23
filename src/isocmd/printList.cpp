@@ -6,6 +6,7 @@
 #include <charconv>
 #include <cstddef>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <tuple>
