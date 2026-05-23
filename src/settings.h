@@ -35,13 +35,13 @@ struct ConfigEntry {
  */
 
 // Validates boolean-like on/off configuration values.
-inline auto isOnOff = [](const std::string& v) { 
-    return v == "on" || v == "off"; 
+inline auto isOnOff = [](const std::string& v) {
+    return v == "on" || v == "off";
 };
 
 // Validates display mode configuration values.
-inline auto isDisplay = [](const std::string& v) { 
-    return v == "full" || v == "compact"; 
+inline auto isDisplay = [](const std::string& v) {
+    return v == "full" || v == "compact";
 };
 
 /**
@@ -90,11 +90,11 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "skin",                                     // key
         "white",                                    // defaultValue
-        "Menu accent color (green/cyan/white/purple/amber/rose)",  // comment
+        "Menu accent color (green/cyan/white/purple/amber/rose/gray)",  // comment
         "Theme Settings",                           // section
         [](const std::string& v) {                  // validate
-            return v == "green" || v == "cyan" || v == "white" || 
-                   v == "purple" || v == "amber" || v == "rose"; 
+            return v == "green" || v == "cyan" || v == "white" ||
+                   v == "purple" || v == "amber" || v == "rose" || v == "gray";
         }
     },
     {

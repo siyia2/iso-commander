@@ -37,6 +37,7 @@ namespace UI {
         static constexpr std::string_view Amber        = "\033[1;38;2;255;176;0m";
         static constexpr std::string_view Rose         = "\033[1;38;2;255;121;198m";
         static constexpr std::string_view White        = "\033[1;38;2;215;215;215m";
+        static constexpr std::string_view Gray         = "\033[1;38;2;105;105;105m";
         static constexpr std::string_view BGNavy       = "\033[1;48;2;0;0;175m";
 
         // Readline-wrapped variants
@@ -99,12 +100,13 @@ inline std::string_view color;
 inline std::string_view getskin() {
     using namespace UI::Palette;
     static constexpr std::pair<std::string_view, std::string_view> skinMap[] = {
-        {"amber",  Amber},
-        {"cyan",   Cyan},
-        {"green",  Green},
-        {"purple", Purple},
-        {"rose",   Rose},
-        {"white",  White},
+        {"amber",    Amber},
+        {"cyan",     Cyan},
+        {"gray",     Gray},
+        {"green",    Green},
+        {"purple",   Purple},
+        {"rose",     Rose},
+        {"white",    White},
     };
     auto it = std::lower_bound(std::begin(skinMap), std::end(skinMap), skin,
         [](const auto& entry, std::string_view val) { return entry.first < val; });
