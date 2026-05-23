@@ -139,8 +139,9 @@ int main(int argc, char *argv[]) {
     /// Start background database import if auto-update is enabled and FolderPaths exist in history file
     if (search && (!(isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath)))) {
         importState->isImportRunning.store(true);
-        backgroundThreads.emplace_back([&newISOFound, importState] {
+        backgroundThreads.emplace_back([&newISOFound, importState, &search] {
             backgroundDatabaseImport(newISOFound, importState);
+            search = false;
         });
         updateHasRun.store(true);
     }
