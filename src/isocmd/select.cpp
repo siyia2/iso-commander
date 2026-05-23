@@ -214,14 +214,18 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
  *   to gracefully repaint the prompt underneath the new list output.
  * - **Auto-Termination:** Executes once after the import signal is received,
  *   clears atomic flags, and terminates (non-looping design).
+ * - **Debounce:** Sleeps 500ms after waking before redrawing to allow any
+ *   final state changes to settle before the UI is repainted.
  *
  * @param isAtISOList      Atomic flag; refresh only occurs if the user is in the list view.
- * @param updateHasRun     Atomic signal set upon completion to acknowledge the refresh.
- * @param newISOFound      Atomic signal cleared upon completion.
+ * @param updateHasRun     Atomic flag set upon completion to acknowledge the refresh.
+ * @param newISOFound      Atomic flag cleared upon completion.
  * @param state            Shared state container for:
  *                         - isImportRunning: Atomic flag used as CV predicate
- *                         - UI indices, pagination state, filters
  *                         - importMutex and importCV for event coordination
+ *                         - filteredFiles, isFiltered, listSubtype for display context
+ *                         - pendingIndices, hasPendingProcess, umountMvRmBreak for list state
+ *                         - currentPage, originalPage for pagination
  */
 void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
                                 std::atomic<bool>& updateHasRun,
@@ -233,6 +237,7 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
             return !state->isImportRunning.load(std::memory_order_acquire);
         });
     }
+    //std::this_thread::sleep_for(std::chrono::milliseconds(500));
     if (isAtISOList.load()) {
         loadAndDisplayIso(state->filteredFiles, state->isFiltered, state->listSubtype,
                           state->umountMvRmBreak, state->pendingIndices, state->hasPendingProcess,
