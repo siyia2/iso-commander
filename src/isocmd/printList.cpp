@@ -46,6 +46,10 @@ struct IntBuf {
  * Performance Note: Uses a large reserved std::string buffer and std::cout.write
  * to minimize syscall overhead and flickering during high-frequency updates.
  *
+ * Thread Safety: The sync indicator read and terminal write are performed
+ * atomically under printMutex, preventing stale indicator display during
+ * concurrent background ISO imports.
+ *
  * @param items              The list of strings to display.
  * @param listType           Category of the list (e.g., "ISO_FILES").
  * @param listSubType        Extension or sub-format details.
@@ -53,8 +57,9 @@ struct IntBuf {
  * @param hasPendingProcess  Flag indicating if a process action is staged.
  * @param isFiltered         Flag indicating if a search filter is currently active.
  * @param currentPage        Mutable reference to the current pagination index.
- * @param state              Shared state with import flag to determine if the
- *                          "[↻ Syncing: New ISO → Restructure]" message appears.
+ * @param state              Shared state providing printMutex and isImportRunning
+ *                           flag; guards the "[↻ Syncing: NewISO → Restructure]"
+ *                           indicator against races with background import completion.
  */
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered,
@@ -83,7 +88,6 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
     IntBuf<> ib1, ib2, ib3, ib4;
     const size_t maxDigits = ib1.format(endIndex).length();
-    const bool isIsoWithAutoUpdate = (state && state->isImportRunning.load() && isIsoMode && !GlobalCaches::globalIsoFileList.empty());
 
     // --- Output Buffering ---
     std::string output;
@@ -91,6 +95,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     output += '\n';
 
     // --- Header ---
+    size_t syncInsertPos = std::string::npos;
     if (!disablePagination) {
         output.append(c.head).append("Page ")
               .append(c.accent).append(ib1.format(effectivePage + 1))
@@ -100,13 +105,10 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
               .append("-").append(ib4.format(endIndex)).append(c.head).append(")/").append(c.num)
               .append(ib1.format(totalItems)).append(c.head).append(")");
 
-        if (isIsoWithAutoUpdate) {
-            output.append(UI::Palette::Dim).append("\n\n[↻ Syncing: NewISO → Restructure]");
-        }
+        syncInsertPos = output.size(); // mark insertion point before BoldReset+\n\n
         output.append(UI::Palette::BoldReset).append("\n\n");
-    }
-    else if (isIsoWithAutoUpdate) {
-        output.append(UI::Palette::Dim).append("[↻ Syncing: NewISO → Restructure]\n\n");
+    } else {
+        syncInsertPos = output.size(); // mark insertion point after leading \n
     }
 
     // --- Main Item Loop ---
@@ -173,5 +175,25 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append(UI::Palette::BoldReset).append("\n");
     }
 
-    std::cout.write(output.data(), output.size());
+    // --- Sync-safe print ---
+    {
+        std::lock_guard<std::mutex> lk(state->printMutex);
+
+        const bool isIsoWithAutoUpdate = (state
+            && state->isImportRunning.load(std::memory_order_relaxed)
+            && isIsoMode
+            && !GlobalCaches::globalIsoFileList.empty());
+
+        if (isIsoWithAutoUpdate) {
+            std::string syncLine;
+            syncLine.append(UI::Palette::Dim);
+            syncLine.append(disablePagination
+                ? "[↻ Syncing: NewISO → Restructure]\n\n"
+                : "\n\n[↻ Syncing: NewISO → Restructure]");
+            syncLine.append(UI::Palette::BoldReset);
+            output.insert(syncInsertPos, syncLine);
+        }
+
+        std::cout.write(output.data(), output.size());
+    }
 }

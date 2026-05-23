@@ -442,19 +442,31 @@ bool isValidDirectory(const std::string& path);
 /**
  * @brief Performs background ISO file import without blocking the UI.
  *
- * Reads history paths, reduces them hierarchically, then traverses directories
- * in concurrent groups sized to the global thread pool's thread count to find
- * ISO files, saving results to the database once all groups complete.
+ * Reads semicolon-delimited paths from the history file, deduplicates them,
+ * removes the root path "/" if other paths are present, then reduces them
+ * hierarchically. Traverses the resulting directories in concurrent groups
+ * sized to the global thread pool's thread count, collecting ISO files and
+ * errors across all groups, then saves all results to the database in a
+ * single call once every group has completed.
  *
- * Checks stopImport between phases and between groups for early exit;
- * any group already spawned runs to completion before the function returns.
- * activeWorkers is incremented before thread launch and decremented on exit
- * to avoid a race between thread startup and the group completion wait.
- * Signals completion via RefreshState::importCV to wake the watcher thread.
+ * Checks stopImport after history parsing, after path reduction, between
+ * groups, and after all traversal completes before saving. When stopImport
+ * fires mid-group, the workerCV wait unblocks early but all spawned threads
+ * are still joined before the function exits. localMaxDepth (-1) and
+ * localPromptFlag (false) are hardcoded locals passed to each traversal.
  *
- * @param newISOFound  Atomic flag set when new ISOs are discovered; cleared after save.
- * @param state        Shared state holding isImportRunning, stopImport, importCV/mutex for signaling,
- *                     workerCV/mutex and activeWorkers for group synchronization.
+ * activeWorkers is incremented after validation but before thread launch,
+ * and decremented by each thread on exit; the last thread to decrement
+ * (fetch_sub returning 1) signals workerCV to wake the waiting main thread.
+ * If thread construction throws, activeWorkers is decremented to stay
+ * consistent. Signals completion via RefreshState::importCV; if stopImport
+ * was not set, waits 500ms before doing so.
+ *
+ * @param newISOFound  Atomic flag set when new ISOs are discovered; cleared
+ *                     after save regardless of whether new ISOs were found.
+ * @param state        Shared state holding isImportRunning, stopImport,
+ *                     importCV/mutex for completion signaling, workerCV/mutex
+ *                     and activeWorkers for per-group synchronization.
  */
 void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
                                std::shared_ptr<RefreshState> state) {
@@ -463,8 +475,13 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
     bool localPromptFlag = false;
     auto signalDone = [&] {
         if (state) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            state->isImportRunning.store(false, std::memory_order_release);
+            if (!state->stopImport.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            }
+            {
+                std::lock_guard<std::mutex> lk(state->printMutex);
+                state->isImportRunning.store(false, std::memory_order_relaxed);
+            }
             state->importCV.notify_all();
         }
     };
