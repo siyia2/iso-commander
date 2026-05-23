@@ -2,7 +2,6 @@ NUM_PROCESSORS := $(shell nproc)
 ifeq ($(filter -j%, $(MAKEFLAGS)),)
     MAKEFLAGS += -j$(NUM_PROCESSORS)
 endif
-
 # ---------- Compiler and common flags ----------
 CXX = g++
 # ---- Base flags (used by both normal and sanitizer builds) ----
@@ -13,11 +12,13 @@ CXXFLAGS_NORMAL = -O3 -flto -fmerge-all-constants -fdata-sections -ffunction-sec
 LDFLAGS_NORMAL  = -Wl,--gc-sections
 # ---- Sanitizer build ----
 ifeq ($(SANITIZE),1)
-    CXXFLAGS_EXTRA = -O1 -g -fno-omit-frame-pointer -fsanitize=address
-    LDFLAGS_EXTRA  = -fsanitize=address
-    # Explicitly disable things that conflict with ASan
+    CXXFLAGS_EXTRA  = -O1 -g -fno-omit-frame-pointer -fsanitize=address
+    LDFLAGS_EXTRA   = -fsanitize=address
     CXXFLAGS_NORMAL = -O1 -g -fno-omit-frame-pointer
     LDFLAGS_NORMAL  =
+    LDFLAGS_STRIP   =
+else
+    LDFLAGS_STRIP   = -Wl,--strip-all
 endif
 CXXFLAGS_COMMON = $(CXXFLAGS_BASE) $(CXXFLAGS_NORMAL) $(CXXFLAGS_EXTRA)
 LDFLAGS_COMMON  = $(LDFLAGS_BASE) $(LDFLAGS_NORMAL) $(LDFLAGS_EXTRA)
@@ -26,7 +27,7 @@ CHD_STATIC = ./deps/libchdr-static.a
 # ---------- Dynamic build (default) ----------
 CXXFLAGS_DYN = $(CXXFLAGS_COMMON) -I./deps/libchdr/include
 LIBS_DYN = -lreadline -lmount $(CHD_STATIC) -llzma -lz -lzstd
-LDFLAGS_DYN = $(LDFLAGS_COMMON)
+LDFLAGS_DYN = $(LDFLAGS_COMMON) $(LDFLAGS_STRIP)
 # ---------- Static build (use STATIC=1) ----------
 LZMA_STATIC = /usr/lib/liblzma.a
 ZLIB_STATIC = /usr/lib/libz.a
@@ -37,12 +38,7 @@ MOUNT_STATIC = /usr/lib/libmount.a
 BLKID_STATIC = /usr/lib/libblkid.a
 ECONF_STATIC = /usr/lib/libeconf.a
 INTL_STATIC = /usr/lib/libintl.a
-# Sanitizer + full static is tricky. Prefer dynamic for ASan builds.
-ifeq ($(SANITIZE),1)
-    LDFLAGS_STAT = -static $(LDFLAGS_COMMON)
-else
-    LDFLAGS_STAT = -static $(LDFLAGS_COMMON) -Wl,--strip-all
-endif
+LDFLAGS_STAT = -static $(LDFLAGS_COMMON) $(LDFLAGS_STRIP)
 CXXFLAGS_STAT = $(CXXFLAGS_COMMON) -I./deps/libchdr/include
 LIBS_STAT = $(CHD_STATIC) \
             $(LZMA_STATIC) $(ZLIB_STATIC) $(ZSTD_STATIC) \
