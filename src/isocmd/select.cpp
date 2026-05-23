@@ -279,7 +279,7 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  */
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun,
                        std::atomic<bool>& isAtISOList, std::atomic<bool>& newISOFound,
-                       std::vector<std::thread>& backgroundThreads, bool& search,
+                       std::vector<std::thread>& backgroundThreads,
                        std::shared_ptr<RefreshState> refreshState) {
 
     rl_bind_key('\f', prevent_readline_keybindings);
@@ -424,7 +424,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 backgroundThreads.end()
             );
             needsClrScrn = true;
-            search = false;
             refreshState->isImportRunning.store(true);
             backgroundThreads.emplace_back([&newISOFound, refreshState] {
                 backgroundDatabaseImport(newISOFound, refreshState);

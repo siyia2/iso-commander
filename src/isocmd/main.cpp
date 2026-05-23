@@ -209,7 +209,7 @@ int main(int argc, char *argv[]) {
         if (choice == "1") {
             isAtMain = isAtISOList = false;
             submenu1(updateHasRun, isAtISOList, importState, newISOFound,
-                     backgroundThreads, search);
+                     backgroundThreads);
         } else if (choice.length() == 1) {
             switch (choice[0]) {
                 case '2':

@@ -61,7 +61,7 @@ void print_ascii() {
 void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun,
     std::atomic<bool>& isAtISOList, std::atomic<bool>& newISOFound,
     std::vector<std::thread>& backgroundThreads,
-    bool& search, std::shared_ptr<RefreshState> refreshState);
+    std::shared_ptr<RefreshState> refreshState);
 
 /**
  * @brief Displays the ISO management submenu and handles user input for file operations.
@@ -77,7 +77,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
  */
 void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList,
     std::shared_ptr<RefreshState> refreshState, std::atomic<bool>& newISOFound,
-    std::vector<std::thread>& backgroundThreads, bool& search) {
+    std::vector<std::thread>& backgroundThreads) {
     while (true) {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
@@ -119,37 +119,37 @@ void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList,
                 case '1':
                     clearScrollBuffer();
                     selectForIsoFiles("mount", updateHasRun, isAtISOList, newISOFound,
-                                      backgroundThreads, search, refreshState);
+                                      backgroundThreads, refreshState);
                     clearScrollBuffer();
                     break;
                 case '2':
                     clearScrollBuffer();
                     selectForIsoFiles("umount", updateHasRun, isAtISOList, newISOFound,
-                                      backgroundThreads, search, refreshState);
+                                      backgroundThreads, refreshState);
                     clearScrollBuffer();
                     break;
                 case '3':
                     clearScrollBuffer();
                     selectForIsoFiles("rm", updateHasRun, isAtISOList, newISOFound,
-                                      backgroundThreads, search, refreshState);
+                                      backgroundThreads, refreshState);
                     clearScrollBuffer();
                     break;
                 case '4':
                     clearScrollBuffer();
                     selectForIsoFiles("mv", updateHasRun, isAtISOList, newISOFound,
-                                       backgroundThreads, search, refreshState);
+                                       backgroundThreads, refreshState);
                     clearScrollBuffer();
                     break;
                 case '5':
                     clearScrollBuffer();
                     selectForIsoFiles("cp", updateHasRun, isAtISOList, newISOFound,
-                                      backgroundThreads, search, refreshState);
+                                      backgroundThreads, refreshState);
                     clearScrollBuffer();
                     break;
                 case '6':
                     clearScrollBuffer();
                     selectForIsoFiles("write2usb", updateHasRun, isAtISOList, newISOFound,
-                                      backgroundThreads, search, refreshState);
+                                      backgroundThreads, refreshState);
                     clearScrollBuffer();
                     break;
             }
@@ -282,7 +282,6 @@ void monitorAndClearMessage(std::shared_ptr<RefreshState> state, std::atomic<boo
             return !state->isImportRunning.load() || stopSignal.load();
         });
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     if (messageActive.load() && !stopSignal.load() && isAtMain.load()) {
         clearScrollBuffer();
         print_ascii();
