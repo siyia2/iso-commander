@@ -447,14 +447,10 @@ bool isValidDirectory(const std::string& path);
  * Traverse tasks themselves run to completion once started.
  * Signals completion via @c RefreshState::importCV to wake the watcher thread.
  *
- * @param isImportRunning Atomic flag cleared on exit; also serves as the CV predicate
- *                        for the watcher thread blocking on @c RefreshState::importCV.
- * @param newISOFound     Atomic flag set by @c saveToDatabase if new ISOs were discovered;
- *                        cleared after signaling to avoid stale triggers.
- * @param stopImport      Checked between major phases to allow early exit on program termination;
- *                        traverse tasks already in flight run to completion.
- * @param state           Shared state container holding the CV and mutex used to signal
- *                        the watcher thread upon import completion.
+ * @param newISOFound     Atomic flag set when new ISOs are discovered; cleared after signaling.
+ * @param stopImport      Checked between phases for early exit; running tasks complete.
+ * @param state           Shared state containing isImportRunning (CV predicate),
+ *                        importCV/mutex for signaling, and UI state (filters, pagination).
  */
 void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
                                std::atomic<bool>& stopImport,
