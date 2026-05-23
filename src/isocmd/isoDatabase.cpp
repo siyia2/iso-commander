@@ -443,11 +443,13 @@ bool isValidDirectory(const std::string& path);
  * @brief Performs background ISO file import without blocking the UI.
  *
  * Reads history paths, reduces them hierarchically, then traverses directories
- * in concurrent groups of up to GlobalState::maxThreads to find ISO files,
- * saving results to the database once all groups complete.
+ * in concurrent groups sized to the global thread pool's thread count to find
+ * ISO files, saving results to the database once all groups complete.
  *
  * Checks stopImport between phases and between groups for early exit;
  * any group already spawned runs to completion before the function returns.
+ * activeWorkers is incremented before thread launch and decremented on exit
+ * to avoid a race between thread startup and the group completion wait.
  * Signals completion via RefreshState::importCV to wake the watcher thread.
  *
  * @param newISOFound  Atomic flag set when new ISOs are discovered; cleared after save.
