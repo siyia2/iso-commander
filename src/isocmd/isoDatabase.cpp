@@ -460,13 +460,16 @@ bool isValidDirectory(const std::string& path);
  * (fetch_sub returning 1) signals workerCV to wake the waiting main thread.
  * If thread construction throws, activeWorkers is decremented to stay
  * consistent. Signals completion via RefreshState::importCV; if stopImport
- * was not set, waits 500ms before doing so.
+ * was not set, waits 500ms before doing so. isImportRunning is stored false
+ * under printMutex before importCV is notified, ensuring printList cannot
+ * observe a stale sync indicator after the signal.
  *
  * @param newISOFound  Atomic flag set when new ISOs are discovered; cleared
  *                     after save regardless of whether new ISOs were found.
  * @param state        Shared state holding isImportRunning, stopImport,
  *                     importCV/mutex for completion signaling, workerCV/mutex
- *                     and activeWorkers for per-group synchronization.
+ *                     and activeWorkers for per-group synchronization,
+ *                     and printMutex for sync indicator consistency.
  */
 void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
                                std::shared_ptr<RefreshState> state) {
