@@ -515,46 +515,29 @@ void processInputForCpMvRm(const std::string&        input,
 }
 
 /**
- * @brief Processes user input to convert multiple disk image files to ISO format.
+ * @brief Handles bulk image-to-ISO conversions with threading and progress visualization.
  *
- * This function parses the user-provided input string (e.g., "1-5,7,9"), identifies
- * the corresponding files from the master list, and orchestrates multi‑threaded
- * conversion of supported image types (BIN/CCD, MDF, NRG, CHD, DAA/GBI) to standard ISO.
+ * Each selected file is enqueued as an independent task directly into the static
+ * thread pool rather than being pre-chunked. This keeps all available threads busy
+ * regardless of whether the file count divides evenly across threads — the pool's
+ * internal queue naturally balances load as threads free up.
  *
- * The function includes an inline size estimation pass to provide an accurate
- * progress bar during conversion. Estimation logic varies by input format:
- * - **NRG**: Excludes a 300 KiB (307200 byte) header.
- * - **MDF**: Reads sector geometry via `MdfTypeInfo` and computes user data bytes.
- * - **BIN/CCD**: Assumes 2352‑byte raw sectors with 2048 bytes of user data.
- * - **CHD**: Opens the CHD file, inspects the header, and calculates total sectors
- *   multiplied by 2048 bytes (ISO user data per sector).
- * - **DAA**: Calls `getDaaIsoSize()` to query the uncompressed ISO size from the
- *   DAA archive header without extracting the entire file.
- *
- * @section multi_threading Multi-Threading and Progress
- * Tasks are distributed across a static thread pool by splitting the selection into
- * chunks. A dedicated background thread manages a real-time progress bar that tracks
- * both byte-level progress and task completion/failure counts.
- *
- * @section post_processing Post-Conversion Sync
- * Upon completion, the function joins the progress display and cleans up signal handlers.
- * If successful, it constructs output paths and calls @ref updateDatabaseAfterOperations
- * to index ONLY the new files, avoiding a full directory scan.
- *
- * @param input         Raw user selection string (e.g., "1,3-5").
- * @param fileList      Master vector of all non‑ISO image paths.
- * @param modeMdf       Use Alcohol 120% MDF conversion logic.
- * @param modeNrg       Use Nero NRG conversion logic.
- * @param modeChd       Use MAME CHD conversion logic.
- * @param modeDaa       Use PowerISO DAA / gBurner GBI logic.
- * @param verbose       Toggle for real-time progress details.
- * @param needsClrScrn  [out] Set to true if the UI requires a refresh.
- * @param newISOFound   [in,out] Atomic flag set to true if the database was updated.
+ * @param input           Raw user input string (indices, ranges, or keywords).
+ * @param fileList        Master list of image files used for index mapping.
+ * @param modeMdf         True if converting MDF images.
+ * @param modeNrg         True if converting NRG images.
+ * @param modeChd         True if converting CHD images.
+ * @param modeDaa         True if converting DAA images.
+ * @param verbose         Toggle for real-time console progress output.
+ * @param needsClrScrn    Set to true if the screen should be cleared on return.
+ * @param[in,out] newISOFound  Atomic flag triggered to true if new ISOs were produced.
  */
-void processInputForConversions(const std::string& input, std::vector<std::string>& fileList,
-                               const bool& modeMdf, const bool& modeNrg, const bool& modeChd,
-                               const bool& modeDaa,
-                               bool& verbose, bool& needsClrScrn, std::atomic<bool>& newISOFound)
+void processInputForConversions(const std::string&        input,
+                                 std::vector<std::string>& fileList,
+                                 const bool& modeMdf, const bool& modeNrg,
+                                 const bool& modeChd, const bool& modeDaa,
+                                 bool& verbose, bool& needsClrScrn,
+                                 std::atomic<bool>& newISOFound)
 {
     std::vector<std::string> successfulOutputPaths;
     std::mutex outPathsMutex;
@@ -581,45 +564,32 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     }
 
     ThreadPool& pool = getStaticThreadPool();
-    const size_t poolSize = pool.threadCount();
-    const size_t numThreads = std::max(size_t(2), std::min({processedIndices.size(), GlobalConcurrency::CONV_THREAD_CAP, poolSize}));
 
-    std::vector<std::vector<size_t>> indexChunks;
-    const size_t totalFiles = processedIndices.size();
-    const size_t filesPerChunk = (totalFiles + numThreads - 1) / numThreads;
-
-    auto it = processedIndices.begin();
-    for (size_t i = 0; i < totalFiles; i += filesPerChunk) {
-        auto chunkEnd = std::next(it, std::min(filesPerChunk, static_cast<size_t>(std::distance(it, processedIndices.end()))));
-        indexChunks.emplace_back(it, chunkEnd);
-        it = chunkEnd;
-    }
-
-    // build only for size calculation, then immediately release
+    // Calculate total bytes across all selected files.
     size_t totalBytes = 0;
     {
         std::vector<std::string> filesToProcess;
         filesToProcess.reserve(processedIndices.size());
-        for (const auto& chunk : indexChunks)
-            for (size_t idx : chunk)
-                filesToProcess.push_back(fileList[idx - 1]);
-        totalBytes = calculateTotalBytesForConversions(filesToProcess, modeMdf, modeNrg, modeChd, modeDaa);
+        for (int idx : processedIndices)
+            filesToProcess.push_back(fileList[idx - 1]);
+        totalBytes = calculateTotalBytesForConversions(
+            filesToProcess, modeMdf, modeNrg, modeChd, modeDaa);
     }
 
-    std::string colorMuted = isOrig ? std::string(UI::Palette::BoldReset) : std::string(theme->muted);
+    const size_t totalTasks = processedIndices.size();
+    std::string colorMuted = isOrig
+        ? std::string(UI::Palette::BoldReset)
+        : std::string(theme->muted);
 
-    size_t totalTasks = processedIndices.size();
     std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
-
     std::string operation;
-    if (modeMdf)      operation = std::string(UI::Palette::Orange) + "mdf2iso" + std::string(colorMuted) + suffix;
-    else if (modeNrg) operation = std::string(UI::Palette::Orange) + "nrg2iso" + std::string(colorMuted) + suffix;
-    else if (modeChd) operation = std::string(UI::Palette::Orange) + "chd2iso" + std::string(colorMuted) + suffix;
-    else if (modeDaa) operation = std::string(UI::Palette::Orange) + "daa2iso" + std::string(colorMuted) + suffix;
-    else              operation = std::string(UI::Palette::Orange) + "ccd2iso" + std::string(colorMuted) + suffix;
+    if (modeMdf)      operation = std::string(UI::Palette::Orange) + "mdf2iso" + colorMuted + suffix;
+    else if (modeNrg) operation = std::string(UI::Palette::Orange) + "nrg2iso" + colorMuted + suffix;
+    else if (modeChd) operation = std::string(UI::Palette::Orange) + "chd2iso" + colorMuted + suffix;
+    else if (modeDaa) operation = std::string(UI::Palette::Orange) + "daa2iso" + colorMuted + suffix;
+    else              operation = std::string(UI::Palette::Orange) + "ccd2iso" + colorMuted + suffix;
 
     clearScrollBuffer();
-
     std::cout << "\n" << colorMuted << " Processing "
               << operation << colorMuted << "... ("
               << UI::Palette::Red << "Ctrl+c"
@@ -628,28 +598,28 @@ void processInputForConversions(const std::string& input, std::vector<std::strin
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
     std::atomic<size_t> failedTasks(0);
-    std::atomic<bool> isProcessingComplete(false);
+    std::atomic<bool>   isProcessingComplete(false);
 
-    std::thread progressThread(displayProgressBarWithSize, &completedBytes,
-        totalBytes, &completedTasks, &failedTasks, totalTasks, &isProcessingComplete, &verbose, operation);
+    std::thread progressThread(displayProgressBarWithSize,
+        &completedBytes, totalBytes,
+        &completedTasks, &failedTasks, totalTasks,
+        &isProcessingComplete, &verbose, operation);
 
+    // Enqueue one task per file — the pool queue balances load naturally.
     std::vector<std::future<void>> futures;
-    futures.reserve(indexChunks.size());
+    futures.reserve(processedIndices.size());
 
-    for (const auto& chunk : indexChunks) {
-        futures.emplace_back(pool.enqueue([chunk, &fileList,
-                                           modeMdf, modeNrg, modeChd, modeDaa,
-                                           &completedBytes, &completedTasks, &failedTasks,
-                                           &successfulOutputPaths, &outPathsMutex]() {
-            std::vector<std::string> imageFilesInChunk;
-            imageFilesInChunk.reserve(chunk.size());
-            for (size_t idx : chunk)
-                imageFilesInChunk.push_back(fileList[idx - 1]);
-            convertToISO(imageFilesInChunk,
-                         modeMdf, modeNrg, modeChd, modeDaa,
-                         &completedBytes, &completedTasks, &failedTasks,
-                         &successfulOutputPaths, &outPathsMutex);
-        }));
+    for (int idx : processedIndices) {
+        const std::string filePath = fileList[idx - 1];
+        futures.emplace_back(pool.enqueue(
+            [filePath, modeMdf, modeNrg, modeChd, modeDaa,
+             &completedBytes, &completedTasks, &failedTasks,
+             &successfulOutputPaths, &outPathsMutex]() {
+                convertToISO({filePath},
+                             modeMdf, modeNrg, modeChd, modeDaa,
+                             &completedBytes, &completedTasks, &failedTasks,
+                             &successfulOutputPaths, &outPathsMutex);
+            }));
     }
 
     for (auto& future : futures)
