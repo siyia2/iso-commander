@@ -176,24 +176,24 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
             size_t usedChunks = indexChunks.size();
             size_t remainingThreads = (numThreads > usedChunks) ? numThreads - usedChunks : 1;
 
-            size_t maxFilesPerChunk = std::max<size_t>(1, (uniqueNameFiles.size() + remainingThreads - 1) / remainingThreads);
+            std::vector<std::vector<int>> uniqueChunks(remainingThreads);
+            for (size_t i = 0; i < uniqueNameFiles.size(); ++i)
+                uniqueChunks[i % remainingThreads].push_back(uniqueNameFiles[i]);
 
-            for (size_t i = 0; i < uniqueNameFiles.size(); i += maxFilesPerChunk) {
-                auto end = std::min(i + maxFilesPerChunk, uniqueNameFiles.size());
-                indexChunks.emplace_back(uniqueNameFiles.begin() + i, uniqueNameFiles.begin() + end);
-            }
+            for (auto& c : uniqueChunks)
+                if (!c.empty()) indexChunks.push_back(std::move(c));
         }
     } else {
-        size_t maxFilesPerChunk = std::max<size_t>(1, (processedIndicesVector.size() + numThreads - 1) / numThreads);
-        for (size_t i = 0; i < processedIndicesVector.size(); i += maxFilesPerChunk) {
-            auto end = std::min(i + maxFilesPerChunk, processedIndicesVector.size());
-            indexChunks.emplace_back(processedIndicesVector.begin() + i, processedIndicesVector.begin() + end);
-        }
+        std::vector<std::vector<int>> deleteChunks(numThreads);
+        for (size_t i = 0; i < processedIndicesVector.size(); ++i)
+            deleteChunks[i % numThreads].push_back(processedIndicesVector[i]);
+
+        for (auto& c : deleteChunks)
+            if (!c.empty()) indexChunks.push_back(std::move(c));
     }
 
     return indexChunks;
 }
-
 
 /**
  * @brief Handles bulk copy, move, or remove operations with threading and progress visualization.
