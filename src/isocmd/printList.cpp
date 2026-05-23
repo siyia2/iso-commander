@@ -19,6 +19,7 @@
 #include "../state.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
+#include "../select.h"
 
 /**
  * @file list_renderer.cpp
@@ -40,21 +41,24 @@ struct IntBuf {
 
 /**
  * @brief Renders formatted lists (ISO, Image, or Mounts) to the terminal.
- * * Performance Note: Uses a large reserved std::string buffer and std::cout.write 
+ *
+ * Performance Note: Uses a large reserved std::string buffer and std::cout.write
  * to minimize syscall overhead and flickering during high-frequency updates.
- * * @param items The list of strings to display.
- * @param listType Category of the list (e.g., "ISO_FILES").
- * @param listSubType Extension or sub-format details.
- * @param pendingIndices Current user selection indices awaiting processing.
- * @param hasPendingProcess Flag indicating if a process action is staged.
- * @param isFiltered Flag indicating if a search filter is currently active.
- * @param currentPage Mutable reference to the current pagination index.
- * @param isImportRunning Atomic flag to detect if a background scan is active.
+ *
+ * @param items              The list of strings to display.
+ * @param listType           Category of the list (e.g., "ISO_FILES").
+ * @param listSubType        Extension or sub-format details.
+ * @param pendingIndices     Current user selection indices awaiting processing.
+ * @param hasPendingProcess  Flag indicating if a process action is staged.
+ * @param isFiltered         Flag indicating if a search filter is currently active.
+ * @param currentPage        Mutable reference to the current pagination index.
+ * @param state              Shared state with import flag to determine if the
+ *                          "[↻ Syncing: New ISO → Restructure]" message appears.
  */
-void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, 
-               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered, 
-               size_t& currentPage, std::atomic<bool>& isImportRunning) {
-    
+void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
+               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered,
+               size_t& currentPage, std::shared_ptr<RefreshState> state) {
+
     if (items.empty()) return;
 
     const PrintListTheme c = getListColors();
@@ -63,7 +67,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     const size_t totalItems = items.size();
     const bool disablePagination = (GlobalState::ITEMS_PER_PAGE == 0 || totalItems <= GlobalState::ITEMS_PER_PAGE);
     const size_t totalPages = disablePagination ? 1 : (totalItems + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE;
-    
+
     size_t effectivePage = (disablePagination) ? 0 : (currentPage >= totalPages ? totalPages - 1 : currentPage);
     const size_t startIndex = disablePagination ? 0 : (effectivePage * GlobalState::ITEMS_PER_PAGE);
     const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + GlobalState::ITEMS_PER_PAGE, totalItems);
@@ -75,10 +79,10 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     const bool isFileMode     = (isIsoMode || isImgMode);
     const bool showNamesOnly  = displayConfig::toggleNamesOnly;
     const bool showFullUmount = displayConfig::toggleFullListUmount;
-    
-    IntBuf<> ib1, ib2, ib3, ib4; 
+
+    IntBuf<> ib1, ib2, ib3, ib4;
     const size_t maxDigits = ib1.format(endIndex).length();
-    const bool isIsoWithAutoUpdate = (isImportRunning.load() && isIsoMode && !GlobalCaches::globalIsoFileList.empty());
+    const bool isIsoWithAutoUpdate = (state && state->isImportRunning.load() && isIsoMode && !GlobalCaches::globalIsoFileList.empty());
 
     // --- Output Buffering ---
     std::string output;
@@ -94,12 +98,12 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
               .append(c.accent).append(ib3.format(startIndex + 1))
               .append("-").append(ib4.format(endIndex)).append(c.head).append(")/").append(c.num)
               .append(ib1.format(totalItems)).append(c.head).append(")");
-        
+
         if (isIsoWithAutoUpdate) {
             output.append(UI::Palette::Dim).append("\n\n[↻ Syncing: New ISO → Restructure]");
         }
         output.append(UI::Palette::BoldReset).append("\n\n");
-    } 
+    }
     else if (isIsoWithAutoUpdate) {
         output.append(UI::Palette::Dim).append("[↻ Syncing: New ISO → Restructure]\n\n");
     }
@@ -108,13 +112,13 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     for (size_t i = startIndex; i < endIndex; ++i) {
         const std::string_view seqColor = (i % 2 == 0) ? c.indexA : c.indexB;
         std::string_view idxStr = ib1.format(i + 1);
-        
+
         output.append(seqColor);
         if (idxStr.length() < maxDigits) output.append(maxDigits - idxStr.length(), ' ');
         output.append(idxStr);
 
         if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
-            output.append(":").append(UI::Palette::BoldReset).append(c.square); 
+            output.append(":").append(UI::Palette::BoldReset).append(c.square);
             output.append(ib2.format(filteringStack.back().originalIndices[i] + 1));
             output.append(UI::Palette::BoldReset).append(c.square).append("^ ")
             .append(UI::Palette::BoldReset);
@@ -123,19 +127,19 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         }
 
         const std::string& item = items[i];
-        
+
         if (isFileMode) {
             auto [dir, fname] = extractDirectoryAndFilename(item, listSubType);
             if (!showNamesOnly) {
                 output.append(c.dir).append(dir).append(UI::Palette::BoldReset).append("/");
             }
             output.append(isIsoMode ? c.iso : c.img).append(fname);
-        } 
+        }
         else if (isMountedMode) {
             auto [dirPart, pathPart, hashPart] = parseMountPointComponents(item);
             if (showFullUmount) {
                 output.append(c.mnt)
-					  .append(dirPart).append(UI::Palette::BoldReset)
+                      .append(dirPart).append(UI::Palette::BoldReset)
                       .append(c.iso).append(pathPart)
                       .append(c.square).append(hashPart);
             } else {

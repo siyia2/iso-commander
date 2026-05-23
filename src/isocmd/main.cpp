@@ -32,6 +32,7 @@
 #include "../state.h"
 #include "../themes.h"
 #include "../settings.h"
+#include "../select.h"
 
 namespace fs = std::filesystem;
 
@@ -40,7 +41,7 @@ namespace fs = std::filesystem;
  * * Uses ANSI bold escape sequences to highlight the version string.
  * * @param version A string representing the semantic version (e.g., "6.3.5").
  */
-void printVersionNumber(const std::string& version) {    
+void printVersionNumber(const std::string& version) {
     std::cout << UI::Palette::BoldReset << "Iso Commander v" << version << UI::Palette::Reset << "\n";
 }
 
@@ -48,8 +49,8 @@ void printVersionNumber(const std::string& version) {
 /**
  * @brief Entry point for the isocmd application - an ISO management and mounting utility.
  *
- * Initializes application state, processes command-line arguments, establishes a single-instance 
- * lock, configures signal handling, launches background tasks (auto-update/database import), 
+ * Initializes application state, processes command-line arguments, establishes a single-instance
+ * lock, configures signal handling, launches background tasks (auto-update/database import),
  * and enters the main interactive menu loop.
  *
  * The application supports the following command-line modes:
@@ -65,19 +66,19 @@ int main(int argc, char *argv[]) {
     /// @name Application State Flags
     /// Atomic booleans controlling concurrency and UI state between main thread and background workers.
     /// @{
-    std::atomic<bool> isImportRunning{false}, messageActive{false}, isAtMain{true}, isAtISOList{false},
+    std::atomic<bool> messageActive{false}, isAtMain{true}, isAtISOList{false},
                      updateHasRun{false}, newISOFound{false}, stopImport{false}, stopMessage{false},
                      monitorThreadSpawned{false};
     /// @}
-    
+
     // Generous reserve for future lists
     GlobalCaches::globalIsoFileList.reserve(1000);
     GlobalCaches::binImgFilesCache.reserve(1000);
-	GlobalCaches::mdfMdsFilesCache.reserve(1000);
-	GlobalCaches::nrgFilesCache.reserve(1000);
-	GlobalCaches::chdFilesCache.reserve(1000);
-	GlobalCaches::daaGbiFilesCache.reserve(1000);
-	
+    GlobalCaches::mdfMdsFilesCache.reserve(1000);
+    GlobalCaches::nrgFilesCache.reserve(1000);
+    GlobalCaches::chdFilesCache.reserve(1000);
+    GlobalCaches::daaGbiFilesCache.reserve(1000);
+
     setupReadlineToIgnoreCtrlC();
 
     // --- Version & Utility Command Dispatch ---
@@ -89,10 +90,10 @@ int main(int argc, char *argv[]) {
     /// Configure readline completion behavior
     rl_completer_word_break_characters = ";";
     rl_completion_display_matches_hook = customListingsFunction;
-    
+
     // Bind PgUp and PgDn to arrow keys
     rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
-	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+    rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
 
     /**
      * @brief Single-instance lock mechanism
@@ -118,7 +119,7 @@ int main(int argc, char *argv[]) {
     signal(SIGTERM, signalHandler);
     /// @}
 
-    /** 
+    /**
      * @brief Configuration loading and background task initialization
      * - `search` controls whether auto-update scanning is enabled
      * - `config` contains user-defined folder paths and settings
@@ -127,10 +128,16 @@ int main(int argc, char *argv[]) {
     std::map<std::string, std::string> config = readUserConfigLists(GlobalState::configPath);
     std::vector<std::thread> backgroundThreads;
 
+    // Store the shared_ptr to RefreshState for access to its isImportRunning
+    std::shared_ptr<RefreshState> importState;
+    importState = std::make_shared<RefreshState>();
+
     /// Start background database import if auto-update is enabled
     if (search) {
-        isImportRunning.store(true);
-        backgroundThreads.emplace_back([&] { backgroundDatabaseImport(isImportRunning, newISOFound, stopImport); });
+        importState->isImportRunning.store(true);
+        backgroundThreads.emplace_back([&newISOFound, &stopImport, importState] {
+            backgroundDatabaseImport(newISOFound, stopImport, importState);
+        });
         /// Mark update as already executed if history file exists
         if (!(isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath)))
             updateHasRun.store(true);
@@ -159,12 +166,14 @@ int main(int argc, char *argv[]) {
          * 2. No stored folder paths available for scanning (one-time message)
          */
         static bool messagePrinted = false;
-        if (search && !isHistoryFileEmpty(GlobalState::historyFilePath) && isImportRunning) {
+
+        if (search && !isHistoryFileEmpty(GlobalState::historyFilePath) &&
+            importState && importState->isImportRunning.load()) {
             std::cout << UI::Palette::Dim << "[Auto-Update: running in the background...]\n" << UI::Palette::Reset;
             messageActive = true;
             if (!monitorThreadSpawned.exchange(true))
                 backgroundThreads.emplace_back(monitorAndClearMessage,
-                                               std::ref(isImportRunning), std::ref(messageActive),
+                                               importState, std::ref(messageActive),
                                                std::ref(stopMessage), std::ref(isAtMain));
         } else if ((search && !messagePrinted && !updateHasRun) &&
                    (isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath))) {
@@ -172,7 +181,7 @@ int main(int argc, char *argv[]) {
             messagePrinted = true;
             messageActive = true;
             backgroundThreads.emplace_back(clearMessageAfterTimeoutInMain, 8, std::ref(isAtMain),
-                                           std::ref(isImportRunning), std::ref(messageActive),
+                                           importState, std::ref(messageActive),
                                            std::ref(stopMessage));
         }
 
@@ -196,12 +205,13 @@ int main(int argc, char *argv[]) {
         std::string choice(input.get());
         if (choice == "1") {
             isAtMain = isAtISOList = false;
-            submenu1(updateHasRun, isAtISOList, isImportRunning, newISOFound, stopImport, backgroundThreads, search);
+            submenu1(updateHasRun, isAtISOList, importState, newISOFound,
+                    stopImport, backgroundThreads, search);
         } else if (choice.length() == 1) {
             switch (choice[0]) {
                 case '2':
                     isAtMain = isAtISOList = false;
-                    submenu2(newISOFound, isImportRunning);
+                    submenu2(newISOFound, importState);
                     break;
                 case '3':
                     isAtMain = isAtISOList = false;
@@ -226,6 +236,9 @@ int main(int argc, char *argv[]) {
     /// Signal all background threads to stop, wait for completion, release lock file.
     /// @{
     stopImport = stopMessage = true;
+    if (importState) {
+        importState->isImportRunning.store(false);
+    }
     for (auto& t : backgroundThreads) if (t.joinable()) t.join();
     std::cout << UI::Palette::Reset << std::flush;
     close(GlobalState::lockFileDescriptor);

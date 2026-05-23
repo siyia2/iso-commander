@@ -445,25 +445,37 @@ bool isValidDirectory(const std::string& path);
  * to find ISO files, and saves them to the database. Checks a stop flag
  * between major phases to allow prompt exit on program termination.
  * Traverse tasks themselves run to completion once started.
+ * Signals completion via @c RefreshState::importCV to wake the watcher thread.
  *
- * @param isImportRunning Atomic flag indicating if import is in progress.
- * @param newISOFound Atomic flag set to true if new ISOs were found.
- * @param stopImport Stop flag checked between phases to allow early exit on program termination.
+ * @param isImportRunning Atomic flag cleared on exit; also serves as the CV predicate
+ *                        for the watcher thread blocking on @c RefreshState::importCV.
+ * @param newISOFound     Atomic flag set by @c saveToDatabase if new ISOs were discovered;
+ *                        cleared after signaling to avoid stale triggers.
+ * @param stopImport      Checked between major phases to allow early exit on program termination;
+ *                        traverse tasks already in flight run to completion.
+ * @param state           Shared state container holding the CV and mutex used to signal
+ *                        the watcher thread upon import completion.
  */
-void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& stopImport) {
+void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
+                               std::atomic<bool>& stopImport,
+                               std::shared_ptr<RefreshState> state) {
     std::vector<std::string> paths;
     int localMaxDepth = -1;
     bool localPromptFlag = false;
 
+    auto signalDone = [&] {
+        if (state) {
+            state->isImportRunning.store(false, std::memory_order_release);
+            state->importCV.notify_all();
+        }
+    };
+
     {
         std::ifstream file(GlobalState::historyFilePath);
-        if (!file.is_open()) {
-            isImportRunning.store(false);
-            return;
-        }
+        if (!file.is_open()) { signalDone(); return; }
         std::string line;
         while (std::getline(file, line)) {
-            if (stopImport.load()) { isImportRunning.store(false); return; }
+            if (stopImport.load()) { signalDone(); return; }
             std::istringstream iss(line);
             std::string path;
             while (std::getline(iss, path, ';')) {
@@ -475,31 +487,23 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
             }
         }
     }
-
-    if (stopImport.load()) { isImportRunning.store(false); return; }
-
+    if (stopImport.load()) { signalDone(); return; }
     if (paths.size() > 1) {
         auto it = std::find(paths.begin(), paths.end(), "/");
         if (it != paths.end()) paths.erase(it);
     }
-
     std::vector<std::string> finalPaths = hierarchicalPathReduction(paths);
-
-    if (finalPaths.empty()) { isImportRunning.store(false); return; }
-
-    if (stopImport.load()) { isImportRunning.store(false); return; }
-
+    if (finalPaths.empty()) { signalDone(); return; }
+    if (stopImport.load()) { signalDone(); return; }
     std::vector<std::string> allIsoFiles;
     std::atomic<size_t> totalFiles{0};
     std::unordered_set<std::string> uniqueErrorMessages;
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
-
     auto& pool = getStaticThreadPool();
     std::vector<std::future<void>> futures;
-
     for (const auto& path : finalPaths) {
-        if (stopImport.load()) { isImportRunning.store(false); return; }
+        if (stopImport.load()) { signalDone(); return; }
         if (isValidDirectory(path)) {
             futures.emplace_back(pool.enqueue([&, path]() {
                 traverse(path, allIsoFiles, uniqueErrorMessages,
@@ -508,20 +512,18 @@ void backgroundDatabaseImport(std::atomic<bool>& isImportRunning, std::atomic<bo
             }));
         }
     }
-
     for (auto& future : futures) {
-		if (future.valid()) {
-			while (future.wait_for(std::chrono::milliseconds(50)) != std::future_status::ready) {
-				if (stopImport.load()) { isImportRunning.store(false); return; }
-			}
-		}
-	}
-
-    if (stopImport.load()) { isImportRunning.store(false); return; }
+        if (future.valid()) {
+            while (future.wait_for(std::chrono::milliseconds(50)) != std::future_status::ready) {
+                if (stopImport.load()) { signalDone(); return; }
+            }
+        }
+    }
+    if (stopImport.load()) { signalDone(); return; }
 
     saveToDatabase(allIsoFiles, newISOFound);
     newISOFound.store(false);
-    isImportRunning.store(false, std::memory_order_release);
+    signalDone();
 }
 
 /**

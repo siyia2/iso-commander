@@ -28,55 +28,58 @@
 #include "../sort.h"
 #include "../state.h"
 #include "../themes.h"
+#include "../select.h"
 
-void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, std::vector<std::string>& pendingIndices, 
-bool& hasPendingProcess, bool& isFiltered, size_t& currentPage, std::atomic<bool>& isImportRunning);
+void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
+               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered,
+               size_t& currentPage, std::shared_ptr<RefreshState> state);
 
 /**
  * @brief Loads ISO files from the database and updates the display.
- * * Synchronizes the global ISO list with the database when the dirty flag is set.
- * If a filter is active during a reload, it is re-applied to ensure the visible 
+ *
+ * Synchronizes the global ISO list with the database when the dirty flag is set.
+ * If a filter is active during a reload, it is re-applied to ensure the visible
  * results and original index mappings remain consistent with the new data.
  *
- * @note If a re-applied filter returns no results, the filter stack is cleared 
+ * @note If a re-applied filter returns no results, the filter stack is cleared
  * and the view resets to the full list to prevent a blank UI.
  *
- * @param filteredFiles Reference to the vector of currently filtered files.
- * @param isFiltered Boolean flag indicating if a filter is active.
- * @param listSubType String representing the sub-category of the list.
- * @param umountMvRmBreak Flag to force a break/refresh in the UI state.
- * @param pendingIndices Vector of indices currently marked for processing.
- * @param hasPendingProcess Boolean flag indicating if there are active background tasks.
- * @param currentPage Current page index for pagination.
- * @param originalPage Backup of the page index before filtering.
- * @param isImportRunning Atomic flag monitoring active import operations.
+ * @param filteredFiles      Reference to the vector of currently filtered files.
+ * @param isFiltered         Boolean flag indicating if a filter is active.
+ * @param listSubType        String representing the sub-category of the list.
+ * @param umountMvRmBreak    Flag to force a break/refresh in the UI state.
+ * @param pendingIndices     Vector of indices currently marked for processing.
+ * @param hasPendingProcess  Boolean flag indicating if there are active background tasks.
+ * @param currentPage        Current page index for pagination.
+ * @param originalPage       Backup of the page index before filtering.
+ * @param state              Shared state with import flag and CV for event coordination.
  * @return true if the list contains items, false if the cache is empty.
  */
 bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
+size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
-    
+
     bool needToReload = GlobalState::isoListDirty.exchange(false);
     std::vector<std::string> freshList;
-    
+
     if (needToReload) {
         loadFromDatabase(freshList);
     }
-    
+
     bool isEmpty = false;
     {
         std::lock_guard<std::mutex> lock(GlobalCaches::updateListMutex);
-        
+
         if (needToReload) {
             GlobalCaches::globalIsoFileList = std::move(freshList);
             currentPage = originalPage;
             pendingIndices.clear();
             hasPendingProcess = false;
             sortFilesCaseInsensitive(GlobalCaches::globalIsoFileList);
-			
-			syncFilteringStackForIso(GlobalCaches::globalIsoFileList, filteringStack, filteredFiles, isFiltered);
-		}
+
+            syncFilteringStackForIso(GlobalCaches::globalIsoFileList, filteringStack, filteredFiles, isFiltered);
+        }
 
         if (GlobalState::needSortingAfterflno) {
             sortFilesCaseInsensitive(GlobalCaches::globalIsoFileList);
@@ -90,11 +93,11 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
         }
 
         clearScrollBuffer();
-        
+
         // Use either the recently refreshed filteredFiles or the global master list
         printList(isFiltered ? filteredFiles : GlobalCaches::globalIsoFileList, "ISO_FILES", listSubType,
-                  pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
-        
+                  pendingIndices, hasPendingProcess, isFiltered, currentPage, state);
+
         isEmpty = GlobalCaches::globalIsoFileList.empty();
     }
 
@@ -104,7 +107,7 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
         pressEnterToReturn();
         return false;
     }
-    
+
     return true;
 }
 
@@ -115,26 +118,31 @@ const std::string MOUNTED_ISO_PATH = "/mnt";
 
 /**
  * @brief Scans, filters, and renders currently mounted ISO directories.
- * * Uses stat-based caching to detect changes in MOUNTED_ISO_PATH. A full re-scan 
+ *
+ * Uses stat-based caching to detect changes in MOUNTED_ISO_PATH. A full re-scan
  * and re-sort occur only if the directory's modification time or link count changes.
- * * If changes are detected and the resulting directory list differs from the cache:
+ *
+ * If changes are detected and the resulting directory list differs from the cache:
  * - Updates the static cache.
  * - Resets pending process states and indices.
- * * If no ISOs are found, it clears internal caches and displays a warning.
+ *
+ * If no ISOs are found, it clears internal caches and displays a warning.
  * Otherwise, it manages pagination state and invokes the UI rendering (printList).
- * * @note Temporarily ignores SIGINT and disables Ctrl+D during execution.
- * * @param isoDirs [out] Vector populated with current mount paths.
- * @param filteredFiles [in/out] List of files post-filtering.
- * @param isFiltered [in/out] Boolean toggle for filtering mode.
- * @param umountMvRmBreak [in] UI flag to force a refresh/reset of the view.
- * @param pendingIndices [in/out] Tracks items marked for batch operations.
- * @param hasPendingProcess [in/out] Flag indicating active background tasks.
- * @param currentPage [in/out] Current UI pagination index.
- * @param originalPage [out] Backup of page index when filtering is reset.
- * @param isImportRunning [in] Atomic flag to prevent UI collisions during imports.
+ *
+ * @note Temporarily ignores SIGINT and disables Ctrl+D during execution.
+ *
+ * @param isoDirs            [out] Vector populated with current mount paths.
+ * @param filteredFiles      [in/out] List of files post-filtering.
+ * @param isFiltered         [in/out] Boolean toggle for filtering mode.
+ * @param umountMvRmBreak    [in] UI flag to force a refresh/reset of the view.
+ * @param pendingIndices     [in/out] Tracks items marked for batch operations.
+ * @param hasPendingProcess  [in/out] Flag indicating active background tasks.
+ * @param currentPage        [in/out] Current UI pagination index.
+ * @param originalPage       [out] Backup of page index when filtering is reset.
+ * @param state              [in] Shared state with import flag and CV for event coordination.
  * @return true if ISOs were found and displayed; false if the directory is empty.
  */
-bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
+bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
@@ -191,7 +199,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         pressEnterToReturn();
 
         std::vector<std::string>().swap(lastSortedDirs);
-		lastIsoCount = 0;
+        lastIsoCount = 0;
         GlobalCaches::cachedParsesForUmount.clear();
 
         return false;
@@ -206,7 +214,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         filteredFiles.clear();
     }
 
-    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
+    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, isFiltered, currentPage, state);
     return true;
 }
 
@@ -221,28 +229,28 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
  *
  * Finally delegates rendering and interaction to the list display system.
  *
- * @param files Current working file list (may be replaced by cache)
- * @param fileType File extension type ("bin", "img", "mdf", "nrg", "chd", "daa", gbi)
- * @param need2Sort Flag indicating whether sorting is required
- * @param isFiltered Filter state affecting cache restoration
- * @param list Controls whether list refresh behavior is executed
- * @param pendingIndices Files queued for processing or convert2iso
+ * @param files            Current working file list (may be replaced by cache)
+ * @param fileType         File extension type ("bin", "img", "mdf", "nrg", "chd", "daa", "gbi")
+ * @param need2Sort        Flag indicating whether sorting is required
+ * @param isFiltered       Filter state affecting cache restoration
+ * @param list             Controls whether list refresh behavior is executed
+ * @param pendingIndices   Files queued for processing or convert2iso
  * @param hasPendingProcess Global processing state flag
- * @param currentPage Pagination state for UI display
- * @param isImportRunning Importer activity flag
+ * @param currentPage      Pagination state for UI display
+ * @param state            Shared state with import flag and CV for event coordination
  */
 void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,
-                              std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning) {
+                              std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::shared_ptr<RefreshState> state) {
     clearScrollBuffer();
-    
+
     // Restore from the appropriate cache when not filtered and the cache is valid
-    files = 
+    files =
     (!isFiltered && !GlobalCaches::binImgFilesCache.empty() && (fileType == "bin" || fileType == "img") &&
      (GlobalCaches::binImgFilesCache.size() != files.size() || !std::equal(GlobalCaches::binImgFilesCache.begin(), GlobalCaches::binImgFilesCache.end(), files.begin())))
-        ? (need2Sort = true, GlobalCaches::binImgFilesCache) 
+        ? (need2Sort = true, GlobalCaches::binImgFilesCache)
     : (!isFiltered && !GlobalCaches::mdfMdsFilesCache.empty() && fileType == "mdf" &&
        (GlobalCaches::mdfMdsFilesCache.size() != files.size() || !std::equal(GlobalCaches::mdfMdsFilesCache.begin(), GlobalCaches::mdfMdsFilesCache.end(), files.begin())))
-        ? (need2Sort = true, GlobalCaches::mdfMdsFilesCache) 
+        ? (need2Sort = true, GlobalCaches::mdfMdsFilesCache)
     : (!isFiltered && !GlobalCaches::nrgFilesCache.empty() && fileType == "nrg" &&
        (GlobalCaches::nrgFilesCache.size() != files.size() || !std::equal(GlobalCaches::nrgFilesCache.begin(), GlobalCaches::nrgFilesCache.end(), files.begin())))
         ? (need2Sort = true, GlobalCaches::nrgFilesCache)
@@ -253,7 +261,7 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
        (GlobalCaches::daaGbiFilesCache.size() != files.size() || !std::equal(GlobalCaches::daaGbiFilesCache.begin(), GlobalCaches::daaGbiFilesCache.end(), files.begin())))
         ? (need2Sort = true, GlobalCaches::daaGbiFilesCache)
     : files;
-            
+
     if (!list || (list && GlobalState::needSortingAfterflno)) {
         if (need2Sort) {
             sortFilesCaseInsensitive(files);
@@ -277,6 +285,6 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
         GlobalState::needSortingAfterflno = false;
         need2Sort = false;
     }
-    
-    printList(files, "IMAGE_FILES", "convert2iso", pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
+
+    printList(files, "IMAGE_FILES", "convert2iso", pendingIndices, hasPendingProcess, isFiltered, currentPage, state);
 }

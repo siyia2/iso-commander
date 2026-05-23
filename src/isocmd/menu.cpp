@@ -19,11 +19,12 @@
 #include "../inputHandling.h"
 #include "../readline.h"
 #include "../themes.h"
+#include "../select.h"
 
 /**
  * @brief Renders a multi-colored ASCII art banner to the terminal.
- * * Uses TrueColor (24-bit RGB) escape sequences to create a vertical flame 
- * gradient sampled from real fire photography, transitioning from 
+ * * Uses TrueColor (24-bit RGB) escape sequences to create a vertical flame
+ * gradient sampled from real fire photography, transitioning from
  * near-white heat at the top to burnt maroon at the base.
  */
 void print_ascii() {
@@ -57,24 +58,31 @@ void print_ascii() {
     std::cout << rows[7] << R"(|___|___/ \___/   \___\___/|_|  |_|_|  |_/_/ \_\|_|\_||___/|___|_|_\ )" << "\n\n" << reset;
 }
 
-void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, 
-std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& stopImport, 
-std::vector<std::thread>& backgroundThreads, bool& search);
+void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun,
+    std::atomic<bool>& isAtISOList, std::atomic<bool>& newISOFound,
+    std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads,
+    bool& search, std::shared_ptr<RefreshState> refreshState);
 
 /**
  * @brief Displays the ISO management submenu and handles user input for file operations.
- * * Provides options for mounting, unmounting, deleting, moving, copying, or writing ISOs.
- * * @param updateHasRun Indicates if the file list needs a refresh.
- * @param isAtISOList Atomic flag used to track terminal state for background processes.
- * @param isImportRunning Tracks if an import process is currently active.
- * @param newISOFound Signals if a new ISO has been discovered during background scans.
+ *
+ * Provides options for mounting, unmounting, deleting, moving, copying, or writing ISOs.
+ *
+ * @param updateHasRun      Indicates if the file list needs a refresh.
+ * @param isAtISOList       Atomic flag used to track terminal state for background processes.
+ * @param newISOFound       Signals if a new ISO has been discovered during background scans.
+ * @param stopImport        Atomic flag to cancel ongoing import operations.
+ * @param backgroundThreads Vector of threads for managing background worker lifetime.
+ * @param search            Flag indicating whether auto-update scanning is enabled.
+ * @param state             Shared state with import flag and CV for event coordination.
  */
-void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound,
-std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads, bool& search) {
+void submenu1(std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList,
+    std::shared_ptr<RefreshState> refreshState, std::atomic<bool>& newISOFound,
+    std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads, bool& search) {
     while (true) {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
-        
+
         isAtISOList.store(false);
         clearScrollBuffer();
 
@@ -93,17 +101,17 @@ std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads, bool
                   << "+-------------------------+\n"
                   << "|6. Write                 |\n"
                   << "+-------------------------+" << UI::Palette::BoldReset << std::endl << "\n";
-        
+
         const ReadlineAndPromptTheme pt = getPromptTheme();
-        char* rawInput = readline(( std::string(pt.primary) + 
-									"Choose an option:" + 
-									std::string(pt.reset) + 
-									" ").c_str());
-        
+        char* rawInput = readline(( std::string(pt.primary) +
+                                    "Choose an option:" +
+                                    std::string(pt.reset) +
+                                    " ").c_str());
+
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
         if (!input.get() || std::strlen(input.get()) == 0) {
-            break; 
+            break;
         }
 
         std::string choice(input.get());
@@ -111,32 +119,38 @@ std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads, bool
             switch (choice[0]) {
                 case '1':
                     clearScrollBuffer();
-                    selectForIsoFiles("mount", updateHasRun, isAtISOList, isImportRunning, newISOFound, stopImport, backgroundThreads, search);
+                    selectForIsoFiles("mount", updateHasRun, isAtISOList, newISOFound,
+                                      stopImport, backgroundThreads, search, refreshState);
                     clearScrollBuffer();
                     break;
                 case '2':
                     clearScrollBuffer();
-                    selectForIsoFiles("umount", updateHasRun, isAtISOList, isImportRunning, newISOFound, stopImport, backgroundThreads, search);
+                    selectForIsoFiles("umount", updateHasRun, isAtISOList, newISOFound,
+                                      stopImport, backgroundThreads, search, refreshState);
                     clearScrollBuffer();
                     break;
                 case '3':
                     clearScrollBuffer();
-                    selectForIsoFiles("rm", updateHasRun, isAtISOList, isImportRunning, newISOFound, stopImport, backgroundThreads, search);
+                    selectForIsoFiles("rm", updateHasRun, isAtISOList, newISOFound,
+                                      stopImport, backgroundThreads, search, refreshState);
                     clearScrollBuffer();
                     break;
                 case '4':
                     clearScrollBuffer();
-                    selectForIsoFiles("mv", updateHasRun, isAtISOList, isImportRunning, newISOFound, stopImport, backgroundThreads, search);
+                    selectForIsoFiles("mv", updateHasRun, isAtISOList, newISOFound,
+                                      stopImport, backgroundThreads, search, refreshState);
                     clearScrollBuffer();
                     break;
                 case '5':
                     clearScrollBuffer();
-                    selectForIsoFiles("cp", updateHasRun, isAtISOList, isImportRunning, newISOFound, stopImport, backgroundThreads, search);
+                    selectForIsoFiles("cp", updateHasRun, isAtISOList, newISOFound,
+                                      stopImport, backgroundThreads, search, refreshState);
                     clearScrollBuffer();
                     break;
                 case '6':
                     clearScrollBuffer();
-                    selectForIsoFiles("write2usb", updateHasRun, isAtISOList, isImportRunning, newISOFound, stopImport, backgroundThreads, search);
+                    selectForIsoFiles("write2usb", updateHasRun, isAtISOList, newISOFound,
+                                      stopImport, backgroundThreads, search, refreshState);
                     clearScrollBuffer();
                     break;
             }
@@ -144,24 +158,26 @@ std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads, bool
     }
 }
 
-void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning);
+void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice,
+                                    std::atomic<bool>& newISOFound,
+                                    std::shared_ptr<RefreshState> state);
 
 /**
  * @brief Displays the conversion submenu for transforming non-ISO disk images into ISO format.
- * 
+ *
  * Supports .BIN/.IMG (with .CCD cuesheets), .MDF, .NRG, .CHD, and .DAA image formats
  * using C++ implementations of conversion tools.
- * 
+ *
  * @param newISOFound Atomic flag to notify main thread of newly created ISO files.
- * @param isImportRunning Tracks background import state to prevent menu collisions.
+ * @param state       Shared state with import flag for tracking background imports.
  */
-void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning) {
+void submenu2(std::atomic<bool>& newISOFound, std::shared_ptr<RefreshState> state) {
     while (true) {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
-        
+
         clearScrollBuffer();
-        
+
         std::cout << color << "+-------------------------+  \n"
                   << "|↵ Convert2ISO             |\n"
                   << "+-------------------------+\n"
@@ -175,17 +191,17 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
                   << "+-------------------------+\n"
                   << "|5. NRG2ISO++             |\n"
                   << "+-------------------------+" << UI::Palette::BoldReset << std::endl << "\n";
-        
+
         const ReadlineAndPromptTheme pt = getPromptTheme();
-        char* rawInput = readline(( std::string(pt.primary) + 
-									"Choose an option:" + 
-									std::string(pt.reset) + 
-									" ").c_str());
+        char* rawInput = readline(( std::string(pt.primary) +
+                                    "Choose an option:" +
+                                    std::string(pt.reset) +
+                                    " ").c_str());
 
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
         if (!input.get() || std::strlen(input.get()) == 0) {
-            break; 
+            break;
         }
 
         std::string choice(input.get());
@@ -194,27 +210,27 @@ void submenu2(std::atomic<bool>& newISOFound, std::atomic<bool>& isImportRunning
             switch (choice[0]) {
                 case '1':
                     operation = "bin";
-                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, isImportRunning);
+                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, state);
                     clearScrollBuffer();
                     break;
                 case '2':
                     operation = "chd";
-                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, isImportRunning);
+                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, state);
                     clearScrollBuffer();
                     break;
                 case '3':
                     operation = "daa";
-                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, isImportRunning);
+                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, state);
                     clearScrollBuffer();
                     break;
                 case '4':
                     operation = "mdf";
-                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, isImportRunning);
+                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, state);
                     clearScrollBuffer();
                     break;
                 case '5':
                     operation = "nrg";
-                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, isImportRunning);
+                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, state);
                     clearScrollBuffer();
                     break;
             }
@@ -243,29 +259,31 @@ void printMenu() {
 
 /**
  * @brief Observes background task completion and performs an asynchronous UI refresh.
- * * This function runs in a background thread to monitor the lifecycle of a database 
- * import. Once the task finishes (or the program signals a shutdown), it evaluates 
- * if the user is currently at the main menu. 
- * * If active, it performs a "soft refresh" by:
+ *
+ * This function runs in a background thread to monitor the lifecycle of a database
+ * import. Once the task finishes (or the program signals a shutdown), it evaluates
+ * if the user is currently at the main menu.
+ *
+ * If active, it performs a "soft refresh" by:
  * 1. Clearing the terminal buffer to remove the "Auto-Update" status line.
  * 2. Re-rendering the ASCII art and menu options.
- * 3. Utilizing Readline's internal state functions (rl_on_new_line, rl_redisplay) 
- * to restore the user's current input prompt without clearing any text 
- * the user may have already started typing.
- * * @param isRunning     Atomic flag tracking the worker thread's activity.
+ * 3. Utilizing Readline's internal state functions (rl_on_new_line, rl_redisplay)
+ *    to restore the user's current input prompt without clearing any text.
+ *
+ * @param state         Shared state with import flag; refresh occurs when import completes.
  * @param messageActive Atomic flag tracking if the status message is visible.
  * @param stopSignal    Atomic flag to abort monitoring during program exit.
  * @param isAtMain      Atomic flag ensuring refresh only occurs on the primary menu.
  */
-void monitorAndClearMessage(std::atomic<bool>& isRunning, 
-                                                std::atomic<bool>& messageActive, 
-                                                std::atomic<bool>& stopSignal,
-                                                std::atomic<bool>& isAtMain) {
-    while (isRunning.load()) {
-        if (stopSignal.load()) return;
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+void monitorAndClearMessage(std::shared_ptr<RefreshState> state, std::atomic<bool>& messageActive,
+                            std::atomic<bool>& stopSignal, std::atomic<bool>& isAtMain) {
+    if (state) {
+        std::unique_lock<std::mutex> lock(state->importMutex);
+        state->importCV.wait(lock, [&] {
+            return !state->isImportRunning.load() || stopSignal.load();
+        });
     }
-
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
     if (messageActive.load() && !stopSignal.load() && isAtMain.load()) {
         clearScrollBuffer();
         print_ascii();
@@ -284,22 +302,24 @@ void monitorAndClearMessage(std::atomic<bool>& isRunning,
  * a stop flag on each tick to allow prompt exit when the program terminates.
  * Triggers a UI redraw if the user is currently at the main menu.
  *
- * @param timeoutTicks Number of 500ms ticks to wait before clearing (e.g. 2 = 1s, 8 = 4s).
- * @param isAtMain Tracks if the user is currently viewing the main menu.
- * @param isImportRunning Prevents clearing if an active import is still running.
- * @param messageActive Flag indicating a temporary message is currently visible.
- * @param stopMessage Stop flag checked every 500ms to allow early exit on program termination.
+ * @param timeoutTicks   Number of 500ms ticks to wait before clearing (e.g. 2 = 1s, 8 = 4s).
+ * @param isAtMain       Tracks if the user is currently viewing the main menu.
+ * @param messageActive  Flag indicating a temporary message is currently visible.
+ * @param stopMessage    Stop flag checked every 500ms to allow early exit.
+ * @param state          Shared state with import flag; prevents clearing if import is running.
  */
-void clearMessageAfterTimeoutInMain(int timeoutTicks, std::atomic<bool>& isAtMain, std::atomic<bool>& isImportRunning, 
-									std::atomic<bool>& messageActive, std::atomic<bool>& stopMessage) {
+void clearMessageAfterTimeoutInMain(int timeoutTicks, std::atomic<bool>& isAtMain,
+                                    std::shared_ptr<RefreshState> state,
+                                    std::atomic<bool>& messageActive,
+                                    std::atomic<bool>& stopMessage) {
     int elapsed = 0;
     while (elapsed < timeoutTicks) {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         elapsed++;
-        if (stopMessage.load()) return;  // ← checks every 500ms
+        if (stopMessage.load()) return;
     }
 
-    if (!isImportRunning.load()) {
+    if (!(state && state->isImportRunning.load())) {
         if (messageActive.load() && isAtMain.load()) {
             clearScrollBuffer();
             print_ascii();
@@ -314,7 +334,7 @@ void clearMessageAfterTimeoutInMain(int timeoutTicks, std::atomic<bool>& isAtMai
 
 /**
  * @brief Clears the terminal screen and resets the scrollback buffer.
- * * Uses ANSI escape sequences: 
+ * * Uses ANSI escape sequences:
  * - \033[3J: Clear scrollback
  * - \033[2J: Clear entire screen
  * - \033[H: Move cursor to home position

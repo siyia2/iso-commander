@@ -200,48 +200,50 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
 }
 
 /**
- * @brief Background worker thread that synchronizes the TUI with filesystem changes.
+ * @brief Background watcher thread that redraws the ISO list after an import completes.
  *
- * Polling function that waits for an update signal and refreshes the display
- * without interrupting the user's current Readline input session.
+ * Blocks on a condition variable until signaled by the import thread, then
+ * refreshes the display without interrupting the user's current Readline session.
  *
  * @details **Concurrency & UI Logic:**
  * - **Thread Safety:** Utilizes @c std::shared_ptr<RefreshState> to ensure the
  *   thread accesses valid data even if the parent scope has exited.
- * - **Input Protection:** Only triggers a refresh if @c isImportRunning is false
- *   to avoid race conditions or database locks.
+ * - **Event-Driven:** Blocks on @c RefreshState::importCV rather than polling,
+ *   waking deterministically the instant the import thread calls @c notify_all().
  * - **Readline Integration:** Calls @c rl_on_new_line() and @c rl_redisplay()
  *   to gracefully repaint the prompt underneath the new list output.
- * - **Auto-Termination:** Once the refresh logic executes, the thread clears
- *   atomic flags and terminates (non-looping design).
+ * - **Auto-Termination:** Executes once after the import signal is received,
+ *   clears atomic flags, and terminates (non-looping design).
  *
- * @param timeoutMS        Interval to wait before checking state (in milliseconds).
  * @param isAtISOList      Atomic flag; refresh only occurs if the user is in the list view.
- * @param isImportRunning  Atomic flag preventing refresh during active I/O tasks.
- * @param updateHasRun     Atomic signal used to acknowledge the refresh request.
+ * @param updateHasRun     Atomic signal set upon completion to acknowledge the refresh.
  * @param newISOFound      Atomic signal cleared upon completion.
- * @param state            Shared state container for UI indices, pagination, and filters.
+ * @param state            Shared state container for:
+ *                         - isImportRunning: Atomic flag used as CV predicate
+ *                         - UI indices, pagination state, filters
+ *                         - importMutex and importCV for event coordination
  */
-void refreshListAfterAutoUpdate(int timeoutMS, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning,
-                                std::atomic<bool>& updateHasRun, std::atomic<bool>& newISOFound,
+void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
+                                std::atomic<bool>& updateHasRun,
+                                std::atomic<bool>& newISOFound,
                                 std::shared_ptr<RefreshState> state) {
-    while (true) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(timeoutMS));
-
-        if (!isImportRunning.load()) {
-            if (isAtISOList.load()) {
-                loadAndDisplayIso(state->filteredFiles, state->isFiltered, state->listSubtype,
-                                  state->umountMvRmBreak, state->pendingIndices, state->hasPendingProcess,
-                                  state->currentPage, state->originalPage, isImportRunning);
-                std::cout << "\n";
-                rl_on_new_line();
-                rl_redisplay();
-            }
-            updateHasRun.store(true);
-            newISOFound.store(false);
-            break;
-        }
+    {
+        std::unique_lock<std::mutex> lock(state->importMutex);
+        state->importCV.wait(lock, [&] {
+            return !state->isImportRunning.load(std::memory_order_acquire);
+        });
     }
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    if (isAtISOList.load()) {
+        loadAndDisplayIso(state->filteredFiles, state->isFiltered, state->listSubtype,
+                          state->umountMvRmBreak, state->pendingIndices, state->hasPendingProcess,
+                          state->currentPage, state->originalPage, state);
+        std::cout << "\n";
+        rl_on_new_line();
+        rl_redisplay();
+    }
+    updateHasRun.store(true);
+    newISOFound.store(false);
 }
 
 /**
@@ -253,8 +255,9 @@ void refreshListAfterAutoUpdate(int timeoutMS, std::atomic<bool>& isAtISOList, s
  * @details **Key Behaviors:**
  * - **Dynamic Context:** Automatically toggles between the global ISO database and active
  *   mount points based on the @p operation.
- * - **Thread-Safe Refresh:** Utilizes @c std::shared_ptr<RefreshState> to share UI state
- *   with a detached background refresh thread, preventing use-after-free errors.
+ * - **Event-Driven Refresh:** Shares a @c RefreshState instance (via @c std::shared_ptr)
+ *   with a detached watcher thread; the watcher blocks on @c RefreshState::importCV and
+ *   redraws the list deterministically when the import thread signals completion.
  * - **Stacked Filtering:** Supports successive narrowing of results. The @c '<' command
  *   unwinds the filter stack or returns to the previous menu.
  * - **Two-Phase Execution:** Implements an "Induction" model where indices are staged
@@ -263,16 +266,20 @@ void refreshListAfterAutoUpdate(int timeoutMS, std::atomic<bool>& isAtISOList, s
  *   sequences to maintain a static-feeling interface during input.
  *
  * @param operation         Target system action ("mount", "umount", "rm", etc.).
- * @param updateHasRun      Atomic signal for background list updates.
- * @param isAtISOList       Atomic flag used to gate background thread UI painting.
- * @param isImportRunning   Prevents UI refresh during active database imports.
- * @param newISOFound       Trigger for the refresh thread to repaint the list.
- * @param stopImport        Atomic signal to cancel background import tasks.
- * @param backgroundThreads Container for managing detached worker lifetimes.
- * @param search            Context flag for manual vs. automatic database refreshes.
+ * @param updateHasRun      Set to true after an import completes to signal the watcher thread to repaint the list.
+ * @param isAtISOList       Guards background UI repaints; false when the user has navigated away from the ISO list.
+ * @param isImportRunning   Prevents concurrent imports; also used as the CV predicate in the watcher thread.
+ * @param newISOFound       Set by the import when new ISOs are discovered; cleared by the watcher after repainting.
+ * @param stopImport        Atomic cancellation signal propagated into background import tasks.
+ * @param backgroundThreads Joinable worker threads (manual R-press imports) retained for lifetime management.
+ * @param search            Cleared on manual R-press to suppress automatic search re-entry after refresh.
+ * @param refreshState      Shared UI state and CV passed from the startup import path to synchronize the
+ *                          watcher with the correct import session; created internally if nullptr.
  */
-void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList,
-std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads, bool& search) {
+void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun,
+                       std::atomic<bool>& isAtISOList, std::atomic<bool>& newISOFound,
+                       std::atomic<bool>& stopImport, std::vector<std::thread>& backgroundThreads,
+                       bool& search, std::shared_ptr<RefreshState> refreshState) {
 
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
@@ -281,7 +288,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
 
     isoDirs.reserve(1000);
 
-    auto refreshState = std::make_shared<RefreshState>();
+    if (!refreshState) refreshState = std::make_shared<RefreshState>();
 
     std::vector<std::string>& filteredFiles = refreshState->filteredFiles;
     std::vector<std::string>& pendingIndices = refreshState->pendingIndices;
@@ -319,7 +326,7 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
     listSubtype = isMount ? "mount" : (write ? "write2usb" : "cp_mv_rm");
 
     while (true) {
-		clearGlobalVerboseSets();
+        clearGlobalVerboseSets();
         enable_ctrl_d();
         setupSignalHandlerCancellations();
         setup_custom_keybindingsForSelect();
@@ -336,63 +343,54 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
 
         if (needsClrScrn) {
             if (!isUnmount) {
-                if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning)) {
+                if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState)) {
                     newISOFound.store(false);
                     break;
                 }
             } else {
-                if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning))
+                if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState))
                     break;
             }
             // Reset manual-update key for mountpoint-lists
-			if (isUnmount) rl_bind_keyseq("R", rl_insert);
+            if (isUnmount) rl_bind_keyseq("R", rl_insert);
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
 
         // Atomic flag to ensure only ONE watcher thread is ever detached per import session
         static std::atomic<bool> watcherRunning{false};
-		// Launch a detached thread for automatic list updating if startup auto-update or manual list refresh is running
-		if (isImportRunning.load() && !isUnmount && !GlobalCaches::globalIsoFileList.empty()) {
-			bool watcherExpected = false;
-			if (watcherRunning.compare_exchange_strong(watcherExpected, true)) {
-				std::thread([refreshState, &isAtISOList, &isImportRunning,
-							 &updateHasRun, &newISOFound]() {
-					refreshListAfterAutoUpdate(500, isAtISOList, isImportRunning,
-											   updateHasRun, newISOFound, refreshState);
-					watcherRunning.store(false);  // release when done
-				}).detach();
-			}
-		}
-
-		// Force redraw after manual imports to resolve stuck indicator
-        if (refreshState->forceRedraw.load() && !isImportRunning.load() && !isUnmount) {
-                            refreshState->forceRedraw.store(false);
-                            needsClrScrn = true;
-                            continue;
+        // Launch a detached thread for automatic list updating if startup auto-update or manual list refresh is running
+        if (refreshState->isImportRunning.load() && !isUnmount) {
+            bool watcherExpected = false;
+            if (watcherRunning.compare_exchange_strong(watcherExpected, true)) {
+                std::thread([refreshState, &isAtISOList, &updateHasRun, &newISOFound]() {
+                    refreshListAfterAutoUpdate(isAtISOList, updateHasRun, newISOFound, refreshState);
+                    watcherRunning.store(false);
+                }).detach();
+            }
         }
 
         std::cout << "\033[1A\033[K";
 
-		// Disable PgUp&PgDn when pagination is not enabled
-		if (GlobalState::ITEMS_PER_PAGE == 0) {
-			rl_bind_keyseq("\\e[5~", rl_insert);
-			rl_bind_keyseq("\\e[6~", rl_insert);
-		}
+        // Disable PgUp&PgDn when pagination is not enabled
+        if (GlobalState::ITEMS_PER_PAGE == 0) {
+            rl_bind_keyseq("\\e[5~", rl_insert);
+            rl_bind_keyseq("\\e[6~", rl_insert);
+        }
 
-		const ReadlineAndPromptTheme pt = getPromptTheme();
+        const ReadlineAndPromptTheme pt = getPromptTheme();
 
-		if (isFiltered) rl_bind_keyseq("*", rl_insert);
+        if (isFiltered) rl_bind_keyseq("*", rl_insert);
 
-		std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
+        std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
-		std::string prompt =
-			prefix +
-			pt.iso         + "ISO" +
-			pt.primary     + " ↵ for " + "\001" +
-			operationColor + "\002" + operation +
-			pt.primary     + ", ? help, < return: " +
-			pt.reset;
+        std::string prompt =
+            prefix +
+            pt.iso         + "ISO" +
+            pt.primary     + " ↵ for " + "\001" +
+            operationColor + "\002" + operation +
+            pt.primary     + ", ? help, < return: " +
+            pt.reset;
 
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
 
@@ -401,50 +399,35 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
         std::string inputString(rawInput.get());
 
         if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
-			needsClrScrn = false;
-			continue;
-		}
-		if (rawInput.get()[0] == '\0') {
+            needsClrScrn = false;
+            continue;
+        }
+        if (rawInput.get()[0] == '\0') {
             needsClrScrn = false;
             continue;
         }
 
-        if (inputString[0] == 'R' && isImportRunning.load()) {
-			std::cout << "\033[1B\033[K";
-			needsClrScrn = false;
-			continue;
-		}
+        if (inputString[0] == 'R' && refreshState->isImportRunning.load()) {
+            std::cout << "\033[1B\033[K";
+            needsClrScrn = false;
+            continue;
+        }
 
-		// Initiate a manual list refresh
-		if (inputString == "R" && !isUnmount && !GlobalCaches::globalIsoFileList.empty()) {
-			bool expected = false;
-			if (!isImportRunning.compare_exchange_strong(expected, true)) {
-				// Already running — swallow the keypress silently
-				needsClrScrn = false;
-				continue;
-			}
-			needsClrScrn = true;
-			search = false;
-			backgroundThreads.emplace_back([&isImportRunning, &newISOFound, &stopImport, &refreshState] {
-                auto makeDeadline = [] {
-                    return std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
-                };
-                // Wait for any previous watcher to finish first
-                auto deadline = makeDeadline();
-                while (watcherRunning.load() && std::chrono::steady_clock::now() < deadline) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                }
-                // Now wait for the new watcher to launch
-                deadline = makeDeadline();
-                while (!watcherRunning.load() && std::chrono::steady_clock::now() < deadline) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                }
-                backgroundDatabaseImport(isImportRunning, newISOFound, stopImport);
-                refreshState->forceRedraw.store(true);
+        // Initiate a manual list refresh
+        if (inputString == "R" && !isUnmount && !GlobalCaches::globalIsoFileList.empty()) {
+            bool expected = false;
+            if (!refreshState->isImportRunning.compare_exchange_strong(expected, true)) {
+                needsClrScrn = false;
+                continue;
+            }
+            needsClrScrn = true;
+            search = false;
+            backgroundThreads.emplace_back([&newISOFound, &stopImport, refreshState] {
+                backgroundDatabaseImport(newISOFound, stopImport, refreshState);
             });
-			updateHasRun.store(true);
-			continue;
-		}
+            updateHasRun.store(true);
+            continue;
+        }
 
         if (inputString == "<") {
             if (isFiltered) {
@@ -454,15 +437,15 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
                 needsClrScrn = true;
                 continue;
             } else {
-				reset_custom_keybindingsForSelect();
+                reset_custom_keybindingsForSelect();
                 currentPage = 0;
                 return;
             }
         }
 
         if (inputString == "proc" && pendingIndices.empty()) {
-			std::cout << "\033[1B\033[K";
-			needsClrScrn = false;
+            std::cout << "\033[1B\033[K";
+            needsClrScrn = false;
             hasPendingProcess = false;
             continue;
         }
@@ -491,10 +474,9 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
 
         if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn,
                                     filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage)) {
-										std::cout << "\033[1B\033[K";
-										// Disable PgUp&PgDn when pagination is not enabled
-
-                continue;
+            std::cout << "\033[1B\033[K";
+            // Disable PgUp&PgDn when pagination is not enabled
+            continue;
         }
 
         bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn);
@@ -507,7 +489,6 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
                                            needsClrScrn, operation, isAtISOList, umountMvRmBreak,
                                            filterHistory, newISOFound);
     }
-
     reset_custom_keybindingsForSelect();
 }
 
@@ -526,14 +507,19 @@ std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound, std::atomic<
  *   induction strings and empty inputs to prevent UI flickering or logic errors.
  * - **Batch Processing:** Supports staging multiple files via @c handlePendingInduction
  *   before committing the conversion batch with the "proc" command.
+ * - **Event-Driven Refresh:** Uses @c RefreshState shared_ptr to monitor import
+ *   status and condition variable for non-polling list updates.
  *
  * @param fileType         The format category (e.g., "bin", "mdf", "nrg").
  * @param[in,out] files    The working list of files to display and process.
  * @param newISOFound      Atomic signal to notify the system when a new ISO is created.
  * @param list             UI flag indicating if the list view is active.
- * @param isImportRunning  Atomic gate to prevent concurrent database access.
+ * @param state            Shared state containing import running flag and condition
+ *                         variable for thread-safe event coordination.
  */
-void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {
+void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files,
+                         std::atomic<bool>& newISOFound, bool& list,
+                         std::shared_ptr<RefreshState> state) {
 
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
@@ -570,20 +556,20 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         operation = "chd2iso";
     } else if (fileType == "daa") {
         fileExtension = ".daa/.gbi";
-		fileExtensionWithOutDots = "DAA/GBI";
-		operation = "daa2iso";
+        fileExtensionWithOutDots = "DAA/GBI";
+        operation = "daa2iso";
     } else {
         fileExtension = "";
         fileExtensionWithOutDots = "FILES";
     }
 
     while (true) {
-		clearGlobalVerboseSets();
+        clearGlobalVerboseSets();
         enable_ctrl_d();
         setupSignalHandlerCancellations();
         setup_custom_keybindingsForSelect();
         // Reset manual-update key for image lists
-		rl_bind_keyseq("R", rl_insert);
+        rl_bind_keyseq("R", rl_insert);
         GlobalState::g_operationCancelled.store(false);
         bool verbose = false;
 
@@ -591,17 +577,19 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
         clear_history();
         if (needsClrScrn) {
-			loadAndDisplayImageFiles(files, fileType, need2Sort, isFiltered, list, pendingIndices, hasPendingProcess, currentPage, isImportRunning);
-			std::cout << "\n\n";
-		}
+            loadAndDisplayImageFiles(files, fileType, need2Sort, isFiltered, list,
+                                     pendingIndices, hasPendingProcess, currentPage,
+                                     state);
+            std::cout << "\n\n";
+        }
 
-		std::cout << "\033[1A\033[K";
+        std::cout << "\033[1A\033[K";
 
-		// Disable PgUp&PgDn when pagination is not enabled
-		if (GlobalState::ITEMS_PER_PAGE == 0) {
-			rl_bind_keyseq("\\e[5~", rl_insert);
-			rl_bind_keyseq("\\e[6~", rl_insert);
-		}
+        // Disable PgUp&PgDn when pagination is not enabled
+        if (GlobalState::ITEMS_PER_PAGE == 0) {
+            rl_bind_keyseq("\\e[5~", rl_insert);
+            rl_bind_keyseq("\\e[6~", rl_insert);
+        }
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
@@ -651,7 +639,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         }
 
         if (inputString == "proc" && pendingIndices.empty()) {
-			std::cout << "\033[1B\033[K";
+            std::cout << "\033[1B\033[K";
             hasPendingProcess = false;
             needsClrScrn = false;
             continue;
@@ -665,9 +653,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         }
 
         if (inputString[0] == ';' || (inputString[0] == '/' && inputString[1] == ';') || std::count(inputString.begin(), inputString.end(), '/') > 1 || inputString.find(";;") != std::string::npos) {
-			needsClrScrn = false;
-			continue;
-		}
+            needsClrScrn = false;
+            continue;
+        }
 
         if (rawInput.get()[0] == '\0') {
             needsClrScrn = false;
@@ -728,5 +716,5 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             }
         }
     }
-   reset_custom_keybindingsForSelect();
+    reset_custom_keybindingsForSelect();
 }
