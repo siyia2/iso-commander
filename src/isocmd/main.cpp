@@ -87,7 +87,7 @@ int main(int argc, char *argv[]) {
 
     // --- Version & Utility Command Dispatch ---
     if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v"))
-        return printVersionNumber("6.9.7"), 0;
+        return printVersionNumber("6.9.6"), 0;
     if (argc >= 3 || (argc == 2 && (std::string(argv[1]) == "umount" || std::string(argv[1]) == "unmount" || std::string(argv[1]) == "mount")))
         return handleMountUmountCommands(argc, argv);
 
