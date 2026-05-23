@@ -200,7 +200,8 @@ int main(int argc, char *argv[]) {
          * - 1: Browse/select ISOs (submenu1)
          * - 2: Manage recent ISOs (submenu2)
          * - 3: Refresh database from filesystem
-         * - 4: Exit application
+         * - 4: Settings Editor
+         * - 5: Exit application
          */
         std::string choice(input.get());
         if (choice == "1") {
@@ -238,6 +239,10 @@ int main(int argc, char *argv[]) {
     stopImport = stopMessage = true;
     if (importState) {
         importState->isImportRunning.store(false);
+        {
+            std::lock_guard<std::mutex> lk(importState->workerMutex);
+            importState->workerCV.notify_one();
+        }
     }
     for (auto& t : backgroundThreads) if (t.joinable()) t.join();
     std::cout << UI::Palette::Reset << std::flush;
