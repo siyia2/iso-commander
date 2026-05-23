@@ -135,7 +135,7 @@ int main(int argc, char *argv[]) {
     // Store the shared_ptr to RefreshState for access to its isImportRunning
     std::shared_ptr<RefreshState> importState;
 
-    /// Start background database import if auto-update is enabled
+    /// Start background database import if auto-update is enabled and FolderPaths exist in history file
     if (search && (!(isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath)))) {
         importState = std::make_shared<RefreshState>();
         importState->isImportRunning.store(true);
