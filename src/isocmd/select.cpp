@@ -299,9 +299,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
     size_t& currentPage                      = refreshState->currentPage;
     size_t& originalPage                     = refreshState->originalPage;
 
-    // Atomic flag to ensure only ONE watcher thread is ever detached per import session
-    std::atomic<bool> watcherRunning{false};
-
     filteredFiles.reserve(1000);
     isFiltered      = false;
     hasPendingProcess = false;
@@ -363,10 +360,11 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         // Launch a detached thread for automatic list updating if startup auto-update or manual list refresh is running
         if (refreshState->isImportRunning.load() && !isUnmount) {
             bool watcherExpected = false;
-            if (watcherRunning.compare_exchange_strong(watcherExpected, true)) {
-                std::thread([refreshState, &isAtISOList, &updateHasRun, &newISOFound, &watcherRunning]() {
+            if (refreshState->isWatcherRunning.compare_exchange_strong(watcherExpected, true)) {
+                std::thread([refreshState, &isAtISOList, &updateHasRun, &newISOFound, &search]() {
                     refreshListAfterAutoUpdate(isAtISOList, updateHasRun, newISOFound, refreshState);
-                    watcherRunning.store(false);
+                    if (search || !refreshState->isImportRunning.load(std::memory_order_acquire))
+                        refreshState->isWatcherRunning.store(false);
                 }).detach();
             }
         }
@@ -410,7 +408,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
         if (inputString[0] == 'R' && refreshState->isImportRunning.load()) {
             std::cout << "\033[1B\033[K";
-            needsClrScrn = false;
+            needsClrScrn = true;
             continue;
         }
 
@@ -421,10 +419,20 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 needsClrScrn = false;
                 continue;
             }
+            // Prune completed threads before launching a new one
+            backgroundThreads.erase(
+                std::remove_if(backgroundThreads.begin(), backgroundThreads.end(),
+                    [](std::thread& t) {
+                        if (t.joinable()) { t.join(); return true; }
+                        return false;
+                    }),
+                backgroundThreads.end()
+            );
             needsClrScrn = true;
             search = false;
             backgroundThreads.emplace_back([&newISOFound, &stopImport, refreshState] {
                 backgroundDatabaseImport(newISOFound, stopImport, refreshState);
+                refreshState->isWatcherRunning.store(false);
             });
             updateHasRun.store(true);
             continue;
