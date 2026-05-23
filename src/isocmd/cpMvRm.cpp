@@ -42,7 +42,7 @@
 
 /**
  * @brief Constructs a list of formatted strings representing ISO files for display.
- * @details Extracts filenames and directories, applying theme-specific colors and 
+ * @details Extracts filenames and directories, applying theme-specific colors and
  * formatting based on global display configurations.
  * * @param indexChunks Chunks of indices pointing to selected files.
  * @param isoFiles The full list of available ISO file paths.
@@ -50,7 +50,7 @@
  */
 std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>& indexChunks, const std::vector<std::string>& isoFiles) {
     std::vector<std::string> entries;
-    
+
     const CpMvRmColors colors = getCpMvRmColors();
 
     for (const auto& chunk : indexChunks) {
@@ -121,29 +121,29 @@ static std::string validateLinuxPath(const std::string& path) {
     return "";
 }
 
-std::string handlePaginatedDisplay(const std::vector<std::string>& entries, const std::string& promptPrefix, 
+std::string handlePaginatedDisplay(const std::vector<std::string>& entries, const std::string& promptPrefix,
 const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn);
 
 /**
  * @brief Orchestrates user confirmation for permanent file deletion.
- * 
- * Uses handlePaginatedDisplay to show the list of files and captures a Y/N 
+ *
+ * Uses handlePaginatedDisplay to show the list of files and captures a Y/N
  * confirmation. Handles terminal environment setup and internal signal state.
- * 
+ *
  * @param isoFiles The list of ISO file paths.
  * @param indexChunks Chunks for formatting the ISO list display.
  * @param umountMvRmBreak [out] Set to true if the operation should proceed.
  * @param abortDel [out] Set to true if the user explicitly cancels.
  * @return True if the user confirmed with 'Y', false otherwise.
  */
-bool handleDeleteOperation(const std::vector<std::string>& isoFiles, 
-                           std::vector<std::vector<int>>& indexChunks, 
-                           bool& umountMvRmBreak, 
+bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
+                           std::vector<std::vector<int>>& indexChunks,
+                           bool& umountMvRmBreak,
                            bool& abortDel) {
-    
+
     rl_attempted_completion_function = nullptr;
     reset_custom_keybindingsForRm();
-    
+
     const CpMvRmColors colors = getCpMvRmColors();
     std::string green = "\001" + std::string(colors.prompt_green) + "\002";
     std::string blue  = "\001" + std::string(colors.prompt_blue) + "\002";
@@ -167,13 +167,13 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
 
     // Environment setup for Readline inside the loop
     auto setupEnv = [&]() {
-        // Only enable Ctrl+L (clear) if pagination is actually being used, 
+        // Only enable Ctrl+L (clear) if pagination is actually being used,
         // or always enable it to re-draw the list from the top.
         rl_bind_key('\f', [](int count, int key) -> int {
             clear_screen_and_buffer(count, key);
             rl_on_new_line();
             rl_replace_line("", 0);
-            rl_done = 1; 
+            rl_done = 1;
             return 0;
         });
     };
@@ -194,7 +194,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
 
         if (!isPageTurn && !userInput.empty()) {
             std::string choice = trimWhitespace(userInput);
-            
+
             if (choice == "Y" || choice == "y") {
                 umountMvRmBreak = true;
                 return true;
@@ -211,11 +211,11 @@ void helpSearches(bool isCpMv, bool import2ISO);
 
 /**
  * @brief Prompts for a destination directory or routes to deletion confirmation.
- * 
- * In Copy/Move mode: Validates Linux paths, handles pagination, processes 
+ *
+ * In Copy/Move mode: Validates Linux paths, handles pagination, processes
  * overwrite flags (-o), and manages Readline history.
  * In Delete mode: Proxies the request to handleDeleteOperation.
- * 
+ *
  * @param isoFiles List of source files.
  * @param indexChunks Chunks for list display formatting.
  * @param uniqueErrorTokenMessages Set for UI error persistence.
@@ -237,7 +237,7 @@ bool& overwriteExisting) {
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
     sortFilesCaseInsensitive(entries);
     clearScrollBuffer();
-    
+
 	reset_custom_keybindingsForCpMvWrite2Usb();
 
     bool shouldContinue = true;
@@ -408,11 +408,11 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst, std::ato
 /**
  * @brief Logs the final result of a Move or Copy operation into verbose reporting sets.
  */
-static void logOperationResult(bool success, bool cancelled, const std::error_code& ec, 
+static void logOperationResult(bool success, bool cancelled, const std::error_code& ec,
                                std::string_view verb, std::string_view srcDir, std::string_view srcFile,
-                               std::string_view destDirProcessed, std::string_view destFile, 
-                               std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, 
-                               std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, 
+                               std::string_view destDirProcessed, std::string_view destFile,
+                               std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors,
+                               std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks,
                                std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages) {
 
     const CpMvRmColors colors = getCpMvRmColors();
@@ -428,10 +428,10 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
     if (!success || ec) {
         // If this were string_view, it would point to a deleted temporary string.
         std::string errorDetail = cancelled ? "Cancelled" : ec.message();
-        
+
         std::string msg;
         msg.reserve(128 + displaySrc.size() + destDirProcessed.size() + errorDetail.size());
-        
+
         msg.append(colors.error_label).append("Error ").append(verb).append(": ")
            .append(colors.error_path).append("'").append(displaySrc).append("'")
            .append(UI::Palette::BoldReset).append(colors.error_label).append(" to '").append(destDirProcessed).append("': ")
@@ -439,7 +439,7 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
            .append(UI::Palette::BoldReset);
 
         verboseErrors.push_back(std::move(msg));
-        
+
         if (failedTasks) {
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
         }
@@ -448,10 +448,10 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
     } else {
         // Success case: pastVerb can stay string_view because literals ("Moved") live forever
         std::string_view pastVerb = (verb == "moving") ? "Moved" : "Copied";
-        
+
         std::string msg;
         msg.reserve(128 + displaySrc.size() + destDirProcessed.size() + destFile.size());
-        
+
         msg.append(colors.success_label).append(pastVerb).append(": ")
            .append(colors.success_path).append("'").append(displaySrc).append("'")
            .append(UI::Palette::BoldReset).append(colors.success_label).append(" to ")
@@ -459,12 +459,12 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
            .append(UI::Palette::BoldReset).append(".");
 
         verboseIsos.push_back(std::move(msg));
-        
+
         if (completedTasks) {
             completedTasks->fetch_add(1, std::memory_order_acq_rel);
         }
     }
-    
+
     if (batchInsertMessages) {
         batchInsertMessages();
     }
@@ -473,10 +473,10 @@ static void logOperationResult(bool success, bool cancelled, const std::error_co
 /**
  * @brief Removes a single ISO file from the disk and logs the outcome.
  */
-void performDeleteOperation(const fs::path& srcPath, std::string_view srcDir, std::string_view srcFile, 
-                            size_t fileSize, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks, 
-                            std::atomic<size_t>* failedTasks, std::vector<std::string>& verboseIsos, 
-                            std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful, 
+void performDeleteOperation(const fs::path& srcPath, std::string_view srcDir, std::string_view srcFile,
+                            size_t fileSize, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks,
+                            std::atomic<size_t>* failedTasks, std::vector<std::string>& verboseIsos,
+                            std::vector<std::string>& verboseErrors, std::atomic<bool>& operationSuccessful,
                             const std::function<void()>& batchInsertMessages) {
 
     const CpMvRmColors colors = getCpMvRmColors();
@@ -497,7 +497,7 @@ void performDeleteOperation(const fs::path& srcPath, std::string_view srcDir, st
            .append(colors.error_path).append("'").append(displaySrc).append("'")
            .append(UI::Palette::BoldReset).append(colors.error_label).append(": Cancelled.")
            .append(UI::Palette::BoldReset);
-        
+
         verboseErrors.push_back(std::move(msg));
         failedTasks->fetch_add(1, std::memory_order_acq_rel);
         operationSuccessful.store(false, std::memory_order_release);
@@ -509,14 +509,14 @@ void performDeleteOperation(const fs::path& srcPath, std::string_view srcDir, st
     // fs::remove returns true if the file was deleted, false if it didn't exist
     if (fs::remove(srcPath, ec)) {
         completedBytes->fetch_add(fileSize, std::memory_order_relaxed);
-        
+
         std::string msg;
         msg.reserve(128 + displaySrc.size());
         msg.append(colors.success_label).append("Deleted: ")
            .append(colors.success_path).append("'").append(displaySrc).append("'")
            .append(UI::Palette::BoldReset).append(colors.success_label).append(".")
            .append(UI::Palette::BoldReset);
-           
+
         verboseIsos.push_back(std::move(msg));
         completedTasks->fetch_add(1, std::memory_order_acq_rel);
     } else {
@@ -528,7 +528,7 @@ void performDeleteOperation(const fs::path& srcPath, std::string_view srcDir, st
            .append(ec ? ec.message() : "File not found")
            .append(".")
            .append(UI::Palette::BoldReset);
-           
+
         verboseErrors.push_back(std::move(msg));
         failedTasks->fetch_add(1, std::memory_order_acq_rel);
         operationSuccessful.store(false, std::memory_order_release);
@@ -537,17 +537,17 @@ void performDeleteOperation(const fs::path& srcPath, std::string_view srcDir, st
 }
 
 /**
- * @brief Executes a file Move operation. 
- * @details Tries a quick filesystem rename first; if moving across different devices, 
+ * @brief Executes a file Move operation.
+ * @details Tries a quick filesystem rename first; if moving across different devices,
  * falls back to a manual copy-then-delete procedure.
  */
-bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath, 
-                          std::string_view srcDir, std::string_view srcFile, 
-                          std::string_view destDirProcessed, std::string_view destFile, 
-                          size_t fileSize, std::atomic<size_t>* completedBytes, 
-                          std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, 
-                          std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors, 
-                          std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages, 
+bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath,
+                          std::string_view srcDir, std::string_view srcFile,
+                          std::string_view destDirProcessed, std::string_view destFile,
+                          size_t fileSize, std::atomic<size_t>* completedBytes,
+                          std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks,
+                          std::vector<std::string>& verboseIsos, std::vector<std::string>& verboseErrors,
+                          std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertMessages,
                           const std::function<void(const fs::path&)>& changeOwnership) {
 
     // 1. Check for early cancellation
@@ -558,7 +558,7 @@ bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath,
     }
 
     std::error_code ec;
-    
+
     // 2. Attempt Fast Move (Rename)
     fs::rename(srcPath, destPath, ec);
 
@@ -573,7 +573,7 @@ bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath,
     // 3. Fallback: Cross-device move (Copy + Delete)
     ec.clear();
     bool success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
-    
+
     if (success) {
         std::error_code deleteEc;
         if (!fs::remove(srcPath, deleteEc)) {
@@ -611,7 +611,7 @@ bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath,
                            verboseIsos, verboseErrors, completedTasks, failedTasks, operationSuccessful, batchInsertMessages);
     } else {
         // Copy failed or was cancelled
-        logOperationResult(false, GlobalState::g_operationCancelled.load(std::memory_order_acquire), 
+        logOperationResult(false, GlobalState::g_operationCancelled.load(std::memory_order_acquire),
                            ec, "moving", srcDir, srcFile, destDirProcessed, destFile,
                            verboseIsos, verboseErrors, completedTasks, failedTasks, operationSuccessful, batchInsertMessages);
     }
@@ -620,74 +620,37 @@ bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath,
 }
 
 /**
- * @brief Specialized move operation for multiple destinations.
+ * @brief Specialized copy operation.
  */
-bool performMultiDestMoveOperation(
-    const fs::path& srcPath, 
-    const fs::path& destPath, 
+bool performCopyOperation(
+    const fs::path& srcPath,
+    const fs::path& destPath,
     std::string_view srcDir,
     std::string_view srcFile,
     std::string_view destDirProcessed,
     std::string_view destFile,
-    std::atomic<size_t>* completedBytes, 
-    std::atomic<size_t>* completedTasks, 
-    std::atomic<size_t>* failedTasks, 
+    std::atomic<size_t>* completedBytes,
+    std::atomic<size_t>* completedTasks,
+    std::atomic<size_t>* failedTasks,
     std::vector<std::string>& verboseIsos,
-    std::vector<std::string>& verboseErrors, 
-    std::atomic<bool>& operationSuccessful, 
-    const std::function<void()>& batchInsertMessages, 
-    const std::function<void(const fs::path&)>& changeOwnership) 
+    std::vector<std::string>& verboseErrors,
+    std::atomic<bool>& operationSuccessful,
+    const std::function<void()>& batchInsertMessages,
+    const std::function<void(const fs::path&)>& changeOwnership)
 {
     std::error_code ec;
-    
-    // bufferedCopyWithProgress usually handles the heavy lifting
-    bool success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
-    
-    if (success) {
-        changeOwnership(destPath);
-    }
 
-    // logOperationResult must also be updated to accept string_view for this to be 100% copy-free
-    logOperationResult(success, GlobalState::g_operationCancelled.load(), ec, "moving", 
-                       srcDir, srcFile, destDirProcessed, destFile,
-                       verboseIsos, verboseErrors, completedTasks, failedTasks, 
-                       operationSuccessful, batchInsertMessages);
-                       
-    return success;
-}
-
-/**
- * @brief Specialized copy operation.
- */
-bool performCopyOperation(
-    const fs::path& srcPath, 
-    const fs::path& destPath, 
-    std::string_view srcDir,
-    std::string_view srcFile, 
-    std::string_view destDirProcessed, 
-    std::string_view destFile, 
-    std::atomic<size_t>* completedBytes, 
-    std::atomic<size_t>* completedTasks, 
-    std::atomic<size_t>* failedTasks, 
-    std::vector<std::string>& verboseIsos,
-    std::vector<std::string>& verboseErrors, 
-    std::atomic<bool>& operationSuccessful, 
-    const std::function<void()>& batchInsertMessages, 
-    const std::function<void(const fs::path&)>& changeOwnership) 
-{
-    std::error_code ec;
-    
     // Execute the actual copy
     bool success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
-    
+
     if (success) {
         changeOwnership(destPath);
     }
 
     // Ensure logOperationResult also takes string_view to avoid copies here
-    logOperationResult(success, GlobalState::g_operationCancelled.load(), ec, "copying", 
+    logOperationResult(success, GlobalState::g_operationCancelled.load(), ec, "copying",
                        srcDir, srcFile, destDirProcessed, destFile,
-                       verboseIsos, verboseErrors, completedTasks, failedTasks, 
+                       verboseIsos, verboseErrors, completedTasks, failedTasks,
                        operationSuccessful, batchInsertMessages);
 
     return success;
@@ -696,41 +659,40 @@ bool performCopyOperation(
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname);
 
 /**
- * @brief High-level handler that iterates through ISO files to perform CP, MV, or RM.
- * @details Manages thread-safe updates to reporting sets and handles ownership changes
- * for newly created files.
+ * @brief Performs a copy, move, or delete operation for a list of files to a
+ *        SINGLE destination directory.
  *
- * It:
- * - Processes multiple destination directories (semicolon-separated in userDestDir)
- * - Batches success/error messages (every 50 entries) to reduce mutex contention
- * - Changes ownership of new files to the real user (via chown)
- * - Handles three operation types:
- *   - Delete: Calls performDeleteOperation
- *   - Move: Single or multi-destination move with source cleanup
- *   - Copy: Single or multi-destination copy
- * - Records successful destination paths for database indexing
+ * Previously this function iterated over all destinations internally.  That loop
+ * has been removed — destination fanout is now handled by the caller
+ * (processInputForCpMvRm) which dispatches one task per (file, destination) pair.
  *
- * @param isoFiles            Files to operate on in this chunk
- * @param isoFilesCopy        Master file list (for existence validation)
- * @param userDestDir         Semicolon-separated destination directories
- * @param isMove              True for move operation
- * @param isCopy              True for copy operation
- * @param isDelete            True for delete operation
- * @param completedBytes      Atomic counter for progress tracking (bytes processed)
- * @param completedTasks      Atomic counter for successful operations
- * @param failedTasks         Atomic counter for failed operations
- * @param overwriteExisting   If true, replace existing files at destination
- * @param successfulDestPaths Vector to collect successful destination paths (optional)
- * @param destPathsMutex      Mutex protecting successfulDestPaths
+ * For multi-destination moves the caller passes effectiveCopy=true and handles
+ * the final source deletion itself after all copies complete.
  *
- * @note For multi-destination moves, the source file is removed once at least
- *       one copy succeeds — not necessarily all copies.
- * @note Ownership is restored using the real user ID from sudo/setuid context.
+ * @param isoFiles        Files to operate on (typically one per call).
+ * @param isoFilesCopy    Master file list for existence validation.
+ * @param singleDestDir   The single destination directory for this call ("" for rm).
+ * @param isMove          True if this is a single-destination move.
+ * @param isCopy          True if this is a copy (or multi-dest move acting as copy).
+ * @param isDelete        True if this is a delete.
+ * @param completedBytes  Atomic byte counter shared with the progress bar.
+ * @param completedTasks  Atomic task counter shared with the progress bar.
+ * @param failedTasks     Atomic failure counter shared with the progress bar.
+ * @param overwriteExisting  Whether to overwrite existing files at the destination.
+ * @param successfulDestPaths  Shared vector recording successful destination paths.
+ * @param destPathsMutex  Mutex protecting successfulDestPaths.
  */
-void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std::vector<std::string>& isoFilesCopy, const std::string& userDestDir, bool isMove, bool isCopy, 
-							bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks,
-							std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::string>* successfulDestPaths,std::mutex* destPathsMutex) {
-
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles,
+                             const std::vector<std::string>& isoFilesCopy,
+                             const std::string&              singleDestDir,
+                             bool isMove, bool isCopy, bool isDelete,
+                             std::atomic<size_t>* completedBytes,
+                             std::atomic<size_t>* completedTasks,
+                             std::atomic<size_t>* failedTasks,
+                             bool overwriteExisting,
+                             std::vector<std::string>* successfulDestPaths,
+                             std::mutex*               destPathsMutex)
+{
     std::atomic<bool> operationSuccessful(true);
 
     uid_t real_uid;
@@ -753,123 +715,106 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std:
         }
     };
 
-    std::vector<std::string> destDirs;
-    std::istringstream iss(userDestDir);
-    std::string destDir;
-    while (std::getline(iss, destDir, ';'))
-        destDirs.push_back(fs::path(destDir).string());
+    // Normalise the single destination path (empty string is valid for rm).
+    const std::string dst = singleDestDir.empty()
+        ? ""
+        : fs::path(singleDestDir).string();
 
     auto changeOwnership = [&](const fs::path& path) {
         [[maybe_unused]] int ret = chown(path.c_str(), real_uid, real_gid);
     };
 
-    const std::unordered_set<std::string> isoFilesCopySet(isoFilesCopy.begin(), isoFilesCopy.end());
+    const std::unordered_set<std::string> isoFilesCopySet(
+        isoFilesCopy.begin(), isoFilesCopy.end());
 
     auto executeOperation = [&](const std::vector<const std::string*>& files) {
         for (const auto* operateIso : files) {
             fs::path srcPath(*operateIso);
-            auto [srcDir, srcFile] = extractDirectoryAndFilename(srcPath.native(), "cp_mv_rm");
+            auto [srcDir, srcFile] = extractDirectoryAndFilename(
+                srcPath.native(), "cp_mv_rm");
 
             struct stat st;
-            size_t fileSize = (stat(srcPath.c_str(), &st) == 0) ? st.st_size : 0;
+            size_t fileSize = (stat(srcPath.c_str(), &st) == 0)
+                ? static_cast<size_t>(st.st_size) : 0;
 
+            // ---- Delete ----
             if (isDelete) {
                 performDeleteOperation(srcPath, srcDir, srcFile, fileSize,
-                                       completedBytes, completedTasks, failedTasks,
-                                       verboseIsos, verboseErrors, operationSuccessful,
-                                       batchInsertMessages);
+                    completedBytes, completedTasks, failedTasks,
+                    verboseIsos, verboseErrors, operationSuccessful,
+                    batchInsertMessages);
                 continue;
             }
 
-            bool atLeastOneCopySucceeded = false;
-            int validDestinations = 0;
+            // ---- Copy / Move (single destination) ----
+            fs::path destPath = fs::path(dst) / srcPath.filename();
+            auto [_, destFile] = extractDirectoryAndFilename(
+                destPath.native(), "cp_mv_rm");
+            const std::string& destDirProcessed = dst;
 
-            for (size_t i = 0; i < destDirs.size(); ++i) {
-                const auto& dst = destDirs[i];
-                fs::path destPath = fs::path(dst) / srcPath.filename();
-                // Always use full destination Dir for operations
-                auto [_, destFile] = extractDirectoryAndFilename(destPath.native(), "cp_mv_rm");
-				const std::string& destDirProcessed = dst;
+            if (fs::absolute(srcPath) == fs::absolute(destPath)) {
+                std::string operation = isMove ? "move" : "copy";
+                reportErrorCpMvRm("same_file", srcDir, srcFile, "", "",
+                    operation, verboseErrors, failedTasks,
+                    operationSuccessful, batchInsertMessages);
+                continue;
+            }
 
-                if (fs::absolute(srcPath) == fs::absolute(destPath)) {
-                    std::string operation = isMove ? "move" : "copy";
-                    reportErrorCpMvRm("same_file", srcDir, srcFile, "", "", operation,
-                              verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
-                    continue;
-                }
-                ++validDestinations;
+            if (!fs::exists(srcPath)) {
+                reportErrorCpMvRm("source_missing", srcDir, srcFile, "", "", "",
+                    verboseErrors, failedTasks,
+                    operationSuccessful, batchInsertMessages);
+                continue;
+            }
 
-                if (!fs::exists(srcPath)) {
-                    reportErrorCpMvRm("source_missing", srcDir, srcFile, "", "", "",
-                              verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
-                    continue;
-                }
-
-                if (fs::exists(destPath)) {
-                    if (overwriteExisting) {
-						std::error_code ec;
-                        if (!fs::remove(destPath, ec)) {
-                            reportErrorCpMvRm("overwrite_failed", "", "", destDirProcessed, ec.message(), "",
-                                      verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
-                            continue;
-                        }
-                    } else {
-                        std::string operation = isCopy ? "copying" : "moving";
-                        reportErrorCpMvRm("file_exists", srcDir, srcFile, destDirProcessed, "",
-                                  operation, verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
+            if (fs::exists(destPath)) {
+                if (overwriteExisting) {
+                    std::error_code ec;
+                    if (!fs::remove(destPath, ec)) {
+                        reportErrorCpMvRm("overwrite_failed", "", "",
+                            destDirProcessed, ec.message(), "",
+                            verboseErrors, failedTasks,
+                            operationSuccessful, batchInsertMessages);
                         continue;
                     }
-                }
-
-                bool success = false;
-
-                if (isMove && destDirs.size() > 1) {
-                    success = performMultiDestMoveOperation(
-                        srcPath, destPath, srcDir, srcFile, destDirProcessed, destFile,
-                        completedBytes, completedTasks, failedTasks, verboseIsos, verboseErrors,
-                        operationSuccessful, batchInsertMessages, changeOwnership);
-                    if (success) {
-                        atLeastOneCopySucceeded = true;
-                        if (successfulDestPaths && destPathsMutex) {
-                            std::lock_guard<std::mutex> lock(*destPathsMutex);
-                            successfulDestPaths->push_back(destPath.string());
-                        }
-                    }
-                } else if (isMove) {
-                    success = performMoveOperation(
-                        srcPath, destPath, srcDir, srcFile, destDirProcessed, destFile,
-                        fileSize, completedBytes, completedTasks, failedTasks, verboseIsos, verboseErrors,
-                        operationSuccessful, batchInsertMessages, changeOwnership);
-                    if (success) {
-                        if (successfulDestPaths && destPathsMutex) {
-                            std::lock_guard<std::mutex> lock(*destPathsMutex);
-                            successfulDestPaths->push_back(destPath.string());
-                        }
-                    }
-                } else {  // isCopy
-                    success = performCopyOperation(
-                        srcPath, destPath, srcDir, srcFile, destDirProcessed, destFile,
-                        completedBytes, completedTasks, failedTasks, verboseIsos, verboseErrors,
-                        operationSuccessful, batchInsertMessages, changeOwnership);
-                    if (success) {
-                        if (successfulDestPaths && destPathsMutex) {
-                            std::lock_guard<std::mutex> lock(*destPathsMutex);
-                            successfulDestPaths->push_back(destPath.string());
-                        }
-                    }
+                } else {
+                    std::string operation = isCopy ? "copying" : "moving";
+                    reportErrorCpMvRm("file_exists", srcDir, srcFile,
+                        destDirProcessed, "", operation,
+                        verboseErrors, failedTasks,
+                        operationSuccessful, batchInsertMessages);
+                    continue;
                 }
             }
 
-            if (isMove && destDirs.size() > 1 && validDestinations > 0 && atLeastOneCopySucceeded) {
-                std::error_code deleteEc;
-                if (!fs::remove(srcPath, deleteEc)) {
-                    reportErrorCpMvRm("remove_after_move", srcDir, srcFile, "", deleteEc.message(), "",
-                              verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
-                }
+            bool success = false;
+
+            if (isMove) {
+                // Single-destination move — rename/move in one step.
+                success = performMoveOperation(
+                    srcPath, destPath, srcDir, srcFile,
+                    destDirProcessed, destFile,
+                    fileSize, completedBytes, completedTasks, failedTasks,
+                    verboseIsos, verboseErrors, operationSuccessful,
+                    batchInsertMessages, changeOwnership);
+            } else {
+                // Copy (including multi-dest move acting as copy).
+                success = performCopyOperation(
+                    srcPath, destPath, srcDir, srcFile,
+                    destDirProcessed, destFile,
+                    completedBytes, completedTasks, failedTasks,
+                    verboseIsos, verboseErrors, operationSuccessful,
+                    batchInsertMessages, changeOwnership);
+            }
+
+            if (success && successfulDestPaths && destPathsMutex) {
+                std::lock_guard<std::mutex> lock(*destPathsMutex);
+                successfulDestPaths->push_back(destPath.string());
             }
         }
     };
 
+    // Filter to files that exist in the master list and on disk.
     std::vector<const std::string*> isoFilesToOperate;
     for (const auto& iso : isoFiles) {
         if (isoFilesCopySet.count(iso)) {
@@ -877,9 +822,11 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std:
             if (fs::exists(isoPath)) {
                 isoFilesToOperate.push_back(&iso);
             } else {
-                auto [isoDir, isoFile] = extractDirectoryAndFilename(isoPath.native(), "cp_mv_rm");
+                auto [isoDir, isoFile] = extractDirectoryAndFilename(
+                    isoPath.native(), "cp_mv_rm");
                 reportErrorCpMvRm("missing_file", isoDir, isoFile, "", "", "",
-                          verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
+                    verboseErrors, failedTasks,
+                    operationSuccessful, batchInsertMessages);
             }
         }
     }
