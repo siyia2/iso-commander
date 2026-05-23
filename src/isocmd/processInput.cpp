@@ -375,7 +375,6 @@ void processInputForCpMvRm(const std::string&        input,
     const size_t destCount = destDirs.size();
     std::unordered_map<std::string, std::atomic<size_t>> mvCopySuccessCount;
     std::unordered_map<std::string, size_t>              mvCopyTargetCount;
-    std::mutex                                           mvCoordMutex;
 
     if (isMove && destCount > 1) {
         for (int idx : processedIndices) {
@@ -440,7 +439,7 @@ void processInputForCpMvRm(const std::string&        input,
             [chunk, &isoFiles, isMove, isCopy, isDelete, destCount,
              &completedBytes, &completedTasks, &failedTasks,
              &overwriteExisting, &successfulDestPaths, &destPathsMutex,
-             &mvCopySuccessCount, &mvCopyTargetCount, &mvCoordMutex]()
+             &mvCopySuccessCount, &mvCopyTargetCount]()
         {
             for (const auto& [idx, dest] : chunk) {
                 const std::string& srcFile = isoFiles[idx - 1];
