@@ -620,6 +620,43 @@ bool performMoveOperation(const fs::path& srcPath, const fs::path& destPath,
 }
 
 /**
+ * @brief Specialized move operation for multiple destinations.
+ */
+bool performMultiDestMoveOperation(
+    const fs::path& srcPath,
+    const fs::path& destPath,
+    std::string_view srcDir,
+    std::string_view srcFile,
+    std::string_view destDirProcessed,
+    std::string_view destFile,
+    std::atomic<size_t>* completedBytes,
+    std::atomic<size_t>* completedTasks,
+    std::atomic<size_t>* failedTasks,
+    std::vector<std::string>& verboseIsos,
+    std::vector<std::string>& verboseErrors,
+    std::atomic<bool>& operationSuccessful,
+    const std::function<void()>& batchInsertMessages,
+    const std::function<void(const fs::path&)>& changeOwnership)
+{
+    std::error_code ec;
+
+    // bufferedCopyWithProgress usually handles the heavy lifting
+    bool success = bufferedCopyWithProgress(srcPath, destPath, completedBytes, ec);
+
+    if (success) {
+        changeOwnership(destPath);
+    }
+
+    // logOperationResult must also be updated to accept string_view for this to be 100% copy-free
+    logOperationResult(success, GlobalState::g_operationCancelled.load(), ec, "moving",
+                       srcDir, srcFile, destDirProcessed, destFile,
+                       verboseIsos, verboseErrors, completedTasks, failedTasks,
+                       operationSuccessful, batchInsertMessages);
+
+    return success;
+}
+
+/**
  * @brief Specialized copy operation.
  */
 bool performCopyOperation(
@@ -659,40 +696,41 @@ bool performCopyOperation(
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname);
 
 /**
- * @brief Performs a copy, move, or delete operation for a list of files to a
- *        SINGLE destination directory.
+ * @brief High-level handler that iterates through ISO files to perform CP, MV, or RM.
+ * @details Manages thread-safe updates to reporting sets and handles ownership changes
+ * for newly created files.
  *
- * Previously this function iterated over all destinations internally.  That loop
- * has been removed — destination fanout is now handled by the caller
- * (processInputForCpMvRm) which dispatches one task per (file, destination) pair.
+ * It:
+ * - Processes multiple destination directories (semicolon-separated in userDestDir)
+ * - Batches success/error messages (every 50 entries) to reduce mutex contention
+ * - Changes ownership of new files to the real user (via chown)
+ * - Handles three operation types:
+ *   - Delete: Calls performDeleteOperation
+ *   - Move: Single or multi-destination move with source cleanup
+ *   - Copy: Single or multi-destination copy
+ * - Records successful destination paths for database indexing
  *
- * For multi-destination moves the caller passes effectiveCopy=true and handles
- * the final source deletion itself after all copies complete.
+ * @param isoFiles            Files to operate on in this chunk
+ * @param isoFilesCopy        Master file list (for existence validation)
+ * @param userDestDir         Semicolon-separated destination directories
+ * @param isMove              True for move operation
+ * @param isCopy              True for copy operation
+ * @param isDelete            True for delete operation
+ * @param completedBytes      Atomic counter for progress tracking (bytes processed)
+ * @param completedTasks      Atomic counter for successful operations
+ * @param failedTasks         Atomic counter for failed operations
+ * @param overwriteExisting   If true, replace existing files at destination
+ * @param successfulDestPaths Vector to collect successful destination paths (optional)
+ * @param destPathsMutex      Mutex protecting successfulDestPaths
  *
- * @param isoFiles        Files to operate on (typically one per call).
- * @param isoFilesCopy    Master file list for existence validation.
- * @param singleDestDir   The single destination directory for this call ("" for rm).
- * @param isMove          True if this is a single-destination move.
- * @param isCopy          True if this is a copy (or multi-dest move acting as copy).
- * @param isDelete        True if this is a delete.
- * @param completedBytes  Atomic byte counter shared with the progress bar.
- * @param completedTasks  Atomic task counter shared with the progress bar.
- * @param failedTasks     Atomic failure counter shared with the progress bar.
- * @param overwriteExisting  Whether to overwrite existing files at the destination.
- * @param successfulDestPaths  Shared vector recording successful destination paths.
- * @param destPathsMutex  Mutex protecting successfulDestPaths.
+ * @note For multi-destination moves, the source file is removed once at least
+ *       one copy succeeds — not necessarily all copies.
+ * @note Ownership is restored using the real user ID from sudo/setuid context.
  */
-void handleIsoFileOperation(const std::vector<std::string>& isoFiles,
-                             const std::vector<std::string>& isoFilesCopy,
-                             const std::string&              singleDestDir,
-                             bool isMove, bool isCopy, bool isDelete,
-                             std::atomic<size_t>* completedBytes,
-                             std::atomic<size_t>* completedTasks,
-                             std::atomic<size_t>* failedTasks,
-                             bool overwriteExisting,
-                             std::vector<std::string>* successfulDestPaths,
-                             std::mutex*               destPathsMutex)
-{
+void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std::vector<std::string>& isoFilesCopy, const std::string& userDestDir, bool isMove, bool isCopy,
+							bool isDelete, std::atomic<size_t>* completedBytes, std::atomic<size_t>* completedTasks,
+							std::atomic<size_t>* failedTasks, bool overwriteExisting, std::vector<std::string>* successfulDestPaths,std::mutex* destPathsMutex) {
+
     std::atomic<bool> operationSuccessful(true);
 
     uid_t real_uid;
@@ -715,106 +753,123 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles,
         }
     };
 
-    // Normalise the single destination path (empty string is valid for rm).
-    const std::string dst = singleDestDir.empty()
-        ? ""
-        : fs::path(singleDestDir).string();
+    std::vector<std::string> destDirs;
+    std::istringstream iss(userDestDir);
+    std::string destDir;
+    while (std::getline(iss, destDir, ';'))
+        destDirs.push_back(fs::path(destDir).string());
 
     auto changeOwnership = [&](const fs::path& path) {
         [[maybe_unused]] int ret = chown(path.c_str(), real_uid, real_gid);
     };
 
-    const std::unordered_set<std::string> isoFilesCopySet(
-        isoFilesCopy.begin(), isoFilesCopy.end());
+    const std::unordered_set<std::string> isoFilesCopySet(isoFilesCopy.begin(), isoFilesCopy.end());
 
     auto executeOperation = [&](const std::vector<const std::string*>& files) {
         for (const auto* operateIso : files) {
             fs::path srcPath(*operateIso);
-            auto [srcDir, srcFile] = extractDirectoryAndFilename(
-                srcPath.native(), "cp_mv_rm");
+            auto [srcDir, srcFile] = extractDirectoryAndFilename(srcPath.native(), "cp_mv_rm");
 
             struct stat st;
-            size_t fileSize = (stat(srcPath.c_str(), &st) == 0)
-                ? static_cast<size_t>(st.st_size) : 0;
+            size_t fileSize = (stat(srcPath.c_str(), &st) == 0) ? st.st_size : 0;
 
-            // ---- Delete ----
             if (isDelete) {
                 performDeleteOperation(srcPath, srcDir, srcFile, fileSize,
-                    completedBytes, completedTasks, failedTasks,
-                    verboseIsos, verboseErrors, operationSuccessful,
-                    batchInsertMessages);
+                                       completedBytes, completedTasks, failedTasks,
+                                       verboseIsos, verboseErrors, operationSuccessful,
+                                       batchInsertMessages);
                 continue;
             }
 
-            // ---- Copy / Move (single destination) ----
-            fs::path destPath = fs::path(dst) / srcPath.filename();
-            auto [_, destFile] = extractDirectoryAndFilename(
-                destPath.native(), "cp_mv_rm");
-            const std::string& destDirProcessed = dst;
+            bool atLeastOneCopySucceeded = false;
+            int validDestinations = 0;
 
-            if (fs::absolute(srcPath) == fs::absolute(destPath)) {
-                std::string operation = isMove ? "move" : "copy";
-                reportErrorCpMvRm("same_file", srcDir, srcFile, "", "",
-                    operation, verboseErrors, failedTasks,
-                    operationSuccessful, batchInsertMessages);
-                continue;
-            }
+            for (size_t i = 0; i < destDirs.size(); ++i) {
+                const auto& dst = destDirs[i];
+                fs::path destPath = fs::path(dst) / srcPath.filename();
+                // Always use full destination Dir for operations
+                auto [_, destFile] = extractDirectoryAndFilename(destPath.native(), "cp_mv_rm");
+				const std::string& destDirProcessed = dst;
 
-            if (!fs::exists(srcPath)) {
-                reportErrorCpMvRm("source_missing", srcDir, srcFile, "", "", "",
-                    verboseErrors, failedTasks,
-                    operationSuccessful, batchInsertMessages);
-                continue;
-            }
+                if (fs::absolute(srcPath) == fs::absolute(destPath)) {
+                    std::string operation = isMove ? "move" : "copy";
+                    reportErrorCpMvRm("same_file", srcDir, srcFile, "", "", operation,
+                              verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
+                    continue;
+                }
+                ++validDestinations;
 
-            if (fs::exists(destPath)) {
-                if (overwriteExisting) {
-                    std::error_code ec;
-                    if (!fs::remove(destPath, ec)) {
-                        reportErrorCpMvRm("overwrite_failed", "", "",
-                            destDirProcessed, ec.message(), "",
-                            verboseErrors, failedTasks,
-                            operationSuccessful, batchInsertMessages);
+                if (!fs::exists(srcPath)) {
+                    reportErrorCpMvRm("source_missing", srcDir, srcFile, "", "", "",
+                              verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
+                    continue;
+                }
+
+                if (fs::exists(destPath)) {
+                    if (overwriteExisting) {
+						std::error_code ec;
+                        if (!fs::remove(destPath, ec)) {
+                            reportErrorCpMvRm("overwrite_failed", "", "", destDirProcessed, ec.message(), "",
+                                      verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
+                            continue;
+                        }
+                    } else {
+                        std::string operation = isCopy ? "copying" : "moving";
+                        reportErrorCpMvRm("file_exists", srcDir, srcFile, destDirProcessed, "",
+                                  operation, verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
                         continue;
                     }
-                } else {
-                    std::string operation = isCopy ? "copying" : "moving";
-                    reportErrorCpMvRm("file_exists", srcDir, srcFile,
-                        destDirProcessed, "", operation,
-                        verboseErrors, failedTasks,
-                        operationSuccessful, batchInsertMessages);
-                    continue;
+                }
+
+                bool success = false;
+
+                if (isMove && destDirs.size() > 1) {
+                    success = performMultiDestMoveOperation(
+                        srcPath, destPath, srcDir, srcFile, destDirProcessed, destFile,
+                        completedBytes, completedTasks, failedTasks, verboseIsos, verboseErrors,
+                        operationSuccessful, batchInsertMessages, changeOwnership);
+                    if (success) {
+                        atLeastOneCopySucceeded = true;
+                        if (successfulDestPaths && destPathsMutex) {
+                            std::lock_guard<std::mutex> lock(*destPathsMutex);
+                            successfulDestPaths->push_back(destPath.string());
+                        }
+                    }
+                } else if (isMove) {
+                    success = performMoveOperation(
+                        srcPath, destPath, srcDir, srcFile, destDirProcessed, destFile,
+                        fileSize, completedBytes, completedTasks, failedTasks, verboseIsos, verboseErrors,
+                        operationSuccessful, batchInsertMessages, changeOwnership);
+                    if (success) {
+                        if (successfulDestPaths && destPathsMutex) {
+                            std::lock_guard<std::mutex> lock(*destPathsMutex);
+                            successfulDestPaths->push_back(destPath.string());
+                        }
+                    }
+                } else {  // isCopy
+                    success = performCopyOperation(
+                        srcPath, destPath, srcDir, srcFile, destDirProcessed, destFile,
+                        completedBytes, completedTasks, failedTasks, verboseIsos, verboseErrors,
+                        operationSuccessful, batchInsertMessages, changeOwnership);
+                    if (success) {
+                        if (successfulDestPaths && destPathsMutex) {
+                            std::lock_guard<std::mutex> lock(*destPathsMutex);
+                            successfulDestPaths->push_back(destPath.string());
+                        }
+                    }
                 }
             }
 
-            bool success = false;
-
-            if (isMove) {
-                // Single-destination move — rename/move in one step.
-                success = performMoveOperation(
-                    srcPath, destPath, srcDir, srcFile,
-                    destDirProcessed, destFile,
-                    fileSize, completedBytes, completedTasks, failedTasks,
-                    verboseIsos, verboseErrors, operationSuccessful,
-                    batchInsertMessages, changeOwnership);
-            } else {
-                // Copy (including multi-dest move acting as copy).
-                success = performCopyOperation(
-                    srcPath, destPath, srcDir, srcFile,
-                    destDirProcessed, destFile,
-                    completedBytes, completedTasks, failedTasks,
-                    verboseIsos, verboseErrors, operationSuccessful,
-                    batchInsertMessages, changeOwnership);
-            }
-
-            if (success && successfulDestPaths && destPathsMutex) {
-                std::lock_guard<std::mutex> lock(*destPathsMutex);
-                successfulDestPaths->push_back(destPath.string());
+            if (isMove && destDirs.size() > 1 && validDestinations > 0 && atLeastOneCopySucceeded) {
+                std::error_code deleteEc;
+                if (!fs::remove(srcPath, deleteEc)) {
+                    reportErrorCpMvRm("remove_after_move", srcDir, srcFile, "", deleteEc.message(), "",
+                              verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
+                }
             }
         }
     };
 
-    // Filter to files that exist in the master list and on disk.
     std::vector<const std::string*> isoFilesToOperate;
     for (const auto& iso : isoFiles) {
         if (isoFilesCopySet.count(iso)) {
@@ -822,11 +877,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles,
             if (fs::exists(isoPath)) {
                 isoFilesToOperate.push_back(&iso);
             } else {
-                auto [isoDir, isoFile] = extractDirectoryAndFilename(
-                    isoPath.native(), "cp_mv_rm");
+                auto [isoDir, isoFile] = extractDirectoryAndFilename(isoPath.native(), "cp_mv_rm");
                 reportErrorCpMvRm("missing_file", isoDir, isoFile, "", "", "",
-                    verboseErrors, failedTasks,
-                    operationSuccessful, batchInsertMessages);
+                          verboseErrors, failedTasks, operationSuccessful, batchInsertMessages);
             }
         }
     }
