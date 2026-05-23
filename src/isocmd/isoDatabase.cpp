@@ -441,16 +441,18 @@ bool isValidDirectory(const std::string& path);
 /**
  * @brief Performs background ISO file import without blocking the UI.
  *
- * Reads history paths, reduces them hierarchically, traverses directories
- * to find ISO files, and saves them to the database. Checks a stop flag
- * between major phases to allow prompt exit on program termination.
- * Traverse tasks themselves run to completion once started.
- * Signals completion via @c RefreshState::importCV to wake the watcher thread.
+ * Reads history paths, reduces them hierarchically, then traverses directories
+ * in concurrent groups of up to GlobalState::maxThreads to find ISO files,
+ * saving results to the database once all groups complete.
  *
- * @param newISOFound     Atomic flag set when new ISOs are discovered; cleared after signaling.
- * @param stopImport      Checked between phases for early exit; running tasks complete.
- * @param state           Shared state containing isImportRunning (CV predicate),
- *                        importCV/mutex for signaling, and UI state (filters, pagination).
+ * Checks stopImport between phases and between groups for early exit;
+ * any group already spawned runs to completion before the function returns.
+ * Signals completion via RefreshState::importCV to wake the watcher thread.
+ *
+ * @param newISOFound  Atomic flag set when new ISOs are discovered; cleared after save.
+ * @param stopImport   Checked between phases and groups for early exit.
+ * @param state        Shared state holding isImportRunning, importCV/mutex for signaling,
+ *                     workerCV/mutex and activeWorkers for group synchronization.
  */
 void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
                                std::atomic<bool>& stopImport,
@@ -458,14 +460,12 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
     std::vector<std::string> paths;
     int localMaxDepth = -1;
     bool localPromptFlag = false;
-
     auto signalDone = [&] {
         if (state) {
             state->isImportRunning.store(false, std::memory_order_release);
             state->importCV.notify_all();
         }
     };
-
     {
         std::ifstream file(GlobalState::historyFilePath);
         if (!file.is_open()) { signalDone(); return; }
@@ -491,30 +491,55 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
     std::vector<std::string> finalPaths = hierarchicalPathReduction(paths);
     if (finalPaths.empty()) { signalDone(); return; }
     if (stopImport.load()) { signalDone(); return; }
+
     std::vector<std::string> allIsoFiles;
     std::atomic<size_t> totalFiles{0};
     std::unordered_set<std::string> uniqueErrorMessages;
     std::mutex processMutex;
     std::mutex traverseErrorMutex;
-    auto& pool = getStaticThreadPool();
-    std::vector<std::future<void>> futures;
-    for (const auto& path : finalPaths) {
-        if (stopImport.load()) { signalDone(); return; }
-        if (isValidDirectory(path)) {
-            futures.emplace_back(pool.enqueue([&, path]() {
+
+    const size_t groupSize = std::max(1u, GlobalConcurrency::maxThreads);
+
+    for (size_t i = 0; i < finalPaths.size(); i += groupSize) {
+        if (stopImport.load()) break;
+
+        std::vector<std::thread> threads;
+        const size_t end = std::min(i + groupSize, finalPaths.size());
+        threads.reserve(end - i);
+
+        state->activeWorkers.store(0, std::memory_order_relaxed);
+
+        for (size_t j = i; j < end; ++j) {
+            if (stopImport.load()) break;
+            if (!isValidDirectory(finalPaths[j])) continue;
+
+            state->activeWorkers.fetch_add(1, std::memory_order_relaxed);
+            threads.emplace_back([&, path = finalPaths[j]]() {
                 traverse(path, allIsoFiles, uniqueErrorMessages,
                          totalFiles, processMutex, traverseErrorMutex,
                          localMaxDepth, localPromptFlag);
-            }));
+                if (state->activeWorkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                    std::lock_guard<std::mutex> lk(state->workerMutex);
+                    state->workerCV.notify_one();
+                }
+            });
         }
-    }
-    for (auto& future : futures) {
-        if (future.valid()) {
-            while (future.wait_for(std::chrono::milliseconds(50)) != std::future_status::ready) {
-                if (stopImport.load()) { signalDone(); return; }
-            }
+
+        // If all paths in this group were invalid, no threads were spawned
+        if (!threads.empty()) {
+            std::unique_lock<std::mutex> lk(state->workerMutex);
+            state->workerCV.wait(lk, [&] {
+                return state->activeWorkers.load(std::memory_order_acquire) == 0
+                    || stopImport.load();
+            });
         }
+
+        for (auto& t : threads)
+            if (t.joinable()) t.join();
+
+        if (stopImport.load()) break;
     }
+
     if (stopImport.load()) { signalDone(); return; }
 
     saveToDatabase(allIsoFiles, newISOFound);
