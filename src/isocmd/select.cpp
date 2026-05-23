@@ -214,7 +214,6 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
  *   to gracefully repaint the prompt underneath the new list output.
  * - **Auto-Termination:** Executes once after the import signal is received,
  *   clears atomic flags, and terminates (non-looping design).
- *   final state changes to settle before the UI is repainted.
  *
  * @param isAtISOList      Atomic flag; refresh only occurs if the user is in the list view.
  * @param updateHasRun     Atomic flag set upon completion to acknowledge the refresh.
