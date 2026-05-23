@@ -408,7 +408,7 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
         if (inputString[0] == 'R' && refreshState->isImportRunning.load()) {
             std::cout << "\033[1B\033[K";
-            needsClrScrn = true;
+            needsClrScrn = false;
             continue;
         }
 
