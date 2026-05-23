@@ -228,6 +228,7 @@ int main(int argc, char *argv[]) {
                     break;
                 case '5':
                     exitProgram = true;
+                    GlobalState::g_operationCancelled.store(true);
                     clearScrollBuffer();
                     break;
                 default: break;
@@ -239,7 +240,6 @@ int main(int argc, char *argv[]) {
     /// Signal all background threads to stop, cancel ongoing searches, release lock file.
     /// @{
     stopImport = stopMessage = true;
-    GlobalState::g_operationCancelled.store(true);
     if (importState) {
         importState->isImportRunning.store(false);
         {
