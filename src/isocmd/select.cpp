@@ -408,17 +408,13 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
 
         if (inputString[0] == 'R' && refreshState->isImportRunning.load()) {
             std::cout << "\033[1B\033[K";
+            refreshState->isWatcherRunning.store(false);
             needsClrScrn = false;
             continue;
         }
 
         // Initiate a manual list refresh
-        if (inputString == "R" && !isUnmount && !GlobalCaches::globalIsoFileList.empty()) {
-            bool expected = false;
-            if (!refreshState->isImportRunning.compare_exchange_strong(expected, true)) {
-                needsClrScrn = false;
-                continue;
-            }
+        if (inputString == "R" && !isUnmount && !GlobalCaches::globalIsoFileList.empty() && !refreshState->isImportRunning.load()) {
             // Prune completed threads before launching a new one
             backgroundThreads.erase(
                 std::remove_if(backgroundThreads.begin(), backgroundThreads.end(),
@@ -430,6 +426,8 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
             );
             needsClrScrn = true;
             search = false;
+            refreshState->isImportRunning.store(true);
+
             backgroundThreads.emplace_back([&newISOFound, &stopImport, refreshState] {
                 backgroundDatabaseImport(newISOFound, stopImport, refreshState);
                 refreshState->isWatcherRunning.store(false);
