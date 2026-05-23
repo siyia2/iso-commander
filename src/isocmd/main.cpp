@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
         backgroundThreads.emplace_back([&newISOFound, &stopImport, importState] {
             backgroundDatabaseImport(newISOFound, stopImport, importState);
         });
-            updateHasRun.store(true);
+        updateHasRun.store(true);
     }
     paginationSet(GlobalState::configPath);
 
@@ -164,7 +164,7 @@ int main(int argc, char *argv[]) {
         /**
          * @brief Status message display logic
          * Shows appropriate background task status:
-         * 1. Auto-update running in background (with optional monitor thread)
+         * 1. Auto-update running in background (with monitor thread)
          * 2. No stored folder paths available for scanning (one-time message)
          */
         static bool messagePrinted = false;
