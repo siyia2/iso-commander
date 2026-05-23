@@ -58,17 +58,17 @@ bool flushCache(const std::string& configPath) {
 
 /**
  * @brief Synchronizes global runtime variables with values from the configuration cache.
- * 
- * This function acts as the bridge between the raw string-based @c g_configCache 
- * and the actual functional variables used by the application (UI toggles, 
+ *
+ * This function acts as the bridge between the raw string-based @c g_configCache
+ * and the actual functional variables used by the application (UI toggles,
  * thread limits, and skinning).
- * 
+ *
  * @details The function performs the following updates:
  * - **Threading & History:** Forwards the cache to @c applyThreadCapsAndHistoryLimits.
  * - **UI State:** Sets @c displayConfig flags for list modes (full/compact) and filename visibility.
  * - **Visuals:** Updates the global @c skin and @c globalTheme; triggers @c getskin() to refresh color palettes.
  * - **Pagination:** Safely parses and updates @c ITEMS_PER_PAGE.
- * 
+ *
  * @param cache A map containing the key-value pairs to be applied to the system state.
  */
 void applyConfigEffects(const std::map<std::string, std::string>& cache) {
@@ -82,11 +82,11 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache) {
     if (cache.count("write2usb_list"))    displayConfig::toggleFullListWrite2usb = (cache.at("write2usb_list") == "full");
     if (cache.count("convert2iso_lists")) displayConfig::toggleFullListConvert2iso = (cache.at("convert2iso_lists") == "full");
     if (cache.count("filenames_only"))    displayConfig::toggleNamesOnly = (cache.at("filenames_only") == "on");
-    
+
     // Appearance
     if (cache.count("skin")) { skin = cache.at("skin"); color = getskin(); }
     if (cache.count("theme")) { globalTheme = cache.at("theme"); }
-    
+
     if (cache.count("pagination")) {
         try { GlobalState::ITEMS_PER_PAGE = std::stoul(cache.at("pagination")); } catch (...) {}
     }
@@ -97,10 +97,10 @@ void syncCache(const std::string& filePath);
 
 /**
  * @brief Launches the interactive Terminal User Interface (TUI) for configuration management.
- * 
+ *
  * Provides a structured, menu-driven environment where users can view current settings,
  * modify them by index, or reset the entire configuration to defaults.
- * 
+ *
  * @details **Workflow features:**
  * - **Sectioning:** Groups settings visually based on the sections defined in @c CONFIG_ORDERED_DEFAULTS.
  * - **Input Handling:** Utilizes GNU Readline for robust command input, supporting both single indices and tokenized multi-edits.
@@ -108,7 +108,7 @@ void syncCache(const std::string& filePath);
  * - **Persistence:** Synchronizes with @c g_configCache. Note that a full reset triggers an immediate @c flushCache to disk upon confirmation.
  * - **Cleanup (RAII):** Employs a local @c SettingsGuard to ensure terminal keybindings are restored even if the loop breaks unexpectedly.
  * - **Signal Handling:** Temporarily ignores @c SIGINT to prevent accidental session termination during configuration.
- * 
+ *
  * @param configPath The filesystem path to the @c .conf file used for synchronization.
  */
 void interactiveConfigEditor(const std::string& configPath) {
@@ -132,23 +132,23 @@ void interactiveConfigEditor(const std::string& configPath) {
                 std::cout << tc.accent << "\n--- " << entry.section << " ---\n" << tc.reset;
             }
             std::string val = GlobalCaches::g_configCache.count(entry.key) ? GlobalCaches::g_configCache[entry.key] : entry.defaultValue;
-            
+
             std::string_view valColor = (index == 1) ? color : std::string_view(tc.data);
-            
+
             std::cout << tc.warning << std::right << std::setw(2) << index++ << ". " << tc.reset
                       << tc.label << std::left << std::setw(32) << entry.key << tc.reset
                       << "= " << tc.reset
                       << valColor << val << tc.reset << "\n";
         }
 		setup_custom_keybindingsForSettingsEditor();
-        std::cout << "\n" << tc.accent << "Actions: " << tc.warning << "1-" << (index-1) 
+        std::cout << "\n" << tc.accent << "Actions: " << tc.warning << "1-" << (index-1)
                   << tc.reset << " ↵ Edit | " << tc.warning << "r" << tc.reset << " Reset |" << tc.warning << " ?" << tc.reset << " help" << tc.reset << "\n";
 
         std::string prompt = std::format(
             "\n\001{}\002Action\001{}\002 ↵ | < \001{}\002Exit\001{}\002: \001{}\002",
             UI::Palette::Yellow,
             tc.label,
-            UI::Palette::Red, 
+            UI::Palette::Red,
             tc.label,
             tc.reset
         );
@@ -158,7 +158,7 @@ void interactiveConfigEditor(const std::string& configPath) {
 
         std::string input = trim(rawInput.get());
         if (input == "<") break;
-        
+
         if (input == "?") {
             helpSettingsEditor();
             continue;
@@ -168,12 +168,12 @@ void interactiveConfigEditor(const std::string& configPath) {
 			reset_custom_keybindingsForSettingsEditor();
             std::string confirmPrompt = std::format(
                 "\001{}\002\nReset all settings to defaults? (y/n): \001{}\002",
-                color, 
+                color,
                 UI::Palette::BoldReset
             );
-            
+
             std::unique_ptr<char, decltype(&std::free)> confirmInput(readline(confirmPrompt.c_str()), &std::free);
-            
+
             if (confirmInput) {
                 std::string confirm = trim(confirmInput.get());
                 if (confirm == "y" || confirm == "Y") {
@@ -211,7 +211,7 @@ void interactiveConfigEditor(const std::string& configPath) {
             std::sort(ordered.begin(), ordered.end());
             for (int choice : ordered) {
                 if (!editSetting(configPath, CONFIG_ORDERED_DEFAULTS[choice - 1].key)) {
-                    break; 
+                    break;
                 }
             }
         }
@@ -220,21 +220,21 @@ void interactiveConfigEditor(const std::string& configPath) {
 
 /**
  * @brief Provides an interactive CLI interface to modify a specific configuration setting.
- * 
- * Displays current values, descriptions, and dynamic input hints. The function 
+ *
+ * Displays current values, descriptions, and dynamic input hints. The function
  * loops until valid input is received, the change is skipped, or the session is aborted.
- * 
+ *
  * @details **Workflow features:**
  * - **Key Discovery:** Locates the @c ConfigEntry definition for metadata and default values.
  * - **Dynamic UX:** Displays context-aware hints for themes, skins, and numeric ranges.
  * - **Validation:** Enforces integrity via the entry's @c validate lambda before acceptance.
- * - **Hot-Reloading:** Updates @c g_configCache and immediately triggers @c applyConfigEffects 
+ * - **Hot-Reloading:** Updates @c g_configCache and immediately triggers @c applyConfigEffects
  *   to reflect changes in the running session (e.g., instant theme switching).
- * - **Persistence:** Attempts to persist changes via @c flushCache. If disk I/O fails, 
+ * - **Persistence:** Attempts to persist changes via @c flushCache. If disk I/O fails,
  *   the user is notified that the change is "memory-only."
- * - **State Refresh:** Triggers @c sortAfterFilenamesOnlyFlag if the filenames display 
+ * - **State Refresh:** Triggers @c sortAfterFilenamesOnlyFlag if the filenames display
  *   toggle is modified to ensure UI consistency.
- * 
+ *
  * @param configPath Path to the @c .conf file for persistence.
  * @param key The unique configuration key to be modified.
  * @return true if the setting was updated, matched the current value, or was skipped.
@@ -243,8 +243,8 @@ void interactiveConfigEditor(const std::string& configPath) {
 bool editSetting(const std::string& configPath, const std::string& key) {
     auto tc = resolveOptionsTheme();
     const ConfigEntry* entry = nullptr;
-    for (const auto& e : CONFIG_ORDERED_DEFAULTS) { 
-        if (e.key == key) { entry = &e; break; } 
+    for (const auto& e : CONFIG_ORDERED_DEFAULTS) {
+        if (e.key == key) { entry = &e; break; }
     }
     if (!entry) return true;
     reset_custom_keybindingsForSettingsEditor();
@@ -265,7 +265,7 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         // --- Dynamic Hint Block ---
         std::cout << tc.label << "Valid values: " << tc.reset;
 		if (key == "skin") {
-			std::cout << "green, cyan, white, purple, amber, rose\n";
+			std::cout << "green, cyan, white, purple, amber, rose, gray\n";
 		} else if (key == "theme") {
 			std::cout << "original, classic, high_contrast, neon, ocean, sunset, forest,\n"
 					  << "               midnight, mono, retro, crimson, dracula, tokyo, paper, sakura\n";
@@ -296,15 +296,15 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 
 		std::string prompt = std::format(
 			"\001{}\002Value\001{}\002 ↵ | ↵ \001{}\002Skip\001{}\002: \001{}\002",
-			UI::Palette::Green, 
-			tc.label, 
-			UI::Palette::Yellow, 
-			tc.reset, 
+			UI::Palette::Green,
+			tc.label,
+			UI::Palette::Yellow,
+			tc.reset,
 			tc.reset
 		);
-        
+
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
-        
+
         // Handle Cancel (Ctrl+D or Empty Enter)
         if (!rawInput) return false;
         std::string newVal = trim(rawInput.get());
@@ -313,29 +313,29 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         // Validation Check
         if (entry->validate && !entry->validate(newVal)) {
             std::cout << "\n" << tc.error << "Invalid value: " << tc.warning << "'" << newVal << "'" << tc.reset << "\n";
-            pressEnterToTry(); 
-            continue; 
+            pressEnterToTry();
+            continue;
         }
 
         // --- Success Case ---
         GlobalCaches::g_configCache[key] = newVal;
         applyConfigEffects(GlobalCaches::g_configCache);
-        
+
         // Use the standardized helper to write to disk and handle errors
         bool saved = flushCache(configPath);
-        
+
         // Refresh the local theme context in case 'skin' or 'theme' was changed
         tc = resolveOptionsTheme();
 
         if (saved) {
-            std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n", 
+            std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n",
                                      tc.label, tc.reset, configPath);
         } else {
-            std::cout << tc.warning << "Notice: " << tc.error 
-                      << "Setting update is memory-only (Disk write failed)." 
+            std::cout << tc.warning << "Notice: " << tc.error
+                      << "Setting update is memory-only (Disk write failed)."
                       << tc.reset << "\n";
         }
-        
+
         // Specific side-effect for filename display toggle
         if (key == "filenames_only") {
             sortAfterFilenamesOnlyFlag();
