@@ -105,7 +105,12 @@ void pressEnterToContinue() {
  * @param errorSet     Set of explicit failure strings.
  * @param printType    Layout mode: 0 (Umount), 1 (Basic Ops), 2 (Mount), 3 (Conversion).
  */
-void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet, std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& errorSet, int printType) {
+void verbosePrint(std::unordered_set<std::string>& primarySet,
+            std::unordered_set<std::string>& secondarySet,
+            std::unordered_set<std::string>& tertiarySet,
+            std::unordered_set<std::string>& errorSet,
+            int printType) {
+
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
     clearScrollBuffer();
