@@ -186,6 +186,96 @@ void displayErrors() {
 }
 
 /**
+ * @brief Generates and logs color-coded error messages for filesystem operations.
+ *
+ * Constructs a human-readable error string tailored to the operation (CP, MV, or RM)
+ * and the specific failure type. The output is formatted according to the current
+ * @c VerboseAndDatabaseTheme.
+ *
+ * @details **Efficiency & Safety:**
+ * - Uses @c std::string_view to minimize string copying.
+ * - Employs @c std::string::reserve to reduce reallocations during formatting.
+ * - Thread-safe updates of task counters using @c std::memory_order_acq_rel.
+ *
+ * @param errorType   Category of failure (e.g., "same_file", "source_missing").
+ * @param srcDir      Path view of the source directory.
+ * @param srcFile     Filename view of the source file.
+ * @param destDir     Path view of the destination directory.
+ * @param errorDetail Specific system error or errno description.
+ * @param operation   The user-facing label for the action ("copy", "move", "delete").
+ * @param[out] verboseErrors The log container where the formatted error is stored.
+ * @param[in,out] failedTasks Atomic counter incremented upon error.
+ * @param[in,out] operationSuccessful Atomic flag set to false on failure.
+ * @param batchInsertFunc Callback triggered to notify the UI of a new error entry.
+ */
+void reportErrorCpMvRm(std::string_view errorType,
+                       std::string_view srcDir,
+                       std::string_view srcFile,
+                       std::string_view destDir,
+                       std::string_view errorDetail,
+                       std::string_view operation,
+                       OperationReporter& reporter) {
+
+    const VerboseAndDatabaseTheme vt = getVerboseTheme();
+
+    // Build displaySrc once
+    std::string displaySrc;
+    if (!displayConfig::toggleNamesOnly) {
+        displaySrc.reserve(srcDir.size() + srcFile.size() + 1);
+        displaySrc.append(srcDir).append("/").append(srcFile);
+    } else {
+        displaySrc = std::string(srcFile);
+    }
+
+    std::string errorMsg;
+    errorMsg.reserve(256 + displaySrc.size() + errorDetail.size());
+
+    if (errorType == "same_file") {
+        errorMsg.append(vt.red).append("Cannot ").append(operation).append(" file to itself: ")
+                .append(vt.red).append("'").append(vt.yellow).append(srcDir).append("/").append(srcFile).append(vt.red).append("'")
+                .append(vt.reset).append(vt.red).append(".").append(vt.reset);
+    }
+    else if (errorType == "source_missing") {
+        errorMsg.append(vt.red).append("Source file no longer exists: ")
+                .append(vt.red).append("'").append(vt.yellow).append(displaySrc).append(vt.red).append("'")
+                .append(vt.reset).append(vt.red).append(".").append(vt.reset);
+    }
+    else if (errorType == "overwrite_failed") {
+        errorMsg.append(vt.red).append("Failed to overwrite: ")
+                .append(vt.red).append("'").append(vt.yellow).append(destDir).append(srcFile).append(vt.red).append("'")
+                .append(vt.reset).append(vt.red).append(" - ").append(errorDetail).append(".").append(vt.reset);
+    }
+    else if (errorType == "file_exists") {
+        errorMsg.append(vt.red).append("Error ").append(operation).append(": ")
+                .append(vt.red).append("'").append(vt.yellow).append(displaySrc).append(vt.red).append("'")
+                .append(vt.reset).append(vt.red).append(" to '").append(vt.yellow).append(destDir).append("': File exists ")
+                .append(vt.red).append("(overwrite with -o)").append(vt.reset).append(vt.red).append(".").append(vt.reset);
+    }
+    else if (errorType == "remove_after_move") {
+        errorMsg.append(vt.red).append("Move completed but failed to remove source file: ")
+                .append(vt.red).append("'").append(vt.yellow).append(displaySrc).append(vt.red).append("'")
+                .append(vt.reset).append(vt.red).append(" - ").append(errorDetail).append(".").append(vt.reset);
+    }
+    else if (errorType == "missing_file") {
+        errorMsg.append(vt.purple).append("Missing: ")
+                .append(vt.purple).append("'").append(vt.yellow).append(displaySrc).append(vt.purple).append("'.");
+    }
+    else {
+        errorMsg.append(vt.red).append("Error: ").append(errorDetail).append(vt.reset);
+    }
+
+    reporter.verboseErrors.push_back(std::move(errorMsg));
+
+    if (reporter.failedTasks)
+        reporter.failedTasks->fetch_add(1, std::memory_order_acq_rel);
+
+    reporter.operationSuccessful.store(false, std::memory_order_release);
+
+    if (reporter.batchInsertMessages)
+        reporter.batchInsertMessages();
+}
+
+/**
  * @brief Processes and displays the results of ISO file selection operations.
  *
  * Evaluates the state of @c verboseSets to determine if an operation (Mount, Unmount,
@@ -242,97 +332,6 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
     if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {
         clear_history();
     }
-}
-
-/**
- * @brief Generates and logs color-coded error messages for filesystem operations.
- *
- * Constructs a human-readable error string tailored to the operation (CP, MV, or RM)
- * and the specific failure type. The output is formatted according to the current
- * @c VerboseAndDatabaseTheme.
- *
- * @details **Efficiency & Safety:**
- * - Uses @c std::string_view to minimize string copying.
- * - Employs @c std::string::reserve to reduce reallocations during formatting.
- * - Thread-safe updates of task counters using @c std::memory_order_acq_rel.
- *
- * @param errorType   Category of failure (e.g., "same_file", "source_missing").
- * @param srcDir      Path view of the source directory.
- * @param srcFile     Filename view of the source file.
- * @param destDir     Path view of the destination directory.
- * @param errorDetail Specific system error or errno description.
- * @param operation   The user-facing label for the action ("copy", "move", "delete").
- * @param[out] verboseErrors The log container where the formatted error is stored.
- * @param[in,out] failedTasks Atomic counter incremented upon error.
- * @param[in,out] operationSuccessful Atomic flag set to false on failure.
- * @param batchInsertFunc Callback triggered to notify the UI of a new error entry.
- */
-void reportErrorCpMvRm(std::string_view errorType, std::string_view srcDir, std::string_view srcFile,
-                       std::string_view destDir, std::string_view errorDetail, std::string_view operation,
-                       std::vector<std::string>& verboseErrors, std::atomic<size_t>* failedTasks,
-                       std::atomic<bool>& operationSuccessful, const std::function<void()>& batchInsertFunc) {
-
-    const VerboseAndDatabaseTheme vt = getVerboseTheme();
-
-    // build displaySrc once using append to avoid extra temporary strings
-    std::string displaySrc;
-    if (!displayConfig::toggleNamesOnly) {
-        displaySrc.reserve(srcDir.size() + srcFile.size() + 1);
-        displaySrc.append(srcDir).append("/").append(srcFile);
-    } else {
-        displaySrc = std::string(srcFile);
-    }
-
-    std::string errorMsg;
-    errorMsg.reserve(256 + displaySrc.size() + errorDetail.size());
-
-    if (errorType == "same_file") {
-        errorMsg.append(vt.red).append("Cannot ").append(operation).append(" file to itself: ")
-                .append(vt.red).append("'").append(vt.yellow).append(srcDir).append("/").append(srcFile).append(vt.red).append("'")
-                .append(vt.reset).append(vt.red).append(".")
-                .append(vt.reset);
-    }
-    else if (errorType == "source_missing") {
-        errorMsg.append(vt.red).append("Source file no longer exists: ")
-                .append(vt.red).append("'").append(vt.yellow).append(displaySrc).append(vt.red).append("'")
-                .append(vt.reset).append(vt.red).append(".")
-                .append(vt.reset);
-    }
-    else if (errorType == "overwrite_failed") {
-        errorMsg.append(vt.red).append("Failed to overwrite: ")
-                .append(vt.red).append("'").append(vt.yellow).append(destDir).append(srcFile).append(vt.red).append("'")
-                .append(vt.reset).append(vt.red).append(" - ").append(errorDetail).append(".")
-                .append(vt.reset);
-    }
-    else if (errorType == "file_exists") {
-        errorMsg.append(vt.red).append("Error ").append(operation).append(": ")
-                .append(vt.red).append("'").append(vt.yellow).append(displaySrc).append(vt.red).append("'")
-                .append(vt.reset).append(vt.red).append(" to '").append(vt.yellow).append(destDir).append("': File exists ")
-                .append(vt.red).append("(overwrite with -o")
-                .append(vt.reset).append(vt.red).append(").")
-                .append(vt.reset);
-    }
-    else if (errorType == "remove_after_move") {
-        errorMsg.append(vt.red).append("Move completed but failed to remove source file: ")
-                .append(vt.red).append("'").append(vt.yellow).append(displaySrc).append(vt.red).append("'")
-                .append(vt.reset).append(vt.red).append(" - ").append(errorDetail).append(".")
-                .append(vt.reset);
-    }
-    else if (errorType == "missing_file") {
-        errorMsg.append(vt.purple).append("Missing: ")
-				.append(vt.purple).append("'")
-				.append(vt.yellow).append(displaySrc)
-				.append(vt.purple).append("'.");
-    }
-    else {
-        errorMsg.append(vt.red).append("Error: ").append(errorDetail)
-                .append(vt.reset);
-    }
-
-    verboseErrors.push_back(std::move(errorMsg));
-    failedTasks->fetch_add(1, std::memory_order_acq_rel);
-    operationSuccessful.store(false, std::memory_order_release);
-    batchInsertFunc();
 }
 
 /**
