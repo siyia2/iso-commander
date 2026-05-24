@@ -437,6 +437,7 @@ void selectForIsoFiles(const std::string& operation,
 
         if (validCommand) continue;
 
+        isAtISOList.store(false);
         bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isFiltered, filteredFiles, isoDirs,
                                                     operation, umountMvRmBreak, filterHistory);
         if (pendingExecuted) continue;
@@ -447,11 +448,9 @@ void selectForIsoFiles(const std::string& operation,
             continue;
         }
 
-        isAtISOList.store(false);
         bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn);
         if (pendingHandled) continue;
 
-        isAtISOList.store(false);
         processOperationForSelectedIsoFiles(inputString, isFiltered, filteredFiles, isoDirs,
                                             operation, umountMvRmBreak, filterHistory);
     }
