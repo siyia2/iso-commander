@@ -673,7 +673,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                                        (fileType == "nrg"),
                                        (fileType == "chd"),
                                        (fileType == "daa"),
-                                       verbose, needsClrScrn);
+                                       verbose);
 
             needsClrScrn = true;
             if (verbose) {
@@ -698,7 +698,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                                        (fileType == "nrg"),
                                        (fileType == "chd"),
                                        (fileType == "daa"),
-                                       verbose, needsClrScrn);
+                                       verbose);
             needsClrScrn = true;
             if (verbose) {
                 verbosePrint(verboseSets.uniqueErrorTokenMessages, verboseSets.operationCompleted, verboseSets.operationSkipped, verboseSets.operationFailed, 3);

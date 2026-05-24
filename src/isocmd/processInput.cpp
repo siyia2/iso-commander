@@ -379,7 +379,7 @@ void processInputForConversions(const std::string& input,
                                  std::vector<std::string>& fileList,
                                  const bool& modeMdf, const bool& modeNrg,
                                  const bool& modeChd, const bool& modeDaa,
-                                 bool& verbose, bool& needsClrScrn
+                                 bool& verbose
                                  )
 {
     std::vector<std::string> successfulOutputPaths;
@@ -402,7 +402,6 @@ void processInputForConversions(const std::string& input,
         std::cout << "\n" << (isOrig ? UI::Palette::Red : theme->secondary)
                   << "No valid input provided." << UI::Palette::BoldReset << "\n";
         pressEnterToContinue();
-        needsClrScrn = true;
         return;
     }
 
