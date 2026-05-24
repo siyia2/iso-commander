@@ -686,7 +686,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
  * @param maxDepth Maximum directory traversal depth
  * @param filterHistory Flag for filter history management
  */
-void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& filterHistory, bool& newISOFound) {
+void databaseSwitches(std::string& inputSearch) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
@@ -713,5 +713,5 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
         clearHistory(inputSearch);
     }
-    refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
+    return;
 }

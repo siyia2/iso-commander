@@ -97,170 +97,168 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             reset_custom_keybindingsForSearches();
         }
     };
-    try {
-        enable_ctrl_d();
-        setupSignalHandlerCancellations();
-        resetReadlinePagination();
-        KeybindingGuard guard;
-        setup_custom_keybindingsForSearches();
-        rl_attempted_completion_function = my_special_completion_entry;
-        GlobalState::g_operationCancelled.store(false);
 
-        const VerboseAndDatabaseTheme dt = getDatabaseTheme();
+    enable_ctrl_d();
+    setupSignalHandlerCancellations();
+    resetReadlinePagination();
+    KeybindingGuard guard;
+    setup_custom_keybindingsForSearches();
+    rl_attempted_completion_function = my_special_completion_entry;
 
-        clearScrollBuffer();
-        loadHistory(filterHistory);
+    while (true) {
+        try {
+            GlobalState::g_operationCancelled.store(false);
 
-        rl_bind_key('\f', clear_screen_and_buffer);
-        rl_bind_key('\t', rl_complete);
+            const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
-        std::string prompt;
-        prompt.reserve(512);
-        prompt.append("\001").append(dt.green).append("\002FolderPaths")
-              .append("\001").append(dt.blue).append("\002 ↵ to scan for ")
-              .append("\001").append(dt.green).append("\002.iso")
-              .append("\001").append(dt.blue).append("\002 entries and import them into the ")
-              .append("\001").append(dt.green).append("\002local")
-              .append("\001").append(dt.blue).append("\002 database, ? help, < return:\n")
-              .append("\001").append(dt.reset).append("\002");
+            clearScrollBuffer();
+            loadHistory(filterHistory);
 
-        char* rawSearchQuery = readline(prompt.c_str());
-        if (!rawSearchQuery) return;
+            rl_bind_key('\f', clear_screen_and_buffer);
+            rl_bind_key('\t', rl_complete);
 
-        std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
-        std::string input = trimWhitespace(searchQuery.get());
+            std::string prompt;
+            prompt.reserve(512);
+            prompt.append("\001").append(dt.green).append("\002FolderPaths")
+                  .append("\001").append(dt.blue).append("\002 ↵ to scan for ")
+                  .append("\001").append(dt.green).append("\002.iso")
+                  .append("\001").append(dt.blue).append("\002 entries and import them into the ")
+                  .append("\001").append(dt.green).append("\002local")
+                  .append("\001").append(dt.blue).append("\002 database, ? help, < return:\n")
+                  .append("\001").append(dt.reset).append("\002");
 
-        if (input == "<") return;
+            char* rawSearchQuery = readline(prompt.c_str());
+            if (!rawSearchQuery) return;
 
-        if (input == "?") {
-            bool isCpMv = false, import2ISO = true;
-            helpSearches(isCpMv, import2ISO);
-            return refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
-        }
+            std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+            std::string input = trimWhitespace(searchQuery.get());
 
-        if (input.starts_with("*") || input.starts_with("!")) {
-            databaseSwitches(input, promptFlag, maxDepth, filterHistory, newISOFound);
-            return;
-        }
+            if (input == "<") return;
 
-        if (!input.empty()) {
-            add_history(input.c_str());
-            std::cout << "\n";
-        }
-
-        if (input.find_first_not_of(" \t\n\r") == std::string::npos) {
-			return refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
-		}
-
-        std::vector<std::string> validPaths;
-        std::unordered_set<std::string> invalidPaths;
-        std::unordered_set<std::string> uniqueErrorMessages;
-        std::vector<std::string> allIsoFiles;
-        std::atomic<size_t> totalFiles{0};
-
-        std::cout << "\033[3H\033[J\n";
-        disableInput();
-
-        auto start_time = std::chrono::high_resolution_clock::now();
-        std::istringstream iss(input);
-        std::string path;
-
-        // ----- Normalize before deduplication -----
-        auto normalizePath = [](const std::string& p) {
-            std::string n = fs::path(p).lexically_normal().string();
-            if (n.size() > 1 && n.back() == '/')
-                n.pop_back();
-            return n;
-        };
-
-        // Use a set of normalized paths for true uniqueness
-        std::unordered_set<std::string> uniqueNormalizedPaths;
-
-        while (std::getline(iss, path, ';')) {
-            path = trimWhitespace(path);
-            if (!isValidDirectory(path)) {
-                invalidPaths.insert(dt.red + path);
+            if (input == "?") {
+                bool isCpMv = false, import2ISO = true;
+                helpSearches(isCpMv, import2ISO);
                 continue;
             }
 
-            std::string normPath = normalizePath(path);
-            if (uniqueNormalizedPaths.insert(normPath).second) {
-                validPaths.push_back(normPath);
+            if (input == "*stats" || input == "clr" || input == "clr_paths" || input == "clr_filter") {
+                databaseSwitches(input);
+                continue;
             }
-        }
 
-        // ----- Subpath filtering now works on already‑normalized paths -----
-
-        // Sort normalized input
-        std::sort(validPaths.begin(), validPaths.end());
-
-        std::vector<std::string> filteredPaths;
-        for (const auto& p : validPaths) {
-            if (filteredPaths.empty() || !p.starts_with(filteredPaths.back() + "/")) {
-                filteredPaths.push_back(p);
+            if (!input.empty()) {
+                add_history(input.c_str());
+                std::cout << "\n";
             }
-        }
-        validPaths = std::move(filteredPaths);
 
-        if (validPaths.empty()) {
+            if (input.find_first_not_of(" \t\n\r") == std::string::npos) {
+                continue;
+            }
+
+            std::vector<std::string> validPaths;
+            std::unordered_set<std::string> invalidPaths;
+            std::unordered_set<std::string> uniqueErrorMessages;
+            std::vector<std::string> allIsoFiles;
+            std::atomic<size_t> totalFiles{0};
+
+            std::cout << "\033[3H\033[J\n";
+            disableInput();
+
+            auto start_time = std::chrono::high_resolution_clock::now();
+            std::istringstream iss(input);
+            std::string path;
+
+            auto normalizePath = [](const std::string& p) {
+                std::string n = fs::path(p).lexically_normal().string();
+                if (n.size() > 1 && n.back() == '/')
+                    n.pop_back();
+                return n;
+            };
+
+            std::unordered_set<std::string> uniqueNormalizedPaths;
+
+            while (std::getline(iss, path, ';')) {
+                path = trimWhitespace(path);
+                if (!isValidDirectory(path)) {
+                    invalidPaths.insert(dt.red + path);
+                    continue;
+                }
+
+                std::string normPath = normalizePath(path);
+                if (uniqueNormalizedPaths.insert(normPath).second) {
+                    validPaths.push_back(normPath);
+                }
+            }
+
+            std::sort(validPaths.begin(), validPaths.end());
+
+            std::vector<std::string> filteredPaths;
+            for (const auto& p : validPaths) {
+                if (filteredPaths.empty() || !p.starts_with(filteredPaths.back() + "/")) {
+                    filteredPaths.push_back(p);
+                }
+            }
+            validPaths = std::move(filteredPaths);
+
+            if (validPaths.empty()) {
+                flushStdin();
+                restoreInput();
+                resetReadlinePagination();
+                if (!invalidPaths.empty()) {
+                    saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, newISOFound, start_time);
+                }
+                continue;
+            }
+
+            {
+                auto& pool = getStaticThreadPool();
+                std::vector<std::future<void>> futures;
+                std::mutex processMutex;
+                std::mutex traverseErrorMutex;
+
+                for (const auto& validPath : validPaths) {
+                    futures.emplace_back(
+                        pool.enqueue([validPath, &allIsoFiles, &uniqueErrorMessages, &totalFiles,
+                                      &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
+                            traverse(validPath, allIsoFiles, uniqueErrorMessages, totalFiles,
+                                    processMutex, traverseErrorMutex, maxDepth, promptFlag);
+                        })
+                    );
+                }
+
+                for (auto& future : futures) {
+                    future.wait();
+                    if (GlobalState::g_operationCancelled.load()) break;
+                }
+            }
+
             flushStdin();
             restoreInput();
             resetReadlinePagination();
-            if (!invalidPaths.empty()) {
-                saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, newISOFound, start_time);
-            }
-            return;
-        }
 
-        {
-            auto& pool = getStaticThreadPool();
-            std::vector<std::future<void>> futures;
-            std::mutex processMutex;
-            std::mutex traverseErrorMutex;
+            std::cout << "\r" << dt.bold << "Total files processed: " << totalFiles;
 
-            for (const auto& validPath : validPaths) {
-                futures.emplace_back(
-                    pool.enqueue([validPath, &allIsoFiles, &uniqueErrorMessages, &totalFiles,
-                                  &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
-                        traverse(validPath, allIsoFiles, uniqueErrorMessages, totalFiles,
-                                processMutex, traverseErrorMutex, maxDepth, promptFlag);
-                    })
-                );
+            if (!invalidPaths.empty() || !validPaths.empty()) {
+                std::cout << "\n";
             }
 
-            for (auto& future : futures) {
-                future.wait();
-                if (GlobalState::g_operationCancelled.load()) break;
+            if (validPaths.empty()) {
+                input = "";
+                clear_history();
+                std::cout << "\033[1A\033[K";
             }
+            if (!validPaths.empty() && !input.empty()) {
+                saveHistory(filterHistory);
+                clear_history();
+            }
+            saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, newISOFound, start_time);
+
+        } catch (const std::exception& e) {
+            const VerboseAndDatabaseTheme dt = getDatabaseTheme();
+            std::cerr << "\n" << dt.red << "Unable to access ISO database: " << e.what() << dt.reset << std::endl;
+            pressEnterToContinue();
+            // loop continues naturally — no recursive call needed
         }
-
-        flushStdin();
-        restoreInput();
-        resetReadlinePagination();
-
-        std::cout << "\r" << dt.bold << "Total files processed: " << totalFiles;
-
-        if (!invalidPaths.empty() || !validPaths.empty()) {
-            std::cout << "\n";
-        }
-
-        if (validPaths.empty()) {
-            input = "";
-            clear_history();
-            std::cout << "\033[1A\033[K";
-        }
-        if (!validPaths.empty() && !input.empty()) {
-            saveHistory(filterHistory);
-            clear_history();
-        }
-        saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, newISOFound, start_time);
-    } catch (const std::exception& e) {
-        const VerboseAndDatabaseTheme dt = getDatabaseTheme();
-
-        std::cerr << "\n" << dt.red << "Unable to access ISO database: " << e.what() << dt.reset << std::endl;
-
-        pressEnterToContinue();
-        refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
     }
 }
 

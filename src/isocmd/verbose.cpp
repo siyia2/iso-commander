@@ -365,8 +365,6 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
     return count;
 }
 
-bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, bool* newISOFound);
-
 /**
  * @brief Finalizes the ISO database refresh by reporting results and syncing global state.
  *
@@ -388,14 +386,12 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, bool* new
  * @param validPaths       Collection of base directories successfully traversed.
  * @param invalidPaths     Set of directories skipped due to permissions or existence errors.
  * @param uniqueErrorMessages Deduplicated log of system-level I/O errors.
- * @param promptFlag       Boolean toggle for verbose UI reporting.
  * @param start_time       Point of origin for the refresh operation for duration calculation.
  * @param newISOFound      Boolean toggle indicating if the scan resulted in delta changes.
  */
 void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles,
                                     std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths,
-                                    std::unordered_set<std::string>& uniqueErrorMessages,
-                                    bool& promptFlag, int& maxDepth, bool& filterHistory, bool& newISOFound,
+                                    std::unordered_set<std::string>& uniqueErrorMessages, bool& newISOFound,
                                     const std::chrono::high_resolution_clock::time_point& start_time) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
@@ -422,15 +418,13 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
         std::cout << "\n";
     };
 
-    if (promptFlag && (!uniqueErrorMessages.empty() || !invalidPaths.empty())) {
+    if ((!uniqueErrorMessages.empty() || !invalidPaths.empty())) {
         printInvalidPaths();
         printErrorMessages();
     }
 
     const bool saveSuccess = GlobalState::g_operationCancelled ? false : saveToDatabase(allIsoFiles, &newISOFound);
     const auto end_time = std::chrono::high_resolution_clock::now();
-
-    if (!promptFlag) return;
 
     const double total_elapsed = std::chrono::duration<double>(end_time - start_time).count();
     std::cout << vt.bold << "\nTotal time taken: " << std::fixed << std::setprecision(1)
@@ -452,7 +446,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
     }
 
     pressEnterToContinue();
-    refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
+    return;
 }
 
 /**
