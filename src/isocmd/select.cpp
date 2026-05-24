@@ -57,7 +57,7 @@
  * @param isAtISOList      Atomic toggle to signal the UI is busy processing.
  * @param umountMvRmBreak  Flag to interrupt the persistent loop on destructive actions.
  * @param filterHistory    Flag to clear/update the readline search history.
- * @param newISOFound      Atomic signal for background filesystem watchers.
+ * @param newISOFound      Atomic signal for background filesystem watcher.
  */
 void processOperationForSelectedIsoFiles(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered, const std::vector<std::string>& filteredFiles,
 										 std::vector<std::string>& isoDirs, bool& needsClrScrn,
@@ -217,7 +217,6 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
  *   clears atomic flags, and terminates (non-looping design).
  *
  * @param isAtISOList      Atomic flag; refresh only occurs if the user is in the list view.
- * @param newISOFound      Atomic flag cleared upon completion.
  * @param state            Shared state container for:
  *                         - isImportRunning: Atomic flag used as CV predicate
  *                         - importMutex and importCV for event coordination
@@ -265,7 +264,7 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  * @param operation         Target system action ("mount", "umount", "rm", etc.).
  * @param isAtISOList       Guards background UI repaints; false when the user has navigated away from the ISO list.
  * @param isImportRunning   Prevents concurrent imports; also used as the CV predicate in the watcher thread.
- * @param newISOFound       Set by the import when new ISOs are discovered; cleared by the watcher after repainting.
+ * @param newISOFound       Set by the import when new ISOs are discovered.
  * @param backgroundThreads Joinable worker threads (manual R-press imports) retained for lifetime management.
  * @param search            Cleared on manual R-press to suppress automatic search re-entry after refresh.
  * @param refreshState      Shared UI state and CV passed from the startup import path to synchronize the

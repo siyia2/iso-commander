@@ -226,7 +226,7 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
  * @param[out] umountMvRmBreak Flag set to false if no tasks were successfully processed.
  * @param filterHistory Indicates if the current file list is a filtered view.
  * @param verbose Toggle for detailed per-file progress output.
- * @param[in,out] newISOFound Atomic flag triggered to true if the filesystem was modified.
+ * @param[in,out] newISOFound Atomic flag triggered to true if new ISOs were produced.
  */
 void processInputForCpMvRm(const std::string& input,
 						   const std::vector<std::string>& isoFiles,
