@@ -118,8 +118,7 @@ void processInputForConversions(
     const bool &modeNrg,
     const bool &modeChd,
     const bool &modeDaa,
-    bool &verbose,
-    bool &needsClrScrn
+    bool &verbose
 );
 
 /**
