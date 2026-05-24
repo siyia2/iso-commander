@@ -41,6 +41,11 @@ void traverse(
 void loadFromDatabase(std::vector<std::string>& globalIsoFileList);
 
 /**
+ * Populates the ISO database with ISOs from scanned folders.
+ */
+bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, bool* newISOFound);
+
+/**
  * Triggers a refresh logic to sync disk state with the database.
  */
 void refreshForDatabase(

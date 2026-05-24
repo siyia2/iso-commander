@@ -116,9 +116,6 @@ void saveAndReportResultsForDatabase(
     std::vector<std::string>& validPaths,
     std::unordered_set<std::string>& invalidPaths,
     std::unordered_set<std::string>& uniqueErrorMessages,
-    bool& promptFlag,
-    int& maxDepth,
-    bool& filterHistory,
     bool& newISOFound,
     const std::chrono::high_resolution_clock::time_point& start_time
 );
