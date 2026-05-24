@@ -188,11 +188,8 @@ void handleFilteringConvert2ISO(
 void handleSelectIsoFilesResults(
     const std::string &operation,
     bool &verbose,
-    bool isMount,
     bool &isFiltered,
-    bool &umountMvRmBreak,
-    bool isUnmount,
-    bool &needsClrScrn
+    bool &umountMvRmBreak
 );
 
 /**
