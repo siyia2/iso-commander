@@ -448,6 +448,7 @@ void selectForIsoFiles(const std::string& operation,
 
         { // Processing block
             isAtISOList.store(false);
+
             bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isFiltered, filteredFiles, isoDirs,
                                                         operation, umountMvRmBreak, filterHistory);
             if (pendingExecuted) continue;
