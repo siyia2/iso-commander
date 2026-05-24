@@ -212,10 +212,8 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
 
     const auto c = getVerboseTheme();
     bool isMount = false;
-    bool isUnmount = false;
 
     if (operation == "mount") isMount = true;
-    if (operation == "umount") isUnmount = true;
 
     if (!verboseSets.uniqueErrorTokenMessages.empty() && verboseSets.operationFailed.empty() &&
          verboseSets.operationFailed.empty() && verboseSets.operationSkipped.empty()) {
@@ -243,16 +241,6 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
 
     if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {
         clear_history();
-    }
-
-    if (!isUnmount && GlobalCaches::globalIsoFileList.empty()) {
-        clearScrollBuffer();
-        std::cout << "\n" << (c.red)
-                  << "No ISO available for " << operation << "."
-                  << UI::Palette::BoldReset << "\n\n";
-
-        pressEnterToContinue();
-        return;
     }
 }
 
