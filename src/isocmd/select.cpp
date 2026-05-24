@@ -437,11 +437,6 @@ void selectForIsoFiles(const std::string& operation,
 
         if (validCommand) continue;
 
-        isAtISOList.store(false);
-        bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isFiltered, filteredFiles, isoDirs,
-                                                    operation, umountMvRmBreak, filterHistory);
-        if (pendingExecuted) continue;
-
         if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn,
                                     filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage)) {
             std::cout << "\033[1B\033[K";
@@ -451,8 +446,15 @@ void selectForIsoFiles(const std::string& operation,
         bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn);
         if (pendingHandled) continue;
 
-        processOperationForSelectedIsoFiles(inputString, isFiltered, filteredFiles, isoDirs,
-                                            operation, umountMvRmBreak, filterHistory);
+        { // Processing block
+            isAtISOList.store(false);
+            bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isFiltered, filteredFiles, isoDirs,
+                                                        operation, umountMvRmBreak, filterHistory);
+            if (pendingExecuted) continue;
+
+            processOperationForSelectedIsoFiles(inputString, isFiltered, filteredFiles, isoDirs,
+                                                operation, umountMvRmBreak, filterHistory);
+        }
     }
     reset_custom_keybindingsForSelect();
 }
