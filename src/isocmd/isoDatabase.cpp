@@ -250,7 +250,7 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
         return false;
     }
     std::lock_guard<std::mutex> fileLock(dbFileMutex);
-    // Reset newISOFoundstatus every time
+    // Reset newISOFound status every time as it is only used for the verbose purposes of saveAndReportResultsForDatabase
     newISOFound.store(false);
     // Open the existing DB file (read-only) to load current cache
     std::vector<std::string> existingCache;
