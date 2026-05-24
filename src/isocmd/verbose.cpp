@@ -216,7 +216,8 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
     if (operation == "mount") isMount = true;
 
     if (!verboseSets.uniqueErrorTokenMessages.empty() && verboseSets.operationFailed.empty() &&
-         verboseSets.operationFailed.empty() && verboseSets.operationSkipped.empty()) {
+         verboseSets.operationFailed.empty() && verboseSets.operationSkipped.empty() &&
+         verboseSets.operationCompleted.empty()) {
 
         clearScrollBuffer();
 
