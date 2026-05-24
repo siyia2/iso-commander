@@ -41,7 +41,6 @@ void printMenu();
 
 // Primary navigation logic for the ISO list and scanning
 void submenu1(
-    std::atomic<bool>& updateHasRun,
     std::atomic<bool>& isAtISOList,
     std::shared_ptr<RefreshState> state,
     std::atomic<bool>& newISOFound,
