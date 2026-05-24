@@ -257,9 +257,7 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  *
  * @param operation         Target system action ("mount", "umount", "rm", etc.).
  * @param isAtISOList       Guards background UI repaints; false when the user has navigated away from the ISO list.
- * @param isImportRunning   Prevents concurrent imports; also used as the CV predicate in the watcher thread.
  * @param backgroundThreads Joinable worker threads (manual R-press imports) retained for lifetime management.
- * @param search            Cleared on manual R-press to suppress automatic search re-entry after refresh.
  * @param refreshState      Shared UI state and CV passed from the startup import path to synchronize the
  *                          watcher with the correct import session; created internally if nullptr.
  */
