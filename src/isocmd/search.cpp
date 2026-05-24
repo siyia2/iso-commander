@@ -207,6 +207,8 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 restoreInput();
                 resetReadlinePagination();
                 if (!invalidPaths.empty()) {
+                    // To prevent unintended cancellation with premature ctrl+c
+                    GlobalState::g_operationCancelled.store(false);
                     saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, newISOFound, start_time);
                 }
                 continue;
@@ -217,6 +219,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 std::vector<std::future<void>> futures;
                 std::mutex processMutex;
                 std::mutex traverseErrorMutex;
+                // To prevent unintended cancellation with premature ctrl+c
                 GlobalState::g_operationCancelled.store(false);
 
                 for (const auto& validPath : validPaths) {
