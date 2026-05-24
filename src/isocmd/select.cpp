@@ -49,15 +49,16 @@
  * @param[in,out] isFiltered Updated if the operation invalidates the current filter.
  * @param filteredFiles    The subset of files currently visible in the UI.
  * @param isoDirs          The list of currently active mount points.
- * @param[out] needsClrScrn Set to true to trigger a full TUI redraw.
  * @param operation        String identifier for logging and UI feedback.
  * @param umountMvRmBreak  Flag to interrupt the persistent loop on destructive actions.
  * @param filterHistory    Flag to clear/update the readline search history.
  */
-void processOperationForSelectedIsoFiles(const std::string& inputString, bool& isFiltered,
+void processOperationForSelectedIsoFiles(const std::string& inputString,
+                                         bool& isFiltered,
                                          const std::vector<std::string>& filteredFiles,
 										 std::vector<std::string>& isoDirs,
-										 const std::string& operation,bool& umountMvRmBreak,
+										 const std::string& operation,
+										 bool& umountMvRmBreak,
 										 bool& filterHistory) {
 
     clearScrollBuffer();
@@ -446,6 +447,7 @@ void selectForIsoFiles(const std::string& operation,
             continue;
         }
 
+        isAtISOList.store(false);
         bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn);
         if (pendingHandled) continue;
 
