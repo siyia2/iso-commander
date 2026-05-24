@@ -207,17 +207,20 @@ void displayErrors() {
  * @param isUnmount      Special case flag to skip the "No ISO available" check.
  * @param[out] needsClrScrn Set to true if the function performed terminal output.
  */
-void handleSelectIsoFilesResults(const std::string& operation, bool& verbose, bool isMount,
-                                 bool& isFiltered, bool& umountMvRmBreak, bool isUnmount,
-                                 bool& needsClrScrn) {
+void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
+                                 bool& isFiltered, bool& umountMvRmBreak) {
 
     const auto c = getVerboseTheme();
+    bool isMount = false;
+    bool isUnmount = false;
+
+    if (operation == "mount") isMount = true;
+    if (operation == "umount") isUnmount = true;
 
     if (!verboseSets.uniqueErrorTokenMessages.empty() && verboseSets.operationFailed.empty() &&
          verboseSets.operationFailed.empty() && verboseSets.operationSkipped.empty()) {
 
         clearScrollBuffer();
-        needsClrScrn = true;
 
         std::cout << "\n" << (c.red)
                   << "No valid input provided."
@@ -227,7 +230,6 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose, bo
     }
     else if (verbose) {
         clearScrollBuffer();
-        needsClrScrn = true;
 
        std::unordered_set<std::string> emptySet;
        verbosePrint(
@@ -241,13 +243,10 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose, bo
 
     if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {
         clear_history();
-        needsClrScrn = true;
     }
 
     if (!isUnmount && GlobalCaches::globalIsoFileList.empty()) {
         clearScrollBuffer();
-        needsClrScrn = true;
-
         std::cout << "\n" << (c.red)
                   << "No ISO available for " << operation << "."
                   << UI::Palette::BoldReset << "\n\n";

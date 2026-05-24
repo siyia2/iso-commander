@@ -46,9 +46,6 @@
  *   following operations that modify the source list (move, remove, unmount).
  *
  * @param inputString      Raw user string (usually indices or paths).
- * @param isMount          True if the intent is to mount the selection.
- * @param isUnmount        True if the intent is to unmount the selection.
- * @param write            True if the intent is a USB bitstream write.
  * @param[in,out] isFiltered Updated if the operation invalidates the current filter.
  * @param filteredFiles    The subset of files currently visible in the UI.
  * @param isoDirs          The list of currently active mount points.
@@ -58,27 +55,28 @@
  * @param umountMvRmBreak  Flag to interrupt the persistent loop on destructive actions.
  * @param filterHistory    Flag to clear/update the readline search history.
  */
-void processOperationForSelectedIsoFiles(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered,
+void processOperationForSelectedIsoFiles(const std::string& inputString, bool& isFiltered,
                                          const std::vector<std::string>& filteredFiles,
-										 std::vector<std::string>& isoDirs, bool& needsClrScrn,
+										 std::vector<std::string>& isoDirs,
 										 const std::string& operation, std::atomic<bool>& isAtISOList,
 										 bool& umountMvRmBreak, bool& filterHistory) {
 
     clearScrollBuffer();
-    needsClrScrn = true;
     bool verbose = false;
+    bool isUnmount = false;
 
-    if (isMount || isUnmount) {
+    if (operation == "mount" || operation == "umount") {
         isAtISOList.store(false);
+        if (operation == "umount") isUnmount = true;
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles :
                                                     (isUnmount ? isoDirs : GlobalCaches::globalIsoFileList);
 
-        if (isUnmount) {
+        if (operation == "umount") {
             umountMvRmBreak = true;
         }
 
         processInputForMountOrUmount(inputString, activeList, umountMvRmBreak, verbose, isUnmount);
-    } else if (write) {
+    } else if (operation == "write") {
         isAtISOList.store(false);
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalCaches::globalIsoFileList;
         writeToUsb(inputString, activeList);
@@ -88,7 +86,7 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
         processInputForCpMvRm(inputString, activeList, operation, umountMvRmBreak, filterHistory, verbose);
     }
 
-    handleSelectIsoFilesResults(operation, verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn);
+    handleSelectIsoFilesResults(operation, verbose, isFiltered, umountMvRmBreak);
 }
 
 /**
@@ -169,14 +167,13 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
  * @param inputString      User command (must be "proc" to trigger).
  * @param pendingIndices   The collection of staged index tokens.
  * @param hasPendingProcess Flag indicating if a queue currently exists.
- * @param[in] isMount,isUnmount,write Operational context flags.
  * @param[out] needsClrScrn Set to true upon successful routing to refresh the UI.
  * @return **true** if the "proc" command was recognized and executed.
  * @return **false** if the queue was empty or the command was invalid.
  */
-bool handlePendingProcess(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingProcess,bool isMount,bool isUnmount,
-						  bool write,bool isFiltered, std::vector<std::string>& filteredFiles,
-						  std::vector<std::string>& isoDirs, bool& needsClrScrn, const std::string& operation,
+bool handlePendingProcess(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
+                          bool isFiltered, std::vector<std::string>& filteredFiles,
+						  std::vector<std::string>& isoDirs, const std::string& operation,
 						  std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory) {
 
     if (hasPendingProcess && !pendingIndices.empty() && inputString == "proc") {
@@ -188,8 +185,7 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
             }
         }
 
-        processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered,
-                     filteredFiles, isoDirs, needsClrScrn, operation, isAtISOList, umountMvRmBreak,
+        processOperationForSelectedIsoFiles(combinedIndices, isFiltered, filteredFiles, isoDirs, operation, isAtISOList, umountMvRmBreak,
                      filterHistory);
 
         return true;
@@ -457,9 +453,8 @@ void selectForIsoFiles(const std::string& operation,
 
         if (validCommand) continue;
 
-        bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isMount, isUnmount, write, isFiltered,
-                                                    filteredFiles, isoDirs,
-                                                    needsClrScrn, operation, isAtISOList, umountMvRmBreak, filterHistory);
+        bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isFiltered, filteredFiles, isoDirs,
+                                                    operation, isAtISOList, umountMvRmBreak, filterHistory);
         if (pendingExecuted) {
             continue;
         }
@@ -476,10 +471,8 @@ void selectForIsoFiles(const std::string& operation,
             continue;
         }
 
-        processOperationForSelectedIsoFiles(inputString, isMount, isUnmount, write, isFiltered,
-                                           filteredFiles, isoDirs,
-                                           needsClrScrn, operation, isAtISOList, umountMvRmBreak,
-                                           filterHistory);
+        processOperationForSelectedIsoFiles(inputString, isFiltered, filteredFiles, isoDirs,
+                                           operation, isAtISOList, umountMvRmBreak, filterHistory);
     }
     reset_custom_keybindingsForSelect();
 }
