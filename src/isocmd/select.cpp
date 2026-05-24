@@ -51,22 +51,20 @@
  * @param isoDirs          The list of currently active mount points.
  * @param[out] needsClrScrn Set to true to trigger a full TUI redraw.
  * @param operation        String identifier for logging and UI feedback.
- * @param isAtISOList      Atomic toggle to signal the UI is busy processing.
  * @param umountMvRmBreak  Flag to interrupt the persistent loop on destructive actions.
  * @param filterHistory    Flag to clear/update the readline search history.
  */
 void processOperationForSelectedIsoFiles(const std::string& inputString, bool& isFiltered,
                                          const std::vector<std::string>& filteredFiles,
 										 std::vector<std::string>& isoDirs,
-										 const std::string& operation, std::atomic<bool>& isAtISOList,
-										 bool& umountMvRmBreak, bool& filterHistory) {
+										 const std::string& operation,bool& umountMvRmBreak,
+										 bool& filterHistory) {
 
     clearScrollBuffer();
     bool verbose = false;
     bool isUnmount = false;
 
     if (operation == "mount" || operation == "umount") {
-        isAtISOList.store(false);
         if (operation == "umount") isUnmount = true;
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles :
                                                     (isUnmount ? isoDirs : GlobalCaches::globalIsoFileList);
@@ -77,11 +75,9 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool& i
 
         processInputForMountOrUmount(inputString, activeList, umountMvRmBreak, verbose, isUnmount);
     } else if (operation == "write") {
-        isAtISOList.store(false);
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalCaches::globalIsoFileList;
         writeToUsb(inputString, activeList);
     } else {
-        isAtISOList.store(false);
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalCaches::globalIsoFileList;
         processInputForCpMvRm(inputString, activeList, operation, umountMvRmBreak, filterHistory, verbose);
     }
@@ -167,14 +163,13 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
  * @param inputString      User command (must be "proc" to trigger).
  * @param pendingIndices   The collection of staged index tokens.
  * @param hasPendingProcess Flag indicating if a queue currently exists.
- * @param[out] needsClrScrn Set to true upon successful routing to refresh the UI.
  * @return **true** if the "proc" command was recognized and executed.
  * @return **false** if the queue was empty or the command was invalid.
  */
 bool handlePendingProcess(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
                           bool isFiltered, std::vector<std::string>& filteredFiles,
 						  std::vector<std::string>& isoDirs, const std::string& operation,
-						  std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory) {
+						  bool& umountMvRmBreak, bool& filterHistory) {
 
     if (hasPendingProcess && !pendingIndices.empty() && inputString == "proc") {
         std::string combinedIndices = "";
@@ -185,7 +180,7 @@ bool handlePendingProcess(const std::string& inputString, std::vector<std::strin
             }
         }
 
-        processOperationForSelectedIsoFiles(combinedIndices, isFiltered, filteredFiles, isoDirs, operation, isAtISOList, umountMvRmBreak,
+        processOperationForSelectedIsoFiles(combinedIndices, isFiltered, filteredFiles, isoDirs, operation, umountMvRmBreak,
                      filterHistory);
 
         return true;
@@ -285,11 +280,11 @@ void selectForIsoFiles(const std::string& operation,
     size_t& originalPage                     = refreshState->originalPage;
 
     filteredFiles.reserve(1000);
-    isFiltered      = false;
+    isFiltered        = false;
     hasPendingProcess = false;
-    umountMvRmBreak = false;
-    currentPage     = 0;
-    originalPage    = 0;
+    umountMvRmBreak   = false;
+    currentPage       = 0;
+    originalPage      = 0;
 
     bool needsClrScrn  = true;
     bool filterHistory = false;
@@ -303,12 +298,8 @@ void selectForIsoFiles(const std::string& operation,
         operation == "umount"    ? UI::Palette::Yellow : UI::Palette::RL_BoldAlt
     );
 
-    bool isMount   = (operation == "mount");
-    bool isUnmount = (operation == "umount");
-    bool write     = (operation == "write2usb");
-    bool isConversion = false;
-
-    listSubtype = isMount ? "mount" : (write ? "write2usb" : "cp_mv_rm");
+    const bool isUnmount = (operation == "umount");
+    listSubtype = (operation == "mount") ? "mount" : (operation == "write2usb") ? "write2usb" : "cp_mv_rm";
 
     while (true) {
         clearGlobalVerboseSets();
@@ -328,33 +319,29 @@ void selectForIsoFiles(const std::string& operation,
 
         if (needsClrScrn) {
             if (!isUnmount) {
-                if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState)) {
+                if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState))
                     break;
-                }
             } else {
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState))
                     break;
             }
-            // Reset manual-update key for mountpoint-lists
             if (isUnmount) rl_bind_keyseq("R", rl_insert);
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
 
-        // Launch a detached thread for automatic list updating if startup auto-update or manual list refresh is running
         if (refreshState->isImportRunning.load() && !isUnmount) {
             bool watcherExpected = false;
             if (refreshState->isWatcherRunning.compare_exchange_strong(watcherExpected, true)) {
                 std::thread([&isAtISOList, refreshState]() {
                     refreshListAfterAutoUpdate(isAtISOList, refreshState);
-                        refreshState->isWatcherRunning.store(false);
+                    refreshState->isWatcherRunning.store(false);
                 }).detach();
             }
         }
 
         std::cout << "\033[1A\033[K";
 
-        // Disable PgUp&PgDn when pagination is not enabled
         if (GlobalState::ITEMS_PER_PAGE == 0) {
             rl_bind_keyseq("\\e[5~", rl_insert);
             rl_bind_keyseq("\\e[6~", rl_insert);
@@ -368,10 +355,10 @@ void selectForIsoFiles(const std::string& operation,
 
         std::string prompt =
             prefix +
-            pt.iso         + "ISO" +
-            pt.primary     + " ↵ for " + "\001" +
+            pt.iso     + "ISO" +
+            pt.primary + " ↵ for " + "\001" +
             operationColor + "\002" + operation +
-            pt.primary     + ", ? help, < return: " +
+            pt.primary + ", ? help, < return: " +
             pt.reset;
 
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
@@ -384,6 +371,7 @@ void selectForIsoFiles(const std::string& operation,
             needsClrScrn = false;
             continue;
         }
+
         if (rawInput.get()[0] == '\0') {
             needsClrScrn = false;
             continue;
@@ -395,9 +383,7 @@ void selectForIsoFiles(const std::string& operation,
             continue;
         }
 
-        // Initiate a manual list refresh
         if (inputString == "R" && !isUnmount && !GlobalCaches::globalIsoFileList.empty() && !refreshState->isImportRunning.load()) {
-            // Prune completed threads before launching a new one
             backgroundThreads.erase(
                 std::remove_if(backgroundThreads.begin(), backgroundThreads.end(),
                     [](std::thread& t) {
@@ -447,30 +433,26 @@ void selectForIsoFiles(const std::string& operation,
         size_t totalPages = (GlobalState::ITEMS_PER_PAGE != 0) ? ((currentList.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE) : 0;
         bool need2Sort = false;
 
-        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, isMount, isUnmount, write, isConversion, need2Sort, isAtISOList);
+        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, operation, need2Sort, isAtISOList);
 
         if (validCommand) continue;
 
         bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isFiltered, filteredFiles, isoDirs,
-                                                    operation, isAtISOList, umountMvRmBreak, filterHistory);
-        if (pendingExecuted) {
-            continue;
-        }
+                                                    operation, umountMvRmBreak, filterHistory);
+        if (pendingExecuted) continue;
 
         if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn,
                                     filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage)) {
             std::cout << "\033[1B\033[K";
-            // Disable PgUp&PgDn when pagination is not enabled
             continue;
         }
 
         bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn);
-        if (pendingHandled) {
-            continue;
-        }
+        if (pendingHandled) continue;
 
+        isAtISOList.store(false);
         processOperationForSelectedIsoFiles(inputString, isFiltered, filteredFiles, isoDirs,
-                                           operation, isAtISOList, umountMvRmBreak, filterHistory);
+                                            operation, umountMvRmBreak, filterHistory);
     }
     reset_custom_keybindingsForSelect();
 }
@@ -646,7 +628,8 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         std::atomic<bool> isAtISOList{false};
 
         size_t totalPages = (GlobalState::ITEMS_PER_PAGE != 0) ? ((files.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE) : 0;
-        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, false, false, false, true, need2Sort, isAtISOList);
+
+        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, operation, need2Sort, isAtISOList);
 
         if (validCommand) continue;
 
