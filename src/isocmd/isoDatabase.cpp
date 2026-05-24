@@ -234,13 +234,13 @@ std::string getHomeDirectory() {
  * it into place — ensuring readers always see either the complete old file or the
  * complete new one, never a partial write.
  *
- * @param globalIsoFileList  Const reference to vector of ISO file paths to add.
- * @param newISOFound        Set to true if at least one new entry was added,
- *                           false if all paths already existed in the cache.
+ * @param discoveredISOFiles  Const reference to vector of ISO file paths to add.
+ * @param newISOFound         Set to true if at least one new entry was added,
+ *                            false if all paths already existed in the cache.
  * @return true  if new entries were written successfully.
  * @return false if no new entries were found, or if an I/O error occurred.
  */
-bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, bool* newISOFound) {
+bool saveToDatabase(const std::vector<std::string>& discoveredISOFiles, bool* newISOFound) {
     std::filesystem::path cachePath = GlobalState::databaseDirectory;
     cachePath /= GlobalState::databaseFilename;
     if (!std::filesystem::exists(GlobalState::databaseDirectory) && !std::filesystem::create_directories(GlobalState::databaseDirectory)) {
@@ -285,7 +285,7 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, bool* new
     std::unordered_set<std::string> existingSet(existingCache.begin(), existingCache.end());
     std::vector<std::string> newEntries;
     bool localNewISOFound = false;
-    for (const auto& iso : globalIsoFileList) {
+    for (const auto& iso : discoveredISOFiles) {
         if (existingSet.find(iso) == existingSet.end()) {
             newEntries.push_back(iso);
             localNewISOFound = true;

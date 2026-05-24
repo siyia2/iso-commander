@@ -143,7 +143,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 continue;
             }
 
-            if (input == "*stats" || input == "clr" || input == "clr_paths" || input == "clr_filter") {
+            if (input == "*stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter") {
                 databaseSwitches(input);
                 continue;
             }
