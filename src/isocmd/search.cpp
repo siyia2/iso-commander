@@ -98,17 +98,19 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
         }
     };
 
-    enable_ctrl_d();
-    setupSignalHandlerCancellations();
-    resetReadlinePagination();
-    KeybindingGuard guard;
-    setup_custom_keybindingsForSearches();
-    rl_attempted_completion_function = my_special_completion_entry;
+    auto rearmSetup = [&]() {
+        enable_ctrl_d();
+        setupSignalHandlerCancellations();
+        resetReadlinePagination();
+        setup_custom_keybindingsForSearches();
+        rl_attempted_completion_function = my_special_completion_entry;
+        GlobalState::g_operationCancelled.store(false);
+    };
 
     while (true) {
+        rearmSetup();
+        KeybindingGuard guard;
         try {
-            GlobalState::g_operationCancelled.store(false);
-
             const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
             clearScrollBuffer();
@@ -215,6 +217,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 std::vector<std::future<void>> futures;
                 std::mutex processMutex;
                 std::mutex traverseErrorMutex;
+                GlobalState::g_operationCancelled.store(false);
 
                 for (const auto& validPath : validPaths) {
                     futures.emplace_back(
@@ -257,7 +260,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             const VerboseAndDatabaseTheme dt = getDatabaseTheme();
             std::cerr << "\n" << dt.red << "Unable to access ISO database: " << e.what() << dt.reset << std::endl;
             pressEnterToContinue();
-            // loop continues naturally — no recursive call needed
         }
     }
 }
