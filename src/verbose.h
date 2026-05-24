@@ -49,23 +49,6 @@ inline void clearGlobalVerboseSets() {
     verboseSets.uniqueErrorTokenMessages.clear();
 }
 
-/**
- * @brief Shared reporting context for file operations (copy/move/delete).
- *
- * Collects verbose success/error messages, updates atomic task counters,
- * tracks overall success state, and triggers batched message flushing.
- *
- * @note Non-owning references/pointers; caller must ensure lifetime.
- */
-struct OperationReporter {
-    std::vector<std::string>& verboseIsos;
-    std::vector<std::string>& verboseErrors;
-    std::atomic<size_t>* completedTasks;
-    std::atomic<size_t>* failedTasks;
-    std::atomic<bool>& operationSuccessful;
-    const std::function<void()>& batchInsertMessages;
-};
-
 // --- Output & Logging Functions ---
 
 /**
@@ -113,14 +96,17 @@ void verboseImageSearchResults(
 /**
  * Specific error reporting for Copy (Cp), Move (Mv), and Remove (Rm) operations.
  */
-void reportErrorCpMvRm(
-    std::string_view errorType,
-    std::string_view srcDir,
-    std::string_view srcFile,
-    std::string_view destDir,
-    std::string_view errorDetail,
-    std::string_view operation,
-    OperationReporter& reporter);
+void reportErrorCpMvRm(std::string_view errorType,
+	std::string_view srcDir,
+	std::string_view srcFile,
+	std::string_view destDir,
+	std::string_view errorDetail,
+	std::string_view operation,
+	std::vector<std::string>& verboseErrors,
+	std::atomic<size_t>* failedTasks,
+	std::atomic<bool>& operationSuccessful,
+	const std::function<void()>& batchInsertFunc);
+
 /**
  * Finalizes the session, saves state, and reports results to the database layer.
  */
