@@ -180,8 +180,7 @@ bool handlePendingProcess(const std::string& inputString, std::vector<std::strin
             }
         }
 
-        processOperationForSelectedIsoFiles(combinedIndices, isFiltered, filteredFiles, isoDirs, operation, umountMvRmBreak,
-                     filterHistory);
+        processOperationForSelectedIsoFiles(combinedIndices, isFiltered, filteredFiles, isoDirs, operation, umountMvRmBreak, filterHistory);
 
         return true;
     }

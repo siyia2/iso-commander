@@ -143,7 +143,11 @@ const std::string MOUNTED_ISO_PATH = "/mnt";
  * @param state              [in] Shared state with import flag and CV for event coordination.
  * @return true if ISOs were found and displayed; false if the directory is empty.
  */
-bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) {
+bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles,
+                               bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices,
+                               bool& hasPendingProcess, size_t& currentPage,
+                               size_t& originalPage, std::shared_ptr<RefreshState> state) {
+
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
