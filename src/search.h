@@ -41,11 +41,7 @@ void displayDatabaseStatistics(
  * search input field.
  */
 void databaseSwitches(
-    std::string& inputSearch,
-    const bool& promptFlag,
-    const int& maxDepth,
-    const bool& filterHistory,
-    bool& newISOfound
+    std::string& inputSearch
 );
 
 #endif // SEARCHES_H
