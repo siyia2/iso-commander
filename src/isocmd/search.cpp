@@ -88,7 +88,7 @@ bool isValidDirectory(const std::string& path) {
  * @param newISOFound   Boolean flag set to true if at least one new ISO entry
  *                      was added to the database.
  *
- * @note Recursively calls itself on help request ('?') or exceptions.
+ * @note Loops on help request ('?') or exceptions without exiting.
  *       Cancellable via Ctrl+C through GlobalState::g_operationCancelled.
  */
 void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool& newISOFound) {

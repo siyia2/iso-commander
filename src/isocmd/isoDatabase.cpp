@@ -611,15 +611,15 @@ void loadFromDatabase(std::vector<std::string>& outList) {
 }
 
 /**
- * @brief Displays database statistics including on-disk and RAM usage
+ * @brief Displays database statistics including on-disk and RAM usage.
  *
- * Shows information about ISO database, history database, transformation cache,
- * and various file format caches.
+ * Creates database and history files if absent, then prints capacity,
+ * entry counts, and locations for the ISO and history databases, followed
+ * by RAM-buffered entry counts for ISO, STR, BIN/IMG, DAA/GBI, CHD, MDF,
+ * and NRG caches sourced from GlobalCaches and GlobalState.
  *
- * @param databaseFilePath Path to the ISO database file
- * @param maxDatabaseSize Maximum allowed database size in bytes
- * @param transformationCache Map of transformation cache entries
- * @param globalIsoFileList Vector of ISO files in memory
+ * @param databaseFilePath Path to the ISO database file.
+ * @param maxDatabaseSize  Maximum allowed database size in bytes.
  */
 void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize) {
     signal(SIGINT, SIG_IGN);
@@ -676,15 +676,15 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
 }
 
 /**
- * @brief Handles database management commands and statistics display
+ * @brief Handles database management commands.
  *
- * Processes various database-related commands including stats display,
- * cache clearing, and theme changes.
+ * Dispatches on inputSearch:
+ *   *stats      — calls displayDatabaseStatistics()
+ *   !clr        — truncates the ISO database file and clears
+ *                 transformationCache and globalIsoFileList
+ *   !clr_paths / !clr_filter — delegates to clearHistory()
  *
- * @param inputSearch Command string to process
- * @param promptFlag Flag controlling prompt behavior
- * @param maxDepth Maximum directory traversal depth
- * @param filterHistory Flag for filter history management
+ * @param inputSearch Command string to process.
  */
 void databaseSwitches(std::string& inputSearch) {
     signal(SIGINT, SIG_IGN);
