@@ -240,7 +240,7 @@ std::string getHomeDirectory() {
  * @return true  if new entries were written successfully.
  * @return false if no new entries were found, or if an I/O error occurred.
  */
-bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atomic<bool>& newISOFound) {
+bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, bool* newISOFound) {
     std::filesystem::path cachePath = GlobalState::databaseDirectory;
     cachePath /= GlobalState::databaseFilename;
     if (!std::filesystem::exists(GlobalState::databaseDirectory) && !std::filesystem::create_directories(GlobalState::databaseDirectory)) {
@@ -250,8 +250,8 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
         return false;
     }
     std::lock_guard<std::mutex> fileLock(dbFileMutex);
-    // Reset newISOFound status every time as it is only used for the verbose purposes of saveAndReportResultsForDatabase
-    newISOFound.store(false);
+    // Reset newISOFound status every time as it is only used for saveAndReportResultsForDatabase in single instances
+    if (newISOFound) *newISOFound = false;
     // Open the existing DB file (read-only) to load current cache
     std::vector<std::string> existingCache;
     int fd = open(cachePath.c_str(), O_RDONLY);
@@ -292,7 +292,8 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
         }
     }
     if (newEntries.empty()) {
-        newISOFound.store(false);
+        if (newISOFound)
+            *newISOFound = false;
         return false;
     }
 
@@ -339,7 +340,8 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
         return false;
     }
 
-    newISOFound.store(localNewISOFound);
+    if (newISOFound)
+        *newISOFound = localNewISOFound;
     GlobalState::isoListDirty.store(true);
     return true;
 }
@@ -352,14 +354,11 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
  * forwarded to saveToDatabase() in a single batch call.
  *
  * @param filePathsStr  Semicolon-delimited string of destination ISO paths.
- * @param newISOFound   Atomic flag set to @c true by saveToDatabase() if at
- *                      least one new ISO entry is added.
  *
  * @note Paths are assumed valid — they were written successfully by the
  *       preceding operation. No filesystem validation is performed.
  */
-void updateDatabaseAfterOperations(const std::string& filePathsStr,
-                                    std::atomic<bool>& newISOFound) {
+void updateDatabaseAfterOperations(const std::string& filePathsStr) {
     std::vector<std::string> allIsoFiles;
     std::istringstream iss(filePathsStr);
     std::string path;
@@ -368,9 +367,8 @@ void updateDatabaseAfterOperations(const std::string& filePathsStr,
         if (!path.empty())
             allIsoFiles.push_back(std::move(path));
     }
-
     if (!allIsoFiles.empty()) {
-        saveToDatabase(allIsoFiles, newISOFound);
+        saveToDatabase(allIsoFiles, nullptr);
 	}
 }
 
@@ -464,15 +462,13 @@ bool isValidDirectory(const std::string& path);
  * under printMutex before importCV is notified, ensuring printList cannot
  * observe a stale sync indicator after the signal.
  *
- * @param newISOFound  Atomic flag set when new ISOs are discovered; cleared
- *                     after save regardless of whether new ISOs were found.
  * @param state        Shared state holding isImportRunning, stopImport,
  *                     importCV/mutex for completion signaling, workerCV/mutex
  *                     and activeWorkers for per-group synchronization,
  *                     and printMutex for sync indicator consistency.
  */
-void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
-                               std::shared_ptr<RefreshState> state) {
+void backgroundDatabaseImport(std::shared_ptr<RefreshState> state) {
+
     std::vector<std::string> paths;
     int localMaxDepth = -1;
     bool localPromptFlag = false;
@@ -563,9 +559,8 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
         for (auto& t : threads)
             if (t.joinable()) t.join();
     }
-
     if (state->stopImport.load()) { signalDone(); return; }
-    saveToDatabase(allIsoFiles, newISOFound);
+    saveToDatabase(allIsoFiles, nullptr);
     signalDone();
 }
 
@@ -690,9 +685,8 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
  * @param promptFlag Flag controlling prompt behavior
  * @param maxDepth Maximum directory traversal depth
  * @param filterHistory Flag for filter history management
- * @param newISOFound Atomic flag indicating if new ISOs were found
  */
-void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& filterHistory, std::atomic<bool>& newISOFound) {
+void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const int& maxDepth, const bool& filterHistory, bool& newISOFound) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
@@ -719,6 +713,5 @@ void databaseSwitches(std::string& inputSearch, const bool& promptFlag, const in
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
         clearHistory(inputSearch);
     }
-
     refreshForDatabase(promptFlag, maxDepth, filterHistory, newISOFound);
 }

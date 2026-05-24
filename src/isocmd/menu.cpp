@@ -60,7 +60,6 @@ void print_ascii() {
 
 void selectForIsoFiles(const std::string& operation,
     std::atomic<bool>& isAtISOList,
-    std::atomic<bool>& newISOFound,
     std::vector<std::thread>& backgroundThreads,
     std::shared_ptr<RefreshState> refreshState);
 
@@ -70,14 +69,12 @@ void selectForIsoFiles(const std::string& operation,
  * Provides options for mounting, unmounting, deleting, moving, copying, or writing ISOs.
  *
  * @param isAtISOList       Atomic flag used to track terminal state for background processes.
- * @param newISOFound       Signals if a new ISO has been discovered during background scans.
  * @param backgroundThreads Vector of threads for managing background worker lifetime.
  * @param search            Flag indicating whether auto-update scanning is enabled.
  * @param state             Shared state with import flag and CV for event coordination.
  */
 void submenu1(std::atomic<bool>& isAtISOList,
     std::shared_ptr<RefreshState> refreshState,
-    std::atomic<bool>& newISOFound,
     std::vector<std::thread>& backgroundThreads) {
     while (true) {
         rl_bind_key('\f', prevent_readline_keybindings);
@@ -119,38 +116,32 @@ void submenu1(std::atomic<bool>& isAtISOList,
             switch (choice[0]) {
                 case '1':
                     clearScrollBuffer();
-                    selectForIsoFiles("mount", isAtISOList, newISOFound,
-                                      backgroundThreads, refreshState);
+                    selectForIsoFiles("mount", isAtISOList, backgroundThreads, refreshState);
                     clearScrollBuffer();
                     break;
                 case '2':
                     clearScrollBuffer();
-                    selectForIsoFiles("umount", isAtISOList, newISOFound,
-                                      backgroundThreads, refreshState);
+                    selectForIsoFiles("umount", isAtISOList, backgroundThreads, refreshState);
                     clearScrollBuffer();
                     break;
                 case '3':
                     clearScrollBuffer();
-                    selectForIsoFiles("rm", isAtISOList, newISOFound,
-                                      backgroundThreads, refreshState);
+                    selectForIsoFiles("rm", isAtISOList, backgroundThreads, refreshState);
                     clearScrollBuffer();
                     break;
                 case '4':
                     clearScrollBuffer();
-                    selectForIsoFiles("mv", isAtISOList, newISOFound,
-                                       backgroundThreads, refreshState);
+                    selectForIsoFiles("mv", isAtISOList, backgroundThreads, refreshState);
                     clearScrollBuffer();
                     break;
                 case '5':
                     clearScrollBuffer();
-                    selectForIsoFiles("cp", isAtISOList, newISOFound,
-                                      backgroundThreads, refreshState);
+                    selectForIsoFiles("cp", isAtISOList, backgroundThreads, refreshState);
                     clearScrollBuffer();
                     break;
                 case '6':
                     clearScrollBuffer();
-                    selectForIsoFiles("write2usb", isAtISOList, newISOFound,
-                                      backgroundThreads, refreshState);
+                    selectForIsoFiles("write2usb", isAtISOList, backgroundThreads, refreshState);
                     clearScrollBuffer();
                     break;
             }
@@ -158,9 +149,7 @@ void submenu1(std::atomic<bool>& isAtISOList,
     }
 }
 
-void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice,
-                                    std::atomic<bool>& newISOFound,
-                                    std::shared_ptr<RefreshState> state);
+void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shared_ptr<RefreshState> state);
 
 /**
  * @brief Displays the conversion submenu for transforming non-ISO disk images into ISO format.
@@ -168,10 +157,9 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice,
  * Supports .BIN/.IMG (with .CCD cuesheets), .MDF, .NRG, .CHD, and .DAA image formats
  * using C++ implementations of conversion tools.
  *
- * @param newISOFound Atomic flag to notify main thread of newly created ISO files.
  * @param state       Shared state with import flag for tracking background imports.
  */
-void submenu2(std::atomic<bool>& newISOFound, std::shared_ptr<RefreshState> state) {
+void submenu2(std::shared_ptr<RefreshState> state) {
     while (true) {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
@@ -210,27 +198,27 @@ void submenu2(std::atomic<bool>& newISOFound, std::shared_ptr<RefreshState> stat
             switch (choice[0]) {
                 case '1':
                     operation = "bin";
-                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, state);
+                    promptSearchBinImgChdDaaMdfNrg(operation, state);
                     clearScrollBuffer();
                     break;
                 case '2':
                     operation = "chd";
-                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, state);
+                    promptSearchBinImgChdDaaMdfNrg(operation, state);
                     clearScrollBuffer();
                     break;
                 case '3':
                     operation = "daa";
-                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, state);
+                    promptSearchBinImgChdDaaMdfNrg(operation, state);
                     clearScrollBuffer();
                     break;
                 case '4':
                     operation = "mdf";
-                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, state);
+                    promptSearchBinImgChdDaaMdfNrg(operation, state);
                     clearScrollBuffer();
                     break;
                 case '5':
                     operation = "nrg";
-                    promptSearchBinImgChdDaaMdfNrg(operation, newISOFound, state);
+                    promptSearchBinImgChdDaaMdfNrg(operation, state);
                     clearScrollBuffer();
                     break;
             }

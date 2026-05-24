@@ -365,7 +365,7 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
     return count;
 }
 
-bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atomic<bool>& newISOFound);
+bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, bool* newISOFound);
 
 /**
  * @brief Finalizes the ISO database refresh by reporting results and syncing global state.
@@ -390,17 +390,19 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
  * @param uniqueErrorMessages Deduplicated log of system-level I/O errors.
  * @param promptFlag       Boolean toggle for verbose UI reporting.
  * @param start_time       Point of origin for the refresh operation for duration calculation.
- * @param newISOFound      Atomic toggle indicating if the scan resulted in delta changes.
+ * @param newISOFound      Boolean toggle indicating if the scan resulted in delta changes.
  */
-void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles, std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths, std::unordered_set<std::string>& uniqueErrorMessages, bool& promptFlag, int& maxDepth, bool& filterHistory, const std::chrono::high_resolution_clock::time_point& start_time, std::atomic<bool>& newISOFound) {
+void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles,
+                                    std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths,
+                                    std::unordered_set<std::string>& uniqueErrorMessages,
+                                    bool& promptFlag, int& maxDepth, bool& filterHistory, bool& newISOFound,
+                                    const std::chrono::high_resolution_clock::time_point& start_time) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    const VerboseAndDatabaseTheme vt = getVerboseTheme();
+    if (newISOFound) loadFromDatabase(GlobalCaches::globalIsoFileList);
 
-	if (newISOFound.load()) {
-		loadFromDatabase(GlobalCaches::globalIsoFileList);
-	}
+    const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
     auto printInvalidPaths = [&]() {
         if (invalidPaths.empty()) return;
@@ -425,7 +427,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
         printErrorMessages();
     }
 
-    const bool saveSuccess = GlobalState::g_operationCancelled ? false : saveToDatabase(allIsoFiles, newISOFound);
+    const bool saveSuccess = GlobalState::g_operationCancelled ? false : saveToDatabase(allIsoFiles, &newISOFound);
     const auto end_time = std::chrono::high_resolution_clock::now();
 
     if (!promptFlag) return;
@@ -436,15 +438,15 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
 
     if (GlobalState::g_operationCancelled) {
         std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "Cancelled" << vt.green << "]" << vt.bold << "\n";
-    } else if (!allIsoFiles.empty() && newISOFound.load() && !saveSuccess) {
+    } else if (!allIsoFiles.empty() && newISOFound && !saveSuccess) {
         std::cout << "\n" << vt.red << "Database Refresh failed: [" << vt.yellow << "Unable to access the database file" << vt.red << "]" << vt.bold << "\n";
     } else if (validPaths.empty()) {
         std::cout << "\n" << vt.red << "Database refresh failed: [" << vt.yellow << "Lack of valid paths" << vt.red << "]" << vt.bold << "\n";
-    } else if (!allIsoFiles.empty() && !newISOFound.load() && !saveSuccess) {
+    } else if (!allIsoFiles.empty() && !newISOFound && !saveSuccess) {
         std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No new ISO found" << vt.green << "]" << vt.bold << "\n";
     } else if (allIsoFiles.empty()) {
         std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No ISO found" << vt.green << "]" << vt.bold << "\n";
-    } else if (!allIsoFiles.empty() && saveSuccess && newISOFound.load()) {
+    } else if (!allIsoFiles.empty() && saveSuccess && newISOFound) {
         int result = countDifferentEntries(allIsoFiles, GlobalCaches::globalIsoFileList);
         std::cout << "\n" << vt.green << "Database Refresh: [" << vt.magenta << result << " ISO imported" << vt.green << "]" << vt.bold << "\n";
     }

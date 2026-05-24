@@ -226,13 +226,12 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
  * @param[out] umountMvRmBreak Flag set to false if no tasks were successfully processed.
  * @param filterHistory Indicates if the current file list is a filtered view.
  * @param verbose Toggle for detailed per-file progress output.
- * @param[in,out] newISOFound Atomic flag triggered to true if new ISOs were produced.
  */
 void processInputForCpMvRm(const std::string& input,
 						   const std::vector<std::string>& isoFiles,
 						   const std::string& process,
 						   bool& umountMvRmBreak, bool& filterHistory,
-						   bool& verbose, std::atomic<bool>& newISOFound) {
+						   bool& verbose) {
     setupSignalHandlerCancellations();
 
     std::vector<std::string> successfulDestPaths;
@@ -354,7 +353,7 @@ void processInputForCpMvRm(const std::string& input,
             exactPaths += destPath;
         }
         if (!exactPaths.empty())
-            updateDatabaseAfterOperations(exactPaths, newISOFound);
+            updateDatabaseAfterOperations(exactPaths);
     }
     clear_history();
 }
@@ -375,14 +374,13 @@ void processInputForCpMvRm(const std::string& input,
  * @param modeDaa         True if converting DAA/GBI images.
  * @param verbose         Toggle for detailed per-file progress output.
  * @param needsClrScrn    Set to true if the screen should be cleared on return.
- * @param[in,out] newISOFound  Atomic flag triggered to true if new ISOs were produced.
  */
-void processInputForConversions(const std::string&        input,
+void processInputForConversions(const std::string& input,
                                  std::vector<std::string>& fileList,
                                  const bool& modeMdf, const bool& modeNrg,
                                  const bool& modeChd, const bool& modeDaa,
-                                 bool& verbose, bool& needsClrScrn,
-                                 std::atomic<bool>& newISOFound)
+                                 bool& verbose, bool& needsClrScrn
+                                 )
 {
     std::vector<std::string> successfulOutputPaths;
     std::mutex outPathsMutex;
@@ -479,6 +477,6 @@ void processInputForConversions(const std::string&        input,
             if (!exactPaths.empty()) exactPaths += ';';
             exactPaths += outPath;
         }
-        updateDatabaseAfterOperations(exactPaths, newISOFound);
+        updateDatabaseAfterOperations(exactPaths);
     }
 }

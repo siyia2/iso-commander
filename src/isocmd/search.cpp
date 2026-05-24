@@ -85,13 +85,13 @@ bool isValidDirectory(const std::string& path) {
  *                      scan behaviour and output verbosity.
  * @param maxDepth      Maximum directory recursion depth (-1 for unlimited).
  * @param filterHistory Whether to load/save readline history with filtering.
- * @param newISOFound   Atomic flag set to true if at least one new ISO entry
+ * @param newISOFound   Boolean flag set to true if at least one new ISO entry
  *                      was added to the database.
  *
  * @note Recursively calls itself on help request ('?') or exceptions.
  *       Cancellable via Ctrl+C through GlobalState::g_operationCancelled.
  */
-void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::atomic<bool>& newISOFound) {
+void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool& newISOFound) {
     struct KeybindingGuard {
         ~KeybindingGuard() {
             reset_custom_keybindingsForSearches();
@@ -207,7 +207,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
             restoreInput();
             resetReadlinePagination();
             if (!invalidPaths.empty()) {
-                saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
+                saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, newISOFound, start_time);
             }
             return;
         }
@@ -253,7 +253,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, std::
             saveHistory(filterHistory);
             clear_history();
         }
-        saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, start_time, newISOFound);
+        saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, promptFlag, maxDepth, filterHistory, newISOFound, start_time);
     } catch (const std::exception& e) {
         const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
@@ -806,7 +806,7 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
     return *currentCache;
 }
 
-void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list, std::shared_ptr<RefreshState> state);
+void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, bool& list, std::shared_ptr<RefreshState> state);
 
 /**
  * @brief Dispatches special command inputs during BIN/IMG/MDF/NRG/CHD/DAA/GBI search UI interaction.
@@ -821,7 +821,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
                                                   bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa,
                                                   const std::string& fileExtension,
                                                   std::vector<std::string>& files, const std::string& fileType,
-                                                  std::atomic<bool>& newISOFound, bool& list,
+                                                  bool& list,
                                                   std::shared_ptr<RefreshState> state) {
 
     if (input == "*stats") {
@@ -847,7 +847,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
                      GlobalCaches::binImgFilesCache, GlobalCaches::mdfMdsFilesCache, GlobalCaches::nrgFilesCache, GlobalCaches::chdFilesCache, GlobalCaches::daaGbiFilesCache,
                      modeMdf, modeNrg, modeChd, modeDaa);
         if (!files.empty())
-            selectForImageFiles(fileType, files, newISOFound, list, state);
+            selectForImageFiles(fileType, files, list, state);
         return true;
     }
     return false;
@@ -863,7 +863,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  * Discovered files are cached in memory and forwarded to the file selection
  * and conversion workflow when available.
  */
-void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atomic<bool>& newISOFound, std::shared_ptr<RefreshState> state) {
+void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shared_ptr<RefreshState> state) {
     struct KeybindingGuard {
         ~KeybindingGuard() {
             reset_custom_keybindingsForSearches();
@@ -953,8 +953,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
         bool list = false;
 
         if (dispatchSpecialCommandForBinImgMdfNrgSearch(inputSearch, modeMdf, modeNrg, modeChd, modeDaa,
-                                   fileExtension, files, fileType,
-                                   newISOFound, list, state))
+                                   fileExtension, files, fileType, list, state))
             continue;
 
         std::cout << " \n\033[3H\033[J\n";
@@ -995,6 +994,6 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::atom
         if (!newFilesFound) continue;
 
         if (!files.empty() && !GlobalState::g_operationCancelled.load())
-            selectForImageFiles(fileType, files, newISOFound, list, state);
+            selectForImageFiles(fileType, files, list, state);
     }
 }

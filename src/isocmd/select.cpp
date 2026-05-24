@@ -57,12 +57,12 @@
  * @param isAtISOList      Atomic toggle to signal the UI is busy processing.
  * @param umountMvRmBreak  Flag to interrupt the persistent loop on destructive actions.
  * @param filterHistory    Flag to clear/update the readline search history.
- * @param newISOFound      Atomic signal for background filesystem watcher.
  */
-void processOperationForSelectedIsoFiles(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered, const std::vector<std::string>& filteredFiles,
+void processOperationForSelectedIsoFiles(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered,
+                                         const std::vector<std::string>& filteredFiles,
 										 std::vector<std::string>& isoDirs, bool& needsClrScrn,
 										 const std::string& operation, std::atomic<bool>& isAtISOList,
-										 bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
+										 bool& umountMvRmBreak, bool& filterHistory) {
 
     clearScrollBuffer();
     needsClrScrn = true;
@@ -85,7 +85,7 @@ void processOperationForSelectedIsoFiles(const std::string& inputString, bool is
     } else {
         isAtISOList.store(false);
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalCaches::globalIsoFileList;
-        processInputForCpMvRm(inputString, activeList, operation, umountMvRmBreak, filterHistory, verbose, newISOFound);
+        processInputForCpMvRm(inputString, activeList, operation, umountMvRmBreak, filterHistory, verbose);
     }
 
     handleSelectIsoFilesResults(operation, verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn);
@@ -177,8 +177,7 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
 bool handlePendingProcess(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingProcess,bool isMount,bool isUnmount,
 						  bool write,bool isFiltered, std::vector<std::string>& filteredFiles,
 						  std::vector<std::string>& isoDirs, bool& needsClrScrn, const std::string& operation,
-						  std::atomic<bool>& isAtISOList, bool& umountMvRmBreak,
-						  bool& filterHistory, std::atomic<bool>& newISOFound) {
+						  std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory) {
 
     if (hasPendingProcess && !pendingIndices.empty() && inputString == "proc") {
         std::string combinedIndices = "";
@@ -190,9 +189,8 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
         }
 
         processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered,
-                     filteredFiles, isoDirs,
-                     needsClrScrn, operation, isAtISOList, umountMvRmBreak,
-                     filterHistory, newISOFound);
+                     filteredFiles, isoDirs, needsClrScrn, operation, isAtISOList, umountMvRmBreak,
+                     filterHistory);
 
         return true;
     }
@@ -264,7 +262,6 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  * @param operation         Target system action ("mount", "umount", "rm", etc.).
  * @param isAtISOList       Guards background UI repaints; false when the user has navigated away from the ISO list.
  * @param isImportRunning   Prevents concurrent imports; also used as the CV predicate in the watcher thread.
- * @param newISOFound       Set by the import when new ISOs are discovered.
  * @param backgroundThreads Joinable worker threads (manual R-press imports) retained for lifetime management.
  * @param search            Cleared on manual R-press to suppress automatic search re-entry after refresh.
  * @param refreshState      Shared UI state and CV passed from the startup import path to synchronize the
@@ -272,7 +269,6 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  */
 void selectForIsoFiles(const std::string& operation,
                        std::atomic<bool>& isAtISOList,
-                       std::atomic<bool>& newISOFound,
                        std::vector<std::thread>& backgroundThreads,
                        std::shared_ptr<RefreshState> refreshState) {
 
@@ -418,8 +414,8 @@ void selectForIsoFiles(const std::string& operation,
             );
             needsClrScrn = true;
             refreshState->isImportRunning.store(true);
-            backgroundThreads.emplace_back([&newISOFound, refreshState] {
-                backgroundDatabaseImport(newISOFound, refreshState);
+            backgroundThreads.emplace_back([refreshState] {
+                backgroundDatabaseImport(refreshState);
                 refreshState->isWatcherRunning.store(false);
             });
             continue;
@@ -463,7 +459,7 @@ void selectForIsoFiles(const std::string& operation,
 
         bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isMount, isUnmount, write, isFiltered,
                                                     filteredFiles, isoDirs,
-                                                    needsClrScrn, operation, isAtISOList, umountMvRmBreak, filterHistory, newISOFound);
+                                                    needsClrScrn, operation, isAtISOList, umountMvRmBreak, filterHistory);
         if (pendingExecuted) {
             continue;
         }
@@ -483,7 +479,7 @@ void selectForIsoFiles(const std::string& operation,
         processOperationForSelectedIsoFiles(inputString, isMount, isUnmount, write, isFiltered,
                                            filteredFiles, isoDirs,
                                            needsClrScrn, operation, isAtISOList, umountMvRmBreak,
-                                           filterHistory, newISOFound);
+                                           filterHistory);
     }
     reset_custom_keybindingsForSelect();
 }
@@ -508,14 +504,12 @@ void selectForIsoFiles(const std::string& operation,
  *
  * @param fileType         The format category (e.g., "bin", "mdf", "nrg").
  * @param[in,out] files    The working list of files to display and process.
- * @param newISOFound      Atomic signal to notify the system when a new ISO is created.
  * @param list             UI flag indicating if the list view is active.
  * @param state            Shared state containing import running flag and condition
  *                         variable for thread-safe event coordination.
  */
 void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files,
-                         std::atomic<bool>& newISOFound, bool& list,
-                         std::shared_ptr<RefreshState> state) {
+                         bool& list, std::shared_ptr<RefreshState> state) {
 
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
@@ -679,7 +673,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                                        (fileType == "nrg"),
                                        (fileType == "chd"),
                                        (fileType == "daa"),
-                                       verbose, needsClrScrn, newISOFound);
+                                       verbose, needsClrScrn);
 
             needsClrScrn = true;
             if (verbose) {
@@ -704,7 +698,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                                        (fileType == "nrg"),
                                        (fileType == "chd"),
                                        (fileType == "daa"),
-                                       verbose, needsClrScrn, newISOFound);
+                                       verbose, needsClrScrn);
             needsClrScrn = true;
             if (verbose) {
                 verbosePrint(verboseSets.uniqueErrorTokenMessages, verboseSets.operationCompleted, verboseSets.operationSkipped, verboseSets.operationFailed, 3);

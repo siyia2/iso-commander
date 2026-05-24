@@ -68,8 +68,7 @@ int main(int argc, char *argv[]) {
     /// Atomic booleans controlling concurrency and UI state between main thread and background workers.
     /// @{
     std::atomic<bool> messageActive{false}, isAtMain{true}, isAtISOList{false},
-                     newISOFound{false}, stopMessage{false},
-                     monitorThreadSpawned{false};
+                     stopMessage{false}, monitorThreadSpawned{false};
     /// @}
 
     // Initialize static thread pool early for improved performance
@@ -139,8 +138,8 @@ int main(int argc, char *argv[]) {
     /// Start background database import if auto-update is enabled and FolderPaths exist in history file
     if (search && (!(isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath)))) {
         importState->isImportRunning.store(true);
-        backgroundThreads.emplace_back([&newISOFound, importState, &search] {
-            backgroundDatabaseImport(newISOFound, importState);
+        backgroundThreads.emplace_back([importState, &search] {
+            backgroundDatabaseImport(importState);
             search = false;
         });
     }
@@ -208,19 +207,20 @@ int main(int argc, char *argv[]) {
         std::string choice(input.get());
         if (choice == "1") {
             isAtMain = isAtISOList = false;
-            submenu1(isAtISOList, importState, newISOFound,
-                     backgroundThreads);
+            submenu1(isAtISOList, importState, backgroundThreads);
         } else if (choice.length() == 1) {
             switch (choice[0]) {
                 case '2':
                     isAtMain = isAtISOList = false;
-                    submenu2(newISOFound, importState);
+                    submenu2(importState);
                     break;
-                case '3':
+                case '3': {
                     isAtMain = isAtISOList = false;
+                    bool newISOFound = false;
                     refreshForDatabase(true, -1, false, newISOFound);
                     clearScrollBuffer();
                     break;
+                }
                 case '4':
                     isAtMain = isAtISOList = false;
                     interactiveConfigEditor(GlobalState::configPath);
