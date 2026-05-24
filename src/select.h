@@ -136,17 +136,14 @@ void writeToUsb(
  * Manages pagination state and help text display.
  */
 bool processPaginationHelpAndDisplay(
-    const std::string &command,
-    size_t &totalPages,
-    size_t &currentPage,
-    bool &isFiltered,
-    bool &needsClrScrn,
-    const bool isMount,
-    const bool isUnmount,
-    const bool isWrite,
-    const bool isConversion,
-    bool &need2Sort,
-    std::atomic<bool> &isAtISOList
+    const std::string& command,
+    size_t& totalPages,
+    size_t& currentPage,
+    bool& isFiltered,
+    bool& needsClrScrn,
+    const std::string& operation,
+    bool& need2Sort,
+    std::atomic<bool>& isAtISOList
 );
 
 /**
