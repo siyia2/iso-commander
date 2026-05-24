@@ -47,7 +47,7 @@ void refreshForDatabase(
     bool promptFlag,
     int maxDepth,
     bool filterHistory,
-    std::atomic<bool>& newISOFound
+    bool& newISOFound
 );
 
 /**
@@ -62,7 +62,6 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
  * Manages the asynchronous import process to ensure the UI/Main thread remains responsive.
  */
 void backgroundDatabaseImport(
-    std::atomic<bool>& newISOFound,
     std::shared_ptr<RefreshState> state
 );
 

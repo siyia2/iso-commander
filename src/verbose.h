@@ -38,8 +38,8 @@ inline VerboseSets verboseSets;
 
 /**
  * @brief Resets the global verbose tracking state.
- * 
- * Clears all entries from the global verboseSets instance, including 
+ *
+ * Clears all entries from the global verboseSets instance, including
  * completed, failed, and skipped operations, plus unique error messages.
  */
 inline void clearGlobalVerboseSets() {
@@ -54,7 +54,7 @@ inline void clearGlobalVerboseSets() {
 /**
  * Prints set contents based on the provided verbosity level.
  */
-void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet, 
+void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet,
 std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& errorSet, int printType);
 
 /**
@@ -96,15 +96,15 @@ void verboseImageSearchResults(
 /**
  * Specific error reporting for Copy (Cp), Move (Mv), and Remove (Rm) operations.
  */
-void reportErrorCpMvRm(std::string_view errorType, 
-	std::string_view srcDir, 
-	std::string_view srcFile, 
-	std::string_view destDir, 
-	std::string_view errorDetail, 
-	std::string_view operation, 
-	std::vector<std::string>& verboseErrors, 
-	std::atomic<size_t>* failedTasks, 
-	std::atomic<bool>& operationSuccessful, 
+void reportErrorCpMvRm(std::string_view errorType,
+	std::string_view srcDir,
+	std::string_view srcFile,
+	std::string_view destDir,
+	std::string_view errorDetail,
+	std::string_view operation,
+	std::vector<std::string>& verboseErrors,
+	std::atomic<size_t>* failedTasks,
+	std::atomic<bool>& operationSuccessful,
 	const std::function<void()>& batchInsertFunc);
 
 /**
@@ -119,8 +119,8 @@ void saveAndReportResultsForDatabase(
     bool& promptFlag,
     int& maxDepth,
     bool& filterHistory,
-    const std::chrono::high_resolution_clock::time_point& start_time,
-    std::atomic<bool>& newISOFound
+    bool& newISOFound,
+    const std::chrono::high_resolution_clock::time_point& start_time
 );
 
 #endif // VERBOSE_H

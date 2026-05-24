@@ -43,13 +43,11 @@ void printMenu();
 void submenu1(
     std::atomic<bool>& isAtISOList,
     std::shared_ptr<RefreshState> state,
-    std::atomic<bool>& newISOFound,
     std::vector<std::thread>& backgroundThreads
 );
 
 // Secondary navigation logic for settings and global status
 void submenu2(
-    std::atomic<bool>& newISOFound,
     std::shared_ptr<RefreshState> state
 );
 

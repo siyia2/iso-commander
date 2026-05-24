@@ -105,8 +105,7 @@ void processInputForCpMvRm(
     const std::string &process,
     bool &umountMvRmBreak,
     bool &filterHistory,
-    bool &verbose,
-    std::atomic<bool> &newISOFound
+    bool &verbose
 );
 
 /**
@@ -120,8 +119,7 @@ void processInputForConversions(
     const bool &modeChd,
     const bool &modeDaa,
     bool &verbose,
-    bool &needsClrScrn,
-    std::atomic<bool> &newISOFound
+    bool &needsClrScrn
 );
 
 /**

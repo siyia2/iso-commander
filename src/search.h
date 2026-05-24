@@ -30,22 +30,22 @@ void helpSearches(bool isCpMv, bool import2ISO);
  * @param maxDatabaseSize Size limit for warning thresholds.
  */
 void displayDatabaseStatistics(
-    const std::string& databaseFilePath, 
+    const std::string& databaseFilePath,
     std::uintmax_t maxDatabaseSize
 );
 
 /**
  * @brief Processes special CLI switches related to database maintenance.
- * 
+ *
  * Handles internal commands like --refresh or --cleanup passed via the
  * search input field.
  */
 void databaseSwitches(
-    std::string& inputSearch, 
-    const bool& promptFlag, 
-    const int& maxDepth, 
-    const bool& filterHistory, 
-    std::atomic<bool>& newISOFound
+    std::string& inputSearch,
+    const bool& promptFlag,
+    const int& maxDepth,
+    const bool& filterHistory,
+    bool& newISOfound
 );
 
 #endif // SEARCHES_H
