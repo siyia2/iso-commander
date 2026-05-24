@@ -250,9 +250,8 @@ bool saveToDatabase(const std::vector<std::string>& discoveredISO, bool* newISOF
         return false;
     }
     std::lock_guard<std::mutex> fileLock(dbFileMutex);
-    // Reset newISOFound status every time as it is only used for saveAndReportResultsForDatabase in single instances
     if (newISOFound) *newISOFound = false;
-    // Open the existing DB file (read-only) to load current cache
+
     std::vector<std::string> existingCache;
     int fd = open(cachePath.c_str(), O_RDONLY);
     if (fd != -1) {
@@ -282,7 +281,9 @@ bool saveToDatabase(const std::vector<std::string>& discoveredISO, bool* newISOF
         close(fd);
     }
 
-    std::unordered_set<std::string> existingSet(existingCache.begin(), existingCache.end());
+    std::vector<std::string> combinedCache = std::move(existingCache);
+    std::unordered_set<std::string> existingSet(combinedCache.begin(), combinedCache.end());
+
     std::vector<std::string> newEntries;
     bool localNewISOFound = false;
     for (const auto& iso : discoveredISO) {
@@ -297,20 +298,18 @@ bool saveToDatabase(const std::vector<std::string>& discoveredISO, bool* newISOF
         return false;
     }
 
-    std::vector<std::string> combinedCache = existingCache;
     combinedCache.insert(combinedCache.end(), newEntries.begin(), newEntries.end());
     if (combinedCache.size() > GlobalState::maxDatabaseSize) {
         combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - GlobalState::maxDatabaseSize));
     }
 
-    // Build output string before touching any file
     std::string output;
     output.reserve(combinedCache.size() * 64);
-    for (const auto& entry : combinedCache)
-        output += entry + "\n";
+    for (const auto& entry : combinedCache) {
+        output += entry;
+        output += '\n';
+    }
 
-    // Write to a temp file in the same directory as the database, then atomically rename into place
-    // Placing the temp file on the same filesystem as the target guarantees rename() is truly atomic
     std::string tmpPath = (std::filesystem::path(GlobalState::databaseFilePath).parent_path() / "iso_commander_database_saved_XXXXXX").string();
     int tmpFd = mkstemp(tmpPath.data());
     if (tmpFd == -1) return false;
@@ -334,7 +333,6 @@ bool saveToDatabase(const std::vector<std::string>& discoveredISO, bool* newISOF
     }
     close(tmpFd);
 
-    // Atomic rename: either the old file survives or the new one is in place — never a torn write
     if (::rename(tmpPath.c_str(), cachePath.c_str()) == -1) {
         ::unlink(tmpPath.c_str());
         return false;
