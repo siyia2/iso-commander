@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
     /// Atomic booleans controlling concurrency and UI state between main thread and background workers.
     /// @{
     std::atomic<bool> messageActive{false}, isAtMain{true}, isAtISOList{false},
-                     updateHasRun{false}, newISOFound{false}, stopMessage{false},
+                     newISOFound{false}, stopMessage{false},
                      monitorThreadSpawned{false};
     /// @}
 
@@ -143,7 +143,6 @@ int main(int argc, char *argv[]) {
             backgroundDatabaseImport(newISOFound, importState);
             search = false;
         });
-        updateHasRun.store(true);
     }
     paginationSet(GlobalState::configPath);
 
@@ -178,7 +177,7 @@ int main(int argc, char *argv[]) {
                 backgroundThreads.emplace_back(monitorAndClearMessage,
                                                importState, std::ref(messageActive),
                                                std::ref(stopMessage), std::ref(isAtMain));
-        } else if ((search && !messagePrinted && !updateHasRun) &&
+        } else if ((search && !messagePrinted) &&
                    (isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath))) {
             std::cout << UI::Palette::Dim << "[Auto-Update: no stored FolderPaths to scan...]\n" << UI::Palette::Reset;
             messagePrinted = true;
@@ -209,7 +208,7 @@ int main(int argc, char *argv[]) {
         std::string choice(input.get());
         if (choice == "1") {
             isAtMain = isAtISOList = false;
-            submenu1(updateHasRun, isAtISOList, importState, newISOFound,
+            submenu1(isAtISOList, importState, newISOFound,
                      backgroundThreads);
         } else if (choice.length() == 1) {
             switch (choice[0]) {

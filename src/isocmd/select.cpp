@@ -217,7 +217,6 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
  *   clears atomic flags, and terminates (non-looping design).
  *
  * @param isAtISOList      Atomic flag; refresh only occurs if the user is in the list view.
- * @param updateHasRun     Atomic flag set upon completion to acknowledge the refresh.
  * @param newISOFound      Atomic flag cleared upon completion.
  * @param state            Shared state container for:
  *                         - isImportRunning: Atomic flag used as CV predicate
@@ -227,8 +226,6 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
  *                         - currentPage, originalPage for pagination
  */
 void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
-                                std::atomic<bool>& updateHasRun,
-                                std::atomic<bool>& newISOFound,
                                 std::shared_ptr<RefreshState> state) {
     {
         std::unique_lock<std::mutex> lock(state->importMutex);
@@ -244,8 +241,6 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
         rl_on_new_line();
         rl_redisplay();
     }
-    updateHasRun.store(true);
-    newISOFound.store(false);
 }
 
 /**
@@ -268,7 +263,6 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  *   sequences to maintain a static-feeling interface during input.
  *
  * @param operation         Target system action ("mount", "umount", "rm", etc.).
- * @param updateHasRun      Set to true after an import completes to signal the watcher thread to repaint the list.
  * @param isAtISOList       Guards background UI repaints; false when the user has navigated away from the ISO list.
  * @param isImportRunning   Prevents concurrent imports; also used as the CV predicate in the watcher thread.
  * @param newISOFound       Set by the import when new ISOs are discovered; cleared by the watcher after repainting.
@@ -277,8 +271,9 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  * @param refreshState      Shared UI state and CV passed from the startup import path to synchronize the
  *                          watcher with the correct import session; created internally if nullptr.
  */
-void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun,
-                       std::atomic<bool>& isAtISOList, std::atomic<bool>& newISOFound,
+void selectForIsoFiles(const std::string& operation,
+                       std::atomic<bool>& isAtISOList,
+                       std::atomic<bool>& newISOFound,
                        std::vector<std::thread>& backgroundThreads,
                        std::shared_ptr<RefreshState> refreshState) {
 
@@ -345,7 +340,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         if (needsClrScrn) {
             if (!isUnmount) {
                 if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState)) {
-                    newISOFound.store(false);
                     break;
                 }
             } else {
@@ -362,8 +356,8 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
         if (refreshState->isImportRunning.load() && !isUnmount) {
             bool watcherExpected = false;
             if (refreshState->isWatcherRunning.compare_exchange_strong(watcherExpected, true)) {
-                std::thread([&isAtISOList, &updateHasRun, &newISOFound, refreshState]() {
-                    refreshListAfterAutoUpdate(isAtISOList, updateHasRun, newISOFound, refreshState);
+                std::thread([&isAtISOList, refreshState]() {
+                    refreshListAfterAutoUpdate(isAtISOList, refreshState);
                         refreshState->isWatcherRunning.store(false);
                 }).detach();
             }
@@ -429,7 +423,6 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 backgroundDatabaseImport(newISOFound, refreshState);
                 refreshState->isWatcherRunning.store(false);
             });
-            updateHasRun.store(true);
             continue;
         }
 

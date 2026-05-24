@@ -250,7 +250,8 @@ bool saveToDatabase(const std::vector<std::string>& globalIsoFileList, std::atom
         return false;
     }
     std::lock_guard<std::mutex> fileLock(dbFileMutex);
-
+    // Reset newISOFoundstatus every time
+    newISOFound.store(false);
     // Open the existing DB file (read-only) to load current cache
     std::vector<std::string> existingCache;
     int fd = open(cachePath.c_str(), O_RDONLY);
@@ -371,7 +372,6 @@ void updateDatabaseAfterOperations(const std::string& filePathsStr,
     if (!allIsoFiles.empty()) {
         saveToDatabase(allIsoFiles, newISOFound);
 	}
-	newISOFound.store(false);
 }
 
 /**
@@ -566,7 +566,6 @@ void backgroundDatabaseImport(std::atomic<bool>& newISOFound,
 
     if (state->stopImport.load()) { signalDone(); return; }
     saveToDatabase(allIsoFiles, newISOFound);
-    newISOFound.store(false);
     signalDone();
 }
 
