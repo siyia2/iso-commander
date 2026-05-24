@@ -33,10 +33,12 @@ void helpSelections(bool& isAtISOListForHelp);
 
 /**
  * @brief Processes standard navigation and help commands for the main application loop.
- * * Handles 'n' (next), 'p' (prev), 'g<num>' (go to), and special toggles like '*'
- * (filename-only mode) and '~' (full path toggle).
- * * @return true if a pagination/help command was handled (caller should usually continue the loop).
- * @return false if the command was not recognized as a pagination/help command.
+ *
+ * Handles 'PgDn' (next page), 'PgUp' (prev page), 'g<num>' (go to page), '//' (no-op guard),
+ * '?' (help), '*' (filename-only toggle), and '~' (full path toggle).
+ *
+ * @return true if a command was handled (caller should usually continue the loop).
+ * @return false if the command was not recognized.
  */
 bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage,
                                      bool& isFiltered, bool& needsClrScrn, const std::string& operation,
