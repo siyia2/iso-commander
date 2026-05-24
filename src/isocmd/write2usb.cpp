@@ -66,16 +66,16 @@ std::vector<ProgressInfo> progressData; ///< Shared progress state for all activ
 std::string getDriveName(const std::string& device) {
     std::string deviceName = device.substr(device.find_last_of('/') + 1);
     std::string sysfsPath = "/sys/block/" + deviceName + "/device/model";
-    
+
     std::ifstream modelFile(sysfsPath);
     std::string driveName;
-    
+
     if (modelFile.is_open()) {
         std::getline(modelFile, driveName);
         driveName.erase(0, driveName.find_first_not_of(" \t"));
         driveName.erase(driveName.find_last_not_of(" \t") + 1);
     }
-    
+
     return driveName.empty() ? "Unknown Drive" : driveName;
 }
 
@@ -253,28 +253,28 @@ bool isDeviceMounted(const std::string& device) {
 
     std::string line;
     std::string deviceName = device;
-    
+
     if (deviceName.substr(0, 5) == "/dev/") {
         deviceName = deviceName.substr(5);
     }
-    
+
     while (std::getline(mountsFile, line)) {
         std::istringstream iss(line);
         std::string mountDevice;
         iss >> mountDevice;
-        
+
         if (mountDevice.substr(0, 5) == "/dev/") {
             mountDevice = mountDevice.substr(5);
         }
-        
-        if (mountDevice == deviceName || 
-            (mountDevice.find(deviceName) == 0 && 
+
+        if (mountDevice == deviceName ||
+            (mountDevice.find(deviceName) == 0 &&
              std::isdigit(mountDevice[deviceName.length()]))) {
             mountsFile.close();
             return true;
         }
     }
-    
+
     mountsFile.close();
     return false;
 }
@@ -288,22 +288,23 @@ bool isDeviceMounted(const std::string& device) {
  *  -# Device size can be determined; sets @p permissions flag to true on failure.
  *  -# ISO capacity check (ISO size <= device size).
  *
- * @note If any validation error occurs, all errors are printed, signal handlers are 
+ * @note If any validation error occurs, all errors are printed, signal handlers are
  *       temporarily adjusted, and an empty vector is returned to trigger a retry.
  *
  * @param deviceMap      Pairs of (1-based ISO index, device path) to validate.
  * @param selectedIsos   Ordered list of ISOs corresponding to the indices.
- * @param[in,out] permissions Set to true if a size query fails (permissions issue); 
+ * @param[in,out] permissions Set to true if a size query fails (permissions issue);
  *                            used to determine the type of user prompt.
  * @return A vector of valid (IsoInfo, device) pairs, or an empty vector if validation failed.
  */
-std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<std::pair<size_t, std::string>>& deviceMap, const std::vector<IsoInfo>& selectedIsos, bool& permissions) {
-    
+std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<std::pair<size_t, std::string>>& deviceMap,
+                                                             const std::vector<IsoInfo>& selectedIsos, bool& permissions) {
+
     const WriteTheme wt = getWriteTheme();
 
     std::vector<std::string> validationErrors;
     std::vector<std::pair<IsoInfo, std::string>> validPairs;
-    
+
     for (const auto& devicePair : deviceMap) {
 		size_t index = devicePair.first;
 		const std::string& device = devicePair.second;
@@ -359,19 +360,19 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
 
 		validPairs.emplace_back(iso, device);
 	}
-    
+
     if (!validationErrors.empty()) {
         std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.rl_resetCol << wt.bold << "\n";
         for (const auto& err : validationErrors) {
             std::cerr << "  \u2022 " << err << wt.bold << "\n";
         }
-        
+
         signal(SIGINT, SIG_IGN);
         disable_ctrl_d();
         permissions ? (permissions = false, pressEnterToContinue()) : pressEnterToTry();
         return {};
     }
-    
+
     return validPairs;
 }
 
@@ -393,62 +394,64 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
  * @param[out] errors  Vector that will be cleared and populated with human-readable error messages.
  * @return Vector of valid (1-based index, device path) pairs extracted from the input.
  */
-std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::string& pairString, const std::vector<std::string>& selectedIsos, std::vector<std::string>& errors) {
-    
+std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::string& pairString,
+                                                                const std::vector<std::string>& selectedIsos,
+                                                                std::vector<std::string>& errors) {
+
     std::vector<std::pair<size_t, std::string>> deviceMap;
     std::unordered_set<std::string> usedDevices;
     std::istringstream pairStream(pairString);
     std::string pair;
-    
+
     errors.clear();
-    
+
     while (std::getline(pairStream, pair, ';')) {
         pair.erase(pair.find_last_not_of(" \t\n\r\f\v") + 1);
         pair.erase(0, pair.find_first_not_of(" \t\n\r\f\v"));
-        
+
         if (pair.empty()) continue;
-        
+
         size_t sepPos = pair.find('>');
         if (sepPos == std::string::npos) {
             errors.push_back("Invalid pair format: '" + pair + "'");
             continue;
         }
-        
+
         std::string indexStr = pair.substr(0, sepPos);
         std::string device = pair.substr(sepPos + 1);
-        
+
         try {
             size_t index = std::stoul(indexStr);
-            
+
             if (index < 1 || index > selectedIsos.size()) {
                 errors.push_back("Invalid index " + indexStr);
                 continue;
             }
-            
+
             if (usedDevices.count(device)) {
                 errors.push_back("Device " + device + " used multiple times");
                 continue;
             }
-            
+
             deviceMap.emplace_back(index, device);
             usedDevices.insert(device);
-            
+
         } catch (...) {
             errors.push_back("Invalid index: '" + indexStr + "'");
         }
     }
-    
+
     std::unordered_set<size_t> mappedIndices;
     for (const auto& [index, device] : deviceMap) {
         mappedIndices.insert(index);
     }
-    
+
     for (size_t i = 1; i <= selectedIsos.size(); ++i) {
         if (mappedIndices.find(i) == mappedIndices.end()) {
             errors.push_back("Missing mapping for ISO " + std::to_string(i));
         }
     }
-    
+
     return deviceMap;
 }
 
@@ -478,14 +481,14 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             (void)num_matches;
             (void)max_length;
         };
-        
+
         rl_attempted_completion_function = completion_cb;
         rl_bind_key('\t', rl_complete);
         rl_bind_key('\f', clear_screen_and_buffer);
         rl_bind_keyseq("\033[A", rl_get_previous_history);
         rl_bind_keyseq("\033[B", rl_get_next_history);
     };
-    
+
     const WriteTheme wt = getWriteTheme();
 
     while (true) {
@@ -493,14 +496,14 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         signal(SIGINT, SIG_IGN);
         disable_ctrl_d();
         clearScrollBuffer();
-        
+
         ThreadPool& pool = getStaticThreadPool();
         if (selectedIsos.size() > pool.threadCount()) {
-            std::cout << "\n" << wt.colorFailure << "ISO selections for " 
-                      << UI::Palette::Yellow << "write2usb" 
-                      << wt.colorFailure << " cannot exceed the current global thread pool size of " 
-                      << wt.colorWarning << pool.threadCount() 
-                      << wt.colorFailure << "!" 
+            std::cout << "\n" << wt.colorFailure << "ISO selections for "
+                      << UI::Palette::Yellow << "write2usb"
+                      << wt.colorFailure << " cannot exceed the current global thread pool size of "
+                      << wt.colorWarning << pool.threadCount()
+                      << wt.colorFailure << "!"
                       << wt.speedCol << "\n";
 
             pressEnterToTry();
@@ -519,22 +522,22 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
             auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write");
-            
+
             devicePromptStream << "  " << wt.indexCol << (i + 1) << ">" << wt.bold << " ";
-            
+
             if (!displayConfig::toggleNamesOnly) {
                 devicePromptStream << wt.pathCol << isoDir << "/";
             }
-            
+
             devicePromptStream << wt.fileCol << filename;
-            
-            devicePromptStream << wt.bold << " (" << wt.sizeCol << sortedIsos[i].sizeStr 
+
+            devicePromptStream << wt.bold << " (" << wt.sizeCol << sortedIsos[i].sizeStr
                               << wt.bold << ")\n";
         }
 
         devicePromptStream << "\n" << wt.rl_resetCol << "Removable USB Devices:" << wt.rl_resetCol << "\n\n";
         std::vector<std::string> usbDevices = getRemovableDevices();
-        
+
         struct DeviceInfo {
             std::string path;
             uint64_t size;
@@ -569,11 +572,11 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 if (dev.error) {
                     devicePromptStream << "  " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
                 } else {
-                    devicePromptStream << "  " << wt.deviceCol << dev.path 
-                                      << wt.rl_resetCol << " <" << dev.driveName 
-                                      << "> (" << wt.sizeCol << dev.sizeStr 
+                    devicePromptStream << "  " << wt.deviceCol << dev.path
+                                      << wt.rl_resetCol << " <" << dev.driveName
+                                      << "> (" << wt.sizeCol << dev.sizeStr
                                       << wt.rl_resetCol << ")"
-                                      << (dev.mounted ? wt.colorFailure + " (mounted)" + wt.rl_resetCol : "") 
+                                      << (dev.mounted ? wt.colorFailure + " (mounted)" + wt.rl_resetCol : "")
                                       << "\n";
                 }
             }
@@ -582,11 +585,11 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         g_completerData.sortedIsos = &sortedIsos;
         g_completerData.usbDevices = &usbDevices;
 		reset_custom_keybindingsForCpMvWrite2Usb();
-		
-        devicePromptStream << "\n" << wt.rl_labelCol << "Mappings" 
-                          << wt.rl_primaryCol << " ↵ as " 
-                          << wt.rl_highlightCol << "INDEX>DEVICE" 
-                          << wt.rl_primaryCol << ", ? help, < return: " 
+
+        devicePromptStream << "\n" << wt.rl_labelCol << "Mappings"
+                          << wt.rl_primaryCol << " ↵ as "
+                          << wt.rl_highlightCol << "INDEX>DEVICE"
+                          << wt.rl_primaryCol << ", ? help, < return: "
                           << wt.rl_resetCol;
 
         std::string devicePrompt = devicePromptStream.str();
@@ -594,27 +597,27 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::unique_ptr<char, decltype(&std::free)> deviceInput(
             readline(devicePrompt.c_str()), &std::free
         );
-        
+
         if (!deviceInput) {
             restoreReadline();
             return {};
         }
-        
+
         if (deviceInput.get()[0] == '\0') {
             continue;
         }
-        
+
         std::string mainInputString(deviceInput.get());
         if (mainInputString == "<") {
             restoreReadline();
             return {};
         }
-        
+
         if (mainInputString == "?") {
             helpMappings();
             continue;
         }
-        
+
         if (deviceInput && *deviceInput) add_history(deviceInput.get());
 
         std::vector<std::string> errors;
@@ -622,7 +625,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         for (const auto& iso : sortedIsos) {
             isoFilenames.push_back(iso.path);
         }
-        
+
         auto deviceMap = parseDeviceMappings(deviceInput.get(), isoFilenames, errors);
 
         if (!errors.empty()) {
@@ -630,7 +633,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             for (const auto& err : errors) {
                 std::cerr << "  • " << err << "\n";
             }
-            
+
            pressEnterToTry();
             continue;
         }
@@ -642,18 +645,18 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         }
 
         // Warning message with colors from theme
-        std::cout << "\n" << wt.colorWarning << "WARNING: This will " 
-                  << UI::Palette::Red << "*ERASE ALL DATA*" 
+        std::cout << "\n" << wt.colorWarning << "WARNING: This will "
+                  << UI::Palette::Red << "*ERASE ALL DATA*"
                   << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
 
         for (const auto& [iso, device] : validPairs) {
             uint64_t deviceSize = getBlockDeviceSize(device);
             std::string deviceSizeStr = formatFileSize(deviceSize);
             std::string driveName = getDriveName(device);
-            
-            std::cout << "  {" << wt.deviceCol << device 
-                      << " " << wt.rl_resetCol << "<" << driveName << "> (" 
-                      << wt.sizeCol << deviceSizeStr 
+
+            std::cout << "  {" << wt.deviceCol << device
+                      << " " << wt.rl_resetCol << "<" << driveName << "> ("
+                      << wt.sizeCol << deviceSizeStr
                       << wt.rl_resetCol << ")} ← {" << wt.fileCol
                       << iso.filename << wt.rl_resetCol << " (" << wt.sizeCol
                       << iso.sizeStr << wt.rl_resetCol << ")}\n";
@@ -668,7 +671,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 			+ wt.rl_resetCol;
 
         std::unique_ptr<char, decltype(&std::free)> confirmation(
-            readline(confirmPrompt.c_str()), 
+            readline(confirmPrompt.c_str()),
             &std::free
         );
 
@@ -702,9 +705,9 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairs) {
     progressData.clear();
     progressData.reserve(validPairs.size());
-    
+
     GlobalState::g_operationCancelled.store(false);
-    
+
     for (const auto& [iso, device] : validPairs) {
         progressData.push_back(ProgressInfo{
             iso.filename,
@@ -721,13 +724,13 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     disableInput();
     clearScrollBuffer();
-    
+
     const WriteTheme wt = getWriteTheme();
 
-    std::cout << "\n" << wt.colorStatus << "Processing " 
-              << (totalTasks > 1 ? "tasks" : "task") << " for " 
-              << UI::Palette::Yellow << "write2usb" << wt.colorStatus 
-              << " operation... (" << UI::Palette::Red << "Ctrl+c" 
+    std::cout << "\n" << wt.colorStatus << "Processing "
+              << (totalTasks > 1 ? "tasks" : "task") << " for "
+              << UI::Palette::Yellow << "write2usb" << wt.colorStatus
+              << " operation... (" << UI::Palette::Red << "Ctrl+c"
               << wt.colorStatus << ":cancel)\n\n";
     std::cout << "\033[s";
 
@@ -736,7 +739,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     std::unordered_map<std::string, std::string> deviceNames;
     std::unordered_map<std::string, uint64_t> deviceSizes;
     std::unordered_map<std::string, std::string> deviceSizeStrs;
-    
+
     for (const auto& prog : progressData) {
         if (deviceNames.find(prog.device) == deviceNames.end()) {
             deviceNames[prog.device] = getDriveName(prog.device);
@@ -744,7 +747,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             deviceSizeStrs[prog.device] = formatFileSize(deviceSizes[prog.device]);
         }
     }
-        
+
     auto displayAllProgress = [&]() {
         for (size_t i = 0; i < progressData.size(); ++i) {
             const auto& prog = progressData[i];
@@ -768,7 +771,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     };
 
     auto displayProgress = [&]() {
-        while (!isProcessingComplete.load(std::memory_order_acquire) && 
+        while (!isProcessingComplete.load(std::memory_order_acquire) &&
               !GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             std::cout << "\033[u";
@@ -781,7 +784,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
         futures.push_back(pool.enqueue([&, i]() {
             const auto& [iso, device] = validPairs[i];
             bool success = writeIsoToDevice(iso.path, device, i);
-            
+
             if (success) {
                 progressData[i].completed.store(true);
                 completedTasks.fetch_add(1);
@@ -796,29 +799,29 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     for (auto& future : futures) {
         future.wait();
     }
-    
+
     isProcessingComplete.store(true, std::memory_order_release);
     signal(SIGINT, SIG_IGN);
     progressThread.join();
-    
+
     std::cout << "\033[s";
     std::cout << "\033[2H\033[2K";
-    
+
     size_t failedTasksValue = 0;
     for (const auto& prog : progressData) {
         if (prog.failed.load()) {
             failedTasksValue++;
         }
     }
-    
+
     size_t completedTasksValue = completedTasks.load();
 
     std::string operation = std::string(UI::Palette::Yellow) + "write2usb" + wt.rl_resetCol;
 
-    std::cout << "\r" << wt.colorStatus << "Status: " << operation << " → " 
-              << (!GlobalState::g_operationCancelled.load() 
-                  ? (failedTasksValue > 0 
-                     ? (completedTasksValue > 0 
+    std::cout << "\r" << wt.colorStatus << "Status: " << operation << " → "
+              << (!GlobalState::g_operationCancelled.load()
+                  ? (failedTasksValue > 0
+                     ? (completedTasksValue > 0
                         ? wt.colorWarning + "PARTIAL"
                         : wt.colorFailure + "FAILED")
                      : wt.colorSuccess + "COMPLETED")
@@ -831,14 +834,14 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     auto duration = std::chrono::duration<double>(endTime - startTime).count();
 
     std::cout << std::fixed << std::setprecision(1);
-    std::cout << "\n" << wt.colorStatus << "Successful: " 
-              << wt.colorSuccess << completedTasks.load() 
-              << wt.colorStatus << "/" 
-              << wt.colorWarning << validPairs.size() 
-              << wt.colorStatus << " | Time Elapsed: " 
-              << wt.colorStatus << duration << "s" 
+    std::cout << "\n" << wt.colorStatus << "Successful: "
+              << wt.colorSuccess << completedTasks.load()
+              << wt.colorStatus << "/"
+              << wt.colorWarning << validPairs.size()
+              << wt.colorStatus << " | Time Elapsed: "
+              << wt.colorStatus << duration << "s"
               << wt.colorStatus << "\n";
-    
+
     flushStdin();
     restoreInput();
 }
@@ -859,7 +862,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles) {
     clearScrollBuffer();
     std::unordered_set<int> indicesToProcess;
-    
+
     setupSignalHandlerCancellations();
     GlobalState::g_operationCancelled.store(false);
 
@@ -894,11 +897,11 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     }
 
     performWriteOperation(validPairs);
-    
+
     // Cleanup and wait for user acknowledgment
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
-	
+
     pressEnterToContinue();
 }
 
