@@ -122,7 +122,7 @@ static std::string validateLinuxPath(const std::string& path) {
 }
 
 std::string handlePaginatedDisplay(const std::vector<std::string>& entries, const std::string& promptPrefix,
-const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurn);
+const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurnm, size_t& currentPage);
 
 /**
  * @brief Orchestrates user confirmation for permanent file deletion.
@@ -130,10 +130,10 @@ const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn
  * Uses handlePaginatedDisplay to show the list of files and captures a Y/N
  * confirmation. Handles terminal environment setup and internal signal state.
  *
- * @param isoFiles The list of ISO file paths.
- * @param indexChunks Chunks for formatting the ISO list display.
- * @param umountMvRmBreak [out] Set to true if the operation should proceed.
- * @param abortDel [out] Set to true if the user explicitly cancels.
+ * @param isoFiles        The list of ISO file paths.
+ * @param indexChunks     Chunks for formatting the ISO list display.
+ * @param umountMvRmBreak [out] Set to true if the user confirms, false if canceled or EOF.
+ * @param abortDel        [out] Set to true if the user explicitly cancels or sends EOF.
  * @return True if the user confirmed with 'Y', false otherwise.
  */
 bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
@@ -177,10 +177,11 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
             return 0;
         });
     };
+    size_t currentPage = 0;
 
     while (true) {
         std::string userInput = handlePaginatedDisplay(
-            entries, promptPrefix, promptSuffix, setupEnv, isPageTurn
+            entries, promptPrefix, promptSuffix, setupEnv, isPageTurn, currentPage
         );
 
         // Cleanup keybindings after returning
@@ -216,18 +217,17 @@ void helpSearches(bool isCpMv, bool import2ISO);
  * overwrite flags (-o), and manages Readline history.
  * In Delete mode: Proxies the request to handleDeleteOperation.
  *
- * @param isoFiles List of source files.
- * @param indexChunks Chunks for list display formatting.
- * @param uniqueErrorTokenMessages Set for UI error persistence.
- * @param userDestDir [out] The resulting validated path(s).
- * @param operationColor UI color string for the prompt.
+ * @param isoFiles           List of source files.
+ * @param indexChunks        Chunks for list display formatting.
+ * @param userDestDir        [out] The resulting validated path(s).
+ * @param operationColor     UI color string for the prompt.
  * @param operationDescription "copy", "move", or "delete".
- * @param umountMvRmBreak [out] Control flag for the parent loop.
- * @param filterHistory Flag for history management.
- * @param isDelete Boolean toggle for Delete vs Copy/Move mode.
- * @param isCopy Boolean toggle for Copy vs Move.
- * @param abortDel [out] Set to true if operation is canceled.
- * @param overwriteExisting [out] Set to true if "-o" flag is detected.
+ * @param umountMvRmBreak    [out] Control flag for the parent loop.
+ * @param filterHistory      Flag for history management.
+ * @param isDelete           Boolean toggle for Delete vs Copy/Move mode.
+ * @param isCopy             Boolean toggle for Copy vs Move.
+ * @param abortDel           [out] Set to true if operation is canceled.
+ * @param overwriteExisting  [out] Set to true if "-o" flag is detected.
  * @return The validated destination string, empty if canceled, or "EOF_SIGNAL".
  */
 std::string userDestDirCpMv(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks,
@@ -242,6 +242,8 @@ bool& overwriteExisting) {
 
     bool shouldContinue = true;
     std::string userInput;
+
+    size_t currentPage = 0;
 
     while (shouldContinue) {
         resetReadlinePagination();
@@ -285,8 +287,8 @@ bool& overwriteExisting) {
                 reset;
 
             userInput = handlePaginatedDisplay(
-                entries, promptPrefix, promptSuffix, setupEnv, isPageTurn
-            );
+                    entries, promptPrefix, promptSuffix, setupEnv, isPageTurn, currentPage
+                );
 
             rl_bind_key('\f', prevent_readline_keybindings);
             rl_bind_key('\t', prevent_readline_keybindings);

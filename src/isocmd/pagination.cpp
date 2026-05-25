@@ -116,22 +116,27 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 /**
  * @brief A self-contained loop for displaying and navigating paginated entries during
  * secondary prompts (like confirming files for Copy/Move).
- * * @param entries The pre-formatted strings to display.
+ *
+ * @param entries            The pre-formatted strings to display.
+ * @param promptPrefix       Text prepended to the prompt string.
+ * @param promptSuffix       Text appended to the prompt string.
  * @param setupEnvironmentFn Callback to refresh environment (e.g., re-printing static headers).
+ * @param isPageTurn         Set to true if the last input was a pagination command, false otherwise.
+ * @param currentPage        Current page index (0-based). Persists across calls to avoid reset on re-entry.
  * @return The user's non-navigation input string, or "EOF_SIGNAL" on Ctrl+D.
  */
 std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                                   const std::string& promptPrefix,
                                   const std::string& promptSuffix,
                                   const std::function<void()>& setupEnvironmentFn,
-                                  bool& isPageTurn) {
+                                  bool& isPageTurn,
+                                  size_t& currentPage) {
 
     const PrintListTheme c = getListColors();
 
     bool disablePagination = (GlobalState::ITEMS_PER_PAGE <= 0 || entries.size() <= GlobalState::ITEMS_PER_PAGE);
     size_t totalEntries = entries.size();
     size_t totalPages = disablePagination ? 1 : ((totalEntries + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE);
-    size_t currentPage = 0;
 
     while (true) {
         if (setupEnvironmentFn) setupEnvironmentFn();
