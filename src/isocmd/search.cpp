@@ -341,10 +341,10 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
             const auto& entry = *it;
 
             if (promptFlag && entry.is_regular_file()) {
-                totalFiles.fetch_add(1, std::memory_order_acq_rel);
-                if (totalFiles % 100 == 0) {
+                uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
+                if (val % 100 == 0) {
                     std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
-                    std::cout << "\r" << dt.bold << "Total files processed: " << totalFiles << std::flush;
+                    std::cout << "\r" << dt.bold << "Total files processed: " << val << std::flush;
                 }
             }
 
@@ -642,12 +642,11 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
 				}
 			}
 
-            if (entry.is_regular_file()) {
-                totalFiles.fetch_add(1, std::memory_order_acq_rel);
-
-                if (totalFiles % 100 == 0) {
-                    std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
-                    std::cout << "\r" << dt.bold << "Total files processed: " << totalFiles << std::flush;
+                if (entry.is_regular_file()) {
+                    uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
+                    if (val % 100 == 0) {
+                        std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
+                        std::cout << "\r" << dt.bold << "Total files processed: " << val << std::flush;
                 }
 
                 if (blacklist(entry, blacklistMdf, blacklistNrg, blacklistChd, blacklistDaa)) {
