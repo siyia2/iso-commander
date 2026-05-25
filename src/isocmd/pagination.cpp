@@ -42,7 +42,7 @@ void helpSelections(bool& isAtISOListForHelp);
  */
 bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage,
                                      bool& isFiltered, bool& needsClrScrn, const std::string& operation,
-                                     bool& need2Sort, std::atomic<bool>& isAtISOList) {
+                                     bool& need2Sort, std::atomic<bool>* isAtISOList) {
 
     const bool isMount      = (operation == "mount");
     const bool isUnmount    = (operation == "umount");
@@ -83,8 +83,8 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
     }
 
     if (command == "?") {
-        bool isAtISOListForHelp = isAtISOList.load();
-        isAtISOList.store(false);
+        bool isAtISOListForHelp = isAtISOList ? isAtISOList->load() : false;
+        if (isAtISOList) isAtISOList->store(false);
         helpSelections(isAtISOListForHelp);
         needsClrScrn = true;
         return true;
@@ -102,7 +102,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 
     if (command == "~") {
         if      (isMount      && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListMount       = !displayConfig::toggleFullListMount;
-        else if (isUnmount)                                        displayConfig::toggleFullListUmount      = !displayConfig::toggleFullListUmount;
+        else if (isUnmount)                                       displayConfig::toggleFullListUmount      = !displayConfig::toggleFullListUmount;
         else if (isWrite      && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListWrite2usb   = !displayConfig::toggleFullListWrite2usb;
         else if (isConversion && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListConvert2iso = !displayConfig::toggleFullListConvert2iso;
         else if               (!displayConfig::toggleNamesOnly)   displayConfig::toggleFullListCpMvRm      = !displayConfig::toggleFullListCpMvRm;

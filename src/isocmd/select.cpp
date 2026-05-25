@@ -449,7 +449,7 @@ void selectForIsoFiles(const std::string& operation,
         size_t totalPages = (GlobalState::ITEMS_PER_PAGE != 0) ? ((currentList.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE) : 0;
         bool need2Sort = false;
 
-        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, operation, need2Sort, isAtISOList);
+        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, operation, need2Sort, &isAtISOList);
 
         if (validCommand) continue;
 
@@ -669,12 +669,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             continue;
         }
 
-        // Dummy placeholder no actual value
-        std::atomic<bool> isAtISOList{false};
-
         size_t totalPages = (GlobalState::ITEMS_PER_PAGE != 0) ? ((files.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE) : 0;
 
-        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, operation, need2Sort, isAtISOList);
+        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, operation, need2Sort, nullptr);
 
         if (validCommand) continue;
 
