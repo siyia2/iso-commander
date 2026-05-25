@@ -238,23 +238,39 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  * and executing system operations.
  *
  * @details **Key Behaviors:**
- * - **Dynamic Context:** Automatically toggles between the global ISO database and active
- *   mount points based on the @p operation.
- * - **Event-Driven Refresh:** Shares a @c RefreshState instance (via @c std::shared_ptr)
- *   with a detached watcher thread; the watcher blocks on @c RefreshState::importCV and
- *   redraws the list deterministically when the import thread signals completion.
- * - **Stacked Filtering:** Supports successive narrowing of results. The @c '<' command
- *   unwinds the filter stack or returns to the previous menu.
- * - **Two-Phase Execution:** Implements an "Induction" model where indices are staged
- *   into @c pendingIndices (delimited by @c ';') and executed via the @c "P" command.
- * - **Terminal Integrity:** Manages @c Readline keybindings and uses ANSI escape
- *   sequences to maintain a static-feeling interface during input.
+ * - **Dynamic Context:** Automatically toggles between the global ISO database
+ *   (@c GlobalCaches::globalIsoFileList) and active mount points (@c isoDirs)
+ *   based on @p operation; unmount operations skip database cleanup and disable
+ *   the manual-refresh keybinding.
+ * - **Event-Driven Refresh:** Shares a @c RefreshState instance (via
+ *   @c std::shared_ptr) with a detached watcher thread. The watcher is spawned
+ *   at most once per import session (guarded by @c isWatcherRunning) and redraws
+ *   the list when the import thread signals completion via @c importCV.
+ * - **Stacked Filtering:** Supports successive narrowing of results via
+ *   @c filteringStack. The @c '<' command unwinds the filter stack (restoring
+ *   @c originalPage) or, when no filter is active, returns to the previous menu.
+ * - **Two-Phase Execution:** Implements an "Induction" model where selected
+ *   indices are staged into @c pendingIndices (a @c std::vector<std::string>)
+ *   and batch-executed via the @c "P" command; @c "clr" discards the pending set.
+ * - **Persistent Directory State:** @c isoDirs is @c static, so its contents
+ *   survive re-entry into this function across the lifetime of the process.
+ * - **Terminal Integrity:** Binds @c \\f and @c \\t to no-ops via Readline to
+ *   prevent terminal corruption, and uses ANSI escape sequences to maintain a
+ *   static-feeling interface during input.
  *
- * @param operation         Target system action ("mount", "umount", "rm", etc.).
- * @param isAtISOList       Guards background UI repaints; false when the user has navigated away from the ISO list.
- * @param backgroundThreads Joinable worker threads (manual R-press imports) retained for lifetime management.
- * @param refreshState      Shared UI state and CV passed from the startup import path to synchronize the
- *                          watcher with the correct import session; created internally if nullptr.
+ * @param operation         Target system action ("mount", "umount", "cp", "mv",
+ *                          "rm", or "write2usb").
+ * @param isAtISOList       Set to @c true while the ISO list is displayed; cleared
+ *                          to @c false before executing an operation. Also gates
+ *                          watcher-thread repaints.
+ * @param backgroundThreads Joinable worker threads (spawned by manual R-press
+ *                          imports) retained for lifetime management; stale
+ *                          completed threads are joined and erased before each
+ *                          new import.
+ * @param refreshState      Shared UI state and condition variable used to
+ *                          synchronize the watcher with the active import session.
+ *                          If @c nullptr, a new @c RefreshState is constructed
+ *                          internally.
  */
 void selectForIsoFiles(const std::string& operation,
                        std::atomic<bool>& isAtISOList,
@@ -447,6 +463,7 @@ void selectForIsoFiles(const std::string& operation,
         if (pendingHandled) continue;
 
         { // Processing block
+
             needsClrScrn = true;
             isAtISOList.store(false);
 
