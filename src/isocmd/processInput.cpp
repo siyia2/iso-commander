@@ -47,11 +47,11 @@
  *
  * @param input Raw user input string (comma/space separated indices or "00" for all).
  * @param files The master list of available ISO file paths.
- * @param operationBreak [out] Boolean flag updated to control the caller's execution loop (e.g., on empty input or failed unmount).
+ * @param umountMvRmBreak [out] Boolean flag updated to control the caller's execution loop (e.g., on empty input or failed unmount).
  * @param verbose Toggle for detailed per-file progress output.
  * @param isUnmount Set to true for unmounting, false for mounting.
  */
-void processInputForMountOrUmount(const std::string& input, const std::vector<std::string>& files, bool& operationBreak, bool& verbose, bool isUnmount) {
+void processInputForMountOrUmount(const std::string& input, const std::vector<std::string>& files, bool& umountMvRmBreak, bool& verbose, bool isUnmount) {
     setupSignalHandlerCancellations();
     GlobalState::g_operationCancelled.store(false);
 
@@ -64,7 +64,7 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     } else {
         tokenizeInput(input, files, indicesToProcess);
         if (indicesToProcess.empty()) {
-            if (isUnmount) operationBreak = false;
+            if (isUnmount) umountMvRmBreak = false;
             return;
         }
     }
@@ -134,7 +134,7 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     for (auto& future : futures)
         future.wait();
 
-    if (completedTasks == 0 && isUnmount) operationBreak = false;
+    if (completedTasks == 0 && isUnmount) umountMvRmBreak = false;
 
     isProcessingComplete.store(true);
     signal(SIGINT, SIG_IGN);
