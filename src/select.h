@@ -143,7 +143,7 @@ bool processPaginationHelpAndDisplay(
     bool& needsClrScrn,
     const std::string& operation,
     bool& need2Sort,
-    std::atomic<bool>& isAtISOList
+    std::atomic<bool>* isAtISOList
 );
 
 /**
