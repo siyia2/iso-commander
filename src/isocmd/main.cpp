@@ -2,6 +2,7 @@
 
 // C++ Standard Library Headers
 #include <atomic>
+#include <condition_variable>
 #include <csignal>
 #include <cstdlib>
 #include <filesystem>
