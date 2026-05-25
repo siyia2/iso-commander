@@ -155,7 +155,7 @@ int main(int argc, char *argv[]) {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
 
-        GlobalState::g_operationCancelled = false;
+        GlobalState::g_operationCancelled.store(false);
         isAtMain.store(true);
         isAtISOList.store(false);
 
