@@ -218,14 +218,16 @@ int main(int argc, char *argv[]) {
                     submenu2(importState);
                     break;
                 case '3': {
-                    isAtMain = isAtISOList = false;
+                    isAtMain.store(false);
+                    isAtISOList.store(false);
                     bool newISOFound = false;
                     refreshForDatabase(true, -1, false, newISOFound);
                     clearScrollBuffer();
                     break;
                 }
                 case '4':
-                    isAtMain = isAtISOList = false;
+                    isAtMain.store(false);
+                    isAtISOList.store(false);
                     interactiveConfigEditor(GlobalState::configPath);
                     clearScrollBuffer();
                     break;
