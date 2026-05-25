@@ -127,7 +127,9 @@ int main(int argc, char *argv[]) {
      * - `search` controls whether auto-update scanning is enabled
      * - `config` contains user-defined folder paths and settings
      */
-    bool exitProgram = false, search = readUserConfigUpdates(GlobalState::configPath);
+    bool exitProgram = false;
+    std::atomic<bool> search{readUserConfigUpdates(GlobalState::configPath)};
+
     std::map<std::string, std::string> config = readUserConfigLists(GlobalState::configPath);
     std::vector<std::thread> backgroundThreads;
 
@@ -136,11 +138,11 @@ int main(int argc, char *argv[]) {
     importState = std::make_shared<RefreshState>();
 
     /// Start background database import if auto-update is enabled and FolderPaths exist in history file
-    if (search && (!(isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath)))) {
+    if (search.load() && (!(isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath)))) {
         importState->isImportRunning.store(true);
         backgroundThreads.emplace_back([importState, &search] {
             backgroundDatabaseImport(importState);
-            search = false;
+            search.store(false);
         });
     }
     paginationSet(GlobalState::configPath);
@@ -170,7 +172,7 @@ int main(int argc, char *argv[]) {
          */
         static bool messagePrinted = false;
 
-        if (search && !isHistoryFileEmpty(GlobalState::historyFilePath) &&
+        if (search.load() && !isHistoryFileEmpty(GlobalState::historyFilePath) &&
             importState && importState->isImportRunning.load()) {
             std::cout << UI::Palette::Dim << "[Auto-Update: running in the background...]\n" << UI::Palette::Reset;
             messageActive = true;
@@ -178,7 +180,7 @@ int main(int argc, char *argv[]) {
                 backgroundThreads.emplace_back(monitorAndClearMessage,
                                                importState, std::ref(messageActive),
                                                std::ref(stopMessage), std::ref(isAtMain));
-        } else if ((search && !messagePrinted) &&
+        } else if ((search.load() && !messagePrinted) &&
                    (isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath))) {
             std::cout << UI::Palette::Dim << "[Auto-Update: no stored FolderPaths to scan...]\n" << UI::Palette::Reset;
             messagePrinted = true;
