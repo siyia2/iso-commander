@@ -155,8 +155,8 @@ int main(int argc, char *argv[]) {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
         GlobalState::g_operationCancelled = false;
-        isAtMain = true;
-        isAtISOList = false;
+        isAtMain.store(true);
+        isAtISOList.store(false);
         clearScrollBuffer();
         print_ascii();
 
@@ -206,7 +206,8 @@ int main(int argc, char *argv[]) {
          */
         std::string choice(input.get());
         if (choice == "1") {
-            isAtMain = isAtISOList = false;
+            isAtMain.store(false);
+            isAtISOList.store(false);
             submenu1(isAtISOList, importState, backgroundThreads);
         } else if (choice.length() == 1) {
             switch (choice[0]) {
