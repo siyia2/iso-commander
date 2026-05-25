@@ -214,7 +214,8 @@ int main(int argc, char *argv[]) {
         } else if (choice.length() == 1) {
             switch (choice[0]) {
                 case '2':
-                    isAtMain = isAtISOList = false;
+                    isAtMain.store(false);
+                    isAtISOList.store(false);
                     submenu2(importState);
                     break;
                 case '3': {
