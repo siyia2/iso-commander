@@ -77,19 +77,36 @@ bool isValidDirectory(const std::string& path) {
  *        into the local database.
  *
  * Reads a semicolon-delimited list of directory paths from the user, validates
- * and trims each path, normalizes and eliminates duplicates and subdirectories,
- * then scans each remaining path in parallel up to maxDepth. Discovered ISO files are
- * deduplicated by saveToDatabase() against existing entries before writing.
+ * and trims each path, deduplicates by normalized form, sorts, then eliminates
+ * subdirectories of already-included paths (prefix check requires prior sort).
+ * Remaining paths are scanned in parallel via a static thread pool up to
+ * @p maxDepth. Results are forwarded to @c saveAndReportResultsForDatabase,
+ * which calls @c saveToDatabase and may mutate @p newISOFound.
  *
- * @param promptFlag    Passed to traverse() and verboseForDatabase() to control
- *                      scan behaviour and output verbosity.
+ * @details **Control flow:**
+ * - **Exit conditions:** @c '<' input or null return from readline (Ctrl+D).
+ * - **Continue conditions:** '?' (shows help via @c helpSearches), switch commands
+ *   (@c *stats, @c !clr, @c !clr_paths, @c !clr_filter via @c databaseSwitches),
+ *   empty/whitespace-only input, empty @p validPaths with no invalid paths, and
+ *   exceptions (prints error, waits for Enter, re-arms and retries).
+ * - **Early save path:** If all paths are invalid (validPaths empty, invalidPaths
+ *   non-empty), resets @c g_operationCancelled and calls
+ *   @c saveAndReportResultsForDatabase without scanning.
+ * - **Cancellation guarding:** @c g_operationCancelled is reset to @c false at
+ *   both the early-save and pre-scan sites to prevent spurious cancellation from
+ *   a premature Ctrl+C before input is processed.
+ * - **Keybinding reset:** A @c KeybindingGuard RAII object is constructed each
+ *   iteration; its destructor calls @c reset_custom_keybindingsForSearches,
+ *   ensuring cleanup on both normal and exceptional exits from the loop body.
+ *
+ * @param promptFlag    Passed to @c traverse() to control scan behaviour.
  * @param maxDepth      Maximum directory recursion depth (-1 for unlimited).
- * @param filterHistory Whether to load/save readline history with filtering.
- * @param newISOFound   Boolean flag set to true if at least one new ISO entry
- *                      was added to the database.
- *
- * @note Loops on help request ('?') or exceptions without exiting.
- *       Cancellable via Ctrl+C through GlobalState::g_operationCancelled.
+ * @param filterHistory If true, readline history is loaded at prompt time and
+ *                      saved after a successful scan via @c loadHistory /
+ *                      @c saveHistory.
+ * @param newISOFound   Passed by reference into @c saveAndReportResultsForDatabase,
+ *                      which forwards it to @c saveToDatabase as a pointer;
+ *                      @c saveToDatabase is responsible for setting it.
  */
 void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool& newISOFound) {
     struct KeybindingGuard {

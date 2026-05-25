@@ -482,25 +482,48 @@ void selectForIsoFiles(const std::string& operation,
  * @brief TUI controller for converting proprietary disk images to standard ISO format.
  *
  * Provides a paginated, filterable interface for selecting non-standard disk images
- * (BIN, MDF, NRG, CHD, DAA) and dispatching them to specific conversion backends.
+ * (BIN/IMG, MDF, NRG, CHD, DAA/GBI) and dispatching them to format-specific
+ * conversion backends (ccd2iso, mdf2iso, nrg2iso, chd2iso, daa2iso).
  *
  * @details **Operational Logic:**
- * - **Dynamic Context:** Configures the UI theme and conversion tool (e.g., nrg2iso)
- *   dynamically based on the @p fileType parameter.
- * - **Cache Management:** On filter exit ('<'), it performs "Cache Restoration" by
- *   reloading data from @c GlobalCaches to ensure data integrity.
- * - **Input Sanitization:** Includes specific guards against malformed semicolon
- *   induction strings and empty inputs to prevent UI flickering or logic errors.
- * - **Batch Processing:** Supports staging multiple files via @c handlePendingInduction
- *   before committing the conversion batch with the "proc" command.
- * - **Event-Driven Refresh:** Uses @c RefreshState shared_ptr to monitor import
- *   status and condition variable for non-polling list updates.
+ * - **Dynamic Context:** Derives @c fileExtension, @c fileExtensionWithOutDots, and
+ *   @c operation from @p fileType at entry; an unrecognised @p fileType falls back
+ *   to empty extension and "FILES" label with no operation string.
+ * - **Input Routing:** After pagination/help is handled by
+ *   @c processPaginationHelpAndDisplay, input starting with @c '/' is forwarded to
+ *   @c handleFilteringConvert2ISO; input containing @c ';' (but not starting with
+ *   @c '/') is forwarded to @c handlePendingInduction; all other non-empty input
+ *   goes directly to @c processInputForConversions.
+ * - **Input Sanitization:** Inputs starting with @c ';', starting with @c '/;',
+ *   containing more than one @c '/', or containing @c ";;" are silently skipped
+ *   (needsClrScrn = false) to prevent UI flickering or logic errors. Empty readline
+ *   input is similarly skipped.
+ * - **Batch Processing:** Supports staging multiple files via @c handlePendingInduction.
+ *   The @c "P" command (when @c hasPendingProcess is true and @c pendingIndices is
+ *   non-empty) joins pending indices space-delimited and dispatches them to
+ *   @c processInputForConversions. @c "clr" discards the pending set.
+ * - **Cache Restoration:** On @c '<' when a filter is active, @p files is reloaded
+ *   from the appropriate @c GlobalCaches entry, @c filteringStack is cleared, and
+ *   @c currentPage is restored to @c originalPage. When no filter is active, @c '<'
+ *   breaks the loop directly with no cache reload.
+ * - **Verbose output:** @c verbose is a local bool reset to @c false each iteration;
+ *   when set by @c processInputForConversions, @c verbosePrint is called with layout
+ *   mode @c 3 (conversion-specific argument order).
+ * - **`need2Sort`:** Initialized @c true; passed into @c loadAndDisplayImageFiles
+ *   each redraw; set to @c false on @c '<' exit and filter-clear to avoid
+ *   redundant sorting.
+ * - **No watcher thread:** Unlike @c selectForIsoFiles, @p state is passed only
+ *   into @c loadAndDisplayImageFiles; no watcher thread or condition variable wait
+ *   is used in this function.
  *
- * @param fileType         The format category (e.g., "bin", "mdf", "nrg").
- * @param[in,out] files    The working list of files to display and process.
- * @param list             UI flag indicating if the list view is active.
- * @param state            Shared state containing import running flag and condition
- *                         variable for thread-safe event coordination.
+ * @param fileType   The format category: "bin", "img", "mdf", "nrg", "chd", or "daa".
+ *                   "bin" and "img" are treated identically (both map to ccd2iso).
+ * @param files      Working list of image file paths to display and process; restored
+ *                   from @c GlobalCaches on filter exit.
+ * @param list       Passed directly into @c loadAndDisplayImageFiles; not read or
+ *                   written by this function directly.
+ * @param state      Shared @c RefreshState passed into @c loadAndDisplayImageFiles
+ *                   for display coordination; no watcher thread is spawned here.
  */
 void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files,
                          bool& list, std::shared_ptr<RefreshState> state) {
@@ -646,6 +669,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             continue;
         }
 
+        // Dummy placeholder no actual value
         std::atomic<bool> isAtISOList{false};
 
         size_t totalPages = (GlobalState::ITEMS_PER_PAGE != 0) ? ((files.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE) : 0;

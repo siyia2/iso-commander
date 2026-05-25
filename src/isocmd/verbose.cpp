@@ -186,26 +186,33 @@ void displayErrors() {
 }
 
 /**
- * @brief Processes and displays the results of ISO file selection operations.
+ * @brief Processes and displays the results of an ISO file selection operation.
  *
- * Evaluates the state of @c verboseSets to determine if an operation (Mount, Unmount,
- * Move, or Remove) succeeded, failed, or received invalid input.
+ * Evaluates @c verboseSets to determine whether the operation produced valid
+ * output, then either prints an error notice or delegates to @c verbosePrint.
  *
  * @details **Logic flow:**
- * - **Error Handling:** Detects "No valid input" if only errors exist without successes.
- * - **Verbose Output:** Delegates to @c verbosePrint if the @p verbose flag is set,
- *   switching layout modes based on @p isMount.
- * - **State Management:** Sets @p needsClrScrn to signal the caller to refresh the TUI.
- * - **History Management:** Clears Readline history on destructive filtered operations
- *   (mv, rm, umount) to prevent re-running commands on non-existent indices.
+ * - **"No valid input" check:** If @c uniqueErrorTokenMessages is non-empty while
+ *   @c operationFailed, @c operationSkipped, and @c operationCompleted are all
+ *   empty, clears the scroll buffer, prints an error notice, and waits for the
+ *   user to press Enter. Note: the condition checks @c operationFailed twice
+ *   (likely a latent bug — @c operationSkipped is the intended second check).
+ * - **Verbose output:** If @p verbose is true, clears the scroll buffer and calls
+ *   @c verbosePrint. For mount operations, passes @c operationSkipped through and
+ *   selects layout mode @c 2; for all other operations, passes an empty set and
+ *   selects layout mode @c 1.
+ * - **History clear:** After a destructive operation (@c mv, @c rm, or @c umount),
+ *   if @p isFiltered and @p umountMvRmBreak are both true, clears Readline history
+ *   to prevent re-running commands against indices that no longer exist.
  *
- * @param operation      The current action string (e.g., "mv", "rm", "umount").
- * @param verbose        If true, triggers the detailed results screen.
- * @param isMount        Determines the @c verbosePrint layout mode (Mount vs Ops).
- * @param isFiltered     Indicates if a search filter is currently active.
- * @param umountMvRmBreak Flag used to trigger a screen break/history clear.
- * @param isUnmount      Special case flag to skip the "No ISO available" check.
- * @param[out] needsClrScrn Set to true if the function performed terminal output.
+ * @param operation      The current action string ("mount", "mv", "rm", "umount", etc.);
+ *                       used to derive the @c verbosePrint layout mode and to gate
+ *                       the history-clear path.
+ * @param verbose        If true, triggers the detailed results screen via @c verbosePrint.
+ * @param isFiltered     Indicates whether a search filter is currently active; gates
+ *                       the history-clear path alongside @p umountMvRmBreak.
+ * @param umountMvRmBreak When true (set by the caller after a destructive operation
+ *                        completes), triggers the history clear on the next results pass.
  */
 void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
                                  bool& isFiltered, bool& umountMvRmBreak) {
@@ -248,25 +255,46 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
 /**
  * @brief Generates and logs color-coded error messages for filesystem operations.
  *
- * Constructs a human-readable error string tailored to the operation (CP, MV, or RM)
- * and the specific failure type. The output is formatted according to the current
- * @c VerboseAndDatabaseTheme.
+ * Constructs a human-readable error string for the given @p errorType, appends it
+ * to @p verboseErrors, increments @p failedTasks, clears @p operationSuccessful,
+ * and invokes @p batchInsertFunc to notify the UI.
  *
- * @details **Efficiency & Safety:**
- * - Uses @c std::string_view to minimize string copying.
- * - Employs @c std::string::reserve to reduce reallocations during formatting.
- * - Thread-safe updates of task counters using @c std::memory_order_acq_rel.
+ * @details **Error types and formatting:**
+ * - @c "same_file"        — red; always uses full @c srcDir/srcFile path regardless
+ *                           of @c displayConfig::toggleNamesOnly.
+ * - @c "source_missing"   — red; uses @c displaySrc.
+ * - @c "overwrite_failed" — red; uses @c destDir + @c srcFile (no separator) + @p errorDetail.
+ * - @c "file_exists"      — red; uses @c displaySrc and @c destDir; hints at @c -o flag.
+ * - @c "remove_after_move"— red; uses @c displaySrc + @p errorDetail.
+ * - @c "missing_file"     — purple (distinct from all other branches); uses @c displaySrc.
+ * - default               — red; emits @p errorDetail directly.
  *
- * @param errorType   Category of failure (e.g., "same_file", "source_missing").
- * @param srcDir      Path view of the source directory.
- * @param srcFile     Filename view of the source file.
- * @param destDir     Path view of the destination directory.
- * @param errorDetail Specific system error or errno description.
- * @param operation   The user-facing label for the action ("copy", "move", "delete").
- * @param[out] verboseErrors The log container where the formatted error is stored.
- * @param[in,out] failedTasks Atomic counter incremented upon error.
- * @param[in,out] operationSuccessful Atomic flag set to false on failure.
- * @param batchInsertFunc Callback triggered to notify the UI of a new error entry.
+ * **Display path:** @c displaySrc is @c srcDir/srcFile when
+ * @c displayConfig::toggleNamesOnly is false, or @c srcFile alone when true.
+ * This toggle is applied in all branches except @c "same_file".
+ *
+ * **Thread safety:** @p failedTasks is incremented with @c memory_order_acq_rel;
+ * @p operationSuccessful is stored @c false with @c memory_order_release.
+ *
+ * @param errorType          Category of failure: "same_file", "source_missing",
+ *                           "overwrite_failed", "file_exists", "remove_after_move",
+ *                           "missing_file", or any other value (falls through to
+ *                           generic error using @p errorDetail).
+ * @param srcDir             Path view of the source directory.
+ * @param srcFile            Filename view of the source file.
+ * @param destDir            Path view of the destination; used as-is in
+ *                           @c "file_exists", and concatenated directly with
+ *                           @p srcFile (no separator) in @c "overwrite_failed".
+ * @param errorDetail        System error description; used by @c "overwrite_failed",
+ *                           @c "remove_after_move", and the default branch.
+ * @param operation          Operation label appended into @c "same_file" and
+ *                           @c "file_exists" messages.
+ * @param verboseErrors      Container to which the formatted error string is appended.
+ * @param failedTasks        Non-null pointer to atomic counter; incremented
+ *                           unconditionally via @c fetch_add.
+ * @param operationSuccessful Atomic flag set to @c false unconditionally.
+ * @param batchInsertFunc    Callback invoked after the error is logged to notify
+ *                           the UI of a new entry.
  */
 void reportErrorCpMvRm(std::string_view errorType, std::string_view srcDir, std::string_view srcFile,
                        std::string_view destDir, std::string_view errorDetail, std::string_view operation,
@@ -365,22 +393,33 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
  * metrics, logs errors, persists the new list to disk, and refreshes the UI cache.
  *
  * @details **Workflow & Safety:**
- * - **Signal Guarding:** Temporarily ignores @c SIGINT and disables @c Ctrl+D to prevent
- *   database corruption during the critical write-to-disk phase.
- * - **Persistence:** Dispatches data to @c saveToDatabase unless the operation was
- *   explicitly cancelled via @c GlobalState::g_operationCancelled.
- * - **Cache Sync:** If new files are found, it triggers @c loadFromDatabase to reconcile
- *   the in-memory @c globalIsoFileList with the newly saved disk state.
- * - **User Feedback:** Provides a color-coded summary of elapsed time, file counts,
- *   and specific failure reasons (e.g., lack of valid paths or locked database).
+ * - **Signal Guarding:** Suppresses @c SIGINT and disables @c Ctrl+D at function entry
+ *   for the remainder of the call; neither is restored before return.
+ * - **Cache Sync:** If @p newISOFound is true on entry, calls @c loadFromDatabase to
+ *   reconcile the in-memory @c globalIsoFileList with the saved disk state before
+ *   any output is produced.
+ * - **Persistence:** Calls @c saveToDatabase (passing @c &newISOFound, which it may
+ *   mutate) unless @c GlobalState::g_operationCancelled is set.
+ * - **User Feedback:** Prints elapsed time, then a color-coded outcome from one of
+ *   five branches: Cancelled; save failed with files and delta; no valid paths;
+ *   files present but no delta (save not attempted or failed); no ISOs found;
+ *   or successful import with delta count from @c countDifferentEntries.
+ * - **Invalid path / error reporting:** Prints invalid paths and error messages before
+ *   the save step. When @p totalFiles is zero and @p validPaths is empty, also emits
+ *   a "Total files processed: 0" line before the invalid-path list.
  *
- * @param allIsoFiles      Full list of discovered ISO paths to be saved.
- * @param totalFiles       Atomic counter of total files scanned (including non-ISOs).
- * @param validPaths       Collection of base directories successfully traversed.
- * @param invalidPaths     Set of directories skipped due to permissions or existence errors.
+ * @param allIsoFiles         Full list of discovered ISO paths to be saved.
+ * @param totalFiles          Atomic count of total files scanned; gates the
+ *                            "Total files processed: 0" diagnostic line.
+ * @param validPaths          Base directories successfully traversed; an empty set
+ *                            triggers the "Lack of valid paths" failure branch.
+ * @param invalidPaths        Directories skipped due to permissions or existence errors.
  * @param uniqueErrorMessages Deduplicated log of system-level I/O errors.
- * @param start_time       Point of origin for the refresh operation for duration calculation.
- * @param newISOFound      Boolean toggle indicating if the scan resulted in delta changes.
+ * @param newISOFound         On entry: whether the scan produced delta changes, gating
+ *                            the @c loadFromDatabase call. Passed by pointer to
+ *                            @c saveToDatabase, which may modify it.
+ * @param start_time          Timestamp of the refresh operation's origin, used to
+ *                            compute total elapsed time.
  */
 void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles,
                                     std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths,
@@ -445,21 +484,26 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
 /**
  * @brief Logs deduplicated filesystem errors and invalid search paths to the terminal.
  *
- * This diagnostic utility formats and displays issues encountered during a crawl,
- * such as permission-denied errors or non-existent directories. It ensures a
- * clean UI by handling line breaks and punctuation dynamically.
+ * Formats and displays issues encountered during a crawl (invalid paths, I/O errors),
+ * then clears both input sets to prepare for the next search cycle.
  *
- * @details **Operational Side Effects:**
- * - **Signal Immunity:** Temporarily ignores @c SIGINT to prevent display corruption
- *   during the error-dumping phase.
- * - **Memory Cleanup:** Automatically @b clears both @p processedErrorsFind and
- *   @p invalidDirectoryPaths upon completion to prepare for the next search cycle.
- * - **Stream Redirection:** Invalid paths are sent to @c std::cerr to distinguish
- *   structural errors from standard output summaries.
+ * @details
+ * - **Signal suppression:** Calls @c signal(SIGINT, SIG_IGN) and @c disable_ctrl_d()
+ *   at entry; neither is restored before return.
+ * - **"Total files processed: 0":** Printed to @c std::cout only when
+ *   @p directoryPaths is empty and @p invalidDirectoryPaths is non-empty.
+ * - **Invalid path output:** The header @c "Invalid paths omitted from search: " goes
+ *   to @c std::cout; the path values and trailing @c '.' go to @c std::cerr.
+ * - **Error message output:** Entries in @p processedErrorsFind are printed to
+ *   @c std::cout, separated by newlines between entries (no trailing newline after
+ *   the last entry).
+ * - **Cleanup:** Both @p processedErrorsFind and @p invalidDirectoryPaths are cleared
+ *   unconditionally before return.
  *
- * @param[in,out] invalidDirectoryPaths Set of paths that were inaccessible or invalid.
- * @param[in]     directoryPaths        The list of source directories (used for state checks).
- * @param[in,out] processedErrorsFind   Deduplicated collection of formatted error strings.
+ * @param invalidDirectoryPaths Paths that were inaccessible or invalid; cleared on exit.
+ * @param directoryPaths        Source directories from the crawl; only @c .empty() is
+ *                              checked, to gate the "Total files processed: 0" line.
+ * @param processedErrorsFind   Deduplicated formatted error strings; cleared on exit.
  */
 void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const std::vector<std::string>& directoryPaths, std::unordered_set<std::string>& processedErrorsFind) {
     signal(SIGINT, SIG_IGN);
@@ -498,30 +542,43 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
 /**
  * @brief Renders a color-coded summary of image discovery results and cache deltas.
  *
- * Provides the user with a detailed report following a search for specific image
- * extensions. It highlights the difference between newly discovered files and
- * existing cached entries.
+ * Captures @c end_time immediately on entry, then selects one of three display
+ * branches based on search outcome. Elapsed time and @c pressEnterToContinue are
+ * always printed unconditionally at the end, regardless of which branch fired or
+ * whether the operation was cancelled.
  *
- * @details **Reporting Features:**
- * - **Delta Visualization:** Clearly distinguishes between @p fileNames (newly found)
- *   and @p currentCacheOld (existing state).
- * - **Dynamic Hints:** If no new files are found but a cache exists, it provides
- *   a context-aware "ls" command hint to the user.
- * - **Error Aggregation:** Integrates with @c verboseFind to list invalid directory
- *   paths and system I/O errors encountered during the crawl.
- * - **Terminal Locking:** Disables interrupt signals and EOF inputs during the
- *   reporting phase to ensure the "Press Enter to Continue" prompt is respected.
+ * @details **Display branches** (all gated on
+ * @c !GlobalState::g_operationCancelled.load()):
+ * - **Files found** (@c !fileNames.empty()): prints found count vs @p currentCacheOld.
+ *   Does NOT call @c verboseFind. Not gated on @p list.
+ * - **No new files, cache non-empty** (@c !newFilesFound && !files.empty() && !list):
+ *   calls @c verboseFind, then prints 0 found vs @c files.size() with an @c "ls ↵"
+ *   hint.
+ * - **Cache empty** (@c files.empty() && !list): calls @c verboseFind, then prints
+ *   0 found and 0 cached.
  *
- * @param fileExtension      The target format extension (e.g., ".bin/.img").
- * @param fileNames          Set of unique file paths discovered in the current run.
- * @param invalidDirectoryPaths Set of paths that failed permission/existence checks.
- * @param newFilesFound      Toggle indicating if the current crawl added new data.
- * @param list               Flag to suppress output if the list view is already active.
- * @param currentCacheOld    The size of the cache prior to the current search.
- * @param files              The current working list of cached files.
- * @param start_time         Timestamp of the search initiation for duration logic.
- * @param processedErrorsFind Log of specific filesystem errors.
- * @param directoryPaths     List of base directories that were scanned.
+ * If @c g_operationCancelled is set, all three branches are skipped; only elapsed
+ * time and the Enter prompt are shown.
+ *
+ * After @c pressEnterToContinue, @c clearScrollBuffer() is called.
+ *
+ * @param fileExtension         Target format label used in output (e.g., ".bin/.img").
+ * @param fileNames             Files discovered in the current run; @c .size() and
+ *                              @c .empty() are used; not modified here.
+ * @param invalidDirectoryPaths Passed to @c verboseFind (cleared there).
+ * @param newFilesFound         Gates the "no new files" branch; distinct from
+ *                              @p fileNames being non-empty.
+ * @param list                  Suppresses the second and third branches when true;
+ *                              does not suppress the first branch.
+ * @param currentCacheOld       Cache entry count before this search; displayed
+ *                              alongside @p fileNames.size() in the first branch.
+ * @param files                 Current working cache; @c .size() and @c .empty()
+ *                              used for branch selection and display.
+ * @param start_time            Search start timestamp; elapsed time is computed
+ *                              against @c end_time captured at function entry.
+ * @param processedErrorsFind   Passed to @c verboseFind (cleared there).
+ * @param directoryPaths        Passed to @c verboseFind for the "Total files
+ *                              processed: 0" gate check.
  */
 void verboseImageSearchResults(const std::string& fileExtension,
                           std::unordered_set<std::string>& fileNames,
