@@ -73,7 +73,7 @@ char** my_special_completion_entry(const char* text, int start, int end) {
         return rl_completion_matches(text, command_generator);
     }
 
-    return nullptr; 
+    return nullptr;
 }
 
 /**
@@ -130,10 +130,10 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     // --- Header printing using raw pointers ---
     if (num_matches > 1) {
         const char* header_label = is_special_cmd_completion ? "CMD Completion Matches" : "Tab Completion Matches";
-        
+
         if (total_pages > 1) {
             printf("\n%s%s [page %d/%d%s] (%sCtrl+l%s → clear%s):%s\n\n",
-                   rc.label, header_label, current_page + 1, total_pages, rc.label, 
+                   rc.label, header_label, current_page + 1, total_pages, rc.label,
                    rc.hint, rc.reset, rc.label, rc.reset);
         } else {
             printf("\n%s%s (%sCtrl+l%s → clear%s):%s\n\n",
@@ -303,13 +303,13 @@ CompleterData g_completerData = {nullptr, nullptr};
 char** completion_cb(const char* text, int start, int end) {
     current_page = 0;
     last_common_prefix[0] = '\0';
-    
-    rl_attempted_completion_over = 1; 
+
+    rl_attempted_completion_over = 1;
     char** matches = nullptr;
     std::string current_word(rl_line_buffer + start, end - start);
-    
+
     bool is_device_completion = (current_word.find('>') != std::string::npos);
-    
+
     if (!is_device_completion) {
         if (g_completerData.sortedIsos) {
             std::vector<std::string> possible_completions;
@@ -319,7 +319,7 @@ char** completion_cb(const char* text, int start, int end) {
                 if (opt.find(text) == 0)
                     possible_completions.push_back(opt);
             }
-            
+
             bool all_present = true;
             std::string full_line(rl_line_buffer);
             for (const auto& comp : possible_completions) {
@@ -328,7 +328,7 @@ char** completion_cb(const char* text, int start, int end) {
                     break;
                 }
             }
-            
+
             if (!all_present && !possible_completions.empty()) {
                 matches = rl_completion_matches(text, [](const char* text, int state) -> char* {
                     static size_t list_index;
@@ -341,7 +341,7 @@ char** completion_cb(const char* text, int start, int end) {
                         if (opt.find(text) == 0)
                             return strdup(opt.c_str());
                     }
-                    return (char*)nullptr; 
+                    return (char*)nullptr;
                 });
             }
         }
@@ -357,7 +357,7 @@ char** completion_cb(const char* text, int start, int end) {
             } else {
                 deviceSubText = fullText;
             }
-            
+
             std::vector<std::string> possible_device_completions;
             for (size_t i = 0; i < g_completerData.usbDevices->size(); i++) {
                 const std::string& dev = (*g_completerData.usbDevices)[i];
@@ -366,7 +366,7 @@ char** completion_cb(const char* text, int start, int end) {
                     possible_device_completions.push_back(completion);
                 }
             }
-            
+
             bool all_present = true;
             std::string full_line(rl_line_buffer);
             for (const auto& comp : possible_device_completions) {
@@ -375,13 +375,13 @@ char** completion_cb(const char* text, int start, int end) {
                     break;
                 }
             }
-            
+
             if (!all_present && !possible_device_completions.empty()) {
                 static std::string s_prefix;
                 static std::string s_deviceSubText;
                 s_prefix = prefix;
                 s_deviceSubText = deviceSubText;
-                
+
                 rl_completion_append_character = '\0';
                 matches = rl_completion_matches(fullText.c_str(), [](const char* /*unused*/, int state) -> char* {
                     static size_t list_index;
@@ -449,10 +449,10 @@ int clear_screen_and_buffer(int, int) {
     clearScrollBuffer();
     fflush(stdout);
     rl_forced_update_display();
-    
+
     current_page = 0;
     last_common_prefix[0] = '\0';
-    
+
     return 0;
 }
 
@@ -483,7 +483,7 @@ int toggleList_handler(int, int) {
 /* --- Action & Command Handlers --- */
 
 int proc_handler(int, int) {
-    rl_replace_line("proc", 0);
+    rl_replace_line("P", 0);
     rl_done = 1;
     return 0;
 }

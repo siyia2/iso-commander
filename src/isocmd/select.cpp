@@ -155,16 +155,16 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
  * "commit" phase for staged user selections.
  *
  * @details **Workflow:**
- * - **Command Guard:** Only executes if @p inputString exactly matches "proc".
+ * - **Command Guard:** Only executes if @p inputString exactly matches "P".
  * - **Serialization:** Concatenates all queued tokens into a single command-line
  *   compatible string.
  * - **Execution:** Routes the combined input through the standard operation
  *   logic (Mount, Unmount, Write, or CP/MV/RM).
  *
- * @param inputString      User command (must be "proc" to trigger).
+ * @param inputString      User command (must be "P" to trigger).
  * @param pendingIndices   The collection of staged index tokens.
  * @param hasPendingProcess Flag indicating if a queue currently exists.
- * @return **true** if the "proc" command was recognized and executed.
+ * @return **true** if the "P" command was recognized and executed.
  * @return **false** if the queue was empty or the command was invalid.
  */
 bool handlePendingProcess(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
@@ -172,7 +172,7 @@ bool handlePendingProcess(const std::string& inputString, std::vector<std::strin
 						  std::vector<std::string>& isoDirs, const std::string& operation,
 						  bool& umountMvRmBreak, bool& filterHistory) {
 
-    if (hasPendingProcess && !pendingIndices.empty() && inputString == "proc") {
+    if (hasPendingProcess && !pendingIndices.empty() && inputString == "P") {
         std::string combinedIndices = "";
         for (size_t i = 0; i < pendingIndices.size(); ++i) {
             combinedIndices += pendingIndices[i];
@@ -246,7 +246,7 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  * - **Stacked Filtering:** Supports successive narrowing of results. The @c '<' command
  *   unwinds the filter stack or returns to the previous menu.
  * - **Two-Phase Execution:** Implements an "Induction" model where indices are staged
- *   into @c pendingIndices (delimited by @c ';') and executed via the @c "proc" command.
+ *   into @c pendingIndices (delimited by @c ';') and executed via the @c "P" command.
  * - **Terminal Integrity:** Manages @c Readline keybindings and uses ANSI escape
  *   sequences to maintain a static-feeling interface during input.
  *
@@ -415,7 +415,7 @@ void selectForIsoFiles(const std::string& operation,
             }
         }
 
-        if (inputString == "proc" && pendingIndices.empty()) {
+        if (inputString == "P" && pendingIndices.empty()) {
             std::cout << "\033[1B\033[K";
             needsClrScrn = false;
             hasPendingProcess = false;
@@ -605,7 +605,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             }
         }
 
-        if (inputString == "proc" && pendingIndices.empty()) {
+        if (inputString == "P" && pendingIndices.empty()) {
             std::cout << "\033[1B\033[K";
             hasPendingProcess = false;
             needsClrScrn = false;
@@ -637,7 +637,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
         if (validCommand) continue;
 
-        if (inputString == "proc" && hasPendingProcess && !pendingIndices.empty()) {
+        if (inputString == "P" && hasPendingProcess && !pendingIndices.empty()) {
             std::string combinedIndices = "";
             for (size_t i = 0; i < pendingIndices.size(); ++i) {
                 combinedIndices += pendingIndices[i];
