@@ -447,6 +447,7 @@ void selectForIsoFiles(const std::string& operation,
         if (pendingHandled) continue;
 
         { // Processing block
+            needsClrScrn = true;
             isAtISOList.store(false);
 
             bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isFiltered, filteredFiles, isoDirs,
