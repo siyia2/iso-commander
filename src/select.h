@@ -91,7 +91,7 @@ void loadAndDisplayImageFiles(
 void processInputForMountOrUmount(
     const std::string &input,
     const std::vector<std::string> &files,
-    bool &operationBreak,
+    bool &umountMvRmBreak,
     bool &verbose,
     bool isUnmount
 );
