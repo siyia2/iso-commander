@@ -75,7 +75,7 @@ void processOperationForSelectedIsoFiles(const std::string& inputString,
         }
 
         processInputForMountOrUmount(inputString, activeList, umountMvRmBreak, verbose, isUnmount);
-    } else if (operation == "write") {
+    } else if (operation == "write2usb") {
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalCaches::globalIsoFileList;
         writeToUsb(inputString, activeList);
     } else {
