@@ -457,7 +457,7 @@ bool isValidDirectory(const std::string& path);
  * (fetch_sub returning 1) signals workerCV to wake the waiting main thread.
  * If thread construction throws, activeWorkers is decremented to stay
  * consistent. Signals completion via RefreshState::importCV; if stopImport
- * was not set. isImportRunning is stored false
+ * was not set, waits 500ms before doing so. isImportRunning is stored false
  * under printMutex before importCV is notified, ensuring printList cannot
  * observe a stale sync indicator after the signal.
  *
@@ -473,6 +473,9 @@ void backgroundDatabaseImport(std::shared_ptr<RefreshState> state) {
     bool localPromptFlag = false;
     auto signalDone = [&] {
         if (state) {
+            if (!state->stopImport.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            }
             {
                 std::lock_guard<std::mutex> lk(state->printMutex);
                 state->isImportRunning.store(false, std::memory_order_relaxed);
