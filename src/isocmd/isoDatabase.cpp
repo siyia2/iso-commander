@@ -473,9 +473,6 @@ void backgroundDatabaseImport(std::shared_ptr<RefreshState> state) {
     bool localPromptFlag = false;
     auto signalDone = [&] {
         if (state) {
-            if (!state->stopImport.load()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            }
             {
                 std::lock_guard<std::mutex> lk(state->printMutex);
                 state->isImportRunning.store(false, std::memory_order_relaxed);
