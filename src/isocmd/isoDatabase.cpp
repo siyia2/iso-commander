@@ -457,7 +457,7 @@ bool isValidDirectory(const std::string& path);
  * (fetch_sub returning 1) signals workerCV to wake the waiting main thread.
  * If thread construction throws, activeWorkers is decremented to stay
  * consistent. Signals completion via RefreshState::importCV; if stopImport
- * was not set, waits 500ms before doing so. isImportRunning is stored false
+ * was not set. isImportRunning is stored false
  * under printMutex before importCV is notified, ensuring printList cannot
  * observe a stale sync indicator after the signal.
  *
