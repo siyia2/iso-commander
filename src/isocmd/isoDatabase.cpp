@@ -229,11 +229,11 @@ std::string getHomeDirectory() {
 /**
  * @brief Saves new ISO file paths to the database, merging with existing entries.
  *
- * Deduplicates incoming paths against the existing cache, appends new entries,
- * and trims to maxDatabaseSize if needed. Writes the new database contents to a
- * temporary file in the same directory as the database, then atomically renames
- * it into place — ensuring readers always see either the complete old file or the
- * complete new one, never a partial write.
+ * Deduplicates incoming paths against the existing cache and against each other,
+ * appends new entries, and trims to maxDatabaseSize if needed. Writes the new
+ * database contents to a temporary file in the same directory as the database,
+ * then atomically renames it into place — ensuring readers always see either the
+ * complete old file or the complete new one, never a partial write.
  *
  * @param discoveredISO  Const reference to vector of ISO file paths to add.
  * @param newISOFound    Set to true if at least one new entry was added,
@@ -252,7 +252,6 @@ bool saveToDatabase(const std::vector<std::string>& discoveredISO, bool* newISOF
     }
     std::lock_guard<std::mutex> fileLock(dbFileMutex);
     if (newISOFound) *newISOFound = false;
-
     std::vector<std::string> existingCache;
     int fd = open(cachePath.c_str(), O_RDONLY);
     if (fd != -1) {
@@ -281,14 +280,12 @@ bool saveToDatabase(const std::vector<std::string>& discoveredISO, bool* newISOF
         }
         close(fd);
     }
-
     std::vector<std::string> combinedCache = std::move(existingCache);
     std::unordered_set<std::string> existingSet(combinedCache.begin(), combinedCache.end());
-
     std::vector<std::string> newEntries;
     bool localNewISOFound = false;
     for (const auto& iso : discoveredISO) {
-        if (existingSet.find(iso) == existingSet.end()) {
+        if (existingSet.insert(iso).second) {
             newEntries.push_back(iso);
             localNewISOFound = true;
         }
@@ -298,28 +295,23 @@ bool saveToDatabase(const std::vector<std::string>& discoveredISO, bool* newISOF
             *newISOFound = false;
         return false;
     }
-
     combinedCache.insert(combinedCache.end(), newEntries.begin(), newEntries.end());
     if (combinedCache.size() > GlobalState::maxDatabaseSize) {
         combinedCache.erase(combinedCache.begin(), combinedCache.begin() + (combinedCache.size() - GlobalState::maxDatabaseSize));
     }
-
     std::string output;
     output.reserve(combinedCache.size() * 64);
     for (const auto& entry : combinedCache) {
         output += entry;
         output += '\n';
     }
-
     std::string tmpPath = (std::filesystem::path(GlobalState::databaseFilePath).parent_path() / "iso_commander_database_saved_XXXXXX").string();
     int tmpFd = mkstemp(tmpPath.data());
     if (tmpFd == -1) return false;
-
     auto cleanupTmp = [&]() {
         close(tmpFd);
         ::unlink(tmpPath.c_str());
     };
-
     if (fchmod(tmpFd, 0644) == -1) {
         cleanupTmp();
         return false;
@@ -333,12 +325,10 @@ bool saveToDatabase(const std::vector<std::string>& discoveredISO, bool* newISOF
         return false;
     }
     close(tmpFd);
-
     if (::rename(tmpPath.c_str(), cachePath.c_str()) == -1) {
         ::unlink(tmpPath.c_str());
         return false;
     }
-
     if (newISOFound)
         *newISOFound = localNewISOFound;
     GlobalState::isoListDirty.store(true);
