@@ -61,11 +61,13 @@ int runCommand(const std::vector<std::string>& args) {
  *
  * Loop-mounts the ISO read-only into a temporary directory and checks
  * for the co-presence of @c sources/boot.wim (Windows setup payload)
- * and @c bootmgr / @c bootmgr.efi (Windows boot manager).  Both markers
+ * and @c bootmgr / @c bootmgr.efi (Windows boot manager). Both markers
  * must be present; either alone is insufficient.
  *
  * The temporary mount point is always unmounted and removed before the
- * function returns, regardless of outcome.
+ * function returns, regardless of outcome. All mount/umount output is
+ * suppressed via @ref runCommand() to avoid cluttering the terminal
+ * with spurious error messages.
  *
  * @param isoPath Absolute path to the ISO image.
  * @return @c true if the ISO appears to be Windows installation media.
@@ -75,13 +77,13 @@ bool isWindowsIso(const std::string& isoPath) {
     if (!mkdtemp(tmpDir)) return false;
 
     auto cleanup = [&]() {
-        std::string cmd = "umount -l " + std::string(tmpDir) + " 2>/dev/null";
-        system(cmd.c_str());
+        // Use runCommand instead of system
+        runCommand({"umount", "-l", tmpDir});
         rmdir(tmpDir);
     };
 
-    std::string mountCmd = "mount -o ro,loop " + isoPath + " " + tmpDir + " 2>/dev/null";
-    if (system(mountCmd.c_str()) != 0) {
+    // Use runCommand instead of system
+    if (runCommand({"mount", "-o", "ro,loop", isoPath, tmpDir}) != 0) {
         rmdir(tmpDir);
         return false;
     }
