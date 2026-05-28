@@ -485,41 +485,165 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 }
 
 /**
+ * @brief Validates that a file descriptor refers to a valid ISO 9660 filesystem.
+ *
+ * Performs ISO 9660 volume descriptor validation by reading the first 32768 bytes
+ * (sectors 0-15) and then scanning volume descriptors starting at sector 16.
+ * Looks for a Primary Volume Descriptor (type 1) with standard identifier
+ * "CD001" or "CDROM". Returns as soon as a valid primary volume descriptor is found.
+ *
+ * @param fd Open file descriptor positioned anywhere (function will seek).
+ * @return true if the file contains a valid ISO 9660 volume descriptor, false otherwise.
+ *
+ * @note The function seeks within the file descriptor; caller should rewind
+ *       if needed after validation.
+ */
+bool isValidIso9660(int fd) {
+    // Read the first 32768 bytes (ISO 9660 primary volume descriptor location)
+    uint8_t buffer[32768];
+
+    // Seek to beginning
+    if (lseek(fd, 0, SEEK_SET) == -1) {
+        return false;
+    }
+
+    // Read boot record area
+    ssize_t bytesRead = read(fd, buffer, sizeof(buffer));
+    if (bytesRead < 32768) {
+        return false;
+    }
+
+    // Check for volume descriptors starting at sector 16 (offset 32768 bytes)
+    // Each volume descriptor is 2048 bytes
+    for (int i = 0; i < 256; i++) {
+        off_t offset = 32768 + (i * 2048);
+        if (lseek(fd, offset, SEEK_SET) == -1) {
+            break;
+        }
+
+        uint8_t descriptor[2048];
+        ssize_t descRead = read(fd, descriptor, sizeof(descriptor));
+        if (descRead != 2048) {
+            break;
+        }
+
+        // Check volume descriptor type: 1 = Primary Volume Descriptor
+        // Standard identifier should be "CD001" or "CDROM"
+        if (descriptor[0] == 1) {
+            // Check standard identifier (bytes 1-5)
+            if ((descriptor[1] == 'C' && descriptor[2] == 'D' &&
+                 descriptor[3] == '0' && descriptor[4] == '0' && descriptor[5] == '1') ||
+                (descriptor[1] == 'C' && descriptor[2] == 'D' &&
+                 descriptor[3] == 'R' && descriptor[4] == 'O' && descriptor[5] == 'M')) {
+                return true;
+            }
+        }
+
+        // Volume descriptor type 255 = Volume Descriptor Set Terminator
+        if (descriptor[0] == 255) {
+            break;
+        }
+    }
+
+    return false;
+}
+
+/**
  * @brief Writes an ISO image to a block device, auto-detecting Windows media.
  *
- * Calls @ref isWindowsIso to probe the ISO before writing.  Windows ISOs
- * are handled by @ref writeWindowsIsoToDevice (FAT32 format + file copy +
- * optional WIM split); all other ISOs fall through to a direct raw
- * O_DIRECT block write.
+ * This function provides intelligent ISO writing with special handling for
+ * Windows installation media. Windows detection occurs in two stages:
+ * 1. First, @ref isWindowsIso performs a quick probe checking for common
+ *    Windows directory structures (efi/microsoft/boot, sources/install.wim, etc.)
+ * 2. Then, the filename is checked for the substring "win" (case-insensitive)
+ *    anywhere in the basename (after the last '/' or '\').
  *
- * For the raw path: opens the ISO for reading and the target device with
- * @c O_WRONLY|O_DIRECT, then streams data in sector-aligned chunks (default
- * 8 MiB buffer, rounded down to a multiple of the device sector size). If
- * the ISO size is not a multiple of the sector size, the final chunk is
- * zero-padded to the sector boundary to satisfy O_DIRECT alignment
- * requirements. Progress, speed, and completion state are written atomically
- * to @c progressData[progressIndex].
+ * Only if BOTH conditions pass (isWindowsIso returns true AND the filename
+ * contains "win") does it delegate to @ref writeWindowsIsoToDevice, which
+ * creates a FAT32 filesystem and copies files (splitting install.wim if
+ * necessary).
  *
- * Speed is recalculated every 300 ms using a sliding byte window.
- * The write loop checks @c GlobalState::g_operationCancelled before each
- * iteration and exits cleanly without marking the task as failed when a
- * cancellation is detected. @c fsync is called on the device fd only if
- * the write was not cancelled, avoiding unnecessary I/O on a partial transfer.
+ * Examples that would trigger Windows handler:
+ *   - /home/win10.iso          ✓ (isWindowsIso true + filename has "win")
+ *   - /downloads/Windows11.iso ✓ (isWindowsIso true + filename has "win")
+ *   - /iso/win_debug.iso       ✓ (isWindowsIso true + filename has "win")
  *
- * @param isoPath       Absolute path to the source ISO image.
- * @param device        Absolute path to the target block device (e.g. @c /dev/sdb).
- * @param progressIndex Index into @ref progressData for this task.
- * @return @c true if every byte of the ISO was written successfully and the
- *         operation was not cancelled; @c false otherwise.
+ * Examples that would NOT trigger Windows handler:
+ *   - /windows/larp.iso        ✗ (isWindowsIso true but filename lacks "win")
+ *   - /home/debian.iso         ✗ (isWindowsIso false)
+ *   - /iso/random.iso          ✗ (isWindowsIso false)
+ *
+ * For all other ISOs (Linux, UEFI bootable, etc.) that fail either condition,
+ * it performs a raw O_DIRECT block-level write.
+ *
+ * **Raw O_DIRECT Path:**
+ * - Opens the ISO with a fresh file descriptor (unaffected by Windows probing)
+ * - Validates the ISO 9660 filesystem structure before writing
+ * - Opens the target device with O_DIRECT for unbuffered, sector-aligned I/O
+ * - Streams data in sector-aligned chunks (8 MiB buffer rounded down to sector size)
+ * - Zero-pads the final chunk to meet O_DIRECT alignment requirements
+ * - Calls fsync() on successful completion to ensure data persistence
+ *
+ * **Progress Tracking:**
+ * - Bytes written, completion percentage, and write speed are atomically updated
+ *   in @c progressData[progressIndex]
+ * - Speed is calculated every 300ms using a sliding window of bytes written
+ * - Final average speed is stored upon completion
+ *
+ * **Cancellation Handling:**
+ * - Checks @c GlobalState::g_operationCancelled before each write iteration
+ * - Exits cleanly without marking the task as failed when cancelled
+ * - Skips fsync() on cancelled operations to avoid unnecessary I/O
+ *
+ * **Error Handling:**
+ * - Validates ISO structure early, failing fast on non-ISO files
+ * - Handles EINTR gracefully in read/write loops
+ * - Detects partial writes and continues until all data is transferred
+ * - Marks progress entry as failed on unrecoverable errors
+ *
+ * @param isoPath       Absolute path to the source ISO image file.
+ * @param device        Absolute path to the target block device (e.g., "/dev/sdb").
+ * @param progressIndex Index into the global @ref progressData array for this task.
+ *
+ * @return true if the ISO was written successfully, validated, and not cancelled;
+ *         false otherwise (I/O error, invalid ISO, device error, or cancellation).
+ *
+ * @note Windows detection requires BOTH the ISO structure probe AND the
+ *       filename containing "win" to succeed. This prevents false positives
+ *       from ISOs that contain Windows directories but aren't Windows install media.
+ * @note The function opens a fresh file descriptor for the ISO after the Windows
+ *       probe to ensure the probe's side effects don't corrupt the O_DIRECT path.
+ * @note O_DIRECT requires sector-aligned buffers, offsets, and sizes. This function
+ *       guarantees alignment by using posix_memalign() and padding the final sector.
+ * @note For Windows ISOs that pass detection, see @ref writeWindowsIsoToDevice for
+ *       its specific behavior and requirements.
+ * @see isWindowsIso
+ * @see isValidIso9660
+ * @see writeWindowsIsoToDevice
+ * @see GlobalState::g_operationCancelled
+ * @see progressData
  */
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex) {
     // Probe for Windows installation media and delegate if detected
-    if (isWindowsIso(isoPath))
-        return writeWindowsIsoToDevice(isoPath, device, progressIndex);
+    if (isWindowsIso(isoPath)) {
+        auto getFilename = [](const std::string& path) -> std::string {
+            size_t lastSlash = path.find_last_of("/\\");
+            return (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
+        };
+
+        std::string filename = getFilename(isoPath);
+        std::string lowerFilename = filename;
+        std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(), ::tolower);
+
+        // Pass if contains "win" anywhere (case-insensitive) - C++20 compatible
+        if (lowerFilename.find("win") != std::string::npos) {
+            return writeWindowsIsoToDevice(isoPath, device, progressIndex);
+        }
+    }
 
     // --- Raw O_DIRECT path for Linux / UEFI ISOs -------------------------
 
-    // Open ISO for reading
+    // Open ISO for reading (fresh descriptor, unaffected by any probe)
     int iso_fd = open(isoPath.c_str(), O_RDONLY);
     if (iso_fd == -1) {
         progressData[progressIndex].failed.store(true);
@@ -527,6 +651,18 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     }
     auto closeIso = [](int* fd) { if (*fd != -1) close(*fd); };
     std::unique_ptr<int, decltype(closeIso)> isoGuard(&iso_fd, closeIso);
+
+    // Verify it's a valid ISO 9660 filesystem before proceeding
+    if (!isValidIso9660(iso_fd)) {
+        progressData[progressIndex].failed.store(true);
+        return false;
+    }
+
+    // Seek back to beginning for writing
+    if (lseek(iso_fd, 0, SEEK_SET) == -1) {
+        progressData[progressIndex].failed.store(true);
+        return false;
+    }
 
     // Open device with O_DIRECT for unbuffered writes
     int dev_fd = open(device.c_str(), O_WRONLY | O_DIRECT);
@@ -599,7 +735,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             while (true) {
                 bytesRead = read(iso_fd, alignedBuffer, bytesToRead);
                 if (bytesRead >= 0) break;
-                if (errno == EINTR)  continue;
+                if (errno == EINTR) continue;
                 throw std::runtime_error("Read error: " + std::string(strerror(errno)));
             }
 
