@@ -343,13 +343,13 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
             std::string driveName = getDriveName(device);
             std::string errMsg;
             errMsg.append(wt.warnLabel).append("'").append(wt.fileCol).append(iso.filename)
-                  .append(wt.rl_resetCol).append(wt.bold).append(" (")
-                  .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol).append(wt.bold)
+                  .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
+                  .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol).append(UI::Palette::DimGray)
                   .append(")").append(wt.warnLabel).append("'").append(wt.errLabel).append(" is too large for ")
-                  .append(wt.errPath).append("'").append(device).append(wt.bold)
+                  .append(wt.errPath).append("'").append(device).append(color)
                   .append(" <").append(driveName).append(">")
-                  .append(wt.rl_resetCol).append(wt.bold).append(" (")
-                  .append(wt.sizeCol).append(deviceSizeStr).append(wt.rl_resetCol).append(")").append(wt.warnLabel).append("'")
+                  .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
+                  .append(wt.sizeCol).append(deviceSizeStr).append(UI::Palette::DimGray).append(")").append(wt.warnLabel).append("'")
                   .append(wt.rl_resetCol);
             validationErrors.push_back(std::move(errMsg));
             continue;
@@ -400,6 +400,8 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
     std::istringstream pairStream(pairString);
     std::string pair;
 
+    const WriteTheme wt = getWriteTheme();
+
     errors.clear();
 
     while (std::getline(pairStream, pair, ';')) {
@@ -410,7 +412,7 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 
         size_t sepPos = pair.find('>');
         if (sepPos == std::string::npos) {
-            errors.push_back("Invalid pair format: '" + pair + "'");
+            errors.push_back(wt.warnLabel + "Invalid pair format: '" + wt.errLabel + pair +  wt.warnLabel + "'");
             continue;
         }
 
@@ -421,12 +423,12 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
             size_t index = std::stoul(indexStr);
 
             if (index < 1 || index > selectedIsos.size()) {
-                errors.push_back("Invalid index " + indexStr);
+                errors.push_back(wt.warnLabel + "Invalid index '" +  wt.errLabel +  indexStr + wt.warnLabel + "'");
                 continue;
             }
 
             if (usedDevices.count(device)) {
-                errors.push_back("Device " + device + " used multiple times");
+                errors.push_back(wt.warnLabel + "Device '" + wt.errLabel + device +  wt.warnLabel + "' used multiple times");
                 continue;
             }
 
@@ -434,7 +436,7 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
             usedDevices.insert(device);
 
         } catch (...) {
-            errors.push_back("Invalid index: '" + indexStr + "'");
+            errors.push_back(wt.warnLabel + "Invalid index: '" + wt.errLabel + indexStr +  wt.warnLabel + "'");
         }
     }
 
@@ -445,7 +447,7 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 
     for (size_t i = 1; i <= selectedIsos.size(); ++i) {
         if (mappedIndices.find(i) == mappedIndices.end()) {
-            errors.push_back("Missing mapping for ISO " + std::to_string(i));
+            errors.push_back(wt.warnLabel + "Missing mapping for ISO '" + wt.errLabel + std::to_string(i) + wt.warnLabel + "'");
         }
     }
 
@@ -628,7 +630,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         if (!errors.empty()) {
             std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
             for (const auto& err : errors) {
-                std::cerr << "  • " << err << "\n";
+                std::cerr << color<< "  • " << err << "\n";
             }
 
             pressEnterToTry();
