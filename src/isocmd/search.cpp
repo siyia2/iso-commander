@@ -683,7 +683,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
 
     {
         std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
-        std::cout << "\r" << dt.bold << "Total files processed: " << totalFiles << dt.reset;
+        std::cout << "\r" << color << "Total files processed: " << totalFiles << dt.reset;
     }
 
     return localFileNames;
