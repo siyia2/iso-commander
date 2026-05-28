@@ -129,10 +129,9 @@ bool isWindowsIso(const std::string& isoPath) {
  *
  * @par Progress reporting
  * Progress, speed, and completion state are written atomically to
- * @c progressData[progressIndex]. Updates are emitted at most every 100 ms
- * during file copy; the clock is sampled only every 4 chunks (32 MiB of
- * transfer) to avoid syscall overhead across the many small files present in
- * a typical Windows ISO. There is no long blocking phase after formatting.
+ * @c progressData[progressIndex]. Updates are emitted at most every 250 ms
+ * during file copy; the clock is sampled on every 8 MiB chunk (~160 ms at
+ * USB 3.0 speeds). There is no long blocking phase after formatting.
  *
  * @par Copy strategy
  * Files are copied using @c copy_file_range() (kernel-assisted, zero
@@ -303,13 +302,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     auto startTime  = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
     uint64_t bytesInWindow = 0;
-    constexpr int    UPDATE_INTERVAL_MS = 100;
-    // Only call now() every N chunks instead of after every chunk.
-    // At 8 MiB/chunk this fires at most ~12× per second at 1 GB/s — well
-    // above the 100 ms update interval — while eliminating the clock call
-    // on the vast majority of chunks where the interval hasn't elapsed.
-    constexpr int    PROGRESS_CHECK_EVERY_N_CHUNKS = 4;
-
+    constexpr int    UPDATE_INTERVAL_MS = 250;
     auto updateProgress = [&](uint64_t justCopied) {
         progressData[progressIndex].bytesWritten.fetch_add(justCopied);
         bytesInWindow += justCopied;
@@ -333,93 +326,79 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     };
 
     auto copyWithProgress = [&](const fs::path& src, const fs::path& dst) -> bool {
-        int fd_in = open(src.c_str(), O_RDONLY);
-        if (fd_in < 0) return false;
+            int fd_in = open(src.c_str(), O_RDONLY);
+            if (fd_in < 0) return false;
 
-        int fd_out = open(dst.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        if (fd_out < 0) { close(fd_in); return false; }
+            int fd_out = open(dst.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd_out < 0) { close(fd_in); return false; }
 
-        if (!GlobalState::g_operationCancelled.load()) {
-            struct stat st;
-            if (fstat(fd_in, &st) == 0 && st.st_size > 0)
-                posix_fallocate(fd_out, 0, st.st_size);
-        }
+            if (!GlobalState::g_operationCancelled.load()) {
+                struct stat st;
+                if (fstat(fd_in, &st) == 0 && st.st_size > 0)
+                    posix_fallocate(fd_out, 0, st.st_size);
+            }
 
-        constexpr size_t CHUNK = 8 * 1024 * 1024;
-        off_t   in_off    = 0;
-        off_t   out_off   = 0;
-        bool    success   = true;
-        int     chunksSinceCheck = 0;
+            constexpr size_t CHUNK = 8 * 1024 * 1024;
+            off_t in_off  = 0;
+            off_t out_off = 0;
+            bool  success = true;
 
-        // --- copy_file_range path ---
-        while (!GlobalState::g_operationCancelled.load()) {
-            ssize_t copied = copy_file_range(fd_in, &in_off,
-                                             fd_out, &out_off,
-                                             CHUNK, 0);
-            if (copied < 0) {
-                if (errno == EINTR) continue;
+            // --- copy_file_range path ---
+            while (!GlobalState::g_operationCancelled.load()) {
+                ssize_t copied = copy_file_range(fd_in, &in_off,
+                                                 fd_out, &out_off,
+                                                 CHUNK, 0);
+                if (copied < 0) {
+                    if (errno == EINTR) continue;
 
-                // Kernel-side copy unsupported; fall through to read/write.
-                success = false;
-                lseek(fd_in,  0, SEEK_SET);
-                lseek(fd_out, 0, SEEK_SET);
+                    // Kernel-side copy unsupported; fall through to read/write.
+                    success = false;
+                    lseek(fd_in,  0, SEEK_SET);
+                    lseek(fd_out, 0, SEEK_SET);
 
-                // --- fallback read/write path ---
-                constexpr size_t BUF_SIZE = 8 * 1024 * 1024;
-                std::vector<char> buf(BUF_SIZE);
-                int fbChunks = 0;
+                    // --- fallback read/write path ---
+                    constexpr size_t BUF_SIZE = 8 * 1024 * 1024;
+                    std::vector<char> buf(BUF_SIZE);
 
-                while (!GlobalState::g_operationCancelled.load()) {
-                    ssize_t bytes_read = read(fd_in, buf.data(), BUF_SIZE);
-                    if (bytes_read < 0) {
-                        if (errno == EINTR) continue;
-                        goto fallback_write_error;
-                    }
-                    if (bytes_read == 0) { success = true; break; }
-
-                    ssize_t bytes_written = 0;
-                    while (bytes_written < bytes_read) {
-                        if (GlobalState::g_operationCancelled.load())
-                            goto fallback_cancelled;
-                        ssize_t written = write(fd_out,
-                                                buf.data() + bytes_written,
-                                                bytes_read - bytes_written);
-                        if (written < 0) {
+                    while (!GlobalState::g_operationCancelled.load()) {
+                        ssize_t bytes_read = read(fd_in, buf.data(), BUF_SIZE);
+                        if (bytes_read < 0) {
                             if (errno == EINTR) continue;
                             goto fallback_write_error;
                         }
-                        bytes_written += written;
-                    }
+                        if (bytes_read == 0) { success = true; break; }
 
-                    if (++fbChunks % PROGRESS_CHECK_EVERY_N_CHUNKS == 0)
+                        ssize_t bytes_written = 0;
+                        while (bytes_written < bytes_read) {
+                            if (GlobalState::g_operationCancelled.load())
+                                goto fallback_cancelled;
+                            ssize_t written = write(fd_out,
+                                                    buf.data() + bytes_written,
+                                                    bytes_read - bytes_written);
+                            if (written < 0) {
+                                if (errno == EINTR) continue;
+                                goto fallback_write_error;
+                            }
+                            bytes_written += written;
+                        }
+
                         updateProgress(static_cast<uint64_t>(bytes_read));
-                    else {
-                        progressData[progressIndex].bytesWritten
-                            .fetch_add(static_cast<uint64_t>(bytes_read));
-                        bytesInWindow += static_cast<uint64_t>(bytes_read);
                     }
+                    break;
+
+                    fallback_write_error: success = false; break;
+                    fallback_cancelled:              break;
                 }
-                break;
 
-                fallback_write_error: success = false; break;
-                fallback_cancelled:              break;
-            }
+                if (copied == 0) break;  // EOF
 
-            if (copied == 0) break;  // EOF
-
-            if (++chunksSinceCheck % PROGRESS_CHECK_EVERY_N_CHUNKS == 0) {
                 updateProgress(static_cast<uint64_t>(copied));
-            } else {
-                progressData[progressIndex].bytesWritten
-                    .fetch_add(static_cast<uint64_t>(copied));
-                bytesInWindow += static_cast<uint64_t>(copied);
             }
-        }
 
-        close(fd_in);
-        close(fd_out);
-        return success && !GlobalState::g_operationCancelled.load();
-    };
+            close(fd_in);
+            close(fd_out);
+            return success && !GlobalState::g_operationCancelled.load();
+        };
 
     try {
         for (const auto& entry :
@@ -493,7 +472,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
  * requirements. Progress, speed, and completion state are written atomically
  * to @c progressData[progressIndex].
  *
- * Speed is recalculated every 100 ms using a sliding byte window.
+ * Speed is recalculated every 250 ms using a sliding byte window.
  * The write loop checks @c GlobalState::g_operationCancelled before each
  * iteration and exits cleanly without marking the task as failed when a
  * cancellation is detected. @c fsync is called on the device fd only if
@@ -568,7 +547,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     auto startTime  = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
     uint64_t bytesInWindow = 0;
-    constexpr int UPDATE_INTERVAL_MS = 100;
+    constexpr int UPDATE_INTERVAL_MS = 250;
 
     auto updateSpeed = [&](auto now) {
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate);
