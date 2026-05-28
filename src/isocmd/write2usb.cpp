@@ -9,6 +9,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -16,6 +17,7 @@
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -549,6 +551,104 @@ bool isValidIso9660(int fd) {
 }
 
 /**
+ * @brief Detects whether an ISO image is a Windows 10/11 installation medium.
+ *
+ * This function projects the initial 32MB metadata window of an ISO file into the
+ * process's virtual address space using POSIX memory mapping (@c mmap). It bypasses
+ * the high overhead of deep user-space buffer allocations and full-file disk reads,
+ * performing flat ASCII and interleaved UTF-16 structural signature scans to isolate
+ * deterministic Windows deployment components.
+ *
+ * @details
+ * - **I/O Efficiency:** Bounding the memory-map window to 32MB shields the hosting
+ * subsystem from catastrophic multi-gigabyte linear disk-scan penalties when
+ * processing non-Windows operating system installation images.
+ * - **Early Short-Circuiting:** Instantly drops execution if the standard ISO 9660 / UDF
+ * Volume Descriptor identifiers (@c CD001 or @c BEA01) are missing from Sector 16
+ * (offset @c 0x8001).
+ * - **Encoding & Endian Resilience:** Features a dual-pass signature scanner capable of
+ * resolving case-insensitive target structures across raw ASCII, UTF-16 Big-Endian
+ * (typical of Joliet metadata tables), and UTF-16 Little-Endian layouts natively
+ * without requiring a formal filesystem tree parser.
+ * - **Precision:** Targets standalone deployment file strings (@c boot.wim and
+ * @c bootmgr) to insulate validation from directory hierarchy fragmentation across
+ * different ISO compilation tools.
+ *
+ * @note This implementation assumes a 64-bit execution environment to safely handle
+ * virtual memory mappings and requires no loop-mounting or elevated privileges.
+ *
+ * @param isoPath Absolute or relative filesystem path to the target image file.
+ * @return @c true if valid ISO metadata, the Windows Boot Manager, and the WinPE
+ * payload image are explicitly detected within the metadata region.
+ */
+bool isWindowsIsoInitialCheck(const std::string& isoPath) {
+    int fd = open(isoPath.c_str(), O_RDONLY);
+    if (fd < 0) return false;
+
+    struct stat sb;
+    if (fstat(fd, &sb) == -1 || sb.st_size < 0x9000) { // Must be at least large enough for system descriptors
+        close(fd);
+        return false;
+    }
+
+    // Map only the first few megabytes where filesystem metadata lives!
+    // This entirely avoids the 4GB full-file scan penalty on non-Windows ISOs.
+    size_t mapSize = std::min(static_cast<size_t>(sb.st_size), static_cast<size_t>(32 * 1024 * 1024)); // 32MB is plenty
+
+    char* addr = static_cast<char*>(mmap(NULL, mapSize, PROT_READ, MAP_PRIVATE, fd, 0));
+    if (addr == MAP_FAILED) {
+        close(fd);
+        return false;
+    }
+
+    std::string_view metaData(addr, mapSize);
+
+    // 1. Instant File System Validation (Sector 16 Magic Number)
+    // Absolute offset validation ensures we are processing a valid ISO format layout
+    bool isValidIso = (metaData.substr(0x8001, 5) == "CD001" || metaData.substr(0x8001, 5) == "BEA01");
+    if (!isValidIso) {
+        munmap(addr, mapSize);
+        close(fd);
+        return false;
+    }
+
+    // 2. Perform your case/encoding resilient checks restricted strictly to the metadata layer
+    auto scanSignature = [addr, mapSize](std::string_view target) -> bool {
+        // ASCII Check
+        auto ascii_it = std::search(addr, addr + mapSize, target.begin(), target.end(),
+            [](char h, char n) { return std::tolower(static_cast<unsigned char>(h)) == std::tolower(static_cast<unsigned char>(n)); });
+        if (ascii_it != (addr + mapSize)) return true;
+
+        // UTF-16 (Both BE and LE) Check
+        for (size_t i = 0; i <= mapSize - (target.size() * 2); i += 2) { // 2-byte alignment step
+            bool matchBE = true, matchLE = true;
+            for (size_t j = 0; j < target.size(); ++j) {
+                char b1 = addr[i + (j * 2)];
+                char b2 = addr[i + (j * 2) + 1];
+
+                // Check Big Endian (\0 + Char)
+                if (b1 != '\0' || std::tolower(static_cast<unsigned char>(b2)) != std::tolower(static_cast<unsigned char>(target[j]))) matchBE = false;
+                // Check Little Endian (Char + \0)
+                if (b2 != '\0' || std::tolower(static_cast<unsigned char>(b1)) != std::tolower(static_cast<unsigned char>(target[j]))) matchLE = false;
+
+                if (!matchBE && !matchLE) break;
+            }
+            if (matchBE || matchLE) return true;
+        }
+        return false;
+    };
+
+    // Look for standalone filenames since paths can fragment across directory node boundaries
+    bool hasBootWim = scanSignature("boot.wim");
+    bool hasBootMgr = scanSignature("bootmgr.efi") || scanSignature("bootmgr");
+
+    munmap(addr, mapSize);
+    close(fd);
+
+    return hasBootWim && hasBootMgr;
+}
+
+/**
  * @brief Writes an ISO image to a block device, auto-detecting Windows media.
  *
  * This function provides intelligent ISO writing with special handling for
@@ -628,18 +728,8 @@ bool isValidIso9660(int fd) {
  * @see progressData
  */
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex) {
-    // Extract and check the filename first
-    auto getFilename = [](const std::string& path) -> std::string {
-        size_t lastSlash = path.find_last_of("/\\");
-        return (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
-    };
 
-    std::string filename = getFilename(isoPath);
-    std::string lowerFilename = filename;
-    std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(), ::tolower);
-
-    // Only probe the ISO if the filename actually contains "win"
-    if (lowerFilename.find("win") != std::string::npos) {
+    if (isWindowsIsoInitialCheck(isoPath)) {
         if (isWindowsIso(isoPath)) {
             return writeWindowsIsoToDevice(isoPath, device, progressIndex);
         }
