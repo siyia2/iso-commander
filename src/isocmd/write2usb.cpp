@@ -487,113 +487,64 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 }
 
 /**
- * @brief Validates that a file descriptor refers to a valid ISO 9660 filesystem.
+ * @brief Validates that a file descriptor refers to a valid ISO 9660 filesystem layout.
  *
- * Performs ISO 9660 volume descriptor validation by reading the first 32768 bytes
- * (sectors 0-15) and then scanning volume descriptors starting at sector 16.
- * Looks for a Primary Volume Descriptor (type 1) with standard identifier
- * "CD001" or "CDROM". Returns as soon as a valid primary volume descriptor is found.
+ * This function performs a stateless verification of the primary volume descriptor.
+ * By utilizing positional I/O (@c pread), it queries Sector 16 directly without
+ * modifying the file descriptor's internal offset cursor, ensuring safety across
+ * concurrent access pipelines.
  *
- * @param fd Open file descriptor positioned anywhere (function will seek).
- * @return true if the file contains a valid ISO 9660 volume descriptor, false otherwise.
- *
- * @note The function seeks within the file descriptor; caller should rewind
- *       if needed after validation.
+ * @param fd An open, readable file descriptor referencing the target image file.
+ * @return @c true if Sector 16 contains a Primary Volume Descriptor (Type 1) matching
+ * standard validation signatures ("CD001" or "CDROM"); otherwise @c false.
  */
 bool isValidIso9660(int fd) {
-    // Read the first 32768 bytes (ISO 9660 primary volume descriptor location)
-    uint8_t buffer[32768];
+    uint8_t buffer[2048];
+    // Directly pread Sector 16 (Offset 32768) to protect file offset state
+    if (pread(fd, buffer, sizeof(buffer), 32768) != 2048) return false;
 
-    // Seek to beginning
-    if (lseek(fd, 0, SEEK_SET) == -1) {
-        return false;
+    if (buffer[0] == 1) {
+        std::string_view id(reinterpret_cast<char*>(buffer + 1), 5);
+        if (id == "CD001" || id == "CDROM") return true;
     }
-
-    // Read boot record area
-    ssize_t bytesRead = read(fd, buffer, sizeof(buffer));
-    if (bytesRead < 32768) {
-        return false;
-    }
-
-    // Check for volume descriptors starting at sector 16 (offset 32768 bytes)
-    // Each volume descriptor is 2048 bytes
-    for (int i = 0; i < 256; i++) {
-        off_t offset = 32768 + (i * 2048);
-        if (lseek(fd, offset, SEEK_SET) == -1) {
-            break;
-        }
-
-        uint8_t descriptor[2048];
-        ssize_t descRead = read(fd, descriptor, sizeof(descriptor));
-        if (descRead != 2048) {
-            break;
-        }
-
-        // Check volume descriptor type: 1 = Primary Volume Descriptor
-        // Standard identifier should be "CD001" or "CDROM"
-        if (descriptor[0] == 1) {
-            // Check standard identifier (bytes 1-5)
-            if ((descriptor[1] == 'C' && descriptor[2] == 'D' &&
-                 descriptor[3] == '0' && descriptor[4] == '0' && descriptor[5] == '1') ||
-                (descriptor[1] == 'C' && descriptor[2] == 'D' &&
-                 descriptor[3] == 'R' && descriptor[4] == 'O' && descriptor[5] == 'M')) {
-                return true;
-            }
-        }
-
-        // Volume descriptor type 255 = Volume Descriptor Set Terminator
-        if (descriptor[0] == 255) {
-            break;
-        }
-    }
-
     return false;
 }
 
 /**
- * @brief Detects whether an ISO image is a Windows 10/11 installation medium.
+ * @brief Performs a high-speed structural probe to detect Windows 10/11 installation media.
  *
- * This function projects the initial 32MB metadata window of an ISO file into the
- * process's virtual address space using POSIX memory mapping (@c mmap). It bypasses
- * the high overhead of deep user-space buffer allocations and full-file disk reads,
- * performing flat ASCII and interleaved UTF-16 structural signature scans to isolate
- * deterministic Windows deployment components.
+ * Projects the initial 32MB metadata boundary of an ISO file into the process's virtual
+ * address space using POSIX memory mapping (@c mmap). It executes flat ASCII and
+ * interleaved dual-endian UTF-16 case-insensitive signature scans to isolate deterministic
+ * Windows deployment blocks without incurring loop-mount configuration overhead.
  *
  * @details
- * - **I/O Efficiency:** Bounding the memory-map window to 32MB shields the hosting
- * subsystem from catastrophic multi-gigabyte linear disk-scan penalties when
- * processing non-Windows operating system installation images.
- * - **Early Short-Circuiting:** Instantly drops execution if the standard ISO 9660 / UDF
- * Volume Descriptor identifiers (@c CD001 or @c BEA01) are missing from Sector 16
- * (offset @c 0x8001).
- * - **Encoding & Endian Resilience:** Features a dual-pass signature scanner capable of
- * resolving case-insensitive target structures across raw ASCII, UTF-16 Big-Endian
- * (typical of Joliet metadata tables), and UTF-16 Little-Endian layouts natively
- * without requiring a formal filesystem tree parser.
- * - **Precision:** Targets standalone deployment file strings (@c boot.wim and
- * @c bootmgr) to insulate validation from directory hierarchy fragmentation across
- * different ISO compilation tools.
+ * - **Early Short-Circuiting:** Instantly drops execution if standard Volume Descriptor
+ * identifiers (@c CD001 or @c BEA01) are absent at offset @c 0x8001.
+ * - **Endian Resilience:** Features a custom lambda scanner capable of resolving
+ * signatures across raw ASCII, UTF-16 Big-Endian (common in Joliet tables), and
+ * UTF-16 Little-Endian configurations natively.
+ * - **I/O Insulation:** Bounding the mapped execution window strictly to 32MB safeguards
+ * the system cache from multi-gigabyte linear disk-scan thrashing when processing
+ * large non-Windows operating system images.
  *
- * @note This implementation assumes a 64-bit execution environment to safely handle
- * virtual memory mappings and requires no loop-mounting or elevated privileges.
- *
+ * @note Assumes a 64-bit target execution architecture to guarantee unhindered
+ * virtual addressing blocks.
  * @param isoPath Absolute or relative filesystem path to the target image file.
- * @return @c true if valid ISO metadata, the Windows Boot Manager, and the WinPE
- * payload image are explicitly detected within the metadata region.
+ * @return @c true if the volume header is valid and both the Windows Boot Manager
+ * (@c bootmgr) and WinPE payload image (@c boot.wim) are found.
  */
 bool isWindowsIsoInitialCheck(const std::string& isoPath) {
     int fd = open(isoPath.c_str(), O_RDONLY);
     if (fd < 0) return false;
 
     struct stat sb;
-    if (fstat(fd, &sb) == -1 || sb.st_size < 0x9000) { // Must be at least large enough for system descriptors
+    if (fstat(fd, &sb) == -1 || sb.st_size < 0x9000) {
         close(fd);
         return false;
     }
 
-    // Map only the first few megabytes where filesystem metadata lives!
-    // This entirely avoids the 4GB full-file scan penalty on non-Windows ISOs.
-    size_t mapSize = std::min(static_cast<size_t>(sb.st_size), static_cast<size_t>(32 * 1024 * 1024)); // 32MB is plenty
+    size_t mapSize = std::min(static_cast<size_t>(sb.st_size), static_cast<size_t>(32 * 1024 * 1024));
 
     char* addr = static_cast<char*>(mmap(NULL, mapSize, PROT_READ, MAP_PRIVATE, fd, 0));
     if (addr == MAP_FAILED) {
@@ -603,8 +554,7 @@ bool isWindowsIsoInitialCheck(const std::string& isoPath) {
 
     std::string_view metaData(addr, mapSize);
 
-    // 1. Instant File System Validation (Sector 16 Magic Number)
-    // Absolute offset validation ensures we are processing a valid ISO format layout
+    // Validate ISO 9660 or UDF headers at Sector 16
     bool isValidIso = (metaData.substr(0x8001, 5) == "CD001" || metaData.substr(0x8001, 5) == "BEA01");
     if (!isValidIso) {
         munmap(addr, mapSize);
@@ -612,25 +562,24 @@ bool isWindowsIsoInitialCheck(const std::string& isoPath) {
         return false;
     }
 
-    // 2. Perform your case/encoding resilient checks restricted strictly to the metadata layer
     auto scanSignature = [addr, mapSize](std::string_view target) -> bool {
-        // ASCII Check
+        if (mapSize < (target.size() * 2)) return false;
+
         auto ascii_it = std::search(addr, addr + mapSize, target.begin(), target.end(),
             [](char h, char n) { return std::tolower(static_cast<unsigned char>(h)) == std::tolower(static_cast<unsigned char>(n)); });
         if (ascii_it != (addr + mapSize)) return true;
 
-        // UTF-16 (Both BE and LE) Check
-        for (size_t i = 0; i <= mapSize - (target.size() * 2); i += 2) { // 2-byte alignment step
+        for (size_t i = 0; i <= mapSize - (target.size() * 2); i += 2) {
             bool matchBE = true, matchLE = true;
             for (size_t j = 0; j < target.size(); ++j) {
                 char b1 = addr[i + (j * 2)];
                 char b2 = addr[i + (j * 2) + 1];
 
-                // Check Big Endian (\0 + Char)
-                if (b1 != '\0' || std::tolower(static_cast<unsigned char>(b2)) != std::tolower(static_cast<unsigned char>(target[j]))) matchBE = false;
-                // Check Little Endian (Char + \0)
-                if (b2 != '\0' || std::tolower(static_cast<unsigned char>(b1)) != std::tolower(static_cast<unsigned char>(target[j]))) matchLE = false;
+                unsigned char u1 = static_cast<unsigned char>(b1);
+                unsigned char u2 = static_cast<unsigned char>(b2);
 
+                if (b1 != '\0' || std::tolower(u2) != std::tolower(static_cast<unsigned char>(target[j]))) matchBE = false;
+                if (b2 != '\0' || std::tolower(u1) != std::tolower(static_cast<unsigned char>(target[j]))) matchLE = false;
                 if (!matchBE && !matchLE) break;
             }
             if (matchBE || matchLE) return true;
@@ -638,7 +587,6 @@ bool isWindowsIsoInitialCheck(const std::string& isoPath) {
         return false;
     };
 
-    // Look for standalone filenames since paths can fragment across directory node boundaries
     bool hasBootWim = scanSignature("boot.wim");
     bool hasBootMgr = scanSignature("bootmgr.efi") || scanSignature("bootmgr");
 
@@ -649,90 +597,43 @@ bool isWindowsIsoInitialCheck(const std::string& isoPath) {
 }
 
 /**
- * @brief Writes an ISO image to a block device, auto-detecting Windows media.
+ * @brief Writes an ISO image to a raw block device, auto-routing Windows vs. Linux configurations.
  *
- * This function provides intelligent ISO writing with special handling for
- * Windows installation media. Windows detection occurs in two sequential stages
- * to optimize performance:
- * 1. First, the filename is checked for the substring "win" (case-insensitive)
- * anywhere in the basename (after the last '/' or '\'). This acts as a cheap
- * guard condition.
- * 2. Only if the filename matches, @ref isWindowsIso performs a structural probe,
- * checking for common Windows directory structures (efi/microsoft/boot,
- * sources/install.wim, etc.).
+ * High-level orchestration routine that intercepts Windows installation media using an
+ * optimized metadata signature probe. Standard/Linux distributions fall through directly
+ * into a specialized, unbuffered block-level stream.
  *
- * Only if BOTH conditions pass (the filename contains "win" AND isWindowsIso
- * returns true) does it delegate to @ref writeWindowsIsoToDevice, which
- * creates a FAT32 filesystem and copies files (splitting install.wim if
- * necessary). If the filename does not contain "win", the expensive structural
- * probe is entirely skipped.
+ * @details
+ * - **Windows Path Routing:** If @ref isWindowsIsoInitialCheck passes, execution is
+ * delegated to @ref writeWindowsIsoToDevice, which automatically handles multi-partitioning,
+ * hybrid FAT32+NTFS tables, and cluster tuning.
+ * - **Raw O_DIRECT Pipeline:** Non-Windows targets are imaged via raw unbuffered disk I/O.
+ * Data transfers utilize a dedicated page-aligned memory buffer (@c posix_memalign) matching
+ * the physical device's underlying sector constraints queried from @c ioctl(BLKSSZGET).
+ * - **Tail-Block Padding:** Detects partial blocks at EOF or short reads, automatically
+ * zero-padding the remaining buffer slice up to the strict sector layout boundary to prevent
+ * kernel rejection errors (@c EINVAL).
+ * - **Asynchronous Cancellation Safety:** Evaluates @c GlobalState::g_operationCancelled
+ * at every inner loop pass. On user abort, it short-circuits execution and leaves the disk
+ * safely without triggering a cascading @c fsync block.
  *
- * Examples that would trigger Windows handler:
- * - /home/win10.iso         ✓ (filename has "win" + isWindowsIso true)
- * - /downloads/Windows11.iso ✓ (filename has "win" + isWindowsIso true)
- * - /iso/win_debug.iso       ✓ (filename has "win" + isWindowsIso true)
+ * @param isoPath Absolute path to the source ISO image file on the host.
+ * @param device Target destination block node path (e.g., @c /dev/sdb). WARNING: All existing
+ * underlying data will be destructively overwritten.
+ * @param progressIndex Unique thread tracking identifier mapped inside the global progress array.
+ * @return @c true if the image data was transferred successfully, verified, and safely flushed;
+ * @c false on physical I/O failure, validation collapse, or user cancellation.
  *
- * Examples that would NOT trigger Windows handler:
- * - /windows/larp.iso        ✗ (filename lacks "win" - skips isWindowsIso probe)
- * - /home/debian.iso         ✗ (filename lacks "win" - skips isWindowsIso probe)
- * - /iso/win_fake.iso        ✗ (filename has "win" but isWindowsIso returns false)
- *
- * For all other ISOs (Linux, UEFI bootable, etc.) that fail either condition,
- * it performs a raw O_DIRECT block-level write.
- *
- * **Raw O_DIRECT Path:**
- * - Opens the ISO with a fresh file descriptor (unaffected by Windows probing)
- * - Validates the ISO 9660 filesystem structure before writing
- * - Opens the target device with O_DIRECT for unbuffered, sector-aligned I/O
- * - Streams data in sector-aligned chunks (8 MiB buffer rounded down to sector size)
- * - Zero-pads the final chunk to meet O_DIRECT alignment requirements
- * - Calls fsync() on successful completion to ensure data persistence
- *
- * **Progress Tracking:**
- * - Bytes written, completion percentage, and write speed are atomically updated
- * in @c progressData[progressIndex]
- * - Speed is calculated every 300ms using a sliding window of bytes written
- * - Final average speed is stored upon completion
- *
- * **Cancellation Handling:**
- * - Checks @c GlobalState::g_operationCancelled before each write iteration
- * - Exits cleanly without marking the task as failed when cancelled
- * - Skips fsync() on cancelled operations to avoid unnecessary I/O
- *
- * **Error Handling:**
- * - Validates ISO structure early, failing fast on non-ISO files
- * - Handles EINTR gracefully in read/write loops
- * - Detects partial writes and continues until all data is transferred
- * - Marks progress entry as failed on unrecoverable errors
- *
- * @param isoPath        Absolute path to the source ISO image file.
- * @param device         Absolute path to the target block device (e.g., "/dev/sdb").
- * @param progressIndex  Index into the global @ref progressData array for this task.
- *
- * @return true if the ISO was written successfully, validated, and not cancelled;
- * false otherwise (I/O error, invalid ISO, device error, or cancellation).
- *
- * @note Windows detection requires BOTH the filename containing "win" AND the ISO
- * structure probe to succeed. The lightweight filename check is evaluated first
- * to prevent expensive disk I/O probes on unrelated media (e.g., Linux distros).
- * @note The function opens a fresh file descriptor for the ISO after a successful Windows
- * probe to ensure the probe's side effects don't corrupt the O_DIRECT path.
- * @note O_DIRECT requires sector-aligned buffers, offsets, and sizes. This function
- * guarantees alignment by using posix_memalign() and padding the final sector.
- * @note For Windows ISOs that pass detection, see @ref writeWindowsIsoToDevice for
- * its specific behavior and requirements.
- * @see isWindowsIso
  * @see isValidIso9660
+ * @see isWindowsIsoInitialCheck
  * @see writeWindowsIsoToDevice
- * @see GlobalState::g_operationCancelled
- * @see progressData
  */
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex) {
 
+    // Fast-path hardware validation probe
     if (isWindowsIsoInitialCheck(isoPath)) {
-        if (isWindowsIso(isoPath)) {
-            return writeWindowsIsoToDevice(isoPath, device, progressIndex);
-        }
+        // Safe to jump straight into formatting; validation is complete
+        return writeWindowsIsoToDevice(isoPath, device, progressIndex);
     }
 
     // --- Raw O_DIRECT path for Linux / UEFI ISOs -------------------------
