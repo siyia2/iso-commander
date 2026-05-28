@@ -35,114 +35,88 @@
  * - Total Object Size: Exactly 128 bytes (2 cache lines), matching typical CPU architecture
  * alignment steps to prevent cache line splitting or false sharing.
  * - Capture Limit: Up to 120 bytes of lambda context can be retained directly on the stack.
- * If a lambda closure exceeds 120 bytes, a compilation error is triggered via static_assert.
+ * If a lambda closure exceeds 120 bytes, it transparently falls back to a
+ * heap-allocated unique_ptr wrapper without changing the interface.
  * - Move Semantics: Exclusively move-only via type-safe placement-new constructors.
  * Copying is explicitly deleted to avoid hidden allocation logic or deep cloning.
  */
 class MoveOnlyTask {
 private:
-    /// @brief Storage size allocated for the inline lambda capture arena.
-    /// @note Set to 120 bytes so that 120 + 8 (vtable pointer) = exactly 128 bytes (2 cache lines).
     static constexpr std::size_t StorageSize = 120;
 
-    /**
-     * @brief Internal execution and lifecycle function pointer table.
-     * * @details Maps type-erased instance operations to specific underlying closure implementations
-     * without needing standard inheritance hierarchies or dynamic dispatch.
-     */
     struct VTable {
-        /// @brief Function pointer matching signature to execute the erased callable context.
         void (*call)(void*);
-        /// @brief Function pointer matching signature to clean up the erased context destructively.
         void (*destroy)(void*) noexcept;
-        /// @brief Function pointer matching signature to move the context from one memory slot to another.
         void (*move)(void*, void*) noexcept;
     };
 
-    /// @brief Inline stack arena aligned to the platform's maximum structural boundary.
     alignas(std::max_align_t) char storage[StorageSize];
-
-    /// @brief Current pointer into the global static VTable matrix tracking the assigned type.
     const VTable* vtable{nullptr};
 
-    /**
-     * @brief Erased wrapper that directly invokes the underlying typed callable.
-     * @tparam F The true, decayed type of the erased callable.
-     * @param ptr Pointer to the raw memory region storing the instance of type F.
-     */
+    // Concrete execution for inline types
     template <typename F>
     static void call_impl(void* ptr) {
-        (*static_cast<F*>(ptr))();
+        (*std::launder(static_cast<F*>(ptr)))();
     }
 
-    /**
-     * @brief Erased wrapper that calls the destructor of the underlying typed callable.
-     * @tparam F The true, decayed type of the erased callable.
-     * @param ptr Pointer to the raw memory region storing the instance of type F.
-     */
     template <typename F>
     static void destroy_impl(void* ptr) noexcept {
-        static_cast<F*>(ptr)->~F();
+        std::launder(static_cast<F*>(ptr))->~F();
     }
 
-    /**
-     * @brief Erased wrapper that invokes the move constructor via placement-new.
-     * @tparam F The true, decayed type of the erased callable.
-     * @param dst Target storage pointer where the new object will be constructed.
-     * @param src Source storage pointer from which content will be moved out.
-     */
     template <typename F>
     static void move_impl(void* dst, void* src) noexcept {
-        ::new (dst) F(std::move(*static_cast<F*>(src)));
+        ::new (dst) F(std::move(*std::launder(static_cast<F*>(src))));
     }
 
-    /**
-     * @brief Statically allocated explicit implementation matrix mapping the lifecycle of type F.
-     * @tparam F The true, decayed type of the erased callable.
-     */
     template <typename F>
     static constexpr VTable vtable_for = { &call_impl<F>, &destroy_impl<F>, &move_impl<F> };
 
+    // Unique execution strategy for Large Heap Overflows
+    template <typename F>
+    static void call_heap_impl(void* ptr) {
+        auto* up = std::launder(static_cast<std::unique_ptr<F>*>(ptr));
+        (**up)();
+    }
+
+    template <typename F>
+    static void destroy_heap_impl(void* ptr) noexcept {
+        std::launder(static_cast<std::unique_ptr<F>*>(ptr))->~unique_ptr();
+    }
+
+    template <typename F>
+    static void move_heap_impl(void* dst, void* src) noexcept {
+        using Box = std::unique_ptr<F>;
+        ::new (dst) Box(std::move(*std::launder(static_cast<Box*>(src))));
+    }
+
+    template <typename F>
+    static constexpr VTable vtable_for_heap = { &call_heap_impl<F>, &destroy_heap_impl<F>, &move_heap_impl<F> };
+
 public:
-    /** @brief Constructs an uninitialized, empty task wrapper. */
     MoveOnlyTask() noexcept = default;
 
-    /**
-     * @brief Template constructor for any callable object.
-     *
-     * @details Uses placement-new to initialize the incoming callable directly inside
-     * the internal storage array. Evaluates boundaries at compile time.
-     *
-     * @tparam F Type of the incoming callable object.
-     * @param f Rvalue reference to the source callable context.
-     */
+    // Restored Perfect Forwarding Constructor
     template <typename F, typename = std::enable_if_t<!std::is_same_v<std::decay_t<F>, MoveOnlyTask>>>
     MoveOnlyTask(F&& f) {
         using DecayedF = std::decay_t<F>;
-        static_assert(sizeof(DecayedF) <= StorageSize,
-            "Task capture size exceeds fixed-size buffer allocation.");
-        static_assert(alignof(DecayedF) <= alignof(std::max_align_t),
-            "Task alignment exceeds buffer alignment constraints.");
-
-        ::new (static_cast<void*>(storage)) DecayedF(std::forward<F>(f));
-        vtable = &vtable_for<DecayedF>;
+        if constexpr (sizeof(DecayedF) <= StorageSize && alignof(DecayedF) <= alignof(std::max_align_t)) {
+            ::new (static_cast<void*>(storage)) DecayedF(std::forward<F>(f));
+            vtable = &vtable_for<DecayedF>;
+        } else {
+            using Box = std::unique_ptr<DecayedF>;
+            ::new (static_cast<void*>(storage)) Box(std::make_unique<DecayedF>(std::forward<F>(f)));
+            vtable = &vtable_for_heap<DecayedF>;
+        }
     }
 
-    /** @brief Cleans up internal allocations by invoking the type-specific destructor. */
-    ~MoveOnlyTask() noexcept {
-        reset();
-    }
+    ~MoveOnlyTask() noexcept { reset(); }
 
-    // Deleted Copy Semantics
     MoveOnlyTask(const MoveOnlyTask&) = delete;
     MoveOnlyTask& operator=(const MoveOnlyTask&) = delete;
 
-    /** @brief Move constructor. Transfers ownership of the memory state. */
-    MoveOnlyTask(MoveOnlyTask&& other) noexcept {
-        move_from(std::move(other));
-    }
+    MoveOnlyTask(MoveOnlyTask&& other) noexcept { move_from(std::move(other)); }
 
-    /** @brief Move assignment operator. Cleans up current state and links incoming task. */
     MoveOnlyTask& operator=(MoveOnlyTask&& other) noexcept {
         if (this != &other) {
             reset();
@@ -151,19 +125,14 @@ public:
         return *this;
     }
 
-    /** @brief Invokes the underlying type-erased callable object. */
     void operator()() {
         if (vtable) {
-            vtable->call(static_cast<void*>(storage));
+            vtable->call(storage);
         }
     }
 
-    /** @brief Boolean conversion operator to check if the instance contains a valid task. */
-    explicit operator bool() const noexcept {
-        return vtable != nullptr;
-    }
+    explicit operator bool() const noexcept { return vtable != nullptr; }
 
-    /** @brief Destroys the current callable context and resets the task to an uninitialized state. */
     void reset() noexcept {
         if (vtable) {
             vtable->destroy(storage);
@@ -172,15 +141,11 @@ public:
     }
 
 private:
-    /**
-     * @brief Handles internal memory migration logic for move mechanics.
-     * @param other The rvalue context to transfer state from.
-     */
     void move_from(MoveOnlyTask&& other) noexcept {
         vtable = other.vtable;
         if (vtable) {
             vtable->move(storage, other.storage);
-            other.reset();
+            other.vtable = nullptr; // Explicitly neutralize other without invoking double-destructors
         }
     }
 };
@@ -383,7 +348,6 @@ private:
     void workerThread() {
         while (true) {
             MoveOnlyTask task;
-
             if (task_queue.dequeue(task)) {
                 runTask(task);
                 continue;
@@ -396,13 +360,23 @@ private:
 
             {
                 std::unique_lock<std::mutex> lock(mutex);
-                sleeping_threads.fetch_add(1, std::memory_order_relaxed);
+                // Double-check the queue right after locking to close the race window
+                if (task_queue.dequeue(task)) {
+                    lock.unlock();
+                    runTask(task);
+                    continue;
+                }
 
+                if (stop.load(std::memory_order_acquire) &&
+                    task_state.load(std::memory_order_acquire) == 0) {
+                    return;
+                }
+
+                sleeping_threads.fetch_add(1, std::memory_order_relaxed);
                 cv.wait(lock, [this] {
                     return pendingFromState(task_state.load(std::memory_order_acquire)) > 0
                         || stop.load(std::memory_order_acquire);
                 });
-
                 sleeping_threads.fetch_sub(1, std::memory_order_relaxed);
             }
         }
@@ -462,7 +436,7 @@ public:
             }
         }));
 
-        {
+        if (sleeping_threads.load(std::memory_order_relaxed) > 0) {
             std::lock_guard<std::mutex> lock(mutex);
             cv.notify_one();
         }
