@@ -288,9 +288,10 @@ public:
             } else {
                 // Pre-read data; ownership is only confirmed if CAS succeeds.
                 if (head.compare_exchange_weak(first, next, std::memory_order_acq_rel)) {
-                    if (next->data) {
-                        result = std::move(next->data);
-                        next->data.reset(); // Safely nullify the internal state of the node payload
+                    auto consumed = next;  // next is now the new head
+                    if (consumed->data) {
+                        result = std::move(consumed->data);
+                        consumed->data.reset();
                     }
                     return true;
                 }
