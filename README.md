@@ -60,7 +60,7 @@ Database folder location: `/root/.local/share/isocmd/database/` || `~/.local/sha
 * Mount/Unmount ISO
 * Copy/Move ISO
 * Delete ISO
-* Write ISO to Removable USB Drives (Linux, BSD, Windows 10/11)
+* Write ISO (Linux, BSD, Windows 10/11) to Removable USB Drives
 * Convert (.bin/.img/.chd/.daa/.gbi/.mdf/.nrg) to ISO
 
 ## Dependencies
