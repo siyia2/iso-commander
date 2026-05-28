@@ -454,6 +454,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         ? (static_cast<double>(totalBytes) / (1024.0 * 1024.0)) / seconds
         : 0.0;
     progressData[progressIndex].speed.store(avgSpeed);
+    progressData[progressIndex].bytesWritten.store(totalBytes);
     progressData[progressIndex].progress.store(100);
     progressData[progressIndex].completed.store(true);
     return true;
@@ -640,6 +641,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             ? (static_cast<double>(fileSize) / (1024.0 * 1024.0)) / seconds
             : 0.0;
         progressData[progressIndex].speed.store(avgSpeed);
+        progressData[progressIndex].bytesWritten.store(fileSize);
         progressData[progressIndex].progress.store(100);
         progressData[progressIndex].completed.store(true);
         return true;
