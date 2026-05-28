@@ -23,7 +23,7 @@ struct IsoInfo {
 
 /**
  * @brief Thread-safe state tracker for an ongoing write process.
- * @details Utilizes atomics for progress updates and move-only semantics to 
+ * @details Utilizes atomics for progress updates and move-only semantics to
  * prevent accidental copying of atomic states.
  */
 struct ProgressInfo {
@@ -73,6 +73,13 @@ struct ProgressInfo {
     ProgressInfo(const ProgressInfo&) = delete;
     ProgressInfo& operator=(const ProgressInfo&) = delete;
 };
+
+inline std::vector<ProgressInfo> progressData; ///< Shared progress state for all active write tasks.
+
+/**
+ * Performs the actual write2usb.
+ */
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
 
 
 // --- Filesystem & Formatting Utilities ---
