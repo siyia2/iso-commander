@@ -760,9 +760,10 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                 uint64_t reportable = std::min<uint64_t>(
                     static_cast<uint64_t>(written),
                     fileSize - std::min(localBytesWritten, fileSize));
-                localBytesWritten                        += static_cast<size_t>(written);
-                bytesInWindow                            += reportable;
-                progressData[progressIndex].bytesWritten.fetch_add(reportable);
+
+                localBytesWritten += static_cast<size_t>(written);
+                bytesInWindow     += static_cast<uint64_t>(written);   // physical throughput for speed
+                progressData[progressIndex].bytesWritten.fetch_add(reportable); // capped for UI
             }
 
             // Throttled progress + speed update
