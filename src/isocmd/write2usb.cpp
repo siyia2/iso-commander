@@ -552,26 +552,30 @@ bool isValidIso9660(int fd) {
  * @brief Writes an ISO image to a block device, auto-detecting Windows media.
  *
  * This function provides intelligent ISO writing with special handling for
- * Windows installation media. Windows detection occurs in two stages:
- * 1. First, @ref isWindowsIso performs a quick probe checking for common
- *    Windows directory structures (efi/microsoft/boot, sources/install.wim, etc.)
- * 2. Then, the filename is checked for the substring "win" (case-insensitive)
- *    anywhere in the basename (after the last '/' or '\').
+ * Windows installation media. Windows detection occurs in two sequential stages
+ * to optimize performance:
+ * 1. First, the filename is checked for the substring "win" (case-insensitive)
+ * anywhere in the basename (after the last '/' or '\'). This acts as a cheap
+ * guard condition.
+ * 2. Only if the filename matches, @ref isWindowsIso performs a structural probe,
+ * checking for common Windows directory structures (efi/microsoft/boot,
+ * sources/install.wim, etc.).
  *
- * Only if BOTH conditions pass (isWindowsIso returns true AND the filename
- * contains "win") does it delegate to @ref writeWindowsIsoToDevice, which
+ * Only if BOTH conditions pass (the filename contains "win" AND isWindowsIso
+ * returns true) does it delegate to @ref writeWindowsIsoToDevice, which
  * creates a FAT32 filesystem and copies files (splitting install.wim if
- * necessary).
+ * necessary). If the filename does not contain "win", the expensive structural
+ * probe is entirely skipped.
  *
  * Examples that would trigger Windows handler:
- *   - /home/win10.iso          ✓ (isWindowsIso true + filename has "win")
- *   - /downloads/Windows11.iso ✓ (isWindowsIso true + filename has "win")
- *   - /iso/win_debug.iso       ✓ (isWindowsIso true + filename has "win")
+ * - /home/win10.iso         ✓ (filename has "win" + isWindowsIso true)
+ * - /downloads/Windows11.iso ✓ (filename has "win" + isWindowsIso true)
+ * - /iso/win_debug.iso       ✓ (filename has "win" + isWindowsIso true)
  *
  * Examples that would NOT trigger Windows handler:
- *   - /windows/larp.iso        ✗ (isWindowsIso true but filename lacks "win")
- *   - /home/debian.iso         ✗ (isWindowsIso false)
- *   - /iso/random.iso          ✗ (isWindowsIso false)
+ * - /windows/larp.iso        ✗ (filename lacks "win" - skips isWindowsIso probe)
+ * - /home/debian.iso         ✗ (filename lacks "win" - skips isWindowsIso probe)
+ * - /iso/win_fake.iso        ✗ (filename has "win" but isWindowsIso returns false)
  *
  * For all other ISOs (Linux, UEFI bootable, etc.) that fail either condition,
  * it performs a raw O_DIRECT block-level write.
@@ -586,7 +590,7 @@ bool isValidIso9660(int fd) {
  *
  * **Progress Tracking:**
  * - Bytes written, completion percentage, and write speed are atomically updated
- *   in @c progressData[progressIndex]
+ * in @c progressData[progressIndex]
  * - Speed is calculated every 300ms using a sliding window of bytes written
  * - Final average speed is stored upon completion
  *
@@ -601,22 +605,22 @@ bool isValidIso9660(int fd) {
  * - Detects partial writes and continues until all data is transferred
  * - Marks progress entry as failed on unrecoverable errors
  *
- * @param isoPath       Absolute path to the source ISO image file.
- * @param device        Absolute path to the target block device (e.g., "/dev/sdb").
- * @param progressIndex Index into the global @ref progressData array for this task.
+ * @param isoPath        Absolute path to the source ISO image file.
+ * @param device         Absolute path to the target block device (e.g., "/dev/sdb").
+ * @param progressIndex  Index into the global @ref progressData array for this task.
  *
  * @return true if the ISO was written successfully, validated, and not cancelled;
- *         false otherwise (I/O error, invalid ISO, device error, or cancellation).
+ * false otherwise (I/O error, invalid ISO, device error, or cancellation).
  *
- * @note Windows detection requires BOTH the ISO structure probe AND the
- *       filename containing "win" to succeed. This prevents false positives
- *       from ISOs that contain Windows directories but aren't Windows install media.
- * @note The function opens a fresh file descriptor for the ISO after the Windows
- *       probe to ensure the probe's side effects don't corrupt the O_DIRECT path.
+ * @note Windows detection requires BOTH the filename containing "win" AND the ISO
+ * structure probe to succeed. The lightweight filename check is evaluated first
+ * to prevent expensive disk I/O probes on unrelated media (e.g., Linux distros).
+ * @note The function opens a fresh file descriptor for the ISO after a successful Windows
+ * probe to ensure the probe's side effects don't corrupt the O_DIRECT path.
  * @note O_DIRECT requires sector-aligned buffers, offsets, and sizes. This function
- *       guarantees alignment by using posix_memalign() and padding the final sector.
+ * guarantees alignment by using posix_memalign() and padding the final sector.
  * @note For Windows ISOs that pass detection, see @ref writeWindowsIsoToDevice for
- *       its specific behavior and requirements.
+ * its specific behavior and requirements.
  * @see isWindowsIso
  * @see isValidIso9660
  * @see writeWindowsIsoToDevice
