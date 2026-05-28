@@ -624,19 +624,19 @@ bool isValidIso9660(int fd) {
  * @see progressData
  */
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex) {
-    // Probe for Windows installation media and delegate if detected
-    if (isWindowsIso(isoPath)) {
-        auto getFilename = [](const std::string& path) -> std::string {
-            size_t lastSlash = path.find_last_of("/\\");
-            return (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
-        };
+    // Extract and check the filename first
+    auto getFilename = [](const std::string& path) -> std::string {
+        size_t lastSlash = path.find_last_of("/\\");
+        return (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
+    };
 
-        std::string filename = getFilename(isoPath);
-        std::string lowerFilename = filename;
-        std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(), ::tolower);
+    std::string filename = getFilename(isoPath);
+    std::string lowerFilename = filename;
+    std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(), ::tolower);
 
-        // Pass if contains "win" anywhere (case-insensitive) - C++20 compatible
-        if (lowerFilename.find("win") != std::string::npos) {
+    // 2. Only probe the ISO if the filename actually contains "win"
+    if (lowerFilename.find("win") != std::string::npos) {
+        if (isWindowsIso(isoPath)) {
             return writeWindowsIsoToDevice(isoPath, device, progressIndex);
         }
     }
