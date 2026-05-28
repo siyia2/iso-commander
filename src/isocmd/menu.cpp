@@ -99,7 +99,7 @@ void submenu1(std::atomic<bool>& isAtISOList,
         clearScrollBuffer();
 
         std::cout << color << "+-------------------------+\n"
-                  << "|↵ Manage ISO              |\n"
+                  << "|      ↵ ManageISO         |\n"
                   << "+-------------------------+\n"
                   << "|1. Mount                 |\n"
                   << "+-------------------------+\n"
@@ -193,7 +193,7 @@ void submenu2(std::shared_ptr<RefreshState> state) {
         clearScrollBuffer();
 
         std::cout << color << "+-------------------------+  \n"
-                  << "|↵ Convert2ISO             |\n"
+                  << "|     ↵ Convert2ISO        |\n"
                   << "+-------------------------+\n"
                   << "|1. CCD2ISO++             |\n"
                   << "+-------------------------+\n"
