@@ -767,22 +767,29 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
 
     auto displayAllProgress = [&]() {
+        // Compute max filename length once per render
+        size_t maxFilenameLen = 0;
+        for (const auto& prog : progressData)
+            maxFilenameLen = std::max(maxFilenameLen, prog.filename.size());
+
         for (size_t i = 0; i < progressData.size(); ++i) {
             const auto& prog = progressData[i];
             std::string currentSize = formatFileSize(prog.bytesWritten.load());
             const std::string& displayTotal = prog.completed.load() ? currentSize : prog.totalSize;
 
+            // Pad filename with spaces to align the arrow
+            std::string paddedFilename = prog.filename;
+            paddedFilename.resize(maxFilenameLen, ' ');
+
             std::cout << "\033[K"
-                      << wt.fileCol << prog.filename << " " << wt.bold << "→ {"
+                      << wt.fileCol << paddedFilename << " " << wt.bold << "→ {"
                       << wt.deviceCol << prog.device << wt.bold << " <"
                       << deviceNames[prog.device] << "> (" << wt.sizeCol
                       << deviceSizeStrs[prog.device] << wt.bold << ")} " << wt.bold;
-
-            if (prog.completed.load())                             std::cout << wt.colorSuccess << "DONE";
-            else if (prog.failed.load())                           std::cout << wt.colorFailure << "FAIL";
-            else if (GlobalState::g_operationCancelled.load())     std::cout << wt.colorWarning << "CXL";
-            else                                                   std::cout << prog.progress << "%";
-
+            if (prog.completed.load())                          std::cout << wt.colorSuccess << "DONE";
+            else if (prog.failed.load())                        std::cout << wt.colorFailure << "FAIL";
+            else if (GlobalState::g_operationCancelled.load())  std::cout << wt.colorWarning << "CXL";
+            else                                                std::cout << prog.progress << "%";
             std::cout << wt.bold << " [" << wt.headerCol << currentSize << "/" << wt.sizeCol << displayTotal << wt.bold << "] "
                       << wt.speedCol << formatSpeed(prog.speed) << (prog.completed.load() ? " (avg)" : "") << wt.bold << "\n";
         }
