@@ -748,7 +748,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     std::cout << "\n" << wt.colorStatus << "Processing "
               << (totalTasks > 1 ? "tasks" : "task") << " for "
               << UI::Palette::Yellow << "write2usb" << wt.colorStatus
-              << " operation... (" << UI::Palette::Red << "Ctrl+c"
+              << "... (" << UI::Palette::Red << "Ctrl+c"
               << wt.colorStatus << ":cancel)\n\n";
     std::cout << "\033[s";
 
