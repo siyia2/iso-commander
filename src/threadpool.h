@@ -81,7 +81,8 @@ private:
 
     template <typename F>
     static void destroy_heap_impl(void* ptr) noexcept {
-        std::launder(static_cast<std::unique_ptr<F>*>(ptr))->~unique_ptr();
+        using Box = std::unique_ptr<F>;
+        std::launder(static_cast<Box*>(ptr))->~Box();
     }
 
     template <typename F>
@@ -436,7 +437,9 @@ public:
             }
         }));
 
-        if (sleeping_threads.load(std::memory_order_relaxed) > 0) {
+        // If threads are actively asleep, OR if this is the only task in the queue, signal a worker.
+        uint64_t current_state = task_state.load(std::memory_order_acquire);
+        if (sleeping_threads.load(std::memory_order_relaxed) > 0 || pendingFromState(current_state) <= 1) {
             std::lock_guard<std::mutex> lock(mutex);
             cv.notify_one();
         }
