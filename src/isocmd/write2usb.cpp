@@ -129,8 +129,8 @@ bool isWindowsIso(const std::string& isoPath) {
  *
  * @par Progress reporting
  * Progress, speed, and completion state are written atomically to
- * @c progressData[progressIndex]. Updates are emitted at most every 250 ms
- * during file copy; the clock is sampled on every 8 MiB chunk (~160 ms at
+ * @c progressData[progressIndex]. Updates are emitted at most every 300 ms
+ * during file copy; the clock is sampled on every 8 MiB chunk (~200 ms at
  * USB 3.0 speeds). There is no long blocking phase after formatting.
  *
  * @par Copy strategy
@@ -300,7 +300,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     auto startTime  = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
     uint64_t bytesInWindow = 0;
-    constexpr int    UPDATE_INTERVAL_MS = 250;
+    constexpr int    UPDATE_INTERVAL_MS = 300;
     auto updateProgress = [&](uint64_t justCopied) {
         progressData[progressIndex].bytesWritten.fetch_add(justCopied);
         bytesInWindow += justCopied;
@@ -462,7 +462,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
  * requirements. Progress, speed, and completion state are written atomically
  * to @c progressData[progressIndex].
  *
- * Speed is recalculated every 250 ms using a sliding byte window.
+ * Speed is recalculated every 300 ms using a sliding byte window.
  * The write loop checks @c GlobalState::g_operationCancelled before each
  * iteration and exits cleanly without marking the task as failed when a
  * cancellation is detected. @c fsync is called on the device fd only if
@@ -537,7 +537,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     auto startTime  = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
     uint64_t bytesInWindow = 0;
-    constexpr int UPDATE_INTERVAL_MS = 250;
+    constexpr int UPDATE_INTERVAL_MS = 300;
 
     auto updateSpeed = [&](auto now) {
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate);
