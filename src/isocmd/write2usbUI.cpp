@@ -684,28 +684,41 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 }
 
 /**
- * @brief Dispatches ISO-to-device write tasks to the thread pool and tracks progress.
+ * @brief Enqueues ISO-to-device write tasks and drives a live progress display.
  *
- * Initialises @ref progressData for each pair, caches device information (names,
- * sizes, formatted strings), enqueues one @ref writeIsoToDevice call per pair
- * in the global thread pool, and runs a background display thread that redraws
- * per-task progress (percentage, bytes written, speed) at 100 ms intervals using
- * ANSI cursor save/restore sequences. On completion or cancellation, prints a
- * summary line with overall status (COMPLETED / PARTIAL / FAILED / INTERRUPTED)
- * and elapsed time.
+ * For each validated (IsoInfo, device) pair:
+ * - Initialises a @ref ProgressInfo entry in @ref progressData
+ * - Caches device names, sizes, and formatted size strings
+ * - Submits one @ref writeIsoToDevice call to the global @ref ThreadPool
  *
- * When Ctrl+C is detected (@ref GlobalState::g_operationCancelled), the function:
- * - Stops waiting for remaining futures immediately
- * - Disables further SIGINT handling
- * - Allows already-enqueued writes to finish naturally (they check the flag)
- * - Waits only for the progress display thread to exit
+ * A background thread redraws per-task status at 100 ms intervals using ANSI
+ * cursor save/restore (ESC[s / ESC[u). Each row shows:
+ * filename → {device <model> (size)} percentage [written/total] speed
  *
- * The function blocks until either:
- * - All futures resolve AND the progress thread exits (normal completion), OR
- * - Cancellation occurs (waits only for progress thread, abandons remaining futures)
+ * Status tokens per row: DONE (success), FAIL (error), CXL (cancelled),
+ * or a live percentage.
  *
- * @param validPairs Validated (IsoInfo, device) pairs produced by
- *                   @ref collectDeviceMappings
+ * @par Cancellation (Ctrl+C / SIGINT)
+ * When @ref GlobalState::g_operationCancelled is set:
+ * -# The future-polling loop exits immediately.
+ * -# SIGINT is suppressed (SIG_IGN).
+ * -# In-flight writes continue and drain naturally (they poll the flag).
+ * -# The function waits only for the progress thread, then returns.
+ *
+ * @par Normal completion
+ * All futures are polled to completion, then the progress thread is joined.
+ *
+ * @par Summary line
+ * Printed above the progress rows on exit:
+ * - @b COMPLETED — all tasks succeeded
+ * - @b PARTIAL   — at least one succeeded and at least one failed
+ * - @b FAILED    — all tasks failed
+ * - @b INTERRUPTED — cancelled before all tasks finished
+ *
+ * Elapsed time and a succeeded/total count are printed below.
+ *
+ * @param validPairs Validated (IsoInfo, device) pairs from
+ *                   @ref collectDeviceMappings.
  */
 void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairs) {
     progressData.clear();
