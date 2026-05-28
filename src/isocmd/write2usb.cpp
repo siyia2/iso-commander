@@ -147,10 +147,8 @@ bool isWindowsIso(const std::string& isoPath) {
  * triggering eager metadata writeback on ntfs3.
  *
  * @par Flush strategy
- * After all files are copied, each partition file descriptor is flushed with
- * @c fsync() before unmounting. The partition fds are used (rather than the
- * raw block device) so that the flush passes through the VFS layer and
- * includes filesystem-level buffers (journal, NTFS log).
+ * After all files are copied, the device is flushed with
+ *  @c fsync() before unmounting.
  *
  * @par Cancellation
  * @c GlobalState::g_operationCancelled is checked before and during every
