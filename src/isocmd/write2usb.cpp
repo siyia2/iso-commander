@@ -489,27 +489,30 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 }
 
 /**
- * @brief Validates that a file descriptor refers to a valid ISO 9660 filesystem layout.
+ * @brief Validates that a file descriptor refers to a valid ISO 9660 filesystem image.
  *
- * This function performs a stateless verification of the primary volume descriptor.
- * By utilizing positional I/O (@c pread), it queries Sector 16 directly without
- * modifying the file descriptor's internal offset cursor, ensuring safety across
- * concurrent access pipelines.
+ * Reads the Primary Volume Descriptor at Sector 16 (byte offset 32768) using
+ * positional I/O, leaving the file descriptor's offset cursor unmodified.
  *
- * @param fd An open, readable file descriptor referencing the target image file.
- * @return @c true if Sector 16 contains a Primary Volume Descriptor (Type 1) matching
- * standard validation signatures ("CD001" or "CDROM"); otherwise @c false.
+ * Checks performed:
+ *   - Descriptor type byte (buffer[0]) must equal 0x01 (Primary Volume Descriptor).
+ *   - Standard Identifier bytes 1–5 must equal "CD001" (ECMA-119 §8.1).
+ *
+ * @param fd  An open, readable file descriptor referencing the target image.
+ * @return    @c true if Sector 16 contains a valid ISO 9660 Primary Volume Descriptor;
+ *            @c false if the read fails, the descriptor type is wrong, or the
+ *            identifier does not match.
  */
 bool isValidIso9660(int fd) {
     uint8_t buffer[2048];
-    // Directly pread Sector 16 (Offset 32768) to protect file offset state
     if (pread(fd, buffer, sizeof(buffer), 32768) != 2048) return false;
 
-    if (buffer[0] == 1) {
-        std::string_view id(reinterpret_cast<char*>(buffer + 1), 5);
-        if (id == "CD001" || id == "CDROM") return true;
-    }
-    return false;
+    // buffer[0]: Volume Descriptor Type — 0x01 = Primary Volume Descriptor (ECMA-119 §8.3).
+    // buffer[1..5]: Standard Identifier — must be "CD001" (ECMA-119 §8.1).
+    if (buffer[0] != 0x01) return false;
+
+    std::string_view id(reinterpret_cast<char*>(buffer + 1), 5);
+    return id == "CD001";
 }
 
 /**

@@ -53,22 +53,29 @@ extern "C" const char* __lsan_default_suppressions() {
 /**
  * @brief Checks if a file is a valid disk image (ISO 9660 or UDF).
  *
- * Checks in order: ISO 9660, UDF (sector sizes 2048/512/4096).
+ * Checks in order: ISO 9660 Primary Volume Descriptor, then UDF Volume
+ * Recognition Sequence across sector sizes 2048, 512, and 4096 bytes.
  *
  * @param path Filesystem path to the file to be checked.
  * @return true if a recognised disk image signature is found, false otherwise.
  *
  * @note Performs binary reads only; does not modify the file.
- * @note UDF detection probes sectors {16, 17, 18, 19, 256} across sector sizes
- *       2048, 512, and 4096 bytes for broad media support.
+ * @note ISO 9660 detection requires descriptor type 0x01 and identifier "CD001"
+ *       at sector 16 (ECMA-119 §8.1).
+ * @note UDF detection probes sectors {16, 17, 18, 19} across sector sizes 2048,
+ *       512, and 4096 bytes. Sector 256 (Anchor Volume Descriptor Pointer) is
+ *       excluded as it does not carry VRS identifiers. 2048-byte sectors are
+ *       probed first as the common case.
  * @note Requires a minimum file size of 34816 bytes.
  *
  * @warning May return true for truncated images that still contain valid magic bytes.
  *
- * @see ISO 9660 ECMA-119, UDF OSTA standard.
+ * @see ECMA-119 (ISO 9660), ECMA-167 §7.2 (UDF VRS).
  */
 static bool isValidIsoFile(const std::string& path) {
     const int fd = open(path.c_str(), O_RDONLY | O_NOATIME | O_CLOEXEC);
+    // Note: O_NOATIME silently has no effect if caller doesn't own the file;
+    // open() still succeeds, so this is safe for a read-only validator.
     if (fd < 0) return false;
 
     struct stat st;
@@ -77,11 +84,10 @@ static bool isValidIsoFile(const std::string& path) {
         return false;
     }
     const off_t fileSize = st.st_size;
-
     posix_fadvise(fd, 0, 0, POSIX_FADV_RANDOM);
 
-    char sig[5];
-
+    // Buffer scoped inside lambda to avoid stale data across reads.
+    char sig[6]{};
     auto readAt = [&](off_t offset, std::size_t n) -> bool {
         if (offset + static_cast<off_t>(n) > fileSize) return false;
         return pread(fd, sig, n, offset) == static_cast<ssize_t>(n);
@@ -89,17 +95,28 @@ static bool isValidIsoFile(const std::string& path) {
 
     bool found = false;
 
-    // --- 1. ISO 9660 (CD001) at sector 16, byte offset +1 ---
-    if (readAt(32769, 5) && std::string_view(sig, 5) == "CD001") {
-        found = true;
+    // --- 1. ISO 9660: Primary Volume Descriptor at sector 16 ---
+    // Byte 0 of the sector is the descriptor type; type 1 = Primary Volume Descriptor.
+    // Identifier at bytes 1–5 must be "CD001" (ECMA-119 §8.1).
+    if (readAt(32768, 6)) {
+        if (sig[0] == 0x01 && std::string_view(sig + 1, 5) == "CD001")
+            found = true;
     }
 
     // --- 2. UDF Volume Recognition Sequence ---
+    // The VRS occupies sectors 16–19 (and optionally beyond) using 2048-byte sectors
+    // per ECMA-167 §7.2. Sector sizes 512 and 4096 are probed for non-standard images.
+    // 2048 is listed first as it is overwhelmingly the common case.
+    //
+    // Sector 256 (UDF Anchor VDP) is intentionally excluded: the tokens below
+    // (BEA01, NSR0x, TEA01) are VRS identifiers and are not present at the anchor.
     if (!found) {
-        static constexpr int kUdfSectors[]  = {16, 17, 18, 19, 256};
+        static constexpr int kUdfSectors[]  = {16, 17, 18, 19};
         static constexpr int kSectorSizes[] = {2048, 512, 4096};
+
         for (const int secSize : kSectorSizes) {
             for (const int sector : kUdfSectors) {
+                // VRS structure identifier begins at byte 1 of each sector (byte 0 is type).
                 if (!readAt(static_cast<off_t>(sector) * secSize + 1, 5)) continue;
                 std::string_view sv(sig, 5);
                 if (sv == "BEA01" || sv == "NSR02" || sv == "NSR03" || sv == "TEA01") {
