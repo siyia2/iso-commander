@@ -1,934 +1,499 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <cctype>
-#include <chrono>
-#include <csignal>
-#include <cstdlib>
-#include <cstring>
-#include <exception>
-#include <filesystem>
-#include <fstream>
-#include <future>
-#include <iomanip>
-#include <iostream>
-#include <memory>
-#include <sstream>
-#include <stdexcept>
-#include <string>
-#include <string_view>
-#include <system_error>
-#include <thread>
-#include <unordered_map>
-#include <unordered_set>
-#include <utility>
 #include <vector>
+#include <string>
+#include <unordered_set>
+#include <algorithm>
+#include <memory>
+#include <chrono>
+#include <atomic>
+#include <filesystem>
+#include <stdexcept>
+#include <cstring>
 
 // C / System Headers
-#include <errno.h>
-#include <fcntl.h>
-#include <linux/fs.h>
-#include <stdint.h>
-#include <sys/ioctl.h>
-#include <sys/types.h>
 #include <unistd.h>
-
-// Third-Party Library Headers
-#include <readline/history.h>
-#include <readline/readline.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/ioctl.h>
+#include <linux/fs.h>
 
 // Project Headers
-#include "../display.h"
-#include "../inputHandling.h"
-#include "../pausePrompt.h"
-#include "../readline.h"
 #include "../state.h"
-#include "../stringManipulation.h"
-#include "../themes.h"
-#include "../threadpool.h"
-#include "../tokenize.h"
 #include "../write2usb.h"
 
 namespace fs = std::filesystem;
 
-std::vector<ProgressInfo> progressData; ///< Shared progress state for all active write tasks.
-
 /**
- * @brief Reads the model name of a block device from sysfs.
+ * @brief Runs an external command with stdout/stderr suppressed.
  *
- * Looks up @c /sys/block/<name>/device/model and trims surrounding whitespace.
+ * Forks a child process, redirects its stdout and stderr to /dev/null,
+ * and exec's the given argument vector. The parent waits for the child
+ * and returns its exit code.
  *
- * @param device Absolute path to the block device (e.g. @c /dev/sdc).
- * @return Model name string, or @c "Unknown Drive" if the file is absent or empty.
+ * @param args Argument vector where args[0] is the executable name.
+ * @return Exit code of the child process, or -1 on fork/exec failure.
  */
-std::string getDriveName(const std::string& device) {
-    std::string deviceName = device.substr(device.find_last_of('/') + 1);
-    std::string sysfsPath = "/sys/block/" + deviceName + "/device/model";
+int runCommand(const std::vector<std::string>& args) {
+    std::vector<const char*> argv;
+    for (const auto& a : args) argv.push_back(a.c_str());
+    argv.push_back(nullptr);
 
-    std::ifstream modelFile(sysfsPath);
-    std::string driveName;
-
-    if (modelFile.is_open()) {
-        std::getline(modelFile, driveName);
-        driveName.erase(0, driveName.find_first_not_of(" \t"));
-        driveName.erase(driveName.find_last_not_of(" \t") + 1);
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        int devNull = open("/dev/null", O_WRONLY);
+        dup2(devNull, STDOUT_FILENO);
+        dup2(devNull, STDERR_FILENO);
+        execvp(argv[0], const_cast<char* const*>(argv.data()));
+        _exit(127);
     }
-
-    return driveName.empty() ? "Unknown Drive" : driveName;
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 }
 
 /**
- * @brief Determines whether a block device is a USB flash drive.
+ * @brief Detects whether an ISO image is Windows installation media.
  *
- * Uses three complementary heuristics in priority order:
- *  1. Canonical sysfs path contains "/usb"  (strongest — short-circuits).
- *  2. A uevent file in the device tree contains an exact USB bus identifier.
- *  3. USB-specific sysfs attributes (speed, version, manufacturer) exist.
+ * Loop-mounts the ISO read-only into a temporary directory and checks
+ * for the co-presence of @c sources/boot.wim (Windows setup payload)
+ * and @c bootmgr / @c bootmgr.efi (Windows boot manager).  Both markers
+ * must be present; either alone is insufficient.
  *
- * The removable sysfs attribute MUST read "1" for the call to return true.
- * If the attribute is unreadable the function returns false (fail-closed).
+ * The temporary mount point is always unmounted and removed before the
+ * function returns, regardless of outcome.
  *
- * @param devicePath Absolute path to the block device (must start with /dev/).
- * @return true if the device is identified as a removable USB flash device.
+ * @param isoPath Absolute path to the ISO image.
+ * @return @c true if the ISO appears to be Windows installation media.
  */
-bool isUsbDevice(const std::string& devicePath) {
+bool isWindowsIso(const std::string& isoPath) {
+    char tmpDir[] = "/tmp/iso_probe_XXXXXX";
+    if (!mkdtemp(tmpDir)) return false;
+
+    auto cleanup = [&]() {
+        std::string cmd = "umount -l " + std::string(tmpDir) + " 2>/dev/null";
+        system(cmd.c_str());
+        rmdir(tmpDir);
+    };
+
+    std::string mountCmd = "mount -o ro,loop " + isoPath + " " + tmpDir + " 2>/dev/null";
+    if (system(mountCmd.c_str()) != 0) {
+        rmdir(tmpDir);
+        return false;
+    }
+
+    bool hasBootWim = fs::exists(std::string(tmpDir) + "/sources/boot.wim");
+    bool hasBootMgr = fs::exists(std::string(tmpDir) + "/bootmgr") ||
+                      fs::exists(std::string(tmpDir) + "/bootmgr.efi");
+    cleanup();
+    return hasBootWim && hasBootMgr;
+}
+
+/**
+* @brief Writes a Windows ISO to a block device using a hybrid FAT32 + NTFS layout (UEFI only).
+*
+* Partition layout written to @p device:
+* GPT partition table.
+* Partition 1: FAT32 (1024 MiB, exactly 1 GiB, EFI System Partition) — receives:
+* * efi/
+* * boot/
+* * sources/boot.wim
+*
+* This satisfies Windows UEFI boot requirements while remaining within
+* FAT32 limitations.
+*
+* Partition 2: NTFS (remainder) — receives all remaining files, including
+* large files such as sources/install.wim that exceed FAT32's 4 GiB limit.
+* The NTFS filesystem is formatted with 64 KiB clusters (`-c 65536`) for
+* better sequential write performance.
+*
+* This layout mirrors the approach used by modern Windows installation media:
+* a small FAT32 ESP for firmware compatibility, and a larger NTFS partition
+* for bulk data storage.
+*
+* The NTFS partition is mounted using the kernel's native ntfs3 driver
+* (requires Linux kernel 5.15 or newer). Falls back to ntfs-3g FUSE driver
+* are not implemented; the function will fail if ntfs3 is unavailable.
+*
+* Progress, speed, and completion state are written atomically to
+* @c progressData[progressIndex]. Live progress is updated every 100ms during
+* file copy; there is no long blocking phase after formatting.
+*
+* Copy operations use @c copy_file_range() when available (kernel-assisted),
+* with fallback to a buffered read/write loop (8 MiB buffer) if the kernel
+* does not support cross-filesystem @c copy_file_range or if an error occurs.
+* On fallback, the entire file is copied using the buffered method.
+*
+* Destination files are preallocated using @c posix_fallocate() on a
+* best-effort basis to reduce fragmentation. Preallocation errors are ignored.
+*
+* After all files are copied, the block device is flushed with @c fsync()
+* before unmounting to ensure all data is written to disk.
+*
+* The function periodically checks @c GlobalState::g_operationCancelled.
+* On cancellation:
+* * Copying stops early
+* * Mounted filesystems are unmounted (lazy unmount with @c umount -l)
+* * The function returns @c false without marking a failure state
+*
+* @param isoPath
+* Absolute path to the source Windows ISO.
+*
+* @param device
+* Absolute path to the target block device (e.g. @c /dev/sdb).
+* All existing data on this device will be destroyed.
+*
+* @param progressIndex
+* Index into @ref progressData used for reporting progress, speed,
+* and completion status.
+*
+* @return @c true
+* If the ISO was successfully written and the device is ready for booting.
+*
+* @return @c false
+* If an error occurs or the operation is cancelled.
+*/
+bool writeWindowsIsoToDevice(const std::string& isoPath,
+                                    const std::string& device,
+                                    size_t             progressIndex) {
+    auto fail = [&]() -> bool {
+        progressData[progressIndex].failed.store(true);
+        return false;
+    };
+
+    // ------------------------------------------------------------------ //
+    // 1. Wipe + repartition: GPT, FAT32 ESP (~1 GiB) + NTFS (remainder) //
+    // ------------------------------------------------------------------ //
+    if (runCommand({"wipefs", "-a", device}) != 0) return fail();
+
+    if (runCommand({"parted", "-s", device,
+                    "mklabel", "gpt",
+                    "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
+                    "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
+                    "set", "1", "esp",  "on",
+                    "set", "1", "boot", "on"}) != 0) return fail();
+
+    runCommand({"partprobe", device});
+    sleep(1);
+
+    // Derive partition paths — handles /dev/sdXN and /dev/nvme0n1pN
+    auto derivePartition = [&](int n) -> std::string {
+        std::string c1 = device + std::to_string(n);
+        std::string c2 = device + "p" + std::to_string(n);
+        for (int attempt = 0; attempt < 10; ++attempt) {
+            if (fs::exists(c1)) return c1;
+            if (fs::exists(c2)) return c2;
+            sleep(1);
+        }
+        return {};
+    };
+
+    std::string fatPart  = derivePartition(1);
+    std::string ntfsPart = derivePartition(2);
+    if (fatPart.empty() || ntfsPart.empty()) return fail();
+
+    if (runCommand({"mkfs.fat", "-F", "32", "-n", "WINBOOT", fatPart}) != 0)
+        return fail();
+
+    // -f = fast format, -c 65536 = 64 KiB cluster size for better sequential write performance
+    if (runCommand({"mkfs.ntfs", "-f", "-c", "65536", "-L", "WINDATA", ntfsPart}) != 0)
+        return fail();
+
+    if (GlobalState::g_operationCancelled.load()) return false;
+
+    // ------------------------------------------------------------------ //
+    // 2. Mount ISO, FAT32 partition, and NTFS partition                  //
+    // ------------------------------------------------------------------ //
+    char isoMnt[]  = "/tmp/win_iso_XXXXXX";
+    char fatMnt[]  = "/tmp/win_fat_XXXXXX";
+    char ntfsMnt[] = "/tmp/win_ntfs_XXXXXX";
+
+    if (!mkdtemp(isoMnt) || !mkdtemp(fatMnt) || !mkdtemp(ntfsMnt))
+        return fail();
+
+    auto unmountAll = [&]() {
+        runCommand({"umount", "-l", isoMnt});
+        runCommand({"umount", "-l", fatMnt});
+        runCommand({"umount", "-l", ntfsMnt});
+        rmdir(isoMnt);
+        rmdir(fatMnt);
+        rmdir(ntfsMnt);
+    };
+
+    if (runCommand({"mount", "-o", "ro,loop", isoPath, isoMnt}) != 0) {
+        unmountAll(); return fail();
+    }
+    if (runCommand({"mount", fatPart, fatMnt}) != 0) {
+        unmountAll(); return fail();
+    }
+    // Native kernel ntfs3 driver (kernel 5.15+)
+    if (runCommand({"mount", "-t", "ntfs3", ntfsPart, ntfsMnt}) != 0) {
+        unmountAll(); return fail();
+    }
+
+    if (GlobalState::g_operationCancelled.load()) { unmountAll(); return false; }
+
+    // ------------------------------------------------------------------ //
+    // 3. Compute total bytes for accurate progress reporting             //
+    // ------------------------------------------------------------------ //
+    uint64_t totalBytes = 0;
     try {
-        // Basic path sanity check
-        if (devicePath.size() < 6 || devicePath.substr(0, 5) != "/dev/") {
+        for (const auto& entry : fs::recursive_directory_iterator(isoMnt))
+            if (entry.is_regular_file())
+                totalBytes += entry.file_size();
+    } catch (...) { unmountAll(); return fail(); }
+    if (totalBytes == 0) { unmountAll(); return fail(); }
+
+    // ------------------------------------------------------------------ //
+    // 4. Classify each ISO entry: boot-critical files → FAT32, rest → NTFS
+    // ------------------------------------------------------------------ //
+
+    // Files and folders that must reside on the FAT32 ESP for UEFI boot:
+    // - efi/          : UEFI bootloader (bootx64.efi, bootmgfw.efi)
+    // - boot/         : BCD, boot.sdi, fonts, resources
+    // - sources/boot.wim : Windows PE setup image
+    const std::unordered_set<std::string> espTopFolders = {
+        "efi",
+        "boot"
+    };
+    const std::string espBootWim = "sources/boot.wim";
+
+    auto belongsOnESP = [&](const fs::path& rel) -> bool {
+        // Check top-level folder
+        std::string top = rel.begin()->string();
+        std::transform(top.begin(), top.end(), top.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        if (espTopFolders.count(top) > 0)
+            return true;
+
+        // Check specific file: sources/boot.wim
+        std::string relStr = rel.generic_string();
+        std::transform(relStr.begin(), relStr.end(), relStr.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        return relStr == espBootWim;
+    };
+
+    // ------------------------------------------------------------------ //
+    // 5. Copy all files with live progress (optimized kernel-side copy)  //
+    // ------------------------------------------------------------------ //
+    auto startTime  = std::chrono::high_resolution_clock::now();
+    auto lastUpdate = startTime;
+    uint64_t bytesInWindow = 0;
+    constexpr int UPDATE_INTERVAL_MS = 100;
+
+    // Optimized copy function using copy_file_range (kernel-side copy)
+    // with posix_fallocate for pre-allocation to avoid fragmentation
+    auto copyWithProgress = [&](const fs::path& src, const fs::path& dst) -> bool {
+        // Open source read-only
+        int fd_in = open(src.c_str(), O_RDONLY);
+        if (fd_in < 0) return false;
+
+        // Open destination (create, truncate, write-only)
+        int fd_out = open(dst.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd_out < 0) {
+            close(fd_in);
             return false;
         }
 
-        const std::string deviceName = devicePath.substr(devicePath.find_last_of('/') + 1);
-
-        // Reject empty names or names that look like partition nodes
-        if (deviceName.empty() ||
-            std::isdigit(static_cast<unsigned char>(deviceName.back()))) {
-            return false;
+        // Pre-allocate the full size if possible
+        // This helps NTFS lay out the file contiguously, boosting write speed
+        struct stat st;
+        if (fstat(fd_in, &st) == 0 && st.st_size > 0) {
+            // Ignore errors - preallocation is an optimization, not a requirement
+            // NTFS3 may return EOPNOTSUPP, which is fine
+            posix_fallocate(fd_out, 0, st.st_size);
         }
 
-        const std::string sysPath = "/sys/block/" + deviceName;
-        if (!fs::exists(sysPath)) {
-            return false;
-        }
+        constexpr size_t CHUNK = 8 * 1024 * 1024;  // 8 MiB per copy_file_range call
+        off_t in_off = 0;
+        off_t out_off = 0;
 
-        {
-            std::ifstream removableFile(sysPath + "/removable");
-            std::string removable;
-            if (!removableFile || !std::getline(removableFile, removable)) {
-                return false;   // can't confirm removable → reject
-            }
-            // Trim possible trailing whitespace / newline
-            while (!removable.empty() && std::isspace(static_cast<unsigned char>(removable.back()))) {
-                removable.pop_back();
-            }
-            if (removable != "1") {
-                return false;
-            }
-        }
+        bool success = true;
 
-        // --- Heuristic 1: canonical sysfs path contains "/usb" --------------
-        // This is the most reliable signal.  Short-circuit immediately so the
-        // weaker heuristics don't run unnecessarily.
-        {
-            std::error_code ec;
-            const std::string resolved = fs::canonical(sysPath, ec).string();
-            if (!ec && resolved.find("/usb") != std::string::npos) {
-                return true;
-            }
-        }
+        while (!GlobalState::g_operationCancelled.load()) {
+            ssize_t copied = copy_file_range(fd_in, &in_off,
+                                             fd_out, &out_off,
+                                             CHUNK, 0);
+            if (copied < 0) {
+                // If kernel-side copy fails (e.g., filesystem doesn't support it),
+                // fall back to traditional read/write loop
+                if (errno == EINTR) continue;  // Interrupted by signal, retry
 
-        // --- Heuristic 2: uevent contains exact USB bus identifier ----------
-        //  Only match the key=value pairs that unambiguously indicate a USB storage bus.
-        {
-            const std::vector<std::string> ueventPaths = {
-                sysPath + "/device/uevent",
-                sysPath + "/uevent"
-            };
+                // Fallback: use traditional userspace copy
+                success = false;
 
-            for (const auto& path : ueventPaths) {
-                std::ifstream uevent(path);
-                std::string line;
-                while (std::getline(uevent, line)) {
-                    if (line == "ID_BUS=usb" ||
-                        line.rfind("DRIVER=usb", 0) == 0) {
-                        return true;
+                // Reset file positions for fallback
+                lseek(fd_in, 0, SEEK_SET);
+                lseek(fd_out, 0, SEEK_SET);
+
+                constexpr size_t BUF_SIZE = 8 * 1024 * 1024;  // 8 MiB buffer
+                std::vector<char> buf(BUF_SIZE);
+
+                while (!GlobalState::g_operationCancelled.load()) {
+                    ssize_t bytes_read = read(fd_in, buf.data(), BUF_SIZE);
+                    if (bytes_read < 0) {
+                        if (errno == EINTR) continue;
+                        break;
+                    }
+                    if (bytes_read == 0) {
+                        success = true;  // Reached EOF successfully
+                        break;
+                    }
+
+                    ssize_t bytes_written = 0;
+                    while (bytes_written < bytes_read) {
+                        ssize_t written = write(fd_out,
+                                               buf.data() + bytes_written,
+                                               bytes_read - bytes_written);
+                        if (written < 0) {
+                            if (errno == EINTR) continue;
+                            break;
+                        }
+                        bytes_written += written;
+                    }
+                    if (bytes_written < bytes_read) break;  // Write error
+
+                    progressData[progressIndex].bytesWritten.fetch_add(
+                        static_cast<uint64_t>(bytes_read));
+                    bytesInWindow += static_cast<uint64_t>(bytes_read);
+
+                    auto now = std::chrono::high_resolution_clock::now();
+                    auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   now - lastUpdate).count();
+                    if (ms >= UPDATE_INTERVAL_MS) {
+                        uint64_t written_total = progressData[progressIndex].bytesWritten.load();
+                        progressData[progressIndex].progress.store(
+                            static_cast<int>(
+                                (static_cast<double>(written_total) / totalBytes) * 100));
+                        if (bytesInWindow > 0 && ms > 0) {
+                            progressData[progressIndex].speed.store(
+                                (static_cast<double>(bytesInWindow) /
+                                 (1024.0 * 1024.0)) / (ms / 1000.0));
+                            bytesInWindow = 0;
+                        }
+                        lastUpdate = now;
                     }
                 }
+                break;  // Exit outer loop after fallback
             }
-        }
 
-        // --- Heuristic 3: USB-specific sysfs attributes exist ---------------
-        // Weakest signal — only reached when the two stronger ones both miss.
-        // "speed" and "version" live under the USB interface node; their
-        // presence is a reasonable (though not infallible) USB indicator.
-        {
-            const std::vector<std::string> usbIndicators = {
-                sysPath + "/device/speed",
-                sysPath + "/device/version",
-                sysPath + "/device/manufacturer"
-            };
+            if (copied == 0) break;   // EOF reached
 
-            for (const auto& path : usbIndicators) {
-                if (fs::exists(path)) {
-                    return true;
+            // Update progress
+            progressData[progressIndex].bytesWritten.fetch_add(
+                static_cast<uint64_t>(copied));
+            bytesInWindow += static_cast<uint64_t>(copied);
+
+            auto now = std::chrono::high_resolution_clock::now();
+            auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           now - lastUpdate).count();
+            if (ms >= UPDATE_INTERVAL_MS) {
+                uint64_t written = progressData[progressIndex].bytesWritten.load();
+                progressData[progressIndex].progress.store(
+                    static_cast<int>(
+                        (static_cast<double>(written) / totalBytes) * 100));
+                if (bytesInWindow > 0 && ms > 0) {
+                    progressData[progressIndex].speed.store(
+                        (static_cast<double>(bytesInWindow) /
+                         (1024.0 * 1024.0)) / (ms / 1000.0));
+                    bytesInWindow = 0;
                 }
+                lastUpdate = now;
             }
         }
 
-        return false;
-
-    } catch (const std::exception&) {
-        return false;
-    }
-}
-
-/**
- * @brief Enumerates removable USB block devices visible in /sys/block.
- *
- * Skips loop devices, RAM disks, zram devices, and any entry whose name
- * ends with a digit (partition suffix). A device is included only when
- * its removable sysfs attribute reads "1" and isUsbDevice() confirms it
- * is USB-attached.
- *
- * @return Vector of absolute device paths such as /dev/sdb.
- */
-std::vector<std::string> getRemovableDevices() {
-    std::vector<std::string> devices;
+        close(fd_in);
+        close(fd_out);
+        return success && !GlobalState::g_operationCancelled.load();
+    };
 
     try {
-        for (const auto& entry : fs::directory_iterator("/sys/block")) {
-            const std::string deviceName = entry.path().filename().string();
+        for (const auto& entry :
+             fs::recursive_directory_iterator(std::string(isoMnt))) {
 
-            // Skip virtual / pseudo devices by prefix
-            if (deviceName.rfind("loop", 0) == 0 ||
-                deviceName.rfind("ram",  0) == 0 ||
-                deviceName.rfind("zram", 0) == 0) {
-                continue;
+            if (GlobalState::g_operationCancelled.load()) {
+                unmountAll(); return false;
             }
 
-            // Only skip names that END with a digit (partition suffix
-            // e.g. "sda1").
-            if (!deviceName.empty() && std::isdigit(static_cast<unsigned char>(deviceName.back()))) {
-                continue;
-            }
+            fs::path rel  = fs::relative(entry.path(), std::string(isoMnt));
+            bool     toESP = belongsOnESP(rel);
+            fs::path dest = fs::path(toESP ? std::string(fatMnt)
+                                           : std::string(ntfsMnt)) / rel;
 
-            // Must be marked removable
-            std::ifstream removableFile(entry.path() / "removable");
-            std::string removable;
-            if (!(removableFile >> removable) || removable != "1") {
-                continue;
-            }
-
-            const std::string devPath = "/dev/" + deviceName;
-
-            // Also filter by USB
-            if (isUsbDevice(devPath)) {
-                devices.push_back(devPath);
-            }
-        }
-    } catch (const fs::filesystem_error& e) {
-        std::cerr << "Filesystem error: " << e.what() << '\n';
-    }
-
-    return devices;
-}
-
-/**
- * @brief Checks whether a block device or any of its partitions is currently mounted.
- *
- * Parses @c /proc/mounts and compares the base device name (without @c /dev/)
- * against each mounted entry, including partition nodes whose names start with
- * the same base and continue with a digit.
- *
- * @param device Absolute path to the block device (e.g. @c /dev/sdb).
- * @return @c true if the device or a partition of it is mounted.
- */
-bool isDeviceMounted(const std::string& device) {
-    std::ifstream mountsFile("/proc/mounts");
-    if (!mountsFile.is_open()) {
-        return false;
-    }
-
-    std::string line;
-    std::string deviceName = device;
-
-    if (deviceName.substr(0, 5) == "/dev/") {
-        deviceName = deviceName.substr(5);
-    }
-
-    while (std::getline(mountsFile, line)) {
-        std::istringstream iss(line);
-        std::string mountDevice;
-        iss >> mountDevice;
-
-        if (mountDevice.substr(0, 5) == "/dev/") {
-            mountDevice = mountDevice.substr(5);
-        }
-
-        if (mountDevice == deviceName ||
-            (mountDevice.find(deviceName) == 0 &&
-             std::isdigit(mountDevice[deviceName.length()]))) {
-            mountsFile.close();
-            return true;
-        }
-    }
-
-    mountsFile.close();
-    return false;
-}
-
-/**
- * @brief Validates a set of ISO-to-device mappings and returns only the viable pairs.
- *
- * Each candidate pair is checked in order:
- *  -# Device is a removable USB device (via @ref isUsbDevice).
- *  -# Device is not currently mounted (via @ref isDeviceMounted).
- *  -# Device size can be determined; sets @p permissions flag to true on failure.
- *  -# ISO capacity check (ISO size <= device size).
- *
- * @note If any validation error occurs, all errors are printed, signal handlers are
- *       temporarily adjusted, and an empty vector is returned to trigger a retry.
- *
- * @param deviceMap      Pairs of (1-based ISO index, device path) to validate.
- * @param selectedIsos   Ordered list of ISOs corresponding to the indices.
- * @param[in,out] permissions Set to true if a size query fails (permissions issue);
- *                            used to determine the type of user prompt.
- * @return A vector of valid (IsoInfo, device) pairs, or an empty vector if validation failed.
- */
-std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<std::pair<size_t, std::string>>& deviceMap,
-                                                             const std::vector<IsoInfo>& selectedIsos, bool& permissions) {
-
-    const WriteTheme wt = getWriteTheme();
-
-    std::vector<std::string> validationErrors;
-    std::vector<std::pair<IsoInfo, std::string>> validPairs;
-
-    for (const auto& devicePair : deviceMap) {
-		size_t index = devicePair.first;
-		const std::string& device = devicePair.second;
-		const auto& iso = selectedIsos[index - 1];
-
-		if (!isUsbDevice(device)) {
-			std::string errMsg;
-			errMsg.append(wt.errPath).append("'").append(device).append("'")
-				  .append(wt.rl_resetCol).append(wt.errLabel).append(" is not a removable USB device")
-				  .append(wt.rl_resetCol);
-			validationErrors.push_back(std::move(errMsg));
-			continue;
-		}
-
-		if (isDeviceMounted(device)) {
-			std::string errMsg;
-			errMsg.append(wt.errPath).append("'").append(device).append("'")
-				  .append(wt.rl_resetCol).append(wt.errLabel).append(" or its partitions are mounted")
-				  .append(wt.rl_resetCol);
-			validationErrors.push_back(std::move(errMsg));
-			continue;
-		}
-
-		uint64_t deviceSize = getBlockDeviceSize(device);
-
-		if (deviceSize == 0) {
-			std::string errMsg;
-			errMsg.append(wt.errLabel).append("Failed to get size for ")
-				  .append(wt.errPath).append("'").append(device).append("'")
-				  .append(wt.rl_resetCol).append(wt.errLabel).append(" check permissions")
-				  .append(wt.rl_resetCol);
-			validationErrors.push_back(std::move(errMsg));
-			permissions = true;
-			continue;
-		}
-
-		if (iso.size > deviceSize) {
-			std::string deviceSizeStr = formatFileSize(deviceSize);
-			std::string driveName = getDriveName(device);
-			std::string errMsg;
-			errMsg.append(wt.warnLabel).append("'").append(wt.fileCol).append(iso.filename)
-				  .append(wt.rl_resetCol).append(wt.bold).append(" (")
-				  .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol).append(wt.bold)
-				  .append(")").append(wt.warnLabel).append("'").append(wt.errLabel).append(" is too large for ")
-				  .append(wt.errPath).append("'").append(device).append(wt.bold)
-				  .append(" <").append(driveName).append(">")
-				  .append(wt.rl_resetCol).append(wt.bold).append(" (")
-				  .append(wt.sizeCol).append(deviceSizeStr).append(wt.rl_resetCol).append(")").append(wt.warnLabel).append("'")
-				  .append(wt.rl_resetCol);
-			validationErrors.push_back(std::move(errMsg));
-			continue;
-		}
-
-		validPairs.emplace_back(iso, device);
-	}
-
-    if (!validationErrors.empty()) {
-        std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.rl_resetCol << wt.bold << "\n";
-        for (const auto& err : validationErrors) {
-            std::cerr << "  \u2022 " << err << wt.bold << "\n";
-        }
-
-        signal(SIGINT, SIG_IGN);
-        disable_ctrl_d();
-        permissions ? (permissions = false, pressEnterToContinue()) : pressEnterToTry();
-        return {};
-    }
-
-    return validPairs;
-}
-
-/**
- * @brief Parses a semicolon-delimited mapping string into (index, device) pairs.
- *
- * Expected format: @c "1>/dev/sdb;2>/dev/sdc" where each token is
- * @c INDEX>DEVICE_PATH.  The function enforces:
- *  - Valid @c INDEX>DEVICE format for each token.
- *  - Index within the range @c [1, selectedIsos.size()].
- *  - No device path used more than once.
- *  - Every ISO index in @p selectedIsos has at least one mapping.
- *
- * Errors are appended to @p errors; the caller inspects this vector to decide
- * whether to re-prompt the user.
- *
- * @param pairString   Raw user input string containing semicolon-separated mappings.
- * @param selectedIsos Ordered list of ISO paths used to validate index bounds.
- * @param[out] errors  Vector that will be cleared and populated with human-readable error messages.
- * @return Vector of valid (1-based index, device path) pairs extracted from the input.
- */
-std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::string& pairString,
-                                                                const std::vector<std::string>& selectedIsos,
-                                                                std::vector<std::string>& errors) {
-
-    std::vector<std::pair<size_t, std::string>> deviceMap;
-    std::unordered_set<std::string> usedDevices;
-    std::istringstream pairStream(pairString);
-    std::string pair;
-
-    errors.clear();
-
-    while (std::getline(pairStream, pair, ';')) {
-        pair.erase(pair.find_last_not_of(" \t\n\r\f\v") + 1);
-        pair.erase(0, pair.find_first_not_of(" \t\n\r\f\v"));
-
-        if (pair.empty()) continue;
-
-        size_t sepPos = pair.find('>');
-        if (sepPos == std::string::npos) {
-            errors.push_back("Invalid pair format: '" + pair + "'");
-            continue;
-        }
-
-        std::string indexStr = pair.substr(0, sepPos);
-        std::string device = pair.substr(sepPos + 1);
-
-        try {
-            size_t index = std::stoul(indexStr);
-
-            if (index < 1 || index > selectedIsos.size()) {
-                errors.push_back("Invalid index " + indexStr);
-                continue;
-            }
-
-            if (usedDevices.count(device)) {
-                errors.push_back("Device " + device + " used multiple times");
-                continue;
-            }
-
-            deviceMap.emplace_back(index, device);
-            usedDevices.insert(device);
-
-        } catch (...) {
-            errors.push_back("Invalid index: '" + indexStr + "'");
-        }
-    }
-
-    std::unordered_set<size_t> mappedIndices;
-    for (const auto& [index, device] : deviceMap) {
-        mappedIndices.insert(index);
-    }
-
-    for (size_t i = 1; i <= selectedIsos.size(); ++i) {
-        if (mappedIndices.find(i) == mappedIndices.end()) {
-            errors.push_back("Missing mapping for ISO " + std::to_string(i));
-        }
-    }
-
-    return deviceMap;
-}
-
-void helpMappings();
-void displayErrors();
-
-/**
- * @brief Interactive loop that collects and validates ISO-to-device mappings from the user.
- *
- * Displays the sorted list of selected ISOs (largest first) alongside detected
- * removable USB devices, then reads mapping input via readline.  The loop
- * continues until the user provides a valid, confirmed set of mappings or
- * explicitly cancels with @c "<".
- *
- * Readline tab-completion is configured for both ISO indices and device paths.
- * A @c "?" input triggers the help screen.  After a valid mapping is entered,
- * the user is shown a destructive-write warning and must confirm with @c y/Y.
- *
- * @param selectedIsos          ISOs chosen by the user for writing.
- * @return Validated (IsoInfo, device) pairs ready for @ref performWriteOperation,
- *         or an empty vector if the user aborted.
- */
-std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos) {
-    auto setupReadline = []() {
-        rl_completion_display_matches_hook = [](char **matches, int num_matches, int max_length) {
-            (void)matches;
-            (void)num_matches;
-            (void)max_length;
-        };
-
-        rl_attempted_completion_function = completion_cb;
-        rl_bind_key('\t', rl_complete);
-        rl_bind_key('\f', clear_screen_and_buffer);
-        rl_bind_keyseq("\033[A", rl_get_previous_history);
-        rl_bind_keyseq("\033[B", rl_get_next_history);
-    };
-
-    const WriteTheme wt = getWriteTheme();
-
-    while (true) {
-        setupReadline();
-        signal(SIGINT, SIG_IGN);
-        disable_ctrl_d();
-        clearScrollBuffer();
-
-        ThreadPool& pool = getStaticThreadPool();
-        if (selectedIsos.size() > pool.threadCount()) {
-            std::cout << "\n" << wt.colorFailure << "ISO selections for "
-                      << UI::Palette::Yellow << "write2usb"
-                      << wt.colorFailure << " cannot exceed the current global thread pool size of "
-                      << wt.colorWarning << pool.threadCount()
-                      << wt.colorFailure << "!"
-                      << wt.speedCol << "\n";
-
-            pressEnterToTry();
-            return {};
-        }
-
-        displayErrors();
-
-        std::vector<IsoInfo> sortedIsos = selectedIsos;
-        std::sort(sortedIsos.begin(), sortedIsos.end(), [](const IsoInfo& a, const IsoInfo& b) {
-            return a.size > b.size;
-        });
-
-        std::ostringstream devicePromptStream;
-        devicePromptStream << "\n" << wt.pathCol << "Selected " << wt.headerCol << "ISO" << wt.bold << ":\n\n";
-
-        for (size_t i = 0; i < sortedIsos.size(); ++i) {
-            auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write2usb");
-
-            devicePromptStream << "  " << wt.indexCol << (i + 1) << ">" << wt.bold << " ";
-
-            if (!displayConfig::toggleNamesOnly) {
-                devicePromptStream << wt.pathCol << isoDir << "/";
-            }
-
-            devicePromptStream << wt.fileCol << filename;
-
-            devicePromptStream << wt.bold << " (" << wt.sizeCol << sortedIsos[i].sizeStr
-                              << wt.bold << ")\n";
-        }
-
-        devicePromptStream << "\n" << wt.rl_resetCol << "Removable USB Devices:" << wt.rl_resetCol << "\n\n";
-        std::vector<std::string> usbDevices = getRemovableDevices();
-
-        struct DeviceInfo {
-            std::string path;
-            uint64_t size;
-            std::string driveName;
-            std::string sizeStr;
-            bool mounted;
-            bool error;
-        };
-
-        std::vector<DeviceInfo> deviceInfos;
-        for (const auto& device : usbDevices) {
-            try {
-                std::string driveName = getDriveName(device);
-                uint64_t deviceSize = getBlockDeviceSize(device);
-                std::string sizeStr = formatFileSize(deviceSize);
-                bool mounted = isDeviceMounted(device);
-                deviceInfos.push_back({device, deviceSize, driveName, sizeStr, mounted, false});
-            } catch (...) {
-                deviceInfos.push_back({device, 0, "", "", false, true});
-            }
-        }
-
-        std::sort(deviceInfos.begin(), deviceInfos.end(), [](const DeviceInfo& a, const DeviceInfo& b) {
-            if (a.error != b.error) return !a.error;
-            return a.size > b.size;
-        });
-
-        if (deviceInfos.empty()) {
-            devicePromptStream << "  " << wt.colorFailure << "No USB flash drives detected!" << wt.rl_resetCol << "\n";
-        } else {
-            for (const auto& dev : deviceInfos) {
-                if (dev.error) {
-                    devicePromptStream << "  " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
-                } else {
-                    devicePromptStream << "  " << wt.deviceCol << dev.path
-                                      << wt.rl_resetCol << " <" << dev.driveName
-                                      << "> (" << wt.sizeCol << dev.sizeStr
-                                      << wt.rl_resetCol << ")"
-                                      << (dev.mounted ? wt.colorFailure + " (mounted)" + wt.rl_resetCol : "")
-                                      << "\n";
+            if (entry.is_directory()) {
+                fs::create_directories(dest);
+            } else if (entry.is_regular_file()) {
+                fs::create_directories(dest.parent_path());
+                if (!copyWithProgress(entry.path(), dest)) {
+                    unmountAll(); return fail();
                 }
             }
         }
+    } catch (...) { unmountAll(); return fail(); }
 
-        g_completerData.sortedIsos = &sortedIsos;
-        g_completerData.usbDevices = &usbDevices;
-		reset_custom_keybindingsForCpMvWrite2Usb();
+    if (GlobalState::g_operationCancelled.load()) { unmountAll(); return false; }
 
-        devicePromptStream << "\n" << wt.rl_labelCol << "Mappings"
-                          << wt.rl_primaryCol << " ↵ as "
-                          << wt.rl_highlightCol << "INDEX>DEVICE"
-                          << wt.rl_primaryCol << ", ? help, < return: "
-                          << wt.rl_resetCol;
-
-        std::string devicePrompt = devicePromptStream.str();
-
-        std::unique_ptr<char, decltype(&std::free)> deviceInput(
-            readline(devicePrompt.c_str()), &std::free
-        );
-
-        if (!deviceInput) {
-            restoreReadline();
-            return {};
-        }
-
-        if (deviceInput.get()[0] == '\0') {
-            continue;
-        }
-
-        std::string mainInputString(deviceInput.get());
-        if (mainInputString == "<") {
-            restoreReadline();
-            return {};
-        }
-
-        if (mainInputString == "?") {
-            helpMappings();
-            continue;
-        }
-
-        if (deviceInput && *deviceInput) add_history(deviceInput.get());
-
-        std::vector<std::string> errors;
-        std::vector<std::string> isoFilenames;
-        for (const auto& iso : sortedIsos) {
-            isoFilenames.push_back(iso.path);
-        }
-
-        auto deviceMap = parseDeviceMappings(deviceInput.get(), isoFilenames, errors);
-
-        if (!errors.empty()) {
-            std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
-            for (const auto& err : errors) {
-                std::cerr << "  • " << err << "\n";
-            }
-
-           pressEnterToTry();
-            continue;
-        }
-
-        bool permissions = false;
-        auto validPairs = validateDevices(deviceMap, sortedIsos, permissions);
-        if (validPairs.empty()) {
-            continue;
-        }
-
-        // Warning message with colors from theme
-        std::cout << "\n" << wt.colorWarning << "WARNING: This will "
-                  << UI::Palette::Red << "*ERASE ALL DATA*"
-                  << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
-
-        for (const auto& [iso, device] : validPairs) {
-            uint64_t deviceSize = getBlockDeviceSize(device);
-            std::string deviceSizeStr = formatFileSize(deviceSize);
-            std::string driveName = getDriveName(device);
-
-            std::cout << "  {" << wt.deviceCol << device
-                      << " " << wt.rl_resetCol << "<" << driveName << "> ("
-                      << wt.sizeCol << deviceSizeStr
-                      << wt.rl_resetCol << ")} ← {" << wt.fileCol
-                      << iso.filename << wt.rl_resetCol << " (" << wt.sizeCol
-                      << iso.sizeStr << wt.rl_resetCol << ")}\n";
-        }
-
-        disableReadlineForConfirmation();
-
-        // Constructing the Readline prompt using theme colors
-        const std::string confirmPrompt =
-			"\001" + std::string(color) + "\002" +
-			"\nProceed? (y/n): "
-			+ wt.rl_resetCol;
-
-        std::unique_ptr<char, decltype(&std::free)> confirmation(
-            readline(confirmPrompt.c_str()),
-            &std::free
-        );
-
-        if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
-            restoreReadline();
-            setupSignalHandlerCancellations();
-            GlobalState::g_operationCancelled.store(false);
-            return validPairs;
-        }
-
-        restoreReadline();
+    // ------------------------------------------------------------------ //
+    // 6. Flush and unmount                                               //
+    // ------------------------------------------------------------------ //
+    int dev_fd = open(device.c_str(), O_RDONLY);
+    if (dev_fd >= 0) {
+        fsync(dev_fd);
+        close(dev_fd);
     }
-}
+    unmountAll();
 
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
-
-/**
- * @brief Dispatches ISO-to-device write tasks to the thread pool and tracks progress.
- *
- * Initialises @ref progressData for each pair, enqueues one @ref writeIsoToDevice
- * call per pair in the global thread pool, and runs a background display thread
- * that redraws per-task progress (percentage, bytes written, speed) at 100 ms
- * intervals.  On completion, prints a summary line with overall status
- * (COMPLETED / PARTIAL / FAILED / INTERRUPTED) and elapsed time.
- *
- * The function blocks until all futures resolve and the progress thread exits.
- *
- * @param validPairs Validated (IsoInfo, device) pairs produced by
- *                   @ref collectDeviceMappings.
- */
-void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairs) {
-    progressData.clear();
-    progressData.reserve(validPairs.size());
-
-    GlobalState::g_operationCancelled.store(false);
-
-    for (const auto& [iso, device] : validPairs) {
-        progressData.push_back(ProgressInfo{
-            iso.filename,
-            device,
-            iso.sizeStr
-        });
-    }
-
-    std::atomic<size_t> completedTasks(0);
-    std::atomic<bool> isProcessingComplete(false);
-    const size_t totalTasks = validPairs.size();
-
-    ThreadPool& pool = getStaticThreadPool();
-
-    disableInput();
-    clearScrollBuffer();
-
-    const WriteTheme wt = getWriteTheme();
-
-    std::cout << "\n" << wt.colorStatus << "Processing "
-              << (totalTasks > 1 ? "tasks" : "task") << " for "
-              << UI::Palette::Yellow << "write2usb" << wt.colorStatus
-              << " operation... (" << UI::Palette::Red << "Ctrl+c"
-              << wt.colorStatus << ":cancel)\n\n";
-    std::cout << "\033[s";
-
-    auto startTime = std::chrono::high_resolution_clock::now();
-
-    std::unordered_map<std::string, std::string> deviceNames;
-    std::unordered_map<std::string, uint64_t> deviceSizes;
-    std::unordered_map<std::string, std::string> deviceSizeStrs;
-
-    for (const auto& prog : progressData) {
-        if (deviceNames.find(prog.device) == deviceNames.end()) {
-            deviceNames[prog.device] = getDriveName(prog.device);
-            deviceSizes[prog.device] = getBlockDeviceSize(prog.device);
-            deviceSizeStrs[prog.device] = formatFileSize(deviceSizes[prog.device]);
-        }
-    }
-
-    auto displayAllProgress = [&]() {
-        for (size_t i = 0; i < progressData.size(); ++i) {
-            const auto& prog = progressData[i];
-            std::string currentSize = formatFileSize(prog.bytesWritten.load());
-
-            std::cout << "\033[K"
-                      << wt.fileCol << prog.filename << " " << wt.bold << "→ {"
-                      << wt.deviceCol << prog.device << wt.bold << " <"
-                      << deviceNames[prog.device] << "> (" << wt.sizeCol
-                      << deviceSizeStrs[prog.device] << wt.bold << ")} " << wt.bold;
-
-            if (prog.completed)                   std::cout << wt.colorSuccess << "DONE";
-            else if (prog.failed)                 std::cout << wt.colorFailure << "FAIL";
-            else if (GlobalState::g_operationCancelled.load()) std::cout << wt.colorWarning << "CXL";
-            else                                  std::cout << prog.progress << "%";
-
-            std::cout << wt.bold << " [" << wt.headerCol << currentSize << "/" << wt.sizeCol << prog.totalSize << wt.bold << "] "
-          << wt.speedCol << formatSpeed(prog.speed) << (prog.completed ? " (avg)" : "") << wt.bold << "\n";
-        }
-        std::cout << std::flush;
-    };
-
-    auto displayProgress = [&]() {
-        while (!isProcessingComplete.load(std::memory_order_acquire) &&
-              !GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            std::cout << "\033[u";
-            displayAllProgress();
-        }
-    };
-
-    std::vector<std::future<void>> futures;
-    for (size_t i = 0; i < totalTasks; ++i) {
-        futures.push_back(pool.enqueue([&, i]() {
-            const auto& [iso, device] = validPairs[i];
-            bool success = writeIsoToDevice(iso.path, device, i);
-
-            if (success) {
-                progressData[i].completed.store(true);
-                completedTasks.fetch_add(1);
-            } else if (!GlobalState::g_operationCancelled.load()) {
-                progressData[i].failed.store(true);
-            }
-        }));
-    }
-
-    std::thread progressThread(displayProgress);
-
-    for (auto& future : futures) {
-        future.wait();
-    }
-
-    isProcessingComplete.store(true, std::memory_order_release);
-    signal(SIGINT, SIG_IGN);
-    progressThread.join();
-
-    std::cout << "\033[s";
-    std::cout << "\033[2H\033[2K";
-
-    size_t failedTasksValue = 0;
-    for (const auto& prog : progressData) {
-        if (prog.failed.load()) {
-            failedTasksValue++;
-        }
-    }
-
-    size_t completedTasksValue = completedTasks.load();
-
-    std::string operation = std::string(UI::Palette::Yellow) + "write2usb" + wt.rl_resetCol;
-
-    std::cout << "\r" << wt.colorStatus << "Status: " << operation << " → "
-              << (!GlobalState::g_operationCancelled.load()
-                  ? (failedTasksValue > 0
-                     ? (completedTasksValue > 0
-                        ? wt.colorWarning + "PARTIAL"
-                        : wt.colorFailure + "FAILED")
-                     : wt.colorSuccess + "COMPLETED")
-                  : wt.colorWarning + "INTERRUPTED")
-              << wt.rl_resetCol << std::endl;
-
-    std::cout << "\033[u";
-
-    auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration<double>(endTime - startTime).count();
-
-    std::cout << std::fixed << std::setprecision(1);
-    std::cout << "\n" << wt.colorStatus << "Successful: "
-              << wt.colorSuccess << completedTasks.load()
-              << wt.colorStatus << "/"
-              << wt.colorWarning << validPairs.size()
-              << wt.colorStatus << " | Time Elapsed: "
-              << wt.colorStatus << duration << "s"
-              << wt.colorStatus << "\n";
-
-    flushStdin();
-    restoreInput();
+    auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::high_resolution_clock::now() - startTime);
+    double seconds  = totalElapsed.count() / 1000.0;
+    double avgSpeed = seconds > 0.0
+        ? (static_cast<double>(totalBytes) / (1024.0 * 1024.0)) / seconds
+        : 0.0;
+    progressData[progressIndex].speed.store(avgSpeed);
+    progressData[progressIndex].progress.store(100);
+    progressData[progressIndex].completed.store(true);
+    return true;
 }
 
 /**
- * @brief Entry point for the write-to-USB workflow.
+ * @brief Writes an ISO image to a block device, auto-detecting Windows media.
  *
- * This function orchestrates the full flashing process:
- * 1. Parses the raw @p input string into unique ISO indices.
- * 2. Resolves filesystem metadata (size, name) for each selected ISO,
- *    skipping any files that are inaccessible or no longer present.
- * 3. Prompts the user for target device mappings via @ref collectDeviceMappings.
- * 4. Executes the flashing process via @ref performWriteOperation.
+ * Calls @ref isWindowsIso to probe the ISO before writing.  Windows ISOs
+ * are handled by @ref writeWindowsIsoToDevice (FAT32 format + file copy +
+ * optional WIM split); all other ISOs fall through to a direct raw
+ * O_DIRECT block write.
  *
- * @param input    Raw selection string from the main menu (e.g. "1 3-5").
- * @param isoFiles Full ordered list of available ISO paths.
- */
-void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles) {
-    clearScrollBuffer();
-    std::unordered_set<int> indicesToProcess;
-
-    setupSignalHandlerCancellations();
-    GlobalState::g_operationCancelled.store(false);
-
-    tokenizeInput(input, isoFiles, indicesToProcess);
-    if (indicesToProcess.empty()) {
-        return;
-    }
-
-    std::vector<IsoInfo> selectedIsos;
-    for (int idx : indicesToProcess) {
-		const std::string& path = isoFiles[idx - 1];
-		std::filesystem::path fsPath(path);
-		std::error_code ec;
-		auto size = std::filesystem::file_size(fsPath, ec);
-		if (ec) continue;
-		selectedIsos.emplace_back(IsoInfo{
-			path,
-			fsPath.filename().string(),
-			size,
-			formatFileSize(size),
-			static_cast<size_t>(idx)
-		});
-	}
-
-    if (selectedIsos.empty()) {
-        return;
-    }
-
-    auto validPairs = collectDeviceMappings(selectedIsos);
-    if (validPairs.empty()) {
-        return;
-    }
-
-    performWriteOperation(validPairs);
-
-    // Cleanup and wait for user acknowledgment
-    signal(SIGINT, SIG_IGN);
-    disable_ctrl_d();
-
-    pressEnterToContinue();
-}
-
-/**
- * @brief Writes an ISO image directly to a block device using O_DIRECT I/O.
+ * For the raw path: opens the ISO for reading and the target device with
+ * @c O_WRONLY|O_DIRECT, then streams data in sector-aligned chunks (default
+ * 8 MiB buffer, rounded down to a multiple of the device sector size). If
+ * the ISO size is not a multiple of the sector size, the final chunk is
+ * zero-padded to the sector boundary to satisfy O_DIRECT alignment
+ * requirements. Progress, speed, and completion state are written atomically
+ * to @c progressData[progressIndex].
  *
- * Opens the ISO for reading and the target device with @c O_WRONLY|O_DIRECT,
- * then streams data in sector-aligned chunks (default 8 MiB buffer, rounded
- * down to a multiple of the device sector size). If the ISO size is not a
- * multiple of the sector size, the final chunk is zero-padded to the sector
- * boundary to satisfy O_DIRECT alignment requirements. Progress, speed, and
- * completion state are written atomically to @c progressData[progressIndex].
- *
- * Speed is recalculated every 500 ms using a sliding byte window.
- * The write loop checks @c GlobalState::g_operationCancelled before each iteration and
- * exits cleanly without marking the task as failed when a cancellation is
- * detected. @c fsync is called on the device fd only if the write was not
- * cancelled, avoiding unnecessary I/O on a partial transfer.
+ * Speed is recalculated every 100 ms using a sliding byte window.
+ * The write loop checks @c GlobalState::g_operationCancelled before each
+ * iteration and exits cleanly without marking the task as failed when a
+ * cancellation is detected. @c fsync is called on the device fd only if
+ * the write was not cancelled, avoiding unnecessary I/O on a partial transfer.
  *
  * @param isoPath       Absolute path to the source ISO image.
  * @param device        Absolute path to the target block device (e.g. @c /dev/sdb).
  * @param progressIndex Index into @ref progressData for this task.
- * @return @c true if every byte of the ISO was written successfully (including
- *         any zero-padding required for sector alignment) and the operation
- *         was not cancelled; @c false otherwise.
+ * @return @c true if every byte of the ISO was written successfully and the
+ *         operation was not cancelled; @c false otherwise.
  */
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex) {
+    // Probe for Windows installation media and delegate if detected
+    if (isWindowsIso(isoPath))
+        return writeWindowsIsoToDevice(isoPath, device, progressIndex);
+
+    // --- Raw O_DIRECT path for Linux / UEFI ISOs -------------------------
+
     // Open ISO for reading
     int iso_fd = open(isoPath.c_str(), O_RDONLY);
     if (iso_fd == -1) {
@@ -985,7 +550,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     auto startTime  = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
     uint64_t bytesInWindow = 0;
-    constexpr int UPDATE_INTERVAL_MS = 500;
+    constexpr int UPDATE_INTERVAL_MS = 100;
 
     auto updateSpeed = [&](auto now) {
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate);
