@@ -429,18 +429,10 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ------------------------------------------------------------------ //
     // 6. Flush and unmount                                               //
     // ------------------------------------------------------------------ //
-    // fsync the partition file descriptors, not the raw block device.
-    // fsync on the raw device skips the filesystem layer and does not flush
-    // filesystem-level buffers (journal, metadata) on all kernels.  Opening
-    // each partition with O_RDWR and calling fsync flushes through the VFS
-    // layer for that filesystem, which is what we actually need here.
-    // (umount will also flush, but explicit fsync gives us the error code.)
-    for (const auto& part : {fatPart, ntfsPart}) {
-        int pfd = open(part.c_str(), O_RDWR);
-        if (pfd >= 0) {
-            fsync(pfd);
-            close(pfd);
-        }
+    int diskFd = open(device.c_str(), O_RDWR);
+    if (diskFd >= 0) {
+        fsync(diskFd);
+        close(diskFd);
     }
     unmountAll();
 
