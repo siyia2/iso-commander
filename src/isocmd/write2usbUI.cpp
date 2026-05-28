@@ -767,31 +767,60 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
 
     auto displayAllProgress = [&]() {
-        // Compute max filename length once per render
         size_t maxFilenameLen = 0;
         for (const auto& prog : progressData)
             maxFilenameLen = std::max(maxFilenameLen, prog.filename.size());
 
+        constexpr int BAR_WIDTH = 10;
+
         for (size_t i = 0; i < progressData.size(); ++i) {
             const auto& prog = progressData[i];
-            std::string currentSize = formatFileSize(prog.bytesWritten.load());
-            const std::string& displayTotal = prog.completed.load() ? currentSize : prog.totalSize;
 
-            // Pad filename with spaces to align the arrow
+            // Pad filename
             std::string paddedFilename = prog.filename;
             paddedFilename.resize(maxFilenameLen, ' ');
 
+            // Build progress bar
+            int pct = prog.progress.load();
+            int filled = (pct * BAR_WIDTH) / 100;
+            std::string bar, empty;
+
+            for (int j = 0; j < filled;             ++j) bar   += "▇";
+            for (int j = 0; j < BAR_WIDTH - filled; ++j) empty += "░";
+
+            // Layout: ISO name and device side-by-side seamlessly
             std::cout << "\033[K"
-                      << wt.fileCol << paddedFilename << " " << wt.bold << "→ {"
-                      << wt.deviceCol << prog.device << wt.bold << " <"
-                      << deviceNames[prog.device] << "> (" << wt.sizeCol
-                      << deviceSizeStrs[prog.device] << wt.bold << ")} " << wt.bold;
-            if (prog.completed.load())                          std::cout << wt.colorSuccess << "DONE";
-            else if (prog.failed.load())                        std::cout << wt.colorFailure << "FAIL";
-            else if (GlobalState::g_operationCancelled.load())  std::cout << wt.colorWarning << "CXL";
-            else                                                std::cout << prog.progress << "%";
-            std::cout << wt.bold << " [" << wt.headerCol << currentSize << "/" << wt.sizeCol << displayTotal << wt.bold << "] "
-                      << wt.speedCol << formatSpeed(prog.speed) << (prog.completed.load() ? " (avg)" : "") << wt.bold << "\n";
+                      << wt.fileCol << paddedFilename
+
+                      << wt.bold << " → " << wt.deviceCol
+                      << std::setw(8) << std::left << prog.device << " "
+
+                      << wt.bold << "[" <<
+                      wt.colorSuccess << bar << wt.speedCol << empty
+                      << wt.bold << "] ";
+
+            // Status tracking
+            bool isCompleted = prog.completed.load();
+
+            if (isCompleted)                                    std::cout << wt.colorSuccess << "DONE  ";
+            else if (prog.failed.load())                        std::cout << wt.colorFailure << "FAIL  ";
+            else if (GlobalState::g_operationCancelled.load())  std::cout << wt.colorWarning << "CXL   ";
+            else {
+                std::string pctStr = std::to_string(pct) + "%";
+                std::cout << wt.bold << std::setw(4) << pctStr << " ";
+            }
+
+            // Speed printing logic
+            std::string speedStr = formatSpeed(prog.speed);
+
+            // FIXED: If *this* specific item finished successfully, it keeps its "(avg)"
+            // tag even if the global process is cancelled later.
+            if (isCompleted) {
+                speedStr += " (avg)";
+            }
+
+            // Standard single newline—no extra spacing gaps
+            std::cout << wt.speedCol << std::setw(16) << std::left << speedStr << "\n";
         }
         std::cout << std::flush;
     };
