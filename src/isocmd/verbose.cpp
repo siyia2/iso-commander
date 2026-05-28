@@ -435,13 +435,13 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
     auto printInvalidPaths = [&]() {
         if (invalidPaths.empty()) return;
         if (totalFiles == 0 && validPaths.empty()) {
-            std::cout << "\r" << vt.bold << "Total files processed: 0\n" << std::flush;
+            std::cout << "\r" << color << "Total files processed: 0\n" << std::flush;
         }
-        std::cout << "\n" << vt.bold << "Invalid paths omitted from search: " << vt.red;
+        std::cout << "\n" << color << "Invalid paths omitted from search: " << vt.red;
         for (auto it = invalidPaths.begin(); it != invalidPaths.end();) {
             std::cout << "'" << *it << "'" << (++it != invalidPaths.end() ? " " : "");
         }
-        std::cout << vt.bold << ".\n";
+        std::cout << color << ".\n";
     };
 
     auto printErrorMessages = [&]() {
@@ -459,7 +459,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
     const auto end_time = std::chrono::high_resolution_clock::now();
 
     const double total_elapsed = std::chrono::duration<double>(end_time - start_time).count();
-    std::cout << vt.bold << "\nTotal time taken: " << std::fixed << std::setprecision(1)
+    std::cout << color << "\nTime Elapsed: " << std::fixed << std::setprecision(1)
               << total_elapsed << " seconds\n";
 
     if (GlobalState::g_operationCancelled) {
@@ -512,15 +512,15 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
     if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
-        std::cout << "\r" << vt.bold << "Total files processed: 0" << std::flush;
+        std::cout << "\r" << color << "Total files processed: 0" << std::flush;
     }
 
     if (!invalidDirectoryPaths.empty()) {
-        std::cout << "\n\n" << vt.bold << "Invalid paths omitted from search: " << vt.red;
+        std::cout << "\n\n" << color << "Invalid paths omitted from search: " << vt.red;
         for (auto it = invalidDirectoryPaths.begin(); it != invalidDirectoryPaths.end(); ++it) {
             std::cerr << "'" << *it << "'" << (std::next(it) != invalidDirectoryPaths.end() ? " " : "");
         }
-        std::cerr << vt.bold << ".";
+        std::cerr << color << ".";
     }
 
     if (!processedErrorsFind.empty()) {
@@ -635,7 +635,7 @@ void verboseImageSearchResults(const std::string& fileExtension,
 
     auto total_elapsed_time =
         std::chrono::duration<double>(end_time - start_time).count();
-    std::cout << vt.bold << "Time Elapsed: " << std::fixed << std::setprecision(1)
+    std::cout << color << "Time Elapsed: " << std::fixed << std::setprecision(1)
               << total_elapsed_time << " seconds" << vt.bold << "\n";
 
     pressEnterToContinue();

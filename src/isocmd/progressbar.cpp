@@ -44,12 +44,12 @@ int oldf;
  */
 void disableInputForProgressBar(struct termios *oldt, int *oldf) {
     struct termios newt;
-    
+
     tcgetattr(STDIN_FILENO, oldt);
     newt = *oldt;
     newt.c_lflag &= ~(ICANON | ECHO);
     tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-    
+
     *oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, *oldf | O_NONBLOCK);
 }
@@ -78,9 +78,9 @@ void restoreInput(struct termios *oldt, int oldf) {
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t totalBytes,
     std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, size_t totalTasks,
     std::atomic<bool>* isComplete, bool* verbose, const std::string& operation) {
-    
+
     ProgressBarColors pc = resolveProgressTheme();
-    
+
     disableInputForProgressBar(&oldt, &oldf);
 
     // --- Configuration Logic ---
@@ -124,10 +124,10 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         const size_t failedTasksValue    = failedTasks->load(std::memory_order_acquire);
         const size_t completedBytesValue = bytesTrackingEnabled ? completedBytes->load(std::memory_order_acquire) : 0;
 
-        double tasksProgress = cancelled 
-            ? static_cast<double>(completedTasksValue) / totalTasks 
+        double tasksProgress = cancelled
+            ? static_cast<double>(completedTasksValue) / totalTasks
             : static_cast<double>(completedTasksValue + failedTasksValue) / totalTasks;
-        
+
         double overallProgress = tasksProgress;
 
         if (bytesTrackingEnabled) {
@@ -157,7 +157,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             ss << (i < progressPos ? "=" : (i == progressPos && !useFinalLayout ? ">" : " "));
             if (i == progressPos && !useFinalLayout) ss << color;
         }
-        
+
         ss << color << "] " << std::fixed << std::setprecision(0) << (overallProgress * 100.0)
            << "% (" << completedTasksValue << "/" << totalTasks << ") Time: "
            << std::fixed << std::setprecision(1) << elapsedSeconds << "s";
@@ -190,7 +190,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     while (!enterPressed) {
         if (poll(&pfd, 1, 100) > 0 && (pfd.revents & POLLIN)) {
             char ch;
-            while (read(STDIN_FILENO, &ch, 1) > 0); 
+            while (read(STDIN_FILENO, &ch, 1) > 0);
         }
 
         std::cout << renderProgressBar(false, false, false) << std::flush;
@@ -211,11 +211,11 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             bool snapTo100 = (!wasCancelled && failedTasksValue == 0);
 
             // --- Status Summary ---
-            std::cout << "\r\033[2K" << pc.status << " Status: " << operation << " → ";
+            std::cout << "\r\033[2K" << color << " Status: " << operation << color << " → ";
             if (wasCancelled) {
                 std::cout << pc.warning << "INTERRUPTED";
             } else if (failedTasksValue > 0) {
-                std::cout << (completedTasksValue > 0 ? pc.warning : pc.failure) 
+                std::cout << (completedTasksValue > 0 ? pc.warning : pc.failure)
                           << (completedTasksValue > 0 ? "PARTIAL" : "FAILED");
             } else {
                 std::cout << pc.success << "COMPLETED";

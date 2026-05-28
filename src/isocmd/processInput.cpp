@@ -80,12 +80,12 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     std::string operationColor = std::string(isUnmount ? UI::Palette::Yellow : UI::Palette::Green);
     std::string operationName = isUnmount ? "umount" : "mount";
 
-    std::cout << colorMuted << "\n Processing"
+    std::cout << color << "\n Processing"
               << (selectedIndices.size() > 1 ? " tasks" : " task")
               << " for " << operationColor << operationName
-              << colorMuted << "... ("
+              << color << "... ("
               << UI::Palette::Red << "Ctrl+c"
-              << colorMuted << ":cancel)\n";
+              << color << ":cancel)\n";
 
     std::string coloredProcess = std::string(operationColor) + operationName + std::string(UI::Palette::BoldReset);
 
@@ -298,11 +298,11 @@ void processInputForCpMvRm(const std::string& input,
 
     std::string colorMuted = isOrig ? std::string(UI::Palette::BoldReset) : std::string(theme->muted);
 
-    std::cout << "\n" << colorMuted << " Processing "
+    std::cout << "\n" << color << " Processing "
               << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process
-              << colorMuted << "... ("
+              << color << "... ("
               << UI::Palette::Red << "Ctrl+c"
-              << colorMuted << ":cancel)\n";
+              << color << ":cancel)\n";
 
     std::string coloredProcess =
         isDelete ? std::string(UI::Palette::Red)    + process + std::string(UI::Palette::BoldReset) :
@@ -432,10 +432,10 @@ void processInputForConversions(const std::string& input,
     else              operation = std::string(UI::Palette::Orange) + "ccd2iso" + colorMuted + suffix;
 
     clearScrollBuffer();
-    std::cout << "\n" << colorMuted << " Processing "
-              << operation << colorMuted << "... ("
+    std::cout << "\n" << color << " Processing "
+              << operation << color << "... ("
               << UI::Palette::Red << "Ctrl+c"
-              << colorMuted << ":cancel)\n";
+              << color << ":cancel)\n";
 
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);

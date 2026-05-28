@@ -515,7 +515,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         });
 
         std::ostringstream devicePromptStream;
-        devicePromptStream << "\n" << wt.pathCol << "Selected " << wt.headerCol << "ISO" << wt.bold << ":\n\n";
+        devicePromptStream << "\n" << wt.pathCol << "Selected " << wt.headerCol << "ISO" << wt.pathCol << ":\n\n";
 
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
             auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write2usb");
@@ -745,11 +745,11 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     const WriteTheme wt = getWriteTheme();
 
-    std::cout << "\n" << wt.colorStatus << "Processing "
+    std::cout << "\n" << color << "Processing "
               << (totalTasks > 1 ? "tasks" : "task") << " for "
-              << UI::Palette::Yellow << "write2usb" << wt.colorStatus
+              << UI::Palette::Yellow << "write2usb" << color
               << "... (" << UI::Palette::Red << "Ctrl+c"
-              << wt.colorStatus << ":cancel)\n\n";
+              << color << ":cancel)\n\n";
     std::cout << "\033[s";
 
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -792,12 +792,12 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             std::cout << "\033[K"
                       << wt.fileCol << paddedFilename
 
-                      << wt.bold << " → " << wt.deviceCol
+                      << color << " → " << wt.deviceCol
                       << std::setw(8) << std::left << prog.device << " "
 
-                      << wt.bold << "[" <<
-                      wt.colorSuccess << bar << wt.speedCol << empty
-                      << wt.bold << "] ";
+                      << color << "[" <<
+                      color << bar << wt.speedCol << empty
+                      << color << "] ";
 
             // Status tracking
             bool isCompleted = prog.completed.load();
@@ -807,20 +807,20 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             else if (GlobalState::g_operationCancelled.load())  std::cout << wt.colorWarning << "CXL   ";
             else {
                 std::string pctStr = std::to_string(pct) + "%";
-                std::cout << wt.bold << std::setw(4) << pctStr << " ";
+                std::cout << color << std::setw(2) << pctStr << " ";
             }
 
             // Speed printing logic
             std::string speedStr = formatSpeed(prog.speed);
 
-            // FIXED: If *this* specific item finished successfully, it keeps its "(avg)"
+            // If *this* specific item finished successfully, it keeps its "(avg)"
             // tag even if the global process is cancelled later.
             if (isCompleted) {
                 speedStr += " (avg)";
             }
 
             // Standard single newline—no extra spacing gaps
-            std::cout << wt.speedCol << std::setw(16) << std::left << speedStr << "\n";
+            std::cout << color << std::setw(16) << std::left << speedStr << "\n";
         }
         std::cout << std::flush;
     };
@@ -895,7 +895,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     std::string operation = std::string(UI::Palette::Yellow) + "write2usb" + wt.rl_resetCol;
 
-    std::cout << "\r" << wt.colorStatus << "Status: " << operation << " → "
+    std::cout << "\r" << color << "Status: " << operation << color <<" → "
               << (!GlobalState::g_operationCancelled.load()
                   ? (failedTasksValue > 0
                      ? (completedTasksValue > 0
@@ -911,12 +911,12 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     auto duration = std::chrono::duration<double>(endTime - startTime).count();
 
     std::cout << std::fixed << std::setprecision(1);
-    std::cout << "\n" << wt.colorStatus << "Successful: "
+    std::cout << "\n" << color << "Successful: "
               << wt.colorSuccess << completedTasks.load()
-              << wt.colorStatus << "/"
+              << color << "/"
               << wt.colorWarning << validPairs.size()
-              << wt.colorStatus << " | Time Elapsed: "
-              << wt.colorStatus << duration << "s"
+              << color << " | Time Elapsed: "
+              << color << duration << "s"
               << wt.colorStatus << "\n";
 
     flushStdin();

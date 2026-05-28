@@ -259,7 +259,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             restoreInput();
             resetReadlinePagination();
 
-            std::cout << "\r" << dt.bold << "Total files processed: " << totalFiles;
+            std::cout << "\r" << color << "Total files processed: " << totalFiles;
 
             if (!invalidPaths.empty() || !validPaths.empty()) {
                 std::cout << "\n";
@@ -344,7 +344,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                 uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (val % 100 == 0) {
                     std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
-                    std::cout << "\r" << dt.bold << "Total files processed: " << val << std::flush;
+                    std::cout << "\r" << color << "Total files processed: " << val << std::flush;
                 }
             }
 
@@ -646,7 +646,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                     uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
                     if (val % 100 == 0) {
                         std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
-                        std::cout << "\r" << dt.bold << "Total files processed: " << val << std::flush;
+                        std::cout << "\r" << color << "Total files processed: " << val << std::flush;
                 }
 
                 if (blacklist(entry, blacklistMdf, blacklistNrg, blacklistChd, blacklistDaa)) {
