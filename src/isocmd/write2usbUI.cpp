@@ -757,6 +757,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
         for (size_t i = 0; i < progressData.size(); ++i) {
             const auto& prog = progressData[i];
             std::string currentSize = formatFileSize(prog.bytesWritten.load());
+            const std::string& displayTotal = prog.completed.load() ? currentSize : prog.totalSize;
 
             std::cout << "\033[K"
                       << wt.fileCol << prog.filename << " " << wt.bold << "→ {"
@@ -764,13 +765,13 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
                       << deviceNames[prog.device] << "> (" << wt.sizeCol
                       << deviceSizeStrs[prog.device] << wt.bold << ")} " << wt.bold;
 
-            if (prog.completed)                                std::cout << wt.colorSuccess << "DONE";
-            else if (prog.failed)                              std::cout << wt.colorFailure << "FAIL";
-            else if (GlobalState::g_operationCancelled.load()) std::cout << wt.colorWarning << "CXL";
-            else                                               std::cout << prog.progress << "%";
+            if (prog.completed.load())                             std::cout << wt.colorSuccess << "DONE";
+            else if (prog.failed.load())                           std::cout << wt.colorFailure << "FAIL";
+            else if (GlobalState::g_operationCancelled.load())     std::cout << wt.colorWarning << "CXL";
+            else                                                   std::cout << prog.progress << "%";
 
-            std::cout << wt.bold << " [" << wt.headerCol << currentSize << "/" << wt.sizeCol << prog.totalSize << wt.bold << "] "
-                      << wt.speedCol << formatSpeed(prog.speed) << (prog.completed ? " (avg)" : "") << wt.bold << "\n";
+            std::cout << wt.bold << " [" << wt.headerCol << currentSize << "/" << wt.sizeCol << displayTotal << wt.bold << "] "
+                      << wt.speedCol << formatSpeed(prog.speed) << (prog.completed.load() ? " (avg)" : "") << wt.bold << "\n";
         }
         std::cout << std::flush;
     };

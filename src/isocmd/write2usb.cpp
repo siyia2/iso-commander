@@ -94,69 +94,89 @@ bool isWindowsIso(const std::string& isoPath) {
 }
 
 /**
-* @brief Writes a Windows ISO to a block device using a hybrid FAT32 + NTFS layout (UEFI only).
-*
-* Partition layout written to @p device:
-* GPT partition table.
-* Partition 1: FAT32 (1024 MiB, exactly 1 GiB, EFI System Partition) — receives:
-* * efi/
-* * boot/
-* * sources/boot.wim
-*
-* This satisfies Windows UEFI boot requirements while remaining within
-* FAT32 limitations.
-*
-* Partition 2: NTFS (remainder) — receives all remaining files, including
-* large files such as sources/install.wim that exceed FAT32's 4 GiB limit.
-* The NTFS filesystem is formatted with 64 KiB clusters (`-c 65536`) for
-* better sequential write performance.
-*
-* This layout mirrors the approach used by modern Windows installation media:
-* a small FAT32 ESP for firmware compatibility, and a larger NTFS partition
-* for bulk data storage.
-*
-* The NTFS partition is mounted using the kernel's native ntfs3 driver
-* (requires Linux kernel 5.15 or newer). Falls back to ntfs-3g FUSE driver
-* are not implemented; the function will fail if ntfs3 is unavailable.
-*
-* Progress, speed, and completion state are written atomically to
-* @c progressData[progressIndex]. Live progress is updated every 100ms during
-* file copy; there is no long blocking phase after formatting.
-*
-* Copy operations use @c copy_file_range() when available (kernel-assisted),
-* with fallback to a buffered read/write loop (8 MiB buffer) if the kernel
-* does not support cross-filesystem @c copy_file_range or if an error occurs.
-* On fallback, the entire file is copied using the buffered method.
-*
-* Destination files are preallocated using @c posix_fallocate() on a
-* best-effort basis to reduce fragmentation. Preallocation errors are ignored.
-*
-* After all files are copied, the block device is flushed with @c fsync()
-* before unmounting to ensure all data is written to disk.
-*
-* The function periodically checks @c GlobalState::g_operationCancelled.
-* On cancellation:
-* * Copying stops early
-* * Mounted filesystems are unmounted (lazy unmount with @c umount -l)
-* * The function returns @c false without marking a failure state
-*
-* @param isoPath
-* Absolute path to the source Windows ISO.
-*
-* @param device
-* Absolute path to the target block device (e.g. @c /dev/sdb).
-* All existing data on this device will be destroyed.
-*
-* @param progressIndex
-* Index into @ref progressData used for reporting progress, speed,
-* and completion status.
-*
-* @return @c true
-* If the ISO was successfully written and the device is ready for booting.
-*
-* @return @c false
-* If an error occurs or the operation is cancelled.
-*/
+ * @brief Writes a Windows ISO to a block device using a hybrid FAT32 + NTFS layout (UEFI only).
+ *
+ * Partition layout written to @p device:
+ *   GPT partition table.
+ *   Partition 1: FAT32 (1024 MiB, EFI System Partition) — receives:
+ *     - efi/
+ *     - boot/
+ *     - sources/boot.wim
+ *
+ *   This satisfies Windows UEFI boot requirements while remaining within
+ *   FAT32 limitations.
+ *
+ *   Partition 2: NTFS (remainder) — receives all remaining files, including
+ *   large files such as sources/install.wim that exceed FAT32's 4 GiB limit.
+ *   Formatted with 64 KiB clusters (@c -c 65536) for better sequential write
+ *   performance.
+ *
+ * This layout mirrors the approach used by modern Windows installation media:
+ * a small FAT32 ESP for firmware compatibility, and a larger NTFS partition
+ * for bulk data storage.
+ *
+ * The NTFS partition is mounted using the kernel's native ntfs3 driver
+ * (requires Linux kernel 5.15 or newer). Fallback to ntfs-3g FUSE is not
+ * implemented; the function will fail if ntfs3 is unavailable.
+ *
+ * @par Partition probing
+ * After partitioning, @c udevadm @c settle is used to block until the kernel
+ * has finished processing all uevents and the partition device nodes are
+ * guaranteed to exist. This replaces the previous @c partprobe + @c sleep
+ * polling approach, which was both slower and subject to races on loaded
+ * systems. A short retry loop is retained as a safety net for environments
+ * without udevd (e.g. minimal containers).
+ *
+ * @par Progress reporting
+ * Progress, speed, and completion state are written atomically to
+ * @c progressData[progressIndex]. Updates are emitted at most every 100 ms
+ * during file copy; the clock is sampled only every 4 chunks (32 MiB of
+ * transfer) to avoid syscall overhead across the many small files present in
+ * a typical Windows ISO. There is no long blocking phase after formatting.
+ *
+ * @par Copy strategy
+ * Files are copied using @c copy_file_range() (kernel-assisted, zero
+ * userspace round-trips) in 8 MiB chunks, with automatic fallback to a
+ * buffered @c read / @c write loop (8 MiB buffer) if the kernel does not
+ * support cross-filesystem @c copy_file_range or if an error occurs.
+ * Progress accounting is handled by a single shared helper in both paths.
+ *
+ * @par Preallocation
+ * Destination files are preallocated using @c posix_fallocate() on a
+ * best-effort basis to reduce NTFS fragmentation. Errors are ignored.
+ * Preallocation is skipped when a cancellation is in progress to avoid
+ * triggering eager metadata writeback on ntfs3.
+ *
+ * @par Flush strategy
+ * After all files are copied, each partition file descriptor is flushed with
+ * @c fsync() before unmounting. The partition fds are used (rather than the
+ * raw block device) so that the flush passes through the VFS layer and
+ * includes filesystem-level buffers (journal, NTFS log).
+ *
+ * @par Cancellation
+ * @c GlobalState::g_operationCancelled is checked before and during every
+ * file copy. On cancellation:
+ *   - Copying stops at the next chunk boundary
+ *   - @c POSIX_FADV_DONTNEED is issued on both partition block devices to
+ *     discard dirty page-cache pages, preventing a writeback storm when
+ *     the lazy unmount hands the mount to the kernel for async teardown
+ *   - All three mounts are lazily unmounted (@c umount -l)
+ *   - The function returns @c false without setting the failure flag
+ *
+ * @param isoPath
+ *   Absolute path to the source Windows ISO.
+ *
+ * @param device
+ *   Absolute path to the target block device (e.g. @c /dev/sdb).
+ *   All existing data on this device will be destroyed.
+ *
+ * @param progressIndex
+ *   Index into @ref progressData used for reporting progress, speed,
+ *   and completion status.
+ *
+ * @return @c true   The ISO was successfully written; the device is bootable.
+ * @return @c false  An error occurred or the operation was cancelled.
+ */
 bool writeWindowsIsoToDevice(const std::string& isoPath,
                                     const std::string& device,
                                     size_t             progressIndex) {
@@ -177,14 +197,15 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                     "set", "1", "esp",  "on",
                     "set", "1", "boot", "on"}) != 0) return fail();
 
-    runCommand({"partprobe", device});
-    sleep(1);
+    if (runCommand({"udevadm", "settle"}) != 0) return fail();
 
-    // Derive partition paths — handles /dev/sdXN and /dev/nvme0n1pN
     auto derivePartition = [&](int n) -> std::string {
         std::string c1 = device + std::to_string(n);
         std::string c2 = device + "p" + std::to_string(n);
-        for (int attempt = 0; attempt < 10; ++attempt) {
+        // One short retry loop remains as a safety net for environments
+        // without udevd (e.g. minimal containers), but the common path
+        // exits on the first attempt after udevadm settle.
+        for (int attempt = 0; attempt < 3; ++attempt) {
             if (fs::exists(c1)) return c1;
             if (fs::exists(c2)) return c2;
             sleep(1);
@@ -199,7 +220,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (runCommand({"mkfs.fat", "-F", "32", "-n", "WINBOOT", fatPart}) != 0)
         return fail();
 
-    // -f = fast format, -c 65536 = 64 KiB cluster size for better sequential write performance
     if (runCommand({"mkfs.ntfs", "-f", "-c", "65536", "-L", "WINDATA", ntfsPart}) != 0)
         return fail();
 
@@ -215,7 +235,19 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (!mkdtemp(isoMnt) || !mkdtemp(fatMnt) || !mkdtemp(ntfsMnt))
         return fail();
 
+    auto dropPageCache = [](const std::string& blockDev) {
+        int fd = open(blockDev.c_str(), O_RDONLY);
+        if (fd >= 0) {
+            posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
+            close(fd);
+        }
+    };
+
     auto unmountAll = [&]() {
+        if (GlobalState::g_operationCancelled.load()) {
+            dropPageCache(fatPart);
+            dropPageCache(ntfsPart);
+        }
         runCommand({"umount", "-l", isoMnt});
         runCommand({"umount", "-l", fatMnt});
         runCommand({"umount", "-l", ntfsMnt});
@@ -230,7 +262,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (runCommand({"mount", fatPart, fatMnt}) != 0) {
         unmountAll(); return fail();
     }
-    // Native kernel ntfs3 driver (kernel 5.15+)
     if (runCommand({"mount", "-t", "ntfs3", ntfsPart, ntfsMnt}) != 0) {
         unmountAll(); return fail();
     }
@@ -251,26 +282,15 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ------------------------------------------------------------------ //
     // 4. Classify each ISO entry: boot-critical files → FAT32, rest → NTFS
     // ------------------------------------------------------------------ //
-
-    // Files and folders that must reside on the FAT32 ESP for UEFI boot:
-    // - efi/          : UEFI bootloader (bootx64.efi, bootmgfw.efi)
-    // - boot/         : BCD, boot.sdi, fonts, resources
-    // - sources/boot.wim : Windows PE setup image
-    const std::unordered_set<std::string> espTopFolders = {
-        "efi",
-        "boot"
-    };
+    const std::unordered_set<std::string> espTopFolders = { "efi", "boot" };
     const std::string espBootWim = "sources/boot.wim";
 
     auto belongsOnESP = [&](const fs::path& rel) -> bool {
-        // Check top-level folder
         std::string top = rel.begin()->string();
         std::transform(top.begin(), top.end(), top.begin(),
                        [](unsigned char c){ return std::tolower(c); });
-        if (espTopFolders.count(top) > 0)
-            return true;
+        if (espTopFolders.count(top) > 0) return true;
 
-        // Check specific file: sources/boot.wim
         std::string relStr = rel.generic_string();
         std::transform(relStr.begin(), relStr.end(), relStr.begin(),
                        [](unsigned char c){ return std::tolower(c); });
@@ -278,131 +298,121 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     };
 
     // ------------------------------------------------------------------ //
-    // 5. Copy all files with live progress (optimized kernel-side copy)  //
+    // 5. Copy all files with live progress                               //
     // ------------------------------------------------------------------ //
     auto startTime  = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
     uint64_t bytesInWindow = 0;
-    constexpr int UPDATE_INTERVAL_MS = 100;
+    constexpr int    UPDATE_INTERVAL_MS = 100;
+    // Only call now() every N chunks instead of after every chunk.
+    // At 8 MiB/chunk this fires at most ~12× per second at 1 GB/s — well
+    // above the 100 ms update interval — while eliminating the clock call
+    // on the vast majority of chunks where the interval hasn't elapsed.
+    constexpr int    PROGRESS_CHECK_EVERY_N_CHUNKS = 4;
 
-    // Optimized copy function using copy_file_range (kernel-side copy)
-    // with posix_fallocate for pre-allocation to avoid fragmentation
+    auto updateProgress = [&](uint64_t justCopied) {
+        progressData[progressIndex].bytesWritten.fetch_add(justCopied);
+        bytesInWindow += justCopied;
+
+        auto now = std::chrono::high_resolution_clock::now();
+        auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       now - lastUpdate).count();
+        if (ms >= UPDATE_INTERVAL_MS) {
+            uint64_t written = progressData[progressIndex].bytesWritten.load();
+            progressData[progressIndex].progress.store(
+                static_cast<int>(
+                    (static_cast<double>(written) / totalBytes) * 100));
+            if (bytesInWindow > 0 && ms > 0) {
+                progressData[progressIndex].speed.store(
+                    (static_cast<double>(bytesInWindow) /
+                     (1024.0 * 1024.0)) / (ms / 1000.0));
+                bytesInWindow = 0;
+            }
+            lastUpdate = now;
+        }
+    };
+
     auto copyWithProgress = [&](const fs::path& src, const fs::path& dst) -> bool {
-        // Open source read-only
         int fd_in = open(src.c_str(), O_RDONLY);
         if (fd_in < 0) return false;
 
-        // Open destination (create, truncate, write-only)
         int fd_out = open(dst.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        if (fd_out < 0) {
-            close(fd_in);
-            return false;
+        if (fd_out < 0) { close(fd_in); return false; }
+
+        if (!GlobalState::g_operationCancelled.load()) {
+            struct stat st;
+            if (fstat(fd_in, &st) == 0 && st.st_size > 0)
+                posix_fallocate(fd_out, 0, st.st_size);
         }
 
-        // Pre-allocate the full size if possible
-        // This helps NTFS lay out the file contiguously, boosting write speed
-        struct stat st;
-        if (fstat(fd_in, &st) == 0 && st.st_size > 0) {
-            // Ignore errors - preallocation is an optimization, not a requirement
-            // NTFS3 may return EOPNOTSUPP, which is fine
-            posix_fallocate(fd_out, 0, st.st_size);
-        }
+        constexpr size_t CHUNK = 8 * 1024 * 1024;
+        off_t   in_off    = 0;
+        off_t   out_off   = 0;
+        bool    success   = true;
+        int     chunksSinceCheck = 0;
 
-        constexpr size_t CHUNK = 8 * 1024 * 1024;  // 8 MiB per copy_file_range call
-        off_t in_off = 0;
-        off_t out_off = 0;
-
-        bool success = true;
-
+        // --- copy_file_range path ---
         while (!GlobalState::g_operationCancelled.load()) {
             ssize_t copied = copy_file_range(fd_in, &in_off,
                                              fd_out, &out_off,
                                              CHUNK, 0);
             if (copied < 0) {
-                // If kernel-side copy fails (e.g., filesystem doesn't support it),
-                // fall back to traditional read/write loop
-                if (errno == EINTR) continue;  // Interrupted by signal, retry
+                if (errno == EINTR) continue;
 
-                // Fallback: use traditional userspace copy
+                // Kernel-side copy unsupported; fall through to read/write.
                 success = false;
-
-                // Reset file positions for fallback
-                lseek(fd_in, 0, SEEK_SET);
+                lseek(fd_in,  0, SEEK_SET);
                 lseek(fd_out, 0, SEEK_SET);
 
-                constexpr size_t BUF_SIZE = 8 * 1024 * 1024;  // 8 MiB buffer
+                // --- fallback read/write path ---
+                constexpr size_t BUF_SIZE = 8 * 1024 * 1024;
                 std::vector<char> buf(BUF_SIZE);
+                int fbChunks = 0;
 
                 while (!GlobalState::g_operationCancelled.load()) {
                     ssize_t bytes_read = read(fd_in, buf.data(), BUF_SIZE);
                     if (bytes_read < 0) {
                         if (errno == EINTR) continue;
-                        break;
+                        goto fallback_write_error;
                     }
-                    if (bytes_read == 0) {
-                        success = true;  // Reached EOF successfully
-                        break;
-                    }
+                    if (bytes_read == 0) { success = true; break; }
 
                     ssize_t bytes_written = 0;
                     while (bytes_written < bytes_read) {
+                        if (GlobalState::g_operationCancelled.load())
+                            goto fallback_cancelled;
                         ssize_t written = write(fd_out,
-                                               buf.data() + bytes_written,
-                                               bytes_read - bytes_written);
+                                                buf.data() + bytes_written,
+                                                bytes_read - bytes_written);
                         if (written < 0) {
                             if (errno == EINTR) continue;
-                            break;
+                            goto fallback_write_error;
                         }
                         bytes_written += written;
                     }
-                    if (bytes_written < bytes_read) break;  // Write error
 
-                    progressData[progressIndex].bytesWritten.fetch_add(
-                        static_cast<uint64_t>(bytes_read));
-                    bytesInWindow += static_cast<uint64_t>(bytes_read);
-
-                    auto now = std::chrono::high_resolution_clock::now();
-                    auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                   now - lastUpdate).count();
-                    if (ms >= UPDATE_INTERVAL_MS) {
-                        uint64_t written_total = progressData[progressIndex].bytesWritten.load();
-                        progressData[progressIndex].progress.store(
-                            static_cast<int>(
-                                (static_cast<double>(written_total) / totalBytes) * 100));
-                        if (bytesInWindow > 0 && ms > 0) {
-                            progressData[progressIndex].speed.store(
-                                (static_cast<double>(bytesInWindow) /
-                                 (1024.0 * 1024.0)) / (ms / 1000.0));
-                            bytesInWindow = 0;
-                        }
-                        lastUpdate = now;
+                    if (++fbChunks % PROGRESS_CHECK_EVERY_N_CHUNKS == 0)
+                        updateProgress(static_cast<uint64_t>(bytes_read));
+                    else {
+                        progressData[progressIndex].bytesWritten
+                            .fetch_add(static_cast<uint64_t>(bytes_read));
+                        bytesInWindow += static_cast<uint64_t>(bytes_read);
                     }
                 }
-                break;  // Exit outer loop after fallback
+                break;
+
+                fallback_write_error: success = false; break;
+                fallback_cancelled:              break;
             }
 
-            if (copied == 0) break;   // EOF reached
+            if (copied == 0) break;  // EOF
 
-            // Update progress
-            progressData[progressIndex].bytesWritten.fetch_add(
-                static_cast<uint64_t>(copied));
-            bytesInWindow += static_cast<uint64_t>(copied);
-
-            auto now = std::chrono::high_resolution_clock::now();
-            auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           now - lastUpdate).count();
-            if (ms >= UPDATE_INTERVAL_MS) {
-                uint64_t written = progressData[progressIndex].bytesWritten.load();
-                progressData[progressIndex].progress.store(
-                    static_cast<int>(
-                        (static_cast<double>(written) / totalBytes) * 100));
-                if (bytesInWindow > 0 && ms > 0) {
-                    progressData[progressIndex].speed.store(
-                        (static_cast<double>(bytesInWindow) /
-                         (1024.0 * 1024.0)) / (ms / 1000.0));
-                    bytesInWindow = 0;
-                }
-                lastUpdate = now;
+            if (++chunksSinceCheck % PROGRESS_CHECK_EVERY_N_CHUNKS == 0) {
+                updateProgress(static_cast<uint64_t>(copied));
+            } else {
+                progressData[progressIndex].bytesWritten
+                    .fetch_add(static_cast<uint64_t>(copied));
+                bytesInWindow += static_cast<uint64_t>(copied);
             }
         }
 
@@ -419,10 +429,10 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                 unmountAll(); return false;
             }
 
-            fs::path rel  = fs::relative(entry.path(), std::string(isoMnt));
+            fs::path rel   = fs::relative(entry.path(), std::string(isoMnt));
             bool     toESP = belongsOnESP(rel);
-            fs::path dest = fs::path(toESP ? std::string(fatMnt)
-                                           : std::string(ntfsMnt)) / rel;
+            fs::path dest  = fs::path(toESP ? std::string(fatMnt)
+                                            : std::string(ntfsMnt)) / rel;
 
             if (entry.is_directory()) {
                 fs::create_directories(dest);
@@ -440,10 +450,18 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ------------------------------------------------------------------ //
     // 6. Flush and unmount                                               //
     // ------------------------------------------------------------------ //
-    int dev_fd = open(device.c_str(), O_RDONLY);
-    if (dev_fd >= 0) {
-        fsync(dev_fd);
-        close(dev_fd);
+    // fsync the partition file descriptors, not the raw block device.
+    // fsync on the raw device skips the filesystem layer and does not flush
+    // filesystem-level buffers (journal, metadata) on all kernels.  Opening
+    // each partition with O_RDWR and calling fsync flushes through the VFS
+    // layer for that filesystem, which is what we actually need here.
+    // (umount will also flush, but explicit fsync gives us the error code.)
+    for (const auto& part : {fatPart, ntfsPart}) {
+        int pfd = open(part.c_str(), O_RDWR);
+        if (pfd >= 0) {
+            fsync(pfd);
+            close(pfd);
+        }
     }
     unmountAll();
 
@@ -454,7 +472,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         ? (static_cast<double>(totalBytes) / (1024.0 * 1024.0)) / seconds
         : 0.0;
     progressData[progressIndex].speed.store(avgSpeed);
-    progressData[progressIndex].bytesWritten.store(totalBytes);
     progressData[progressIndex].progress.store(100);
     progressData[progressIndex].completed.store(true);
     return true;
@@ -641,7 +658,6 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             ? (static_cast<double>(fileSize) / (1024.0 * 1024.0)) / seconds
             : 0.0;
         progressData[progressIndex].speed.store(avgSpeed);
-        progressData[progressIndex].bytesWritten.store(fileSize);
         progressData[progressIndex].progress.store(100);
         progressData[progressIndex].completed.store(true);
         return true;
