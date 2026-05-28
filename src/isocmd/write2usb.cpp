@@ -638,7 +638,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     std::string lowerFilename = filename;
     std::transform(lowerFilename.begin(), lowerFilename.end(), lowerFilename.begin(), ::tolower);
 
-    // 2. Only probe the ISO if the filename actually contains "win"
+    // Only probe the ISO if the filename actually contains "win"
     if (lowerFilename.find("win") != std::string::npos) {
         if (isWindowsIso(isoPath)) {
             return writeWindowsIsoToDevice(isoPath, device, progressIndex);
