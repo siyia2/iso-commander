@@ -515,7 +515,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         });
 
         std::ostringstream devicePromptStream;
-        devicePromptStream << "\n" << wt.pathCol << "Selected " << wt.headerCol << "ISO" << wt.pathCol << ":\n\n";
+        devicePromptStream << "\n" << color << "Selected " << wt.headerCol << "ISO" << color << ":\n\n";
 
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
             auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write2usb");
@@ -528,11 +528,11 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
             devicePromptStream << wt.fileCol << filename;
 
-            devicePromptStream << wt.bold << " (" << wt.sizeCol << sortedIsos[i].sizeStr
-                              << wt.bold << ")\n";
+            devicePromptStream << UI::Palette::DimGray << " (" << wt.sizeCol << sortedIsos[i].sizeStr
+                              << UI::Palette::DimGray << ")\n";
         }
 
-        devicePromptStream << "\n" << wt.rl_resetCol << "Removable USB Devices:" << wt.rl_resetCol << "\n\n";
+        devicePromptStream << "\n" << color << "Removable USB Devices:" << wt.rl_resetCol << "\n\n";
         std::vector<std::string> usbDevices = getRemovableDevices();
 
         struct DeviceInfo {
@@ -570,9 +570,9 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                     devicePromptStream << "  " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
                 } else {
                     devicePromptStream << "  " << wt.deviceCol << dev.path
-                                      << wt.rl_resetCol << " <" << dev.driveName
-                                      << "> (" << wt.sizeCol << dev.sizeStr
-                                      << wt.rl_resetCol << ")"
+                                      << color << " <" << dev.driveName
+                                      << ">" << UI::Palette::DimGray << " (" << wt.sizeCol << dev.sizeStr
+                                      << UI::Palette::DimGray << ")"
                                       << (dev.mounted ? wt.colorFailure + " (mounted)" + wt.rl_resetCol : "")
                                       << "\n";
                 }
@@ -651,12 +651,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             std::string deviceSizeStr = formatFileSize(deviceSize);
             std::string driveName = getDriveName(device);
 
-            std::cout << "  {" << wt.deviceCol << device
-                      << " " << wt.rl_resetCol << "<" << driveName << "> ("
+            std::cout << UI::Palette::DimGray << "  {" << wt.deviceCol << device
+                      << " " << color << "<" << driveName << ">" << UI::Palette::DimGray << " ("
                       << wt.sizeCol << deviceSizeStr
-                      << wt.rl_resetCol << ")} ← {" << wt.fileCol
-                      << iso.filename << wt.rl_resetCol << " (" << wt.sizeCol
-                      << iso.sizeStr << wt.rl_resetCol << ")}\n";
+                      << UI::Palette::DimGray << ")} " << color <<"←" << UI::Palette::DimGray << " {" << wt.fileCol
+                      << iso.filename << UI::Palette::DimGray << " (" << wt.sizeCol
+                      << iso.sizeStr << UI::Palette::DimGray << ")}\n";
         }
 
         disableReadlineForConfirmation();
@@ -802,9 +802,9 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             // Status tracking
             bool isCompleted = prog.completed.load();
 
-            if (isCompleted)                                    std::cout << wt.colorSuccess << "DONE  ";
-            else if (prog.failed.load())                        std::cout << wt.colorFailure << "FAIL  ";
-            else if (GlobalState::g_operationCancelled.load())  std::cout << wt.colorWarning << "CXL   ";
+            if (isCompleted)                                    std::cout << wt.colorSuccess << "DONE ";
+            else if (prog.failed.load())                        std::cout << wt.colorFailure << "FAIL ";
+            else if (GlobalState::g_operationCancelled.load())  std::cout << wt.colorWarning << "CXL  ";
             else {
                 std::string pctStr = std::to_string(pct) + "%";
                 std::cout << color << std::setw(2) << pctStr << " ";
