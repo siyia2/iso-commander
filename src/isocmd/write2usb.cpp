@@ -83,12 +83,10 @@ bool isWindowsIso(const std::string& isoPath) {
     if (!mkdtemp(tmpDir)) return false;
 
     auto cleanup = [&]() {
-        // Use runCommand instead of system
         runCommand({"umount", "-l", tmpDir});
         rmdir(tmpDir);
     };
 
-    // Use runCommand instead of system
     if (runCommand({"mount", "-o", "ro,loop", isoPath, tmpDir}) != 0) {
         rmdir(tmpDir);
         return false;
