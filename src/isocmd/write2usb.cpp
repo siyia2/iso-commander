@@ -1,25 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
-#include <vector>
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstring>
+#include <filesystem>
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <unordered_set>
-#include <algorithm>
-#include <memory>
-#include <chrono>
-#include <atomic>
-#include <filesystem>
-#include <stdexcept>
-#include <cstring>
+#include <vector>
 
 // C / System Headers
-#include <unistd.h>
 #include <fcntl.h>
-#include <sys/wait.h>
+#include <linux/fs.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/ioctl.h>
-#include <linux/fs.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 // Project Headers
 #include "../state.h"
