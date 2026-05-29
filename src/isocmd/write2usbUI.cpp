@@ -575,7 +575,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                                       << color << " <" << dev.driveName
                                       << ">" << UI::Palette::DimGray << " (" << wt.sizeCol << dev.sizeStr
                                       << UI::Palette::DimGray << ")"
-                                      << (dev.mounted ? wt.colorFailure + " -> mounted" + wt.rl_resetCol : "")
+                                      << (dev.mounted ? wt.colorFailure + " [MOUNTED]" + wt.rl_resetCol : "")
                                       << "\n";
                 }
             }
