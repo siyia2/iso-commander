@@ -22,7 +22,7 @@ namespace UI {
         static constexpr std::string_view Reset        = "\033[0m";
         static constexpr std::string_view BoldReset    = "\033[1;38;2;160;170;181m";
         static constexpr std::string_view Dim          = "\033[0;38;2;130;130;130m";
-        static constexpr std::string_view DimGray      = "\033[1;38;2;100;100;100m";
+        static constexpr std::string_view DimGray      = "\033[1;38;2;130;130;130m";
 
         static constexpr std::string_view Red          = "\033[1;38;2;235;40;40m";
         static constexpr std::string_view Green        = "\033[1;38;2;90;215;35m";
@@ -37,7 +37,7 @@ namespace UI {
         static constexpr std::string_view Amber        = "\033[1;38;2;230;158;0m";
         static constexpr std::string_view Rose         = "\033[1;38;2;240;110;185m";
         static constexpr std::string_view White        = "\033[1;38;2;215;215;215m";
-        static constexpr std::string_view Gray         = "\033[1;38;2;120;120;120m";
+        static constexpr std::string_view Gray         = "\033[1;38;2;140;140;140m";
         static constexpr std::string_view BGNavy       = "\033[1;48;2;0;0;175m";
 
         // Readline-wrapped variants
