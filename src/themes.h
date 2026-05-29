@@ -20,16 +20,16 @@ namespace UI {
      */
     namespace Palette {
         static constexpr std::string_view Reset        = "\033[0m";
-        static constexpr std::string_view BoldReset    = "\033[1;38;2;195;195;195m";
+        static constexpr std::string_view BoldReset    = "\033[1;38;2;160;170;181m";
         static constexpr std::string_view Dim          = "\033[0;38;2;130;130;130m";
         static constexpr std::string_view DimGray      = "\033[1;38;2;100;100;100m";
 
         static constexpr std::string_view Red          = "\033[1;38;2;235;40;40m";
-        static constexpr std::string_view Green        = "\033[1;38;2;100;235;40m";
-        static constexpr std::string_view Yellow       = "\033[1;38;2;245;222;0m";
-        static constexpr std::string_view Blue         = "\033[1;38;2;0;125;235m";
+        static constexpr std::string_view Green        = "\033[1;38;2;90;215;35m";
+        static constexpr std::string_view Yellow       = "\033[1;38;2;212;184;0m";
+        static constexpr std::string_view Blue         = "\033[1;38;2;0;115;215m";
         static constexpr std::string_view Magenta      = "\033[1;38;2;235;50;245m";
-        static constexpr std::string_view Cyan         = "\033[1;38;2;103;210;215m";
+        static constexpr std::string_view Cyan         = "\033[1;38;2;80;190;195m";
         static constexpr std::string_view DarkCyan     = "\033[1;38;2;0;160;160m";
         static constexpr std::string_view Orange       = "\033[1;38;2;235;120;20m";
         static constexpr std::string_view Purple       = "\033[1;38;2;150;105;210m";
@@ -41,11 +41,11 @@ namespace UI {
         static constexpr std::string_view BGNavy       = "\033[1;48;2;0;0;175m";
 
         // Readline-wrapped variants
-        static constexpr std::string_view RL_Blue      = "\001\033[1;38;2;0;125;235m\002";
-        static constexpr std::string_view RL_Green     = "\001\033[1;38;2;100;235;40m\002";
+        static constexpr std::string_view RL_Blue      = "\001\033[1;38;2;0;115;215m\002";
+        static constexpr std::string_view RL_Green     = "\001\033[1;38;2;90;215;35m\002";
         static constexpr std::string_view RL_Red       = "\001\033[1;38;2;235;40;40m\002";
-        static constexpr std::string_view RL_Yellow    = "\001\033[1;38;2;245;222;0m\002";
-        static constexpr std::string_view RL_BoldAlt   = "\001\033[1;38;2;195;195;195m\002";
+        static constexpr std::string_view RL_Yellow    = "\001\033[1;38;2;212;184;0m\002";
+        static constexpr std::string_view RL_BoldAlt   = "\001\033[1;38;2;160;170;181m\002";
     }
 
 	struct MainTheme { std::string_view primary, secondary, accent, muted, highlight, background, warning;
