@@ -11,6 +11,7 @@
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <queue>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -516,31 +517,111 @@ bool isValidIso9660(int fd) {
 }
 
 /**
- * @brief Performs a high-speed structural probe to detect Windows 10/11 installation media.
+ * @brief Probes an ISO image to detect Windows 10/11 installation media.
  *
- * Projects the initial 32MB metadata boundary of an ISO file into the process's virtual
- * address space using POSIX memory mapping (@c mmap). It executes flat ASCII and
- * interleaved dual-endian UTF-16 case-insensitive signature scans to isolate deterministic
- * Windows deployment blocks without incurring loop-mount configuration overhead.
+ * Maps up to the first 32 MB of the file into the process address space and
+ * performs a single-pass Aho-Corasick scan for Windows Boot Manager and WinPE
+ * payload signatures. The 32 MB window is sufficient because Windows ISO
+ * directory entries for bootmgr and boot.wim always appear within the first
+ * few MB of the image.
  *
  * @details
- * - **Early Short-Circuiting:** Instantly drops execution if standard Volume Descriptor
- * identifiers (@c CD001 or @c BEA01) are absent at offset @c 0x8001.
- * - **Endian Resilience:** Features a custom lambda scanner capable of resolving
- * signatures across raw ASCII, UTF-16 Big-Endian (common in Joliet tables), and
- * UTF-16 Little-Endian configurations natively.
- * - **I/O Insulation:** Bounding the mapped execution window strictly to 32MB safeguards
- * the system cache from multi-gigabyte linear disk-scan thrashing when processing
- * large non-Windows operating system images.
+ * - **Volume validation:** Requires a Primary Volume Descriptor (type 0x01,
+ *   identifier "CD001") at sector 16. Pure-UDF images with "NSR02"/"NSR03"
+ *   are also accepted; "BEA01" alone is not sufficient.
+ * - **Signature scan:** Searches simultaneously for "bootmgr[.efi]" and
+ *   "boot.wim" case-insensitively across ASCII, UTF-16LE, and UTF-16BE in a
+ *   single O(n) pass. UTF-16LE is the native encoding used by Windows for
+ *   Joliet/UDF filenames. The automaton is built once on first call and reused
+ *   across subsequent calls.
  *
- * @note Assumes a 64-bit target execution architecture to guarantee unhindered
- * virtual addressing blocks.
- * @param isoPath Absolute or relative filesystem path to the target image file.
- * @return @c true if the volume header is valid and both the Windows Boot Manager
- * (@c bootmgr) and WinPE payload image (@c boot.wim) are found.
+ * @param isoPath Absolute or relative filesystem path to the target image.
+ * @return @c true if the volume header is valid and both "bootmgr[.efi]" and
+ *         "boot.wim" signatures are present within the mapped window.
+ *
+ * @note Opens with O_CLOEXEC to avoid fd leaks into child processes.
+ * @note Does not modify the file; read-only mapping.
+ * @note The static Aho-Corasick automaton is thread-safe under C++11 and later.
  */
 bool isWindowsIsoInitialCheck(const std::string& isoPath) {
-    int fd = open(isoPath.c_str(), O_RDONLY);
+
+    // --- Aho-Corasick automaton (built once, shared across calls) ---
+    // Logical patterns: 0 = "boot.wim", 1 = "bootmgr.efi", 2 = "bootmgr"
+    // Variants: 0 = ASCII, 1 = UTF-16LE, 2 = UTF-16BE  →  bits 0–8
+    static const auto ac = [] {
+        struct Node {
+            std::array<int, 256> next{};
+            int fail{0};
+            uint32_t match{0};
+            Node() { next.fill(-1); }
+        };
+
+        std::vector<Node> nodes;
+        nodes.emplace_back();
+
+        auto addPattern = [&](std::string_view text, int logicalIndex, int variant) {
+            int cur = 0;
+            for (char raw : text) {
+                unsigned char c = static_cast<unsigned char>(std::tolower(raw));
+                uint8_t bytes[2];
+                int byteCount;
+                if (variant == 0) {
+                    bytes[0] = c;
+                    byteCount = 1;
+                } else if (variant == 1) {
+                    bytes[0] = c; bytes[1] = 0x00; // UTF-16LE: [char, 0x00]
+                    byteCount = 2;
+                } else {
+                    bytes[0] = 0x00; bytes[1] = c; // UTF-16BE: [0x00, char]
+                    byteCount = 2;
+                }
+                for (int b = 0; b < byteCount; ++b) {
+                    int byte = bytes[b];
+                    if (nodes[cur].next[byte] == -1) {
+                        nodes[cur].next[byte] = static_cast<int>(nodes.size());
+                        nodes.emplace_back();
+                    }
+                    cur = nodes[cur].next[byte];
+                }
+            }
+            nodes[cur].match |= (1u << (logicalIndex * 3 + variant));
+        };
+
+        for (int v = 0; v < 3; ++v) {
+            addPattern("boot.wim",    0, v);
+            addPattern("bootmgr.efi", 1, v);
+            addPattern("bootmgr",     2, v);
+        }
+
+        // BFS to build failure links
+        std::queue<int> q;
+        for (int c = 0; c < 256; ++c) {
+            if (nodes[0].next[c] == -1) {
+                nodes[0].next[c] = 0;
+            } else {
+                nodes[nodes[0].next[c]].fail = 0;
+                q.push(nodes[0].next[c]);
+            }
+        }
+        while (!q.empty()) {
+            int u = q.front(); q.pop();
+            nodes[u].match |= nodes[nodes[u].fail].match;
+            for (int c = 0; c < 256; ++c) {
+                int v = nodes[u].next[c];
+                if (v == -1) {
+                    nodes[u].next[c] = nodes[nodes[u].fail].next[c];
+                } else {
+                    nodes[v].fail = nodes[nodes[u].fail].next[c];
+                    q.push(v);
+                }
+            }
+        }
+
+        return nodes;
+    }();
+
+    // --- File open and size check ---
+    int fd = open(isoPath.c_str(), O_RDONLY | O_CLOEXEC);
     if (fd < 0) return false;
 
     struct stat sb;
@@ -549,55 +630,48 @@ bool isWindowsIsoInitialCheck(const std::string& isoPath) {
         return false;
     }
 
-    size_t mapSize = std::min(static_cast<size_t>(sb.st_size), static_cast<size_t>(32 * 1024 * 1024));
-
-    char* addr = static_cast<char*>(mmap(NULL, mapSize, PROT_READ, MAP_PRIVATE, fd, 0));
+    const size_t mapSize = std::min(static_cast<size_t>(sb.st_size),
+                                    static_cast<size_t>(32 * 1024 * 1024));
+    char* addr = static_cast<char*>(mmap(nullptr, mapSize, PROT_READ, MAP_PRIVATE, fd, 0));
     if (addr == MAP_FAILED) {
         close(fd);
         return false;
     }
+    madvise(addr, mapSize, MADV_SEQUENTIAL);
 
-    std::string_view metaData(addr, mapSize);
-
-    // Validate ISO 9660 or UDF headers at Sector 16
-    bool isValidIso = (metaData.substr(0x8001, 5) == "CD001" || metaData.substr(0x8001, 5) == "BEA01");
-    if (!isValidIso) {
-        munmap(addr, mapSize);
-        close(fd);
-        return false;
+    // --- Volume header validation ---
+    // Sector 16 (offset 0x8000): byte 0 = descriptor type, bytes 1–5 = identifier.
+    // Accept ISO 9660 PVD (type=0x01, id="CD001") or UDF NSR (id="NSR02"/"NSR03").
+    {
+        const uint8_t descType = static_cast<uint8_t>(addr[0x8000]);
+        std::string_view id(addr + 0x8001, 5);
+        const bool validIso = (descType == 0x01 && id == "CD001");
+        const bool validUdf = (id == "NSR02" || id == "NSR03");
+        if (!validIso && !validUdf) {
+            munmap(addr, mapSize);
+            close(fd);
+            return false;
+        }
     }
 
-    auto scanSignature = [addr, mapSize](std::string_view target) -> bool {
-        if (mapSize < (target.size() * 2)) return false;
-
-        auto ascii_it = std::search(addr, addr + mapSize, target.begin(), target.end(),
-            [](char h, char n) { return std::tolower(static_cast<unsigned char>(h)) == std::tolower(static_cast<unsigned char>(n)); });
-        if (ascii_it != (addr + mapSize)) return true;
-
-        for (size_t i = 0; i <= mapSize - (target.size() * 2); i += 2) {
-            bool matchBE = true, matchLE = true;
-            for (size_t j = 0; j < target.size(); ++j) {
-                char b1 = addr[i + (j * 2)];
-                char b2 = addr[i + (j * 2) + 1];
-
-                unsigned char u1 = static_cast<unsigned char>(b1);
-                unsigned char u2 = static_cast<unsigned char>(b2);
-
-                if (b1 != '\0' || std::tolower(u2) != std::tolower(static_cast<unsigned char>(target[j]))) matchBE = false;
-                if (b2 != '\0' || std::tolower(u1) != std::tolower(static_cast<unsigned char>(target[j]))) matchLE = false;
-                if (!matchBE && !matchLE) break;
-            }
-            if (matchBE || matchLE) return true;
-        }
-        return false;
-    };
-
-    bool hasBootWim = scanSignature("boot.wim");
-    bool hasBootMgr = scanSignature("bootmgr.efi") || scanSignature("bootmgr");
+    // --- Single-pass Aho-Corasick scan ---
+    uint32_t found = 0;
+    int cur = 0;
+    for (size_t i = 0; i < mapSize; ++i) {
+        const int c = static_cast<unsigned char>(
+            std::tolower(static_cast<unsigned char>(addr[i])));
+        cur = ac[cur].next[c];
+        if (ac[cur].match)
+            found |= ac[cur].match;
+    }
 
     munmap(addr, mapSize);
     close(fd);
 
+    // boot.wim  matched in any variant: bits 0,1,2
+    // bootmgr   matched in any variant: bits 3–8
+    const bool hasBootWim = (found & 0b000000111u) != 0;
+    const bool hasBootMgr = (found & 0b111111000u) != 0;
     return hasBootWim && hasBootMgr;
 }
 
