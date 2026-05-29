@@ -39,7 +39,7 @@ void setupHelp(std::string_view title, const ThemeColors& tc) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
     clearScrollBuffer();
-    std::cout << "\n" << tc.title << "===== " << title << " =====" 
+    std::cout << "\n" << tc.title << "===== " << title << " ====="
               << UI::Palette::BoldReset << "\n" << std::endl;
 }
 
@@ -78,8 +78,8 @@ void helpSelections(bool& isAtISOListForHelp) {
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~'" + std::string(UI::Palette::BoldReset) + "                : View Full/Compact\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'*'" + std::string(UI::Palette::BoldReset) + "                : View FilenamesOnly (¬filtered, ¬umount)\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'/'" + std::string(UI::Palette::BoldReset) + "                : Filter (e.g. term1;term2)\n" +
-    (isAtISOListForHelp ? 
-        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'R'" + std::string(UI::Palette::BoldReset) + "                : Refresh ISO list from stored FolderPaths\n" 
+    (isAtISOListForHelp ?
+        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'R'" + std::string(UI::Palette::BoldReset) + "                : Refresh ISO list from stored FolderPaths\n"
         : "") +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process|Clear pending items\n" +
     "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgDn'|'PgUp'|'g' " + std::string(UI::Palette::BoldReset) + " : Pagination Next|Previous|GoTo page");
@@ -183,7 +183,7 @@ void helpMappings() {
 
     printSection(tc, "\n3. Tips:",
         "   • Tab-complete INDEX>DEVICE pairs for faster mapping\n"
-        "   • Only raw devices are eligible for write2usb\n"
+        "   • Only unmounted parent devices are eligible for write2usb\n"
         "   • USB detection relies on '/sys/class/block/sd*/removable' kernel value");
 
     pressEnterToReturn();
