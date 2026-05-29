@@ -90,7 +90,7 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "skin",                                     // key
         "white",                                    // defaultValue
-        "Menu accent color (green/cyan/white/purple/amber/rose/gray)",  // comment
+        "Menu and header accent color (green/cyan/white/purple/amber/rose/gray)",  // comment
         "Theme Settings",                           // section
         [](const std::string& v) {                  // validate
             return v == "green" || v == "cyan" || v == "white" ||
