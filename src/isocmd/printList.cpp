@@ -143,14 +143,14 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             auto [dirPart, pathPart, hashPart] = parseMountPointComponents(item);
             if (showFullUmount) {
                 output.append(c.mnt)
-                      .append(dirPart).append(UI::Palette::BoldReset)
+                      .append(dirPart).append(UI::Palette::Reset).append(UI::Palette::BoldReset)
                       .append(c.iso).append(pathPart)
                       .append(c.square).append(hashPart);
             } else {
                 output.append(c.iso).append(pathPart);
             }
         }
-        output.append(UI::Palette::BoldReset).append("\n");
+        output.append(UI::Palette::Reset).append(UI::Palette::BoldReset).append("\n");
     }
 
     // --- Footer ---
@@ -173,7 +173,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             output.append(pendingIndices[i]);
             if (i < pendingIndices.size() - 1) output.push_back(' ');
         }
-        output.append(UI::Palette::BoldReset).append("\n");
+        output.append(UI::Palette::Reset).append(UI::Palette::BoldReset).append("\n");
     }
 
     // --- Sync-safe print ---
