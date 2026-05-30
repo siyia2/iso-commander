@@ -539,15 +539,18 @@ bool isValidIso9660(int fd) {
  *   Joliet/UDF filenames. The automaton is built once on first call and reused
  *   across subsequent calls.
  *
- * @param isoPath Absolute or relative filesystem path to the target image.
+ * @param fd       Open, readable file descriptor positioned anywhere — the
+ *                 mapping is always made from offset 0. The caller retains
+ *                 ownership; this function does not close the descriptor.
+ * @param fileSize Size of the image in bytes, as returned by @c fstat. Used
+ *                 for the minimum-size guard and to clamp the mapping window.
  * @return @c true if the volume header is valid and both "bootmgr[.efi]" and
  *         "boot.wim" signatures are present within the mapped window.
  *
- * @note Opens with O_CLOEXEC to avoid fd leaks into child processes.
  * @note Does not modify the file; read-only mapping.
  * @note The static Aho-Corasick automaton is thread-safe under C++11 and later.
  */
-bool isWindowsIsoInitialCheck(const std::string& isoPath) {
+bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
 
     // --- Aho-Corasick automaton (built once, shared across calls) ---
     // Logical patterns: 0 = "boot.wim", 1 = "bootmgr.efi", 2 = "bootmgr"
@@ -624,23 +627,13 @@ bool isWindowsIsoInitialCheck(const std::string& isoPath) {
         return nodes;
     }();
 
-    // --- File open and size check ---
-    int fd = open(isoPath.c_str(), O_RDONLY | O_CLOEXEC);
-    if (fd < 0) return false;
+    // --- Size check (fd already open, caller owns it) ---
+    if (fileSize < 0x9000) return false;
 
-    struct stat sb;
-    if (fstat(fd, &sb) == -1 || sb.st_size < 0x9000) {
-        close(fd);
-        return false;
-    }
-
-    const size_t mapSize = std::min(static_cast<size_t>(sb.st_size),
+    const size_t mapSize = std::min(static_cast<size_t>(fileSize),
                                     static_cast<size_t>(32 * 1024 * 1024));
     char* addr = static_cast<char*>(mmap(nullptr, mapSize, PROT_READ, MAP_PRIVATE, fd, 0));
-    if (addr == MAP_FAILED) {
-        close(fd);
-        return false;
-    }
+    if (addr == MAP_FAILED) return false;
     madvise(addr, mapSize, MADV_SEQUENTIAL);
 
     // --- Volume header validation ---
@@ -653,7 +646,6 @@ bool isWindowsIsoInitialCheck(const std::string& isoPath) {
         const bool validUdf = (id == "NSR02" || id == "NSR03");
         if (!validIso && !validUdf) {
             munmap(addr, mapSize);
-            close(fd);
             return false;
         }
     }
@@ -670,7 +662,7 @@ bool isWindowsIsoInitialCheck(const std::string& isoPath) {
     }
 
     munmap(addr, mapSize);
-    close(fd);
+    // fd is NOT closed — caller owns it
 
     // boot.wim  matched in any variant: bits 0,1,2
     // bootmgr   matched in any variant: bits 3–8
@@ -682,23 +674,29 @@ bool isWindowsIsoInitialCheck(const std::string& isoPath) {
 /**
  * @brief Writes an ISO image to a raw block device, auto-routing Windows vs. Linux configurations.
  *
- * High-level orchestration routine that intercepts Windows installation media using an
- * optimized metadata signature probe. Standard/Linux distributions fall through directly
- * into a specialized, unbuffered block-level stream.
+ * High-level orchestration routine that opens the ISO once, validates it, then intercepts
+ * Windows installation media using an optimized metadata signature probe. Standard/Linux
+ * distributions fall through directly into a specialized, unbuffered block-level stream.
  *
  * @details
+ * - **Single fd Lifecycle:** The ISO is opened once at entry via @c open(O_RDONLY) and
+ *   held for the duration of the call. The same descriptor is passed to @ref isValidIso9660
+ *   and @ref isWindowsIsoInitialCheck, avoiding redundant opens. File size is retrieved
+ *   once via @c fstat and reused across all paths.
+ * - **Early Validation:** @ref isValidIso9660 is invoked before any device access or
+ *   routing decision, ensuring invalid images are rejected with minimal overhead.
  * - **Windows Path Routing:** If @ref isWindowsIsoInitialCheck passes, execution is
- * delegated to @ref writeWindowsIsoToDevice, which automatically handles multi-partitioning,
- * hybrid FAT32+NTFS tables, and cluster tuning.
+ *   delegated to @ref writeWindowsIsoToDevice, which automatically handles multi-partitioning,
+ *   hybrid FAT32+NTFS tables, and cluster tuning.
  * - **Raw O_DIRECT Pipeline:** Non-Windows targets are imaged via raw unbuffered disk I/O.
- * Data transfers utilize a dedicated page-aligned memory buffer (@c posix_memalign) matching
- * the physical device's underlying sector constraints queried from @c ioctl(BLKSSZGET).
+ *   Data transfers utilize a dedicated page-aligned memory buffer (@c posix_memalign) matching
+ *   the physical device's underlying sector constraints queried from @c ioctl(BLKSSZGET).
  * - **Tail-Block Padding:** Detects partial blocks at EOF or short reads, automatically
- * zero-padding the remaining buffer slice up to the strict sector layout boundary to prevent
- * kernel rejection errors (@c EINVAL).
+ *   zero-padding the remaining buffer slice up to the strict sector layout boundary to prevent
+ *   kernel rejection errors (@c EINVAL).
  * - **Asynchronous Cancellation Safety:** Evaluates @c GlobalState::g_operationCancelled
- * at every inner loop pass. On user abort, it short-circuits execution and leaves the disk
- * safely without triggering a cascading @c fsync block.
+ *   at every inner loop pass. On user abort, it short-circuits execution and leaves the disk
+ *   safely without triggering a cascading @c fsync block.
  *
  * @param isoPath Absolute path to the source ISO image file on the host.
  * @param device Target destination block node path (e.g., @c /dev/sdb). WARNING: All existing
@@ -713,15 +711,7 @@ bool isWindowsIsoInitialCheck(const std::string& isoPath) {
  */
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex) {
 
-    // Fast-path hardware validation probe
-    if (isWindowsIsoInitialCheck(isoPath)) {
-        // Safe to jump straight into formatting; validation is complete
-        return writeWindowsIsoToDevice(isoPath, device, progressIndex);
-    }
-
-    // --- Raw O_DIRECT path for Linux / UEFI ISOs -------------------------
-
-    // Open ISO for reading (fresh descriptor, unaffected by any probe)
+    // Open ISO once — shared by all validation and write paths
     int iso_fd = open(isoPath.c_str(), O_RDONLY);
     if (iso_fd == -1) {
         progressData[progressIndex].failed.store(true);
@@ -736,11 +726,31 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         return false;
     }
 
-    // Seek back to beginning for writing
+    // Seek back to beginning after validation probe
     if (lseek(iso_fd, 0, SEEK_SET) == -1) {
         progressData[progressIndex].failed.store(true);
         return false;
     }
+
+    // Get file size once via fstat — reused by both routing and raw write path
+    struct stat sb;
+    if (fstat(iso_fd, &sb) == -1) {
+        progressData[progressIndex].failed.store(true);
+        return false;
+    }
+
+    // Fast-path: Windows ISO routing (borrows iso_fd)
+    if (isWindowsIsoInitialCheck(iso_fd, sb.st_size)) {
+        return writeWindowsIsoToDevice(isoPath, device, progressIndex);
+    }
+
+    // Seek back to beginning for raw write path
+    if (lseek(iso_fd, 0, SEEK_SET) == -1) {
+        progressData[progressIndex].failed.store(true);
+        return false;
+    }
+
+    // --- Raw O_DIRECT path for Linux / UEFI ISOs -------------------------
 
     // Open device with O_DIRECT for unbuffered writes
     int dev_fd = open(device.c_str(), O_WRONLY | O_DIRECT);
@@ -758,13 +768,8 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         return false;
     }
 
-    uint64_t fileSize = 0;
-    try {
-        fileSize = std::filesystem::file_size(isoPath);
-    } catch (const std::filesystem::filesystem_error&) {
-        progressData[progressIndex].failed.store(true);
-        return false;
-    }
+    // Use file size from fstat rather than reopening via std::filesystem
+    const uint64_t fileSize = static_cast<uint64_t>(sb.st_size);
     if (fileSize == 0) {
         progressData[progressIndex].failed.store(true);
         return false;
