@@ -100,50 +100,76 @@ bool isWindowsIso(const std::string& isoPath) {
     return hasBootWim && hasBootMgr;
 }
 
-/** @par Copy strategy
- * Files are copied using a single 4 MiB buffer allocated once (via
- * @c posix_memalign, 4096-byte aligned) and reused across all files.
- * The source file descriptor uses @c posix_fadvise(POSIX_FADV_SEQUENTIAL)
- * to enable kernel read-ahead from the loop-mounted ISO.
- *
- * FAT32 destination fds are opened with @c O_DIRECT, bypassing the page
- * cache entirely — writes go straight to the USB device with no kernel
- * buffering. This eliminates post-cancel dirty-page writeback for the ESP.
- * Short final-chunk reads are padded to the next 512-byte sector boundary
- * (required by @c O_DIRECT) with zeroed bytes. After the loop,
- * @c ftruncate(fd_out, fileSize) strips the padding so the on-disk file is
- * byte-for-byte identical to the source — progress and @c writtenInFile
- * always track @c bytes_read (real bytes), never the padded write length.
- *
- * NTFS destination fds use buffered I/O (@c ntfs3 does not support
- * @c O_DIRECT). The dirty-page backlog is bounded by @c sync_file_range;
- * see @par Dirty-page backlog below.
- *
- * @par Dirty-page backlog (NTFS)
- * Buffered writes to the NTFS partition accumulate dirty pages that the
- * kernel flushes asynchronously to the USB device. Without mitigation,
- * cancelling mid-copy can leave hundreds of MiB still queued for writeback.
- * To bound this, @c sync_file_range is called with @c SYNC_FILE_RANGE_WRITE
- * every 4 MiB written, starting asynchronous writeback of each completed
- * window without blocking the write loop. At most one window (~4 MiB) of
- * dirty pages is unsynced at any moment, so cancellation stops USB writes
- * within approximately that amount.
- *
- * @par Cancellation
- * @c GlobalState::g_operationCancelled is checked before and during every
- * file copy. On cancellation:
- *   - Copying stops at the next chunk boundary
- *   - @c ftruncate(fd_out, 0) is called on the current output fd to
- *     invalidate its dirty pages before @c close(); combined with
- *     @c POSIX_FADV_DONTNEED this asks the kernel to discard rather than
- *     flush those pages. Honoured on a best-effort basis by @c ntfs3.
- *   - @c POSIX_FADV_DONTNEED followed by @c BLKFLSBUF is issued on both
- *     partition block devices unconditionally before every unmount — on
- *     cancellation this covers dirty pages from previously completed files
- *     which are no longer reachable via any open fd
- *   - All three mounts are lazily unmounted (@c umount -l)
- *   - The function returns @c false without setting the failure flag
- */
+/**
+* @brief Writes a Windows ISO to a block device using a hybrid FAT32 + NTFS layout (UEFI only).
+*
+* Partition layout written to @p device:
+*   GPT partition table.
+*   Partition 1: FAT32 (1024 MiB, EFI System Partition) — receives:
+*     - efi/
+*     - boot/
+*     - sources/boot.wim
+*
+*   This satisfies Windows UEFI boot requirements while remaining within
+*   FAT32 limitations.
+*
+*   Partition 2: NTFS (remainder) — receives all remaining files, including
+*   large files such as sources/install.wim that exceed FAT32's 4 GiB limit.
+*   Formatted with 64 KiB clusters (@c -c 65536) for better sequential write
+*   performance.
+*
+* This layout mirrors the approach used by modern Windows installation media:
+* a small FAT32 ESP for firmware compatibility, and a larger NTFS partition
+* for bulk data storage.
+*
+* The NTFS partition is mounted using the kernel's native ntfs3 driver
+* (requires Linux kernel 5.15 or newer). Fallback to ntfs-3g FUSE is not
+* implemented; the function will fail if ntfs3 is unavailable.
+*
+* @par Copy strategy
+* Files are copied using a single 4 MiB buffer allocated once (via
+* @c posix_memalign, 4096-byte aligned) and reused across all files.
+* The source file descriptor uses @c posix_fadvise(POSIX_FADV_SEQUENTIAL)
+* to enable kernel read-ahead from the loop-mounted ISO.
+*
+* FAT32 destination fds are opened with @c O_DIRECT, bypassing the page
+* cache entirely — writes go straight to the USB device with no kernel
+* buffering. This eliminates post-cancel dirty-page writeback for the ESP.
+* Short final-chunk reads are padded to the next 512-byte sector boundary
+* (required by @c O_DIRECT) with zeroed bytes. After the loop,
+* @c ftruncate(fd_out, fileSize) strips the padding so the on-disk file is
+* byte-for-byte identical to the source — progress and @c writtenInFile
+* always track @c bytes_read (real bytes), never the padded write length.
+*
+* NTFS destination fds use buffered I/O (@c ntfs3 does not support
+* @c O_DIRECT). The dirty-page backlog is bounded by @c sync_file_range;
+* see @par Dirty-page backlog below.
+*
+* @par Dirty-page backlog (NTFS)
+* Buffered writes to the NTFS partition accumulate dirty pages that the
+* kernel flushes asynchronously to the USB device. Without mitigation,
+* cancelling mid-copy can leave hundreds of MiB still queued for writeback.
+* To bound this, @c sync_file_range is called with @c SYNC_FILE_RANGE_WRITE
+* every 4 MiB written, starting asynchronous writeback of each completed
+* window without blocking the write loop. At most one window (~4 MiB) of
+* dirty pages is unsynced at any moment, so cancellation stops USB writes
+* within approximately that amount.
+*
+* @par Cancellation
+* @c GlobalState::g_operationCancelled is checked before and during every
+* file copy. On cancellation:
+*   - Copying stops at the next chunk boundary
+*   - @c ftruncate(fd_out, 0) is called on the current output fd to
+*     invalidate its dirty pages before @c close(); combined with
+*     @c POSIX_FADV_DONTNEED this asks the kernel to discard rather than
+*     flush those pages. Honoured on a best-effort basis by @c ntfs3.
+*   - @c POSIX_FADV_DONTNEED followed by @c BLKFLSBUF is issued on both
+*     partition block devices unconditionally before every unmount — on
+*     cancellation this covers dirty pages from previously completed files
+*     which are no longer reachable via any open fd
+*   - All three mounts are lazily unmounted (@c umount -l)
+*   - The function returns @c false without setting the failure flag
+*/
 bool writeWindowsIsoToDevice(const std::string& isoPath,
                                     const std::string& device,
                                     size_t             progressIndex) {
