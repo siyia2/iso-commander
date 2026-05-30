@@ -245,9 +245,11 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         return fail();
 
     auto dropPageCache = [](const std::string& blockDev) {
-        int fd = open(blockDev.c_str(), O_RDONLY);
+        int fd = open(blockDev.c_str(), O_RDWR);
         if (fd >= 0) {
-            posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
+            // Discard the block device's page cache — much more effective
+            // than posix_fadvise on O_RDONLY fd for dirty-page eviction.
+            ioctl(fd, BLKFLSBUF);
             close(fd);
         }
     };
