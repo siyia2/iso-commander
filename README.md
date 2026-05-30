@@ -32,7 +32,6 @@ Database: `/root/.local/share/isocmd/database/`
 - Direct `libmount` and `umount2` system calls
 - Single self-contained executable binary
 - `O_DIRECT` unbuffered non-ntfs writes — bypasses page cache entirely
-- `sync_file_range` dirty-page bounding on NTFS — instant cancellation
 
 🔀 **Concurrent Processing**
 - Multithreaded asynchronous task handling
