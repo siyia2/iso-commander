@@ -354,22 +354,20 @@ private:
                 continue;
             }
 
-            if (stop.load(std::memory_order_acquire) &&
-                task_state.load(std::memory_order_acquire) == 0) {
+            // Fast path exit: No tasks left and stop signaled
+            if (stop.load(std::memory_order_acquire)) {
                 return;
             }
 
             {
                 std::unique_lock<std::mutex> lock(mutex);
-                // Double-check the queue right after locking to close the race window
                 if (task_queue.dequeue(task)) {
                     lock.unlock();
                     runTask(task);
                     continue;
                 }
 
-                if (stop.load(std::memory_order_acquire) &&
-                    task_state.load(std::memory_order_acquire) == 0) {
+                if (stop.load(std::memory_order_acquire)) {
                     return;
                 }
 
@@ -397,9 +395,8 @@ public:
         }
     }
 
-    /** @brief Destructor. Blocks until all pending tasks are finished, then joins workers. */
+    /** @brief Destructor. Aborts unstarted tasks, waits for active tasks to finish, and joins workers. */
     ~ThreadPool() {
-        waitAllTasksCompleted();
         shutdown();
     }
 
@@ -455,7 +452,9 @@ public:
         });
     }
 
-    /** @brief Signals all workers to exit after draining remaining work, then joins every thread. */
+    /** * @brief Signals all workers to stop immediately, joins execution threads,
+     * and discards any unexecuted tasks remaining in the queue.
+     */
     void shutdown() {
         if (stop.exchange(true, std::memory_order_acq_rel)) return;
 
@@ -469,7 +468,9 @@ public:
         }
 
         MoveOnlyTask residual;
-        while (task_queue.dequeue(residual)) { residual.reset(); }
+        while (task_queue.dequeue(residual)) {
+            residual.reset();
+        }
     }
 
     /** @brief Returns true if no tasks are pending or active. */
