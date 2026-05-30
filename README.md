@@ -1,7 +1,7 @@
 # iso-commander
 ![iso-commander-preview](https://github.com/user-attachments/assets/47298b0c-0dc0-4c26-a6cb-e6e6b68c2d92)
 
-The most capable ISO manager on Linux. Mount, convert, and write ISO images with zero compromise.
+The most capable ISO manager on Linux. Mount, Unmount, Delete, Copy, Move, convert, and Write ISO images with zero compromise.
 
 The only Linux tool that writes Windows 10/11 bootable USB drives correctly — native GPT + FAT32/NTFS layout, no wimlib, no file splitting, no workarounds. Faster and more correct than WoeUSB.
 
