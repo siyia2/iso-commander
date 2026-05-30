@@ -100,94 +100,49 @@ bool isWindowsIso(const std::string& isoPath) {
     return hasBootWim && hasBootMgr;
 }
 
-/**
- * @brief Writes a Windows ISO to a block device using a hybrid FAT32 + NTFS layout (UEFI only).
+/** @par Copy strategy
+ * Files are copied using a single 4 MiB buffer allocated once (via
+ * @c posix_memalign, 4096-byte aligned) and reused across all files.
+ * The source file descriptor uses @c posix_fadvise(POSIX_FADV_SEQUENTIAL)
+ * to enable kernel read-ahead from the loop-mounted ISO.
  *
- * Partition layout written to @p device:
- *   GPT partition table.
- *   Partition 1: FAT32 (1024 MiB, EFI System Partition) — receives:
- *     - efi/
- *     - boot/
- *     - sources/boot.wim
+ * FAT32 destination fds are opened with @c O_DIRECT, bypassing the page
+ * cache entirely — writes go straight to the USB device with no kernel
+ * buffering. This eliminates post-cancel dirty-page writeback for the ESP.
+ * Short final-chunk reads are padded to the next 512-byte sector boundary
+ * (required by @c O_DIRECT) with zeroed bytes. After the loop,
+ * @c ftruncate(fd_out, fileSize) strips the padding so the on-disk file is
+ * byte-for-byte identical to the source — progress and @c writtenInFile
+ * always track @c bytes_read (real bytes), never the padded write length.
  *
- *   This satisfies Windows UEFI boot requirements while remaining within
- *   FAT32 limitations.
+ * NTFS destination fds use buffered I/O (@c ntfs3 does not support
+ * @c O_DIRECT). The dirty-page backlog is bounded by @c sync_file_range;
+ * see @par Dirty-page backlog below.
  *
- *   Partition 2: NTFS (remainder) — receives all remaining files, including
- *   large files such as sources/install.wim that exceed FAT32's 4 GiB limit.
- *   Formatted with 64 KiB clusters (@c -c 65536) for better sequential write
- *   performance.
- *
- * This layout mirrors the approach used by modern Windows installation media:
- * a small FAT32 ESP for firmware compatibility, and a larger NTFS partition
- * for bulk data storage.
- *
- * The NTFS partition is mounted using the kernel's native ntfs3 driver
- * (requires Linux kernel 5.15 or newer). Fallback to ntfs-3g FUSE is not
- * implemented; the function will fail if ntfs3 is unavailable.
- *
- * @par Partition probing
- * After partitioning, @c udevadm @c settle is used to block until the kernel
- * has finished processing all uevents and the partition device nodes are
- * guaranteed to exist. This replaces the previous @c partprobe + @c sleep
- * polling approach, which was both slower and subject to races on loaded
- * systems. A short retry loop is retained as a safety net for environments
- * without udevd (e.g. minimal containers).
- *
- * @par Progress reporting
- * Progress, speed, and completion state are written atomically to
- * @c progressData[progressIndex]. Updates are emitted at most every 300 ms
- * during file copy; the clock is sampled on every 4 MiB chunk. There is no
- * long blocking phase after formatting.
- *
- * @par Copy strategy
- * Files are copied using a buffered @c read / @c write loop with a 4 MiB buffer,
- * which is allocated once and reused across all files. This approach performs
- * better than @c copy_file_range() over USB mass storage because it provides
- * better backpressure to the flash controller. The source file descriptor uses
- * @c posix_fadvise(POSIX_FADV_SEQUENTIAL) to enable kernel read-ahead from the
- * loop-mounted ISO.
- *
- * @par Preallocation
- * Destination files on the NTFS partition are preallocated using
- * @c posix_fallocate() on a best-effort basis to reduce NTFS fragmentation.
- * Errors are ignored. Preallocation is skipped for FAT32 (which would fall
- * back to zero-filling the file, causing a redundant write pass).
- *
- * @par Flush strategy
- * After all files are copied, the device is flushed with @c fsync() before
- * unmounting.
+ * @par Dirty-page backlog (NTFS)
+ * Buffered writes to the NTFS partition accumulate dirty pages that the
+ * kernel flushes asynchronously to the USB device. Without mitigation,
+ * cancelling mid-copy can leave hundreds of MiB still queued for writeback.
+ * To bound this, @c sync_file_range is called with @c SYNC_FILE_RANGE_WRITE
+ * every 4 MiB written, starting asynchronous writeback of each completed
+ * window without blocking the write loop. At most one window (~4 MiB) of
+ * dirty pages is unsynced at any moment, so cancellation stops USB writes
+ * within approximately that amount.
  *
  * @par Cancellation
  * @c GlobalState::g_operationCancelled is checked before and during every
  * file copy. On cancellation:
  *   - Copying stops at the next chunk boundary
- *   - @c POSIX_FADV_DONTNEED is issued on both partition block devices to
- *     discard dirty page-cache pages, preventing a writeback storm when
- *     the lazy unmount hands the mount to the kernel for async teardown
+ *   - @c ftruncate(fd_out, 0) is called on the current output fd to
+ *     invalidate its dirty pages before @c close(); combined with
+ *     @c POSIX_FADV_DONTNEED this asks the kernel to discard rather than
+ *     flush those pages. Honoured on a best-effort basis by @c ntfs3.
+ *   - @c POSIX_FADV_DONTNEED followed by @c BLKFLSBUF is issued on both
+ *     partition block devices unconditionally before every unmount — on
+ *     cancellation this covers dirty pages from previously completed files
+ *     which are no longer reachable via any open fd
  *   - All three mounts are lazily unmounted (@c umount -l)
  *   - The function returns @c false without setting the failure flag
- *
- * @par Two-pass copy order
- * NTFS partition files are written first, followed by ESP (FAT32) files.
- * This ensures that the bootloader only lands on the ESP after all the data
- * it references (especially sources/boot.wim) is already present on the drive.
- * Windows setup is sensitive to the ESP appearing complete before the
- * referenced data is available.
- *
- * @param isoPath
- *   Absolute path to the source Windows ISO.
- *
- * @param device
- *   Absolute path to the target block device (e.g. @c /dev/sdb).
- *   All existing data on this device will be destroyed.
- *
- * @param progressIndex
- *   Index into @ref progressData used for reporting progress, speed,
- *   and completion status.
- *
- * @return @c true   The ISO was successfully written; the device is bootable.
- * @return @c false  An error occurred or the operation was cancelled.
  */
 bool writeWindowsIsoToDevice(const std::string& isoPath,
                                     const std::string& device,
@@ -247,56 +202,58 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     auto dropPageCache = [](const std::string& blockDev) {
         int fd = open(blockDev.c_str(), O_RDWR);
         if (fd >= 0) {
-            // Discard the block device's page cache — much more effective
-            // than posix_fadvise on O_RDONLY fd for dirty-page eviction.
+            // FADV_DONTNEED on the block device asks the kernel to drop
+            // dirty pages for the entire device — more effective than
+            // BLKFLSBUF alone for flushed-but-not-committed pages.
+            posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
             ioctl(fd, BLKFLSBUF);
             close(fd);
         }
     };
 
     bool alreadyUnmounted = false;
-        auto unmountAll = [&]() {
-            if (alreadyUnmounted) return;
-            alreadyUnmounted = true;
+    auto unmountAll = [&]() {
+        if (alreadyUnmounted) return;
+        alreadyUnmounted = true;
 
-            if (GlobalState::g_operationCancelled.load()) {
-                dropPageCache(fatPart);
-                dropPageCache(ntfsPart);
-            }
-            runCommand({"umount", "-l", isoMnt});
-            runCommand({"umount", "-l", fatMnt});
-            runCommand({"umount", "-l", ntfsMnt});
-            rmdir(isoMnt);
-            rmdir(fatMnt);
-            rmdir(ntfsMnt);
-        };
+        // Always drop page cache before unmounting — even on clean exit
+        // the block devices benefit from cache eviction before teardown.
+        // On cancellation this is the primary mechanism for stopping
+        // residual USB writes from previously completed files.
+        dropPageCache(fatPart);
+        dropPageCache(ntfsPart);
 
-        if (runCommand({"mount", "-o", "ro,loop", isoPath, isoMnt}) != 0) {
-            unmountAll(); return fail();
-        }
-        if (runCommand({"mount", fatPart, fatMnt}) != 0) {
-            unmountAll(); return fail();
-        }
-        if (runCommand({"mount", "-t", "ntfs3", ntfsPart, ntfsMnt}) != 0) {
-            unmountAll(); return fail();
-        }
+        runCommand({"umount", "-l", isoMnt});
+        runCommand({"umount", "-l", fatMnt});
+        runCommand({"umount", "-l", ntfsMnt});
+        rmdir(isoMnt);
+        rmdir(fatMnt);
+        rmdir(ntfsMnt);
+    };
 
-        if (GlobalState::g_operationCancelled.load()) { unmountAll(); return false; }
+    if (runCommand({"mount", "-o", "ro,loop", isoPath, isoMnt}) != 0) {
+        unmountAll(); return fail();
+    }
+    if (runCommand({"mount", fatPart, fatMnt}) != 0) {
+        unmountAll(); return fail();
+    }
+    if (runCommand({"mount", "-t", "ntfs3", ntfsPart, ntfsMnt}) != 0) {
+        unmountAll(); return fail();
+    }
+
+    if (GlobalState::g_operationCancelled.load()) { unmountAll(); return false; }
 
     // ------------------------------------------------------------------ //
     // 3. Collect all ISO entries in a single pass, compute total bytes,  //
-    //    and classify each entry (ESP vs NTFS) up front.                 //                                           //
+    //    and classify each entry (ESP vs NTFS) up front.                 //
     // ------------------------------------------------------------------ //
     struct IsoEntry {
         fs::path src;
-        fs::path dst;      // fully resolved destination path
+        fs::path dst;
         uint64_t size;
         bool     isDir;
     };
 
-    // ESP files go first (boot-critical), NTFS files go second.
-    // We keep two vectors and concatenate so NTFS data is fully written
-    // before the bootloader lands on the ESP — safer for Windows boot.
     std::vector<IsoEntry> ntfsEntries;
     std::vector<IsoEntry> espEntries;
     uint64_t totalBytes = 0;
@@ -337,16 +294,22 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ------------------------------------------------------------------ //
     // 4. Copy with live progress                                         //
     //                                                                    //
-    //    Key USB-specific choices:                                       //
-    //    - Buffer allocated once (4 MiB) and reused across all files.    //
-    //      4 MiB keeps the controller's internal buffer fed              //
-    //      without over-committing.                                      //
-    //    - posix_fallocate on NTFS only: pre-reserves clusters so the    //
-    //      driver doesn't allocate on every write. Skipped for FAT32     //
-    //      which has no fallocate support and would zero-fill instead.   //
-    //    - posix_fadvise(SEQUENTIAL) on each source fd: the read side is //
-    //      a loop-mounted ISO on the host — telling the kernel to        //
-    //      prefetch aggressively is a free throughput win.               //
+    //    Key choices:                                                    //
+    //    - Buffer allocated once (4 MiB, 4096-aligned) and reused.      //
+    //    - FAT32: O_DIRECT bypasses page cache entirely — no post-cancel //
+    //      dirty-page writeback on the ESP. Final short chunk is padded  //
+    //      to the next 512-byte sector boundary then truncated back to   //
+    //      exact file size after the loop so Secure Boot verification    //
+    //      sees the correct bytes. Progress tracking uses bytes_read     //
+    //      (real bytes), never the padded write length.                  //
+    //    - NTFS: ntfs3 does not support O_DIRECT; buffered I/O is used.  //
+    //      sync_file_range every SYNC_WINDOW bytes caps the dirty-page   //
+    //      backlog so cancellation stops USB writes quickly.             //
+    //    - On cancellation: ftruncate(fd_out, 0) + FADV_DONTNEED on the  //
+    //      current fd, plus FADV_DONTNEED + BLKFLSBUF on both block      //
+    //      devices via unmountAll, covers pages from completed files.    //
+    //    - posix_fallocate on NTFS only: pre-reserves clusters.          //
+    //    - posix_fadvise(SEQUENTIAL) on each source fd for prefetch.     //
     // ------------------------------------------------------------------ //
     auto startTime  = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
@@ -375,12 +338,22 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         }
     };
 
-    // Single reusable 4 MiB buffer — allocated once here.
-    constexpr size_t BUF_SIZE = 4 * 1024 * 1024;
-    std::vector<char> ioBuf(BUF_SIZE);
+    // Single reusable 4 MiB buffer — must be 4096-aligned for O_DIRECT
+    // on FAT32. Allocated once and reused across all files.
+    constexpr size_t   BUF_SIZE    = 4 * 1024 * 1024;
+    // Dirty-page backlog cap for NTFS: at most ~one window is unsynced at
+    // any moment, so cancellation leaves at most SYNC_WINDOW bytes queued.
+    constexpr uint64_t SYNC_WINDOW = 4ULL * 1024 * 1024;  // 4 MiB
+
+    void* rawBuf = nullptr;
+    if (posix_memalign(&rawBuf, 4096, BUF_SIZE) != 0) { unmountAll(); return fail(); }
+    auto ioBuf     = static_cast<char*>(rawBuf);
+    auto freeIoBuf = [&]() { free(rawBuf); rawBuf = nullptr; ioBuf = nullptr; };
 
     auto copyWithProgress = [&](const fs::path& src, const fs::path& dst,
                                 uint64_t fileSize) -> bool {
+        const bool isNtfs = dst.string().rfind(ntfsMnt, 0) == 0;
+
         int fd_in = open(src.c_str(), O_RDONLY);
         if (fd_in < 0) return false;
 
@@ -390,21 +363,27 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         // write to the USB device.
         posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
 
-        int fd_out = open(dst.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        // FAT32: O_DIRECT bypasses the page cache entirely — writes go
+        // straight to the USB device with no kernel buffering, eliminating
+        // post-cancel dirty-page writeback for the ESP.
+        // NTFS: ntfs3 rejects O_DIRECT; use buffered I/O + sync_file_range.
+        int outFlags = O_WRONLY | O_CREAT | O_TRUNC;
+        if (!isNtfs) outFlags |= O_DIRECT;
+
+        int fd_out = open(dst.c_str(), outFlags, 0644);
         if (fd_out < 0) { close(fd_in); return false; }
 
-        // posix_fallocate on NTFS (ntfs3) pre-reserves clusters, avoiding
-        // on-the-fly allocation during writing — measurably faster on USB.
-        // Skipped for FAT32: it doesn't support fallocate and would fall
-        // back to writing zeros (a full redundant write pass per file).
-        const bool isNtfs = dst.string().rfind(ntfsMnt, 0) == 0;
+        // Pre-reserve clusters on NTFS to avoid on-the-fly allocation.
+        // Skipped for FAT32 (no fallocate support; would zero-fill instead).
         if (isNtfs && fileSize > 0)
-            posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));  // ignore return; best-effort
+            posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
 
-        bool success = true;
+        bool     success        = true;
+        uint64_t writtenInFile  = 0;
+        uint64_t lastSyncOffset = 0;
 
         while (!GlobalState::g_operationCancelled.load()) {
-            ssize_t bytes_read = read(fd_in, ioBuf.data(), BUF_SIZE);
+            ssize_t bytes_read = read(fd_in, ioBuf, BUF_SIZE);
             if (bytes_read < 0) {
                 if (errno == EINTR) continue;
                 success = false;
@@ -412,15 +391,28 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             }
             if (bytes_read == 0) break;  // EOF
 
+            // O_DIRECT requires the write length to be a sector multiple.
+            // Pad the final short chunk to the next 512-byte boundary with
+            // zeros. Progress and writtenInFile always track bytes_read (the
+            // real byte count) — never writeLen — so reported size and the
+            // post-loop ftruncate both use the correct value.
+            ssize_t writeLen = bytes_read;
+            if (!isNtfs) {
+                ssize_t aligned = (bytes_read + 511) & ~511;
+                if (aligned > bytes_read)
+                    memset(ioBuf + bytes_read, 0, aligned - bytes_read);
+                writeLen = aligned;
+            }
+
             ssize_t bytes_written = 0;
-            while (bytes_written < bytes_read) {
+            while (bytes_written < writeLen) {
                 if (GlobalState::g_operationCancelled.load()) {
                     success = false;
                     goto done;
                 }
                 ssize_t written = write(fd_out,
-                                        ioBuf.data() + bytes_written,
-                                        bytes_read   - bytes_written);
+                                        ioBuf + bytes_written,
+                                        writeLen - bytes_written);
                 if (written < 0) {
                     if (errno == EINTR) continue;
                     success = false;
@@ -428,10 +420,43 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                 }
                 bytes_written += written;
             }
+
+            // Track real bytes (not padded writeLen) for accurate progress
+            // reporting and correct post-loop ftruncate on FAT32.
+            writtenInFile += static_cast<uint64_t>(bytes_read);
             updateProgress(static_cast<uint64_t>(bytes_read));
+
+            // NTFS only: bound the dirty-page backlog with async writeback.
+            // SYNC_FILE_RANGE_WRITE starts flushing the completed window without
+            // blocking the write loop — the kernel drains it in the background
+            // while we continue filling the next window. Provides a soft cap on
+            // dirty pages; cancellation may leave up to ~one SYNC_WINDOW queued.
+            if (isNtfs && (writtenInFile - lastSyncOffset) >= SYNC_WINDOW) {
+                sync_file_range(fd_out,
+                                static_cast<off_t>(lastSyncOffset),
+                                static_cast<off_t>(SYNC_WINDOW),
+                                SYNC_FILE_RANGE_WRITE);
+                lastSyncOffset = writtenInFile;
+            }
         }
 
     done:
+        // Strip O_DIRECT sector-alignment padding written on the final chunk
+        // so Secure Boot signature verification sees the exact source bytes.
+        // Must happen before the cancellation ftruncate(0) which overwrites it.
+        if (!isNtfs && success && fileSize > 0)
+            ftruncate(fd_out, static_cast<off_t>(fileSize));
+
+        if (GlobalState::g_operationCancelled.load()) {
+            // Ask the kernel to discard dirty pages for this file rather than
+            // flushing them to the USB device. ftruncate invalidates the pages;
+            // FADV_DONTNEED reinforces that the cache can be dropped.
+            // ntfs3 may not honour both in all kernel versions, but this is the
+            // strongest signal available without O_DIRECT support.
+            ftruncate(fd_out, 0);
+            posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
+        }
+
         close(fd_in);
         close(fd_out);
         return success && !GlobalState::g_operationCancelled.load();
@@ -446,14 +471,14 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     auto processEntries = [&](const std::vector<IsoEntry>& entries) -> bool {
         for (const auto& e : entries) {
             if (GlobalState::g_operationCancelled.load()) {
-                unmountAll(); return false;
+                freeIoBuf(); unmountAll(); return false;
             }
             if (e.isDir) {
                 fs::create_directories(e.dst);
             } else {
                 fs::create_directories(e.dst.parent_path());
                 if (!copyWithProgress(e.src, e.dst, e.size)) {
-                    unmountAll(); return fail();
+                    freeIoBuf(); unmountAll(); return fail();
                 }
             }
         }
@@ -462,6 +487,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
     if (!processEntries(ntfsEntries)) return false;
     if (!processEntries(espEntries))  return false;
+
+    freeIoBuf();
 
     // ------------------------------------------------------------------ //
     // 6. Flush and unmount                                               //
