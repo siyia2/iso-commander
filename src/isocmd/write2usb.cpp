@@ -10,7 +10,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <queue>
 #include <stdexcept>
@@ -26,7 +25,6 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/utsname.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -63,52 +61,6 @@ int runCommand(const std::vector<std::string>& args) {
     int status = 0;
     waitpid(pid, &status, 0);
     return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-}
-
-/**
- * @brief Probes /proc/filesystems and system kernel release metadata to determine
- * the most modern and performant NTFS driver available on the host platform.
- *
- * Priority Tiering:
- * 1. "ntfs" via Kernel 7.1+ (NTFSPLUS — community driver based on revert of
- *    the original NTFS codebase, with expanded write support and performance
- *    improvements over the Paragon NTFS3 driver)
- * 2. "ntfs3" via Kernel 5.15+ (Paragon Native Driver)
- *
- * Note: The legacy read-only "ntfs" driver was removed in kernel 7.1. Any
- * kernel reporting "ntfs" in /proc/filesystems at 7.1+ is therefore the
- * NTFSPLUS-derived driver, not the legacy one. The legacy driver is never
- * returned; this function is used exclusively for write operations.
- */
-std::string getBestNtfsDriver() {
-    runCommand({"modprobe", "ntfs3"});
-    runCommand({"modprobe", "ntfs"});
-
-    struct utsname osInfo;
-    int major = 0, minor = 0;
-    bool haveVersion = (uname(&osInfo) == 0 &&
-                        sscanf(osInfo.release, "%d.%d", &major, &minor) == 2);
-
-    std::ifstream filesystems("/proc/filesystems");
-    bool hasNtfs3 = false;
-    bool hasNtfs  = false;
-
-    if (filesystems.is_open()) {
-        std::string line;
-        while (std::getline(filesystems, line)) {
-            if (line.find("ntfs3") != std::string::npos)
-                hasNtfs3 = true;
-            else if (line.find("ntfs") != std::string::npos)
-                hasNtfs  = true;
-        }
-    }
-
-    bool isModernNtfs = hasNtfs && haveVersion &&
-                        (major > 7 || (major == 7 && minor >= 1));
-
-    if (isModernNtfs) return "ntfs";   // NTFSPLUS — write-capable, modern 7.1+
-    if (hasNtfs3)     return "ntfs3";  // Paragon — write-capable, 5.15+
-    return {};                         // No write-capable driver found
 }
 
 /**
@@ -170,11 +122,9 @@ bool isWindowsIso(const std::string& isoPath) {
  * a small FAT32 ESP for firmware compatibility, and a larger NTFS partition
  * for bulk data storage.
  *
- * The NTFS partition is mounted using the best available write-capable kernel NTFS
- * driver as determined by getBestNtfsDriver(). On kernels 7.1+, the NTFSPLUS-derived
- * "ntfs" driver is preferred. On kernels 5.15–7.0, "ntfs3" (Paragon) is used. FUSE
- * fallback via ntfs-3g is not implemented; the function will fail if
- * no write-capable kernel driver is available.
+ * The NTFS partition is mounted using the kernel's native ntfs3 driver
+ * (requires Linux kernel 5.15 or newer). Fallback to ntfs-3g FUSE is not
+ * implemented; the function will fail if ntfs3 is unavailable.
  *
  * @par Partition probing
  * After partitioning, @c udevadm @c settle is used to block until the kernel
@@ -295,43 +245,41 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         return fail();
 
     auto dropPageCache = [](const std::string& blockDev) {
-        int fd = open(blockDev.c_str(), O_RDWR);
+        int fd = open(blockDev.c_str(), O_RDONLY);
         if (fd >= 0) {
-            // Discard the block device's page cache — much more effective
-            // than posix_fadvise on O_RDONLY fd for dirty-page eviction.
-            ioctl(fd, BLKFLSBUF);
+            posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
             close(fd);
         }
     };
+
     bool alreadyUnmounted = false;
-    auto unmountAll = [&]() {
-        if (alreadyUnmounted) return;
-        alreadyUnmounted = true;
+        auto unmountAll = [&]() {
+            if (alreadyUnmounted) return;
+            alreadyUnmounted = true;
 
-        if (GlobalState::g_operationCancelled.load()) {
-            dropPageCache(fatPart);
-            dropPageCache(ntfsPart);
-        }
-        runCommand({"umount", "-l", isoMnt});
-        runCommand({"umount", "-l", fatMnt});
-        runCommand({"umount", "-l", ntfsMnt});
-        rmdir(isoMnt);
-        rmdir(fatMnt);
-        rmdir(ntfsMnt);
-    };
+            if (GlobalState::g_operationCancelled.load()) {
+                dropPageCache(fatPart);
+                dropPageCache(ntfsPart);
+            }
+            runCommand({"umount", "-l", isoMnt});
+            runCommand({"umount", "-l", fatMnt});
+            runCommand({"umount", "-l", ntfsMnt});
+            rmdir(isoMnt);
+            rmdir(fatMnt);
+            rmdir(ntfsMnt);
+        };
 
-    if (runCommand({"mount", "-o", "ro,loop", isoPath, isoMnt}) != 0) {
-        unmountAll(); return fail();
-    }
-    if (runCommand({"mount", fatPart, fatMnt}) != 0) {
-        unmountAll(); return fail();
-    }
-    std::string ntfsDriver = getBestNtfsDriver();
-    if (runCommand({"mount", "-t", ntfsDriver, ntfsPart, ntfsMnt}) != 0) {
+        if (runCommand({"mount", "-o", "ro,loop", isoPath, isoMnt}) != 0) {
             unmountAll(); return fail();
-    }
+        }
+        if (runCommand({"mount", fatPart, fatMnt}) != 0) {
+            unmountAll(); return fail();
+        }
+        if (runCommand({"mount", "-t", "ntfs3", ntfsPart, ntfsMnt}) != 0) {
+            unmountAll(); return fail();
+        }
 
-    if (GlobalState::g_operationCancelled.load()) { unmountAll(); return false; }
+        if (GlobalState::g_operationCancelled.load()) { unmountAll(); return false; }
 
     // ------------------------------------------------------------------ //
     // 3. Collect all ISO entries in a single pass, compute total bytes,  //
