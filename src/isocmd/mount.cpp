@@ -331,7 +331,7 @@ void mountIsoFiles(
         mnt_context_set_source(ctx, isoFile.c_str());
         mnt_context_set_target(ctx, mountPoint.c_str());
         mnt_context_set_options(ctx, "loop,ro");
-        mnt_context_set_fstype_pattern(ctx, "iso9660,udf");
+        mnt_context_set_fstype_pattern(ctx, "udf,iso9660");
 
         const int ret = mnt_context_mount(ctx);
 
