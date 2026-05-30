@@ -3,7 +3,10 @@
 
 The most capable ISO manager on Linux. Mount, Unmount, Delete, Copy, Move, ConvertTo, and Write ISO images with zero compromise.
 
-The only Linux tool that writes Windows 10/11 bootable USB drives correctly — native GPT + FAT32/NTFS layout, no wimlib, no file splitting, no workarounds. Faster and more correct than WoeUSB.
+The most capable ISO manager on Linux, with a best-in-class Windows 10/11 
+USB write engine. Native GPT + FAT32/NTFS layout — no wimlib, no file 
+splitting, no workarounds. Works correctly out of the box where other 
+tools struggle.
 
 Root access is required for `mount`, `umount`, and `write` operations. For best experience execute with `sudo isocmd`.
 
