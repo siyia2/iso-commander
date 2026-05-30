@@ -69,13 +69,13 @@ int runCommand(const std::vector<std::string>& args) {
  * the most modern and performant NTFS driver available on the host platform.
  *
  * Priority Tiering:
- * 1. "ntfs" via Kernel 6.9+ (NTFSPLUS — community driver based on revert of
+ * 1. "ntfs" via Kernel 7.1+ (NTFSPLUS — community driver based on revert of
  *    the original NTFS codebase, with expanded write support and performance
  *    improvements over the Paragon NTFS3 driver)
  * 2. "ntfs3" via Kernel 5.15+ (Paragon Native Driver)
  *
- * Note: The legacy read-only "ntfs" driver was removed in kernel 6.9. Any
- * kernel reporting "ntfs" in /proc/filesystems at 6.9+ is therefore the
+ * Note: The legacy read-only "ntfs" driver was removed in kernel 7.1. Any
+ * kernel reporting "ntfs" in /proc/filesystems at 7.1+ is therefore the
  * NTFSPLUS-derived driver, not the legacy one. The legacy driver is never
  * returned; this function is used exclusively for write operations.
  */
