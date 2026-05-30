@@ -8,6 +8,9 @@ url="https://github.com/siyia2/iso-commander"
 license=('GPL3')
 depends=('coreutils' 'glibc' 'readline' 'util-linux' 'xz' 'zstd')
 makedepends=('gcc' 'make')
+optdepends=('ntfs-3g: NTFS formatting for Windows ISO creation (only mkfs.ntfs is used; NTFS writes utilize the kernel ntfs3 driver, not the FUSE driver)'
+            'dosfstools: FAT32 formatting for Windows ISO creation'
+            'parted: GPT partition layout for Windows ISO creation')
 md5sums=('d026cc9c27672951a941cfaba15ea8f0')
 
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
