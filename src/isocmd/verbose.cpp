@@ -460,7 +460,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
 
     const double total_elapsed = std::chrono::duration<double>(end_time - start_time).count();
     std::cout << color << "\nTime Elapsed: " << std::fixed << std::setprecision(1)
-              << total_elapsed << " seconds\n";
+              << total_elapsed << "s\n";
 
     if (GlobalState::g_operationCancelled) {
         std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "Cancelled" << vt.green << "]" << vt.bold << "\n";
@@ -636,7 +636,7 @@ void verboseImageSearchResults(const std::string& fileExtension,
     auto total_elapsed_time =
         std::chrono::duration<double>(end_time - start_time).count();
     std::cout << color << "Time Elapsed: " << std::fixed << std::setprecision(1)
-              << total_elapsed_time << " seconds" << vt.bold << "\n";
+              << total_elapsed_time << "s" << vt.bold << "\n";
 
     pressEnterToContinue();
     clearScrollBuffer();
