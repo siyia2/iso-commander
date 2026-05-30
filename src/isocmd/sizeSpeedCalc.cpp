@@ -31,33 +31,25 @@
 /**
  * @brief Queries the size of a block device in bytes.
  *
- * Attempts @c BLKGETSIZE64 first (returns bytes directly), then falls back to
- * @c BLKGETSIZE (returns 512-byte sector count) if the first ioctl fails.
+ * Reads @c /sys/block/<name>/size from sysfs, which reports the device
+ * size in 512-byte logical sectors. This avoids opening the block device
+ * directly, preventing thread blocking during active kernel I/O flushes.
  *
  * @param device Absolute path to the block device (e.g. @c /dev/sdb).
- * @return Size in bytes, or @c 0 on failure or if the device cannot be opened.
+ * @return Size in bytes, or @c 0 on failure or if the sysfs entry is absent.
  */
 uint64_t getBlockDeviceSize(const std::string& device) {
-    int fd = open(device.c_str(), O_RDONLY);
-    if (fd == -1) {
+    std::string deviceName = device.substr(device.find_last_of('/') + 1);
+    std::ifstream sizeFile("/sys/block/" + deviceName + "/size");
+
+    uint64_t sectors = 0;
+    if (!(sizeFile >> sectors)) {
         return 0;
     }
 
-    uint64_t size = 0;
-    
-    if (ioctl(fd, BLKGETSIZE64, &size) == 0) {
-        close(fd);
-        return size;
-    }
-    
-    unsigned long sectors = 0;
-    if (ioctl(fd, BLKGETSIZE, &sectors) == 0) {
-        close(fd);
-        return sectors * 512ULL;
-    }
-    
-    close(fd);
-    return 0;
+    // sysfs /size is always in 512-byte logical sectors regardless of
+    // the drive's physical sector size
+    return sectors * 512ULL;
 }
 
 /**
@@ -72,13 +64,13 @@ uint64_t getBlockDeviceSize(const std::string& device) {
 std::string formatFileSize(uint64_t size) {
     std::ostringstream oss;
     if (size < 1024 * 1024) {
-        oss << std::fixed << std::setprecision(2) 
+        oss << std::fixed << std::setprecision(2)
             << static_cast<double>(size) / 1024 << " KB";
     } else if (size < 1024 * 1024 * 1024) {
-        oss << std::fixed << std::setprecision(2) 
+        oss << std::fixed << std::setprecision(2)
             << static_cast<double>(size) / (1024 * 1024) << " MB";
     } else {
-        oss << std::fixed << std::setprecision(2) 
+        oss << std::fixed << std::setprecision(2)
             << static_cast<double>(size) / (1024 * 1024 * 1024) << " GB";
     }
     return oss.str();
@@ -110,23 +102,23 @@ std::string formatSpeed(double mbPerSec) {
 
 /**
  * @brief Get the uncompressed ISO size from a DAA file
- * 
+ *
  * Reads the DAA file header and extracts the original ISO image size
  * before compression. This is useful for pre-allocating buffers or
  * verifying available disk space before extraction.
- * 
+ *
  * @param path Path to the DAA file (UTF-8 encoded on applicable platforms)
  * @return Uncompressed ISO size in bytes, or 0 if:
  *         - File cannot be opened
  *         - Read operation fails
  *         - DAA signature is invalid (not "DAA" or "GBI")
- * 
+ *
  * @note The function automatically handles endianness detection and
  *       byte-swapping based on the host platform.
- * 
+ *
  * @warning The returned size is the claimed size from the DAA header;
  *          no validation is performed against actual compressed data.
- * 
+ *
  * @see daa_t::isosize
  */
 static uint64_t getDaaIsoSize(const std::string& path) {
