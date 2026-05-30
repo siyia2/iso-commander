@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <queue>
 #include <stdexcept>
@@ -25,6 +26,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -61,6 +63,52 @@ int runCommand(const std::vector<std::string>& args) {
     int status = 0;
     waitpid(pid, &status, 0);
     return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+}
+
+/**
+ * @brief Probes /proc/filesystems and system kernel release metadata to determine
+ * the most modern and performant NTFS driver available on the host platform.
+ *
+ * Priority Tiering:
+ * 1. "ntfs" via Kernel 7.1+ (NTFSPLUS — community driver based on revert of
+ *    the original NTFS codebase, with expanded write support and performance
+ *    improvements over the Paragon NTFS3 driver)
+ * 2. "ntfs3" via Kernel 5.15+ (Paragon Native Driver)
+ *
+ * Note: The legacy read-only "ntfs" driver was removed in kernel 7.1. Any
+ * kernel reporting "ntfs" in /proc/filesystems at 7.1+ is therefore the
+ * NTFSPLUS-derived driver, not the legacy one. The legacy driver is never
+ * returned; this function is used exclusively for write operations.
+ */
+std::string getBestNtfsDriver() {
+    runCommand({"modprobe", "ntfs3"});
+    runCommand({"modprobe", "ntfs"});
+
+    struct utsname osInfo;
+    int major = 0, minor = 0;
+    bool haveVersion = (uname(&osInfo) == 0 &&
+                        sscanf(osInfo.release, "%d.%d", &major, &minor) == 2);
+
+    std::ifstream filesystems("/proc/filesystems");
+    bool hasNtfs3 = false;
+    bool hasNtfs  = false;
+
+    if (filesystems.is_open()) {
+        std::string line;
+        while (std::getline(filesystems, line)) {
+            if (line.find("ntfs3") != std::string::npos)
+                hasNtfs3 = true;
+            else if (line.find("ntfs") != std::string::npos)
+                hasNtfs  = true;
+        }
+    }
+
+    bool isModernNtfs = hasNtfs && haveVersion &&
+                        (major > 7 || (major == 7 && minor >= 1));
+
+    if (isModernNtfs) return "ntfs";   // NTFSPLUS — write-capable, modern 7.1+
+    if (hasNtfs3)     return "ntfs3";  // Paragon — write-capable, 5.15+
+    return {};                         // No write-capable driver found
 }
 
 /**
@@ -115,16 +163,16 @@ bool isWindowsIso(const std::string& isoPath) {
 *
 *   Partition 2: NTFS (remainder) — receives all remaining files, including
 *   large files such as sources/install.wim that exceed FAT32's 4 GiB limit.
-*   Formatted with 64 KiB clusters (@c -c 65536) for better sequential write
-*   performance.
+*   Formatted with 4 KiB clusters (@c -c 4096).
 *
 * This layout mirrors the approach used by modern Windows installation media:
 * a small FAT32 ESP for firmware compatibility, and a larger NTFS partition
 * for bulk data storage.
 *
-* The NTFS partition is mounted using the kernel's native ntfs3 driver
-* (requires Linux kernel 5.15 or newer). Fallback to ntfs-3g FUSE is not
-* implemented; the function will fail if ntfs3 is unavailable.
+* The NTFS partition is mounted using the best available kernel NTFS driver,
+* selected at runtime by @c getBestNtfsDriver(). On kernel 7.1+, the
+* NTFSPLUS driver is preferred; on 5.15–7.0, the Paragon ntfs3 driver is
+* used. The function will fail if neither driver is available.
 *
 * @par Copy strategy
 * Files are copied using a single 4 MiB buffer allocated once (via
@@ -210,7 +258,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (runCommand({"mkfs.fat", "-F", "32", "-n", "WINBOOT", fatPart}) != 0)
         return fail();
 
-    if (runCommand({"mkfs.ntfs", "-f", "-c", "65536", "-L", "WINDATA", ntfsPart}) != 0)
+    if (runCommand({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA", ntfsPart}) != 0)
         return fail();
 
     if (GlobalState::g_operationCancelled.load()) return false;
@@ -263,7 +311,10 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (runCommand({"mount", fatPart, fatMnt}) != 0) {
         unmountAll(); return fail();
     }
-    if (runCommand({"mount", "-t", "ntfs3", ntfsPart, ntfsMnt}) != 0) {
+    // NTFS driver autodetection newer ntfs is default, ntfs3 is fallback for older systems
+    std::string ntfsDriver = getBestNtfsDriver();
+    if (ntfsDriver.empty()) { unmountAll(); return fail(); }
+    if (runCommand({"mount", "-t", ntfsDriver, ntfsPart, ntfsMnt}) != 0) {
         unmountAll(); return fail();
     }
 
@@ -328,7 +379,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     //      exact file size after the loop so Secure Boot verification    //
     //      sees the correct bytes. Progress tracking uses bytes_read     //
     //      (real bytes), never the padded write length.                  //
-    //    - NTFS: ntfs3 does not support O_DIRECT; buffered I/O is used.  //
+    //    - NTFS: does not support O_DIRECT; buffered I/O is used.        //
     //      sync_file_range every SYNC_WINDOW bytes caps the dirty-page   //
     //      backlog so cancellation stops USB writes quickly.             //
     //    - On cancellation: ftruncate(fd_out, 0) + FADV_DONTNEED on the  //
