@@ -64,7 +64,7 @@ Database: `/root/.local/share/isocmd/database/`
 - **Arch Linux:** `readline util-linux xz zstd`
 - **Debian/Ubuntu:** `libreadline-dev libmount-dev liblzma-dev libzstd-dev`
 - **Agnostic:** `libchdr` (statically built and linked)
-- **Optional — required for Windows live USB creation:** `ntfs-3g` `parted` `dosfstools`
+- **Optional — for Windows live USB creation:** `ntfs-3g` `parted` `dosfstools`
 
 ## Ways to Install
 - Download the binary from the latest release
