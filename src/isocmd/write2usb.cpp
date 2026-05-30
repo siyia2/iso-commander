@@ -66,6 +66,43 @@ int runCommand(const std::vector<std::string>& args) {
 }
 
 /**
+ * @brief Detects whether an ISO image is Windows installation media.
+ *
+ * Loop-mounts the ISO read-only into a temporary directory and checks
+ * for the co-presence of @c sources/boot.wim (Windows setup payload)
+ * and @c bootmgr / @c bootmgr.efi (Windows boot manager). Both markers
+ * must be present; either alone is insufficient.
+ *
+ * The temporary mount point is always unmounted and removed before the
+ * function returns, regardless of outcome. All mount/umount output is
+ * suppressed via @ref runCommand() to avoid cluttering the terminal
+ * with spurious error messages.
+ *
+ * @param isoPath Absolute path to the ISO image.
+ * @return @c true if the ISO appears to be Windows installation media.
+ */
+bool isWindowsIso(const std::string& isoPath) {
+    char tmpDir[] = "/tmp/iso_probe_XXXXXX";
+    if (!mkdtemp(tmpDir)) return false;
+
+    auto cleanup = [&]() {
+        runCommand({"umount", "-l", tmpDir});
+        rmdir(tmpDir);
+    };
+
+    if (runCommand({"mount", "-o", "ro,loop", isoPath, tmpDir}) != 0) {
+        rmdir(tmpDir);
+        return false;
+    }
+
+    bool hasBootWim = fs::exists(std::string(tmpDir) + "/sources/boot.wim");
+    bool hasBootMgr = fs::exists(std::string(tmpDir) + "/bootmgr") ||
+                      fs::exists(std::string(tmpDir) + "/bootmgr.efi");
+    cleanup();
+    return hasBootWim && hasBootMgr;
+}
+
+/**
  * @brief Probes /proc/filesystems and system kernel release metadata to determine
  * the most modern and performant NTFS driver available on the host platform.
  *
@@ -112,43 +149,6 @@ std::string getBestNtfsDriver() {
 }
 
 /**
- * @brief Detects whether an ISO image is Windows installation media.
- *
- * Loop-mounts the ISO read-only into a temporary directory and checks
- * for the co-presence of @c sources/boot.wim (Windows setup payload)
- * and @c bootmgr / @c bootmgr.efi (Windows boot manager). Both markers
- * must be present; either alone is insufficient.
- *
- * The temporary mount point is always unmounted and removed before the
- * function returns, regardless of outcome. All mount/umount output is
- * suppressed via @ref runCommand() to avoid cluttering the terminal
- * with spurious error messages.
- *
- * @param isoPath Absolute path to the ISO image.
- * @return @c true if the ISO appears to be Windows installation media.
- */
-bool isWindowsIso(const std::string& isoPath) {
-    char tmpDir[] = "/tmp/iso_probe_XXXXXX";
-    if (!mkdtemp(tmpDir)) return false;
-
-    auto cleanup = [&]() {
-        runCommand({"umount", "-l", tmpDir});
-        rmdir(tmpDir);
-    };
-
-    if (runCommand({"mount", "-o", "ro,loop", isoPath, tmpDir}) != 0) {
-        rmdir(tmpDir);
-        return false;
-    }
-
-    bool hasBootWim = fs::exists(std::string(tmpDir) + "/sources/boot.wim");
-    bool hasBootMgr = fs::exists(std::string(tmpDir) + "/bootmgr") ||
-                      fs::exists(std::string(tmpDir) + "/bootmgr.efi");
-    cleanup();
-    return hasBootWim && hasBootMgr;
-}
-
-/**
 * @brief Writes a Windows ISO to a block device using a hybrid FAT32 + NTFS layout (UEFI only).
 *
 * Partition layout written to @p device:
@@ -189,19 +189,11 @@ bool isWindowsIso(const std::string& isoPath) {
 * byte-for-byte identical to the source — progress and @c writtenInFile
 * always track @c bytes_read (real bytes), never the padded write length.
 *
-* NTFS destination fds use buffered I/O (@c ntfs3 does not support
-* @c O_DIRECT). The dirty-page backlog is bounded by @c sync_file_range;
-* see @par Dirty-page backlog below.
-*
-* @par Dirty-page backlog (NTFS)
-* Buffered writes to the NTFS partition accumulate dirty pages that the
-* kernel flushes asynchronously to the USB device. Without mitigation,
-* cancelling mid-copy can leave hundreds of MiB still queued for writeback.
-* To bound this, @c sync_file_range is called with @c SYNC_FILE_RANGE_WRITE
-* every 4 MiB written, starting asynchronous writeback of each completed
-* window without blocking the write loop. At most one window (~4 MiB) of
-* dirty pages is unsynced at any moment, so cancellation stops USB writes
-* within approximately that amount.
+* NTFS destination fds use buffered I/O (kernel NTFS drivers do not support
+* @c O_DIRECT). No periodic mid-copy sync is performed — @c fdatasync and
+* @c sync_file_range over USB are too costly and caused stalls in testing.
+* The kernel flushes all dirty pages at unmount, which is the final flush
+* guarantee for both ntfs and ntfs3 drivers.
 *
 * @par Cancellation
 * @c GlobalState::g_operationCancelled is checked before and during every
@@ -210,7 +202,7 @@ bool isWindowsIso(const std::string& isoPath) {
 *   - @c ftruncate(fd_out, 0) is called on the current output fd to
 *     invalidate its dirty pages before @c close(); combined with
 *     @c POSIX_FADV_DONTNEED this asks the kernel to discard rather than
-*     flush those pages. Honoured on a best-effort basis by @c ntfs3.
+*     flush those pages. Honoured on a best-effort basis by kernel drivers.
 *   - @c POSIX_FADV_DONTNEED followed by @c BLKFLSBUF is issued on both
 *     partition block devices unconditionally before every unmount — on
 *     cancellation this covers dirty pages from previously completed files
@@ -311,7 +303,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (runCommand({"mount", fatPart, fatMnt}) != 0) {
         unmountAll(); return fail();
     }
-    // NTFS driver autodetection newer ntfs is default, ntfs3 is fallback for older systems
+    // NTFS driver autodetection: newer ntfs is default, ntfs3 is fallback for older systems
     std::string ntfsDriver = getBestNtfsDriver();
     if (ntfsDriver.empty()) { unmountAll(); return fail(); }
     if (runCommand({"mount", "-t", ntfsDriver, ntfsPart, ntfsMnt}) != 0) {
@@ -380,12 +372,12 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     //      sees the correct bytes. Progress tracking uses bytes_read     //
     //      (real bytes), never the padded write length.                  //
     //    - NTFS: does not support O_DIRECT; buffered I/O is used.        //
-    //      sync_file_range every SYNC_WINDOW bytes caps the dirty-page   //
-    //      backlog so cancellation stops USB writes quickly.             //
+    //      No periodic mid-copy sync — fdatasync/sync_file_range over    //
+    //      USB caused stalls in testing. Dirty pages are flushed at      //
+    //      unmount for both ntfs and ntfs3 drivers.                      //
     //    - On cancellation: ftruncate(fd_out, 0) + FADV_DONTNEED on the  //
     //      current fd, plus FADV_DONTNEED + BLKFLSBUF on both block      //
     //      devices via unmountAll, covers pages from completed files.    //
-    //    - posix_fallocate on NTFS only: pre-reserves clusters.          //
     //    - posix_fadvise(SEQUENTIAL) on each source fd for prefetch.     //
     // ------------------------------------------------------------------ //
     auto startTime  = std::chrono::high_resolution_clock::now();
@@ -417,10 +409,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
     // Single reusable 4 MiB buffer — must be 4096-aligned for O_DIRECT
     // on FAT32. Allocated once and reused across all files.
-    constexpr size_t   BUF_SIZE    = 4 * 1024 * 1024;
-    // Dirty-page backlog cap for NTFS: at most ~one window is unsynced at
-    // any moment, so cancellation leaves at most SYNC_WINDOW bytes queued.
-    constexpr uint64_t SYNC_WINDOW = 4ULL * 1024 * 1024;  // 4 MiB
+    constexpr size_t BUF_SIZE = 4 * 1024 * 1024;
 
     void* rawBuf = nullptr;
     if (posix_memalign(&rawBuf, 4096, BUF_SIZE) != 0) { unmountAll(); return fail(); }
@@ -443,21 +432,14 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         // FAT32: O_DIRECT bypasses the page cache entirely — writes go
         // straight to the USB device with no kernel buffering, eliminating
         // post-cancel dirty-page writeback for the ESP.
-        // NTFS: ntfs3 rejects O_DIRECT; use buffered I/O + sync_file_range.
+        // NTFS: kernel NTFS drivers reject O_DIRECT; use buffered I/O.
         int outFlags = O_WRONLY | O_CREAT | O_TRUNC;
         if (!isNtfs) outFlags |= O_DIRECT;
 
         int fd_out = open(dst.c_str(), outFlags, 0644);
         if (fd_out < 0) { close(fd_in); return false; }
 
-        // Pre-reserve clusters on NTFS to avoid on-the-fly allocation.
-        // Skipped for FAT32 (no fallocate support; would zero-fill instead).
-        if (isNtfs && fileSize > 0)
-            posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
-
-        bool     success        = true;
-        uint64_t writtenInFile  = 0;
-        uint64_t lastSyncOffset = 0;
+        bool     success       = true;
 
         while (!GlobalState::g_operationCancelled.load()) {
             ssize_t bytes_read = read(fd_in, ioBuf, BUF_SIZE);
@@ -500,21 +482,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
             // Track real bytes (not padded writeLen) for accurate progress
             // reporting and correct post-loop ftruncate on FAT32.
-            writtenInFile += static_cast<uint64_t>(bytes_read);
             updateProgress(static_cast<uint64_t>(bytes_read));
-
-            // NTFS only: bound the dirty-page backlog with async writeback.
-            // SYNC_FILE_RANGE_WRITE starts flushing the completed window without
-            // blocking the write loop — the kernel drains it in the background
-            // while we continue filling the next window. Provides a soft cap on
-            // dirty pages; cancellation may leave up to ~one SYNC_WINDOW queued.
-            if (isNtfs && (writtenInFile - lastSyncOffset) >= SYNC_WINDOW) {
-                sync_file_range(fd_out,
-                                static_cast<off_t>(lastSyncOffset),
-                                static_cast<off_t>(SYNC_WINDOW),
-                                SYNC_FILE_RANGE_WRITE);
-                lastSyncOffset = writtenInFile;
-            }
         }
 
     done:
@@ -528,8 +496,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             // Ask the kernel to discard dirty pages for this file rather than
             // flushing them to the USB device. ftruncate invalidates the pages;
             // FADV_DONTNEED reinforces that the cache can be dropped.
-            // ntfs3 may not honour both in all kernel versions, but this is the
-            // strongest signal available without O_DIRECT support.
+            // Honoured on a best-effort basis by kernel NTFS drivers.
             ftruncate(fd_out, 0);
             posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
         }
