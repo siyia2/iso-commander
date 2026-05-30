@@ -303,8 +303,11 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             close(fd);
         }
     };
-
+    bool alreadyUnmounted = false;
     auto unmountAll = [&]() {
+        if (alreadyUnmounted) return;
+        alreadyUnmounted = true;
+
         if (GlobalState::g_operationCancelled.load()) {
             dropPageCache(fatPart);
             dropPageCache(ntfsPart);
