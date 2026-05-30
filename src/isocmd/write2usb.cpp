@@ -295,9 +295,11 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         return fail();
 
     auto dropPageCache = [](const std::string& blockDev) {
-        int fd = open(blockDev.c_str(), O_RDONLY);
+        int fd = open(blockDev.c_str(), O_RDWR);
         if (fd >= 0) {
-            posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
+            // Discard the block device's page cache — much more effective
+            // than posix_fadvise on O_RDONLY fd for dirty-page eviction.
+            ioctl(fd, BLKFLSBUF);
             close(fd);
         }
     };
@@ -517,10 +519,12 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     //    The umount calls below force the kernel to flush all dirty      //
     //    pages; that is the strongest guarantee we can give.             //
     // ------------------------------------------------------------------ //
-    int diskFd = open(device.c_str(), O_RDWR);
-    if (diskFd >= 0) {
-        fsync(diskFd);
-        close(diskFd);
+    if (!GlobalState::g_operationCancelled.load()) {
+        int diskFd = open(device.c_str(), O_RDWR);
+        if (diskFd >= 0) {
+            fsync(diskFd);
+            close(diskFd);
+        }
     }
     unmountAll();
 
