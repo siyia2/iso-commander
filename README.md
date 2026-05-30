@@ -31,7 +31,7 @@ Database: `/root/.local/share/isocmd/database/`
 - Native C++ implementation — no Python runtime, no shell wrappers
 - Direct `libmount` and `umount2` system calls
 - Single self-contained executable binary
-- `O_DIRECT` writes on FAT32 — bypasses page cache entirely
+- `O_DIRECT` unbuffered non-ntfs writes — bypasses page cache entirely
 - `sync_file_range` dirty-page bounding on NTFS — instant cancellation
 
 🔀 **Concurrent Processing**
