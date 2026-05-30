@@ -104,7 +104,7 @@ std::string getBestNtfsDriver() {
     }
 
     bool isModernNtfs = hasNtfs && haveVersion &&
-                        (major > 6 || (major == 6 && minor >= 9));
+                        (major > 7 || (major == 7 && minor >= 1));
 
     if (isModernNtfs) return "ntfs";   // NTFSPLUS — write-capable, modern 7.1+
     if (hasNtfs3)     return "ntfs3";  // Paragon — write-capable, 5.15+
