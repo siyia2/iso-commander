@@ -25,6 +25,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -61,6 +62,52 @@ int runCommand(const std::vector<std::string>& args) {
     int status = 0;
     waitpid(pid, &status, 0);
     return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+}
+
+/**
+ * @brief Probes /proc/filesystems and system kernel release metadata to determine
+ * the most modern and performant NTFS driver available on the host platform.
+ *
+ * Priority Tiering:
+ * 1. "ntfs" via Kernel 6.9+ (NTFSPLUS — community driver based on revert of
+ *    the original NTFS codebase, with expanded write support and performance
+ *    improvements over the Paragon NTFS3 driver)
+ * 2. "ntfs3" via Kernel 5.15+ (Paragon Native Driver)
+ *
+ * Note: The legacy read-only "ntfs" driver was removed in kernel 6.9. Any
+ * kernel reporting "ntfs" in /proc/filesystems at 6.9+ is therefore the
+ * NTFSPLUS-derived driver, not the legacy one. The legacy driver is never
+ * returned; this function is used exclusively for write operations.
+ */
+std::string getBestNtfsDriver() {
+    runCommand({"modprobe", "ntfs3"});
+    runCommand({"modprobe", "ntfs"});
+
+    struct utsname osInfo;
+    int major = 0, minor = 0;
+    bool haveVersion = (uname(&osInfo) == 0 &&
+                        sscanf(osInfo.release, "%d.%d", &major, &minor) == 2);
+
+    std::ifstream filesystems("/proc/filesystems");
+    bool hasNtfs3 = false;
+    bool hasNtfs  = false;
+
+    if (filesystems.is_open()) {
+        std::string line;
+        while (std::getline(filesystems, line)) {
+            if (line.find("ntfs3") != std::string::npos)
+                hasNtfs3 = true;
+            else if (line.find("ntfs") != std::string::npos)
+                hasNtfs  = true;
+        }
+    }
+
+    bool isModernNtfs = hasNtfs && haveVersion &&
+                        (major > 6 || (major == 6 && minor >= 9));
+
+    if (isModernNtfs) return "ntfs";   // NTFSPLUS — write-capable, modern 7.1+
+    if (hasNtfs3)     return "ntfs3";  // Paragon — write-capable, 5.15+
+    return {};                         // No write-capable driver found
 }
 
 /**
@@ -122,9 +169,11 @@ bool isWindowsIso(const std::string& isoPath) {
  * a small FAT32 ESP for firmware compatibility, and a larger NTFS partition
  * for bulk data storage.
  *
- * The NTFS partition is mounted using the kernel's native ntfs3 driver
- * (requires Linux kernel 5.15 or newer). Fallback to ntfs-3g FUSE is not
- * implemented; the function will fail if ntfs3 is unavailable.
+ * The NTFS partition is mounted using the best available write-capable kernel NTFS
+ * driver as determined by getBestNtfsDriver(). On kernels 7.1+, the NTFSPLUS-derived
+ * "ntfs" driver is preferred. On kernels 5.15–7.0, "ntfs3" (Paragon) is used. FUSE
+ * fallback via ntfs-3g is not implemented; the function will fail if
+ * no write-capable kernel driver is available.
  *
  * @par Partition probing
  * After partitioning, @c udevadm @c settle is used to block until the kernel
@@ -271,8 +320,9 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (runCommand({"mount", fatPart, fatMnt}) != 0) {
         unmountAll(); return fail();
     }
-    if (runCommand({"mount", "-t", "ntfs3", ntfsPart, ntfsMnt}) != 0) {
-        unmountAll(); return fail();
+    std::string ntfsDriver = getBestNtfsDriver();
+    if (runCommand({"mount", "-t", ntfsDriver, ntfsPart, ntfsMnt}) != 0) {
+            unmountAll(); return fail();
     }
 
     if (GlobalState::g_operationCancelled.load()) { unmountAll(); return false; }
@@ -331,11 +381,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ------------------------------------------------------------------ //
     // 4. Copy with live progress                                         //
     //                                                                    //
-    //    Key USB-specific choices:                      //
-    //    - copy_file_range removed: it optimises in-kernel page-cache    //
-    //      copies but adds no benefit writing over USB mass storage, and //
-    //      can obscure backpressure. Plain read/write is faster and more //
-    //      predictable on flash controllers.                             //
+    //    Key USB-specific choices:                                       //
     //    - Buffer allocated once (4 MiB) and reused across all files.    //
     //      4 MiB keeps the controller's internal buffer fed              //
     //      without over-committing.                                      //
