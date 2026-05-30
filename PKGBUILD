@@ -14,18 +14,20 @@ optdepends=(
     'parted: GPT partition layout for Windows live USB creation'
 )
 
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz")
 md5sums=('b976079ab7970c1e08cb6159062a2192')
 
-source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-
 build() {
-    cd "${srcdir}/$pkgname-${pkgver}"
+    cd "${srcdir}/${pkgname}-${pkgver}"
     make
 }
 
 package() {
-    cd "${srcdir}/$pkgname-${pkgver}"
-    install -Dm755 isocmd "$pkgdir/usr/bin/isocmd"
-    # Install the man page
-    install -Dm644 "${srcdir}/$pkgname-$pkgver/man/isocmd.1" "$pkgdir/usr/share/man/man1/isocmd.1"
+    cd "${srcdir}/${pkgname}-${pkgver}"
+
+    # Install the binary
+    install -Dm755 isocmd "${pkgdir}/usr/bin/isocmd"
+
+    # Install the man page (cleaned up path)
+    install -Dm644 "man/isocmd.1" "${pkgdir}/usr/share/man/man1/isocmd.1"
 }
