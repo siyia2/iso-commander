@@ -425,11 +425,11 @@ void processInputForConversions(const std::string& input,
 
     std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
     std::string operation;
-    if (modeMdf)      operation = std::string(UI::Palette::Orange) + "mdf2iso" + colorMuted + suffix;
-    else if (modeNrg) operation = std::string(UI::Palette::Orange) + "nrg2iso" + colorMuted + suffix;
-    else if (modeChd) operation = std::string(UI::Palette::Orange) + "chd2iso" + colorMuted + suffix;
-    else if (modeDaa) operation = std::string(UI::Palette::Orange) + "daa2iso" + colorMuted + suffix;
-    else              operation = std::string(UI::Palette::Orange) + "ccd2iso" + colorMuted + suffix;
+    if (modeMdf)      operation = std::string(UI::Palette::Orange) + "mdf2iso" + std::string(color) + suffix;
+    else if (modeNrg) operation = std::string(UI::Palette::Orange) + "nrg2iso" + std::string(color) + suffix;
+    else if (modeChd) operation = std::string(UI::Palette::Orange) + "chd2iso" + std::string(color) + suffix;
+    else if (modeDaa) operation = std::string(UI::Palette::Orange) + "daa2iso" + std::string(color) + suffix;
+    else              operation = std::string(UI::Palette::Orange) + "ccd2iso" + std::string(color) + suffix;
 
     clearScrollBuffer();
     std::cout << "\n" << color << " Processing "
