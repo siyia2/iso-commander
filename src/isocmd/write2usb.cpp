@@ -16,7 +16,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <unordered_set>
 #include <vector>
 
@@ -576,7 +575,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     progressData[progressIndex].speed.store(avgSpeed);
     progressData[progressIndex].progress.store(100);
     progressData[progressIndex].completed.store(true);
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
     return true;
 }
 
