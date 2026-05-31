@@ -28,6 +28,6 @@ package() {
     # Install the binary
     install -Dm755 isocmd "${pkgdir}/usr/bin/isocmd"
 
-    # Install the man page (cleaned up path)
+    # Install the man page
     install -Dm644 "man/isocmd.1" "${pkgdir}/usr/share/man/man1/isocmd.1"
 }
