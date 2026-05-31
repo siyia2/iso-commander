@@ -9,7 +9,7 @@ license=('GPL3')
 depends=('coreutils' 'glibc' 'readline' 'util-linux' 'xz' 'zstd')
 makedepends=('gcc' 'make')
 optdepends=(
-    'ntfs-3g: NTFS writes (leverage kernel drivers: ntfs3 < 7.1 / ntfs >= 7.1)'
+    'ntfs-3g: NTFS formatting for Windows live USB creation (writes use the paragon kernel driver)'
     'dosfstools: FAT32 formatting for Windows live USB creation'
     'parted: GPT partition layout for Windows live USB creation'
 )
