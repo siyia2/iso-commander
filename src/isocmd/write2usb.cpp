@@ -26,7 +26,6 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/utsname.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -103,14 +102,19 @@ bool isWindowsIso(const std::string& isoPath) {
 }
 
 /**
- * @brief Probes /proc/filesystems and system kernel release metadata to determine
- * the most modern and performant NTFS driver available on the host platform.
+ * @brief Probes /proc/filesystems to determine the best available write-capable
+ * NTFS driver on the host platform.
+ *
+ * Currently always prefers the Paragon ntfs3 driver (kernel 5.15+) over the
+ * newer NTFSPLUS ntfs driver (kernel 7.1+). Although NTFSPLUS is the more
+ * modern driver, it is still maturing — testing revealed horrible performance
+ * and write reliability issues that make ntfs3 the safer choice for
+ * now. This preference may be revisited in a future release once NTFSPLUS
+ * stabilises.
  *
  * Priority Tiering:
- * 1. "ntfs" via Kernel 7.1+ (NTFSPLUS — community driver based on revert of
- *    the original NTFS codebase, with expanded write support and performance
- *    improvements over the Paragon NTFS3 driver)
- * 2. "ntfs3" via Kernel 5.15+ (Paragon Native Driver)
+ * 1. "ntfs3" via Kernel 5.15+ (Paragon Native Driver) — preferred
+ * 2. "ntfs"  via Kernel 7.1+ (NTFSPLUS) — available but not yet preferred
  *
  * Note: The legacy read-only "ntfs" driver was removed in kernel 7.1. Any
  * kernel reporting "ntfs" in /proc/filesystems at 7.1+ is therefore the
@@ -120,11 +124,6 @@ bool isWindowsIso(const std::string& isoPath) {
 std::string getBestNtfsDriver() {
     runCommand({"modprobe", "ntfs3"});
     runCommand({"modprobe", "ntfs"});
-
-    struct utsname osInfo;
-    int major = 0, minor = 0;
-    bool haveVersion = (uname(&osInfo) == 0 &&
-                        sscanf(osInfo.release, "%d.%d", &major, &minor) == 2);
 
     std::ifstream filesystems("/proc/filesystems");
     bool hasNtfs3 = false;
@@ -140,12 +139,9 @@ std::string getBestNtfsDriver() {
         }
     }
 
-    bool isModernNtfs = hasNtfs && haveVersion &&
-                        (major > 7 || (major == 7 && minor >= 1));
-
-    if (isModernNtfs) return "ntfs";   // NTFSPLUS — write-capable, modern 7.1+
-    if (hasNtfs3)     return "ntfs3";  // Paragon — write-capable, 5.15+
-    return {};                         // No write-capable driver found
+    if (hasNtfs3) return "ntfs3";  // Paragon — preferred for now
+    if (hasNtfs)  return "ntfs";   // NTFSPLUS — fallback until it matures
+    return {};                     // No write-capable driver found
 }
 
 /**
@@ -303,7 +299,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (runCommand({"mount", fatPart, fatMnt}) != 0) {
         unmountAll(); return fail();
     }
-    // NTFS driver autodetection: newer ntfs is default, ntfs3 is fallback for older systems
+    // NTFS driver autodetection: ntfs3 is preferred, ntfs (NTFSPLUS) is fallback
     std::string ntfsDriver = getBestNtfsDriver();
     if (ntfsDriver.empty()) { unmountAll(); return fail(); }
     if (runCommand({"mount", "-t", ntfsDriver, ntfsPart, ntfsMnt}) != 0) {
@@ -396,7 +392,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             uint64_t written = progressData[progressIndex].bytesWritten.load();
             progressData[progressIndex].progress.store(
                 static_cast<int>(
-                    (static_cast<double>(written) / totalBytes) * 100));
+                    std::min(99.0, (static_cast<double>(written) / totalBytes) * 100)));
             if (bytesInWindow > 0 && ms > 0) {
                 progressData[progressIndex].speed.store(
                     (static_cast<double>(bytesInWindow) /
@@ -438,6 +434,11 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
         int fd_out = open(dst.c_str(), outFlags, 0644);
         if (fd_out < 0) { close(fd_in); return false; }
+
+        // Pre-reserve clusters to avoid on-the-fly allocation.
+        // Skipped for FAT32 (no fallocate support on FAT).
+        if (isNtfs && fileSize > 0)
+            posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
 
         bool     success       = true;
 
