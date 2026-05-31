@@ -50,7 +50,7 @@ Database: `/root/.local/share/isocmd/database/`
 - No wimlib, no file splitting — `install.wim` routed to NTFS natively
 - Two-pass write ordering — bootloader written last for integrity
 - Byte-perfect writes verified by md5sum against source ISO
-- Dynamic NTFS driver selection — `ntfs` on kernels 7.1+, `ntfs3` as a safe fallback
+- Dynamic NTFS driver selection — `ntfs3` is preferred for best performance
 - Best Windows USB writer on Linux, period
 
 ⚙️ **Supported Operations**
