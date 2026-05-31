@@ -16,6 +16,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 
@@ -144,89 +145,117 @@ std::string getBestNtfsDriver() {
     return {};                     // No write-capable driver found
 }
 
+// ---------------------------------------------------------------------------
+// Windows Family ISO type detection
+// ---------------------------------------------------------------------------
+
+/** Layout variants that drive partitioning and copy strategy. */
+enum class IsoType { WindowsInstall, FatOnly };
+
 /**
-* @brief Writes a Windows ISO to a block device using a hybrid FAT32 + NTFS layout (UEFI only).
-*
-* Partition layout written to @p device:
-*   GPT partition table.
-*   Partition 1: FAT32 (1024 MiB, EFI System Partition) — receives:
-*     - efi/
-*     - boot/
-*     - sources/boot.wim
-*
-*   This satisfies Windows UEFI boot requirements while remaining within
-*   FAT32 limitations.
-*
-*   Partition 2: NTFS (remainder) — receives all remaining files, including
-*   large files such as sources/install.wim that exceed FAT32's 4 GiB limit.
-*   Formatted with 4 KiB clusters (@c -c 4096).
-*
-* This layout mirrors the approach used by modern Windows installation media:
-* a small FAT32 ESP for firmware compatibility, and a larger NTFS partition
-* for bulk data storage.
-*
-* The NTFS partition is mounted using the best available kernel NTFS driver,
-* selected at runtime by @c getBestNtfsDriver(). On kernel 7.1+, the
-* NTFSPLUS driver is preferred; on 5.15–7.0, the Paragon ntfs3 driver is
-* used. The function will fail if neither driver is available.
-*
-* @par Copy strategy
-* Files are copied using a single 4 MiB buffer allocated once (via
-* @c posix_memalign, 4096-byte aligned) and reused across all files.
-* The source file descriptor uses @c posix_fadvise(POSIX_FADV_SEQUENTIAL)
-* to enable kernel read-ahead from the loop-mounted ISO.
-*
-* FAT32 destination fds are opened with @c O_DIRECT, bypassing the page
-* cache entirely — writes go straight to the USB device with no kernel
-* buffering. This eliminates post-cancel dirty-page writeback for the ESP.
-* Short final-chunk reads are padded to the next 512-byte sector boundary
-* (required by @c O_DIRECT) with zeroed bytes. After the loop,
-* @c ftruncate(fd_out, fileSize) strips the padding so the on-disk file is
-* byte-for-byte identical to the source — progress and @c writtenInFile
-* always track @c bytes_read (real bytes), never the padded write length.
-*
-* NTFS destination fds use buffered I/O (kernel NTFS drivers do not support
-* @c O_DIRECT). No periodic mid-copy sync is performed — @c fdatasync and
-* @c sync_file_range over USB are too costly and caused stalls in testing.
-* The kernel flushes all dirty pages at unmount, which is the final flush
-* guarantee for both ntfs and ntfs3 drivers.
-*
-* @par Cancellation
-* @c GlobalState::g_operationCancelled is checked before and during every
-* file copy. On cancellation:
-*   - Copying stops at the next chunk boundary
-*   - @c ftruncate(fd_out, 0) is called on the current output fd to
-*     invalidate its dirty pages before @c close(); combined with
-*     @c POSIX_FADV_DONTNEED this asks the kernel to discard rather than
-*     flush those pages. Honoured on a best-effort basis by kernel drivers.
-*   - @c POSIX_FADV_DONTNEED followed by @c BLKFLSBUF is issued on both
-*     partition block devices unconditionally before every unmount — on
-*     cancellation this covers dirty pages from previously completed files
-*     which are no longer reachable via any open fd
-*   - All three mounts are lazily unmounted (@c umount -l)
-*   - The function returns @c false without setting the failure flag
-*/
+ * @brief Classify a mounted ISO as a full Windows install or FAT-only boot disk.
+ *
+ * Presence of @c sources/install.wim or @c sources/install.esd is the
+ * canonical indicator of a Windows install image.  WinPE, Hiren's Boot CD,
+ * and other rescue disks lack these files and are treated as @c FatOnly.
+ *
+ * @param isoMnt Mount point of the loop-mounted ISO (read-only).
+ * @return @c WindowsInstall if an install payload is found, @c FatOnly otherwise.
+ */
+static IsoType detectIsoType(const std::string& isoMnt) {
+    // A genuine Windows install ISO always ships sources/install.wim or
+    // sources/install.esd.  Everything else (Hiren's, rescue disks, WinPE
+    // variants without an install image, …) goes through the FAT-only path.
+    return (fs::exists(isoMnt + "/sources/install.wim") ||
+            fs::exists(isoMnt + "/sources/install.esd"))
+               ? IsoType::WindowsInstall
+               : IsoType::FatOnly;
+}
+
+// ---------------------------------------------------------------------------
+// Main writer
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Write a Windows-family ISO image to a block device.
+ *
+ * Partitioning is chosen automatically by ISO type:
+ * - **WindowsInstall** — GPT with a ~1 GiB FAT32 ESP (bootloader +
+ *   @c sources/boot.wim) and an NTFS data partition for the install payload.
+ * - **FatOnly** (WinPE, Hiren's, rescue disks) — GPT with a single FAT32
+ *   partition spanning the whole device.
+ *
+ * I/O strategy per file:
+ * - FAT32 files < 4 GiB use @c O_DIRECT (no post-cancel dirty writeback).
+ * - NTFS files and any file @>= 4 GiB use buffered I/O (@c O_DIRECT is
+ *   unsupported by kernel NTFS drivers and unsafe near the FAT32 file-size limit).
+ *
+ * For WindowsInstall, NTFS content is written before the ESP so the bootloader
+ * only lands after the data it references is already on disk.
+ *
+ * @param isoPath       Path to the source ISO file.
+ * @param device        Target block device (e.g. @c /dev/sdb). Will be wiped.
+ * @param progressIndex Index into the shared @c progressData array for live
+ *                      progress, speed, and completion reporting.
+ * @return @c true on success, @c false on any error or cancellation.
+ */
 bool writeWindowsIsoToDevice(const std::string& isoPath,
-                                    const std::string& device,
-                                    size_t             progressIndex) {
+                              const std::string& device,
+                              size_t             progressIndex) {
     auto fail = [&]() -> bool {
         progressData[progressIndex].failed.store(true);
         return false;
     };
 
     // ------------------------------------------------------------------ //
-    // 1. Wipe + repartition: GPT, FAT32 ESP (~1 GiB) + NTFS (remainder) //
+    // 0. Mount the ISO first so we can inspect its layout before we       //
+    //    decide how to partition the target device.                        //
     // ------------------------------------------------------------------ //
-    if (runCommand({"wipefs", "-a", device}) != 0) return fail();
+    char isoMnt[] = "/tmp/win_iso_XXXXXX";
+    if (!mkdtemp(isoMnt)) return fail();
 
-    if (runCommand({"parted", "-s", device,
-                    "mklabel", "gpt",
-                    "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
-                    "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
-                    "set", "1", "esp",  "on",
-                    "set", "1", "boot", "on"}) != 0) return fail();
+    // We need the ISO mounted for detection; clean up on any early exit.
+    auto unmountIso = [&]() {
+        runCommand({"umount", "-l", isoMnt});
+        rmdir(isoMnt);
+    };
 
-    if (runCommand({"udevadm", "settle"}) != 0) return fail();
+    if (runCommand({"mount", "-o", "ro,loop", isoPath, isoMnt}) != 0) {
+        unmountIso();
+        return fail();
+    }
+
+    const IsoType isoType = detectIsoType(std::string(isoMnt));
+
+    // ------------------------------------------------------------------ //
+    // 1. Wipe + repartition                                               //
+    //                                                                     //
+    //    WindowsInstall : GPT, FAT32 ESP (~1 GiB) + NTFS (remainder)     //
+    //    FatOnly        : GPT, single FAT32 partition (100 %)             //
+    // ------------------------------------------------------------------ //
+    if (runCommand({"wipefs", "-a", device}) != 0) { unmountIso(); return fail(); }
+
+    int partResult = -1;
+    if (isoType == IsoType::WindowsInstall) {
+        partResult = runCommand({"parted", "-s", device,
+                                 "mklabel", "gpt",
+                                 "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
+                                 "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
+                                 "set", "1", "esp",  "on",
+                                 "set", "1", "boot", "on"});
+    } else {
+        // Single FAT32 partition that spans the whole drive.
+        // Mark it ESP + boot so UEFI firmware picks it up without a second
+        // partition table entry pointing nowhere.
+        partResult = runCommand({"parted", "-s", device,
+                                 "mklabel", "gpt",
+                                 "mkpart", "HIRENS", "fat32", "1MiB", "100%",
+                                 "set", "1", "esp",  "on",
+                                 "set", "1", "boot", "on"});
+    }
+    if (partResult != 0) { unmountIso(); return fail(); }
+
+    if (runCommand({"udevadm", "settle"}) != 0) { unmountIso(); return fail(); }
 
     auto derivePartition = [&](int n) -> std::string {
         std::string c1 = device + std::to_string(n);
@@ -240,33 +269,42 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     };
 
     std::string fatPart  = derivePartition(1);
-    std::string ntfsPart = derivePartition(2);
-    if (fatPart.empty() || ntfsPart.empty()) return fail();
+    std::string ntfsPart = (isoType == IsoType::WindowsInstall)
+                               ? derivePartition(2)
+                               : std::string{};
 
-    if (runCommand({"mkfs.fat", "-F", "32", "-n", "WINBOOT", fatPart}) != 0)
-        return fail();
+    if (fatPart.empty()) { unmountIso(); return fail(); }
+    if (isoType == IsoType::WindowsInstall && ntfsPart.empty()) {
+        unmountIso(); return fail();
+    }
 
-    if (runCommand({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA", ntfsPart}) != 0)
-        return fail();
+    if (runCommand({"mkfs.fat", "-F", "32", "-n",
+                    (isoType == IsoType::WindowsInstall ? "WINBOOT" : "HIRENS"),
+                    fatPart}) != 0) {
+        unmountIso(); return fail();
+    }
 
-    if (GlobalState::g_operationCancelled.load()) return false;
+    if (isoType == IsoType::WindowsInstall) {
+        if (runCommand({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA",
+                        ntfsPart}) != 0) {
+            unmountIso(); return fail();
+        }
+    }
+
+    if (GlobalState::g_operationCancelled.load()) { unmountIso(); return false; }
 
     // ------------------------------------------------------------------ //
-    // 2. Mount ISO, FAT32 partition, and NTFS partition                  //
+    // 2. Mount FAT32 partition (and NTFS for Windows installs)            //
     // ------------------------------------------------------------------ //
-    char isoMnt[]  = "/tmp/win_iso_XXXXXX";
     char fatMnt[]  = "/tmp/win_fat_XXXXXX";
     char ntfsMnt[] = "/tmp/win_ntfs_XXXXXX";
 
-    if (!mkdtemp(isoMnt) || !mkdtemp(fatMnt) || !mkdtemp(ntfsMnt))
-        return fail();
+    if (!mkdtemp(fatMnt))  { unmountIso(); return fail(); }
+    if (!mkdtemp(ntfsMnt)) { unmountIso(); rmdir(fatMnt); return fail(); }
 
     auto dropPageCache = [](const std::string& blockDev) {
         int fd = open(blockDev.c_str(), O_RDWR);
         if (fd >= 0) {
-            // FADV_DONTNEED on the block device asks the kernel to drop
-            // dirty pages for the entire device — more effective than
-            // BLKFLSBUF alone for flushed-but-not-committed pages.
             posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
             ioctl(fd, BLKFLSBUF);
             close(fd);
@@ -278,39 +316,38 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         if (alreadyUnmounted) return;
         alreadyUnmounted = true;
 
-        // Always drop page cache before unmounting — even on clean exit
-        // the block devices benefit from cache eviction before teardown.
-        // On cancellation this is the primary mechanism for stopping
-        // residual USB writes from previously completed files.
         dropPageCache(fatPart);
-        dropPageCache(ntfsPart);
+        if (!ntfsPart.empty()) dropPageCache(ntfsPart);
 
         runCommand({"umount", "-l", isoMnt});
         runCommand({"umount", "-l", fatMnt});
-        runCommand({"umount", "-l", ntfsMnt});
+        if (isoType == IsoType::WindowsInstall)
+            runCommand({"umount", "-l", ntfsMnt});
+
         rmdir(isoMnt);
         rmdir(fatMnt);
         rmdir(ntfsMnt);
     };
 
-    if (runCommand({"mount", "-o", "ro,loop", isoPath, isoMnt}) != 0) {
-        unmountAll(); return fail();
-    }
+    // ISO is already mounted from section 0; mount the target partitions now.
     if (runCommand({"mount", fatPart, fatMnt}) != 0) {
         unmountAll(); return fail();
     }
-    // NTFS driver autodetection: ntfs3 is preferred, ntfs (NTFSPLUS) is fallback
-    std::string ntfsDriver = getBestNtfsDriver();
-    if (ntfsDriver.empty()) { unmountAll(); return fail(); }
-    if (runCommand({"mount", "-t", ntfsDriver, ntfsPart, ntfsMnt}) != 0) {
-        unmountAll(); return fail();
+
+    std::string ntfsDriver;
+    if (isoType == IsoType::WindowsInstall) {
+        ntfsDriver = getBestNtfsDriver();
+        if (ntfsDriver.empty()) { unmountAll(); return fail(); }
+        if (runCommand({"mount", "-t", ntfsDriver, ntfsPart, ntfsMnt}) != 0) {
+            unmountAll(); return fail();
+        }
     }
 
     if (GlobalState::g_operationCancelled.load()) { unmountAll(); return false; }
 
     // ------------------------------------------------------------------ //
-    // 3. Collect all ISO entries in a single pass, compute total bytes,  //
-    //    and classify each entry (ESP vs NTFS) up front.                 //
+    // 3. Collect all ISO entries, compute total bytes, classify each      //
+    //    entry (ESP vs NTFS) — or route everything to FAT for FatOnly.   //
     // ------------------------------------------------------------------ //
     struct IsoEntry {
         fs::path src;
@@ -323,10 +360,14 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     std::vector<IsoEntry> espEntries;
     uint64_t totalBytes = 0;
 
+    // Classification is only meaningful for WindowsInstall.
+    // FatOnly: every entry goes to espEntries (= the single FAT partition).
     const std::unordered_set<std::string> espTopFolders = { "efi", "boot" };
     const std::string espBootWim = "sources/boot.wim";
 
     auto belongsOnESP = [&](const fs::path& rel) -> bool {
+        if (isoType == IsoType::FatOnly) return true;  // everything → FAT
+
         std::string top = rel.begin()->string();
         std::transform(top.begin(), top.end(), top.begin(),
                        [](unsigned char c){ return std::tolower(c); });
@@ -339,7 +380,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     };
 
     try {
-        for (const auto& entry : fs::recursive_directory_iterator(std::string(isoMnt))) {
+        for (const auto& entry :
+             fs::recursive_directory_iterator(std::string(isoMnt))) {
             fs::path rel   = fs::relative(entry.path(), std::string(isoMnt));
             bool     toESP = belongsOnESP(rel);
             fs::path dest  = fs::path(toESP ? std::string(fatMnt)
@@ -357,24 +399,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (totalBytes == 0) { unmountAll(); return fail(); }
 
     // ------------------------------------------------------------------ //
-    // 4. Copy with live progress                                         //
-    //                                                                    //
-    //    Key choices:                                                    //
-    //    - Buffer allocated once (4 MiB, 4096-aligned) and reused.      //
-    //    - FAT32: O_DIRECT bypasses page cache entirely — no post-cancel //
-    //      dirty-page writeback on the ESP. Final short chunk is padded  //
-    //      to the next 512-byte sector boundary then truncated back to   //
-    //      exact file size after the loop so Secure Boot verification    //
-    //      sees the correct bytes. Progress tracking uses bytes_read     //
-    //      (real bytes), never the padded write length.                  //
-    //    - NTFS: does not support O_DIRECT; buffered I/O is used.        //
-    //      No periodic mid-copy sync — fdatasync/sync_file_range over    //
-    //      USB caused stalls in testing. Dirty pages are flushed at      //
-    //      unmount for both ntfs and ntfs3 drivers.                      //
-    //    - On cancellation: ftruncate(fd_out, 0) + FADV_DONTNEED on the  //
-    //      current fd, plus FADV_DONTNEED + BLKFLSBUF on both block      //
-    //      devices via unmountAll, covers pages from completed files.    //
-    //    - posix_fadvise(SEQUENTIAL) on each source fd for prefetch.     //
+    // 4. Copy with live progress                                          //
     // ------------------------------------------------------------------ //
     auto startTime  = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
@@ -392,7 +417,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             uint64_t written = progressData[progressIndex].bytesWritten.load();
             progressData[progressIndex].progress.store(
                 static_cast<int>(
-                    std::min(99.0, (static_cast<double>(written) / totalBytes) * 100)));
+                    std::min(99.0,
+                             (static_cast<double>(written) / totalBytes) * 100)));
             if (bytesInWindow > 0 && ms > 0) {
                 progressData[progressIndex].speed.store(
                     (static_cast<double>(bytesInWindow) /
@@ -403,44 +429,47 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         }
     };
 
-    // Single reusable 4 MiB buffer — must be 4096-aligned for O_DIRECT
-    // on FAT32. Allocated once and reused across all files.
     constexpr size_t BUF_SIZE = 4 * 1024 * 1024;
-
     void* rawBuf = nullptr;
-    if (posix_memalign(&rawBuf, 4096, BUF_SIZE) != 0) { unmountAll(); return fail(); }
+    if (posix_memalign(&rawBuf, 4096, BUF_SIZE) != 0) {
+        unmountAll(); return fail();
+    }
     auto ioBuf     = static_cast<char*>(rawBuf);
     auto freeIoBuf = [&]() { free(rawBuf); rawBuf = nullptr; ioBuf = nullptr; };
 
     auto copyWithProgress = [&](const fs::path& src, const fs::path& dst,
                                 uint64_t fileSize) -> bool {
-        const bool isNtfs = dst.string().rfind(ntfsMnt, 0) == 0;
+        // Use buffered I/O when:
+        //   a) the destination is on NTFS (kernel NTFS drivers reject O_DIRECT), or
+        //   b) the file is >= 4 GiB — FAT32's per-file size limit is 4 GiB - 1 byte,
+        //      and ftruncate to shrink sector-padded O_DIRECT writes is unreliable
+        //      at that boundary.  No legitimate bootloader file is anywhere near
+        //      4 GiB, so this threshold never affects ESP correctness.
+        constexpr uint64_t FAT32_FILE_LIMIT = 4ULL * 1024 * 1024 * 1024;
+        const bool useBufferedIO =
+            ((isoType == IsoType::WindowsInstall) &&
+             (dst.string().rfind(ntfsMnt, 0) == 0))
+            || (fileSize >= FAT32_FILE_LIMIT);
 
         int fd_in = open(src.c_str(), O_RDONLY);
         if (fd_in < 0) return false;
 
-        // Hint to the kernel: we will read this file sequentially.
-        // The ISO is on the host filesystem, so prefetching is cheap and
-        // effective — the kernel will read ahead into page cache while we
-        // write to the USB device.
         posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
 
-        // FAT32: O_DIRECT bypasses the page cache entirely — writes go
-        // straight to the USB device with no kernel buffering, eliminating
-        // post-cancel dirty-page writeback for the ESP.
-        // NTFS: kernel NTFS drivers reject O_DIRECT; use buffered I/O.
+        // O_DIRECT bypasses the page cache entirely — no post-cancel dirty-page
+        // writeback on the ESP.  Skipped for buffered paths (NTFS or large files).
         int outFlags = O_WRONLY | O_CREAT | O_TRUNC;
-        if (!isNtfs) outFlags |= O_DIRECT;
+        if (!useBufferedIO) outFlags |= O_DIRECT;
 
         int fd_out = open(dst.c_str(), outFlags, 0644);
         if (fd_out < 0) { close(fd_in); return false; }
 
-        // Pre-reserve clusters to avoid on-the-fly allocation.
-        // Skipped for FAT32 (no fallocate support on FAT).
-        if (isNtfs && fileSize > 0)
+        // Pre-reserve clusters on buffered paths to avoid on-the-fly allocation.
+        // Skipped for O_DIRECT FAT32 (no fallocate support on FAT).
+        if (useBufferedIO && fileSize > 0)
             posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
 
-        bool     success       = true;
+        bool success = true;
 
         while (!GlobalState::g_operationCancelled.load()) {
             ssize_t bytes_read = read(fd_in, ioBuf, BUF_SIZE);
@@ -449,15 +478,13 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                 success = false;
                 break;
             }
-            if (bytes_read == 0) break;  // EOF
+            if (bytes_read == 0) break;
 
-            // O_DIRECT requires the write length to be a sector multiple.
-            // Pad the final short chunk to the next 512-byte boundary with
-            // zeros. Progress and writtenInFile always track bytes_read (the
-            // real byte count) — never writeLen — so reported size and the
-            // post-loop ftruncate both use the correct value.
+            // O_DIRECT requires write length to be a sector multiple.
+            // Pad the final short chunk to the next 512-byte boundary with zeros.
+            // Progress and writtenInFile always track bytes_read (real byte count).
             ssize_t writeLen = bytes_read;
-            if (!isNtfs) {
+            if (!useBufferedIO) {
                 ssize_t aligned = (bytes_read + 511) & ~511;
                 if (aligned > bytes_read)
                     memset(ioBuf + bytes_read, 0, aligned - bytes_read);
@@ -481,23 +508,16 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                 bytes_written += written;
             }
 
-            // Track real bytes (not padded writeLen) for accurate progress
-            // reporting and correct post-loop ftruncate on FAT32.
             updateProgress(static_cast<uint64_t>(bytes_read));
         }
 
     done:
-        // Strip O_DIRECT sector-alignment padding written on the final chunk
-        // so Secure Boot signature verification sees the exact source bytes.
-        // Must happen before the cancellation ftruncate(0) which overwrites it.
-        if (!isNtfs && success && fileSize > 0)
+        // Strip O_DIRECT sector-alignment padding so Secure Boot and embedded-ISO
+        // checksum verification see the exact source bytes.
+        if (!useBufferedIO && success && fileSize > 0)
             ftruncate(fd_out, static_cast<off_t>(fileSize));
 
         if (GlobalState::g_operationCancelled.load()) {
-            // Ask the kernel to discard dirty pages for this file rather than
-            // flushing them to the USB device. ftruncate invalidates the pages;
-            // FADV_DONTNEED reinforces that the cache can be dropped.
-            // Honoured on a best-effort basis by kernel NTFS drivers.
             ftruncate(fd_out, 0);
             posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
         }
@@ -508,10 +528,10 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     };
 
     // ------------------------------------------------------------------ //
-    // 5. Two-pass copy: NTFS data first, ESP bootloader second.          //
-    //    Windows setup is sensitive to the ESP appearing complete; by    //
-    //    writing all NTFS content first we ensure the bootloader only    //
-    //    lands after the data it points to is already on the drive.      //
+    // 5. Copy passes                                                       //
+    //                                                                     //
+    //    WindowsInstall : NTFS data first, ESP bootloader second          //
+    //    FatOnly        : ntfsEntries is empty; single espEntries pass    //
     // ------------------------------------------------------------------ //
     auto processEntries = [&](const std::vector<IsoEntry>& entries) -> bool {
         for (const auto& e : entries) {
@@ -530,19 +550,13 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         return true;
     };
 
-    if (!processEntries(ntfsEntries)) return false;
+    if (!processEntries(ntfsEntries)) return false;  // no-op for FatOnly
     if (!processEntries(espEntries))  return false;
 
     freeIoBuf();
 
     // ------------------------------------------------------------------ //
-    // 6. Flush and unmount                                               //
-    //                                                                    //
-    //    Note: USB mass storage devices may acknowledge fsync/flush      //
-    //    commands before their internal write cache is fully committed   //
-    //    to flash. There is no reliable userspace workaround for this.   //
-    //    The umount calls below force the kernel to flush all dirty      //
-    //    pages; that is the strongest guarantee we can give.             //
+    // 6. Flush and unmount                                                //
     // ------------------------------------------------------------------ //
     if (!GlobalState::g_operationCancelled.load()) {
         int diskFd = open(device.c_str(), O_RDWR);
@@ -562,6 +576,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     progressData[progressIndex].speed.store(avgSpeed);
     progressData[progressIndex].progress.store(100);
     progressData[progressIndex].completed.store(true);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
     return true;
 }
 
