@@ -13,7 +13,7 @@ Root access is required for `mount`, `umount`, and `write` operations. For best 
 ISO files are mounted under `/mnt/iso_{name}` format. Conversions are stored in their respective source directories.
 
 Configuration: `/root/.config/isocmd/config` or `~/.config/isocmd/config`  
-Database: `/root/.local/share/isocmd/database/`
+Database: `/root/.local/share/isocmd/database/` or `~/.local/share/isocmd/database/`
 
 ## ✨ Features
 
