@@ -1,7 +1,8 @@
 # iso-commander
-![iso-commander-preview](https://github.com/user-attachments/assets/47298b0c-0dc0-4c26-a6cb-e6e6b68c2d92)
 
 The most capable ISO manager on Linux. Mount, Unmount, Delete, Copy, Move, ConvertTo, and Write ISO images with zero compromise.
+
+![iso-commander-preview](https://github.com/user-attachments/assets/47298b0c-0dc0-4c26-a6cb-e6e6b68c2d92)
 
 Includes a best-in-class Windows 10/11 USB write engine. 
 Native GPT + FAT32/NTFS layout — no wimlib, no file 
