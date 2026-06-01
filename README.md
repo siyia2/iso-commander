@@ -89,7 +89,6 @@ Bundled conversion tools:
 | Tool | Author | License |
 |------|--------|---------|
 | mdf2iso | Salvatore Santagati | GPL-2.0-or-later |
-| nrg2iso | Grégory Kokanosky | GPL-2.0-or-later |
+| nrg2iso | Grégory Kokanosky | GPL-3.0-or-later (as of 2021) |
 | ccd2iso | Danny Kurniawan & Kerry Harris | GPL-2.0-or-later |
 | daa2iso | Luigi Auriemma | GPL-2.0-or-later |
-| nrg2iso | — | GPL-3.0-or-later (as of 2021) |
