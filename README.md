@@ -20,6 +20,8 @@ Mount, convert, and write ISOs on Linux — done right
 | All distros | `libchdr` (statically built and linked) |
 | Windows USB writing | `ntfs-3g parted dosfstools` |
 
+
+
 **Supported Operations**
 > Mount · Unmount · Copy · Move · Delete · Write to USB · Convert to ISO
 
