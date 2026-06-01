@@ -8,8 +8,8 @@ Mount, convert, and write ISOs on Linux — done right
 ### Installation
 
 1. **Arch Linux (AUR)** — `yay -S iso-commander`
-2. **Binary** — Download from the [latest release]([https://github.com](https://github.com/siyia2/iso-commander/releases))
-3. **Source** — `make`
+2. **Binary** — Download from the [latest release](https://github.com/siyia2/iso-commander/releases)
+3. 3. **Source** — `make`
 
 ### Dependencies
 
