@@ -24,12 +24,11 @@ The most capable ISO manager on Linux. Mount, unmount, delete, copy, move, conve
 **Supported Operations**
 > Mount · Unmount · Copy · Move · Delete · Write to USB · Convert to ISO
 
-> Root access is required for `mount`, `umount`, and `write` operations. Run with `sudo isocmd`.
-
 **Convert to ISO — Supported Formats**
 > `.bin` · `.img` · `.chd` · `.daa` · `.gbi` · `.mdf` · `.nrg`
 
 ### Notes
+- Root access is required for `mount`, `umount`, and `write` operations. Run with `sudo isocmd`.
 - ISO files are mounted under `/mnt/iso_{name}`
 - Converted files are saved to the source ISO's directory
 - Config: `~/.config/isocmd/config` — Database: `~/.local/share/isocmd/database/`
