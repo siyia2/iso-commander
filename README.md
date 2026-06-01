@@ -9,12 +9,13 @@ For the best experience, run with `sudo isocmd`.
 
 ## Getting Started
 
-### Installation
-1. Arch Linux (AUR) `yay -S iso-commander` 
-2. Binary  Download from the [latest release](https://github.com)
-3. Source  `make`
+## Installation
 
-### Dependencies
+1. **Arch Linux (AUR)** — `yay -S iso-commander`
+2. **Binary** — Download from the [latest release](https://github.com)
+3. **Source** — `make`
+
+## Dependencies
 
 | Distro | Packages |
 |--------|----------|
@@ -23,13 +24,12 @@ For the best experience, run with `sudo isocmd`.
 | All distros | `libchdr` (statically built and linked) |
 | Windows USB writing | `ntfs-3g parted dosfstools` |
 
-ISO files are mounted under `/mnt/iso_{name}`.
-Converted files are saved in the source ISO's directory.
+> Root access is required for `mount`, `umount`, and `write` operations. Run with `sudo isocmd`.
 
-| Path | Description |
-|------|-------------|
-| `/root/.config/isocmd/config` | Configuration |
-| `/root/.local/share/isocmd/database/` | Database |
+## Notes
+- ISO files are mounted under `/mnt/iso_{name}`
+- Converted files are saved to the source ISO's directory
+- Config: `~/.config/isocmd/config` — Database: `~/.local/share/isocmd/database/`
 
 > Non-root equivalents use `~/.config/isocmd/` and `~/.local/share/isocmd/` respectively.
 
