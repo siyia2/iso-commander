@@ -63,14 +63,13 @@ Converted files are saved in the source ISO's directory.
 - Non-interactive mode support
 - Full RGB color support
 
-📂 **Supported Formats**
+📂 **Supported Convert To ISO Formats**
 
 | Category | Formats |
 |----------|---------|
-| ISO Filesystems | ISO 9660, UDF, Rock Ridge, Joliet, ISOFs |
 | Conversions | `.bin` `.img` `.chd` `.daa` `.gbi` `.mdf` `.nrg` |
 
-⚙️ **Supported Operations**
+⚙️ **Supported ISO Operations**
 Mount · Unmount · Copy · Move · Delete · Write to USB · Convert to ISO
 
 ## Dependencies
