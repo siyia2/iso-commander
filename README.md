@@ -32,7 +32,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 - Root access is required for `mount`, `umount`, and `write` operations. Run with `sudo isocmd`
 - ISO files are mounted under `/mnt/iso_{name}`
 - Converted files are saved to the source ISO's directory
-- Config: `~/.config/isocmd/config` — Database: `~/.local/share/isocmd/database/`
+- Config: `/root/.config/isocmd/config` — Database: `/root/.local/share/isocmd/database/`
 
 > Non-root equivalents use `~/.config/isocmd/` and `~/.local/share/isocmd/` respectively
 
