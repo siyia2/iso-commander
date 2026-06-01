@@ -1,49 +1,31 @@
 # iso-commander
-
-The most capable ISO manager on Linux. Mount, Unmount, Delete, Copy, Move, ConvertTo, and WriteToUsb ISO images with zero compromise.
+The most capable ISO manager on Linux. Mount, unmount, delete, copy, move, convert, and write ISO images with zero compromise.
 
 ![iso-commander-preview](https://github.com/user-attachments/assets/47298b0c-0dc0-4c26-a6cb-e6e6b68c2d92)
 
-Includes a best-in-class Windows 10/11 USB write engine. 
-Native GPT + FAT32/NTFS layout — no wimlib, no file 
-splitting, no workarounds. Works correctly out of the box where other 
-tools struggle.
+## Requirements
+Root access is required for `mount`, `umount`, and `write` operations.
+For the best experience, run with `sudo isocmd`.
 
-Root access is required for `mount`, `umount`, and `write` operations. For best experience execute with `sudo isocmd`.
+## Quick Install
+| Method | Command |
+|--------|---------|
+| Arch Linux (AUR) | `yay -S iso-commander` |
+| Binary | Download from the [latest release](https://github.com) |
+| Source | `make` |
 
-ISO files are mounted under `/mnt/iso_{name}` format. Conversions are stored in their respective source directories.
+## Getting Started
+ISO files are mounted under `/mnt/iso_{name}`.
+Converted files are saved in the source ISO's directory.
 
-Configuration: `/root/.config/isocmd/config` or `~/.config/isocmd/config`  
-Database: `/root/.local/share/isocmd/database/` or `~/.local/share/isocmd/database/`
+| Path | Description |
+|------|-------------|
+| `/root/.config/isocmd/config` | Configuration |
+| `/root/.local/share/isocmd/database/` | Database |
 
-## ✨ Features
+> Non-root equivalents use `~/.config/isocmd/` and `~/.local/share/isocmd/` respectively.
 
-💾 **Smart ISO Storage & Retrieval**
-- Minimizes disk thrashing
-- Optimizes file access performance
-- Optional automatic imports to database
-- Resilient atomic database writes
-
-🖥️ **Advanced Terminal Interface**
-- Robust tab completion and pagination
-- Comprehensive command history
-- Advanced progress tracking
-- Optional non-interactive mode
-- Full RGB color support
-
-⚡ **High-Performance Architecture**
-- Native C++ implementation — no Python runtime, no shell wrappers
-- Direct `libmount` and `umount2` system calls
-- Single self-contained executable binary
-- `O_DIRECT` unbuffered non-ntfs writes — bypasses page cache entirely
-
-🔀 **Concurrent Processing**
-- Multithreaded asynchronous task handling
-- Lock-free operations
-- Scalable from 1 to 10,000 ISO files
-
-📂 **Supported ISO Filesystem Types**
-- ISO 9660, UDF, Rock Ridge, Joliet, ISOFs
+## Features
 
 🖊️ **Best-in-Class USB Write Engine**
 - Native GPT + FAT32/NTFS dual partition layout for Windows 10/11
@@ -51,10 +33,9 @@ Database: `/root/.local/share/isocmd/database/` or `~/.local/share/isocmd/databa
 - No wimlib, no file splitting — `install.wim` routed to NTFS natively
 - Two-pass write ordering — bootloader written last for integrity
 - Byte-perfect writes verified by md5sum against source ISO
-- Dynamic NTFS driver selection — `ntfs3` is preferred for best performance
-- Best Windows USB writer on Linux, period
+- Dynamic NTFS driver selection — `ntfs3` preferred for best performance
 
-### 💡 USB Boot Mode Support
+💡 **USB Boot Mode Support**
 
 | ISO Type      | Write Method            | BIOS | UEFI |
 |---------------|-------------------------|------|------|
@@ -64,33 +45,51 @@ Database: `/root/.local/share/isocmd/database/` or `~/.local/share/isocmd/databa
 
 > \* Linux/BSD boot support mirrors the source ISO — if the ISO supports BIOS, UEFI, or both, the written USB will too.
 
+⚡ **High Performance**
+- Native C++ — no Python runtime, no shell wrappers
+- `O_DIRECT` unbuffered writes — bypasses page cache entirely
+- Multithreaded processing — scales from 1 to 10,000 ISO files
+- Lock-free operations
+
+💾 **Smart ISO Management**
+- Persistent database with atomic writes
+- Minimized disk thrashing and optimized file access
+- Optional automatic imports
+
+🖥️ **Terminal Interface**
+- Tab completion and pagination
+- Command history
+- Real-time progress tracking
+- Non-interactive mode support
+- Full RGB color support
+
+📂 **Supported Formats**
+
+| Category | Formats |
+|----------|---------|
+| ISO Filesystems | ISO 9660, UDF, Rock Ridge, Joliet, ISOFs |
+| Conversions | `.bin` `.img` `.chd` `.daa` `.gbi` `.mdf` `.nrg` |
+
 ⚙️ **Supported Operations**
-- Mount/Unmount ISO
-- Copy/Move ISO
-- Delete ISO
-- Write ISO (Linux, BSD, Windows 10/11) to USB drives
-- Convert `.bin` `.img` `.chd` `.daa` `.gbi` `.mdf` `.nrg` to ISO
+Mount · Unmount · Copy · Move · Delete · Write to USB · Convert to ISO
 
 ## Dependencies
-- **Arch Linux:** `readline util-linux xz zstd`
-- **Debian/Ubuntu:** `libreadline-dev libmount-dev liblzma-dev libzstd-dev`
-- **Agnostic:** `libchdr` (statically built and linked)
-- **Optional — for Windows live USB creation:** `ntfs-3g` `parted` `dosfstools`
 
-## Ways to Install
-- Download the binary from the latest release
-- Compile from source with `make`
-- Arch Linux: available from the AUR — `yay -S iso-commander`
+| Distro | Packages |
+|--------|----------|
+| Arch Linux | `readline util-linux xz zstd` |
+| Debian / Ubuntu | `libreadline-dev libmount-dev liblzma-dev libzstd-dev` |
+| All distros | `libchdr` (statically built and linked) |
+| Windows USB writing | `ntfs-3g parted dosfstools` |
 
-## 🏆 Credits
+## Credits
+Special thanks to Aaron Giles for libchd and Romain TISSERAND for the libchdr fork *(BSD-3-Clause)*.
 
-Special thanks to Aaron Giles for libchd and Romain TISSERAND for the libchdr fork.
-- libchd license: BSD-3-Clause
-- libchdr license: BSD-3-Clause
-
-Special thanks to the original authors of the bundled conversion tools:
-- Salvatore Santagati (mdf2iso) — GPL-2.0-or-later
-- Grégory Kokanosky (nrg2iso) — GPL-2.0-or-later
-- Danny Kurniawan & Kerry Harris (ccd2iso) — GPL-2.0-or-later
-- Luigi Auriemma (daa2iso) — GPL-2.0-or-later
-- nrg2iso — GPL-3.0-or-later (as of 2021)
+Bundled conversion tools:
+| Tool | Author | License |
+|------|--------|---------|
+| mdf2iso | Salvatore Santagati | GPL-2.0-or-later |
+| nrg2iso | Grégory Kokanosky | GPL-2.0-or-later |
+| ccd2iso | Danny Kurniawan & Kerry Harris | GPL-2.0-or-later |
+| daa2iso | Luigi Auriemma | GPL-2.0-or-later |
+| nrg2iso | — | GPL-3.0-or-later (as of 2021) |
