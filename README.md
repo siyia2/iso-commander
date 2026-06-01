@@ -9,7 +9,7 @@ For the best experience, run with `sudo isocmd`.
 
 ## Getting Started
 
-# Installation
+### Installation
 1. Arch Linux (AUR) `yay -S iso-commander` 
 2. Binary  Download from the [latest release](https://github.com)
 3. Source  `make` 
