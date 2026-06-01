@@ -1,7 +1,7 @@
 # iso-commander
 The most capable ISO manager on Linux. Mount, unmount, delete, copy, move, convert, and write ISO images with zero compromise.
 
-![iso-commander-preview]([https://github.com/user-attachments/assets/47298b0c-0dc0-4c26-a6cb-e6e6b68c2d92](https://github.com/siyia2/iso-commander/blob/main/preview/iso-commander-preview.gif))
+![iso-commander-preview][([https://github.com/user-attachments/assets/47298b0c-0dc0-4c26-a6cb-e6e6b68c2d92](https://github.com/siyia2/iso-commander/blob/main/preview/iso-commander-preview.gif))](https://github.com/siyia2/iso-commander/blob/main/preview/iso-commander-preview.gif)
 
 ## Getting Started
 
