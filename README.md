@@ -8,9 +8,9 @@ Root access is required for `mount`, `umount`, and `write` operations.
 For the best experience, run with `sudo isocmd`.
 
 ## Quick Install
-Arch Linux (AUR)  `yay -S iso-commander` 
-Binary  Download from the [latest release](https://github.com)
-Source  `make` 
+1. Arch Linux (AUR) `yay -S iso-commander` 
+2. Binary  Download from the [latest release](https://github.com)
+3. Source  `make` 
 
 ## Getting Started
 ISO files are mounted under `/mnt/iso_{name}`.
