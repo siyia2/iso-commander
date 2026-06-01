@@ -54,6 +54,16 @@ Database: `/root/.local/share/isocmd/database/` or `~/.local/share/isocmd/databa
 - Dynamic NTFS driver selection — `ntfs3` is preferred for best performance
 - Best Windows USB writer on Linux, period
 
+### 💡 USB Boot Mode Support
+
+| ISO Type      | Write Method            | BIOS | UEFI |
+|---------------|-------------------------|------|------|
+| Windows < 10  | GPT + FAT32/NTFS layout | ✗    | ✗    |
+| Windows 10/11 | GPT + FAT32/NTFS layout | ✗    | ✓    |
+| Linux / BSD   | Raw sector copy         | ✓ *  | ✓ *  |
+
+> \* Linux/BSD boot support mirrors the source ISO — if the ISO supports BIOS, UEFI, or both, the written USB will too.
+
 ⚙️ **Supported Operations**
 - Mount/Unmount ISO
 - Copy/Move ISO
