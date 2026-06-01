@@ -9,13 +9,13 @@ For the best experience, run with `sudo isocmd`.
 
 ## Getting Started
 
-## Installation
+### Installation
 
 1. **Arch Linux (AUR)** — `yay -S iso-commander`
 2. **Binary** — Download from the [latest release](https://github.com)
 3. **Source** — `make`
 
-## Dependencies
+### Dependencies
 
 | Distro | Packages |
 |--------|----------|
@@ -26,7 +26,7 @@ For the best experience, run with `sudo isocmd`.
 
 > Root access is required for `mount`, `umount`, and `write` operations. Run with `sudo isocmd`.
 
-## Notes
+### Notes
 - ISO files are mounted under `/mnt/iso_{name}`
 - Converted files are saved to the source ISO's directory
 - Config: `~/.config/isocmd/config` — Database: `~/.local/share/isocmd/database/`
