@@ -61,11 +61,14 @@ The most capable ISO manager on Linux. Mount, unmount, delete, copy, move, conve
 
 ## USB Boot Mode Support
 
-| ISO Type      | Write Method            | BIOS | UEFI |
-|---------------|-------------------------|------|------|
-| Windows < 10  | Unsupported             | ✗    | ✗    |
-| Windows 10/11 | GPT + FAT32/NTFS layout | ✗    | ✓    |
-| Linux / BSD   | Raw sector copy         | ✓ *  | ✓ *  |
+| ISO Type           | Write Method            | BIOS | UEFI |
+|--------------------|-------------------------|------|------|
+| Windows < 10       | Unsupported             | ✗    | ✗    |
+| Windows 10/11      | GPT + FAT32/NTFS layout | ✗    | ✓    |
+| Windows 10/11 PE   | FAT32 only              | ✗    | ✓    |
+| Linux / BSD        | Raw sector copy         | ✓ *  | ✓ *  |
+
+> \* Linux/BSD boot support mirrors the source ISO — if the ISO supports BIOS, UEFI, or both, the written USB will too.
 
 > \* Linux/BSD boot support mirrors the source ISO — if the ISO supports BIOS, UEFI, or both, the written USB will too.
 
