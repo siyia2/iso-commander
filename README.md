@@ -7,11 +7,6 @@ The most capable ISO manager on Linux. Mount, unmount, delete, copy, move, conve
 Root access is required for `mount`, `umount`, and `write` operations.
 For the best experience, run with `sudo isocmd`.
 
-## Quick Install
-1. Arch Linux (AUR) `yay -S iso-commander` 
-2. Binary  Download from the [latest release](https://github.com)
-3. Source  `make` 
-
 ## Getting Started
 ISO files are mounted under `/mnt/iso_{name}`.
 Converted files are saved in the source ISO's directory.
@@ -78,6 +73,11 @@ Mount · Unmount · Copy · Move · Delete · Write to USB · Convert to ISO
 | Debian / Ubuntu | `libreadline-dev libmount-dev liblzma-dev libzstd-dev` |
 | All distros | `libchdr` (statically built and linked) |
 | Windows USB writing | `ntfs-3g parted dosfstools` |
+
+## Installation
+1. Arch Linux (AUR) `yay -S iso-commander` 
+2. Binary  Download from the [latest release](https://github.com)
+3. Source  `make` 
 
 ## Credits
 Special thanks to Aaron Giles for libchd and Romain TISSERAND for the libchdr fork *(BSD-3-Clause)*.
