@@ -75,7 +75,7 @@ For the best experience, run with `sudo isocmd`.
 
 Special thanks to Aaron Giles for libchdr and Romain TISSERAND for the libchdr fork *(BSD-3-Clause)*.
 
-The following conversion tools were ported into iso-commander's source — special thanks to their original authors:
+The following conversion tools were ported — special thanks to their original authors:
 
 - **mdf2iso** — Salvatore Santagati *(GPL-2.0-or-later)*
 - **nrg2iso** — Grégory Kokanosky *(GPL-3.0-or-later, as of 2021)*
