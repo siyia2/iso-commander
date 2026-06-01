@@ -52,6 +52,7 @@ The most capable ISO manager on Linux. Mount, unmount, delete, copy, move, conve
 💾 **Smart ISO Management**
 - Persistent database with atomic writes and automatic imports
 - Minimized disk thrashing and optimized file access
+- Optional automatic imports to database
 
 🖥️ **Terminal Interface**
 - Tab completion, pagination, and command history
