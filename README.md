@@ -39,7 +39,7 @@ Converted files are saved in the source ISO's directory.
 
 | ISO Type      | Write Method            | BIOS | UEFI |
 |---------------|-------------------------|------|------|
-| Windows < 10  | GPT + FAT32/NTFS layout | ✗    | ✗    |
+| Windows < 10  | Unsupported             | ✗    | ✗    |
 | Windows 10/11 | GPT + FAT32/NTFS layout | ✗    | ✓    |
 | Linux / BSD   | Raw sector copy         | ✓ *  | ✓ *  |
 
