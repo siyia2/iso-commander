@@ -1,7 +1,7 @@
 # iso-commander
 The most capable ISO manager on Linux. Mount, unmount, delete, copy, move, convert, and write ISO images with zero compromise.
 
-![iso-commander-preview](preview/iso-commander-preview)
+![iso-commander-preview](iso-commander/preview/iso-commander-preview.gif)
 
 ## Getting Started
 
