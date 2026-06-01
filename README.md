@@ -41,16 +41,6 @@ For the best experience, run with `sudo isocmd`.
 - Byte-perfect writes verified by md5sum against source ISO
 - Dynamic NTFS driver selection — `ntfs3` preferred for best performance
 
-💡 **USB Boot Mode Support**
-
-| ISO Type      | Write Method            | BIOS | UEFI |
-|---------------|-------------------------|------|------|
-| Windows < 10  | Unsupported             | ✗    | ✗    |
-| Windows 10/11 | GPT + FAT32/NTFS layout | ✗    | ✓    |
-| Linux / BSD   | Raw sector copy         | ✓ *  | ✓ *  |
-
-> \* Linux/BSD boot support mirrors the source ISO — if the ISO supports BIOS, UEFI, or both, the written USB will too.
-
 ⚡ **High Performance**
 - Native C++ — no Python runtime, no shell wrappers
 - `O_DIRECT` unbuffered writes — bypasses page cache entirely
@@ -70,6 +60,16 @@ For the best experience, run with `sudo isocmd`.
 
 📂 **Convert to ISO — Supported Formats**
 > `.bin` · `.img` · `.chd` · `.daa` · `.gbi` · `.mdf` · `.nrg`
+
+## USB Boot Mode Support
+
+| ISO Type      | Write Method            | BIOS | UEFI |
+|---------------|-------------------------|------|------|
+| Windows < 10  | Unsupported             | ✗    | ✗    |
+| Windows 10/11 | GPT + FAT32/NTFS layout | ✗    | ✓    |
+| Linux / BSD   | Raw sector copy         | ✓ *  | ✓ *  |
+
+> \* Linux/BSD boot support mirrors the source ISO — if the ISO supports BIOS, UEFI, or both, the written USB will too.
 
 ## Credits
 
