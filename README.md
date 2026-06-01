@@ -21,8 +21,6 @@ Converted files are saved in the source ISO's directory.
 ## Features
 
 🖊️ **Best-in-Class USB Write Engine**
-- Native GPT + FAT32/NTFS dual partition layout for Windows 10/11
-- Automatic Windows vs Linux/BSD ISO detection via Aho-Corasick signature scan
 - No wimlib, no file splitting — `install.wim` routed to NTFS natively
 - Two-pass write ordering — bootloader written last for integrity
 - Byte-perfect writes verified by md5sum against source ISO
