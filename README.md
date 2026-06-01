@@ -41,29 +41,22 @@ Converted files are saved in the source ISO's directory.
 ⚡ **High Performance**
 - Native C++ — no Python runtime, no shell wrappers
 - `O_DIRECT` unbuffered writes — bypasses page cache entirely
-- Multithreaded processing — scales from 1 to 10,000 ISO files
-- Lock-free operations
+- Multithreaded, lock-free processing — scales from 1 to 10,000 ISO files
 
 💾 **Smart ISO Management**
-- Persistent database with atomic writes
+- Persistent database with atomic writes and automatic imports
 - Minimized disk thrashing and optimized file access
-- Optional automatic imports
 
 🖥️ **Terminal Interface**
-- Tab completion and pagination
-- Command history
-- Real-time progress tracking
-- Non-interactive mode support for mount/umount
+- Tab completion, pagination, and command history
+- Real-time progress tracking and non-interactive mode
 - Built-in theme engine with full RGB color support
 
-⚙️ **Supported ISO Operations**
+⚙️ **Supported Operations**
 > Mount · Unmount · Copy · Move · Delete · Write to USB · Convert to ISO
 
-📂 **Supported Convert To ISO Formats**
-
-| Category | Formats |
-|----------|---------|
-| Conversions | `.bin` `.img` `.chd` `.daa` `.gbi` `.mdf` `.nrg` |
+📂 **Convert to ISO — Supported Formats**
+> `.bin` · `.img` · `.chd` · `.daa` · `.gbi` · `.mdf` · `.nrg`
 
 ## Dependencies
 
