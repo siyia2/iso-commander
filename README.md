@@ -50,7 +50,7 @@ Mount, convert, and write ISOs on Linux — done right
 - Multithreaded, lock-free processing — scales from 1 to 10,000 ISO files
 
 💾 **Smart ISO Management**
-- Persistent database with atomic writes and automatic imports
+- Persistent database with atomic writes
 - Minimized disk thrashing and optimized file access
 - Optional automatic imports to database
 
@@ -68,11 +68,11 @@ Mount, convert, and write ISOs on Linux — done right
 | Windows 10/11 PE   | FAT32 only              | ✗    | ✓    |
 | Linux/BSD          | Raw sector copy         | ✓ *  | ✓ *  |
 
-> \* Linux/BSD boot support mirrors the source ISO — if the ISO supports both, the written USB will too.
+> \* Linux/BSD boot support mirrors the source ISO — if the ISO supports both, the written USB will too
 
 ## 🏆 Credits
 
-Special thanks to Aaron Giles for libchdr and Romain TISSERAND for the libchdr fork *(BSD-3-Clause)*.
+Special thanks to Aaron Giles for libchdr and Romain TISSERAND for the libchdr fork *(BSD-3-Clause)*
 
 The following conversion tools were ported — special thanks to their original authors:
 
