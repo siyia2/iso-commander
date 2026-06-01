@@ -17,7 +17,7 @@ Mount, convert, and write ISOs on Linux — done right
 |--------|----------|
 | Arch Linux | `readline util-linux xz zstd` |
 | Debian / Ubuntu | `libreadline-dev libmount-dev liblzma-dev libzstd-dev` |
-| All distros | `libchdr` (statically built and linked) |
+| Agnostic | `libchdr` (statically built and linked) |
 | Windows USB writing | `ntfs-3g parted dosfstools` |
 
 <br>
