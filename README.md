@@ -72,9 +72,11 @@ For the best experience, run with `sudo isocmd`.
 > `.bin` · `.img` · `.chd` · `.daa` · `.gbi` · `.mdf` · `.nrg`
 
 ## Credits
-Special thanks to Aaron Giles for libchd and Romain TISSERAND for the libchdr fork *(BSD-3-Clause)*.
 
-Bundled conversion tools:
+Special thanks to Aaron Giles for libchdr and Romain TISSERAND for the libchdr fork *(BSD-3-Clause)*.
+
+The following conversion tools were ported into iso-commander's source — Special thanks to the original authors:
+
 | Tool | Author | License |
 |------|--------|---------|
 | mdf2iso | Salvatore Santagati | GPL-2.0-or-later |
