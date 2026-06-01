@@ -3,10 +3,6 @@ The most capable ISO manager on Linux. Mount, unmount, delete, copy, move, conve
 
 ![iso-commander-preview](https://github.com/user-attachments/assets/47298b0c-0dc0-4c26-a6cb-e6e6b68c2d92)
 
-## Runtime Requirements
-Root access is required for `mount`, `umount`, and `write` operations.
-For the best experience, run with `sudo isocmd`.
-
 ## Getting Started
 
 ### Installation
