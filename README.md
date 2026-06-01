@@ -29,12 +29,12 @@ Mount, convert, and write ISOs on Linux — done right
 > `.bin` · `.img` · `.chd` · `.daa` · `.gbi` · `.mdf` · `.nrg`
 
 ### Notes
-- Root access is required for `mount`, `umount`, and `write` operations. Run with `sudo isocmd`.
+- Root access is required for `mount`, `umount`, and `write` operations. Run with `sudo isocmd`
 - ISO files are mounted under `/mnt/iso_{name}`
 - Converted files are saved to the source ISO's directory
 - Config: `~/.config/isocmd/config` — Database: `~/.local/share/isocmd/database/`
 
-> Non-root equivalents use `~/.config/isocmd/` and `~/.local/share/isocmd/` respectively.
+> Non-root equivalents use `~/.config/isocmd/` and `~/.local/share/isocmd/` respectively
 
 ## Features
 
