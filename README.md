@@ -20,6 +20,13 @@ The most capable ISO manager on Linux. Mount, unmount, delete, copy, move, conve
 | All distros | `libchdr` (statically built and linked) |
 | Windows USB writing | `ntfs-3g parted dosfstools` |
 
+
+**Supported Operations**
+> Mount · Unmount · Copy · Move · Delete · Write to USB · Convert to ISO
+
+**Convert to ISO — Supported Formats**
+> `.bin` · `.img` · `.chd` · `.daa` · `.gbi` · `.mdf` · `.nrg`
+
 > Root access is required for `mount`, `umount`, and `write` operations. Run with `sudo isocmd`.
 
 ### Notes
@@ -50,12 +57,6 @@ The most capable ISO manager on Linux. Mount, unmount, delete, copy, move, conve
 - Tab completion, pagination, and command history
 - Real-time progress tracking and non-interactive mode
 - Built-in theme engine with full RGB color support
-
-⚙️ **Supported Operations**
-> Mount · Unmount · Copy · Move · Delete · Write to USB · Convert to ISO
-
-📂 **Convert to ISO — Supported Formats**
-> `.bin` · `.img` · `.chd` · `.daa` · `.gbi` · `.mdf` · `.nrg`
 
 ## USB Boot Mode Support
 
