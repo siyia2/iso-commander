@@ -56,14 +56,14 @@ Converted files are saved in the source ISO's directory.
 - Non-interactive mode support for mount/umount
 - Built-in theme engine with full RGB color support
 
+⚙️ **Supported ISO Operations**
+| Mount · Unmount · Copy · Move · Delete · Write to USB · Convert to ISO |
+
 📂 **Supported Convert To ISO Formats**
 
 | Category | Formats |
 |----------|---------|
 | Conversions | `.bin` `.img` `.chd` `.daa` `.gbi` `.mdf` `.nrg` |
-
-⚙️ **Supported ISO Operations**
-Mount · Unmount · Copy · Move · Delete · Write to USB · Convert to ISO
 
 ## Dependencies
 
