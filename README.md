@@ -66,9 +66,9 @@ Mount, convert, and write ISOs on Linux — done right
 | Windows < 10       | Unsupported             | ✗    | ✗    |
 | Windows 10/11      | GPT + FAT32/NTFS layout | ✗    | ✓    |
 | Windows 10/11 PE   | FAT32 only              | ✗    | ✓    |
-| Linux / BSD        | Raw sector copy         | ✓ *  | ✓ *  |
+| Linux/BSD          | Raw sector copy         | ✓ *  | ✓ *  |
 
-> \* Linux/BSD boot support mirrors the source ISO — if the ISO supports BIOS, UEFI, or both, the written USB will too.
+> \* Linux/BSD boot support mirrors the source ISO — if the ISO supports both, the written USB will too.
 
 ## 🏆 Credits
 
