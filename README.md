@@ -1,5 +1,5 @@
 # iso-commander
-Mount, convert, and write ISOs on Linux — done right
+Mount ISOs, convert images, write bootable USB drives — done right
 
 <img src="preview/iso-commander-preview.gif" width="900" alt="iso-commander demo">
 
