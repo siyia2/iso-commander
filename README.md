@@ -9,7 +9,7 @@ For the best experience, run with `sudo isocmd`.
 
 ## Quick Install
 Arch Linux (AUR)  `yay -S iso-commander` 
-Binary  Download from the [latest release](https://github.com) |
+Binary  Download from the [latest release](https://github.com)
 Source  `make` 
 
 ## Getting Started
