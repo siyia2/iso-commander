@@ -57,7 +57,7 @@ Converted files are saved in the source ISO's directory.
 - Built-in theme engine with full RGB color support
 
 ⚙️ **Supported ISO Operations**
-| Mount · Unmount · Copy · Move · Delete · Write to USB · Convert to ISO |
+> Mount · Unmount · Copy · Move · Delete · Write to USB · Convert to ISO
 
 📂 **Supported Convert To ISO Formats**
 
