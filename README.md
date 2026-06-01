@@ -60,8 +60,8 @@ Converted files are saved in the source ISO's directory.
 - Tab completion and pagination
 - Command history
 - Real-time progress tracking
-- Non-interactive mode support
-- Full RGB color support
+- Non-interactive mode support for mount/umount
+- In-built theme engine with full RGB color support
 
 📂 **Supported Convert To ISO Formats**
 
