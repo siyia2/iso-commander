@@ -1,7 +1,7 @@
 # iso-commander
 Mount, convert, and write ISOs on Linux — done right
 
-<img src="preview/iso-commander-preview.gif" width="2000" alt="iso-commander demo">
+<img src="preview/iso-commander-preview.gif" width="900" alt="iso-commander demo">
 
 ## Getting Started
 
