@@ -68,7 +68,7 @@ The most capable ISO manager on Linux. Mount, unmount, delete, copy, move, conve
 
 > \* Linux/BSD boot support mirrors the source ISO — if the ISO supports BIOS, UEFI, or both, the written USB will too.
 
-## Credits
+## 🏆 Credits
 
 Special thanks to Aaron Giles for libchdr and Romain TISSERAND for the libchdr fork *(BSD-3-Clause)*.
 
