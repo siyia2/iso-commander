@@ -348,8 +348,8 @@ void clearMessageAfterTimeoutInMain(int timeoutTicks, std::atomic<bool>& isAtMai
 /**
  * @brief Clears the terminal screen and resets the scrollback buffer.
  * * Uses ANSI escape sequences:
- * - \033[3J: Clear scrollback
  * - \033[2J: Clear entire screen
+ * - \033[3J: Clear scrollback
  * - \033[H: Move cursor to home position
  */
 void clearScrollBuffer() {
