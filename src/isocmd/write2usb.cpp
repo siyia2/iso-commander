@@ -243,7 +243,7 @@ static bool writeRawSectors(int                fd_in,
             memset(ioBuf + bytes_read, 0, writeLen - bytes_read);
 
         for (ssize_t w = 0; w < writeLen; ) {
-            if (GlobalState::g_operationCancelled.load()) { success = false; goto done; cancelled = true; }
+            if (GlobalState::g_operationCancelled.load()) { success = false; cancelled = true; goto done; }
             ssize_t n = write(fd_out, ioBuf + w, writeLen - w);
             if (n < 0) { if (errno == EINTR) continue; success = false; goto done; }
             w += n;
