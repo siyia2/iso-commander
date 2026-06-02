@@ -353,5 +353,5 @@ void clearMessageAfterTimeoutInMain(int timeoutTicks, std::atomic<bool>& isAtMai
  * - \033[H: Move cursor to home position
  */
 void clearScrollBuffer() {
-    std::cout << "\033[3J\033[2J\033[H\033[0m" << std::flush;
+    std::cout << "\033[2J\033[3J\033[H\033[0m" << std::flush;
 }
