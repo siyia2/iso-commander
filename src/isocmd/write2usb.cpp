@@ -145,6 +145,136 @@ std::string getBestNtfsDriver() {
 }
 
 // ---------------------------------------------------------------------------
+// Shared raw-sector writer
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Write an open ISO image file descriptor to a block device, sector-by-sector.
+ *
+ * Used by both the RawSector Windows path and the Linux/generic path.  The
+ * caller is responsible for opening and closing @p fd_in.
+ *
+ * I/O strategy:
+ * - @c O_DIRECT | @c O_SYNC on the block device — no post-cancel dirty writeback.
+ * - Sector size queried from the device via @c BLKSSZGET — correct for both
+ *   512-byte and 4096-byte (4Kn) devices.
+ * - Final short block zero-padded to the next sector boundary; @c ftruncate is
+ *   not needed on a block device.
+ *
+ * @param fd_in         Open, readable file descriptor for the source ISO.
+ * @param fileSize      Size of the source image in bytes (from @c fstat).
+ * @param device        Target block device (e.g. @c /dev/sdb). Will be wiped.
+ * @param progressIndex Index into the shared @c progressData array.
+ * @return @c true on success, @c false on any error or cancellation.
+ */
+static bool writeRawSectors(int                fd_in,
+                             uint64_t           fileSize,
+                             const std::string& device,
+                             size_t             progressIndex) {
+    auto fail = [&]() -> bool {
+        progressData[progressIndex].failed.store(true);
+        return false;
+    };
+
+    if (fileSize == 0) return fail();
+
+    posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
+
+    if (runCommand({"wipefs", "-a", device}) != 0) return fail();
+
+    int fd_out = open(device.c_str(), O_WRONLY | O_DIRECT | O_SYNC);
+    if (fd_out < 0) return fail();
+
+    // Query physical sector size — handles both 512-byte and 4Kn drives.
+    int sectorSize = 0;
+    if (ioctl(fd_out, BLKSSZGET, &sectorSize) < 0 || sectorSize <= 0) {
+        close(fd_out); return fail();
+    }
+
+    // Allocate aligned buffer (8 MiB, rounded down to sector boundary).
+    constexpr size_t DESIRED_BUFFER = 8 * 1024 * 1024;
+    size_t bufSize = (DESIRED_BUFFER / sectorSize) * sectorSize;
+    if (bufSize == 0) bufSize = sectorSize;
+
+    void* rawBuf = nullptr;
+    if (posix_memalign(&rawBuf, sectorSize, bufSize) != 0) {
+        close(fd_out); return fail();
+    }
+    auto* ioBuf = static_cast<char*>(rawBuf);
+
+    // Progress / speed tracking
+    auto startTime  = std::chrono::high_resolution_clock::now();
+    auto lastUpdate = startTime;
+    uint64_t bytesInWindow = 0;
+    constexpr int UPDATE_INTERVAL_MS = 300;
+
+    auto updateProgress = [&](uint64_t justCopied) {
+        progressData[progressIndex].bytesWritten.fetch_add(justCopied);
+        bytesInWindow += justCopied;
+        auto now = std::chrono::high_resolution_clock::now();
+        auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       now - lastUpdate).count();
+        if (ms >= UPDATE_INTERVAL_MS) {
+            uint64_t written = progressData[progressIndex].bytesWritten.load();
+            progressData[progressIndex].progress.store(
+                static_cast<int>(
+                    std::min(99.0, (static_cast<double>(written) / fileSize) * 100)));
+            if (bytesInWindow > 0 && ms > 0) {
+                progressData[progressIndex].speed.store(
+                    (static_cast<double>(bytesInWindow) / (1024.0 * 1024.0))
+                    / (ms / 1000.0));
+                bytesInWindow = 0;
+            }
+            lastUpdate = now;
+        }
+    };
+
+    bool success = true;
+
+    while (!GlobalState::g_operationCancelled.load()) {
+        ssize_t bytes_read = read(fd_in, ioBuf, bufSize);
+        if (bytes_read < 0) { if (errno == EINTR) continue; success = false; break; }
+        if (bytes_read == 0) break;
+
+        // Pad final short chunk to sector boundary.
+        ssize_t writeLen = ((bytes_read + sectorSize - 1) / sectorSize) * sectorSize;
+        if (writeLen > bytes_read)
+            memset(ioBuf + bytes_read, 0, writeLen - bytes_read);
+
+        for (ssize_t w = 0; w < writeLen; ) {
+            if (GlobalState::g_operationCancelled.load()) { success = false; goto done; }
+            ssize_t n = write(fd_out, ioBuf + w, writeLen - w);
+            if (n < 0) { if (errno == EINTR) continue; success = false; goto done; }
+            w += n;
+        }
+        updateProgress(static_cast<uint64_t>(bytes_read));
+    }
+
+done:
+    if (GlobalState::g_operationCancelled.load()) {
+        posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
+        success = false;
+    }
+
+    if (success) fsync(fd_out);
+    free(rawBuf);
+    close(fd_out);
+    if (!success) return fail();
+
+    // Final progress
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::high_resolution_clock::now() - startTime);
+    double seconds = elapsed.count() / 1000.0;
+    progressData[progressIndex].speed.store(
+        seconds > 0.0
+            ? (static_cast<double>(fileSize) / (1024.0 * 1024.0)) / seconds
+            : 0.0);
+    progressData[progressIndex].progress.store(100);
+    progressData[progressIndex].completed.store(true);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // Windows Family ISO type detection
 // ---------------------------------------------------------------------------
 
@@ -180,13 +310,13 @@ static IsoType detectIsoType(const std::string& isoMnt) {
  * - **WindowsInstall** — GPT with a ~1 GiB FAT32 ESP (bootloader +
  *   @c sources/boot.wim) and an NTFS data partition for the install payload.
  * - **RawSector** (WinPE, Hiren's Boot CD, recovery disks) — ISO written
- *   verbatim sector-by-sector, preserving the hybrid MBR and El Torito boot
- *   structures embedded by the ISO author.  No partitioning or formatting
- *   is performed.
+ *   verbatim sector-by-sector via @ref writeRawSectors, preserving the hybrid
+ *   MBR and El Torito boot structures embedded by the ISO author.  No
+ *   partitioning or formatting is performed.
  *
  * I/O strategy:
- * - RawSector: single sequential pass with @c O_DIRECT | @c O_SYNC directly
- *   to the block device.
+ * - RawSector: delegated to @ref writeRawSectors — single sequential pass with
+ *   @c O_DIRECT | @c O_SYNC directly to the block device.
  * - WindowsInstall FAT32 files < 4 GiB: @c O_DIRECT (no post-cancel dirty
  *   writeback).
  * - WindowsInstall NTFS files and any file >= 4 GiB: buffered I/O (@c O_DIRECT
@@ -228,8 +358,20 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     const IsoType isoType = detectIsoType(std::string(isoMnt));
     unmountIso();  // done with inspection in both branches
 
+    // ------------------------------------------------------------------------------------ //
+    // 1. RawSector — write ISO verbatim (preserves hybrid MBR + El Torito boot structures) //
+    // ------------------------------------------------------------------------------------ //
+    if (isoType == IsoType::RawSector) {
+        int fd_in = open(isoPath.c_str(), O_RDONLY);
+        if (fd_in < 0) return fail();
+        uint64_t fileSize = static_cast<uint64_t>(fs::file_size(isoPath));
+        bool result = writeRawSectors(fd_in, fileSize, device, progressIndex);
+        close(fd_in);
+        return result;
+    }
+
     // ------------------------------------------------------------------ //
-    // 1. Shared I/O primitives (buffer, progress, cancellation)          //
+    // 2. Shared I/O primitives (buffer, progress, cancellation)          //
     // ------------------------------------------------------------------ //
     auto startTime  = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
@@ -242,7 +384,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     auto ioBuf     = static_cast<char*>(rawBuf);
     auto freeIoBuf = [&]() { free(rawBuf); rawBuf = nullptr; ioBuf = nullptr; };
 
-    // totalBytes is set differently per branch; lambda captures it by ref.
+    // totalBytes is set by the WindowsInstall enumeration below.
     uint64_t totalBytes = 0;
 
     auto updateProgress = [&](uint64_t justCopied) {
@@ -265,56 +407,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             lastUpdate = now;
         }
     };
-
-    // ------------------------------------------------------------------------------------ //
-    // 2. RawSector — write ISO verbatim (preserves hybrid MBR + El Torito boot structures) //
-    // ------------------------------------------------------------------------------------ //
-    if (isoType == IsoType::RawSector) {
-        totalBytes = fs::file_size(isoPath);
-        if (totalBytes == 0) { freeIoBuf(); return fail(); }
-
-        int fd_in = open(isoPath.c_str(), O_RDONLY);
-        if (fd_in < 0) { freeIoBuf(); return fail(); }
-        posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
-
-        if (runCommand({"wipefs", "-a", device}) != 0) {
-            close(fd_in); freeIoBuf(); return fail();
-        }
-
-        int fd_out = open(device.c_str(), O_WRONLY | O_DIRECT | O_SYNC);
-        if (fd_out < 0) { close(fd_in); freeIoBuf(); return fail(); }
-
-        bool success = true;
-        while (!GlobalState::g_operationCancelled.load()) {
-            ssize_t bytes_read = read(fd_in, ioBuf, BUF_SIZE);
-            if (bytes_read < 0) { if (errno == EINTR) continue; success = false; break; }
-            if (bytes_read == 0) break;
-
-            ssize_t writeLen = (bytes_read + 511) & ~511;
-            if (writeLen > bytes_read)
-                memset(ioBuf + bytes_read, 0, writeLen - bytes_read);
-
-            for (ssize_t w = 0; w < writeLen; ) {
-                if (GlobalState::g_operationCancelled.load()) { success = false; goto rawDone; }
-                ssize_t n = write(fd_out, ioBuf + w, writeLen - w);
-                if (n < 0) { if (errno == EINTR) continue; success = false; goto rawDone; }
-                w += n;
-            }
-            updateProgress(static_cast<uint64_t>(bytes_read));
-        }
-
-    rawDone:
-        if (GlobalState::g_operationCancelled.load()) {
-            posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
-            success = false;
-        }
-        fsync(fd_out);
-        close(fd_in);
-        close(fd_out);
-        freeIoBuf();
-        if (!success) return fail();
-        goto finalize;
-    }
 
     // ------------------------------------------------------------------ //
     // 3. WindowsInstall — GPT + FAT32 ESP + NTFS data partition          //
@@ -534,7 +626,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         unmountAll();
     }
 
-finalize:
     auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now() - startTime);
     double seconds  = totalElapsed.count() / 1000.0;
@@ -566,8 +657,6 @@ bool isValidIso9660(int fd) {
     uint8_t buffer[2048];
     if (pread(fd, buffer, sizeof(buffer), 32768) != 2048) return false;
 
-    // buffer[0]: Volume Descriptor Type — 0x01 = Primary Volume Descriptor (ECMA-119 §8.3).
-    // buffer[1..5]: Standard Identifier — must be "CD001" (ECMA-119 §8.1).
     if (buffer[0] != 0x01) return false;
 
     std::string_view id(reinterpret_cast<char*>(buffer + 1), 5);
@@ -607,20 +696,9 @@ bool isValidIso9660(int fd) {
  *                 for the minimum-size guard and to clamp the mapping window.
  * @return @c true if the volume header is valid and both "bootmgr[.efi]" and
  *         "boot.wim" signatures are present within the mapped window.
- *
- * @note Does not modify the file; read-only mapping.
- * @note The static Aho-Corasick automaton and case-folding table are both
- *       thread-safe under C++11 and later (guaranteed by static-local
- *       initialisation rules).
- * @note @c MADV_WILLNEED is applied to the first 4 MB of the mapping to
- *       begin faulting in pages immediately; @c MADV_SEQUENTIAL covers the
- *       remainder so the prefetcher stays primed if a full scan is needed.
  */
 bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
 
-    // --- Aho-Corasick automaton (built once, shared across calls) ---
-    // Logical patterns: 0 = "boot.wim", 1 = "bootmgr.efi", 2 = "bootmgr"
-    // Variants: 0 = ASCII, 1 = UTF-16LE, 2 = UTF-16BE  →  bits 0–8
     static const auto ac = [] {
         struct Node {
             std::array<int, 256> next{};
@@ -666,7 +744,6 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
             addPattern("bootmgr",     2, v);
         }
 
-        // BFS to build failure links
         std::queue<int> q;
         for (int c = 0; c < 256; ++c) {
             if (nodes[0].next[c] == -1) {
@@ -693,8 +770,6 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
         return nodes;
     }();
 
-    // Built once at program start; avoids locale machinery and branching
-    // on every byte of the 32 MiB scan window.
     static const auto toLower = [] {
         std::array<uint8_t, 256> t{};
         for (int i = 0; i < 256; ++i)
@@ -702,7 +777,6 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
         return t;
     }();
 
-    // --- Size check ---
     if (fileSize < 0x9000) return false;
 
     const size_t mapSize = std::min(static_cast<size_t>(fileSize),
@@ -711,14 +785,9 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
         mmap(nullptr, mapSize, PROT_READ, MAP_PRIVATE, fd, 0));
     if (addr == MAP_FAILED) return false;
 
-    // Hint the kernel to prefetch the first 4 MiB immediately — signatures
-    // almost always appear within the first 2–3 MiB of a Windows ISO, so
-    // WILLNEED on the head reduces time-to-first-match.  SEQUENTIAL covers
-    // the remainder so readahead stays primed for the full scan if needed.
     madvise(addr,                  4 * 1024 * 1024, MADV_WILLNEED);
     madvise(addr, mapSize,                          MADV_SEQUENTIAL);
 
-    // --- Volume header validation ---
     {
         const uint8_t descType = static_cast<uint8_t>(addr[0x8000]);
         std::string_view id(addr + 0x8001, 5);
@@ -730,13 +799,6 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
         }
     }
 
-    // --- Single-pass Aho-Corasick scan ---
-    // Early-exit masks: once both groups are matched there is no need to
-    // scan further.  Saves up to ~30 MiB of iteration on typical ISOs where
-    // both signatures appear near the front of the directory area.
-    //
-    // boot.wim  matched in any variant: bits 0–2
-    // bootmgr   matched in any variant: bits 3–8
     constexpr uint32_t MASK_BOOTWIM = 0b000000111u;
     constexpr uint32_t MASK_BOOTMGR = 0b111111000u;
     constexpr uint32_t MASK_ALL     = MASK_BOOTWIM | MASK_BOOTMGR;
@@ -746,8 +808,6 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
     for (size_t i = 0; i < mapSize; ++i) {
         cur    = ac[cur].next[toLower[static_cast<uint8_t>(addr[i])]];
         found |= ac[cur].match;
-
-        // Both groups matched — no need to continue scanning.
         if ((found & MASK_ALL) == MASK_ALL) break;
     }
 
@@ -762,7 +822,7 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
  *
  * High-level orchestration routine that opens the ISO once, validates it, then intercepts
  * Windows installation media using an optimized metadata signature probe. Standard/Linux
- * distributions fall through directly into a specialized, unbuffered block-level stream.
+ * distributions fall through directly into @ref writeRawSectors.
  *
  * @details
  * - **Single fd Lifecycle:** The ISO is opened once at entry via @c open(O_RDONLY) and
@@ -774,30 +834,23 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
  * - **Windows Path Routing:** If @ref isWindowsIsoInitialCheck passes, execution is
  *   delegated to @ref writeWindowsIsoToDevice, which automatically handles multi-partitioning,
  *   hybrid FAT32+NTFS tables, and cluster tuning.
- * - **Raw O_DIRECT Pipeline:** Non-Windows targets are imaged via raw unbuffered disk I/O.
- *   Data transfers utilize a dedicated page-aligned memory buffer (@c posix_memalign) matching
- *   the physical device's underlying sector constraints queried from @c ioctl(BLKSSZGET).
- * - **Tail-Block Padding:** Detects partial blocks at EOF or short reads, automatically
- *   zero-padding the remaining buffer slice up to the strict sector layout boundary to prevent
- *   kernel rejection errors (@c EINVAL).
- * - **Asynchronous Cancellation Safety:** Evaluates @c GlobalState::g_operationCancelled
- *   at every inner loop pass. On user abort, it short-circuits execution and leaves the disk
- *   safely without triggering a cascading @c fsync block.
+ * - **Raw Pipeline:** Non-Windows targets are imaged via @ref writeRawSectors — unbuffered
+ *   O_DIRECT I/O with dynamic sector size detection and zero-padded tail blocks.
  *
  * @param isoPath Absolute path to the source ISO image file on the host.
  * @param device Target destination block node path (e.g., @c /dev/sdb). WARNING: All existing
  * underlying data will be destructively overwritten.
  * @param progressIndex Unique thread tracking identifier mapped inside the global progress array.
- * @return @c true if the image data was transferred successfully, verified, and safely flushed;
+ * @return @c true if the image data was transferred successfully and safely flushed;
  * @c false on physical I/O failure, validation collapse, or user cancellation.
  *
  * @see isValidIso9660
  * @see isWindowsIsoInitialCheck
  * @see writeWindowsIsoToDevice
+ * @see writeRawSectors
  */
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex) {
 
-    // Open ISO once — shared by all validation and write paths
     int iso_fd = open(isoPath.c_str(), O_RDONLY);
     if (iso_fd == -1) {
         progressData[progressIndex].failed.store(true);
@@ -806,175 +859,28 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     auto closeIso = [](int* fd) { if (*fd != -1) close(*fd); };
     std::unique_ptr<int, decltype(closeIso)> isoGuard(&iso_fd, closeIso);
 
-    // Verify it's a valid ISO 9660 filesystem before proceeding
     if (!isValidIso9660(iso_fd)) {
         progressData[progressIndex].failed.store(true);
         return false;
     }
 
-    // Seek back to beginning after validation probe
-    if (lseek(iso_fd, 0, SEEK_SET) == -1) {
-        progressData[progressIndex].failed.store(true);
-        return false;
-    }
-
-    // Get file size once via fstat — reused by both routing and raw write path
     struct stat sb;
     if (fstat(iso_fd, &sb) == -1) {
         progressData[progressIndex].failed.store(true);
         return false;
     }
 
-    // Fast-path: Windows ISO routing (borrows iso_fd)
     if (isWindowsIsoInitialCheck(iso_fd, sb.st_size)) {
         return writeWindowsIsoToDevice(isoPath, device, progressIndex);
     }
 
-    // Seek back to beginning for raw write path
     if (lseek(iso_fd, 0, SEEK_SET) == -1) {
         progressData[progressIndex].failed.store(true);
         return false;
     }
 
-    // --- Raw O_DIRECT path for Linux / UEFI ISOs -------------------------
-
-    // Open device with O_DIRECT for unbuffered writes
-    int dev_fd = open(device.c_str(), O_WRONLY | O_DIRECT);
-    if (dev_fd == -1) {
-        progressData[progressIndex].failed.store(true);
-        return false;
-    }
-    auto closeDev = [](int* fd) { if (*fd != -1) close(*fd); };
-    std::unique_ptr<int, decltype(closeDev)> devGuard(&dev_fd, closeDev);
-
-    // Get sector size (required for O_DIRECT alignment)
-    int sectorSize = 0;
-    if (ioctl(dev_fd, BLKSSZGET, &sectorSize) < 0 || sectorSize <= 0) {
-        progressData[progressIndex].failed.store(true);
-        return false;
-    }
-
-    // Use file size from fstat rather than reopening via std::filesystem
-    const uint64_t fileSize = static_cast<uint64_t>(sb.st_size);
-    if (fileSize == 0) {
-        progressData[progressIndex].failed.store(true);
-        return false;
-    }
-
-    // Pad file size up to sector boundary for O_DIRECT
-    const uint64_t paddedSize = ((fileSize + sectorSize - 1) / sectorSize) * sectorSize;
-
-    // Allocate aligned buffer (8 MiB, rounded down to sector boundary)
-    constexpr size_t DESIRED_BUFFER = 8 * 1024 * 1024;
-    size_t bufferSize = (DESIRED_BUFFER / sectorSize) * sectorSize;
-    if (bufferSize == 0) bufferSize = sectorSize;
-
-    char* alignedBuffer = nullptr;
-    if (posix_memalign(reinterpret_cast<void**>(&alignedBuffer), sectorSize, bufferSize) != 0) {
-        progressData[progressIndex].failed.store(true);
-        return false;
-    }
-    std::unique_ptr<char, decltype(&free)> bufferGuard(alignedBuffer, &free);
-
-    // Progress / speed tracking
-    auto startTime  = std::chrono::high_resolution_clock::now();
-    auto lastUpdate = startTime;
-    uint64_t bytesInWindow = 0;
-    constexpr int UPDATE_INTERVAL_MS = 300;
-
-    auto updateSpeed = [&](auto now) {
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate);
-        if (bytesInWindow > 0 && elapsed.count() > 0) {
-            double seconds = elapsed.count() / 1000.0;
-            progressData[progressIndex].speed.store(
-                (static_cast<double>(bytesInWindow) / (1024.0 * 1024.0)) / seconds);
-            bytesInWindow = 0;
-            lastUpdate = now;
-        }
-    };
-
-    uint64_t localBytesWritten = 0;
-
-    try {
-        while (localBytesWritten < paddedSize && !GlobalState::g_operationCancelled.load()) {
-            uint64_t remaining   = paddedSize - localBytesWritten;
-            size_t   bytesToRead = static_cast<size_t>(std::min<uint64_t>(bufferSize, remaining));
-
-            ssize_t bytesRead = 0;
-            while (true) {
-                bytesRead = read(iso_fd, alignedBuffer, bytesToRead);
-                if (bytesRead >= 0) break;
-                if (errno == EINTR) continue;
-                throw std::runtime_error("Read error: " + std::string(strerror(errno)));
-            }
-
-            if (bytesRead == 0) {
-                // EOF — remainder is padding; zero the full chunk
-                std::memset(alignedBuffer, 0, bytesToRead);
-            } else if (static_cast<size_t>(bytesRead) < bytesToRead) {
-                // Short read on final chunk — zero-pad the tail
-                std::memset(alignedBuffer + bytesRead, 0, bytesToRead - bytesRead);
-            }
-
-            // Write loop — handles partial writes and EINTR
-            size_t remainingToWrite = bytesToRead;
-            char*  writePtr         = alignedBuffer;
-            while (remainingToWrite > 0) {
-                ssize_t written = write(dev_fd, writePtr, remainingToWrite);
-                if (written < 0) {
-                    if (errno == EINTR) continue;
-                    throw std::runtime_error("Write error: " + std::string(strerror(errno)));
-                }
-
-                remainingToWrite -= static_cast<size_t>(written);
-                writePtr         += written;
-
-                uint64_t reportable = std::min<uint64_t>(
-                    static_cast<uint64_t>(written),
-                    fileSize - std::min(localBytesWritten, fileSize));
-
-                localBytesWritten += static_cast<size_t>(written);
-                bytesInWindow     += static_cast<uint64_t>(written);   // physical throughput for speed
-                progressData[progressIndex].bytesWritten.fetch_add(reportable); // capped for UI
-            }
-
-            // Throttled progress + speed update
-            auto now           = std::chrono::high_resolution_clock::now();
-            auto msSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                     now - lastUpdate).count();
-            if (msSinceUpdate >= UPDATE_INTERVAL_MS) {
-                uint64_t reported = progressData[progressIndex].bytesWritten.load();
-                progressData[progressIndex].progress.store(
-                    static_cast<int>((static_cast<double>(reported) / fileSize) * 100));
-                updateSpeed(now);
-            }
-        }
-    } catch (...) {
-        if (!GlobalState::g_operationCancelled.load()) {
-            progressData[progressIndex].failed.store(true);
-        }
-        return false;
-    }
-
-    if (!GlobalState::g_operationCancelled.load()) {
-        if (fsync(dev_fd) != 0) {
-            progressData[progressIndex].failed.store(true);
-            return false;
-        }
-    }
-
-    if (!GlobalState::g_operationCancelled.load() && localBytesWritten >= paddedSize) {
-        auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::high_resolution_clock::now() - startTime);
-        double seconds  = totalElapsed.count() / 1000.0;
-        double avgSpeed = seconds > 0.0
-            ? (static_cast<double>(fileSize) / (1024.0 * 1024.0)) / seconds
-            : 0.0;
-        progressData[progressIndex].speed.store(avgSpeed);
-        progressData[progressIndex].progress.store(100);
-        progressData[progressIndex].completed.store(true);
-        return true;
-    }
-
-    return false;
+    return writeRawSectors(iso_fd,
+                           static_cast<uint64_t>(sb.st_size),
+                           device,
+                           progressIndex);
 }
