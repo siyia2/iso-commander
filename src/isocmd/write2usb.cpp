@@ -230,6 +230,7 @@ static bool writeRawSectors(int                fd_in,
     };
 
     bool success = true;
+    bool cancelled = false;
 
     while (!GlobalState::g_operationCancelled.load()) {
         ssize_t bytes_read = read(fd_in, ioBuf, bufSize);
@@ -242,7 +243,7 @@ static bool writeRawSectors(int                fd_in,
             memset(ioBuf + bytes_read, 0, writeLen - bytes_read);
 
         for (ssize_t w = 0; w < writeLen; ) {
-            if (GlobalState::g_operationCancelled.load()) { success = false; goto done; }
+            if (GlobalState::g_operationCancelled.load()) { success = false; goto done; cancelled = true; }
             ssize_t n = write(fd_out, ioBuf + w, writeLen - w);
             if (n < 0) { if (errno == EINTR) continue; success = false; goto done; }
             w += n;
@@ -250,28 +251,44 @@ static bool writeRawSectors(int                fd_in,
         updateProgress(static_cast<uint64_t>(bytes_read));
     }
 
-done:
-    if (GlobalState::g_operationCancelled.load()) {
-        posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
-        success = false;
-    }
+    done:
+        // Check if the loop exited due to a late-stage cancellation
+        if (GlobalState::g_operationCancelled.load()) {
+            cancelled = true;
+        }
 
-    if (success) fsync(fd_out);
-    free(rawBuf);
-    close(fd_out);
-    if (!success) return fail();
+        if (cancelled) {
+            posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
+            // Clear caches if required by your architecture
+        } else if (success) {
+            fsync(fd_out);
+        }
 
-    // Final progress
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::high_resolution_clock::now() - startTime);
-    double seconds = elapsed.count() / 1000.0;
-    progressData[progressIndex].speed.store(
-        seconds > 0.0
-            ? (static_cast<double>(fileSize) / (1024.0 * 1024.0)) / seconds
-            : 0.0);
-    progressData[progressIndex].progress.store(100);
-    progressData[progressIndex].completed.store(true);
-    return true;
+        free(rawBuf);
+        close(fd_out);
+
+        // --- Handle Exit Routing ---
+        if (cancelled) {
+            // Handle cancellation gracefully without marking 'failed' as true
+            progressData[progressIndex].completed.store(false);
+            // If your progressData structure has a .cancelled atom, set it here:
+            // progressData[progressIndex].cancelled.store(true);
+            return false;
+        }
+
+        if (!success) return fail();
+
+        // Final progress (only reached if genuinely successful)
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::high_resolution_clock::now() - startTime);
+        double seconds = elapsed.count() / 1000.0;
+        progressData[progressIndex].speed.store(
+            seconds > 0.0
+                ? (static_cast<double>(fileSize) / (1024.0 * 1024.0)) / seconds
+                : 0.0);
+        progressData[progressIndex].progress.store(100);
+        progressData[progressIndex].completed.store(true);
+        return true;
 }
 
 // ---------------------------------------------------------------------------
