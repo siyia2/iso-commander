@@ -25,7 +25,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 **Supported Operations**
 > Mount · Unmount · Copy · Move · Delete · Write to USB · Convert to ISO
 
-**Convert to ISO — Supported Formats**
+**Convert to ISO — Supported Formats (archival only — conversion breaks emulator compatibility)**
 > `.bin` · `.img` · `.chd` · `.daa` · `.gbi` · `.mdf` · `.nrg`
 
 ### Notes
@@ -67,7 +67,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 | Windows 10/11 PE   | Raw sector              | ✓ *  | ✓ *  |
 | Linux/BSD          | Raw sector copy         | ✓ *  | ✓ *  |
 
-> \* Boot support mirrors the source ISO's mastering
+> \* Boot support depends on what the original ISO supports
 
 ## 🏆 Credits
 
