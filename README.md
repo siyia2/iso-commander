@@ -25,7 +25,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 **Supported Operations**
 > Mount · Unmount · Copy · Move · Delete · Write to USB · Convert to ISO
 
-**Convert to ISO — Supported Formats (archival only — conversion breaks emulator compatibility)**
+**Convert to ISO — Supported Formats (archival only — breaks emulator compatibility)**
 > `.bin` · `.img` · `.chd` · `.daa` · `.gbi` · `.mdf` · `.nrg`
 
 ### Notes
