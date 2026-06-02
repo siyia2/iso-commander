@@ -835,31 +835,17 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
 }
 
 /**
- * @brief Writes an ISO image to a raw block device, auto-routing Windows vs. Linux configurations.
+ * @brief Writes an ISO image to a block device with automatic format routing.
  *
- * High-level orchestration routine that opens the ISO once, validates it, then intercepts
- * Windows installation media using an optimized metadata signature probe. Standard/Linux
- * distributions fall through directly into @ref writeRawSectors.
+ * Validates the ISO and dispatches to the appropriate write pipeline:
+ * - Windows installation media → handled by @ref writeWindowsIsoToDevice
+ * - All other ISOs → written via @ref writeRawSectors
  *
- * @details
- * - **Single fd Lifecycle:** The ISO is opened once at entry via @c open(O_RDONLY) and
- *   held for the duration of the call. The same descriptor is passed to @ref isValidIso9660
- *   and @ref isWindowsIsoInitialCheck, avoiding redundant opens. File size is retrieved
- *   once via @c fstat and reused across all paths.
- * - **Early Validation:** @ref isValidIso9660 is invoked before any device access or
- *   routing decision, ensuring invalid images are rejected with minimal overhead.
- * - **Windows Path Routing:** If @ref isWindowsIsoInitialCheck passes, execution is
- *   delegated to @ref writeWindowsIsoToDevice, which automatically handles multi-partitioning,
- *   hybrid FAT32+NTFS tables, and cluster tuning.
- * - **Raw Pipeline:** Non-Windows targets are imaged via @ref writeRawSectors — unbuffered
- *   O_DIRECT I/O with dynamic sector size detection and zero-padded tail blocks.
+ * @param isoPath Path to the source ISO image.
+ * @param device Target block device (e.g., /dev/sdb). WARNING: data is overwritten.
+ * @param progressIndex Index into the global progress tracker.
  *
- * @param isoPath Absolute path to the source ISO image file on the host.
- * @param device Target destination block node path (e.g., @c /dev/sdb). WARNING: All existing
- * underlying data will be destructively overwritten.
- * @param progressIndex Unique thread tracking identifier mapped inside the global progress array.
- * @return @c true if the image data was transferred successfully and safely flushed;
- * @c false on physical I/O failure, validation collapse, or user cancellation.
+ * @return true on success, false on validation failure, I/O error, or cancellation.
  *
  * @see isValidIso9660
  * @see isWindowsIsoInitialCheck
