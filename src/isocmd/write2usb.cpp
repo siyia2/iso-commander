@@ -320,13 +320,22 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // 3. WindowsInstall — GPT + FAT32 ESP + NTFS data partition          //
     // ------------------------------------------------------------------ //
     {
-        // Re-mount ISO — needed for file enumeration in this path.
-        if (!mkdtemp(isoMnt)) { freeIoBuf(); return fail(); }
-        if (runCommand({"mount", "-o", "ro,loop", isoPath, isoMnt}) != 0) {
-            unmountIso(); freeIoBuf(); return fail();
+        // Fresh temp dir — isoMnt was already expanded and freed above.
+        char isoMnt2[] = "/tmp/win_iso_XXXXXX";
+        if (!mkdtemp(isoMnt2)) { freeIoBuf(); return fail(); }
+
+        auto unmountIso2 = [&]() {
+            runCommand({"umount", "-l", isoMnt2});
+            rmdir(isoMnt2);
+        };
+
+        if (runCommand({"mount", "-o", "ro,loop", isoPath, isoMnt2}) != 0) {
+            unmountIso2(); freeIoBuf(); return fail();
         }
 
-        if (runCommand({"wipefs", "-a", device}) != 0) { unmountIso(); freeIoBuf(); return fail(); }
+        if (runCommand({"wipefs", "-a", device}) != 0) {
+            unmountIso2(); freeIoBuf(); return fail();
+        }
 
         if (runCommand({"parted", "-s", device,
                         "mklabel", "gpt",
@@ -334,10 +343,12 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                         "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
                         "set", "1", "esp",  "on",
                         "set", "1", "boot", "on"}) != 0) {
-            unmountIso(); freeIoBuf(); return fail();
+            unmountIso2(); freeIoBuf(); return fail();
         }
 
-        if (runCommand({"udevadm", "settle"}) != 0) { unmountIso(); freeIoBuf(); return fail(); }
+        if (runCommand({"udevadm", "settle"}) != 0) {
+            unmountIso2(); freeIoBuf(); return fail();
+        }
 
         auto derivePartition = [&](int n) -> std::string {
             std::string c1 = device + std::to_string(n);
@@ -352,21 +363,25 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
         std::string fatPart  = derivePartition(1);
         std::string ntfsPart = derivePartition(2);
-        if (fatPart.empty() || ntfsPart.empty()) { unmountIso(); freeIoBuf(); return fail(); }
+        if (fatPart.empty() || ntfsPart.empty()) {
+            unmountIso2(); freeIoBuf(); return fail();
+        }
 
         if (runCommand({"mkfs.fat", "-F", "32", "-n", "WINBOOT", fatPart}) != 0) {
-            unmountIso(); freeIoBuf(); return fail();
+            unmountIso2(); freeIoBuf(); return fail();
         }
         if (runCommand({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA", ntfsPart}) != 0) {
-            unmountIso(); freeIoBuf(); return fail();
+            unmountIso2(); freeIoBuf(); return fail();
         }
 
-        if (GlobalState::g_operationCancelled.load()) { unmountIso(); freeIoBuf(); return false; }
+        if (GlobalState::g_operationCancelled.load()) {
+            unmountIso2(); freeIoBuf(); return false;
+        }
 
         char fatMnt[]  = "/tmp/win_fat_XXXXXX";
         char ntfsMnt[] = "/tmp/win_ntfs_XXXXXX";
-        if (!mkdtemp(fatMnt))  { unmountIso(); freeIoBuf(); return fail(); }
-        if (!mkdtemp(ntfsMnt)) { unmountIso(); rmdir(fatMnt); freeIoBuf(); return fail(); }
+        if (!mkdtemp(fatMnt))  { unmountIso2(); freeIoBuf(); return fail(); }
+        if (!mkdtemp(ntfsMnt)) { unmountIso2(); rmdir(fatMnt); freeIoBuf(); return fail(); }
 
         auto dropPageCache = [](const std::string& blockDev) {
             int fd = open(blockDev.c_str(), O_RDWR);
@@ -383,10 +398,10 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             alreadyUnmounted = true;
             dropPageCache(fatPart);
             dropPageCache(ntfsPart);
-            runCommand({"umount", "-l", isoMnt});
+            runCommand({"umount", "-l", isoMnt2});
             runCommand({"umount", "-l", fatMnt});
             runCommand({"umount", "-l", ntfsMnt});
-            rmdir(isoMnt); rmdir(fatMnt); rmdir(ntfsMnt);
+            rmdir(isoMnt2); rmdir(fatMnt); rmdir(ntfsMnt);
         };
 
         if (runCommand({"mount", "-o", "noatime", fatPart, fatMnt}) != 0) {
@@ -420,8 +435,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
         try {
             for (const auto& entry :
-                 fs::recursive_directory_iterator(std::string(isoMnt))) {
-                fs::path rel  = fs::relative(entry.path(), std::string(isoMnt));
+                 fs::recursive_directory_iterator(std::string(isoMnt2))) {
+                fs::path rel  = fs::relative(entry.path(), std::string(isoMnt2));
                 bool    toESP = belongsOnESP(rel);
                 fs::path dest = fs::path(toESP ? std::string(fatMnt)
                                                : std::string(ntfsMnt)) / rel;
@@ -435,7 +450,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
         if (totalBytes == 0) { unmountAll(); freeIoBuf(); return fail(); }
 
-        // ---- copy helper (identical semantics to original) ------------
+        // ---- copy helper ----------------------------------------------
         constexpr uint64_t FAT32_FILE_LIMIT = 4ULL * 1024 * 1024 * 1024;
 
         auto copyWithProgress = [&](const fs::path& src, const fs::path& dst,
