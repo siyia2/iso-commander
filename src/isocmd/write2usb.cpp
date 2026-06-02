@@ -149,26 +149,24 @@ std::string getBestNtfsDriver() {
 // ---------------------------------------------------------------------------
 
 /** Layout variants that drive partitioning and copy strategy. */
-enum class IsoType { WindowsInstall, FatOnly };
+enum class IsoType { WindowsInstall, RawSector };
 
 /**
- * @brief Classify a mounted ISO as a full Windows install or FAT-only boot disk.
+ * @brief Classify a mounted ISO as a full Windows install or a raw-sector image.
  *
  * Presence of @c sources/install.wim or @c sources/install.esd is the
  * canonical indicator of a Windows install image.  WinPE, Hiren's Boot CD,
- * and other rescue disks lack these files and are treated as @c FatOnly.
+ * and other rescue/recovery disks lack these files and are written raw
+ * sector-by-sector to preserve their hybrid MBR and El Torito boot structures.
  *
  * @param isoMnt Mount point of the loop-mounted ISO (read-only).
- * @return @c WindowsInstall if an install payload is found, @c FatOnly otherwise.
+ * @return @c WindowsInstall if an install payload is found, @c RawSector otherwise.
  */
 static IsoType detectIsoType(const std::string& isoMnt) {
-    // A genuine Windows install ISO always ships sources/install.wim or
-    // sources/install.esd.  Everything else (Hiren's, rescue disks, WinPE
-    // variants without an install image, …) goes through the FAT-only path.
     return (fs::exists(isoMnt + "/sources/install.wim") ||
             fs::exists(isoMnt + "/sources/install.esd"))
                ? IsoType::WindowsInstall
-               : IsoType::FatOnly;
+               : IsoType::RawSector;
 }
 
 // ---------------------------------------------------------------------------
@@ -178,16 +176,21 @@ static IsoType detectIsoType(const std::string& isoMnt) {
 /**
  * @brief Write a Windows-family ISO image to a block device.
  *
- * Partitioning is chosen automatically by ISO type:
+ * Write strategy is chosen automatically by ISO type:
  * - **WindowsInstall** — GPT with a ~1 GiB FAT32 ESP (bootloader +
  *   @c sources/boot.wim) and an NTFS data partition for the install payload.
- * - **FatOnly** (WinPE, Hiren's, rescue disks) — GPT with a single FAT32
- *   partition spanning the whole device.
+ * - **RawSector** (WinPE, Hiren's Boot CD, recovery disks) — ISO written
+ *   verbatim sector-by-sector, preserving the hybrid MBR and El Torito boot
+ *   structures embedded by the ISO author.  No partitioning or formatting
+ *   is performed.
  *
- * I/O strategy per file:
- * - FAT32 files < 4 GiB use @c O_DIRECT (no post-cancel dirty writeback).
- * - NTFS files and any file @>= 4 GiB use buffered I/O (@c O_DIRECT is
- *   unsupported by kernel NTFS drivers and unsafe).
+ * I/O strategy:
+ * - RawSector: single sequential pass with @c O_DIRECT | @c O_SYNC directly
+ *   to the block device.
+ * - WindowsInstall FAT32 files < 4 GiB: @c O_DIRECT (no post-cancel dirty
+ *   writeback).
+ * - WindowsInstall NTFS files and any file >= 4 GiB: buffered I/O (@c O_DIRECT
+ *   is unsupported by kernel NTFS drivers and unsafe at the FAT32 size boundary).
  *
  * For WindowsInstall, NTFS content is written before the ESP so the bootloader
  * only lands after the data it references is already on disk.
@@ -207,13 +210,11 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     };
 
     // ------------------------------------------------------------------ //
-    // 0. Mount the ISO first so we can inspect its layout before we       //
-    //    decide how to partition the target device.                        //
+    // 0. Mount ISO for type detection                                     //
     // ------------------------------------------------------------------ //
     char isoMnt[] = "/tmp/win_iso_XXXXXX";
     if (!mkdtemp(isoMnt)) return fail();
 
-    // We need the ISO mounted for detection; clean up on any early exit.
     auto unmountIso = [&]() {
         runCommand({"umount", "-l", isoMnt});
         rmdir(isoMnt);
@@ -225,190 +226,28 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     }
 
     const IsoType isoType = detectIsoType(std::string(isoMnt));
+    unmountIso();  // done with inspection in both branches
 
     // ------------------------------------------------------------------ //
-    // 1. Wipe + repartition                                               //
-    //                                                                     //
-    //    WindowsInstall : GPT, FAT32 ESP (~1 GiB) + NTFS (remainder)     //
-    //    FatOnly        : GPT, single FAT32 partition (100 %)             //
-    // ------------------------------------------------------------------ //
-    if (runCommand({"wipefs", "-a", device}) != 0) { unmountIso(); return fail(); }
-
-    int partResult = -1;
-    if (isoType == IsoType::WindowsInstall) {
-        partResult = runCommand({"parted", "-s", device,
-                                 "mklabel", "gpt",
-                                 "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
-                                 "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
-                                 "set", "1", "esp",  "on",
-                                 "set", "1", "boot", "on"});
-    } else {
-        // Single FAT32 partition that spans the whole drive.
-        // Mark it ESP + boot so UEFI firmware picks it up without a second
-        // partition table entry pointing nowhere.
-        partResult = runCommand({"parted", "-s", device,
-                                 "mklabel", "gpt",
-                                 "mkpart", "HIRENS", "fat32", "1MiB", "100%",
-                                 "set", "1", "esp",  "on",
-                                 "set", "1", "boot", "on"});
-    }
-    if (partResult != 0) { unmountIso(); return fail(); }
-
-    if (runCommand({"udevadm", "settle"}) != 0) { unmountIso(); return fail(); }
-
-    auto derivePartition = [&](int n) -> std::string {
-        std::string c1 = device + std::to_string(n);
-        std::string c2 = device + "p" + std::to_string(n);
-        for (int attempt = 0; attempt < 3; ++attempt) {
-            if (fs::exists(c1)) return c1;
-            if (fs::exists(c2)) return c2;
-            sleep(1);
-        }
-        return {};
-    };
-
-    std::string fatPart  = derivePartition(1);
-    std::string ntfsPart = (isoType == IsoType::WindowsInstall)
-                               ? derivePartition(2)
-                               : std::string{};
-
-    if (fatPart.empty()) { unmountIso(); return fail(); }
-    if (isoType == IsoType::WindowsInstall && ntfsPart.empty()) {
-        unmountIso(); return fail();
-    }
-
-    if (runCommand({"mkfs.fat", "-F", "32", "-n",
-                    (isoType == IsoType::WindowsInstall ? "WINBOOT" : "HIRENS"),
-                    fatPart}) != 0) {
-        unmountIso(); return fail();
-    }
-
-    if (isoType == IsoType::WindowsInstall) {
-        if (runCommand({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA",
-                        ntfsPart}) != 0) {
-            unmountIso(); return fail();
-        }
-    }
-
-    if (GlobalState::g_operationCancelled.load()) { unmountIso(); return false; }
-
-    // ------------------------------------------------------------------ //
-    // 2. Mount FAT32 partition (and NTFS for Windows installs)            //
-    // ------------------------------------------------------------------ //
-    char fatMnt[]  = "/tmp/win_fat_XXXXXX";
-    char ntfsMnt[] = "/tmp/win_ntfs_XXXXXX";
-
-    if (!mkdtemp(fatMnt))  { unmountIso(); return fail(); }
-    if (!mkdtemp(ntfsMnt)) { unmountIso(); rmdir(fatMnt); return fail(); }
-
-    auto dropPageCache = [](const std::string& blockDev) {
-        int fd = open(blockDev.c_str(), O_RDWR);
-        if (fd >= 0) {
-            posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
-            ioctl(fd, BLKFLSBUF);
-            close(fd);
-        }
-    };
-
-    bool alreadyUnmounted = false;
-    auto unmountAll = [&]() {
-        if (alreadyUnmounted) return;
-        alreadyUnmounted = true;
-
-        dropPageCache(fatPart);
-        if (!ntfsPart.empty()) dropPageCache(ntfsPart);
-
-        runCommand({"umount", "-l", isoMnt});
-        runCommand({"umount", "-l", fatMnt});
-        if (isoType == IsoType::WindowsInstall)
-            runCommand({"umount", "-l", ntfsMnt});
-
-        rmdir(isoMnt);
-        rmdir(fatMnt);
-        rmdir(ntfsMnt);
-    };
-
-    // ISO is already mounted from section 0; mount the target partitions now.
-    if (runCommand({"mount", fatPart, fatMnt}) != 0) {
-        unmountAll(); return fail();
-    }
-
-    std::string ntfsDriver;
-    if (isoType == IsoType::WindowsInstall) {
-        ntfsDriver = getBestNtfsDriver();
-        if (ntfsDriver.empty()) { unmountAll(); return fail(); }
-        if (runCommand({"mount", "-t", ntfsDriver, "-o", "noatime,prealloc", ntfsPart, ntfsMnt}) != 0) {
-            unmountAll(); return fail();
-        }
-    }
-
-    if (GlobalState::g_operationCancelled.load()) { unmountAll(); return false; }
-
-    // ------------------------------------------------------------------ //
-    // 3. Collect all ISO entries, compute total bytes, classify each      //
-    //    entry (ESP vs NTFS) — or route everything to FAT for FatOnly.   //
-    // ------------------------------------------------------------------ //
-    struct IsoEntry {
-        fs::path src;
-        fs::path dst;
-        uint64_t size;
-        bool     isDir;
-    };
-
-    std::vector<IsoEntry> ntfsEntries;
-    std::vector<IsoEntry> espEntries;
-    uint64_t totalBytes = 0;
-
-    // Classification is only meaningful for WindowsInstall.
-    // FatOnly: every entry goes to espEntries (= the single FAT partition).
-    const std::unordered_set<std::string> espTopFolders = { "efi", "boot" };
-    const std::string espBootWim = "sources/boot.wim";
-
-    auto belongsOnESP = [&](const fs::path& rel) -> bool {
-        if (isoType == IsoType::FatOnly) return true;  // everything → FAT
-
-        std::string top = rel.begin()->string();
-        std::transform(top.begin(), top.end(), top.begin(),
-                       [](unsigned char c){ return std::tolower(c); });
-        if (espTopFolders.count(top) > 0) return true;
-
-        std::string relStr = rel.generic_string();
-        std::transform(relStr.begin(), relStr.end(), relStr.begin(),
-                       [](unsigned char c){ return std::tolower(c); });
-        return relStr == espBootWim;
-    };
-
-    try {
-        for (const auto& entry :
-             fs::recursive_directory_iterator(std::string(isoMnt))) {
-            fs::path rel   = fs::relative(entry.path(), std::string(isoMnt));
-            bool     toESP = belongsOnESP(rel);
-            fs::path dest  = fs::path(toESP ? std::string(fatMnt)
-                                            : std::string(ntfsMnt)) / rel;
-
-            uint64_t sz = entry.is_regular_file() ? entry.file_size() : 0;
-            totalBytes += sz;
-
-            IsoEntry e { entry.path(), dest, sz, entry.is_directory() };
-            if (toESP) espEntries.push_back(std::move(e));
-            else       ntfsEntries.push_back(std::move(e));
-        }
-    } catch (...) { unmountAll(); return fail(); }
-
-    if (totalBytes == 0) { unmountAll(); return fail(); }
-
-    // ------------------------------------------------------------------ //
-    // 4. Copy with live progress                                          //
+    // 1. Shared I/O primitives (buffer, progress, cancellation)          //
     // ------------------------------------------------------------------ //
     auto startTime  = std::chrono::high_resolution_clock::now();
     auto lastUpdate = startTime;
     uint64_t bytesInWindow = 0;
     constexpr int UPDATE_INTERVAL_MS = 300;
 
+    constexpr size_t BUF_SIZE = 4 * 1024 * 1024;
+    void* rawBuf = nullptr;
+    if (posix_memalign(&rawBuf, 4096, BUF_SIZE) != 0) return fail();
+    auto ioBuf     = static_cast<char*>(rawBuf);
+    auto freeIoBuf = [&]() { free(rawBuf); rawBuf = nullptr; ioBuf = nullptr; };
+
+    // totalBytes is set differently per branch; lambda captures it by ref.
+    uint64_t totalBytes = 0;
+
     auto updateProgress = [&](uint64_t justCopied) {
         progressData[progressIndex].bytesWritten.fetch_add(justCopied);
         bytesInWindow += justCopied;
-
         auto now = std::chrono::high_resolution_clock::now();
         auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
                        now - lastUpdate).count();
@@ -416,156 +255,271 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             uint64_t written = progressData[progressIndex].bytesWritten.load();
             progressData[progressIndex].progress.store(
                 static_cast<int>(
-                    std::min(99.0,
-                             (static_cast<double>(written) / totalBytes) * 100)));
+                    std::min(99.0, (static_cast<double>(written) / totalBytes) * 100)));
             if (bytesInWindow > 0 && ms > 0) {
                 progressData[progressIndex].speed.store(
-                    (static_cast<double>(bytesInWindow) /
-                     (1024.0 * 1024.0)) / (ms / 1000.0));
+                    (static_cast<double>(bytesInWindow) / (1024.0 * 1024.0))
+                    / (ms / 1000.0));
                 bytesInWindow = 0;
             }
             lastUpdate = now;
         }
     };
 
-    constexpr size_t BUF_SIZE = 4 * 1024 * 1024;
-    void* rawBuf = nullptr;
-    if (posix_memalign(&rawBuf, 4096, BUF_SIZE) != 0) {
-        unmountAll(); return fail();
-    }
-    auto ioBuf     = static_cast<char*>(rawBuf);
-    auto freeIoBuf = [&]() { free(rawBuf); rawBuf = nullptr; ioBuf = nullptr; };
+    // ------------------------------------------------------------------ //
+    // 2. FatOnly — raw sector copy (preserves hybrid MBR + El Torito)    //
+    // ------------------------------------------------------------------ //
+    if (isoType == IsoType::RawSector) {
+        totalBytes = fs::file_size(isoPath);
+        if (totalBytes == 0) { freeIoBuf(); return fail(); }
 
-    auto copyWithProgress = [&](const fs::path& src, const fs::path& dst,
-                                uint64_t fileSize) -> bool {
-        // Use buffered I/O when:
-        //   a) the destination is on NTFS (kernel NTFS drivers reject O_DIRECT), or
-        //   b) the file is >= 4 GiB — FAT32's per-file size limit is 4 GiB - 1 byte,
-        //      and ftruncate to shrink sector-padded O_DIRECT writes is unreliable
-        //      at that boundary.  No legitimate bootloader file is anywhere near
-        //      4 GiB, so this threshold never affects ESP correctness.
-        constexpr uint64_t FAT32_FILE_LIMIT = 4ULL * 1024 * 1024 * 1024;
-        const bool useBufferedIO =
-            ((isoType == IsoType::WindowsInstall) &&
-             (dst.string().rfind(ntfsMnt, 0) == 0))
-            || (fileSize >= FAT32_FILE_LIMIT);
-
-        int fd_in = open(src.c_str(), O_RDONLY);
-        if (fd_in < 0) return false;
-
+        int fd_in = open(isoPath.c_str(), O_RDONLY);
+        if (fd_in < 0) { freeIoBuf(); return fail(); }
         posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
 
-        // O_DIRECT bypasses the page cache entirely — no post-cancel dirty-page
-        // writeback on the ESP.  Skipped for buffered paths (NTFS or large files).
-        int outFlags = O_WRONLY | O_CREAT | O_TRUNC;
-        if (!useBufferedIO) outFlags |= O_DIRECT;
+        if (runCommand({"wipefs", "-a", device}) != 0) {
+            close(fd_in); freeIoBuf(); return fail();
+        }
 
-        int fd_out = open(dst.c_str(), outFlags, 0644);
-        if (fd_out < 0) { close(fd_in); return false; }
-
-        // Pre-reserve clusters on buffered paths to avoid on-the-fly allocation.
-        // Skipped for O_DIRECT FAT32 (no fallocate support on FAT).
-        if (useBufferedIO && fileSize > 0)
-            posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
+        int fd_out = open(device.c_str(), O_WRONLY | O_DIRECT | O_SYNC);
+        if (fd_out < 0) { close(fd_in); freeIoBuf(); return fail(); }
 
         bool success = true;
-
         while (!GlobalState::g_operationCancelled.load()) {
             ssize_t bytes_read = read(fd_in, ioBuf, BUF_SIZE);
-            if (bytes_read < 0) {
-                if (errno == EINTR) continue;
-                success = false;
-                break;
-            }
+            if (bytes_read < 0) { if (errno == EINTR) continue; success = false; break; }
             if (bytes_read == 0) break;
 
-            // O_DIRECT requires write length to be a sector multiple.
-            // Pad the final short chunk to the next 512-byte boundary with zeros.
-            // Progress and writtenInFile always track bytes_read (real byte count).
-            ssize_t writeLen = bytes_read;
-            if (!useBufferedIO) {
-                ssize_t aligned = (bytes_read + 511) & ~511;
-                if (aligned > bytes_read)
-                    memset(ioBuf + bytes_read, 0, aligned - bytes_read);
-                writeLen = aligned;
-            }
+            ssize_t writeLen = (bytes_read + 511) & ~511;
+            if (writeLen > bytes_read)
+                memset(ioBuf + bytes_read, 0, writeLen - bytes_read);
 
-            ssize_t bytes_written = 0;
-            while (bytes_written < writeLen) {
-                if (GlobalState::g_operationCancelled.load()) {
-                    success = false;
-                    goto done;
-                }
-                ssize_t written = write(fd_out,
-                                        ioBuf + bytes_written,
-                                        writeLen - bytes_written);
-                if (written < 0) {
-                    if (errno == EINTR) continue;
-                    success = false;
-                    goto done;
-                }
-                bytes_written += written;
+            for (ssize_t w = 0; w < writeLen; ) {
+                if (GlobalState::g_operationCancelled.load()) { success = false; goto rawDone; }
+                ssize_t n = write(fd_out, ioBuf + w, writeLen - w);
+                if (n < 0) { if (errno == EINTR) continue; success = false; goto rawDone; }
+                w += n;
             }
-
             updateProgress(static_cast<uint64_t>(bytes_read));
         }
 
-    done:
-        // Strip O_DIRECT sector-alignment padding so Secure Boot and embedded-ISO
-        // checksum verification see the exact source bytes.
-        if (!useBufferedIO && success && fileSize > 0)
-            ftruncate(fd_out, static_cast<off_t>(fileSize));
-
+    rawDone:
         if (GlobalState::g_operationCancelled.load()) {
-            ftruncate(fd_out, 0);
             posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
+            success = false;
         }
-
+        fsync(fd_out);
         close(fd_in);
         close(fd_out);
-        return success && !GlobalState::g_operationCancelled.load();
-    };
+        freeIoBuf();
+        if (!success) return fail();
+        goto finalize;
+    }
 
     // ------------------------------------------------------------------ //
-    // 5. Copy passes                                                       //
-    //                                                                     //
-    //    WindowsInstall : NTFS data first, ESP bootloader second          //
-    //    FatOnly        : ntfsEntries is empty; single espEntries pass    //
+    // 3. WindowsInstall — GPT + FAT32 ESP + NTFS data partition          //
     // ------------------------------------------------------------------ //
-    auto processEntries = [&](const std::vector<IsoEntry>& entries) -> bool {
-        for (const auto& e : entries) {
-            if (GlobalState::g_operationCancelled.load()) {
-                freeIoBuf(); unmountAll(); return false;
+    {
+        // Re-mount ISO — needed for file enumeration in this path.
+        if (!mkdtemp(isoMnt)) { freeIoBuf(); return fail(); }
+        if (runCommand({"mount", "-o", "ro,loop", isoPath, isoMnt}) != 0) {
+            unmountIso(); freeIoBuf(); return fail();
+        }
+
+        if (runCommand({"wipefs", "-a", device}) != 0) { unmountIso(); freeIoBuf(); return fail(); }
+
+        if (runCommand({"parted", "-s", device,
+                        "mklabel", "gpt",
+                        "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
+                        "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
+                        "set", "1", "esp",  "on",
+                        "set", "1", "boot", "on"}) != 0) {
+            unmountIso(); freeIoBuf(); return fail();
+        }
+
+        if (runCommand({"udevadm", "settle"}) != 0) { unmountIso(); freeIoBuf(); return fail(); }
+
+        auto derivePartition = [&](int n) -> std::string {
+            std::string c1 = device + std::to_string(n);
+            std::string c2 = device + "p" + std::to_string(n);
+            for (int attempt = 0; attempt < 3; ++attempt) {
+                if (fs::exists(c1)) return c1;
+                if (fs::exists(c2)) return c2;
+                sleep(1);
             }
-            if (e.isDir) {
-                fs::create_directories(e.dst);
-            } else {
-                fs::create_directories(e.dst.parent_path());
-                if (!copyWithProgress(e.src, e.dst, e.size)) {
-                    freeIoBuf(); unmountAll(); return fail();
+            return {};
+        };
+
+        std::string fatPart  = derivePartition(1);
+        std::string ntfsPart = derivePartition(2);
+        if (fatPart.empty() || ntfsPart.empty()) { unmountIso(); freeIoBuf(); return fail(); }
+
+        if (runCommand({"mkfs.fat", "-F", "32", "-n", "WINBOOT", fatPart}) != 0) {
+            unmountIso(); freeIoBuf(); return fail();
+        }
+        if (runCommand({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA", ntfsPart}) != 0) {
+            unmountIso(); freeIoBuf(); return fail();
+        }
+
+        if (GlobalState::g_operationCancelled.load()) { unmountIso(); freeIoBuf(); return false; }
+
+        char fatMnt[]  = "/tmp/win_fat_XXXXXX";
+        char ntfsMnt[] = "/tmp/win_ntfs_XXXXXX";
+        if (!mkdtemp(fatMnt))  { unmountIso(); freeIoBuf(); return fail(); }
+        if (!mkdtemp(ntfsMnt)) { unmountIso(); rmdir(fatMnt); freeIoBuf(); return fail(); }
+
+        auto dropPageCache = [](const std::string& blockDev) {
+            int fd = open(blockDev.c_str(), O_RDWR);
+            if (fd >= 0) {
+                posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
+                ioctl(fd, BLKFLSBUF);
+                close(fd);
+            }
+        };
+
+        bool alreadyUnmounted = false;
+        auto unmountAll = [&]() {
+            if (alreadyUnmounted) return;
+            alreadyUnmounted = true;
+            dropPageCache(fatPart);
+            dropPageCache(ntfsPart);
+            runCommand({"umount", "-l", isoMnt});
+            runCommand({"umount", "-l", fatMnt});
+            runCommand({"umount", "-l", ntfsMnt});
+            rmdir(isoMnt); rmdir(fatMnt); rmdir(ntfsMnt);
+        };
+
+        if (runCommand({"mount", "-o", "noatime", fatPart, fatMnt}) != 0) {
+            unmountAll(); freeIoBuf(); return fail();
+        }
+        std::string ntfsDriver = getBestNtfsDriver();
+        if (ntfsDriver.empty()) { unmountAll(); freeIoBuf(); return fail(); }
+        if (runCommand({"mount", "-t", ntfsDriver, "-o", "noatime,prealloc",
+                        ntfsPart, ntfsMnt}) != 0) {
+            unmountAll(); freeIoBuf(); return fail();
+        }
+
+        if (GlobalState::g_operationCancelled.load()) { unmountAll(); freeIoBuf(); return false; }
+
+        // ---- enumerate ISO entries ------------------------------------
+        struct IsoEntry { fs::path src, dst; uint64_t size; bool isDir; };
+        std::vector<IsoEntry> ntfsEntries, espEntries;
+        const std::unordered_set<std::string> espTopFolders = { "efi", "boot" };
+        const std::string espBootWim = "sources/boot.wim";
+
+        auto belongsOnESP = [&](const fs::path& rel) -> bool {
+            std::string top = rel.begin()->string();
+            std::transform(top.begin(), top.end(), top.begin(),
+                           [](unsigned char c){ return std::tolower(c); });
+            if (espTopFolders.count(top)) return true;
+            std::string relStr = rel.generic_string();
+            std::transform(relStr.begin(), relStr.end(), relStr.begin(),
+                           [](unsigned char c){ return std::tolower(c); });
+            return relStr == espBootWim;
+        };
+
+        try {
+            for (const auto& entry :
+                 fs::recursive_directory_iterator(std::string(isoMnt))) {
+                fs::path rel  = fs::relative(entry.path(), std::string(isoMnt));
+                bool    toESP = belongsOnESP(rel);
+                fs::path dest = fs::path(toESP ? std::string(fatMnt)
+                                               : std::string(ntfsMnt)) / rel;
+                uint64_t sz   = entry.is_regular_file() ? entry.file_size() : 0;
+                totalBytes   += sz;
+                IsoEntry e { entry.path(), dest, sz, entry.is_directory() };
+                if (toESP) espEntries.push_back(std::move(e));
+                else       ntfsEntries.push_back(std::move(e));
+            }
+        } catch (...) { unmountAll(); freeIoBuf(); return fail(); }
+
+        if (totalBytes == 0) { unmountAll(); freeIoBuf(); return fail(); }
+
+        // ---- copy helper (identical semantics to original) ------------
+        constexpr uint64_t FAT32_FILE_LIMIT = 4ULL * 1024 * 1024 * 1024;
+
+        auto copyWithProgress = [&](const fs::path& src, const fs::path& dst,
+                                    uint64_t fileSize) -> bool {
+            const bool useBufferedIO =
+                (dst.string().rfind(ntfsMnt, 0) == 0) ||
+                (fileSize >= FAT32_FILE_LIMIT);
+
+            int fd_in = open(src.c_str(), O_RDONLY);
+            if (fd_in < 0) return false;
+            posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
+
+            int outFlags = O_WRONLY | O_CREAT | O_TRUNC;
+            if (!useBufferedIO) outFlags |= O_DIRECT;
+
+            int fd_out = open(dst.c_str(), outFlags, 0644);
+            if (fd_out < 0) { close(fd_in); return false; }
+
+            if (useBufferedIO && fileSize > 0)
+                posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
+
+            bool success = true;
+            while (!GlobalState::g_operationCancelled.load()) {
+                ssize_t bytes_read = read(fd_in, ioBuf, BUF_SIZE);
+                if (bytes_read < 0) { if (errno == EINTR) continue; success = false; break; }
+                if (bytes_read == 0) break;
+
+                ssize_t writeLen = bytes_read;
+                if (!useBufferedIO) {
+                    ssize_t aligned = (bytes_read + 511) & ~511;
+                    if (aligned > bytes_read)
+                        memset(ioBuf + bytes_read, 0, aligned - bytes_read);
+                    writeLen = aligned;
+                }
+
+                for (ssize_t w = 0; w < writeLen; ) {
+                    if (GlobalState::g_operationCancelled.load()) { success = false; goto fileDone; }
+                    ssize_t n = write(fd_out, ioBuf + w, writeLen - w);
+                    if (n < 0) { if (errno == EINTR) continue; success = false; goto fileDone; }
+                    w += n;
+                }
+                updateProgress(static_cast<uint64_t>(bytes_read));
+            }
+
+        fileDone:
+            if (!useBufferedIO && success && fileSize > 0)
+                ftruncate(fd_out, static_cast<off_t>(fileSize));
+            if (GlobalState::g_operationCancelled.load()) {
+                ftruncate(fd_out, 0);
+                posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
+            }
+            close(fd_in); close(fd_out);
+            return success && !GlobalState::g_operationCancelled.load();
+        };
+
+        auto processEntries = [&](const std::vector<IsoEntry>& entries) -> bool {
+            for (const auto& e : entries) {
+                if (GlobalState::g_operationCancelled.load()) {
+                    freeIoBuf(); unmountAll(); return false;
+                }
+                if (e.isDir) {
+                    fs::create_directories(e.dst);
+                } else {
+                    fs::create_directories(e.dst.parent_path());
+                    if (!copyWithProgress(e.src, e.dst, e.size)) {
+                        freeIoBuf(); unmountAll(); return fail();
+                    }
                 }
             }
-        }
-        return true;
-    };
+            return true;
+        };
 
-    if (!processEntries(ntfsEntries)) return false;  // no-op for FatOnly
-    if (!processEntries(espEntries))  return false;
+        if (!processEntries(ntfsEntries)) return false;
+        if (!processEntries(espEntries))  return false;
 
-    freeIoBuf();
+        freeIoBuf();
 
-    // ------------------------------------------------------------------ //
-    // 6. Flush and unmount                                                //
-    // ------------------------------------------------------------------ //
-    if (!GlobalState::g_operationCancelled.load()) {
         int diskFd = open(device.c_str(), O_RDWR);
-        if (diskFd >= 0) {
-            fsync(diskFd);
-            close(diskFd);
-        }
-    }
-    unmountAll();
+        if (diskFd >= 0) { fsync(diskFd); close(diskFd); }
 
+        unmountAll();
+    }
+
+finalize:
     auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now() - startTime);
     double seconds  = totalElapsed.count() / 1000.0;
