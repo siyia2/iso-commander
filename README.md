@@ -64,7 +64,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 |--------------------|-------------------------|------|------|
 | Windows < 10       | Unsupported             | ✗    | ✗    |
 | Windows 10/11      | GPT + FAT32/NTFS layout | ✗    | ✓    |
-| Windows 10/11 PE   | Raw sector copy         | ✓ *  | ✓ *  |
+| Windows PE         | Raw sector copy         | ✓ *  | ✓ *  |
 | Linux/BSD          | Raw sector copy         | ✓ *  | ✓ *  |
 
 > \* Boot support depends on what the original ISO supports
