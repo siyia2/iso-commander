@@ -266,9 +266,9 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         }
     };
 
-    // ------------------------------------------------------------------ //
-    // 2. FatOnly — raw sector copy (preserves hybrid MBR + El Torito)    //
-    // ------------------------------------------------------------------ //
+    // ------------------------------------------------------------------------------------ //
+    // 2. RawSector — write ISO verbatim (preserves hybrid MBR + El Torito boot structures) //
+    // ------------------------------------------------------------------------------------ //
     if (isoType == IsoType::RawSector) {
         totalBytes = fs::file_size(isoPath);
         if (totalBytes == 0) { freeIoBuf(); return fail(); }
