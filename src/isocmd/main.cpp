@@ -197,7 +197,7 @@ int main(int argc, char *argv[]) {
         /// Read user input with theme-aware styling
         const ReadlineAndPromptTheme pt = getPromptTheme();
         char* rawInput = readline(("\n" + std::string(pt.primary) +
-                                   "Choose an option:" + std::string(pt.reset) + " ").c_str());
+                                   "Choose an option: " + std::string(pt.reset)).c_str());
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
         if (!input) break; ///< Handle EOF (Ctrl+D)
 

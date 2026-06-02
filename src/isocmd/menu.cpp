@@ -116,9 +116,8 @@ void submenu1(std::atomic<bool>& isAtISOList,
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
         char* rawInput = readline(( std::string(pt.primary) +
-                                    "Choose an option:" +
-                                    std::string(pt.reset) +
-                                    " ").c_str());
+                                    "Choose an option: " +
+                                    std::string(pt.reset)).c_str());
 
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
@@ -208,9 +207,8 @@ void submenu2(std::shared_ptr<RefreshState> state) {
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
         char* rawInput = readline(( std::string(pt.primary) +
-                                    "Choose an option:" +
-                                    std::string(pt.reset) +
-                                    " ").c_str());
+                                    "Choose an option: " +
+                                    std::string(pt.reset)).c_str());
 
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
