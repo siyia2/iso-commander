@@ -64,10 +64,10 @@ Mount ISOs, convert images, write bootable USB drives — done right
 |--------------------|-------------------------|------|------|
 | Windows < 10       | Unsupported             | ✗    | ✗    |
 | Windows 10/11      | GPT + FAT32/NTFS layout | ✗    | ✓    |
-| Windows 10/11 PE   | Raw sector              | ✓ *  | ✓ *    |
+| Windows 10/11 PE   | Raw sector              | ✓ *  | ✓ *  |
 | Linux/BSD          | Raw sector copy         | ✓ *  | ✓ *  |
 
-> \* Boot support for RawSector ISOs mirrors the source image — if the ISO was mastered with hybrid MBR and/or El Torito UEFI entries, the written USB will support the same boot methods.
+> \* Boot support mirrors the source ISO's mastering
 
 ## 🏆 Credits
 
