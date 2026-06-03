@@ -833,6 +833,9 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
  * - **Raw O_DIRECT Pipeline:** Non-Windows targets are imaged via raw unbuffered disk I/O.
  *   Data transfers utilize a dedicated page-aligned memory buffer (@c posix_memalign) matching
  *   the physical device's underlying sector constraints queried from @c ioctl(BLKSSZGET).
+ *   @c POSIX_FADV_SEQUENTIAL is applied to the source descriptor before the write loop to
+ *   enable aggressive kernel read-ahead; @c POSIX_FADV_DONTNEED is applied after to release
+ *   the ISO from page cache once writing completes.
  * - **Tail-Block Padding:** Detects partial blocks at EOF or short reads, automatically
  *   zero-padding the remaining buffer slice up to the strict sector layout boundary to prevent
  *   kernel rejection errors (@c EINVAL).
@@ -891,6 +894,9 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         progressData[progressIndex].failed.store(true);
         return false;
     }
+
+    // Hint sequential read pattern for aggressive read-ahead on the ISO source.
+    posix_fadvise(iso_fd, 0, 0, POSIX_FADV_SEQUENTIAL);
 
     // --- Raw O_DIRECT path for Linux / UEFI ISOs -------------------------
 
@@ -990,14 +996,14 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                     fileSize - std::min(localBytesWritten, fileSize));
 
                 localBytesWritten += static_cast<size_t>(written);
-                bytesInWindow     += static_cast<uint64_t>(written);   // physical throughput for speed
-                progressData[progressIndex].bytesWritten.fetch_add(reportable); // capped for UI
+                bytesInWindow     += static_cast<uint64_t>(written);
+                progressData[progressIndex].bytesWritten.fetch_add(reportable);
             }
 
             // Throttled progress + speed update
             auto now           = std::chrono::high_resolution_clock::now();
             auto msSinceUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                     now - lastUpdate).count();
+                                        now - lastUpdate).count();
             if (msSinceUpdate >= UPDATE_INTERVAL_MS) {
                 uint64_t reported = progressData[progressIndex].bytesWritten.load();
                 progressData[progressIndex].progress.store(
@@ -1011,6 +1017,9 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         }
         return false;
     }
+
+    // Drop ISO from page cache — no point keeping it after writing.
+    posix_fadvise(iso_fd, 0, 0, POSIX_FADV_DONTNEED);
 
     if (!GlobalState::g_operationCancelled.load()) {
         if (fsync(dev_fd) != 0) {
