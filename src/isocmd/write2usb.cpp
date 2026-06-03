@@ -103,23 +103,29 @@ bool isWindowsIso(const std::string& isoPath) {
 
 /**
  * @brief Probes /proc/filesystems to determine the best available write-capable
- * NTFS driver on the host platform.
+ * NTFS driver on the host platform, prioritizing the native kernel engines.
  *
- * Currently always prefers the Paragon ntfs3 driver (kernel 5.15+) over the
- * newer NTFSPLUS ntfs driver (kernel 7.1+). Although NTFSPLUS is the more
- * modern driver, it is still maturing — testing revealed horrible performance
- * and write reliability issues that make ntfs3 the safer choice for
- * now. This preference may be revisited in a future release once NTFSPLUS
- * stabilises.
+ * This function handles kernel driver prioritization following the Linux 7.1+
+ * filesystem overhaul. The native NTFSPlus engine (registered under the legacy
+ * "ntfs" namespace) is preferred for its superior kernel-space write performance.
+ * Paragon's "ntfs3" serves as the secondary fallback, while user-space FUSE
+ * ("ntfs-3g") acts as the ultimate safety fallback.
+ * * @note Because modern distributions frequently symlink '/sbin/mount.ntfs' to
+ * the legacy FUSE 'ntfs-3g' binary, downstream mounting logic *must* call the
+ * system mount utility with the internal flag ("mount", "-i", "-t", driver, ...)
+ * when using the returned token. This bypasses user-space wrappers and forces
+ * the kernel to leverage the native NTFSPlus ("ntfs") engine directly.
  *
  * Priority Tiering:
- * 1. "ntfs3" via Kernel 5.15+ (Paragon Native Driver) — preferred
- * 2. "ntfs"  via Kernel 7.1+ (NTFSPLUS) — available but not yet preferred
+ * 1. "ntfs"   via Kernel 7.1+ (NTFSPlus Native Driver) — Highest Priority
+ * 2. "ntfs3"  via Kernel 5.15+ (Paragon Native Driver) — First Fallback
+ * 3. "ntfs-3g" via Userspace FUSE Engine — Ultimate Fallback
  *
- * Note: The legacy read-only "ntfs" driver was removed in kernel 7.1. Any
- * kernel reporting "ntfs" in /proc/filesystems at 7.1+ is therefore the
- * NTFSPLUS-derived driver, not the legacy one. The legacy driver is never
- * returned; this function is used exclusively for write operations.
+ * Note: The legacy read-only kernel driver was completely replaced in 7.1.
+ * Any "ntfs" token found in /proc/filesystems on a 7.1+ host safely guarantees
+ * the modern, write-capable NTFSPlus driver.
+ *
+ * @return std::string The exact string identifier of the chosen filesystem driver.
  */
 std::string getBestNtfsDriver() {
     runCommand({"modprobe", "ntfs3"});
@@ -132,16 +138,23 @@ std::string getBestNtfsDriver() {
     if (filesystems.is_open()) {
         std::string line;
         while (std::getline(filesystems, line)) {
-            if (line.find("ntfs3") != std::string::npos)
+            std::string type;
+            std::stringstream ss(line);
+
+            // Extract the filesystem identifier safely
+            while (ss >> type);
+
+            if (type == "ntfs") {
+                hasNtfs = true;
+            } else if (type == "ntfs3") {
                 hasNtfs3 = true;
-            else if (line.find("ntfs") != std::string::npos)
-                hasNtfs  = true;
+            }
         }
     }
 
-    if (hasNtfs3) return "ntfs3";  // Paragon — preferred for now
-    if (hasNtfs)  return "ntfs";   // NTFSPLUS — fallback until it matures
-    return {};                     // No write-capable driver found
+    if (hasNtfs)  return "ntfs";     // Highest Priority: Native NTFSPlus (Linux 7.1+)
+    if (hasNtfs3) return "ntfs3";    // Fallback 1: Paragon ntfs3
+    return "ntfs-3g";                // Fallback 2: Legacy FUSE User-space driver
 }
 
 // ---------------------------------------------------------------------------
@@ -337,7 +350,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (isoType == IsoType::WindowsInstall) {
         ntfsDriver = getBestNtfsDriver();
         if (ntfsDriver.empty()) { unmountAll(); return fail(); }
-        if (runCommand({"mount", "-t", ntfsDriver, "-o", "noatime", ntfsPart, ntfsMnt}) != 0) {
+        if (runCommand({"mount", "-i", "-t", ntfsDriver, "-o", "noatime", ntfsPart, ntfsMnt}) != 0) {
             unmountAll(); return fail();
         }
     }
