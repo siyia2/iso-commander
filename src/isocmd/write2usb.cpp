@@ -172,7 +172,7 @@ static IsoType detectIsoType(const std::string& isoMnt) {
 }
 
 // ---------------------------------------------------------------------------
-// Main writer
+// Windows writer
 // ---------------------------------------------------------------------------
 
 /**
@@ -186,8 +186,10 @@ static IsoType detectIsoType(const std::string& isoMnt) {
  *
  * I/O strategy per file:
  * - FAT32 files < 4 GiB use @c O_DIRECT (no post-cancel dirty writeback).
- * - NTFS files and any file @>= 4 GiB use buffered I/O (@c O_DIRECT is
- *   unsupported by kernel NTFS drivers and unsafe).
+ * - NTFS files and any file >= 4 GiB use buffered I/O (@c O_DIRECT is
+ *   unsupported by kernel NTFS drivers and unsafe).  Async writeback is
+ *   scheduled continuously via @c sync_file_range to keep dirty pages
+ *   draining to the device during the copy, reducing the final flush stall.
  *
  * For WindowsInstall, NTFS content is written before the ESP so the bootloader
  * only lands after the data it references is already on disk.
@@ -329,7 +331,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     };
 
     // ISO is already mounted from section 0; mount the target partitions now.
-    if (runCommand({"mount", fatPart, fatMnt}) != 0) {
+    if (runCommand({"mount","-o", "noatime", fatPart, fatMnt}) != 0) {
         unmountAll(); return fail();
     }
 
@@ -337,7 +339,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (isoType == IsoType::WindowsInstall) {
         ntfsDriver = getBestNtfsDriver();
         if (ntfsDriver.empty()) { unmountAll(); return fail(); }
-        if (runCommand({"mount", "-t", ntfsDriver, "-o", "noatime,prealloc", ntfsPart, ntfsMnt}) != 0) {
+        if (runCommand({"mount", "-t", ntfsDriver, "-o", "noatime", ntfsPart, ntfsMnt}) != 0) {
             unmountAll(); return fail();
         }
     }
@@ -453,6 +455,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         int fd_in = open(src.c_str(), O_RDONLY);
         if (fd_in < 0) return false;
 
+        // Hint sequential read pattern; kernel will read-ahead aggressively.
         posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
 
         // O_DIRECT bypasses the page cache entirely — no post-cancel dirty-page
@@ -468,7 +471,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         if (useBufferedIO && fileSize > 0)
             posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
 
-        bool success = true;
+        bool  success     = true;
+        off_t writeOffset = 0;  // tracks bytes committed for sync_file_range
 
         while (!GlobalState::g_operationCancelled.load()) {
             ssize_t bytes_read = read(fd_in, ioBuf, BUF_SIZE);
@@ -481,7 +485,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
             // O_DIRECT requires write length to be a sector multiple.
             // Pad the final short chunk to the next 512-byte boundary with zeros.
-            // Progress and writtenInFile always track bytes_read (real byte count).
+            // Progress always tracks bytes_read (real byte count).
             ssize_t writeLen = bytes_read;
             if (!useBufferedIO) {
                 ssize_t aligned = (bytes_read + 511) & ~511;
@@ -508,9 +512,26 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             }
 
             updateProgress(static_cast<uint64_t>(bytes_read));
+
+            // Buffered path only: increment offset first, then kick off async
+            // writeback lagging 2 x BUF_SIZE behind so the kernel always has a
+            // full 4 MB chunk queued ahead of what it's flushing.
+            // SYNC_FILE_RANGE_WRITE is non-blocking — it just schedules I/O.
+            if (useBufferedIO) {
+                writeOffset += bytes_read;
+                off_t flushStart = std::max(off_t(0), writeOffset - (off_t)BUF_SIZE * 2);
+                sync_file_range(fd_out, flushStart, (off_t)BUF_SIZE, SYNC_FILE_RANGE_WRITE);
+            }
         }
 
     done:
+        // Flush the remaining two buffers that the lagged drain hasn't reached yet.
+        if (useBufferedIO && success)
+            sync_file_range(fd_out,
+                            std::max(off_t(0), writeOffset - (off_t)BUF_SIZE * 2),
+                            (off_t)BUF_SIZE * 2,
+                            SYNC_FILE_RANGE_WRITE);
+
         // Strip O_DIRECT sector-alignment padding so Secure Boot and embedded-ISO
         // checksum verification see the exact source bytes.
         if (!useBufferedIO && success && fileSize > 0)
@@ -520,6 +541,10 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             ftruncate(fd_out, 0);
             posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
         }
+
+        // Drop the source file from page cache — no point keeping ISO data
+        // in RAM after it's been written.
+        posix_fadvise(fd_in, 0, 0, POSIX_FADV_DONTNEED);
 
         close(fd_in);
         close(fd_out);
@@ -895,8 +920,8 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     // Pad file size up to sector boundary for O_DIRECT
     const uint64_t paddedSize = ((fileSize + sectorSize - 1) / sectorSize) * sectorSize;
 
-    // Allocate aligned buffer (8 MiB, rounded down to sector boundary)
-    constexpr size_t DESIRED_BUFFER = 8 * 1024 * 1024;
+    // Allocate aligned buffer (4 MiB, rounded down to sector boundary)
+    constexpr size_t DESIRED_BUFFER = 4 * 1024 * 1024;
     size_t bufferSize = (DESIRED_BUFFER / sectorSize) * sectorSize;
     if (bufferSize == 0) bufferSize = sectorSize;
 
