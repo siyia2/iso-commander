@@ -951,7 +951,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         prompt.append("\001").append(dt.green).append("\002FolderPaths")
               .append("\001").append(dt.blue).append("\002 ↵ to scan for \001")
               .append("\001").append(dt.orange).append("\002").append(fileExtension)
-              .append("\001").append(dt.blue).append("\002 entries and cache them into \001")
+              .append("\001").append(dt.blue).append("\002 entries and cache them in \001")
               .append("\001").append(dt.yellow).append("\002RAM\001")
               .append("\001").append(dt.blue).append("\002, ? help, < return:\n\001")
               .append(dt.reset).append("\002");
