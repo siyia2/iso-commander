@@ -124,6 +124,8 @@ bool isWindowsIso(const std::string& isoPath) {
  * string if neither module is currently loaded.
  */
 std::string getBestNtfsDriver() {
+    runCommand({"modprobe", "ntfs3"});
+    runCommand({"modprobe", "ntfs"});
     std::ifstream modules("/proc/modules");
     bool hasNtfs3 = false;
     bool hasNtfs  = false;
