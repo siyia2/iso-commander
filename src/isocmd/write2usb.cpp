@@ -472,7 +472,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
 
         bool  success     = true;
-        off_t writeOffset = 0;  // tracks bytes committed for sync_file_range
 
         while (!GlobalState::g_operationCancelled.load()) {
             ssize_t bytes_read = read(fd_in, ioBuf, BUF_SIZE);
@@ -512,26 +511,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             }
 
             updateProgress(static_cast<uint64_t>(bytes_read));
-
-            // Buffered path only: increment offset first, then kick off async
-            // writeback lagging 2 x BUF_SIZE behind so the kernel always has a
-            // full 4 MB chunk queued ahead of what it's flushing.
-            // SYNC_FILE_RANGE_WRITE is non-blocking — it just schedules I/O.
-            if (useBufferedIO) {
-                writeOffset += bytes_read;
-                off_t flushStart = std::max(off_t(0), writeOffset - (off_t)BUF_SIZE * 2);
-                sync_file_range(fd_out, flushStart, (off_t)BUF_SIZE, SYNC_FILE_RANGE_WRITE);
-            }
         }
-
     done:
-        // Flush the remaining two buffers that the lagged drain hasn't reached yet.
-        if (useBufferedIO && success)
-            sync_file_range(fd_out,
-                            std::max(off_t(0), writeOffset - (off_t)BUF_SIZE * 2),
-                            (off_t)BUF_SIZE * 2,
-                            SYNC_FILE_RANGE_WRITE);
-
         // Strip O_DIRECT sector-alignment padding so Secure Boot and embedded-ISO
         // checksum verification see the exact source bytes.
         if (!useBufferedIO && success && fileSize > 0)
