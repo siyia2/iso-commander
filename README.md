@@ -41,7 +41,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 🖊️ **Best-in-Class USB Write Engine**
 - No wimlib, no file splitting — `install.wim` routed to NTFS natively
 - Two-pass write ordering — bootloader written last for integrity
-- Dynamic NTFS driver selection — `ntfs3` preferred for best performance
+- Dynamic NTFS driver selection — `NTFSPLUS` is preferred for best performance
 
 ⚡ **High Performance**
 - Native C++ — no Python runtime, no shell wrappers
