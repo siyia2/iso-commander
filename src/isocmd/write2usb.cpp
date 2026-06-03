@@ -187,9 +187,7 @@ static IsoType detectIsoType(const std::string& isoMnt) {
  * I/O strategy per file:
  * - FAT32 files < 4 GiB use @c O_DIRECT (no post-cancel dirty writeback).
  * - NTFS files and any file >= 4 GiB use buffered I/O (@c O_DIRECT is
- *   unsupported by kernel NTFS drivers and unsafe).  Async writeback is
- *   scheduled continuously via @c sync_file_range to keep dirty pages
- *   draining to the device during the copy, reducing the final flush stall.
+ *   unsupported by kernel NTFS drivers and unsafe).
  *
  * For WindowsInstall, NTFS content is written before the ESP so the bootloader
  * only lands after the data it references is already on disk.
