@@ -7,7 +7,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 
 ### Installation
 
-1. **Arch Linux (AUR)** — `yay -S iso-commander`
+1. **Arch Linux (AUR)** — `yay -S iso-commander` or `yay -S iso-commander-bin`
 2. **Static Binary** — Download from the [latest release](https://github.com/siyia2/iso-commander/releases)
 3. **Source** — `make`
 
