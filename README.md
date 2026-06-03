@@ -18,7 +18,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 | Arch Linux | `readline util-linux xz zstd` |
 | Debian | `libreadline-dev libmount-dev liblzma-dev libzstd-dev` |
 | Agnostic | `libchdr` (statically built and linked) |
-| Windows USB Writing | `ntfsprogs` (Arch)/`ntfs-3g` (Debian) `parted` `dosfstools` |
+| Windows USB Writing | Arch/Debian: `ntfsprogs`/`ntfs-3g` `parted` `dosfstools` |
 
 <br>
 
