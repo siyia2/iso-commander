@@ -102,59 +102,51 @@ bool isWindowsIso(const std::string& isoPath) {
 }
 
 /**
- * @brief Probes /proc/filesystems to determine the best available write-capable
- * NTFS driver on the host platform, prioritizing the native kernel engines.
+ * @brief Probes /proc/modules to determine the best available write-capable
+ * NTFS kernel module currently loaded on the host platform.
  *
- * This function handles kernel driver prioritization following the Linux 7.1+
- * filesystem overhaul. The native NTFSPlus engine (registered under the legacy
- * "ntfs" namespace) is preferred for its superior kernel-space write performance.
- * Paragon's "ntfs3" serves as the secondary fallback, while user-space FUSE
- * ("ntfs-3g") acts as the ultimate safety fallback.
- * * @note Because modern distributions frequently symlink '/sbin/mount.ntfs' to
- * the legacy FUSE 'ntfs-3g' binary, downstream mounting logic *must* call the
- * system mount utility with the internal flag ("mount", "-i", "-t", driver, ...)
- * when using the returned token. This bypasses user-space wrappers and forces
- * the kernel to leverage the native NTFSPlus ("ntfs") engine directly.
+ * Following the modern NTFS driver overhaul in Linux 7.1+, this function
+ * prioritizes the heavily optimized, modernized "ntfs" module (formerly NTFSPlus)
+ * which brings native, high-performance read/write capabilities back to the
+ * core kernel. It falls back to Paragon's "ntfs3" driver if loaded instead.
  *
- * Priority Tiering:
- * 1. "ntfs"   via Kernel 7.1+ (NTFSPlus Native Driver) — Highest Priority
- * 2. "ntfs3"  via Kernel 5.15+ (Paragon Native Driver) — First Fallback
- * 3. "ntfs-3g" via Userspace FUSE Engine — Ultimate Fallback
+ * @note Because modern Linux distributions frequently symlink userspace binaries
+ * or default to older FUSE wrappers, downstream mounting logic should pass the
+ * internal flag ("mount", "-i", "-t", driver, ...) when using the returned token.
+ * This bypasses userspace mount helpers and forces the VFS subsystem to invoke
+ * the designated kernel module directly.
  *
- * Note: The legacy read-only kernel driver was completely replaced in 7.1.
- * Any "ntfs" token found in /proc/filesystems on a 7.1+ host safely guarantees
- * the modern, write-capable NTFSPlus driver.
+ * Module Priority Tiering:
+ * 1. "ntfs"  via Kernel 7.1+ (Modernized Read/Write Engine) — Highest Priority
+ * 2. "ntfs3" via Kernel 5.15+ (Paragon Engine) — Fallback
  *
- * @return std::string The exact string identifier of the chosen filesystem driver.
+ * @return std::string The name of the detected NTFS kernel module, or an empty
+ * string if neither module is currently loaded.
  */
 std::string getBestNtfsDriver() {
-    runCommand({"modprobe", "ntfs3"});
-    runCommand({"modprobe", "ntfs"});
-
-    std::ifstream filesystems("/proc/filesystems");
+    std::ifstream modules("/proc/modules");
     bool hasNtfs3 = false;
     bool hasNtfs  = false;
 
-    if (filesystems.is_open()) {
+    if (modules.is_open()) {
         std::string line;
-        while (std::getline(filesystems, line)) {
-            std::string type;
+        while (std::getline(modules, line)) {
             std::stringstream ss(line);
+            std::string moduleName;
+            ss >> moduleName; // The module name is always the first token on the line
 
-            // Extract the filesystem identifier safely
-            while (ss >> type);
-
-            if (type == "ntfs") {
-                hasNtfs = true;
-            } else if (type == "ntfs3") {
+            if (moduleName == "ntfs3") {
                 hasNtfs3 = true;
+            } else if (moduleName == "ntfs") {
+                hasNtfs = true;
             }
         }
     }
 
-    if (hasNtfs)  return "ntfs";     // Highest Priority: Native NTFSPlus (Linux 7.1+)
-    if (hasNtfs3) return "ntfs3";    // Fallback 1: Paragon ntfs3
-    return "ntfs-3g";                // Fallback 2: Legacy FUSE User-space driver
+    if (hasNtfs)  return "ntfs";   // NTFSPLUS - preferred
+    if (hasNtfs3) return "ntfs3";  // in-kernel Paragon — fallback
+
+    return {};
 }
 
 // ---------------------------------------------------------------------------
