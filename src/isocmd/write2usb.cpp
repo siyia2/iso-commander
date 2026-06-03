@@ -10,7 +10,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <queue>
 #include <stdexcept>
@@ -102,13 +101,17 @@ bool isWindowsIso(const std::string& isoPath) {
 }
 
 /**
- * @brief Probes /proc/modules to determine the best available write-capable
- * NTFS kernel module currently loaded on the host platform.
+ * @brief Probes /sys/module to determine the best available write-capable
+ * NTFS kernel driver currently active on the host platform.
+ *
+ * This function handles demand-loading of modular drivers and evaluates system
+ * capabilities via sysfs, ensuring seamless compatibility with both dynamically
+ * loaded kernel modules (.ko) and drivers built directly into the kernel core.
  *
  * Following the modern NTFS driver overhaul in Linux 7.1+, this function
- * prioritizes the heavily optimized, modernized "ntfs" module (formerly NTFSPlus)
- * which brings native, high-performance read/write capabilities back to the
- * core kernel. It falls back to Paragon's "ntfs3" driver if loaded instead.
+ * prioritizes the heavily optimized, modernized "ntfs" driver rewrite, which
+ * entirely supersedes the legacy read-only engine. It falls back to Paragon's
+ * "ntfs3" driver if running on older kernels where the modern remake is unavailable.
  *
  * @note Because modern Linux distributions frequently symlink userspace binaries
  * or default to older FUSE wrappers, downstream mounting logic should pass the
@@ -116,38 +119,29 @@ bool isWindowsIso(const std::string& isoPath) {
  * This bypasses userspace mount helpers and forces the VFS subsystem to invoke
  * the designated kernel module directly.
  *
- * Module Priority Tiering:
- * 1. "ntfs"  via Kernel 7.1+ (Modernized Read/Write Engine) — Highest Priority
+ * Driver Priority Tiering:
+ * 1. "ntfs"  via Kernel 7.1+ (Modernized Native Read/Write Engine) — Highest Priority
  * 2. "ntfs3" via Kernel 5.15+ (Paragon Engine) — Fallback
  *
- * @return std::string The name of the detected NTFS kernel module, or an empty
- * string if neither module is currently loaded.
+ * @return std::string The token name of the detected NTFS kernel driver ("ntfs" or "ntfs3"),
+ * or an empty string if no modern write-capable driver is available.
  */
 std::string getBestNtfsDriver() {
+    // Force demand-loading of the modules
     runCommand({"modprobe", "ntfs3"});
     runCommand({"modprobe", "ntfs"});
 
-    std::ifstream modules("/proc/modules");
-    bool hasNtfs3 = false;
-    bool hasNtfs  = false;
-
-    if (modules.is_open()) {
-        std::string line;
-        while (std::getline(modules, line)) {
-            std::stringstream ss(line);
-            std::string moduleName;
-            ss >> moduleName; // The module name is always the first token on the line
-
-            if (moduleName == "ntfs3") {
-                hasNtfs3 = true;
-            } else if (moduleName == "ntfs") {
-                hasNtfs = true;
-            }
-        }
+    // 1. Tier 1: Check for the Modern NTFS Remake (Kernel 7.1+)
+    if (std::filesystem::exists("/sys/module/ntfs")) {
+        // Since we are explicitly on 7.1+, the 'ntfs' module namespace
+        // has been fully occupied by the write-capable remake.
+        return "ntfs";
     }
 
-    if (hasNtfs)  return "ntfs";   // NTFSPLUS - preferred
-    if (hasNtfs3) return "ntfs3";  // in-kernel Paragon — fallback
+    // 2. Tier 2: Check for Paragon ntfs3 (Kernel 5.15+)
+    if (std::filesystem::exists("/sys/module/ntfs3")) {
+        return "ntfs3";
+    }
 
     return {};
 }
