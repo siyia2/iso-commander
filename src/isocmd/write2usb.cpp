@@ -104,14 +104,17 @@ bool isWindowsIso(const std::string& isoPath) {
  * @brief Probes /sys/module to determine the best available write-capable
  * NTFS kernel driver currently active on the host platform.
  *
- * This function handles demand-loading of modular drivers and evaluates system
- * capabilities via sysfs, ensuring seamless compatibility with both dynamically
- * loaded kernel modules (.ko) and drivers built directly into the kernel core.
+ * This function evaluates system capabilities via sysfs, ensuring seamless
+ * compatibility with both dynamically loaded kernel modules (.ko) and drivers
+ * built directly into the kernel core. It utilizes a lazy-loading optimization
+ * strategy, checking for pre-initialized drivers first and only executing
+ * userspace `modprobe` commands for lower priority/fallback tiers if necessary.
  *
  * Following the modern NTFS driver overhaul in Linux 7.1+, this function
  * prioritizes the heavily optimized, modernized "ntfs" driver rewrite, which
  * entirely supersedes the legacy read-only engine. It falls back to Paragon's
- * "ntfs3" driver if running on older kernels where the modern remake is unavailable.
+ * "ntfs3" driver if running on older kernels (like 5.15 through 6.x) where the
+ * modern remake is unavailable.
  *
  * @note Because modern Linux distributions frequently symlink userspace binaries
  * or default to older FUSE wrappers, downstream mounting logic should pass the
@@ -127,22 +130,24 @@ bool isWindowsIso(const std::string& isoPath) {
  * or an empty string if no modern write-capable driver is available.
  */
 std::string getBestNtfsDriver() {
-    // Force demand-loading of the modules
-    runCommand({"modprobe", "ntfs3"});
-    runCommand({"modprobe", "ntfs"});
-
-    // 1. Tier 1: Check for the Modern NTFS Remake (Kernel 7.1+)
+    // First Pass: Check if the modern 7.1+ NTFS driver is already active/built-in
     if (std::filesystem::exists("/sys/module/ntfs")) {
-        // Since we are explicitly on 7.1+, the 'ntfs' module namespace
-        // has been fully occupied by the write-capable remake.
         return "ntfs";
     }
 
-    // 2. Tier 2: Check for Paragon ntfs3 (Kernel 5.15+)
+    // Demand-load the modern 7.1+ NTFSPLUS driver if it was dormant as a module
+    runCommand({"modprobe", "ntfs"});
+    if (std::filesystem::exists("/sys/module/ntfs")) {
+        return "ntfs";
+    }
+
+    // Modern driver failed/unavailable. Lazy-load the Paragon ntfs3 fallback (Kernel 5.15+)
+    runCommand({"modprobe", "ntfs3"});
     if (std::filesystem::exists("/sys/module/ntfs3")) {
         return "ntfs3";
     }
 
+    // Return empty if no modern native write-capable drivers could be verified
     return {};
 }
 
