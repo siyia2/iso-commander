@@ -310,7 +310,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
         if (!isUsbDevice(device)) {
             std::string errMsg;
             errMsg.append(wt.errPath).append("'").append(device).append("'")
-                  .append(wt.rl_resetCol).append(wt.errLabel).append(" is not a removable USB device")
+                  .append(wt.rl_resetCol).append(wt.errLabel).append(" is not a removable USB flash device")
                   .append(wt.rl_resetCol);
             validationErrors.push_back(std::move(errMsg));
             continue;
@@ -534,7 +534,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                               << UI::Palette::DimGray << ")\n";
         }
 
-        devicePromptStream << "\n" << color << "Removable USB Devices:" << wt.rl_resetCol << "\n\n";
+        devicePromptStream << "\n" << color << "Removable USB Flash Devices:" << wt.rl_resetCol << "\n\n";
         std::vector<std::string> usbDevices = getRemovableDevices();
 
         struct DeviceInfo {
