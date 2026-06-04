@@ -4,15 +4,14 @@
 #define THREAD_POOL_H
 
 // C++ Standard Library Headers
+#include <algorithm>
 #include <atomic>
-#include <condition_variable>
 #include <cstddef>
 #include <cstring>
 #include <functional>
 #include <future>
 #include <iostream>
 #include <memory>
-#include <mutex>
 #include <new>
 #include <stdexcept>
 #include <thread>
@@ -25,79 +24,170 @@
 #include "./concurrency.h"
 
 /**
- * @brief A high-performance, fixed-size, move-only type-erased callable wrapper.
+ * @file thread_pool.hpp
+ * @brief Lock-free thread pool with type-erased move-only tasks.
  *
- * @details This component replaces standard copyable type erasers to fully eliminate
- * runtime heap allocations and indirect reference counting. It establishes an internal
- * stack-allocated arena where lambda closures can be initialized directly.
+ * Provides three cooperative components:
+ *  - @ref MoveOnlyTask  – a small-buffer-optimised, move-only type-erased callable.
+ *  - @ref LockFreeQueue – a Michael–Scott lock-free FIFO queue.
+ *  - @ref ThreadPool    – a fully lock-free worker-thread pool built on the two above.
  *
- * Technical Specs & Constraints:
- * - Total Object Size: Exactly 128 bytes (2 cache lines), matching typical CPU architecture
- * alignment steps to prevent cache line splitting or false sharing.
- * - Capture Limit: Up to 120 bytes of lambda context can be retained directly on the stack.
- * If a lambda closure exceeds 120 bytes, it transparently falls back to a
- * heap-allocated unique_ptr wrapper without changing the interface.
- * - Move Semantics: Exclusively move-only via type-safe placement-new constructors.
- * Copying is explicitly deleted to avoid hidden allocation logic or deep cloning.
+ * @note Requires C++20 (`std::atomic::wait` / `notify_*`).
+ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  MoveOnlyTask
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @class MoveOnlyTask
+ * @brief A move-only, type-erased callable wrapper with small-buffer optimisation.
+ *
+ * Stores any callable (function pointer, lambda, `std::bind` expression, …) that
+ * accepts zero arguments and returns `void`.  The callable is held inside an
+ * inline storage buffer of @ref StorageSize bytes whenever possible; otherwise it
+ * is heap-allocated via `std::unique_ptr` and the pointer itself lives in the
+ * buffer.  Either way the external interface – move, call, destroy – is uniform
+ * through a compile-time-generated VTable.
+ *
+ * Copy construction and copy assignment are explicitly deleted because the stored
+ * callable may itself be non-copyable (e.g. a lambda that captures a
+ * `std::unique_ptr`).
+ *
+ * ### Typical usage
+ * @code
+ *   MoveOnlyTask task = []{ std::puts("hello"); };
+ *   task();   // prints "hello"
+ *
+ *   MoveOnlyTask moved = std::move(task);
+ *   moved();  // still prints "hello"
+ *   // task is now empty (operator bool() == false)
+ * @endcode
  */
 class MoveOnlyTask {
 private:
+    /// @brief Maximum number of bytes that may be stored inline (without heap allocation).
     static constexpr std::size_t StorageSize = 120;
 
+    /**
+     * @brief Per-type virtual dispatch table.
+     *
+     * A single instance of this struct is generated at compile time for each
+     * concrete callable type @c F via the `vtable_for<F>` / `vtable_for_heap<F>`
+     * static members.  All three function pointers receive the raw storage pointer
+     * and must cast it to the correct type internally.
+     */
     struct VTable {
-        void (*call)(void*);
-        void (*destroy)(void*) noexcept;
-        void (*move)(void*, void*) noexcept;
+        void (*call)(void*);           ///< Invoke the stored callable.
+        void (*destroy)(void*) noexcept; ///< Destroy the stored callable in-place.
+        void (*move)(void*, void*) noexcept; ///< Move-construct from @p src into @p dst.
     };
 
+    /// @brief Aligned raw storage for the callable (or a `unique_ptr` to it).
     alignas(std::max_align_t) char storage[StorageSize];
+
+    /// @brief Active dispatch table, or `nullptr` when the task is empty.
     const VTable* vtable{nullptr};
 
-    // Concrete execution for inline types
+    // ── Inline-storage VTable implementations ────────────────────────────────
+
+    /**
+     * @brief Calls the callable stored at @p ptr by invoking `operator()`.
+     * @tparam F Decayed callable type stored inline.
+     * @param ptr Pointer to inline storage containing an object of type @c F.
+     */
     template <typename F>
     static void call_impl(void* ptr) {
         (*std::launder(static_cast<F*>(ptr)))();
     }
 
+    /**
+     * @brief Destroys the callable stored at @p ptr by calling its destructor.
+     * @tparam F Decayed callable type stored inline.
+     * @param ptr Pointer to inline storage containing an object of type @c F.
+     */
     template <typename F>
     static void destroy_impl(void* ptr) noexcept {
         std::launder(static_cast<F*>(ptr))->~F();
     }
 
+    /**
+     * @brief Move-constructs an @c F from @p src into @p dst.
+     * @tparam F Decayed callable type stored inline.
+     * @param dst Destination raw storage (uninitialised).
+     * @param src Source raw storage containing an object of type @c F.
+     */
     template <typename F>
     static void move_impl(void* dst, void* src) noexcept {
         ::new (dst) F(std::move(*std::launder(static_cast<F*>(src))));
     }
 
+    /**
+     * @brief Compile-time VTable instance for callables that fit in inline storage.
+     * @tparam F Decayed callable type.
+     */
     template <typename F>
     static constexpr VTable vtable_for = { &call_impl<F>, &destroy_impl<F>, &move_impl<F> };
 
-    // Unique execution strategy for Large Heap Overflows
+    // ── Heap-storage VTable implementations ──────────────────────────────────
+
+    /**
+     * @brief Calls the callable stored behind a `unique_ptr<F>` at @p ptr.
+     * @tparam F Decayed callable type allocated on the heap.
+     * @param ptr Pointer to inline storage containing a `std::unique_ptr<F>`.
+     */
     template <typename F>
     static void call_heap_impl(void* ptr) {
         auto* up = std::launder(static_cast<std::unique_ptr<F>*>(ptr));
         (**up)();
     }
 
+    /**
+     * @brief Destroys the `unique_ptr<F>` (and thus the heap callable) at @p ptr.
+     * @tparam F Decayed callable type allocated on the heap.
+     * @param ptr Pointer to inline storage containing a `std::unique_ptr<F>`.
+     */
     template <typename F>
     static void destroy_heap_impl(void* ptr) noexcept {
         using Box = std::unique_ptr<F>;
         std::launder(static_cast<Box*>(ptr))->~Box();
     }
 
+    /**
+     * @brief Move-constructs the `unique_ptr<F>` from @p src into @p dst.
+     * @tparam F Decayed callable type allocated on the heap.
+     * @param dst Destination raw storage (uninitialised).
+     * @param src Source raw storage containing a `std::unique_ptr<F>`.
+     */
     template <typename F>
     static void move_heap_impl(void* dst, void* src) noexcept {
         using Box = std::unique_ptr<F>;
         ::new (dst) Box(std::move(*std::launder(static_cast<Box*>(src))));
     }
 
+    /**
+     * @brief Compile-time VTable instance for callables that exceed inline storage.
+     * @tparam F Decayed callable type.
+     */
     template <typename F>
     static constexpr VTable vtable_for_heap = { &call_heap_impl<F>, &destroy_heap_impl<F>, &move_heap_impl<F> };
 
 public:
+    // ── Constructors / destructor ─────────────────────────────────────────────
+
+    /// @brief Constructs an empty (null) task.
     MoveOnlyTask() noexcept = default;
 
-    // Restored Perfect Forwarding Constructor
+    /**
+     * @brief Constructs a task wrapping the callable @p f.
+     *
+     * If `sizeof(DecayedF) <= StorageSize` and `alignof(DecayedF) <= alignof(std::max_align_t)`
+     * the callable is constructed directly inside @ref storage.  Otherwise it is
+     * heap-allocated and a `std::unique_ptr` owning it is placed in @ref storage.
+     *
+     * @tparam F    Callable type (deduced).  Must not be `MoveOnlyTask` itself.
+     * @param  f    Forwarding reference to the callable to be stored.
+     */
     template <typename F, typename = std::enable_if_t<!std::is_same_v<std::decay_t<F>, MoveOnlyTask>>>
     MoveOnlyTask(F&& f) {
         using DecayedF = std::decay_t<F>;
@@ -111,13 +201,29 @@ public:
         }
     }
 
+    /// @brief Destroys the stored callable (if any) via @ref reset.
     ~MoveOnlyTask() noexcept { reset(); }
 
+    /// @brief Copy construction is disabled; the stored callable may be non-copyable.
     MoveOnlyTask(const MoveOnlyTask&) = delete;
+    /// @brief Copy assignment is disabled; the stored callable may be non-copyable.
     MoveOnlyTask& operator=(const MoveOnlyTask&) = delete;
 
+    /**
+     * @brief Move-constructs from @p other, leaving it empty.
+     * @param other Source task.  Will be empty after this call.
+     */
     MoveOnlyTask(MoveOnlyTask&& other) noexcept { move_from(std::move(other)); }
 
+    /**
+     * @brief Move-assigns from @p other, leaving it empty.
+     *
+     * Destroys the currently stored callable (if any) before taking ownership of
+     * @p other's callable.  Self-assignment is handled safely.
+     *
+     * @param other Source task.  Will be empty after this call.
+     * @return `*this`
+     */
     MoveOnlyTask& operator=(MoveOnlyTask&& other) noexcept {
         if (this != &other) {
             reset();
@@ -126,14 +232,31 @@ public:
         return *this;
     }
 
+    // ── Observers / mutators ─────────────────────────────────────────────────
+
+    /**
+     * @brief Invokes the stored callable.
+     *
+     * Does nothing if the task is empty (`operator bool() == false`).
+     */
     void operator()() {
         if (vtable) {
             vtable->call(storage);
         }
     }
 
+    /**
+     * @brief Returns `true` if this task holds a callable.
+     * @return `true` when non-empty, `false` when default-constructed or after a move.
+     */
     explicit operator bool() const noexcept { return vtable != nullptr; }
 
+    /**
+     * @brief Destroys the stored callable and resets the task to the empty state.
+     *
+     * After this call `operator bool()` returns `false`.  Safe to call on an
+     * already-empty task.
+     */
     void reset() noexcept {
         if (vtable) {
             vtable->destroy(storage);
@@ -142,61 +265,85 @@ public:
     }
 
 private:
+    /**
+     * @brief Takes ownership of @p other's callable by moving it into this object's storage.
+     *
+     * Assumes this object's storage is uninitialised (i.e. `vtable == nullptr`).
+     * After the call @p other is left empty.
+     *
+     * @param other Source task.
+     */
     void move_from(MoveOnlyTask&& other) noexcept {
         vtable = other.vtable;
         if (vtable) {
             vtable->move(storage, other.storage);
-            other.vtable = nullptr; // Explicitly neutralize other without invoking double-destructors
+            other.vtable = nullptr;
         }
     }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  LockFreeQueue
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * @brief A thread-safe, non-blocking Michael-Scott Lock-Free Queue optimized for MoveOnlyTask.
+ * @class LockFreeQueue
+ * @brief Thread-safe, non-blocking Michael–Scott lock-free FIFO queue.
  *
- * @details This implementation utilizes C++20 atomic shared_ptr to eliminate the
- * classic ABA problem without requiring a complex garbage collector.
+ * Implements the classic Michael & Scott (1996) two-pointer CAS-based queue.
+ * Both @ref enqueue and @ref dequeue are linearisable and wait-free in the
+ * absence of contention; under contention they are lock-free (at least one
+ * thread makes progress per finite number of steps).
  *
- * Concurrency guarantees:
- * - Safe for any number of concurrent producers (enqueue) and consumers (dequeue)
- * simultaneously.
- * - Progress guarantee: enqueue() and dequeue() are lock-free.
- * - Expected complexity: O(1) amortized per operation under low contention.
+ * The queue uses a sentinel (dummy) head node so that head and tail never
+ * alias the same node while the queue is non-empty, simplifying the CAS logic.
  *
- * Key Robustness Features:
- * 1. Inline Data Storage: Tasks are stored directly inside the node structure, eliminating
- * the extra heap allocation and alignment complexities of std::unique_ptr wrappers.
- * 2. Tail-Helping: Includes logic to allow threads to "help" move the tail
- * pointer forward if it lags behind, preventing a single stalled thread
- * from blocking the entire queue.
+ * @tparam T Element type.  Must be movable.
  *
- * @tparam T The type of elements stored in the queue (optimized for MoveOnlyTask).
+ * @note `std::shared_ptr` is used for node ownership to avoid the ABA problem
+ *       that would occur with raw pointers and manual memory management.
+ *
+ * ### Typical usage
+ * @code
+ *   LockFreeQueue<int> q;
+ *   q.enqueue(42);
+ *
+ *   int val;
+ *   if (q.dequeue(val)) {
+ *       // val == 42
+ *   }
+ * @endcode
  */
 template <typename T>
 class LockFreeQueue {
 private:
     /**
-     * @brief Singly-linked block node containing the actual task context payload.
+     * @brief Internal singly-linked list node.
+     *
+     * @c data holds the element value (only meaningful in non-sentinel nodes).
+     * @c next is an atomic `shared_ptr` to the successor node.
      */
     struct Node {
-        /// @brief The raw inline memory footprint holding the typed task data wrapper.
-        T data;
-        /// @brief Atomic shared ownership reference pointing directly to the succeeding node in sequence.
-        std::atomic<std::shared_ptr<Node>> next;
+        T data;                                  ///< Stored element (invalid in sentinel).
+        std::atomic<std::shared_ptr<Node>> next; ///< Atomic link to the next node.
 
-        /** @brief Constructs a blank node acting primarily as a tracking boundary marker. */
+        /// @brief Constructs a sentinel (empty) node.
         Node() : data(), next(nullptr) {}
-        /** @brief Constructs a payload node by moving data seamlessly into the inline structure. */
+        /// @brief Constructs a data node with @p val.
         Node(T&& val) : data(std::move(val)), next(nullptr) {}
     };
 
-    /// @brief Head reference pointer tracking the dynamic trailing base of the active queue sequence.
+    /// @brief Points to the sentinel node; elements are dequeued from @c head->next.
     alignas(64) std::atomic<std::shared_ptr<Node>> head;
-    /// @brief Tail reference pointer tracking the speculative end boundary where items are appended.
+    /// @brief Points to the last enqueued node (may lag one step behind the true tail).
     alignas(64) std::atomic<std::shared_ptr<Node>> tail;
 
 public:
-    /** @brief Initializes the queue with a dummy node to simplify boundary conditions. */
+    /**
+     * @brief Constructs an empty queue with a single sentinel node.
+     *
+     * Both @c head and @c tail are initialised to point at the same dummy node.
+     */
     LockFreeQueue() {
         auto dummy = std::make_shared<Node>();
         head.store(dummy, std::memory_order_relaxed);
@@ -204,8 +351,13 @@ public:
     }
 
     /**
-     * @brief Atomically enqueues an item.
-     * @param value The item to move into the queue.
+     * @brief Appends @p value to the back of the queue.
+     *
+     * Allocates a new node, then uses a CAS loop to link it after the current
+     * tail.  If the tail pointer has fallen behind (another thread enqueued but
+     * did not yet swing the tail), this thread helps advance it first.
+     *
+     * @param value The value to enqueue.  Moved into the new node.
      */
     void enqueue(T value) {
         auto new_node = std::make_shared<Node>(std::move(value));
@@ -213,32 +365,33 @@ public:
             auto last = tail.load(std::memory_order_acquire);
             auto next = last->next.load(std::memory_order_acquire);
 
-            if (next == nullptr) {
-                // Try to link the new node to the end of the list.
-                if (last->next.compare_exchange_weak(next, new_node,
-                    std::memory_order_release, std::memory_order_relaxed)) {
-
-                    // Link successful; try to swing tail to the new node.
-                    tail.compare_exchange_weak(last, new_node, std::memory_order_release);
-                    return;
+            if (last == tail.load(std::memory_order_relaxed)) {
+                if (next == nullptr) {
+                    // Tail truly points to the last node; try to link new_node.
+                    if (last->next.compare_exchange_weak(next, new_node,
+                        std::memory_order_release, std::memory_order_relaxed)) {
+                        // Link succeeded; try to swing tail (failure is benign).
+                        tail.compare_exchange_weak(last, new_node, std::memory_order_release);
+                        return;
+                    }
+                } else {
+                    // Tail is lagging; help advance it.
+                    tail.compare_exchange_weak(last, next, std::memory_order_release);
                 }
-            } else {
-                // Tail is lagging; help move it forward so other threads aren't blocked.
-                tail.compare_exchange_weak(last, next, std::memory_order_release);
             }
-
-            #if defined(__x86_64__) || defined(_M_X64)
-                __builtin_ia32_pause();
-            #else
-                std::this_thread::yield();
-            #endif
+            pause_processor();
         }
     }
 
     /**
-     * @brief Atomically dequeues an item.
-     * @param result Reference into which the dequeued item is moved on success.
-     * @return true if an item was retrieved, false if the queue was empty.
+     * @brief Removes and returns the element at the front of the queue.
+     *
+     * Uses a CAS on @c head to atomically claim ownership of the first real
+     * node.  The thread that wins the CAS is the sole owner of that node's
+     * @c data and moves it into @p result.
+     *
+     * @param[out] result  Receives the dequeued value on success.
+     * @return `true` if an element was dequeued, `false` if the queue was empty.
      */
     bool dequeue(T& result) {
         while (true) {
@@ -246,105 +399,160 @@ public:
             auto last  = tail.load(std::memory_order_acquire);
             auto next  = first->next.load(std::memory_order_acquire);
 
-            if (first == last) {
-                if (next == nullptr) return false; // Queue is empty.
-
-                // Tail is lagging behind head; help move it forward.
-                tail.compare_exchange_weak(last, next, std::memory_order_release);
-            } else {
-                // Pre-read data; ownership is only confirmed if CAS succeeds.
-                if (head.compare_exchange_weak(first, next, std::memory_order_acq_rel)) {
-                    auto consumed = next;  // next is now the new head
-                    if (consumed->data) {
-                        result = std::move(consumed->data);
-                        consumed->data.reset();
+            if (first == head.load(std::memory_order_relaxed)) {
+                if (first == last) {
+                    if (next == nullptr) return false; // Truly empty.
+                    // Tail is lagging; help advance it.
+                    tail.compare_exchange_weak(last, next, std::memory_order_release);
+                } else {
+                    // Attempt to swing head to the next node.
+                    if (head.compare_exchange_weak(first, next, std::memory_order_acq_rel)) {
+                        // Sole owner of next->data; extract it.
+                        result = std::move(next->data);
+                        return true;
                     }
-                    return true;
                 }
             }
-
-            #if defined(__x86_64__) || defined(_M_X64)
-                __builtin_ia32_pause();
-            #else
-                std::this_thread::yield();
-            #endif
+            pause_processor();
         }
+    }
+
+private:
+    /**
+     * @brief Emits a CPU spin-loop hint or yields the thread.
+     *
+     * On x86-64 issues the `PAUSE` instruction to reduce pipeline stalls in
+     * spin loops.  On other architectures falls back to `std::this_thread::yield()`.
+     */
+    static inline void pause_processor() noexcept {
+        #if defined(__x86_64__) || defined(_M_X64)
+            __builtin_ia32_pause();
+        #else
+            std::this_thread::yield();
+        #endif
     }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  ThreadPool
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * @brief High-performance ThreadPool using lock-free allocation-less task management.
+ * @class ThreadPool
+ * @brief Fully lock-free thread pool backed by C++20 atomic wait/notify.
  *
- * @details This pool manages a set of worker threads that consume tasks from a
- * LockFreeQueue<MoveOnlyTask>. It utilizes a 64-bit atomic state bitfield (32-bit pending,
- * 32-bit active) to track workload without the overhead of heavy mutex locking.
+ * Manages a fixed set of worker threads that drain tasks from a @ref LockFreeQueue.
+ * Task submission is done via @ref enqueue, which returns a `std::future` allowing
+ * the caller to obtain the result (or re-throw exceptions) asynchronously.
+ *
+ * ### State encoding
+ * A single 64-bit atomic `task_state` encodes two independent 32-bit counters:
+ * | Bits  | Meaning                            |
+ * |-------|------------------------------------|
+ * | 63–32 | Pending tasks (enqueued, not yet picked up) |
+ * | 31–0  | Active tasks (currently executing) |
+ *
+ * Workers park on `task_state.wait()` when no pending work is available and
+ * are woken by `task_state.notify_one()` after each submission.
+ *
+ * ### Typical usage
+ * @code
+ *   ThreadPool pool(std::thread::hardware_concurrency());
+ *
+ *   auto f = pool.enqueue([](int x){ return x * x; }, 7);
+ *   std::cout << f.get() << '\n'; // 49
+ *
+ *   pool.waitAllTasksCompleted();
+ *   pool.shutdown();
+ * @endcode
+ *
+ * @note The destructor calls @ref shutdown automatically, so explicit shutdown
+ *       is only necessary when you need to drain the pool before destruction.
  */
 class ThreadPool {
 private:
-    /// @brief Configured capacity constraint detailing spawned thread workers.
+    /// @brief Number of worker threads in this pool.
     const size_t num_threads;
 
-    /// @brief Bits 63-32: Number of tasks in queue. Bits 31-0: Number of tasks currently running.
+    /**
+     * @brief Combined pending/active task counter.
+     *
+     * Upper 32 bits = number of tasks that have been enqueued but not yet
+     * picked up by a worker.  Lower 32 bits = number of tasks currently
+     * executing.  Both counters are manipulated with a single atomic add,
+     * which keeps them consistent without a separate lock.
+     */
     alignas(64) std::atomic<uint64_t> task_state{0};
 
-    /// @brief Explicit value bit representation indicating exactly 1 task added to the upper 32-bit field.
+    /// @brief Addend that increments the pending count by one.
     static constexpr uint64_t PENDING_ONE = uint64_t(1) << 32;
-    /// @brief Explicit value bit representation indicating exactly 1 task added to the lower 32-bit field.
+    /// @brief Addend that increments the active count by one.
     static constexpr uint64_t ACTIVE_ONE  = uint64_t(1);
 
-    /// @brief Native system thread storage handling long-running task workers.
+    /// @brief Worker thread handles.
     std::vector<std::thread> workers;
-    /// @brief Internal Michael-Scott queue optimized to prevent lock step penalties.
+
+    /// @brief FIFO queue of pending tasks.
     LockFreeQueue<MoveOnlyTask> task_queue;
 
-    /// @brief Mutex managing synchronization across workers during low workload state tracking.
-    std::mutex              mutex;
-    /// @brief Condition variable managing signaling between execution boundaries.
-    std::condition_variable cv;
-    /// @brief Flag indicating termination state changes across global threads.
-    std::atomic<bool>       stop{false};
-    /// @brief Counter tracking current quantity of workers parked on cv.wait structures.
-    alignas(64) std::atomic<size_t> sleeping_threads{0};
+    /// @brief Set to `true` by @ref shutdown to signal workers to exit.
+    alignas(64) std::atomic<bool> stop{false};
+
+    /// @brief Reserved for future use (e.g. tracking waiters on @ref waitAllTasksCompleted).
+    alignas(64) std::atomic<uint64_t> global_waiters{0};
+
+    // ── State helper accessors ────────────────────────────────────────────────
 
     /**
-     * @brief Direct helper utility separating the high 32 bits from packed state parameters.
-     * @param s The current combined 64-bit status value.
-     * @return Transformed task count currently inside the queue container.
+     * @brief Extracts the pending task count from a packed state value.
+     * @param s Packed value loaded from @ref task_state.
+     * @return Number of tasks that are enqueued but not yet executing.
      */
-    static uint64_t pendingFromState(uint64_t s) { return s >> 32; }
+    static uint32_t pendingFromState(uint64_t s) noexcept { return static_cast<uint32_t>(s >> 32); }
 
     /**
-     * @brief Signals cv structure handlers if task_state evaluates precisely to empty.
-     * @param prevState Monitored task_state composition values captured prior to updates.
+     * @brief Extracts the active task count from a packed state value.
+     * @param s Packed value loaded from @ref task_state.
+     * @return Number of tasks currently executing.
      */
-    void notifyIfIdle(uint64_t prevState) {
-        uint64_t newState = prevState - ACTIVE_ONE;
-        if (newState == 0) {
-            std::lock_guard<std::mutex> lock(mutex);
-            cv.notify_all();
-        }
-    }
+    static uint32_t activeFromState(uint64_t s) noexcept  { return static_cast<uint32_t>(s & 0xFFFFFFFFULL); }
+
+    // ── Internal worker helpers ───────────────────────────────────────────────
 
     /**
-     * @brief Transforms active counters, runs task payload contexts, and processes exit tracking flags.
-     * @param task Raw task wrapper extracted from the internal lock-free tracking list.
+     * @brief Executes a single task and decrements the active counter.
+     *
+     * Exceptions thrown by the task are silently swallowed (callers receive
+     * exceptions via the `std::future` returned from @ref enqueue).  After the
+     * task completes the active counter is decremented; if that brings both
+     * counters to zero any threads blocked in @ref waitAllTasksCompleted are
+     * notified.
+     *
+     * @param task The task to execute.  Must be non-empty.
      */
     void runTask(MoveOnlyTask& task) {
-        // Transition: decrement pending count, increment active count.
-        task_state.fetch_add(static_cast<uint64_t>(-PENDING_ONE) + ACTIVE_ONE,
-                             std::memory_order_acq_rel);
-
         if (task) {
-            try { task(); } catch (...) { /* Prevent exception propagation into worker thread. */ }
+            try { task(); } catch (...) {}
         }
 
-        // Transition: decrement active count. Capture previous state to detect idle.
+        // Atomically drop active-execution status.
         uint64_t prev = task_state.fetch_sub(ACTIVE_ONE, std::memory_order_acq_rel);
-        notifyIfIdle(prev);
+
+        // Notify waitAllTasksCompleted() if this was the last in-flight task.
+        if (activeFromState(prev) == 1 && pendingFromState(prev) == 0) {
+            task_state.notify_all();
+        }
     }
 
     /**
-     * @brief Primary consumer loop routine mapping life sequences for active OS threads.
+     * @brief Entry point for each worker thread.
+     *
+     * Continuously:
+     *  1. Tries to dequeue and execute a task (@ref runTask).
+     *  2. If no task is available and @ref stop is set, exits.
+     *  3. Otherwise parks on `task_state.wait()` until work or a stop signal arrives.
+     *  4. On wakeup, re-checks the queue; if a task is found, atomically transfers
+     *     one pending credit to an active credit before executing.
      */
     void workerThread() {
         while (true) {
@@ -354,37 +562,33 @@ private:
                 continue;
             }
 
-            // Fast path exit: No tasks left and stop signaled
-            if (stop.load(std::memory_order_acquire)) {
-                return;
+            if (stop.load(std::memory_order_acquire)) return;
+
+            // Park until notified of new work or shutdown.
+            uint64_t current_state = task_state.load(std::memory_order_acquire);
+            while (pendingFromState(current_state) == 0 && !stop.load(std::memory_order_acquire)) {
+                task_state.wait(current_state, std::memory_order_relaxed);
+                current_state = task_state.load(std::memory_order_acquire);
             }
 
-            {
-                std::unique_lock<std::mutex> lock(mutex);
-                if (task_queue.dequeue(task)) {
-                    lock.unlock();
-                    runTask(task);
-                    continue;
-                }
-
-                if (stop.load(std::memory_order_acquire)) {
-                    return;
-                }
-
-                sleeping_threads.fetch_add(1, std::memory_order_relaxed);
-                cv.wait(lock, [this] {
-                    return pendingFromState(task_state.load(std::memory_order_acquire)) > 0
-                        || stop.load(std::memory_order_acquire);
-                });
-                sleeping_threads.fetch_sub(1, std::memory_order_relaxed);
+            // Re-check after wakeup; transfer pending → active atomically.
+            if (task_queue.dequeue(task)) {
+                task_state.fetch_add(static_cast<uint64_t>(-PENDING_ONE) + ACTIVE_ONE, std::memory_order_acq_rel);
+                runTask(task);
             }
         }
     }
 
 public:
+    // ── Construction / destruction ────────────────────────────────────────────
+
     /**
-     * @brief Constructs a ThreadPool and spawns @p n worker threads.
-     * @param n Number of worker threads. Must be greater than zero.
+     * @brief Constructs a thread pool with @p n worker threads.
+     *
+     * Launches @p n threads immediately; they begin polling for work as soon as
+     * @ref enqueue is called.
+     *
+     * @param n Number of worker threads.  Must be > 0.
      * @throws std::invalid_argument if @p n == 0.
      */
     explicit ThreadPool(size_t n) : num_threads(n) {
@@ -395,18 +599,34 @@ public:
         }
     }
 
-    /** @brief Destructor. Aborts unstarted tasks, waits for active tasks to finish, and joins workers. */
+    /**
+     * @brief Destroys the pool, calling @ref shutdown if it has not been called yet.
+     *
+     * Blocks until all worker threads have exited.
+     */
     ~ThreadPool() {
         shutdown();
     }
 
+    // ── Public interface ──────────────────────────────────────────────────────
+
     /**
-     * @brief Submits a callable and its arguments to the pool for asynchronous execution.
-     * * @tparam F Callable type (function, lambda, functor, etc.).
-     * @tparam Args Argument types forwarded to @p f.
-     * @param f The callable to invoke on a worker thread.
-     * @param args Arguments forwarded to @p f at the time of invocation.
-     * @return std::future mapping the evaluation result of the submitted task.
+     * @brief Submits a callable and its arguments for asynchronous execution.
+     *
+     * The callable and arguments are captured by value (or move) into a
+     * @ref MoveOnlyTask.  The task is enqueued and one waiting worker is
+     * notified.  The returned `std::future` provides access to the return
+     * value or any exception thrown by @p f.
+     *
+     * @tparam F    Callable type (deduced).
+     * @tparam Args Argument types (deduced).
+     * @param  f    Callable to invoke.
+     * @param  args Arguments forwarded to @p f.
+     * @return A `std::future<R>` where `R = std::invoke_result_t<F, Args...>`.
+     *
+     * @note Calling this after @ref shutdown has been invoked results in
+     *       undefined behaviour (the task is enqueued but no worker will
+     *       pick it up).
      */
     template <class F, class... Args>
     auto enqueue(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>> {
@@ -415,8 +635,8 @@ public:
         auto promise = std::make_shared<std::promise<return_type>>();
         std::future<return_type> result = promise->get_future();
 
-        task_state.fetch_add(PENDING_ONE, std::memory_order_release);
-
+        // Enqueue the wrapped task before incrementing the pending counter so
+        // that workers never observe a non-zero counter with an empty queue.
         task_queue.enqueue(MoveOnlyTask([
             func = std::forward<F>(f),
             tup  = std::make_tuple(std::forward<Args>(args)...),
@@ -434,56 +654,81 @@ public:
             }
         }));
 
-        // If threads are actively asleep, OR if this is the only task in the queue, signal a worker.
-        uint64_t current_state = task_state.load(std::memory_order_acquire);
-        if (sleeping_threads.load(std::memory_order_relaxed) > 0 || pendingFromState(current_state) <= 1) {
-            std::lock_guard<std::mutex> lock(mutex);
-            cv.notify_one();
-        }
+        // Now safe to signal availability to workers.
+        task_state.fetch_add(PENDING_ONE, std::memory_order_release);
+        task_state.notify_one();
 
         return result;
     }
 
-    /** @brief Blocks the calling thread until the queue is empty and all workers are idle. */
+    /**
+     * @brief Blocks the calling thread until all pending and active tasks finish.
+     *
+     * Uses `std::atomic::wait` (C++20 futex) to avoid a busy spin.  Returns
+     * immediately if the pool is already idle.
+     *
+     * @note This does not prevent new tasks from being submitted concurrently,
+     *       so the function may block for longer than expected in that case.
+     */
     void waitAllTasksCompleted() {
-        std::unique_lock<std::mutex> lock(mutex);
-        cv.wait(lock, [this] {
-            return task_state.load(std::memory_order_acquire) == 0;
-        });
+        uint64_t current_state = task_state.load(std::memory_order_acquire);
+        while (current_state != 0) {
+            task_state.wait(current_state, std::memory_order_relaxed);
+            current_state = task_state.load(std::memory_order_acquire);
+        }
     }
 
-    /** * @brief Signals all workers to stop immediately, joins execution threads,
-     * and discards any unexecuted tasks remaining in the queue.
+    /**
+     * @brief Signals all workers to stop, joins them, and drains the task queue.
+     *
+     * Idempotent: calling @ref shutdown more than once is safe.  Any tasks
+     * that were enqueued but not yet started are dequeued and discarded (their
+     * associated `std::future` will never become ready).
+     *
+     * @warning Do not call @ref enqueue after @ref shutdown.
      */
     void shutdown() {
         if (stop.exchange(true, std::memory_order_acq_rel)) return;
 
-        {
-            std::lock_guard<std::mutex> lock(mutex);
-            cv.notify_all();
-        }
+        // Wake all parked workers so they can observe the stop flag.
+        task_state.notify_all();
 
         for (auto& t : workers) {
             if (t.joinable()) t.join();
         }
 
+        // Drain any remaining tasks that were never executed.
         MoveOnlyTask residual;
         while (task_queue.dequeue(residual)) {
             residual.reset();
         }
     }
 
-    /** @brief Returns true if no tasks are pending or active. */
+    // ── Observers ─────────────────────────────────────────────────────────────
+
+    /**
+     * @brief Returns `true` if there are no pending or active tasks.
+     * @return `true` when both the pending and active counters are zero.
+     */
     bool isIdle() const { return task_state.load(std::memory_order_acquire) == 0; }
 
-    /** @brief Returns the total number of worker threads. */
+    /**
+     * @brief Returns the number of worker threads managed by this pool.
+     * @return The value passed to the constructor.
+     */
     size_t threadCount() const { return num_threads; }
 
-    /** @brief Returns the number of tasks currently in the queue (pending, not yet running). */
+    /**
+     * @brief Returns the number of tasks that have been enqueued but not yet started.
+     * @return Pending task count extracted from @ref task_state.
+     */
     uint64_t pendingCount() const { return pendingFromState(task_state.load(std::memory_order_acquire)); }
 
-    /** @brief Returns the number of tasks currently being executed by worker threads. */
-    uint64_t activeCount() const { return task_state.load(std::memory_order_acquire) & 0xFFFFFFFFULL; }
+    /**
+     * @brief Returns the number of tasks currently being executed by workers.
+     * @return Active task count extracted from @ref task_state.
+     */
+    uint64_t activeCount() const { return activeFromState(task_state.load(std::memory_order_acquire)); }
 };
 
 /**
