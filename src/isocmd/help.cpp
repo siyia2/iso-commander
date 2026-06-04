@@ -184,7 +184,7 @@ void helpMappings() {
     printSection(tc, "\n3. Tips:",
         "   • Tab-complete INDEX>DEVICE pairs for faster mapping\n"
         "   • Only unmounted parent devices are eligible for write2usb\n"
-        "   • Identifies USB flash devices using sysfs and uevent heuristics");
+        "   • USB device detection relies on sysfs and uevent heuristics");
 
     pressEnterToReturn();
 }
