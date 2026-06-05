@@ -547,37 +547,58 @@ private:
     /**
      * @brief Entry point for each worker thread.
      *
-     * Continuously:
-     *  1. Tries to dequeue and execute a task (@ref runTask).
-     *  2. If no task is available and @ref stop is set, exits.
-     *  3. Otherwise parks on `task_state.wait()` until work or a stop signal arrives.
-     *  4. On wakeup, re-checks the queue; if a task is found, atomically transfers
-     *     one pending credit to an active credit before executing.
+     * Coordinates execution using a speculative, lock-free state machine:
+     * 1. Synchronizes via state-based parking; blocks on `task_state.wait()`
+     * at 0% CPU whenever the global pending task count is zero.
+     * 2. Speculatively claims a task by atomically transferring one credit
+     * from 'pending' to 'active' in the 64-bit `task_state` bitfield.
+     * 3. Attempts to physically extract a payload from the `LockFreeQueue`.
+     * 4. On success: Executes the task safely wrapped in a try/catch block.
+     * 5. On failure (queue race collision): Executes a fail-safe state rollback
+     * and strategically yields the thread execution timeslice to prevent
+     * userspace livelocks, allowing the atomic state to settle.
      */
     void workerThread() {
-        while (true) {
-            MoveOnlyTask task;
-            if (task_queue.dequeue(task)) {
-                runTask(task);
-                continue;
-            }
+            while (true) {
+                uint64_t current_state = task_state.load(std::memory_order_acquire);
 
-            if (stop.load(std::memory_order_acquire)) return;
+                while (pendingFromState(current_state) == 0) {
+                    if (stop.load(std::memory_order_acquire)) return;
+                    task_state.wait(current_state, std::memory_order_relaxed);
+                    current_state = task_state.load(std::memory_order_acquire);
+                }
 
-            // Park until notified of new work or shutdown.
-            uint64_t current_state = task_state.load(std::memory_order_acquire);
-            while (pendingFromState(current_state) == 0 && !stop.load(std::memory_order_acquire)) {
-                task_state.wait(current_state, std::memory_order_relaxed);
-                current_state = task_state.load(std::memory_order_acquire);
-            }
+                uint64_t expected = current_state;
+                uint64_t desired = current_state - PENDING_ONE + ACTIVE_ONE;
 
-            // Re-check after wakeup; transfer pending → active atomically.
-            if (task_queue.dequeue(task)) {
-                task_state.fetch_add(static_cast<uint64_t>(-PENDING_ONE) + ACTIVE_ONE, std::memory_order_acq_rel);
-                runTask(task);
+                if (!task_state.compare_exchange_weak(expected, desired,
+                                                      std::memory_order_acq_rel,
+                                                      std::memory_order_relaxed)) {
+                    #if defined(__x86_64__) || defined(_M_X64)
+                        __builtin_ia32_pause(); // Don't burn a hot loop on CAS rejection
+                    #else
+                        std::this_thread::yield();
+                    #endif
+                    continue;
+                }
+
+                MoveOnlyTask task;
+                if (task_queue.dequeue(task)) {
+                    runTask(task);
+                } else {
+                    // Rollback State: Raced on queue extraction
+                    uint64_t prev = task_state.fetch_add(PENDING_ONE - ACTIVE_ONE, std::memory_order_acq_rel);
+                    if (activeFromState(prev) == 1 && pendingFromState(prev) == 0) {
+                        task_state.notify_all();
+                    }
+
+                    // Force the thread to yield execution here.
+                    // This breaks the livelock, giving the global atomic state a window
+                    // to settle to 0, which forces this thread into the passive wait() pool.
+                    std::this_thread::yield();
+                }
             }
         }
-    }
 
 public:
     // ── Construction / destruction ────────────────────────────────────────────
