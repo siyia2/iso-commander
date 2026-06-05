@@ -241,10 +241,10 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
 
                 for (const auto& validPath : validPaths) {
                     futures.emplace_back(
-                        pool.enqueue([validPath, &allIsoFiles, &uniqueErrorMessages, &totalFiles,
+                        pool.enqueue([path = validPath, &allIsoFiles, &uniqueErrorMessages, &totalFiles,
                                       &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
-                            traverse(validPath, allIsoFiles, uniqueErrorMessages, totalFiles,
-                                    processMutex, traverseErrorMutex, maxDepth, promptFlag);
+                            traverse(path, allIsoFiles, uniqueErrorMessages, totalFiles,
+                                     processMutex, traverseErrorMutex, maxDepth, promptFlag);
                         })
                     );
                 }
@@ -789,8 +789,12 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
     {
         auto& pool = getStaticThreadPool();
 
-        for (const auto& path : filteredPaths) {   // <-- Use filteredPaths!
-            threadFutures.push_back(pool.enqueue([path, &mode, &callback, &processedErrorsFind]() -> std::unordered_set<std::string> {
+        for (const auto& path : filteredPaths) {
+            // Explicitly isolate a string copy for this thread task
+            std::string pathCopy = path;
+
+            // Move that copy into the lambda's storage block
+            threadFutures.push_back(pool.enqueue([path = std::move(pathCopy), &mode, &callback, &processedErrorsFind]() -> std::unordered_set<std::string> {
                 return processPaths(path, mode, callback, std::ref(processedErrorsFind));
             }));
         }

@@ -46,7 +46,7 @@ namespace AnsiEscape {
 
 /**
  * @brief Precomputes Boyer-Moore bad character and good suffix tables for a pattern
- * 
+ *
  * @param pattern The search pattern to precompute tables for
  * @param badCharTable Output table mapping characters to their last occurrence index
  * @param goodSuffixTable Output table with safe skip distances for suffix mismatches
@@ -91,7 +91,7 @@ void precomputeBoyerMooreTables(const std::string& pattern, std::vector<int>& ba
 
 /**
  * @brief Performs Boyer-Moore search to check if pattern exists in text
- * 
+ *
  * @param text The text to search within
  * @param pattern The pattern to search for
  * @param badCharTable Precomputed bad character shift table
@@ -124,7 +124,7 @@ bool boyerMooreSearchExists(const std::string& text, const std::string& pattern,
 
 /**
  * @brief Builds query tokens from a semicolon-separated query string
- * 
+ *
  * @param query The query string to tokenize
  * @return Vector of QueryToken objects ready for Boyer-Moore searching
  */
@@ -160,7 +160,7 @@ static std::vector<QueryToken> buildQueryTokens(const std::string& query) {
 
 /**
  * @brief Filters file indices based on a search query using Boyer-Moore algorithm
- * 
+ *
  * @param files Vector of file paths to filter
  * @param query Search query with semicolon-separated terms
  * @return Vector of indices matching the search criteria
@@ -178,18 +178,18 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
 
     const bool needLower = std::any_of(queryTokens.begin(), queryTokens.end(),
                                [](const QueryToken& qt) { return !qt.isCaseSensitive; });
-    
+
     ThreadPool&  pool       = getStaticThreadPool();
     const size_t numThreads = std::min({
-        pool.threadCount(), 
-        files.size(), 
+        pool.threadCount(),
+        files.size(),
         static_cast<size_t>(GlobalConcurrency::FILTER_THREAD_CAP)
     });
-    
+
     const size_t chunkSize  = (files.size() + numThreads - 1) / numThreads;
 
     std::vector<std::future<std::vector<size_t>>> futures;
-    futures.reserve(numThreads);
+        futures.reserve(numThreads);
 
     for (size_t i = 0; i < numThreads; ++i) {
         const size_t start = i * chunkSize;
@@ -197,7 +197,7 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
         if (start >= end) break;
 
         futures.emplace_back(pool.enqueue(
-            [&files, start, end, needLower, queryTokens]() -> std::vector<size_t> {
+            [&files, start, end, needLower, &queryTokens]() -> std::vector<size_t> {
                 std::vector<size_t> localMatches;
                 localMatches.reserve((end - start) / 4);
 
@@ -217,10 +217,10 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
                         bool match;
                         if (qt.isCaseSensitive) {
                             match = boyerMooreSearchExists(file,      qt.original,
-                                                           qt.originalBadChar, qt.originalGoodSuffix);
+                                                            qt.originalBadChar, qt.originalGoodSuffix);
                         } else {
                             match = boyerMooreSearchExists(fileLower, qt.lower,
-                                                           qt.lowerBadChar,    qt.lowerGoodSuffix);
+                                                            qt.lowerBadChar,    qt.lowerGoodSuffix);
                         }
                         if (match) {
                             localMatches.push_back(j);
@@ -237,7 +237,7 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
     filteredIndices.reserve(files.size());
 
     std::exception_ptr firstException;
-    
+
     for (auto& fut : futures) {
         try {
             auto chunk = fut.get();
@@ -260,15 +260,15 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
 
 /**
  * @brief Executes core filtering logic with support for nested filter stacks.
- * * * Transforms source paths into searchable strings based on context (e.g., 
+ * * * Transforms source paths into searchable strings based on context (e.g.,
  * filename only or unmount-specific keys).
- * * Chains new results through the existing `filteringStack` to ensure that 
+ * * Chains new results through the existing `filteringStack` to ensure that
  * local indices are correctly mapped back to the global database indices.
  * * Manages UI state by resetting pagination and marking the screen for refresh.
  *
  * @param searchString The substring pattern to filter by (saved for state recovery).
  * @param ctx FilterContext providing source lists, unmount flags, and UI state.
- * @return true if matches were found and the filter stack was updated; 
+ * @return true if matches were found and the filter stack was updated;
  * false if the query is empty or no matches exist.
  */
 static bool applyFilterCore(const std::string& searchString, FilterContext& ctx) {
@@ -364,7 +364,7 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
 
 /**
  * @brief Saves a search query to readline history
- * 
+ *
  * @param query The query string to save
  * @param filterHistory Reference to filter history flag
  * @param alreadyLoaded If true, skips loadHistory (caller loaded before the prompt)
@@ -435,8 +435,8 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
 
 /**
  * @brief Performs multi-stage filtering on the global ISO file list.
- * * This block processes a stack of filtering states to progressively narrow down 
- * the files displayed to the user. Each level of the @ref filteringStack applies 
+ * * This block processes a stack of filtering states to progressively narrow down
+ * the files displayed to the user. Each level of the @ref filteringStack applies
  * a new search query to the results of the previous level.
  * * @section filtering_logic Logic Flow:
  * 1.  **Initialization**: Starts with a full range of indices representing @ref globalIsoFileList.
@@ -445,21 +445,21 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
  * - Executes the @ref filterFilesIndices function with the current query.
  * - Maps the resulting local indices back to the original global file indices.
  * - Updates the active index set for the next stack iteration.
- * 3.  **Break Condition**: If any filter level results in zero matches, the "broken" flag is set, 
+ * 3.  **Break Condition**: If any filter level results in zero matches, the "broken" flag is set,
  * the stack is cleared, and filtering is disabled.
- * 4.  **Finalization**: If matches survive all levels, the @ref filteredFiles list is 
+ * 4.  **Finalization**: If matches survive all levels, the @ref filteredFiles list is
  * repopulated using the final set of surviving global indices.
- * * @note This implementation uses `std::move` on the index vector to optimize performance 
+ * * @note This implementation uses `std::move` on the index vector to optimize performance
  * during transition between stack levels.
  * * @pre `isFiltered` must be true and `filteringStack` must not be empty.
- * @post `filteredFiles` will contain the subset of `globalIsoFileList` that satisfies all queries, 
+ * @post `filteredFiles` will contain the subset of `globalIsoFileList` that satisfies all queries,
  * or will be cleared if no matches are found.
  */
 void syncFilteringStackForIso(
     const std::vector<std::string>& globalIsoFileList,
     std::vector<FilteringState>& filteringStack,
     std::vector<std::string>& filteredFiles,
-    bool& isFiltered) 
+    bool& isFiltered)
 {
     if (!isFiltered || filteringStack.empty()) {
         return;
@@ -543,7 +543,7 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
     auto wrap = [](std::string_view s) -> std::string {
         return "\001" + std::string(s) + "\002";
     };
-	
+
 	rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
 	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
 	std::cout << "\n";
