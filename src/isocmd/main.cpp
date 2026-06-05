@@ -113,6 +113,9 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // Initialize static thread pool early for improved performance
+    getStaticThreadPool();
+
     /// @name Signal Handling
     /// Ignore Ctrl+C (SIGINT) in main loop; gracefully handle SIGTERM.
     /// @{
@@ -144,9 +147,6 @@ int main(int argc, char *argv[]) {
         });
     }
     paginationSet(GlobalState::configPath);
-
-    // Initialize static thread pool early for improved performance
-    getStaticThreadPool();
 
     /**
      * @brief Main interactive loop
@@ -244,19 +244,29 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    /// @name Cleanup and Resource Release
-    /// Signal all background threads to stop, cancel any ongoing searches, release lock file.
+    //// @name Cleanup and Resource Release
+    /// Shut down the thread pool, signal background tasks to stop, and release system locks.
     /// @{
+    getStaticThreadPool().shutdown();
+
     importState->stopImport = stopMessage = true;
-    GlobalState::g_operationCancelled.store(true);
+    GlobalState::g_operationCancelled.store(true, std::memory_order_release);
+
     if (importState) {
-        importState->isImportRunning.store(false);
+        importState->isImportRunning.store(false, std::memory_order_release);
         {
             std::lock_guard<std::mutex> lk(importState->workerMutex);
-            importState->workerCV.notify_one();
+            // Use notify_all() to wake up all background database threads safely
+            importState->workerCV.notify_all();
         }
     }
-    for (auto& t : backgroundThreads) if (t.joinable()) t.join();
+
+    for (auto& t : backgroundThreads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+
     std::cout << UI::Palette::Reset << std::flush;
     close(GlobalState::lockFileDescriptor);
     unlink(lockFile);
