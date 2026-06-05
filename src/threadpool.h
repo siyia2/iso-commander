@@ -717,39 +717,42 @@ public:
     }
 
     /**
-         * @brief Signals all workers to stop, joins them, and drains the task queue.
-         *
-         * Idempotent: calling @ref shutdown more than once is safe.  Any tasks
-         * that were enqueued but not yet started are dequeued and discarded (their
-         * associated `std::future` will never become ready).
-         *
-         * @warning Do not call @ref enqueue after @ref shutdown.
-         */
-        void shutdown() {
-            // 1. Signal the stop flag
-            stop.store(true, std::memory_order_release);
+     * @brief Signals all workers to stop, joins them, and drains the task queue.
+     *
+     * Idempotent: calling @ref shutdown more than once is safe.  Any tasks
+     * that were enqueued but not yet started are dequeued and discarded (their
+     * associated `std::future` will never become ready).
+     *
+     * @warning Do not call @ref enqueue after @ref shutdown.
+     */
+    void shutdown() {
+        // 1. Permanently trip the exit wire
+        stop.store(true, std::memory_order_release);
 
-            // 2. Clear out the state entirely and shake any parked threads awake from the kernel.
-            // Changing the value ensures task_state.wait() comparisons instantly fail.
-            task_state.store(0, std::memory_order_release);
+        // 2. Destructive Wakeup Loop: Eliminates the "Lost Wakeup" race condition.
+        // Successively cycling through values (0-3) forces an atomic state shift
+        // that shatters any ongoing `task_state.wait()` comparisons, guaranteeing
+        // no worker thread gets permanently stranded in a kernel-level sleep.
+        for (int i = 0; i < 4; ++i) {
+            task_state.store(i, std::memory_order_release);
             task_state.notify_all();
+            std::this_thread::yield();
+        }
 
-            // 3. Join all worker threads to guarantee they have completely stopped executing
-            for (std::thread& worker : workers) {
-                if (worker.joinable()) {
-                    worker.join();
-                }
-            }
-
-            // CRITICAL DRAINING STEP: Discard any remaining tasks left behind in the queue.
-            // This ensures unexecuted tasks are destroyed, releasing their resources
-            // and breaking any associated std::promise/std::future chains as promised.
-            MoveOnlyTask abandoned_task;
-            while (task_queue.dequeue(abandoned_task)) {
-                // Intentionally do nothing; letting 'abandoned_task' go out of scope
-                // destroys the underlying lambda/functor and fails its promise.
+        // 3. Join the worker threads cleanly to guarantee execution termination
+        for (std::thread& worker : workers) {
+            if (worker.joinable()) {
+                worker.join();
             }
         }
+
+        // 4. Clean up trailing allocations to prevent memory leaks
+        MoveOnlyTask abandoned_task;
+        while (task_queue.dequeue(abandoned_task)) {
+            // Intentionally letting 'abandoned_task' go out of scope drops
+            // the lambda, destroying its state and discarding the task.
+        }
+    }
 
     // ── Observers ─────────────────────────────────────────────────────────────
 
