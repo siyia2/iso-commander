@@ -548,6 +548,7 @@ private:
      * @brief Entry point for each worker thread.
      *
      * Coordinates execution using a speculative, lock-free state machine:
+     * 0. Evaluates global shutdown state first, exiting instantly if stop is signaled.
      * 1. Synchronizes via state-based parking; blocks on `task_state.wait()`
      * at 0% CPU whenever the global pending task count is zero.
      * 2. Speculatively claims a task by atomically transferring one credit
@@ -559,46 +560,62 @@ private:
      * userspace livelocks, allowing the atomic state to settle.
      */
     void workerThread() {
-            while (true) {
-                uint64_t current_state = task_state.load(std::memory_order_acquire);
+        while (true) {
+            // 1. ABSOLUTE EXIT GATE: If stop is set, exit immediately.
+            if (stop.load(std::memory_order_acquire)) {
+                return;
+            }
 
-                while (pendingFromState(current_state) == 0) {
-                    if (stop.load(std::memory_order_acquire)) return;
-                    task_state.wait(current_state, std::memory_order_relaxed);
-                    current_state = task_state.load(std::memory_order_acquire);
-                }
+            uint64_t current_state = task_state.load(std::memory_order_acquire);
 
-                uint64_t expected = current_state;
-                uint64_t desired = current_state - PENDING_ONE + ACTIVE_ONE;
+            // 2. PASSIVE PARK GATE
+            while (pendingFromState(current_state) == 0) {
+                // Check right before sleeping
+                if (stop.load(std::memory_order_acquire)) return;
 
-                if (!task_state.compare_exchange_weak(expected, desired,
-                                                      std::memory_order_acq_rel,
-                                                      std::memory_order_relaxed)) {
-                    #if defined(__x86_64__) || defined(_M_X64)
-                        __builtin_ia32_pause(); // Don't burn a hot loop on CAS rejection
-                    #else
-                        std::this_thread::yield();
-                    #endif
-                    continue;
-                }
+                task_state.wait(current_state, std::memory_order_relaxed);
+                current_state = task_state.load(std::memory_order_acquire);
 
-                MoveOnlyTask task;
-                if (task_queue.dequeue(task)) {
-                    runTask(task);
-                } else {
-                    // Rollback State: Raced on queue extraction
-                    uint64_t prev = task_state.fetch_add(PENDING_ONE - ACTIVE_ONE, std::memory_order_acq_rel);
-                    if (activeFromState(prev) == 1 && pendingFromState(prev) == 0) {
-                        task_state.notify_all();
-                    }
+                // Check right after waking up
+                if (stop.load(std::memory_order_acquire)) return;
+            }
 
-                    // Force the thread to yield execution here.
-                    // This breaks the livelock, giving the global atomic state a window
-                    // to settle to 0, which forces this thread into the passive wait() pool.
+            // 3. SPECULATIVE CREDIT CLAIM
+            uint64_t expected = current_state;
+            uint64_t desired = current_state - PENDING_ONE + ACTIVE_ONE;
+
+            if (!task_state.compare_exchange_weak(expected, desired,
+                                                  std::memory_order_acq_rel,
+                                                  std::memory_order_relaxed)) {
+                #if defined(__x86_64__) || defined(_M_X64)
+                    __builtin_ia32_pause();
+                #else
                     std::this_thread::yield();
+                #endif
+                continue;
+            }
+
+            // 4. PHYSICAL QUEUE EXTRACTION
+            MoveOnlyTask task;
+            if (task_queue.dequeue(task)) {
+                runTask(task);
+            } else {
+                // Rollback State: Fix counter offset
+                uint64_t prev = task_state.fetch_add(PENDING_ONE - ACTIVE_ONE, std::memory_order_acq_rel);
+                if (activeFromState(prev) == 1 && pendingFromState(prev) == 0) {
+                    task_state.notify_all();
                 }
+
+                // 5. LIVELOCK & SHUTDOWN SAFETY PROTECTION
+                // If shutdown happens during rollback, break out immediately
+                if (stop.load(std::memory_order_acquire)) {
+                    return;
+                }
+
+                std::this_thread::yield();
             }
         }
+    }
 
 public:
     // ── Construction / destruction ────────────────────────────────────────────
@@ -700,30 +717,39 @@ public:
     }
 
     /**
-     * @brief Signals all workers to stop, joins them, and drains the task queue.
-     *
-     * Idempotent: calling @ref shutdown more than once is safe.  Any tasks
-     * that were enqueued but not yet started are dequeued and discarded (their
-     * associated `std::future` will never become ready).
-     *
-     * @warning Do not call @ref enqueue after @ref shutdown.
-     */
-    void shutdown() {
-        if (stop.exchange(true, std::memory_order_acq_rel)) return;
+         * @brief Signals all workers to stop, joins them, and drains the task queue.
+         *
+         * Idempotent: calling @ref shutdown more than once is safe.  Any tasks
+         * that were enqueued but not yet started are dequeued and discarded (their
+         * associated `std::future` will never become ready).
+         *
+         * @warning Do not call @ref enqueue after @ref shutdown.
+         */
+        void shutdown() {
+            // 1. Signal the stop flag
+            stop.store(true, std::memory_order_release);
 
-        // Wake all parked workers so they can observe the stop flag.
-        task_state.notify_all();
+            // 2. Clear out the state entirely and shake any parked threads awake from the kernel.
+            // Changing the value ensures task_state.wait() comparisons instantly fail.
+            task_state.store(0, std::memory_order_release);
+            task_state.notify_all();
 
-        for (auto& t : workers) {
-            if (t.joinable()) t.join();
+            // 3. Join all worker threads to guarantee they have completely stopped executing
+            for (std::thread& worker : workers) {
+                if (worker.joinable()) {
+                    worker.join();
+                }
+            }
+
+            // CRITICAL DRAINING STEP: Discard any remaining tasks left behind in the queue.
+            // This ensures unexecuted tasks are destroyed, releasing their resources
+            // and breaking any associated std::promise/std::future chains as promised.
+            MoveOnlyTask abandoned_task;
+            while (task_queue.dequeue(abandoned_task)) {
+                // Intentionally do nothing; letting 'abandoned_task' go out of scope
+                // destroys the underlying lambda/functor and fails its promise.
+            }
         }
-
-        // Drain any remaining tasks that were never executed.
-        MoveOnlyTask residual;
-        while (task_queue.dequeue(residual)) {
-            residual.reset();
-        }
-    }
 
     // ── Observers ─────────────────────────────────────────────────────────────
 
