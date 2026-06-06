@@ -26,7 +26,7 @@ LDFLAGS_COMMON  = $(LDFLAGS_BASE) $(LDFLAGS_NORMAL) $(LDFLAGS_EXTRA)
 CHD_STATIC = ./deps/libchdr-static.a
 # ---------- Dynamic build (default) ----------
 CXXFLAGS_DYN = $(CXXFLAGS_COMMON) -I./deps/libchdr/include
-LIBS_DYN = -lreadline -lmount $(CHD_STATIC) -llzma -lz -lzstd
+LIBS_DYN = -lreadline -lmount $(CHD_STATIC)
 LDFLAGS_DYN = $(LDFLAGS_COMMON) $(LDFLAGS_STRIP)
 # ---------- Static build (use STATIC=1) ----------
 LZMA_STATIC = /usr/lib/liblzma.a
