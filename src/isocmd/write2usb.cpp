@@ -520,11 +520,13 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     done:
         // Strip O_DIRECT sector-alignment padding so Secure Boot and embedded-ISO
         // checksum verification see the exact source bytes.
-        if (!useBufferedIO && success && fileSize > 0)
-            ftruncate(fd_out, static_cast<off_t>(fileSize));
+        if (!useBufferedIO && success && fileSize > 0) {
+            if (ftruncate(fd_out, static_cast<off_t>(fileSize)) != 0)
+                success = false;
+        }
 
         if (GlobalState::g_operationCancelled.load()) {
-            ftruncate(fd_out, 0);
+            (void)ftruncate(fd_out, 0);
             posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
         }
 
