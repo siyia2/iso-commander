@@ -526,7 +526,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         }
 
         if (GlobalState::g_operationCancelled.load()) {
-            (void)ftruncate(fd_out, 0);
+            [[maybe_unused]] const int truncRes = ftruncate(fd_out, 0);
             posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
         }
 
