@@ -9,7 +9,7 @@ license=('GPL-3.0-or-later')
 provides=('iso-commander')
 conflicts=('iso-commander')
 optdepends=(
-    'util-linux: Mount/umount for Windows live USB creation'
+    'util-linux: Mount/umount for handling Windows ISO'
     'ntfsprogs: NTFS formatting for Windows live USB creation'
     'dosfstools: FAT32 formatting for Windows live USB creation'
     'parted: GPT partition layout for Windows live USB creation'
