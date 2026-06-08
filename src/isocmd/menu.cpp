@@ -101,18 +101,18 @@ void submenu1(std::atomic<bool>& isAtISOList,
         std::cout << color << "+-------------------------+\n"
                   << "|      ↵ ManageISO         |\n"
                   << "+-------------------------+\n"
-                  << "|1. Mount                 |\n"
+                  << "| 1. Mount                |\n"
                   << "+-------------------------+\n"
-                  << "|2. Unmount               |\n"
+                  << "| 2. Unmount              |\n"
                   << "+-------------------------+\n"
-                  << "|3. Delete                |\n"
+                  << "| 3. Delete               |\n"
                   << "+-------------------------+\n"
-                  << "|4. Move                  |\n"
+                  << "| 4. Move                 |\n"
                   << "+-------------------------+\n"
-                  << "|5. Copy                  |\n"
+                  << "| 5. Copy                 |\n"
                   << "+-------------------------+\n"
-                  << "|6. Write                 |\n"
-                  << "+-------------------------+" << UI::Palette::BoldReset << std::endl << "\n";
+                  << "| 6. Write                |\n"
+                  << "+-------------------------+" << "\n\n";
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
         char* rawInput = readline(( std::string(pt.primary) +
@@ -194,16 +194,16 @@ void submenu2(std::shared_ptr<RefreshState> state) {
         std::cout << color << "+---------------------------+  \n"
                   << "|      ↵ Convert2ISO         |\n"
                   << "+---------------------------+\n"
-                  << "|1. CCD2ISO++               |\n"
+                  << "| 1. CCD2ISO++              |\n"
                   << "+---------------------------+\n"
-                  << "|2. CHD2ISO++               |\n"
+                  << "| 2. CHD2ISO++              |\n"
                   << "+---------------------------+\n"
-                  << "|3. DAA2ISO++               |\n"
+                  << "| 3. DAA2ISO++              |\n"
                   << "+---------------------------+\n"
-                  << "|4. MDF2ISO++               |\n"
+                  << "| 4. MDF2ISO++              |\n"
                   << "+---------------------------+\n"
-                  << "|5. NRG2ISO++               |\n"
-                  << "+---------------------------+" << UI::Palette::BoldReset << std::endl << "\n";
+                  << "| 5. NRG2ISO++              |\n"
+                  << "+---------------------------+" << "\n\n";
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
         char* rawInput = readline(( std::string(pt.primary) +
@@ -257,15 +257,15 @@ void printMenu() {
     std::cout << color << "+-----------------------+\n"
               << "|      Main Menu         |\n"
               << "+-----------------------+\n"
-              << "|1. ManageISO           |\n"
+              << "| 1. ManageISO          |\n"
               << "+-----------------------+\n"
-              << "|2. Convert2ISO         |\n"
+              << "| 2. Convert2ISO        |\n"
               << "+-----------------------+\n"
-              << "|3. ImportISO           |\n"
+              << "| 3. ImportISO          |\n"
               << "+-----------------------+\n"
-              << "|4. Settings            |\n"
+              << "| 4. Settings           |\n"
               << "+-----------------------+\n"
-              << "|5. Exit                |\n"
+              << "| 5. Exit               |\n"
               << "+-----------------------+" << "\n";
 }
 
