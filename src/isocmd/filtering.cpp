@@ -578,7 +578,6 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
     }
 
     auto onEmptyInput = [&]() {
-        clear_history();
         *cfg.needsClrScrn = *cfg.isFiltered;
     };
 
