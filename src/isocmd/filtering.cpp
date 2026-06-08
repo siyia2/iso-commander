@@ -134,8 +134,6 @@ static std::vector<QueryToken> buildQueryTokens(const std::string& query) {
     std::string token;
 
     while (std::getline(ss, token, ';')) {
-        token.erase(0, token.find_first_not_of(" \t"));
-        token.erase(token.find_last_not_of(" \t") + 1);
         if (token.empty()) continue;
 
         QueryToken qt;
@@ -411,13 +409,24 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
         std::unique_ptr<char, decltype(&std::free)> raw(
             readline(promptText.c_str()), &std::free);
 
-        if (!raw || raw.get()[0] == '\0' || strcmp(raw.get(), "/") == 0
-        || raw.get()[0] == ';' || (raw.get()[0] == '/' && raw.get()[1] == ';')
+        //---- Robust handling of FilterTerms prompt ----
+        if (!raw) {
+            // EOF (Ctrl+D) - exit
+            break;
+        }
+        if (strcmp(raw.get(), "/") == 0
+        || raw.get()[0] == ';'
+        || raw.get()[0] == '<'
+        || (raw.get()[0] == '/' && raw.get()[1] == ';')
         || std::count(raw.get(), raw.get() + strlen(raw.get()), '/') > 1
         || strstr(raw.get(), ";;") != nullptr) {
-            std::cout << "\033[1A\033[K";
+            if (raw.get()[0] == '<') {
+                break;
+            } else if (!(raw.get()[0] == '<')) {
+                std::cout << "\033[1A\033[K";
+            }
             handleEmpty();
-            break;
+            continue;
         }
 
         std::string query(raw.get());
@@ -548,12 +557,13 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
 	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
 	std::cout << "\n";
 	reset_custom_keybindingsForSelect();
+	rl_bind_keyseq("<", exit_handler);
     const ReadlineAndPromptTheme ft = getFilterTheme("", false);
     const std::string prompt =
         ft.filter  + "FilterTerms" +
         ft.primary + " ↵ for " +
         wrap(cfg.operationColor) + cfg.operation +
-        ft.primary + ", ↵ return: " +
+        ft.primary + ", < return: " +
         ft.reset;
 
     FilterContext ctx {
