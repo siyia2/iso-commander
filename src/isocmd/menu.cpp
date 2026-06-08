@@ -103,7 +103,7 @@ void submenu1(std::atomic<bool>& isAtISOList,
                   << "+-------------------------+\n"
                   << "|1. Mount                 |\n"
                   << "+-------------------------+\n"
-                  << "|2. Umount                |\n"
+                  << "|2. Unmount               |\n"
                   << "+-------------------------+\n"
                   << "|3. Delete                |\n"
                   << "+-------------------------+\n"
@@ -116,7 +116,7 @@ void submenu1(std::atomic<bool>& isAtISOList,
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
         char* rawInput = readline(( std::string(pt.primary) +
-                                    "Choose an option: " +
+                                    "Enter choice [1-6]: " +
                                     std::string(pt.reset)).c_str());
 
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
@@ -191,23 +191,23 @@ void submenu2(std::shared_ptr<RefreshState> state) {
 
         clearScrollBuffer();
 
-        std::cout << color << "+-------------------------+  \n"
-                  << "|     ↵ Convert2ISO        |\n"
-                  << "+-------------------------+\n"
-                  << "|1. CCD2ISO++             |\n"
-                  << "+-------------------------+\n"
-                  << "|2. CHD2ISO++             |\n"
-                  << "+-------------------------+\n"
-                  << "|3. DAA2ISO++             |\n"
-                  << "+-------------------------+\n"
-                  << "|4. MDF2ISO++             |\n"
-                  << "+-------------------------+\n"
-                  << "|5. NRG2ISO++             |\n"
-                  << "+-------------------------+" << UI::Palette::BoldReset << std::endl << "\n";
+        std::cout << color << "+---------------------------+  \n"
+                  << "|      ↵ Convert2ISO         |\n"
+                  << "+---------------------------+\n"
+                  << "|1. CCD2ISO++               |\n"
+                  << "+---------------------------+\n"
+                  << "|2. CHD2ISO++               |\n"
+                  << "+---------------------------+\n"
+                  << "|3. DAA2ISO++               |\n"
+                  << "+---------------------------+\n"
+                  << "|4. MDF2ISO++               |\n"
+                  << "+---------------------------+\n"
+                  << "|5. NRG2ISO++               |\n"
+                  << "+---------------------------+" << UI::Palette::BoldReset << std::endl << "\n";
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
         char* rawInput = readline(( std::string(pt.primary) +
-                                    "Choose an option: " +
+                                    "Enter choice [1-5]: " +
                                     std::string(pt.reset)).c_str());
 
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
@@ -254,19 +254,19 @@ void submenu2(std::shared_ptr<RefreshState> state) {
  * @brief Prints the primary application menu options.
  */
 void printMenu() {
-    std::cout << color << "+-------------------------+\n"
-              << "|      Menu Options        |\n"
-              << "+-------------------------+\n"
-              << "|1. ManageISO             |\n"
-              << "+-------------------------+\n"
-              << "|2. Convert2ISO           |\n"
-              << "+-------------------------+\n"
-              << "|3. ImportISO             |\n"
-              << "+-------------------------+\n"
-              << "|4. Settings              |\n"
-              << "+-------------------------+\n"
-              << "|5. Exit                  |\n"
-              << "+-------------------------+" << "\n";
+    std::cout << color << "+-----------------------+\n"
+              << "|      Main Menu         |\n"
+              << "+-----------------------+\n"
+              << "|1. ManageISO           |\n"
+              << "+-----------------------+\n"
+              << "|2. Convert2ISO         |\n"
+              << "+-----------------------+\n"
+              << "|3. ImportISO           |\n"
+              << "+-----------------------+\n"
+              << "|4. Settings            |\n"
+              << "+-----------------------+\n"
+              << "|5. Exit                |\n"
+              << "+-----------------------+" << "\n";
 }
 
 /**

@@ -104,7 +104,7 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
 
     if (isEmpty) {
         const PrintListTheme c = getListColors();
-        std::cout << "\n" << c.num << "ISO Cache is empty. Choose 'ImportISO' from the Main Menu Options." << c.dir << "\n";
+        std::cout << "\n" << c.num << "ISO database is empty. Choose 'ImportISO' from the Main Menu." << c.dir << "\n";
         pressEnterToReturn();
         return false;
     }
