@@ -199,8 +199,8 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                     : "\n\n[↻ Syncing: NewISO → Restructure]");
             } else {
                 syncLine.append(disablePagination
-                    ? "[No history — nothing to sync]\n\n"
-                    : "\n\n[No history — nothing to sync]");
+                    ? "[No FolderPath history — nothing to sync]\n\n"
+                    : "\n\n[No FolderPath history — nothing to sync]");
             }
             syncLine.append(UI::Palette::BoldReset);
             output.insert(syncInsertPos, syncLine);
