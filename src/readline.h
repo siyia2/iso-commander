@@ -42,7 +42,7 @@ struct IsoInfo; // Forward declaration
 struct CompleterData {
     /** @brief Pointer to the processed list of ISO images. */
     const std::vector<IsoInfo>* sortedIsos;
-    
+
     /** @brief Pointer to the list of available USB device paths. */
     const std::vector<std::string>* usbDevices;
 };
@@ -55,6 +55,9 @@ extern CompleterData g_completerData;
  * KEYBINDING MANAGEMENT
  * Functions to toggle between "Hotkeys" and "Standard Typing" modes.
  */
+
+// --- Exit Handler ---
+int exit_handler(int, int);
 
 // --- File Selection Mode ---
 void setup_custom_keybindingsForSelect(void);
