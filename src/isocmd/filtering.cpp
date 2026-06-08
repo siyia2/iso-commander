@@ -410,21 +410,17 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
             readline(promptText.c_str()), &std::free);
 
         //---- Robust handling of FilterTerms prompt ----
-        if (!raw) {
+        if (!raw || raw.get()[0] == '<') {
             // EOF (Ctrl+D) - exit
             break;
         }
+
         if (strcmp(raw.get(), "/") == 0
         || raw.get()[0] == ';'
-        || raw.get()[0] == '<'
         || (raw.get()[0] == '/' && raw.get()[1] == ';')
         || std::count(raw.get(), raw.get() + strlen(raw.get()), '/') > 1
         || strstr(raw.get(), ";;") != nullptr) {
-            if (raw.get()[0] == '<') {
-                break;
-            } else if (!(raw.get()[0] == '<')) {
-                std::cout << "\033[1A\033[K";
-            }
+            std::cout << "\033[1A\033[K";
             handleEmpty();
             continue;
         }
