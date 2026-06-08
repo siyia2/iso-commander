@@ -5,6 +5,7 @@
 #include <atomic>
 #include <charconv>
 #include <cstddef>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -18,10 +19,15 @@
 #include "../caches.h"
 #include "../display.h"
 #include "../filtering.h"
+#include "../databaseOps.h"
+#include "../main.h"
 #include "../state.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
 #include "../select.h"
+
+
+namespace fs = std::filesystem;
 
 /**
  * @file list_renderer.cpp
@@ -188,9 +194,15 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         if (isIsoWithAutoUpdate) {
             std::string syncLine;
             syncLine.append(UI::Palette::Dim);
-            syncLine.append(disablePagination
-                ? "[↻ Syncing: NewISO → Restructure]\n\n"
-                : "\n\n[↻ Syncing: NewISO → Restructure]");
+            if (!isHistoryFileEmpty(GlobalState::historyFilePath) && fs::is_regular_file(GlobalState::historyFilePath)) {
+                syncLine.append(disablePagination
+                    ? "[↻ Syncing: NewISO → Restructure]\n\n"
+                    : "\n\n[↻ Syncing: NewISO → Restructure]");
+            } else {
+                syncLine.append(disablePagination
+                    ? "[No history — nothing to sync]\n\n"
+                    : "\n\n[No history — nothing to sync]");
+            }
             syncLine.append(UI::Palette::BoldReset);
             output.insert(syncInsertPos, syncLine);
         }
