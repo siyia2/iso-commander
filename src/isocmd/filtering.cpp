@@ -404,7 +404,6 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
     const auto& handleEmpty = onEmptyInput ? onEmptyInput : defaultEmptyInput;
 
     std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
-    clear_history();
     ctx.filterHistory = true;
     loadHistory(ctx.filterHistory);
 
