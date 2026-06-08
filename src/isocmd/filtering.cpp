@@ -322,7 +322,10 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
     }
 
     if (tempFiltered.empty())                     return false;
-    if (tempFiltered.size() == sourceList.size()) return true;
+    if (tempFiltered.size() == sourceList.size()) {
+        std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+        return true;
+    }
 
     ctx.currentPage  = 0;
     ctx.needsClrScrn = true;
@@ -420,7 +423,7 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
         || (raw.get()[0] == '/' && raw.get()[1] == ';')
         || std::count(raw.get(), raw.get() + strlen(raw.get()), '/') > 1
         || strstr(raw.get(), ";;") != nullptr) {
-            std::cout << "\033[1A\033[K";
+            std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
             handleEmpty();
             continue;
         }
