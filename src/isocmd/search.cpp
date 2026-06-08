@@ -961,14 +961,18 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
               .append(dt.reset).append("\002");
 
         char* rawSearchQuery = readline(prompt.c_str());
-        if (!rawSearchQuery) return;
-
+        if (!rawSearchQuery) {
+            clear_history();
+            return;
+        }
         std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
 
         const std::string inputSearch = trimWhitespace(searchQuery.get());
 
-        if (inputSearch == "<") return;
-
+        if (inputSearch == "<") {
+            clear_history();
+            return;
+        }
         if (inputSearch.find_first_not_of(" \t\n\r") == std::string::npos) {
             continue;
         }
