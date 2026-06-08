@@ -376,6 +376,7 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
         loadHistory(filterHistory);
     add_history(query.c_str());
     saveHistory(filterHistory);
+    clear_history();
 }
 
 // ─── Interactive / quick filter driver ───────────────────────────────────────
@@ -414,6 +415,7 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
         //---- Robust handling of FilterTerms prompt ----
         if (!raw || raw.get()[0] == '<') {
             // EOF (Ctrl+D) - exit
+            clear_history();
             break;
         }
 
