@@ -26,7 +26,6 @@
 #include "../themes.h"
 #include "../select.h"
 
-
 namespace fs = std::filesystem;
 
 /**
