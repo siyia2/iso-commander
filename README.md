@@ -38,11 +38,6 @@ Mount ISOs, convert images, write bootable USB drives — done right
 
 ## Features
 
-🖊️ **Best-in-Class USB Write Engine**
-- No wimlib, no file splitting — `install.wim` routed to NTFS natively
-- Two-pass write ordering — bootloader written last for integrity
-- Dynamic NTFS driver selection — `NTFSPLUS` is preferred for best performance
-
 ⚡ **High Performance**
 - Native C++ — no Python runtime, no shell wrappers
 - `O_DIRECT` unbuffered writes — bypasses page cache entirely
@@ -57,6 +52,11 @@ Mount ISOs, convert images, write bootable USB drives — done right
 - Tab completion, pagination, and command history
 - Real-time progress tracking and non-interactive mode
 - Built-in theme engine with full RGB color support
+
+🖊️ **Best-in-Class USB Write Engine**
+- No wimlib, no file splitting — `install.wim` routed to NTFS natively
+- Two-pass write ordering — bootloader written last for integrity
+- Dynamic NTFS driver selection — `NTFSPLUS` is preferred for best performance
 
 ## USB Boot Mode Support
 
