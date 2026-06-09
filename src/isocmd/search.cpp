@@ -234,17 +234,14 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             {
                 auto& pool = getStaticThreadPool();
                 std::vector<std::future<void>> futures;
-                std::mutex processMutex;
-                std::mutex traverseErrorMutex;
+
                 // To prevent unintended cancellation with premature ctrl+c
                 GlobalState::g_operationCancelled.store(false);
 
                 for (const auto& validPath : validPaths) {
                     futures.emplace_back(
-                        pool.enqueue([path = validPath, &allIsoFiles, &uniqueErrorMessages, &totalFiles,
-                                      &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
-                            traverse(path, allIsoFiles, uniqueErrorMessages, totalFiles,
-                                     processMutex, traverseErrorMutex, maxDepth, promptFlag);
+                        pool.enqueue([path = validPath, &allIsoFiles, &uniqueErrorMessages, &totalFiles, &maxDepth, &promptFlag]() {
+                            traverse(path, allIsoFiles, uniqueErrorMessages, totalFiles, maxDepth, promptFlag);
                         })
                     );
                 }
@@ -287,26 +284,29 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
 /**
  * @brief Recursively traverses a directory to find ISO files
  *
- * This function performs a depth-first traversal of the filesystem starting at
+ * This function performs a recursive traversal of the filesystem starting at
  * the specified path, collecting all .iso files and handling errors appropriately.
+ * Uses batch processing to minimize lock contention when writing results.
+ *
+ * Traversal can be interrupted by setting GlobalState::g_operationCancelled,
+ * in which case GlobalConcurrency::g_CancelledMessageAdded is set atomically,
+ * the error set is cleared, and a cancellation message is inserted.
+ * Note: GlobalConcurrency::g_CancelledMessageAdded must be reset before
+ * the next traversal run.
  *
  * @param path The starting directory path for traversal
  * @param isoFiles Output vector to store discovered ISO file paths
  * @param uniqueErrorMessages Set to store unique error messages encountered
  * @param totalFiles Atomic counter for total files processed (for progress reporting)
- * @param traverseFilesMutex Mutex for protecting isoFiles vector access
- * @param traverseErrorsMutex Mutex for protecting error messages set access
  * @param maxDepth Maximum recursion depth (-1 for unlimited)
- * @param promptFlag If true, displays progress updates
+ * @param promptFlag If true, displays progress updates and error messages
  */
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles,
               std::unordered_set<std::string>& uniqueErrorMessages,
-              std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex,
-              std::mutex& traverseErrorsMutex, int maxDepth, bool promptFlag) {
+              std::atomic<size_t>& totalFiles, int maxDepth, bool promptFlag) {
 
     const size_t BATCH_SIZE = 100;
     std::vector<std::string> localIsoFiles;
-    std::atomic<bool> g_CancelledMessageAdded{false};
 
     const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
@@ -323,8 +323,8 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
              it != std::filesystem::recursive_directory_iterator(); ++it) {
 
             if (GlobalState::g_operationCancelled.load()) {
-                if (!g_CancelledMessageAdded.exchange(true)) {
-                    std::lock_guard<std::mutex> lock(traverseErrorsMutex);
+                if (!GlobalConcurrency::g_CancelledMessageAdded.exchange(true)) {
+                    std::lock_guard<std::mutex> lock(GlobalConcurrency::traverseErrorsMutex);
                     uniqueErrorMessages.clear();
 
                     std::string msg = "\n" + dt.yellow + "ISO search interrupted by user" + dt.reset;
@@ -357,14 +357,14 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
             localIsoFiles.push_back(filePath.string());
 
             if (localIsoFiles.size() >= BATCH_SIZE) {
-                std::lock_guard<std::mutex> lock(traverseFilesMutex);
+                std::lock_guard<std::mutex> lock(GlobalConcurrency::traverseFilesMutex);
                 isoFiles.insert(isoFiles.end(), localIsoFiles.begin(), localIsoFiles.end());
                 localIsoFiles.clear();
             }
         }
 
         if (!localIsoFiles.empty()) {
-            std::lock_guard<std::mutex> lock(traverseFilesMutex);
+            std::lock_guard<std::mutex> lock(GlobalConcurrency::traverseFilesMutex);
             isoFiles.insert(isoFiles.end(), localIsoFiles.begin(), localIsoFiles.end());
         }
 
@@ -373,7 +373,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                                      e.what() + dt.reset;
 
         if (promptFlag) {
-            std::lock_guard<std::mutex> errorLock(traverseErrorsMutex);
+            std::lock_guard<std::mutex> errorLock(GlobalConcurrency::traverseErrorsMutex);
             uniqueErrorMessages.insert(formattedError);
         }
     }
