@@ -56,8 +56,8 @@ extern CompleterData g_completerData;
  * Functions to toggle between "Hotkeys" and "Standard Typing" modes.
  */
 
-// --- Exit Handler ---
-int exit_handler(int, int);
+// --- Exit Handler For FilterTerms ---
+int exit_handler_filtering(int, int);
 
 // --- File Selection Mode ---
 void setup_custom_keybindingsForSelect(void);
