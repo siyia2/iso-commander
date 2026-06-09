@@ -44,6 +44,13 @@ namespace GlobalConcurrency {
     // Mutex Protection For file counts in search.cpp
     inline std::mutex couNtMutex;
 
+    // Mutex protection for file traversal results and error messages
+    inline std::mutex traverseFilesMutex;
+    inline std::mutex traverseErrorsMutex;
+
+    // Ensures the traversal cancellation message is inserted only once across all threads
+    inline std::atomic<bool> g_CancelledMessageAdded{false};
+
 } // namespace GlobalConcurrency
 
 #endif // CONCURRENCY_H

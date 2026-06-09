@@ -26,8 +26,6 @@ void traverse(
     std::vector<std::string>& isoFiles,
     std::unordered_set<std::string>& uniqueErrorMessages,
     std::atomic<size_t>& totalFiles,
-    std::mutex& traverseFilesMutex,
-    std::mutex& traverseErrorsMutex,
     int maxDepth,
     bool promptFlag
 );
