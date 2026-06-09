@@ -74,7 +74,10 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
 
         if (needToReload) {
             GlobalCaches::globalIsoFileList = std::move(freshList);
-            currentPage = originalPage;
+            //  Only reset to originalPage if we are NOT actively filtered ---
+            if (!isFiltered) {
+                currentPage = originalPage;
+            }
             pendingIndices.clear();
             hasPendingProcess = false;
             sortFilesCaseInsensitive(GlobalCaches::globalIsoFileList);
