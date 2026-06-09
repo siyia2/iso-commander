@@ -563,7 +563,7 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
         ft.filter  + "FilterTerms" +
         ft.primary + " ↵ for " +
         wrap(cfg.operationColor) + cfg.operation +
-        ft.primary + ", / return: " +
+        ft.primary + ", / exit: " +
         ft.reset;
 
     FilterContext ctx {
