@@ -22,9 +22,6 @@
 #include <ctype.h>
 #include <sys/stat.h>
 
-// Third-Party Library Headers
-#include <readline/history.h>
-
 // Project Headers
 #include "../concurrency.h"
 #include "../inputHandling.h"
@@ -355,7 +352,6 @@ void processInputForCpMvRm(const std::string& input,
         if (!exactPaths.empty())
             updateDatabaseAfterOperations(exactPaths);
     }
-    clear_history();
 }
 
 /**
