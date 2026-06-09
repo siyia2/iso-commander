@@ -240,38 +240,40 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  *
  * @details **Key Behaviors:**
  * - **Dynamic Context:** Automatically toggles between the global ISO database
- *   (@c GlobalCaches::globalIsoFileList) and active mount points (@c isoDirs)
- *   based on @p operation; unmount operations skip database cleanup and disable
- *   the manual-refresh keybinding.
+ * (@c GlobalCaches::globalIsoFileList) and active mount points (@c isoDirs)
+ * based on @p operation; unmount operations skip database cleanup and disable
+ * the manual-refresh keybinding.
  * - **Event-Driven Refresh:** Shares a @c RefreshState instance (via
- *   @c std::shared_ptr) with a detached watcher thread. The watcher is spawned
- *   at most once per import session (guarded by @c isWatcherRunning) and redraws
- *   the list when the import thread signals completion via @c importCV.
+ * @c std::shared_ptr) with a detached watcher thread. The watcher is spawned
+ * at most once per import session (guarded by @c isWatcherRunning) and redraws
+ * the list when the import thread signals completion via @c importCV.
  * - **Stacked Filtering:** Supports successive narrowing of results via
- *   @c filteringStack. The @c '<' command unwinds the filter stack (restoring
- *   @c originalPage) or, when no filter is active, returns to the previous menu.
+ * @c filteringStack. Read/write mutations to @c filteredFiles and sizing evaluations
+ * are protected by @c GlobalCaches::updateListMutex to prevent data races with the
+ * background watcher thread. The @c '<' command unwinds the filter stack (restoring
+ * @c originalPage) or, when no filter is active, returns to the previous menu.
  * - **Two-Phase Execution:** Implements an "Induction" model where selected
- *   indices are staged into @c pendingIndices (a @c std::vector<std::string>)
- *   and batch-executed via the @c "P" command; @c "clr" discards the pending set.
+ * indices are staged into @c pendingIndices (a @c std::vector<std::string>)
+ * and batch-executed via the @c "P" command; @c "clr" discards the pending set.
  * - **Persistent Directory State:** @c isoDirs is @c static, so its contents
- *   survive re-entry into this function across the lifetime of the process.
+ * survive re-entry into this function across the lifetime of the process.
  * - **Terminal Integrity:** Binds @c \\f and @c \\t to no-ops via Readline to
- *   prevent terminal corruption, and uses ANSI escape sequences to maintain a
- *   static-feeling interface during input.
+ * prevent terminal corruption, and uses ANSI escape sequences to maintain a
+ * static-feeling interface during input.
  *
- * @param operation         Target system action ("mount", "umount", "cp", "mv",
- *                          "rm", or "write2usb").
- * @param isAtISOList       Set to @c true while the ISO list is displayed; cleared
- *                          to @c false before executing an operation. Also gates
- *                          watcher-thread repaints.
+ * @param operation          Target system action ("mount", "umount", "cp", "mv",
+ * "rm", or "write2usb").
+ * @param isAtISOList        Set to @c true while the ISO list is displayed; cleared
+ * to @c false before executing an operation. Also gates
+ * watcher-thread repaints.
  * @param backgroundThreads Joinable worker threads (spawned by manual R-press
- *                          imports) retained for lifetime management; stale
- *                          completed threads are joined and erased before each
- *                          new import.
- * @param refreshState      Shared UI state and condition variable used to
- *                          synchronize the watcher with the active import session.
- *                          If @c nullptr, a new @c RefreshState is constructed
- *                          internally.
+ * imports) retained for lifetime management; stale
+ * completed threads are joined and erased before each
+ * new import.
+ * @param refreshState       Shared UI state and condition variable used to
+ * synchronize the watcher with the active import session.
+ * If @c nullptr, a new @c RefreshState is constructed
+ * internally.
  */
 void selectForIsoFiles(const std::string& operation,
                        std::atomic<bool>& isAtISOList,
@@ -446,16 +448,29 @@ void selectForIsoFiles(const std::string& operation,
             continue;
         }
 
-        const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : GlobalCaches::globalIsoFileList);
-        size_t totalPages = (GlobalState::ITEMS_PER_PAGE != 0) ? ((currentList.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE) : 0;
+        size_t totalPages = 0;
+        {
+            std::lock_guard<std::mutex> lock(GlobalCaches::updateListMutex);
+            const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : GlobalCaches::globalIsoFileList);
+            totalPages = (GlobalState::ITEMS_PER_PAGE != 0) ? ((currentList.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE) : 0;
+        }
         bool need2Sort = false;
 
         bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, operation, need2Sort, &isAtISOList);
 
         if (validCommand) continue;
 
-        if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn,
-                                    filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage)) {
+        // --- Mutation lock covers execution of handleFilteringForISO ---
+        bool filteringHandled = false;
+        {
+            std::lock_guard<std::mutex> lock(GlobalCaches::updateListMutex);
+            if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn,
+                                      filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage)) {
+                filteringHandled = true;
+            }
+        }
+
+        if (filteringHandled) {
             std::cout << "\033[1B\033[K";
             continue;
         }
@@ -464,7 +479,6 @@ void selectForIsoFiles(const std::string& operation,
         if (pendingHandled) continue;
 
         { // Processing block
-
             needsClrScrn = true;
             isAtISOList.store(false);
 
