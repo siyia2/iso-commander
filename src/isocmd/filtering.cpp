@@ -413,16 +413,16 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
             readline(promptText.c_str()), &std::free);
 
         //---- Robust handling of FilterTerms prompt ----
-        if (!raw || raw.get()[0] == '<') {
+        if (!raw || raw.get()[0] == '/') {
+            if (!raw) {
+                std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+            }
             // EOF (Ctrl+D) - exit
             clear_history();
             break;
         }
 
-        if (strcmp(raw.get(), "/") == 0
-        || raw.get()[0] == ';'
-        || (raw.get()[0] == '/' && raw.get()[1] == ';')
-        || std::count(raw.get(), raw.get() + strlen(raw.get()), '/') > 1
+        if (raw.get()[0] == ';'
         || strstr(raw.get(), ";;") != nullptr) {
             std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
             handleEmpty();
@@ -557,13 +557,13 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
 	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
 	std::cout << "\n";
 	reset_custom_keybindingsForSelect();
-	rl_bind_keyseq("<", exit_handler);
+	rl_bind_keyseq("/", exit_handler_filtering);
     const ReadlineAndPromptTheme ft = getFilterTheme("", false);
     const std::string prompt =
         ft.filter  + "FilterTerms" +
         ft.primary + " ↵ for " +
         wrap(cfg.operationColor) + cfg.operation +
-        ft.primary + ", < return: " +
+        ft.primary + ", / return: " +
         ft.reset;
 
     FilterContext ctx {

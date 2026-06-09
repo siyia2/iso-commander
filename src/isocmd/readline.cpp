@@ -540,6 +540,12 @@ int exit_handler(int, int) {
     return 0;
 }
 
+int exit_handler_filtering(int, int) {
+    rl_replace_line("/", 0);
+    rl_done = 1;
+    return 0;
+}
+
 /**
  * @brief Keybindings for the main File Selection interface.
  */
