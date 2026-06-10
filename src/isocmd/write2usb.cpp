@@ -179,6 +179,43 @@ static IsoType detectIsoType(const std::string& isoMnt) {
                : IsoType::FatOnly;
 }
 
+/**
+ * @brief Checks if a block device is accessible and ready for I/O operations.
+ * * Attempts to open the device node in read-only and non-blocking mode.
+ * This effectively tests if the kernel has fully registered the block device
+ * and that it is not currently locked or in an invalid state.
+ * * @param path The filesystem path to the device node (e.g., "/dev/sdb1").
+ * @return true If the device can be opened successfully.
+ * @return false If the device does not exist, access is denied, or it is busy.
+ */
+bool isDeviceReady(const std::string& path) {
+    int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK);
+    if (fd == -1) return false;
+    close(fd);
+    return true;
+}
+
+/**
+ * @brief Waits for a device node to appear and become ready within a specified timeout.
+ * * This function performs an informed poll by checking for the existence of the
+ * device node and verifying its readiness via isDeviceReady(). It provides an
+ * init-agnostic alternative to `udevadm settle` or `udevadm wait`.
+ * * @param path The filesystem path to the device node to wait for.
+ * @param timeout_seconds The maximum duration to wait in seconds (default is 30).
+ * @return true If the device node is found and is ready for use within the timeout.
+ * @return false If the timeout is reached before the device is ready.
+ */
+bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
+    auto start = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - start < std::chrono::seconds(timeout_seconds)) {
+        if (fs::exists(path) && fs::is_block_file(path)) {
+            if (isDeviceReady(path)) return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Windows writer
 // ---------------------------------------------------------------------------
@@ -272,12 +309,15 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     }
     if (partResult != 0) { unmountIso(); return fail(); }
 
-    if (runCommand({"udevadm", "settle"}) != 0) { unmountIso(); return fail(); }
+    if (!waitForDevice(device)) {
+        unmountIso();
+        return fail();
+    }
 
     auto derivePartition = [&](int n) -> std::string {
         std::string target = device + std::to_string(n);
-        runCommand({"udevadm", "wait", "--timeout=30", "--initialized", target});
-        return fs::exists(target) ? target : std::string{};
+        // Wait for the specific partition node to be ready
+        return waitForDevice(target, 30) ? target : std::string{};
     };
 
     std::string fatPart  = derivePartition(1);
