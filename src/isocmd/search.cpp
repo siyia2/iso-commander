@@ -58,6 +58,33 @@ namespace fs = std::filesystem;
 //=============================================================================
 // General Section
 //=============================================================================
+
+/**
+ * @brief Translation-unit-local synchronization primitives for directory traversal.
+ *
+ * @details
+ * - @c couNtMutex: Serializes progress counter output shared between
+ *   @c traverse() and @c processPaths().
+ * - @c traverseFilesMutex: Protects batch writes to the ISO file results
+ *   vector in @c traverse().
+ * - @c traverseErrorsMutex: Protects writes to the unique error message
+ *   set in @c traverse().
+ * - @c g_CancelledMessageAdded: Ensures the traversal cancellation message
+ *   is inserted exactly once across all threads. Must be reset to @c false
+ *   before each new traversal run.
+ */
+namespace {
+    // Mutex Protection For file counts in search.cpp
+    std::mutex couNtMutex;
+
+    // Mutex protection for file traversal results and error messages
+    std::mutex traverseFilesMutex;
+    std::mutex traverseErrorsMutex;
+
+    // Ensures the traversal cancellation message is inserted only once across all threads
+    std::atomic<bool> g_CancelledMessageAdded{false};
+}
+
 /**
  * @brief Checks if a given path is a valid directory
  * @param path The filesystem path to check
@@ -323,8 +350,8 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
              it != std::filesystem::recursive_directory_iterator(); ++it) {
 
             if (GlobalState::g_operationCancelled.load()) {
-                if (!GlobalConcurrency::g_CancelledMessageAdded.exchange(true)) {
-                    std::lock_guard<std::mutex> lock(GlobalConcurrency::traverseErrorsMutex);
+                if (!g_CancelledMessageAdded.exchange(true)) {
+                    std::lock_guard<std::mutex> lock(traverseErrorsMutex);
                     uniqueErrorMessages.clear();
 
                     std::string msg = "\n" + dt.yellow + "ISO search interrupted by user" + dt.reset;
@@ -343,7 +370,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
             if (promptFlag && entry.is_regular_file()) {
                 uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (val % 100 == 0) {
-                    std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
+                    std::lock_guard<std::mutex> lock(couNtMutex);
                     std::cout << "\r" << color << "Total files processed: " << val << std::flush;
                 }
             }
@@ -357,14 +384,14 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
             localIsoFiles.push_back(filePath.string());
 
             if (localIsoFiles.size() >= BATCH_SIZE) {
-                std::lock_guard<std::mutex> lock(GlobalConcurrency::traverseFilesMutex);
+                std::lock_guard<std::mutex> lock(traverseFilesMutex);
                 isoFiles.insert(isoFiles.end(), localIsoFiles.begin(), localIsoFiles.end());
                 localIsoFiles.clear();
             }
         }
 
         if (!localIsoFiles.empty()) {
-            std::lock_guard<std::mutex> lock(GlobalConcurrency::traverseFilesMutex);
+            std::lock_guard<std::mutex> lock(traverseFilesMutex);
             isoFiles.insert(isoFiles.end(), localIsoFiles.begin(), localIsoFiles.end());
         }
 
@@ -373,7 +400,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                                      e.what() + dt.reset;
 
         if (promptFlag) {
-            std::lock_guard<std::mutex> errorLock(GlobalConcurrency::traverseErrorsMutex);
+            std::lock_guard<std::mutex> errorLock(traverseErrorsMutex);
             uniqueErrorMessages.insert(formattedError);
         }
     }
@@ -645,7 +672,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                 if (entry.is_regular_file()) {
                     uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
                     if (val % 100 == 0) {
-                        std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
+                        std::lock_guard<std::mutex> lock(couNtMutex);
                         std::cout << "\r" << color << "Total files processed: " << val << std::flush;
                 }
 
@@ -682,7 +709,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
     }
 
     {
-        std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
+        std::lock_guard<std::mutex> lock(couNtMutex);
         std::cout << "\r" << color << "Total files processed: " << totalFiles << dt.reset;
     }
 
