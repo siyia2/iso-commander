@@ -309,10 +309,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     }
     if (partResult != 0) { unmountIso(); return fail(); }
 
-    if (!waitForDevice(device)) {
-        unmountIso();
-        return fail();
-    }
+    if (!waitForDevice(device)) { unmountIso(); return fail(); }
 
     auto derivePartition = [&](int n) -> std::string {
         std::string target = device + std::to_string(n);
