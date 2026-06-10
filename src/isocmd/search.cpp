@@ -58,27 +58,6 @@ namespace fs = std::filesystem;
 //=============================================================================
 // General Section
 //=============================================================================
-
-/**
- * @brief Translation-unit-local synchronization primitives for directory traversal.
- *
- * @details
- * - @c couNtMutex: Serializes progress counter output shared between
- *   @c traverse() and @c processPaths().
- * - @c traverseFilesMutex: Protects batch writes to the ISO file results
- *   vector in @c traverse().
- * - @c traverseErrorsMutex: Protects writes to the unique error message
- *   set in @c traverse().
- */
-namespace {
-    // Mutex Protection For file counts in search.cpp
-    std::mutex couNtMutex;
-
-    // Mutex protection for file traversal results and error messages
-    std::mutex traverseFilesMutex;
-    std::mutex traverseErrorsMutex;
-}
-
 /**
  * @brief Checks if a given path is a valid directory
  * @param path The filesystem path to check
@@ -255,14 +234,17 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             {
                 auto& pool = getStaticThreadPool();
                 std::vector<std::future<void>> futures;
-
+                std::mutex processMutex;
+                std::mutex traverseErrorMutex;
                 // To prevent unintended cancellation with premature ctrl+c
                 GlobalState::g_operationCancelled.store(false);
 
                 for (const auto& validPath : validPaths) {
                     futures.emplace_back(
-                        pool.enqueue([path = validPath, &allIsoFiles, &uniqueErrorMessages, &totalFiles, &maxDepth, &promptFlag]() {
-                            traverse(path, allIsoFiles, uniqueErrorMessages, totalFiles, maxDepth, promptFlag);
+                        pool.enqueue([path = validPath, &allIsoFiles, &uniqueErrorMessages, &totalFiles,
+                                      &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
+                            traverse(path, allIsoFiles, uniqueErrorMessages, totalFiles,
+                                     processMutex, traverseErrorMutex, maxDepth, promptFlag);
                         })
                     );
                 }
@@ -305,26 +287,22 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
 /**
  * @brief Recursively traverses a directory to find ISO files
  *
- * This function performs a recursive traversal of the filesystem starting at
+ * This function performs a depth-first traversal of the filesystem starting at
  * the specified path, collecting all .iso files and handling errors appropriately.
- * Uses batch processing to minimize lock contention when writing results.
- *
- * Traversal can be interrupted by setting GlobalState::g_operationCancelled,
- * in which case GlobalConcurrency::g_CancelledMessageAdded is set atomically,
- * the error set is cleared, and a cancellation message is inserted.
- * Note: GlobalConcurrency::g_CancelledMessageAdded must be reset before
- * the next traversal run.
  *
  * @param path The starting directory path for traversal
  * @param isoFiles Output vector to store discovered ISO file paths
  * @param uniqueErrorMessages Set to store unique error messages encountered
  * @param totalFiles Atomic counter for total files processed (for progress reporting)
+ * @param traverseFilesMutex Mutex for protecting isoFiles vector access
+ * @param traverseErrorsMutex Mutex for protecting error messages set access
  * @param maxDepth Maximum recursion depth (-1 for unlimited)
- * @param promptFlag If true, displays progress updates and error messages
+ * @param promptFlag If true, displays progress updates
  */
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles,
               std::unordered_set<std::string>& uniqueErrorMessages,
-              std::atomic<size_t>& totalFiles, int maxDepth, bool promptFlag) {
+              std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex,
+              std::mutex& traverseErrorsMutex, int maxDepth, bool promptFlag) {
 
     const size_t BATCH_SIZE = 100;
     std::vector<std::string> localIsoFiles;
@@ -365,7 +343,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
             if (promptFlag && entry.is_regular_file()) {
                 uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (val % 100 == 0) {
-                    std::lock_guard<std::mutex> lock(couNtMutex);
+                    std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
                     std::cout << "\r" << color << "Total files processed: " << val << std::flush;
                 }
             }
@@ -667,7 +645,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                 if (entry.is_regular_file()) {
                     uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
                     if (val % 100 == 0) {
-                        std::lock_guard<std::mutex> lock(couNtMutex);
+                        std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
                         std::cout << "\r" << color << "Total files processed: " << val << std::flush;
                 }
 
@@ -704,7 +682,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
     }
 
     {
-        std::lock_guard<std::mutex> lock(couNtMutex);
+        std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
         std::cout << "\r" << color << "Total files processed: " << totalFiles << dt.reset;
     }
 

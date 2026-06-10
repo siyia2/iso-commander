@@ -502,6 +502,8 @@ void backgroundDatabaseImport(std::shared_ptr<RefreshState> state) {
     std::vector<std::string> allIsoFiles;
     std::atomic<size_t> totalFiles{0};
     std::unordered_set<std::string> uniqueErrorMessages;
+    std::mutex processMutex;
+    std::mutex traverseErrorMutex;
 
     const size_t groupSize = std::max<size_t>(1, getStaticThreadPool().threadCount());
 
@@ -523,7 +525,8 @@ void backgroundDatabaseImport(std::shared_ptr<RefreshState> state) {
             try {
                 threads.emplace_back([&, path = finalPaths[j]]() {
                     traverse(path, allIsoFiles, uniqueErrorMessages,
-                             totalFiles, localMaxDepth, localPromptFlag);
+                             totalFiles, processMutex, traverseErrorMutex,
+                             localMaxDepth, localPromptFlag);
                     if (state->activeWorkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
                         std::lock_guard<std::mutex> lk(state->workerMutex);
                         state->workerCV.notify_all();
