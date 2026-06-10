@@ -275,15 +275,9 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (runCommand({"udevadm", "settle"}) != 0) { unmountIso(); return fail(); }
 
     auto derivePartition = [&](int n) -> std::string {
-        std::string c1 = device + std::to_string(n);
-        std::string c2 = device + "p" + std::to_string(n);
-        for (int attempt = 0; attempt < 10; ++attempt) {
-            runCommand({"udevadm", "settle", "--timeout=5"});
-            if (fs::exists(c1)) return c1;
-            if (fs::exists(c2)) return c2;
-            usleep(500000);
-        }
-        return {};
+        std::string target = device + std::to_string(n);
+        runCommand({"udevadm", "wait", "--timeout=30", "--initialized", target});
+        return fs::exists(target) ? target : std::string{};
     };
 
     std::string fatPart  = derivePartition(1);
