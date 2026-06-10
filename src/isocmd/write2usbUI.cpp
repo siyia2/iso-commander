@@ -827,10 +827,14 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
         std::cout << std::flush;
     };
 
+    bool isFirstUpdate = true;
     auto displayProgress = [&]() {
         while (!isProcessingComplete.load(std::memory_order_acquire) &&
               !GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (!isFirstUpdate){
+                std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            }
+            isFirstUpdate = false;
             std::cout << "\033[u";
             displayAllProgress();
         }
