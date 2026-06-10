@@ -277,10 +277,11 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     auto derivePartition = [&](int n) -> std::string {
         std::string c1 = device + std::to_string(n);
         std::string c2 = device + "p" + std::to_string(n);
-        for (int attempt = 0; attempt < 3; ++attempt) {
+        for (int attempt = 0; attempt < 10; ++attempt) {
+            runCommand({"udevadm", "settle", "--timeout=5"});
             if (fs::exists(c1)) return c1;
             if (fs::exists(c2)) return c2;
-            sleep(1);
+            usleep(500000);
         }
         return {};
     };
