@@ -325,6 +325,19 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
             continue;
         }
 
+        {
+            std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+            if (g_drainingDevices.count(device)) {
+                std::string errMsg;
+                errMsg.append(wt.errPath).append("'").append(device).append("'")
+                      .append(wt.rl_resetCol).append(wt.errLabel)
+                      .append(" has pending kernel-level tasks")
+                      .append(wt.rl_resetCol);
+                validationErrors.push_back(std::move(errMsg));
+                continue;
+            }
+        }
+
         uint64_t deviceSize = getBlockDeviceSize(device);
 
         if (deviceSize == 0) {
@@ -471,7 +484,7 @@ void displayErrors();
  *
  * Detected devices are annotated with status indicators:
  * - @b [MOUNTED] — device or a partition is currently mounted; cannot be written to.
- * - @b [DRAINING]   — device was part of a cancelled operation and is still draining
+ * - @b [FLUSHING]   — device was part of a cancelled operation and is still draining
  *                  in the background; proceeding is possible but may race with cleanup.
  *
  * @param selectedIsos ISOs chosen by the user for writing.
@@ -584,7 +597,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                                           if (dev.mounted) return wt.colorFailure + " [MOUNTED]" + wt.rl_resetCol;
                                           std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
                                           if (g_drainingDevices.count(dev.path))
-                                              return wt.colorWarning + " [DRAINING]" + wt.rl_resetCol;
+                                              return wt.colorWarning + " [FLUSHING]" + wt.rl_resetCol;
                                           return "";
                                       }())
                                       << "\n";
@@ -728,7 +741,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  * into a detached thread execution closure. This allows OS page caches (e.g., buffered NTFS flushes)
  * to drain onto the hardware safely in the background, entirely avoiding stack-use-after-free crashes.
  * Each device is removed from the global dirty-device set as its own drain completes, allowing
- * the device selection screen to clear the @b [DRAINING] indicator per-device as soon as it is safe.
+ * the device selection screen to clear the @b [FLUSHING] indicator per-device as soon as it is safe.
  *
  * @par Normal Completion
  * All futures are sequentially polled to completion, the UI rendering loop is closed natively,
@@ -946,7 +959,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     // This allows background hardware tasks to finish flushing cache data safely
     // without copying or moving the non-copyable 'progressData' structure.
     // Each device is erased from the dirty-device set as its own future completes,
-    // allowing the [DRAINING] indicator to clear per-device as soon as draining finishes.
+    // allowing the [FLUSHING] indicator to clear per-device as soon as draining finishes.
     if (GlobalState::g_operationCancelled.load()) {
         // 1. Prepare device list safely before spawning the thread
         std::vector<std::string> deviceNames;
