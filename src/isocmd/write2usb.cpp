@@ -211,7 +211,7 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
         if (fs::exists(path) && fs::is_block_file(path)) {
             if (isDeviceReady(path)) return true;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     return false;
 }
