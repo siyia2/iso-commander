@@ -192,18 +192,26 @@ static IsoType detectIsoType(const std::string& isoMnt) {
  * - **FatOnly** (WinPE, Hiren's, rescue disks) — GPT with a single FAT32
  * partition spanning the whole device.
  *
- * I/O & Telemetry strategy per file:
+ * I/O strategy per file:
  * - **FAT32 files < 4 GiB** use unbuffered Direct I/O (@c O_DIRECT) to bypass the
- * Linux Page Cache, ensuring user-initiated cancellations instantly abort without
- * post-cancel dirty background writeback hanging the host system thread.
- * - **NTFS files** intentionally bypass @c O_DIRECT and fallback exclusively onto
- * standard **Buffered I/O**. This allows the operating system cache to smoothly
- * aggregate sequential payload transfers. Speed optimization is achieved via
- * explicit @c posix_fallocate block clustering to minimize device fragmentation.
- * - **Asynchronous Monitoring** — Thread timing, throughput calculations, and
- * floating-point math are decoupled entirely from the critical data pipeline loop
- * into an independent background thread. This eliminates loop latency and maximizes
- * hardware channel saturation.
+ * Linux page cache, ensuring user-initiated cancellations abort cleanly without
+ * post-cancel dirty writeback flushing to the device in the background.
+ * - **FAT32 files >= 4 GiB** fall back to buffered I/O to respect the FAT32
+ * per-file size limit.
+ * - **NTFS files** always use buffered I/O with @c posix_fallocate pre-allocation
+ * to maximize sequential write throughput and minimize filesystem fragmentation.
+ *
+ * Telemetry:
+ * - Progress, speed, and byte accounting are handled by a dedicated background
+ * thread, keeping all floating-point math and timing logic out of the critical
+ * I/O path.
+ *
+ * Flush and unmount strategy:
+ * - @c syncfs is called on each mounted filesystem fd before unmounting,
+ * flushing all dirty pages at the filesystem level explicitly. Regular
+ * @c umount is then attempted to block until the kernel confirms all I/O
+ * is complete. A lazy @c umount @c -l fallback is used only if the mount
+ * point is unexpectedly busy.
  *
  * For WindowsInstall, NTFS content is written before the ESP so the bootloader
  * only lands after the data it references is already on disk.
@@ -223,14 +231,15 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     };
 
     // ------------------------------------------------------------------ //
-    // 0. Mount the ISO first so we can inspect its layout before we        //
-    //    decide how to partition the target device.                         //
+    // 0. Mount the ISO first so we can inspect its layout before we       //
+    //    decide how to partition the target device.                        //
     // ------------------------------------------------------------------ //
     char isoMnt[] = "/tmp/win_iso_XXXXXX";
     if (!mkdtemp(isoMnt)) return fail();
 
     auto unmountIso = [&]() {
-        runCommand({"umount", "-l", isoMnt});
+        if (runCommand({"umount", isoMnt}) != 0)
+            runCommand({"umount", "-l", isoMnt});
         rmdir(isoMnt);
     };
 
@@ -277,10 +286,14 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     };
 
     std::string fatPart  = derivePartition(1);
-    std::string ntfsPart = (isoType == IsoType::WindowsInstall) ? derivePartition(2) : std::string{};
+    std::string ntfsPart = (isoType == IsoType::WindowsInstall)
+                               ? derivePartition(2)
+                               : std::string{};
 
     if (fatPart.empty()) { unmountIso(); return fail(); }
-    if (isoType == IsoType::WindowsInstall && ntfsPart.empty()) { unmountIso(); return fail(); }
+    if (isoType == IsoType::WindowsInstall && ntfsPart.empty()) {
+        unmountIso(); return fail();
+    }
 
     if (runCommand({"mkfs.fat", "-F", "32", "-n",
                     (isoType == IsoType::WindowsInstall ? "WINBOOT" : "HIRENS"),
@@ -289,7 +302,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     }
 
     if (isoType == IsoType::WindowsInstall) {
-        if (runCommand({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA", ntfsPart}) != 0) {
+        if (runCommand({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA",
+                        ntfsPart}) != 0) {
             unmountIso(); return fail();
         }
     }
@@ -302,16 +316,16 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     char fatMnt[]  = "/tmp/win_fat_XXXXXX";
     char ntfsMnt[] = "/tmp/win_ntfs_XXXXXX";
 
-    if (!mkdtemp(fatMnt))  { unmountIso(); return fail(); }
-    if (!mkdtemp(ntfsMnt)) { unmountIso(); rmdir(fatMnt); return fail(); }
+    if (!mkdtemp(fatMnt)) { unmountIso(); return fail(); }
 
-    auto dropPageCache = [](const std::string& blockDev) {
-        int fd = open(blockDev.c_str(), O_RDWR);
-        if (fd >= 0) {
-            posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
-            ioctl(fd, BLKFLSBUF);
-            close(fd);
-        }
+    // Only allocate the NTFS mount point when actually needed
+    if (isoType == IsoType::WindowsInstall) {
+        if (!mkdtemp(ntfsMnt)) { unmountIso(); rmdir(fatMnt); return fail(); }
+    }
+
+    auto safeUmount = [&](const char* path) {
+        if (runCommand({"umount", path}) != 0)
+            runCommand({"umount", "-l", path});
     };
 
     bool alreadyUnmounted = false;
@@ -319,19 +333,18 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         if (alreadyUnmounted) return;
         alreadyUnmounted = true;
 
-        dropPageCache(fatPart);
-        if (!ntfsPart.empty()) dropPageCache(ntfsPart);
-
-        runCommand({"umount", "-l", isoMnt});
-        runCommand({"umount", "-l", fatMnt});
-        if (isoType == IsoType::WindowsInstall) runCommand({"umount", "-l", ntfsMnt});
+        safeUmount(isoMnt);
+        safeUmount(fatMnt);
+        if (isoType == IsoType::WindowsInstall)
+            safeUmount(ntfsMnt);
 
         rmdir(isoMnt);
         rmdir(fatMnt);
-        rmdir(ntfsMnt);
+        if (isoType == IsoType::WindowsInstall)
+            rmdir(ntfsMnt);
     };
 
-    if (runCommand({"mount","-o", "noatime", fatPart, fatMnt}) != 0) {
+    if (runCommand({"mount", "-o", "noatime", fatPart, fatMnt}) != 0) {
         unmountAll(); return fail();
     }
 
@@ -339,7 +352,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (isoType == IsoType::WindowsInstall) {
         ntfsDriver = getBestNtfsDriver();
         if (ntfsDriver.empty()) { unmountAll(); return fail(); }
-        if (runCommand({"mount", "-i", "-t", ntfsDriver, "-o", "noatime", ntfsPart, ntfsMnt}) != 0) {
+        if (runCommand({"mount", "-i", "-t", ntfsDriver, "-o", "noatime",
+                        ntfsPart, ntfsMnt}) != 0) {
             unmountAll(); return fail();
         }
     }
@@ -365,20 +379,25 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
     auto belongsOnESP = [&](const fs::path& rel) -> bool {
         if (isoType == IsoType::FatOnly) return true;
+
         std::string top = rel.begin()->string();
-        std::transform(top.begin(), top.end(), top.begin(), [](unsigned char c){ return std::tolower(c); });
+        std::transform(top.begin(), top.end(), top.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
         if (espTopFolders.count(top) > 0) return true;
 
         std::string relStr = rel.generic_string();
-        std::transform(relStr.begin(), relStr.end(), relStr.begin(), [](unsigned char c){ return std::tolower(c); });
+        std::transform(relStr.begin(), relStr.end(), relStr.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
         return relStr == espBootWim;
     };
 
     try {
-        for (const auto& entry : fs::recursive_directory_iterator(std::string(isoMnt))) {
+        for (const auto& entry :
+             fs::recursive_directory_iterator(std::string(isoMnt))) {
             fs::path rel   = fs::relative(entry.path(), std::string(isoMnt));
             bool     toESP = belongsOnESP(rel);
-            fs::path dest  = fs::path(toESP ? std::string(fatMnt) : std::string(ntfsMnt)) / rel;
+            fs::path dest  = fs::path(toESP ? std::string(fatMnt)
+                                            : std::string(ntfsMnt)) / rel;
 
             uint64_t sz = entry.is_regular_file() ? entry.file_size() : 0;
             totalBytes += sz;
@@ -392,33 +411,36 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (totalBytes == 0) { unmountAll(); return fail(); }
 
     // ------------------------------------------------------------------ //
-    // 4. Setup asynchronous status tracking engine                       //
+    // 4. Async progress monitoring thread                                 //
     // ------------------------------------------------------------------ //
     std::atomic<uint64_t> totalBytesWrittenAccumulator{0};
-    std::atomic<bool> monitoringActive{true};
+    std::atomic<bool>     monitoringActive{true};
 
-    // Spin up an isolated telemetry thread to update UI state out-of-band
     std::thread progressMonitorThread([&, totalBytes, progressIndex]() {
-        auto lastUpdate = std::chrono::high_resolution_clock::now();
+        auto     lastUpdate  = std::chrono::high_resolution_clock::now();
         uint64_t lastWritten = 0;
 
         while (monitoringActive.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
             auto now = std::chrono::high_resolution_clock::now();
-            auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count();
+            auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           now - lastUpdate).count();
             if (ms <= 0) continue;
 
             uint64_t currentWritten = totalBytesWrittenAccumulator.load();
-            uint64_t deltaBytes     = (currentWritten >= lastWritten) ? (currentWritten - lastWritten) : 0;
+            uint64_t deltaBytes     = (currentWritten >= lastWritten)
+                                          ? (currentWritten - lastWritten)
+                                          : 0;
 
-            // Update user progress metrics cleanly without blocking disk hardware channels
             progressData[progressIndex].bytesWritten.store(currentWritten);
             progressData[progressIndex].progress.store(static_cast<int>(
-                std::min(99.0, (static_cast<double>(currentWritten) / totalBytes) * 100.0)));
+                std::min(99.0,
+                         (static_cast<double>(currentWritten) / totalBytes) * 100.0)));
 
             if (deltaBytes > 0) {
-                double speedMBs = (static_cast<double>(deltaBytes) / (1024.0 * 1024.0)) / (ms / 1000.0);
+                double speedMBs = (static_cast<double>(deltaBytes) /
+                                   (1024.0 * 1024.0)) / (ms / 1000.0);
                 progressData[progressIndex].speed.store(speedMBs);
             }
 
@@ -427,7 +449,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         }
     });
 
-    // Clean memory block alignment initialization
     constexpr size_t BUF_SIZE = 4 * 1024 * 1024;
     void* rawBuf = nullptr;
     if (posix_memalign(&rawBuf, 4096, BUF_SIZE) != 0) {
@@ -438,20 +459,27 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     auto ioBuf     = static_cast<char*>(rawBuf);
     auto freeIoBuf = [&]() { free(rawBuf); rawBuf = nullptr; ioBuf = nullptr; };
 
+    // ------------------------------------------------------------------ //
+    // 5. Per-file copy with hybrid I/O                                    //
+    //                                                                     //
+    //    NTFS destination  → buffered I/O + posix_fallocate               //
+    //    FAT32 < 4 GiB     → O_DIRECT (no post-cancel dirty writeback)    //
+    //    FAT32 >= 4 GiB    → buffered I/O (FAT32 size limit guard)        //
+    // ------------------------------------------------------------------ //
     auto copyWithProgress = [&](const fs::path& src, const fs::path& dst,
                                 uint64_t fileSize) -> bool {
-        // Identify if the destination file is heading to the NTFS partition
-        const bool isNtfsDest = (isoType == IsoType::WindowsInstall) && (dst.string().rfind(ntfsMnt, 0) == 0);
+        const bool isNtfsDest = (isoType == IsoType::WindowsInstall) &&
+                                (dst.string().rfind(ntfsMnt, 0) == 0);
 
-        // FAT32 size safety limit for the ESP partition
         constexpr uint64_t FAT32_FILE_LIMIT = 4ULL * 1024 * 1024 * 1024;
         const bool isLargeFat32 = !isNtfsDest && (fileSize >= FAT32_FILE_LIMIT);
 
+        // NTFS always uses buffered I/O + fallocate for maximum sequential
+        // write throughput. FAT32 uses O_DIRECT unless the file exceeds 4 GiB.
         const bool useBufferedIO = isNtfsDest || isLargeFat32;
 
         int fd_in = open(src.c_str(), O_RDONLY);
         if (fd_in < 0) return false;
-
         posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
 
         int outFlags = O_WRONLY | O_CREAT | O_TRUNC;
@@ -460,13 +488,12 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         int fd_out = open(dst.c_str(), outFlags, 0644);
         if (fd_out < 0) { close(fd_in); return false; }
 
-        // Pre-allocate space on the disk for buffered paths (NTFS / large files) to maximize write speed
-        if (useBufferedIO && fileSize > 0) {
+        // Pre-reserve clusters to minimize fragmentation on buffered paths.
+        // Skipped for O_DIRECT (FAT32 files don't benefit and FAT lacks fallocate support).
+        if (useBufferedIO && fileSize > 0)
             posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
-        }
 
         bool success = true;
-
         while (!GlobalState::g_operationCancelled.load()) {
             ssize_t bytes_read = read(fd_in, ioBuf, BUF_SIZE);
             if (bytes_read < 0) {
@@ -478,6 +505,9 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
             ssize_t writeLen = bytes_read;
             if (!useBufferedIO) {
+                // O_DIRECT requires writes to be a multiple of the sector size.
+                // Pad the final short chunk to the next 512-byte boundary with
+                // zeros; ftruncate below strips the padding after the file is closed.
                 ssize_t aligned = (bytes_read + 511) & ~511;
                 if (aligned > bytes_read)
                     memset(ioBuf + bytes_read, 0, aligned - bytes_read);
@@ -490,7 +520,9 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                     success = false;
                     goto done;
                 }
-                ssize_t written = write(fd_out, ioBuf + bytes_written, writeLen - bytes_written);
+                ssize_t written = write(fd_out,
+                                        ioBuf + bytes_written,
+                                        writeLen - bytes_written);
                 if (written < 0) {
                     if (errno == EINTR) continue;
                     success = false;
@@ -499,20 +531,24 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                 bytes_written += written;
             }
 
-            // Lightweight tracking update for the asynchronous monitor thread
-            totalBytesWrittenAccumulator.fetch_add(bytes_read);
+            totalBytesWrittenAccumulator.fetch_add(
+                static_cast<uint64_t>(bytes_read));
         }
     done:
+        // Strip O_DIRECT sector-alignment padding so file size is exact.
         if (!useBufferedIO && success && fileSize > 0) {
             if (ftruncate(fd_out, static_cast<off_t>(fileSize)) != 0)
                 success = false;
         }
 
+        // On cancellation, zero out any partial write so the device is not
+        // left with a half-written file that could confuse downstream tools.
         if (GlobalState::g_operationCancelled.load()) {
-            [[maybe_unused]] const int truncRes = ftruncate(fd_out, 0);
+            [[maybe_unused]] const int r = ftruncate(fd_out, 0);
             posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
         }
 
+        // Release ISO source pages from cache — no point keeping them in RAM.
         posix_fadvise(fd_in, 0, 0, POSIX_FADV_DONTNEED);
         close(fd_in);
         close(fd_out);
@@ -520,7 +556,10 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     };
 
     // ------------------------------------------------------------------ //
-    // 5. Run copy sequences                                               //
+    // 6. Copy passes                                                      //
+    //                                                                     //
+    //    WindowsInstall : NTFS payload first, ESP bootloader second       //
+    //    FatOnly        : ntfsEntries is empty; single espEntries pass    //
     // ------------------------------------------------------------------ //
     auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -554,27 +593,37 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
     freeIoBuf();
 
-    // Kill background monitor cleanly before finalizing final disk synchronization locks
     monitoringActive.store(false);
     if (progressMonitorThread.joinable()) progressMonitorThread.join();
 
     // ------------------------------------------------------------------ //
-    // 6. Flush and unmount                                                //
+    // 7. Flush and unmount                                                //
     // ------------------------------------------------------------------ //
     if (!GlobalState::g_operationCancelled.load()) {
-        int diskFd = open(device.c_str(), O_RDWR);
-        if (diskFd >= 0) {
-            fsync(diskFd);
-            close(diskFd);
+        // syncfs flushes filesystem-level dirty pages directly, which is more
+        // targeted than fsync on the raw block device. umount guarantees the
+        // final flush, but syncfs first makes that flush explicit and auditable.
+        if (isoType == IsoType::WindowsInstall) {
+            int ntfsFd = open(ntfsMnt, O_RDONLY);
+            if (ntfsFd >= 0) {
+                syncfs(ntfsFd);
+                close(ntfsFd);
+            }
+        }
+        int fatFd = open(fatMnt, O_RDONLY);
+        if (fatFd >= 0) {
+            syncfs(fatFd);
+            close(fatFd);
         }
     }
     unmountAll();
 
-    // Finalize performance telemetry structures accurately
     auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now() - startTime);
     double seconds  = totalElapsed.count() / 1000.0;
-    double avgSpeed = seconds > 0.0 ? (static_cast<double>(totalBytes) / (1024.0 * 1024.0)) / seconds : 0.0;
+    double avgSpeed = seconds > 0.0
+        ? (static_cast<double>(totalBytes) / (1024.0 * 1024.0)) / seconds
+        : 0.0;
 
     progressData[progressIndex].speed.store(avgSpeed);
     progressData[progressIndex].progress.store(100);
