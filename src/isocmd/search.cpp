@@ -69,9 +69,6 @@ namespace fs = std::filesystem;
  *   vector in @c traverse().
  * - @c traverseErrorsMutex: Protects writes to the unique error message
  *   set in @c traverse().
- * - @c g_CancelledMessageAdded: Ensures the traversal cancellation message
- *   is inserted exactly once across all threads. Must be reset to @c false
- *   before each new traversal run.
  */
 namespace {
     // Mutex Protection For file counts in search.cpp
@@ -80,9 +77,6 @@ namespace {
     // Mutex protection for file traversal results and error messages
     std::mutex traverseFilesMutex;
     std::mutex traverseErrorsMutex;
-
-    // Ensures the traversal cancellation message is inserted only once across all threads
-    std::atomic<bool> g_CancelledMessageAdded{false};
 }
 
 /**
@@ -334,6 +328,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 
     const size_t BATCH_SIZE = 100;
     std::vector<std::string> localIsoFiles;
+    std::atomic<bool> g_CancelledMessageAdded{false};
 
     const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
