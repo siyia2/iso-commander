@@ -6,7 +6,11 @@
 // C++ Standard Library Headers
 #include <atomic>
 #include <cstdint>
+#include <future>
+#include <mutex>
 #include <string>
+#include <thread>
+#include <unordered_set>
 
 // --- Data Structures ---
 
@@ -75,6 +79,11 @@ struct ProgressInfo {
 };
 
 inline std::vector<ProgressInfo> progressData; ///< Shared progress state for all active write tasks.
+
+// Used exclusively for the [FLUSHING] device indicator
+inline std::mutex g_drainingDevicesMutex;
+inline std::unordered_set<std::string> g_drainingDevices;
+inline std::atomic<bool> g_drainingCancelled{false};
 
 /**
  * Performs the actual write2usb.
