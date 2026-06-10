@@ -182,8 +182,8 @@ void helpMappings() {
         "   • Multiple : Separate with ';' (e.g., '1>/dev/sdc;2>/dev/sdd')");
 
     printSection(tc, "\n3. Tips:",
-        "   • Tab-complete INDEX>DEVICE pairs for faster mapping\n"
         "   • Press Enter to refresh USB Flash Devices\n"
+        "   • Tab-complete INDEX>DEVICE pairs for faster mapping\n"
         "   • Only unmounted parent devices are eligible for write2usb");
 
     pressEnterToReturn();
