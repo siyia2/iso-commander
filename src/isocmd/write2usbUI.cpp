@@ -689,38 +689,48 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  * @brief Enqueues ISO-to-device write tasks and drives a live progress display.
  *
  * For each validated (IsoInfo, device) pair:
- * - Initialises a @ref ProgressInfo entry in @ref progressData
+ * - Initializes a @ref ProgressInfo entry in @ref progressData
  * - Caches device names, sizes, and formatted size strings
  * - Submits one @ref writeIsoToDevice call to the global @ref ThreadPool
  *
- * A background thread redraws per-task status at 100 ms intervals using ANSI
- * cursor save/restore (ESC[s / ESC[u). Each row shows:
- * filename → {device <model> (size)} percentage [written/total] speed
+ * A background thread redraws per-task status at uniform 300 ms intervals using ANSI
+ * cursor save/restore (\033[s / \033[u).
+ * * @par Row Layout
+ * Each row prints seamlessly side-by-side:
+ * @code
+ * filename → device [▇▇▇░░░░░░░] percentage speed
+ * @endcode
  *
- * Status tokens per row: DONE (success), FAIL (error), CXL (cancelled),
- * or a live percentage.
+ * @par Status Tokens
+ * - @b DONE — Task completed successfully (appends " (avg)" to final speed readout).
+ * - @b FAIL — Task encountered an error during execution.
+ * - @b CXL  — Task execution or cleanup was interrupted by user cancellation.
+ * - @b %    — Live percentage value representing active transfer progress.
  *
  * @par Cancellation (Ctrl+C / SIGINT)
- * When @ref GlobalState::g_operationCancelled is set:
- * -# The future-polling loop exits immediately.
- * -# SIGINT is suppressed (SIG_IGN).
- * -# In-flight writes continue and drain naturally (they poll the flag).
- * -# The function waits only for the progress thread, then returns.
+ * When @ref GlobalState::g_operationCancelled is tripped:
+ * -# The main thread's future-polling loop breaks within 300 ms.
+ * -# The live UI render thread is flagged and joined immediately.
+ * -# Terminal properties, standard input buffers, and layout configurations are restored @b instantly.
+ * -# Operating system control is returned to the user's shell prompt without visual lag.
+ * -# @b Out-of-Band Draining: Active std::future objects are moved out of the local scope
+ * into a detached thread execution closure. This allows OS page caches (e.g., buffered NTFS flushes)
+ * to drain onto the hardware safely in the background, entirely avoiding stack-use-after-free crashes.
  *
- * @par Normal completion
- * All futures are polled to completion, then the progress thread is joined.
+ * @par Normal Completion
+ * All futures are sequentially polled to completion, the UI rendering loop is closed natively,
+ * a final static frame update is committed, and lingering thread handles are cleanly joined.
  *
- * @par Summary line
- * Printed above the progress rows on exit:
- * - @b COMPLETED — all tasks succeeded
- * - @b PARTIAL   — at least one succeeded and at least one failed
- * - @b FAILED    — all tasks failed
- * - @b INTERRUPTED — cancelled before all tasks finished
+ * @par Summary Line
+ * On execution exit, the primary cursor moves up to print an operational status overview:
+ * - @b COMPLETED — All targeted block operations succeeded.
+ * - @b PARTIAL   — At least one task succeeded and at least one task failed.
+ * - @b FAILED    — Total failure across all enqueued storage block streams.
+ * - @b INTERRUPTED — Operation aborted by explicit user termination before total completion.
  *
- * Elapsed time and a succeeded/total count are printed below.
+ * Final execution metrics (elapsed duration and a successful/total count ratio) are printed below.
  *
- * @param validPairs Validated (IsoInfo, device) pairs from
- *                   @ref collectDeviceMappings.
+ * @param validPairs Validated (IsoInfo, device) pairs targeted for writing.
  */
 void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairs) {
     progressData.clear();
@@ -778,11 +788,9 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
         for (size_t i = 0; i < progressData.size(); ++i) {
             const auto& prog = progressData[i];
 
-            // Pad filename
             std::string paddedFilename = prog.filename;
             paddedFilename.resize(maxFilenameLen, ' ');
 
-            // Build progress bar
             int pct = prog.progress.load();
             int filled = (pct * BAR_WIDTH) / 100;
             std::string bar, empty;
@@ -790,18 +798,14 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             for (int j = 0; j < filled;             ++j) bar   += "▇";
             for (int j = 0; j < BAR_WIDTH - filled; ++j) empty += "░";
 
-            // Layout: ISO name and device side-by-side seamlessly
             std::cout << "\033[K"
                       << wt.fileCol << paddedFilename
-
                       << color << " → " << wt.deviceCol
                       << std::setw(8) << std::left << prog.device << " "
-
-                      << color << "[" <<
-                      color << bar << wt.speedCol << empty
+                      << color << "["
+                      << bar << wt.speedCol << empty
                       << color << "] ";
 
-            // Status tracking
             bool isCompleted = prog.completed.load();
 
             if (isCompleted)                                    std::cout << wt.colorSuccess << "DONE ";
@@ -812,29 +816,32 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
                 std::cout << color << std::setw(2) << pctStr << " ";
             }
 
-            // Speed printing logic
             std::string speedStr = formatSpeed(prog.speed);
-
-            // If *this* specific item finished successfully, it keeps its "(avg)"
-            // tag even if the global process is cancelled later.
             if (isCompleted) {
                 speedStr += " (avg)";
             }
 
-            // Standard single newline—no extra spacing gaps
             std::cout << color << std::setw(16) << std::left << speedStr << "\n";
         }
         std::cout << std::flush;
     };
 
+    // UI render thread locked to 300ms pacing for optimal visual stability
     bool isFirstUpdate = true;
     auto displayProgress = [&]() {
         while (!isProcessingComplete.load(std::memory_order_acquire) &&
-              !GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
-            if (!isFirstUpdate){
+               !GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
+
+            if (!isFirstUpdate) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(300));
+                // Double check flags right after waking up to prevent stale prints on quick exit
+                if (isProcessingComplete.load(std::memory_order_acquire) ||
+                    GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
+                    break;
+                }
             }
             isFirstUpdate = false;
+
             std::cout << "\033[u";
             displayAllProgress();
         }
@@ -857,35 +864,26 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     std::thread progressThread(displayProgress);
 
-    // Wait for futures with timeout to allow immediate cancellation
+    // Polling Loop: standard 300ms pulse heartbeat check matching the UI pacing layout
     for (auto& future : futures) {
         while (!GlobalState::g_operationCancelled.load()) {
-            auto status = future.wait_for(std::chrono::milliseconds(100));
+            auto status = future.wait_for(std::chrono::milliseconds(300));
             if (status == std::future_status::ready) {
-                break;  // Task completed
+                break;
             }
-            // If cancelled, break out - the write function will detect
-            // GlobalState::g_operationCancelled and return quickly
-        }
-        // If cancelled, don't wait anymore - tasks will finish on their own
-        if (GlobalState::g_operationCancelled.load()) {
-            break;
         }
     }
 
+    // 1. Instantly trip the display thread break condition flags
     isProcessingComplete.store(true, std::memory_order_release);
-
-    // Don't wait for cancelled tasks - just detach them
-    if (GlobalState::g_operationCancelled.load()) {
-        signal(SIGINT, SIG_IGN);
-        progressThread.join();
-        std::cout << "\033[u";
-        displayAllProgress();
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    } else {
-        signal(SIGINT, SIG_IGN);
+    signal(SIGINT, SIG_IGN);
+    if (progressThread.joinable()) {
         progressThread.join();
     }
+
+    // 2. Force one final static render pass to commit final output matrix states cleanly
+    std::cout << "\033[u";
+    displayAllProgress();
 
     std::cout << "\033[s";
     std::cout << "\033[2H\033[2K";
@@ -898,9 +896,9 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
 
     size_t completedTasksValue = completedTasks.load();
-
     std::string operation = std::string(UI::Palette::Yellow) + "write2usb" + wt.rl_resetCol;
 
+    // 3. Print operational results summaries directly
     std::cout << "\r" << color << "Status: " << operation << color <<" → "
               << (!GlobalState::g_operationCancelled.load()
                   ? (failedTasksValue > 0
@@ -925,8 +923,31 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
               << color << duration << "s"
               << wt.colorStatus << "\n";
 
+    // 4. Instantly hand focus and console command lines back to your user's shell prompt
     flushStdin();
     restoreInput();
+
+    // 5. OOR (Out-Of-Range) BACKGROUND DRAINING:
+    // If the process was canceled via Ctrl+C, move ONLY the active futures out of the
+    // local function context into a safe, detached background engine.
+    // This allows background hardware tasks to finish flushing cache data safely
+    // without copying or moving the non-copyable 'progressData' structure.
+    if (GlobalState::g_operationCancelled.load()) {
+        std::thread([capturedFutures = std::move(futures)]() mutable {
+            for (auto& future : capturedFutures) {
+                if (future.valid()) {
+                    future.wait();
+                }
+            }
+        }).detach();
+    } else {
+        // Normal fast block cleanup sequence path if everything finished successfully
+        for (auto& future : futures) {
+            if (future.valid()) {
+                future.wait();
+            }
+        }
+    }
 }
 
 /**
