@@ -469,7 +469,12 @@ void displayErrors();
  * A @c "?" input triggers the help screen.  After a valid mapping is entered,
  * the user is shown a destructive-write warning and must confirm with @c y/Y.
  *
- * @param selectedIsos          ISOs chosen by the user for writing.
+ * Detected devices are annotated with status indicators:
+ * - @b [MOUNTED] — device or a partition is currently mounted; cannot be written to.
+ * - @b [FLUSHING]   — device was part of a cancelled operation and is still draining
+ *                  in the background; proceeding is possible but may race with cleanup.
+ *
+ * @param selectedIsos ISOs chosen by the user for writing.
  * @return Validated (IsoInfo, device) pairs ready for @ref performWriteOperation,
  *         or an empty vector if the user aborted.
  */
@@ -575,7 +580,13 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                                       << color << " <" << dev.driveName
                                       << ">" << UI::Palette::DimGray << " (" << wt.sizeCol << dev.sizeStr
                                       << UI::Palette::DimGray << ")"
-                                      << (dev.mounted ? wt.colorFailure + " [MOUNTED]" + wt.rl_resetCol : "")
+                                      << ([&]() -> std::string {
+                                          if (dev.mounted) return wt.colorFailure + " [MOUNTED]" + wt.rl_resetCol;
+                                          std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+                                          if (g_drainingDevices.count(dev.path))
+                                              return wt.colorWarning + " [FLUSHING]" + wt.rl_resetCol;
+                                          return "";
+                                      }())
                                       << "\n";
                 }
             }
@@ -716,6 +727,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  * -# @b Out-of-Band Draining: Active std::future objects are moved out of the local scope
  * into a detached thread execution closure. This allows OS page caches (e.g., buffered NTFS flushes)
  * to drain onto the hardware safely in the background, entirely avoiding stack-use-after-free crashes.
+ * Each device is removed from the global dirty-device set as its own drain completes, allowing
+ * the device selection screen to clear the @b [FLUSHING] indicator per-device as soon as it is safe.
  *
  * @par Normal Completion
  * All futures are sequentially polled to completion, the UI rendering loop is closed natively,
@@ -932,13 +945,28 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     // local function context into a safe, detached background engine.
     // This allows background hardware tasks to finish flushing cache data safely
     // without copying or moving the non-copyable 'progressData' structure.
+    // Each device is erased from the dirty-device set as its own future completes,
+    // allowing the [FLUSHING] indicator to clear per-device as soon as draining finishes.
     if (GlobalState::g_operationCancelled.load()) {
-        std::thread([capturedFutures = std::move(futures)]() mutable {
-            for (auto& future : capturedFutures) {
-                if (future.valid()) {
-                    future.wait();
-                }
+        {
+            std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+            for (const auto& [iso, device] : validPairs)
+                g_drainingDevices.insert(device);
+        }
+        g_drainingCancelled.store(true);
+        std::thread([capturedFutures = std::move(futures),
+                     devices = [&]() {
+                         std::vector<std::string> d;
+                         for (const auto& [iso, device] : validPairs) d.push_back(device);
+                         return d;
+                     }()]() mutable {
+            for (size_t i = 0; i < capturedFutures.size(); ++i) {
+                if (capturedFutures[i].valid()) capturedFutures[i].wait();
+                std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+                g_drainingDevices.erase(devices[i]);
             }
+            if (g_drainingDevices.empty())
+                g_drainingCancelled.store(false);
         }).detach();
     } else {
         // Normal fast block cleanup sequence path if everything finished successfully
