@@ -303,7 +303,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     } else {
         partResult = runCommand({"parted", "-s", device,
                                  "mklabel", "gpt",
-                                 "mkpart", "HIRENS", "fat32", "1MiB", "100%",
+                                 "mkpart", "WINPE", "fat32", "1MiB", "100%",
                                  "set", "1", "esp",  "on",
                                  "set", "1", "boot", "on"});
     }
@@ -328,7 +328,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     }
 
     if (runCommand({"mkfs.fat", "-F", "32", "-n",
-                    (isoType == IsoType::WindowsInstall ? "WINBOOT" : "HIRENS"),
+                    (isoType == IsoType::WindowsInstall ? "WINBOOT" : "WINPE"),
                     fatPart}) != 0) {
         unmountIso(); return fail();
     }
