@@ -35,6 +35,7 @@
 #include "../themes.h"
 #include "../settings.h"
 #include "../select.h"
+#include "../write2usb.h"
 
 namespace fs = std::filesystem;
 
@@ -266,6 +267,8 @@ int main(int argc, char *argv[]) {
             t.join();
         }
     }
+
+    g_drainingManager.joinAll();
 
     std::cout << UI::Palette::Reset << std::flush;
     close(GlobalState::lockFileDescriptor);

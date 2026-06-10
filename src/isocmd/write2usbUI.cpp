@@ -948,26 +948,42 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     // Each device is erased from the dirty-device set as its own future completes,
     // allowing the [DRAINING] indicator to clear per-device as soon as draining finishes.
     if (GlobalState::g_operationCancelled.load()) {
+        // 1. Prepare device list safely before spawning the thread
+        std::vector<std::string> deviceNames;
+        deviceNames.reserve(validPairs.size());
+
         {
             std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-            for (const auto& [iso, device] : validPairs)
+            for (const auto& [iso, device] : validPairs) {
                 g_drainingDevices.insert(device);
+                deviceNames.push_back(device);
+            }
         }
         g_drainingCancelled.store(true);
-        std::thread([capturedFutures = std::move(futures),
-                     devices = [&]() {
-                         std::vector<std::string> d;
-                         for (const auto& [iso, device] : validPairs) d.push_back(device);
-                         return d;
-                     }()]() mutable {
+
+        // 2. Add to managed global container instead of detaching
+        g_drainingManager.add(std::thread([
+            capturedFutures = std::move(futures),
+            devices = std::move(deviceNames)
+        ]() mutable {
             for (size_t i = 0; i < capturedFutures.size(); ++i) {
-                if (capturedFutures[i].valid()) capturedFutures[i].wait();
-                std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-                g_drainingDevices.erase(devices[i]);
+                // Wait for hardware completion
+                if (capturedFutures[i].valid()) {
+                    capturedFutures[i].wait();
+                }
+
+                // Scope the lock to release it as soon as the erase is done
+                {
+                    std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+                    g_drainingDevices.erase(devices[i]);
+
+                    // Signal completion only when the last device is handled
+                    if (g_drainingDevices.empty()) {
+                        g_drainingCancelled.store(false);
+                    }
+                }
             }
-            if (g_drainingDevices.empty())
-                g_drainingCancelled.store(false);
-        }).detach();
+        }));
     } else {
         // Normal fast block cleanup sequence path if everything finished successfully
         for (auto& future : futures) {
