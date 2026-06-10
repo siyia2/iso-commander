@@ -597,7 +597,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                                           if (dev.mounted) return wt.colorFailure + " [MOUNTED]" + wt.rl_resetCol;
                                           std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
                                           if (g_drainingDevices.count(dev.path))
-                                              return wt.colorWarning + " [FLUSHING]" + wt.rl_resetCol;
+                                              return wt.colorFailure + " [FLUSHING]" + wt.rl_resetCol;
                                           return "";
                                       }())
                                       << "\n";
