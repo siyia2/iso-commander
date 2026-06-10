@@ -41,6 +41,9 @@ namespace GlobalConcurrency {
     // Mutex Protection For Verbose Sets
     inline std::mutex globalSetsMutex;
 
+    // Mutex Protection For file counts in search.cpp
+    inline std::mutex couNtMutex;
+
 } // namespace GlobalConcurrency
 
 #endif // CONCURRENCY_H
