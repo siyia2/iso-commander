@@ -73,9 +73,11 @@ static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessage
 
 /**
  * @brief Performs unmount operations on a list of ISO mount points.
- * @details Uses the Linux umount2 system call with MNT_DETACH (lazy unmount).
- * Handles root permission checks and cancellation signals, and cleans up
- * empty mount point directories after a successful unmount.
+ * @details Utilizes the libmount context API to perform lazy unmount operations
+ * (equivalent to MNT_DETACH). Automatically identifies and detaches the
+ * associated loop devices (/dev/loopX) to prevent resource leakage. Handles
+ * root permission checks and cancellation signals, and cleans up empty mount
+ * point directories after a successful unmount.
  *
  * Results are written directly to the global verboseSets:
  *   - verboseSets.operationCompleted  Success messages.
