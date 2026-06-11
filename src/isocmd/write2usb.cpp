@@ -160,14 +160,18 @@ static bool wipeDeviceSignatures(const std::string& device)
 /**
  * @brief Mount @p src at @p target using libmnt_context.
  *
+ * Automatically enables automatic loop device deletion (mnt_context_enable_loopdel)
+ * to ensure that any loop device created for the mount is released upon unmounting,
+ * preventing dangling device nodes.
+ *
  * @param src     Source path or device (may be nullptr for bind/move mounts).
  * @param target  Mount point (must already exist).
  * @param options Comma-separated mount options string (e.g. "ro,loop").
- *                Pass nullptr or "" for no extra options.
+ * Pass nullptr or "" for no extra options.
  * @param fstype  Filesystem type override (e.g. "ntfs3").
- *                Pass nullptr to let the kernel auto-detect.
+ * Pass nullptr to let the kernel auto-detect.
  * @param flags   Extra libmount context flags (e.g. MNT_MS_PROPAGATION).
- *                Pass 0 for the common case.
+ * Pass 0 for the common case.
  * @return 0 on success, non-zero on failure.
  */
 static int libMount(const char* src,
@@ -185,6 +189,10 @@ static int libMount(const char* src,
                  mnt_context_append_options(ctx, options);
     if (fstype && *fstype)
                  mnt_context_set_fstype(ctx, fstype);
+
+    // Enable automatic loop device cleanup for all mounts via this helper
+    mnt_context_enable_loopdel(ctx, 1);
+
     (void)flags; // reserved for caller convenience
 
     int rc = mnt_context_mount(ctx);
