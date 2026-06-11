@@ -38,7 +38,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 
 ## Features
 
-⚡ **High Performance**
+⚡ **High-Performance Architecture**
 - Single self-contained executable binary
 - Native C++ — no Python runtime, no shell wrappers
 - Multithreaded, lock-free processing — scales from 1 to 10,000 ISO files
