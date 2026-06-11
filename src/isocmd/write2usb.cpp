@@ -29,6 +29,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+// Third-Party Library Headers
+#include <libmount/libmount.h>
+#include <blkid/blkid.h>
+
 // Project Headers
 #include "../state.h"
 #include "../write2usb.h"
@@ -62,43 +66,6 @@ int runCommand(const std::vector<std::string>& args) {
     int status = 0;
     waitpid(pid, &status, 0);
     return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-}
-
-/**
- * @brief Detects whether an ISO image is Windows installation media.
- *
- * Loop-mounts the ISO read-only into a temporary directory and checks
- * for the co-presence of @c sources/boot.wim (Windows setup payload)
- * and @c bootmgr / @c bootmgr.efi (Windows boot manager). Both markers
- * must be present; either alone is insufficient.
- *
- * The temporary mount point is always unmounted and removed before the
- * function returns, regardless of outcome. All mount/umount output is
- * suppressed via @ref runCommand() to avoid cluttering the terminal
- * with spurious error messages.
- *
- * @param isoPath Absolute path to the ISO image.
- * @return @c true if the ISO appears to be Windows installation media.
- */
-bool isWindowsIso(const std::string& isoPath) {
-    char tmpDir[] = "/tmp/iso_probe_XXXXXX";
-    if (!mkdtemp(tmpDir)) return false;
-
-    auto cleanup = [&]() {
-        runCommand({"umount", "-l", tmpDir});
-        rmdir(tmpDir);
-    };
-
-    if (runCommand({"mount", "-o", "ro,loop", isoPath, tmpDir}) != 0) {
-        rmdir(tmpDir);
-        return false;
-    }
-
-    bool hasBootWim = fs::exists(std::string(tmpDir) + "/sources/boot.wim");
-    bool hasBootMgr = fs::exists(std::string(tmpDir) + "/bootmgr") ||
-                      fs::exists(std::string(tmpDir) + "/bootmgr.efi");
-    cleanup();
-    return hasBootWim && hasBootMgr;
 }
 
 /**
@@ -150,6 +117,143 @@ std::string getBestNtfsDriver() {
 
     // Return empty if no modern native write-capable drivers could be verified
     return {};
+}
+
+// ---------------------------------------------------------------------------
+// Wipefs replacement (libblkid)
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Erase all filesystem/partition signatures on @p device.
+ *
+ * Equivalent to `wipefs -a <device>`.  Uses libblkid's probe-and-wipe loop
+ * so no child process is spawned.
+ *
+ * @param device Block device path (e.g. "/dev/sdb").
+ * @return true on success (including the case where no signatures were found).
+ */
+static bool wipeDeviceSignatures(const std::string& device)
+{
+    blkid_probe pr = blkid_new_probe_from_filename(device.c_str());
+    if (!pr) return false;
+
+    blkid_probe_enable_superblocks(pr, true);
+    blkid_probe_set_superblocks_flags(pr,
+        BLKID_SUBLKS_MAGIC | BLKID_SUBLKS_TYPE);
+
+    blkid_probe_enable_partitions(pr, true);
+    blkid_probe_set_partitions_flags(pr, BLKID_PARTS_MAGIC);
+
+    // Loop until no more signatures are found.
+    // blkid_do_probe() returns 0 while signatures remain, 1 when done.
+    while (blkid_do_probe(pr) == 0)
+        blkid_do_wipe(pr, false /* not dry-run */);
+
+    blkid_free_probe(pr);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Internal mount / umount / helpers (libmount)
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Mount @p src at @p target using libmnt_context.
+ *
+ * @param src     Source path or device (may be nullptr for bind/move mounts).
+ * @param target  Mount point (must already exist).
+ * @param options Comma-separated mount options string (e.g. "ro,loop").
+ *                Pass nullptr or "" for no extra options.
+ * @param fstype  Filesystem type override (e.g. "ntfs3").
+ *                Pass nullptr to let the kernel auto-detect.
+ * @param flags   Extra libmount context flags (e.g. MNT_MS_PROPAGATION).
+ *                Pass 0 for the common case.
+ * @return 0 on success, non-zero on failure.
+ */
+static int libMount(const char* src,
+                    const char* target,
+                    const char* options = nullptr,
+                    const char* fstype  = nullptr,
+                    int         flags   = 0)
+{
+    libmnt_context* ctx = mnt_new_context();
+    if (!ctx) return -1;
+
+    if (src)     mnt_context_set_source(ctx, src);
+    if (target)  mnt_context_set_target(ctx, target);
+    if (options && *options)
+                 mnt_context_append_options(ctx, options);
+    if (fstype && *fstype)
+                 mnt_context_set_fstype(ctx, fstype);
+    (void)flags; // reserved for caller convenience
+
+    int rc = mnt_context_mount(ctx);
+    mnt_free_context(ctx);
+    return rc;
+}
+
+/**
+ * @brief Unmount @p target using libmnt_context.
+ *
+ * @param target Path to the mount point.
+ * @param lazy   If true, pass MNT_DETACH (equivalent to umount -l).
+ * @return 0 on success, non-zero on failure.
+ */
+static int libUmount(const char* target, bool lazy = false)
+{
+    libmnt_context* ctx = mnt_new_context();
+    if (!ctx) return -1;
+
+    mnt_context_set_target(ctx, target);
+    if (lazy)
+        mnt_context_enable_lazy(ctx, true);
+
+    int rc = mnt_context_umount(ctx);
+    mnt_free_context(ctx);
+    return rc;
+}
+
+/**
+ * @brief Best-effort unmount: try normal first, fall back to lazy.
+ */
+static void safeUmount(const char* path)
+{
+    if (libUmount(path, false) != 0)
+        libUmount(path, true);
+}
+
+/**
+ * @brief Detects whether an ISO image is Windows installation media.
+ *
+ * Loop-mounts the ISO read-only into a temporary directory and checks
+ * for the co-presence of sources/boot.wim (Windows setup payload)
+ * and bootmgr / bootmgr.efi (Windows boot manager).
+ *
+ * Uses libmount instead of forking mount/umount processes.
+ *
+ * @param isoPath Absolute path to the ISO image.
+ * @return true if the ISO appears to be Windows installation media.
+ */
+bool isWindowsIso(const std::string& isoPath)
+{
+    char tmpDir[] = "/tmp/iso_probe_XXXXXX";
+    if (!mkdtemp(tmpDir)) return false;
+
+    auto cleanup = [&]() {
+        safeUmount(tmpDir);
+        rmdir(tmpDir);
+    };
+
+    if (libMount(isoPath.c_str(), tmpDir, "ro,loop") != 0) {
+        rmdir(tmpDir);
+        return false;
+    }
+
+    bool hasBootWim = fs::exists(std::string(tmpDir) + "/sources/boot.wim");
+    bool hasBootMgr = fs::exists(std::string(tmpDir) + "/bootmgr") ||
+                      fs::exists(std::string(tmpDir) + "/bootmgr.efi");
+    cleanup();
+    return hasBootWim && hasBootMgr;
 }
 
 // ---------------------------------------------------------------------------
@@ -225,37 +329,37 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  *
  * Partitioning is chosen automatically by ISO type:
  * - **WindowsInstall** — GPT with a ~1 GiB FAT32 ESP (bootloader +
- * @c sources/boot.wim) and an NTFS data partition for the install payload.
+ *   @c sources/boot.wim) and an NTFS data partition for the install payload.
  * - **FatOnly** (WinPE, Hiren's, rescue disks) — GPT with a single FAT32
- * partition spanning the whole device.
+ *   partition spanning the whole device.
  *
  * I/O strategy per file:
  * - **FAT32 files < 4 GiB** use unbuffered Direct I/O (@c O_DIRECT) to bypass the
- * Linux page cache, ensuring user-initiated cancellations abort cleanly without
- * post-cancel dirty writeback flushing to the device in the background.
+ *   Linux page cache, ensuring user-initiated cancellations abort cleanly without
+ *   post-cancel dirty writeback flushing to the device in the background.
  * - **FAT32 files >= 4 GiB** fall back to buffered I/O to respect the FAT32
- * per-file size limit.
+ *   per-file size limit.
  * - **NTFS files** always use buffered I/O with @c posix_fallocate pre-allocation
- * to maximize sequential write throughput and minimize filesystem fragmentation.
+ *   to maximize sequential write throughput and minimize filesystem fragmentation.
  *
  * Sector alignment:
  * - Both logical (@c BLKSSZGET) and physical (@c BLKPBSZGET) sector sizes are
- * queried on each partition node. The larger of the two is used to govern
- * @c O_DIRECT buffer alignment and write padding, ensuring correct behaviour
- * on 512n, 512e, and 4Kn drives. @c BLKPBSZGET is treated as best-effort and
- * falls back to the logical size if unavailable.
+ *   queried on each partition node. The larger of the two is used to govern
+ *   @c O_DIRECT buffer alignment and write padding, ensuring correct behaviour
+ *   on 512n, 512e, and 4Kn drives. If either ioctl fails or returns a
+ *   non-positive value, that size is treated as 512 bytes; the larger of the
+ *   two resulting values is then used.
  *
  * Telemetry:
  * - Progress, speed, and byte accounting are handled by a dedicated background
- * thread, keeping all floating-point math and timing logic out of the critical
- * I/O path.
+ *   thread, keeping timing logic and speed calculations out of the critical
+ *   I/O path.
  *
  * Flush and unmount strategy:
  * - @c syncfs is called on each mounted filesystem fd before unmounting,
- * flushing all dirty pages at the filesystem level explicitly. Regular
- * @c umount is then attempted to block until the kernel confirms all I/O
- * is complete. A lazy @c umount @c -l fallback is used only if the mount
- * point is unexpectedly busy.
+ *   flushing all dirty pages at the filesystem level explicitly. Unmounting
+ *   is then delegated to @c safeUmount, which is expected to block until the
+ *   kernel confirms all I/O is complete.
  *
  * For WindowsInstall, NTFS content is written before the ESP so the bootloader
  * only lands after the data it references is already on disk.
@@ -263,31 +367,30 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  * @param isoPath       Path to the source ISO file.
  * @param device        Target block device (e.g. @c /dev/sdb). Will be wiped.
  * @param progressIndex Index into the shared @c progressData array for live
- * progress, speed, and completion reporting.
+ *                      progress, speed, and completion reporting.
  * @return @c true on success, @c false on any error or cancellation.
  */
 bool writeWindowsIsoToDevice(const std::string& isoPath,
                              const std::string& device,
-                             size_t             progressIndex) {
+                             size_t             progressIndex)
+{
     auto fail = [&]() -> bool {
         progressData[progressIndex].failed.store(true);
         return false;
     };
 
     // ------------------------------------------------------------------ //
-    // 0. Mount the ISO first so we can inspect its layout before we       //
-    //    decide how to partition the target device.                        //
+    // 0. Mount the ISO to inspect its layout                              //
     // ------------------------------------------------------------------ //
     char isoMnt[] = "/tmp/win_iso_XXXXXX";
     if (!mkdtemp(isoMnt)) return fail();
 
     auto unmountIso = [&]() {
-        if (runCommand({"umount", isoMnt}) != 0)
-            runCommand({"umount", "-l", isoMnt});
+        safeUmount(isoMnt);
         rmdir(isoMnt);
     };
 
-    if (runCommand({"mount", "-o", "ro,loop", isoPath, isoMnt}) != 0) {
+    if (libMount(isoPath.c_str(), isoMnt, "ro,loop") != 0) {
         unmountIso();
         return fail();
     }
@@ -297,7 +400,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ------------------------------------------------------------------ //
     // 1. Wipe + repartition                                               //
     // ------------------------------------------------------------------ //
-    if (runCommand({"wipefs", "-a", device}) != 0) { unmountIso(); return fail(); }
+    if (!wipeDeviceSignatures(device)) { unmountIso(); return fail(); }
 
     int partResult = -1;
     if (isoType == IsoType::WindowsInstall) {
@@ -346,29 +449,19 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         }
     }
 
-    // Query both logical (BLKSSZGET) and physical (BLKPBSZGET) sector sizes
-    // and take the maximum. This correctly handles:
-    //   - 512n  : logical=512,  physical=512  → align to 512
-    //   - 512e  : logical=512,  physical=4096 → align to 4096
-    //   - 4Kn   : logical=4096, physical=4096 → align to 4096
+    // Sector size query
     auto getBestSectorSize = [](const std::string& devNode) -> int {
         int fd = open(devNode.c_str(), O_RDONLY);
         if (fd < 0) return 512;
-
         int logicalSize  = 512;
         int physicalSize = 512;
-
         if (ioctl(fd, BLKSSZGET,  &logicalSize)  < 0 || logicalSize  <= 0) logicalSize  = 512;
         if (ioctl(fd, BLKPBSZGET, &physicalSize) < 0 || physicalSize <= 0) physicalSize = 512;
-
         close(fd);
         return std::max(logicalSize, physicalSize);
     };
 
     const int fatSectorSize  = getBestSectorSize(fatPart);
-    // ntfsSectorSize is only used for O_DIRECT decisions, but NTFS always uses
-    // buffered I/O, so this value only matters for buffer alignment math.
-    // Still query it properly so the maxSectorSize calculation is correct.
     const int ntfsSectorSize = (isoType == IsoType::WindowsInstall)
                                    ? getBestSectorSize(ntfsPart)
                                    : 512;
@@ -387,11 +480,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         if (!mkdtemp(ntfsMnt)) { unmountIso(); rmdir(fatMnt); return fail(); }
     }
 
-    auto safeUmount = [&](const char* path) {
-        if (runCommand({"umount", path}) != 0)
-            runCommand({"umount", "-l", path});
-    };
-
     bool alreadyUnmounted = false;
     auto unmountAll = [&]() {
         if (alreadyUnmounted) return;
@@ -408,7 +496,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             rmdir(ntfsMnt);
     };
 
-    if (runCommand({"mount", "-o", "noatime", fatPart, fatMnt}) != 0) {
+    if (libMount(fatPart.c_str(), fatMnt, "noatime") != 0) {
         unmountAll(); return fail();
     }
 
@@ -416,16 +504,23 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (isoType == IsoType::WindowsInstall) {
         ntfsDriver = getBestNtfsDriver();
         if (ntfsDriver.empty()) { unmountAll(); return fail(); }
-        if (runCommand({"mount", "-i", "-t", ntfsDriver, "-o", "noatime",
-                        ntfsPart, ntfsMnt}) != 0) {
-            unmountAll(); return fail();
-        }
+
+        libmnt_context* ctx = mnt_new_context();
+        mnt_context_set_source(ctx, ntfsPart.c_str());
+        mnt_context_set_target(ctx, ntfsMnt);
+        mnt_context_set_fstype(ctx, ntfsDriver.c_str());
+        mnt_context_append_options(ctx, "noatime");
+        mnt_context_disable_helpers(ctx, true);
+        int rc = mnt_context_mount(ctx);
+        mnt_free_context(ctx);
+
+        if (rc != 0) { unmountAll(); return fail(); }
     }
 
     if (GlobalState::g_operationCancelled.load()) { unmountAll(); return false; }
 
     // ------------------------------------------------------------------ //
-    // 3. Collect and classify ISO entries                                 //
+    // 3. Collect and classify ISO entries                                //
     // ------------------------------------------------------------------ //
     struct IsoEntry {
         fs::path src;
@@ -475,7 +570,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (totalBytes == 0) { unmountAll(); return fail(); }
 
     // ------------------------------------------------------------------ //
-    // 4. Async progress monitoring thread                                 //
+    // 4. Async progress monitoring thread                                //
     // ------------------------------------------------------------------ //
     std::atomic<uint64_t> totalBytesWrittenAccumulator{0};
     std::atomic<bool>     monitoringActive{true};
@@ -518,16 +613,14 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     size_t bufferSize = (DESIRED_BUFFER / maxSectorSize) * maxSectorSize;
 
     void* rawBuf = nullptr;
-    if (posix_memalign(&rawBuf, maxSectorSize, bufferSize) != 0) { unmountAll(); return fail(); }
+    if (posix_memalign(&rawBuf, maxSectorSize, bufferSize) != 0) {
+        unmountAll(); return fail();
+    }
     auto ioBuf = static_cast<char*>(rawBuf);
     auto freeIoBuf = [&]() { free(rawBuf); };
 
     // ------------------------------------------------------------------ //
-    // 5. Per-file copy with hybrid I/O                                    //
-    //                                                                     //
-    //    NTFS destination  → buffered I/O + posix_fallocate               //
-    //    FAT32 < 4 GiB     → O_DIRECT (aligned to physical sector size)   //
-    //    FAT32 >= 4 GiB    → buffered I/O (FAT32 size limit guard)        //
+    // 5. Per-file copy with hybrid I/O                                   //
     // ------------------------------------------------------------------ //
     auto copyWithProgress = [&](const fs::path& src, const fs::path& dst,
                                 uint64_t fileSize, int sectorSize) -> bool {
@@ -552,8 +645,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         if (useBufferedIO && fileSize > 0)
             posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
 
-        // sectorSize is already max(logical, physical) from getBestSectorSize,
-        // so this mask correctly handles 512e and 4Kn drives.
         const size_t mask = static_cast<size_t>(sectorSize) - 1;
 
         bool success = true;
@@ -580,7 +671,9 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                     success = false;
                     goto done;
                 }
-                ssize_t written = write(fd_out, ioBuf + bytes_written, writeLen - bytes_written);
+                ssize_t written = write(fd_out,
+                                        ioBuf + bytes_written,
+                                        writeLen - bytes_written);
                 if (written < 0) {
                     if (errno == EINTR) continue;
                     success = false;
@@ -589,23 +682,21 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                 bytes_written += written;
             }
 
-            totalBytesWrittenAccumulator.fetch_add(static_cast<uint64_t>(bytes_read));
+            totalBytesWrittenAccumulator.fetch_add(
+                static_cast<uint64_t>(bytes_read));
         }
-    done:
-    if (!useBufferedIO) {
-        // Always truncate on O_DIRECT path: removes the sector-alignment
-        // padding on success, and zeroes the file on cancel so a
-        // partially-written tail isn't left on 512e/4Kn media.
-        if (GlobalState::g_operationCancelled.load()) {
-            [[maybe_unused]] const int r = ftruncate(fd_out, 0);
-        } else if (ftruncate(fd_out, static_cast<off_t>(fileSize)) != 0) {
-            success = false;
-        }
-    }
 
-        if (GlobalState::g_operationCancelled.load()) {
-            posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
+    done:
+        if (!useBufferedIO) {
+            if (GlobalState::g_operationCancelled.load()) {
+                [[maybe_unused]] const int r = ftruncate(fd_out, 0);
+            } else if (ftruncate(fd_out, static_cast<off_t>(fileSize)) != 0) {
+                success = false;
+            }
         }
+
+        if (GlobalState::g_operationCancelled.load())
+            posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
 
         posix_fadvise(fd_in, 0, 0, POSIX_FADV_DONTNEED);
         close(fd_in);
@@ -614,10 +705,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     };
 
     // ------------------------------------------------------------------ //
-    // 6. Copy passes                                                      //
-    //                                                                     //
-    //    WindowsInstall : NTFS payload first, ESP bootloader second       //
-    //    FatOnly        : ntfsEntries is empty; single espEntries pass    //
+    // 6. Copy passes (NTFS payload first, ESP second)                    //
     // ------------------------------------------------------------------ //
     auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -665,17 +753,12 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (!GlobalState::g_operationCancelled.load()) {
         if (isoType == IsoType::WindowsInstall) {
             int ntfsFd = open(ntfsMnt, O_RDONLY);
-            if (ntfsFd >= 0) {
-                syncfs(ntfsFd);
-                close(ntfsFd);
-            }
+            if (ntfsFd >= 0) { syncfs(ntfsFd); close(ntfsFd); }
         }
         int fatFd = open(fatMnt, O_RDONLY);
-        if (fatFd >= 0) {
-            syncfs(fatFd);
-            close(fatFd);
-        }
+        if (fatFd >= 0) { syncfs(fatFd); close(fatFd); }
     }
+
     unmountAll();
 
     auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
