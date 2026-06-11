@@ -15,10 +15,10 @@ Mount ISOs, convert images, write bootable USB drives — done right
 
 | Distro | Packages |
 |--------|----------|
-| Arch Linux | `readline` `util-linux` |
+| Arch | `readline` `util-linux` |
 | Debian | `libreadline-dev` `libmount-dev` |
 | Agnostic | `libchdr` (statically built and linked) |
-| Optional | `ntfsprogs`/`ntfs-3g` `parted` `dosfstools` |
+| Optional (Windows writer) | `ntfsprogs`/`ntfs-3g` `parted` `dosfstools` |
 
 <br>
 
