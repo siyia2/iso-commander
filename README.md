@@ -16,7 +16,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 | Distro | Packages |
 |--------|----------|
 | Arch | `readline` `util-linux` |
-| Debian | `libreadline-dev` `libmount-dev` |
+| Debian | `libreadline-dev` `libmount-dev` `libblkid-dev` |
 | Agnostic | `libchdr` (statically built and linked) |
 | Optional (Windows writer) | `ntfsprogs`/`ntfs-3g` `parted` `dosfstools` |
 
