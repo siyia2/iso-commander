@@ -98,7 +98,7 @@ int runCommand(const std::vector<std::string>& args) {
  * or an empty string if no modern write-capable driver is available.
  */
 std::string getBestNtfsDriver() {
-    // First Pass: Check if the modern 7.1+ NTFS driver is already active/built-in
+    // First Pass: Check if the modern 7.1+ NTFSPLUS driver is already active/built-in
     if (std::filesystem::exists("/sys/module/ntfs")) {
         return "ntfs";
     }
