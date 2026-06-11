@@ -135,49 +135,49 @@ void unmountISO(
         return;
     }
     for (const auto& isoDir : isoDirs) {
-            if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
-                if (!silentMode)
-                    errorMessages.push_back(
-                        formatDirForDisplay(isoDir, messageFormatter, "cancel"));
-                failedTasks->fetch_add(1, std::memory_order_relaxed);
-                maybeFlush();
-                continue;
-            }
-
-            // 1. Allocate isolated libmount context
-            libmnt_context* ctx = mnt_new_context();
-            if (!ctx) {
-                failedTasks->fetch_add(1, std::memory_order_relaxed);
-                if (!silentMode)
-                    errorMessages.push_back(
-                        formatDirForDisplay(isoDir, messageFormatter, "error"));
-                maybeFlush();
-                continue;
-            }
-
-            // 2. Configure target, lazy unmount (MNT_DETACH), and loop cleanup
-            mnt_context_set_target(ctx, isoDir.c_str());
-            mnt_context_enable_lazy(ctx, 1);    // Matches MNT_DETACH
-            mnt_context_enable_loopdel(ctx, 1); // Cleans up /dev/loopX
-
-            // 3. Execute the unmount operation
-            const int result = mnt_context_umount(ctx);
-            mnt_free_context(ctx);
-
-            // 4. Handle results and directory removal using your original log buffers
-            if (result == 0 || isDirectoryEmpty(isoDir)) {
-                rmdir(isoDir.c_str());
-                completedTasks->fetch_add(1, std::memory_order_relaxed);
-                if (!silentMode)
-                    successMessages.push_back(
-                        formatDirForDisplay(isoDir, messageFormatter, "success"));
-            } else {
-                failedTasks->fetch_add(1, std::memory_order_relaxed);
-                if (!silentMode)
-                    errorMessages.push_back(
-                        formatDirForDisplay(isoDir, messageFormatter, "error"));
-            }
+        if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
+            if (!silentMode)
+                errorMessages.push_back(
+                    formatDirForDisplay(isoDir, messageFormatter, "cancel"));
+            failedTasks->fetch_add(1, std::memory_order_relaxed);
             maybeFlush();
+            continue;
         }
+
+        // 1. Allocate isolated libmount context
+        libmnt_context* ctx = mnt_new_context();
+        if (!ctx) {
+            failedTasks->fetch_add(1, std::memory_order_relaxed);
+            if (!silentMode)
+                errorMessages.push_back(
+                    formatDirForDisplay(isoDir, messageFormatter, "error"));
+            maybeFlush();
+            continue;
+        }
+
+        // 2. Configure target, lazy unmount (MNT_DETACH), and loop cleanup
+        mnt_context_set_target(ctx, isoDir.c_str());
+        mnt_context_enable_lazy(ctx, 1);    // Matches MNT_DETACH
+        mnt_context_enable_loopdel(ctx, 1); // Cleans up /dev/loopX
+
+        // 3. Execute the unmount operation
+        const int result = mnt_context_umount(ctx);
+        mnt_free_context(ctx);
+
+        // 4. Handle results and directory removal using your original log buffers
+        if (result == 0 || isDirectoryEmpty(isoDir)) {
+            rmdir(isoDir.c_str());
+            completedTasks->fetch_add(1, std::memory_order_relaxed);
+            if (!silentMode)
+                successMessages.push_back(
+                    formatDirForDisplay(isoDir, messageFormatter, "success"));
+        } else {
+            failedTasks->fetch_add(1, std::memory_order_relaxed);
+            if (!silentMode)
+                errorMessages.push_back(
+                    formatDirForDisplay(isoDir, messageFormatter, "error"));
+        }
+        maybeFlush();
+    }
     flushTemporaryBuffers();
 }
