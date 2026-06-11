@@ -1,7 +1,7 @@
 # iso-commander
 Mount ISOs, convert images, write bootable USB drives — done right
 
-![Demo](preview/iso-commander-preview.gif)
+![Demo]([preview/iso-commander-preview.gif](https://github.com/siyia2/iso-commander/blob/main/preview/iso-commander-preview.gif?raw=true))
 
 ## Getting Started
 
