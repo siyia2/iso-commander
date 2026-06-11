@@ -3,7 +3,9 @@
 // C++ Standard Library Headers
 #include <atomic>
 #include <cstddef>
+#include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -51,39 +53,50 @@ extern "C" const char* __lsan_default_suppressions() {
 }
 
 /**
- * @brief Checks if a file is a valid disk image (ISO 9660 or UDF).
+ * @brief Heuristic check to determine if a file is a valid ISO 9660 or UDF disk image.
  *
- * Checks in order: ISO 9660 Primary Volume Descriptor, then UDF Volume
- * Recognition Sequence across sector sizes 2048, 512, and 4096 bytes.
+ * Performs a series of signature-based checks to identify disk image formats.
+ * Validation is heuristic: it confirms the presence of standard volume descriptors
+ * but does not perform a full filesystem integrity parse.
  *
  * @param path Filesystem path to the file to be checked.
- * @return true if a recognised disk image signature is found, false otherwise.
+ * @param st   The stat struct of the file (used for an initial size gate).
+ * @return true if a recognized disk image signature is found, false otherwise.
  *
  * @note Performs binary reads only; does not modify the file.
- * @note ISO 9660 detection requires descriptor type 0x01 and identifier "CD001"
- *       at sector 16 (ECMA-119 §8.1).
- * @note UDF detection probes sectors {16, 17, 18, 19} across sector sizes 2048,
- *       512, and 4096 bytes. Sector 256 (Anchor Volume Descriptor Pointer) is
- *       excluded as it does not carry VRS identifiers. 2048-byte sectors are
- *       probed first as the common case.
- * @note Requires a minimum file size of 34816 bytes.
+ * @note ISO 9660 detection: Checks for descriptor type 0x01 and identifier "CD001"
+ * at logical sector 16 (offset 32768, ECMA-119 §8.1).
+ * @note UDF detection: Probes for Volume Recognition Sequence (VRS) identifiers
+ * ("BEA01", "NSR02", "NSR03", "TEA01") at sectors 16-19.
+ * - Checks sector sizes: 2048 (default), 512, and 4096 bytes.
+ * - Identifier is read starting at byte 1 of each sector (byte 0 is type).
+ * - Anchor Volume Descriptor Pointer (AVDP) at sector 256 is not checked.
+ * @note Requires a minimum file size of 34816 bytes (17 * 2048).
  *
- * @warning May return true for truncated images that still contain valid magic bytes.
+ * @warning May return true for truncated images that contain valid magic bytes.
+ * @warning This is a header-level validator; a "true" result does not guarantee
+ * that the subsequent filesystem structures are readable or intact.
  *
  * @see ECMA-119 (ISO 9660), ECMA-167 §7.2 (UDF VRS).
  */
-static bool isValidIsoFile(const std::string& path) {
+static bool isValidIsoFile(const std::string& path, const struct stat& st) {
+    // Early size check using pre-existing stat
+    if (st.st_size < 34816) {
+        return false;
+    }
+    const off_t fileSize = st.st_size;
+
     const int fd = open(path.c_str(), O_RDONLY | O_NOATIME | O_CLOEXEC);
     // Note: O_NOATIME silently has no effect if caller doesn't own the file;
     // open() still succeeds, so this is safe for a read-only validator.
     if (fd < 0) return false;
 
-    struct stat st;
-    if (fstat(fd, &st) < 0 || st.st_size < 34816) {
-        close(fd);
-        return false;
-    }
-    const off_t fileSize = st.st_size;
+    // RAII guard for file descriptor
+    struct FdGuard {
+        int fd;
+        ~FdGuard() { if (fd >= 0) close(fd); }
+    } fdGuard{fd};
+
     posix_fadvise(fd, 0, 0, POSIX_FADV_RANDOM);
 
     // Buffer scoped inside lambda to avoid stale data across reads.
@@ -129,8 +142,8 @@ static bool isValidIsoFile(const std::string& path) {
     }
 
     posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
-    close(fd);
     return found;
+    // fdGuard automatically closes the file descriptor
 }
 
 /**
@@ -178,28 +191,33 @@ static std::string mountPointSuffix(const std::string& isoPath) {
 }
 
 /**
- * @brief Mounts valid ISO files to unique directories under /mnt using loop devices.
+ * @brief Mounts a batch of ISO files to unique directories under /mnt using loop devices.
  *
- * Performs progressive validation (root → cancellation → existence → format) before
- * attempting mount, minimising unnecessary I/O. A single libmnt_context is allocated
- * once for the batch and reset via mnt_reset_context between files to avoid repeated
- * allocation overhead. The in-memory mount point cache is updated on each successful
- * mount so duplicate paths within the same batch are caught without re-reading
- * /proc/mounts.
+ * This function handles bulk mounting by performing multi-stage validation (root privileges,
+ * cancellation state, file existence, and filesystem format) to minimize unnecessary I/O.
  *
- * Mount points: /mnt/iso_<stem>~<5-char base-36 FNV-1a suffix>.
+ * ### Integrity & Performance Features:
+ * - **Resource Efficiency:** Uses a single `libmnt_context` per batch, reset via `mnt_reset_context`
+ * to avoid repeated allocation overhead.
+ * - **Intelligent Deduplication:**
+ * 1. **Path-based:** Filters via `mountPointCache` for quick lookups.
+ * 2. **Inode-based:** Inspects `/sys/block/loopN/loop/backing_file` to detect files that have
+ * been renamed or hard-linked but are already active, ensuring idempotency.
+ * - **Concurrency Strategy:** Results are buffered in thread-local vectors and flushed to
+ * `globalSets` periodically to minimize lock contention on `GlobalConcurrency::globalSetsMutex`.
  *
- * Results are written directly to the global verboseSets:
- *   - verboseSets.operationCompleted  Success messages (FS type included).
- *   - verboseSets.operationSkipped    Already-mounted messages.
- *   - verboseSets.operationFailed     Failure messages (needsRoot, cxl, missingISO, badFS, mkdir).
+ * ### Mount Path Schema:
+ * `/mnt/iso_<stem>~<5-char base-36 FNV-1a suffix>`
  *
- * @param isoFiles        Absolute paths to ISO files to process.
- * @param completedTasks  Incremented for successes and skips.
- * @param failedTasks     Incremented for any failure (including cancellation).
- * @param silentMode      Suppresses all message generation; only counters are updated.
+ * @param isoFiles      Vector of absolute paths to the ISO files.
+ * @param completedTasks Atomic counter for successful mounts and skipped duplicates.
+ * @param failedTasks   Atomic counter for any failures (e.g., missing root, I/O errors).
+ * @param silentMode    If true, suppresses all log generation; only updates atomics.
  *
- * @warning Requires root (geteuid() == 0). Without it every file gets "needsRoot".
+ * @warning Requires root privileges (geteuid() == 0). If invoked without root, all
+ * operations will immediately fail with a "needsRoot" error.
+ * @note The inode cache is updated dynamically during the loop, allowing the function to
+ * properly handle batches containing duplicate files.
  */
 void mountIsoFiles(
     const std::vector<std::string>& isoFiles,
@@ -238,7 +256,87 @@ void mountIsoFiles(
         ~CtxGuard() { mnt_free_context(c); }
     } ctxGuard{ctx};
 
+    // Pack (st_dev, st_ino) into a single uint64_t key so the cache is
+    // correct across multiple filesystems (inodes are only unique per device).
+    auto makeInodeKey = [](const struct stat& st) -> uint64_t {
+        return (static_cast<uint64_t>(st.st_dev) << 32) | st.st_ino;
+    };
+
+    // Build cache of already-mounted source inodes so that a renamed ISO
+    // (same inode, different path) is correctly recognised as already mounted.
+    // mnt_fs_get_source() returns the loop device (e.g. /dev/loop0) for ISO
+    // mounts, not the backing file path, so we resolve it through sysfs.
+    auto buildMountedInodeCache = [&makeInodeKey]() -> std::unordered_set<uint64_t> {
+        std::unordered_set<uint64_t> inodes;
+        libmnt_table* tbl = mnt_new_table_from_file("/proc/self/mountinfo");
+        if (!tbl) return inodes;
+
+        // RAII wrapper for libmount table
+        struct TableGuard {
+            libmnt_table* t;
+            ~TableGuard() { if (t) mnt_free_table(t); }
+        } tableGuard{tbl};
+
+        libmnt_iter* itr = mnt_new_iter(MNT_ITER_FORWARD);
+        if (!itr) return inodes;
+
+        // RAII wrapper for libmount iterator
+        struct IterGuard {
+            libmnt_iter* i;
+            ~IterGuard() { if (i) mnt_free_iter(i); }
+        } iterGuard{itr};
+
+        libmnt_fs* fs = nullptr;
+        while (mnt_table_next_fs(tbl, itr, &fs) == 0) {
+            const char* src = mnt_fs_get_source(fs);
+            if (!src) continue;
+
+            struct stat st{};
+            if (::stat(src, &st) != 0) continue;
+
+            if (S_ISBLK(st.st_mode)) {
+                // Block device — check if it is a loop device backed by a file.
+                // /sys/block/loopN/loop/backing_file contains the real path,
+                // and stat() on that path gives the stable inode regardless of
+                // any renames that have happened since the mount.
+                unsigned int loopNum = 0;
+                if (std::sscanf(src, "/dev/loop%u", &loopNum) == 1) {
+                    // Use pre-sized string buffer to avoid multiple allocations
+                    char backingPath[256];
+                    int written = snprintf(backingPath, sizeof(backingPath),
+                                          "/sys/block/loop%u/loop/backing_file", loopNum);
+                    if (written <= 0 || static_cast<size_t>(written) >= sizeof(backingPath)) {
+                        continue; // Path too long, skip this entry
+                    }
+
+                    // Use RAII for file stream
+                    std::ifstream f(backingPath);
+                    if (!f.is_open()) continue;
+
+                    std::string realPath;
+                    if (std::getline(f, realPath) && !realPath.empty()) {
+                        // Trim trailing whitespace
+                        while (!realPath.empty() &&
+                               (realPath.back() == '\n' || realPath.back() == '\r'))
+                            realPath.pop_back();
+
+                        struct stat backingSt{};
+                        if (::stat(realPath.c_str(), &backingSt) == 0)
+                            inodes.insert(makeInodeKey(backingSt));
+                    }
+                    // f is automatically closed when it goes out of scope
+                }
+            } else {
+                // Direct file mount (no loop device) — stat it normally.
+                inodes.insert(makeInodeKey(st));
+            }
+        }
+        // IterGuard and TableGuard automatically clean up
+        return inodes;
+    };
+
     auto mountPointCache = buildMountPointCache();
+    auto mountedInodes   = buildMountedInodeCache();
 
     std::vector<std::string> tempCompleted;
     std::vector<std::string> tempSkipped;
@@ -280,37 +378,74 @@ void mountIsoFiles(
         failedTasks->fetch_add(1, std::memory_order_relaxed);
     };
 
-    for (const auto& isoFile : isoFiles) {
+    // Pre-allocate string buffer for mount point construction
+    std::string mountPointBuffer;
+    mountPointBuffer.reserve(256); // Typical path length
 
+    for (const auto& isoFile : isoFiles) {
         if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
             recordFail(isoFile, "cxl");
             maybeFlush();
             continue;
         }
 
-        if (!fs::exists(fs::path(isoFile))) {
+        // Single stat() call for existence check, validation, and inode cache
+        struct stat isoStat{};
+        if (::stat(isoFile.c_str(), &isoStat) != 0) {
             recordFail(isoFile, "missingISO");
             maybeFlush();
             continue;
         }
 
-        if (!isValidIsoFile(isoFile)) {
+        // Check if it's a regular file
+        if (!S_ISREG(isoStat.st_mode)) {
             recordFail(isoFile, "badFS");
             maybeFlush();
             continue;
         }
 
+        // Validate ISO format using pre-existing stat result (avoids redundant stat)
+        if (!isValidIsoFile(isoFile, isoStat)) {
+            recordFail(isoFile, "badFS");
+            maybeFlush();
+            continue;
+        }
+
+        // Construct mount point with minimal allocations
         const fs::path isoPath(isoFile);
-        const std::string mountPoint =
-            "/mnt/iso_" + isoPath.stem().string() + "~" + mountPointSuffix(isoFile);
+        mountPointBuffer.clear();
+        mountPointBuffer = "/mnt/iso_";
+        mountPointBuffer += isoPath.stem().string();
+        mountPointBuffer += "~";
+        mountPointBuffer += mountPointSuffix(isoFile);
+        const std::string& mountPoint = mountPointBuffer;
 
         auto [mntDir, mntName] = extractDirectoryAndFilename(mountPoint, "mount");
-        auto [isoDir, isoName] = extractDirectoryAndFilename(isoFile,    "mount");
+        auto [isoDir, isoName] = extractDirectoryAndFilename(isoFile, "mount");
 
+        // --- path-based skip (file was not renamed) ---
         if (mountPointCache.count(mountPoint)) {
             if (!silentMode)
                 tempSkipped.push_back(
-                    formatter.formatSkipped(std::string(isoDir), std::string(isoName), std::string(mntDir), std::string(mntName))
+                    formatter.formatSkipped(std::string(isoDir), std::string(isoName),
+                                            std::string(mntDir), std::string(mntName))
+                );
+            completedTasks->fetch_add(1, std::memory_order_relaxed);
+            maybeFlush();
+            continue;
+        }
+
+        // --- inode-based skip (file was renamed after being mounted) ---
+        // The kernel tracks loop-device backing files by inode, so a rename
+        // leaves the original mount intact but under a stale path in our
+        // name-derived mountPointCache.  Detect this by checking whether the
+        // file's (dev, inode) pair is already present in the live mount table.
+        // Reuse the isoStat we already have
+        if (mountedInodes.count(makeInodeKey(isoStat))) {
+            if (!silentMode)
+                tempSkipped.push_back(
+                    formatter.formatSkipped(std::string(isoDir), std::string(isoName),
+                                            std::string(mntDir), std::string(mntName))
                 );
             completedTasks->fetch_add(1, std::memory_order_relaxed);
             maybeFlush();
@@ -340,14 +475,21 @@ void mountIsoFiles(
                 const char* rawFsType = mnt_context_get_fstype(ctx);
                 const std::string fsType = rawFsType ? rawFsType : "unknown";
                 tempCompleted.push_back(
-                    formatter.formatMountSuccess(std::string(isoDir), std::string(isoName), std::string(mntDir), std::string(mntName), fsType)
+                    formatter.formatMountSuccess(std::string(isoDir), std::string(isoName),
+                                                 std::string(mntDir), std::string(mntName), fsType)
                 );
             }
             mountPointCache.emplace(mountPoint);
+            // Keep the inode cache consistent so subsequent entries in the
+            // same batch that share the same file are also skipped correctly.
+            mountedInodes.insert(makeInodeKey(isoStat));
             completedTasks->fetch_add(1, std::memory_order_relaxed);
         } else {
             recordFail(isoFile, "badFS");
-            fs::remove(mountPoint, ec);
+            // Only remove the directory we just created if it is empty;
+            // a concurrent mount may have legitimately used it.
+            if (fs::is_directory(mountPoint) && fs::is_empty(mountPoint))
+                fs::remove(mountPoint, ec);
         }
 
         maybeFlush();
