@@ -30,7 +30,7 @@ struct VerboseMessageFormatter {
 
         auto appendError = [&](std::string_view tag) {
             buf.append(tc.error).append("Failed to unmount: ")
-               .append(tc.warning).append("'").append(path).append("'")
+               .append(tc.warning).append("'").append(path).append(tc.warning).append("'")
                .append(tc.error).append(". ")
                .append(tc.label).append("{").append(tag).append("}")
                .append(tc.reset);
