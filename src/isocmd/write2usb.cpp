@@ -193,11 +193,13 @@ static int libMount(const char* src,
 }
 
 /**
- * @brief Unmount @p target using libmnt_context.
+ * @brief Unmount @p target using libmnt_context with automatic loopdev cleanup.
  *
  * @param target Path to the mount point.
- * @param lazy   If true, pass MNT_DETACH (equivalent to umount -l).
+ * @param lazy   If true, perform lazy unmount (MNT_DETACH / umount -l).
  * @return 0 on success, non-zero on failure.
+ *
+ * @note Enables MNT_DETACH (when lazy=true) and LOOPDEL (always) flags.
  */
 static int libUmount(const char* target, bool lazy = false)
 {
@@ -207,6 +209,8 @@ static int libUmount(const char* target, bool lazy = false)
     mnt_context_set_target(ctx, target);
     if (lazy)
         mnt_context_enable_lazy(ctx, true);
+
+    mnt_context_enable_loopdel(ctx, true);
 
     int rc = mnt_context_umount(ctx);
     mnt_free_context(ctx);
