@@ -40,7 +40,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 
 ⚡ **High Performance**
 - Native C++ — no Python runtime, no shell wrappers
-- `O_DIRECT` unbuffered writes — bypasses page cache entirely
+- Single self-contained executable binary
 - Multithreaded, lock-free processing — scales from 1 to 10,000 ISO files
 
 💾 **Smart ISO Management**
