@@ -238,6 +238,13 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  * - **NTFS files** always use buffered I/O with @c posix_fallocate pre-allocation
  * to maximize sequential write throughput and minimize filesystem fragmentation.
  *
+ * Sector alignment:
+ * - Both logical (@c BLKSSZGET) and physical (@c BLKPBSZGET) sector sizes are
+ * queried on each partition node. The larger of the two is used to govern
+ * @c O_DIRECT buffer alignment and write padding, ensuring correct behaviour
+ * on 512n, 512e, and 4Kn drives. @c BLKPBSZGET is treated as best-effort and
+ * falls back to the logical size if unavailable.
+ *
  * Telemetry:
  * - Progress, speed, and byte accounting are handled by a dedicated background
  * thread, keeping all floating-point math and timing logic out of the critical
@@ -313,7 +320,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
     auto derivePartition = [&](int n) -> std::string {
         std::string target = device + std::to_string(n);
-        // Wait for the specific partition node to be ready
         return waitForDevice(target, 30) ? target : std::string{};
     };
 
@@ -340,6 +346,33 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         }
     }
 
+    // Query both logical (BLKSSZGET) and physical (BLKPBSZGET) sector sizes
+    // and take the maximum. This correctly handles:
+    //   - 512n  : logical=512,  physical=512  → align to 512
+    //   - 512e  : logical=512,  physical=4096 → align to 4096
+    //   - 4Kn   : logical=4096, physical=4096 → align to 4096
+    auto getBestSectorSize = [](const std::string& devNode) -> int {
+        int fd = open(devNode.c_str(), O_RDONLY);
+        if (fd < 0) return 512;
+
+        int logicalSize  = 512;
+        int physicalSize = 512;
+
+        if (ioctl(fd, BLKSSZGET,  &logicalSize)  < 0 || logicalSize  <= 0) logicalSize  = 512;
+        if (ioctl(fd, BLKPBSZGET, &physicalSize) < 0 || physicalSize <= 0) physicalSize = 512;
+
+        close(fd);
+        return std::max(logicalSize, physicalSize);
+    };
+
+    const int fatSectorSize  = getBestSectorSize(fatPart);
+    // ntfsSectorSize is only used for O_DIRECT decisions, but NTFS always uses
+    // buffered I/O, so this value only matters for buffer alignment math.
+    // Still query it properly so the maxSectorSize calculation is correct.
+    const int ntfsSectorSize = (isoType == IsoType::WindowsInstall)
+                                   ? getBestSectorSize(ntfsPart)
+                                   : 512;
+
     if (GlobalState::g_operationCancelled.load()) { unmountIso(); return false; }
 
     // ------------------------------------------------------------------ //
@@ -350,7 +383,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
     if (!mkdtemp(fatMnt)) { unmountIso(); return fail(); }
 
-    // Only allocate the NTFS mount point when actually needed
     if (isoType == IsoType::WindowsInstall) {
         if (!mkdtemp(ntfsMnt)) { unmountIso(); rmdir(fatMnt); return fail(); }
     }
@@ -481,33 +513,30 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         }
     });
 
-    constexpr size_t BUF_SIZE = 4 * 1024 * 1024;
+    constexpr size_t DESIRED_BUFFER = 4 * 1024 * 1024;
+    const int maxSectorSize = std::max(fatSectorSize, ntfsSectorSize);
+    size_t bufferSize = (DESIRED_BUFFER / maxSectorSize) * maxSectorSize;
+
     void* rawBuf = nullptr;
-    if (posix_memalign(&rawBuf, 4096, BUF_SIZE) != 0) {
-        monitoringActive.store(false);
-        if (progressMonitorThread.joinable()) progressMonitorThread.join();
-        unmountAll(); return fail();
-    }
-    auto ioBuf     = static_cast<char*>(rawBuf);
-    auto freeIoBuf = [&]() { free(rawBuf); rawBuf = nullptr; ioBuf = nullptr; };
+    if (posix_memalign(&rawBuf, maxSectorSize, bufferSize) != 0) { unmountAll(); return fail(); }
+    auto ioBuf = static_cast<char*>(rawBuf);
+    auto freeIoBuf = [&]() { free(rawBuf); };
 
     // ------------------------------------------------------------------ //
     // 5. Per-file copy with hybrid I/O                                    //
     //                                                                     //
     //    NTFS destination  → buffered I/O + posix_fallocate               //
-    //    FAT32 < 4 GiB     → O_DIRECT (no post-cancel dirty writeback)    //
+    //    FAT32 < 4 GiB     → O_DIRECT (aligned to physical sector size)   //
     //    FAT32 >= 4 GiB    → buffered I/O (FAT32 size limit guard)        //
     // ------------------------------------------------------------------ //
     auto copyWithProgress = [&](const fs::path& src, const fs::path& dst,
-                                uint64_t fileSize) -> bool {
+                                uint64_t fileSize, int sectorSize) -> bool {
         const bool isNtfsDest = (isoType == IsoType::WindowsInstall) &&
                                 (dst.string().rfind(ntfsMnt, 0) == 0);
 
         constexpr uint64_t FAT32_FILE_LIMIT = 4ULL * 1024 * 1024 * 1024;
         const bool isLargeFat32 = !isNtfsDest && (fileSize >= FAT32_FILE_LIMIT);
 
-        // NTFS always uses buffered I/O + fallocate for maximum sequential
-        // write throughput. FAT32 uses O_DIRECT unless the file exceeds 4 GiB.
         const bool useBufferedIO = isNtfsDest || isLargeFat32;
 
         int fd_in = open(src.c_str(), O_RDONLY);
@@ -520,14 +549,16 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         int fd_out = open(dst.c_str(), outFlags, 0644);
         if (fd_out < 0) { close(fd_in); return false; }
 
-        // Pre-reserve clusters to minimize fragmentation on buffered paths.
-        // Skipped for O_DIRECT (FAT32 files don't benefit and FAT lacks fallocate support).
         if (useBufferedIO && fileSize > 0)
             posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
 
+        // sectorSize is already max(logical, physical) from getBestSectorSize,
+        // so this mask correctly handles 512e and 4Kn drives.
+        const size_t mask = static_cast<size_t>(sectorSize) - 1;
+
         bool success = true;
         while (!GlobalState::g_operationCancelled.load()) {
-            ssize_t bytes_read = read(fd_in, ioBuf, BUF_SIZE);
+            ssize_t bytes_read = read(fd_in, ioBuf, bufferSize);
             if (bytes_read < 0) {
                 if (errno == EINTR) continue;
                 success = false;
@@ -537,10 +568,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
             ssize_t writeLen = bytes_read;
             if (!useBufferedIO) {
-                // O_DIRECT requires writes to be a multiple of the sector size.
-                // Pad the final short chunk to the next 512-byte boundary with
-                // zeros; ftruncate below strips the padding after the file is closed.
-                ssize_t aligned = (bytes_read + 511) & ~511;
+                ssize_t aligned = (bytes_read + mask) & ~static_cast<ssize_t>(mask);
                 if (aligned > bytes_read)
                     memset(ioBuf + bytes_read, 0, aligned - bytes_read);
                 writeLen = aligned;
@@ -552,9 +580,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                     success = false;
                     goto done;
                 }
-                ssize_t written = write(fd_out,
-                                        ioBuf + bytes_written,
-                                        writeLen - bytes_written);
+                ssize_t written = write(fd_out, ioBuf + bytes_written, writeLen - bytes_written);
                 if (written < 0) {
                     if (errno == EINTR) continue;
                     success = false;
@@ -563,24 +589,22 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                 bytes_written += written;
             }
 
-            totalBytesWrittenAccumulator.fetch_add(
-                static_cast<uint64_t>(bytes_read));
+            totalBytesWrittenAccumulator.fetch_add(static_cast<uint64_t>(bytes_read));
         }
     done:
-        // Strip O_DIRECT sector-alignment padding so file size is exact.
-        if (!useBufferedIO && success && fileSize > 0) {
-            if (ftruncate(fd_out, static_cast<off_t>(fileSize)) != 0)
-                success = false;
+        if (!useBufferedIO) {
+            // Always truncate on O_DIRECT path: removes the sector-alignment
+            // padding on success, and zeroes the file on cancel so a
+            // partially-written tail isn't left on 512e/4Kn media.
+            ftruncate(fd_out, GlobalState::g_operationCancelled.load()
+                                  ? 0
+                                  : static_cast<off_t>(fileSize));
         }
 
-        // On cancellation, zero out any partial write so the device is not
-        // left with a half-written file that could confuse downstream tools.
         if (GlobalState::g_operationCancelled.load()) {
-            [[maybe_unused]] const int r = ftruncate(fd_out, 0);
             posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
         }
 
-        // Release ISO source pages from cache — no point keeping them in RAM.
         posix_fadvise(fd_in, 0, 0, POSIX_FADV_DONTNEED);
         close(fd_in);
         close(fd_out);
@@ -604,7 +628,12 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                 fs::create_directories(e.dst);
             } else {
                 fs::create_directories(e.dst.parent_path());
-                if (!copyWithProgress(e.src, e.dst, e.size)) {
+
+                const bool toNtfs = (isoType == IsoType::WindowsInstall) &&
+                                    (e.dst.string().rfind(ntfsMnt, 0) == 0);
+                int sectorSize = toNtfs ? ntfsSectorSize : fatSectorSize;
+
+                if (!copyWithProgress(e.src, e.dst, e.size, sectorSize)) {
                     freeIoBuf(); unmountAll(); return fail();
                 }
             }
@@ -632,9 +661,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // 7. Flush and unmount                                                //
     // ------------------------------------------------------------------ //
     if (!GlobalState::g_operationCancelled.load()) {
-        // syncfs flushes filesystem-level dirty pages directly, which is more
-        // targeted than fsync on the raw block device. umount guarantees the
-        // final flush, but syncfs first makes that flush explicit and auditable.
         if (isoType == IsoType::WindowsInstall) {
             int ntfsFd = open(ntfsMnt, O_RDONLY);
             if (ntfsFd >= 0) {
@@ -891,8 +917,12 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
  * delegated to @ref writeWindowsIsoToDevice, which automatically handles multi-partitioning,
  * hybrid FAT32+NTFS tables, and cluster tuning.
  * - **Raw O_DIRECT Pipeline:** Non-Windows targets are imaged via raw unbuffered disk I/O.
- * Data transfers utilize a dedicated page-aligned memory buffer (@c posix_memalign) matching
- * the physical device's underlying sector constraints queried from @c ioctl(BLKSSZGET).
+ * Data transfers utilize a dedicated page-aligned memory buffer (@c posix_memalign) sized
+ * to the device's effective sector boundary, derived by querying both logical sector size
+ * (@c ioctl(BLKSSZGET)) and physical sector size (@c ioctl(BLKPBSZGET)) and taking the
+ * larger of the two. This ensures correct @c O_DIRECT alignment on 512n, 512e, and 4Kn
+ * drives. @c BLKPBSZGET is treated as best-effort and falls back to the logical size if
+ * the kernel or device does not support it.
  * @c POSIX_FADV_SEQUENTIAL is applied to the source descriptor before the write loop to
  * enable aggressive kernel read-ahead; @c POSIX_FADV_DONTNEED is applied after to release
  * the ISO from page cache once writing completes.
@@ -968,12 +998,20 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     }
     std::unique_ptr<int, decltype(closeIso)> devGuard(&dev_fd, closeIso);
 
-    // Get sector size (required for O_DIRECT alignment)
-    int sectorSize = 0;
-    if (ioctl(dev_fd, BLKSSZGET, &sectorSize) < 0 || sectorSize <= 0) {
+    // Query logical and physical sector sizes; take the max so that
+    // O_DIRECT alignment is correct for 512n, 512e, and 4Kn drives.
+    int logicalSectorSize  = 0;
+    int physicalSectorSize = 0;
+
+    if (ioctl(dev_fd, BLKSSZGET, &logicalSectorSize) < 0 || logicalSectorSize <= 0) {
         progressData[progressIndex].failed.store(true);
         return false;
     }
+    // BLKPBSZGET is best-effort; fall back to logical size if unavailable
+    if (ioctl(dev_fd, BLKPBSZGET, &physicalSectorSize) < 0 || physicalSectorSize <= 0)
+        physicalSectorSize = logicalSectorSize;
+
+    const int sectorSize = std::max(logicalSectorSize, physicalSectorSize);
 
     const uint64_t fileSize = static_cast<uint64_t>(sb.st_size);
     if (fileSize == 0) {
