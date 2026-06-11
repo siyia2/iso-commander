@@ -592,14 +592,16 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             totalBytesWrittenAccumulator.fetch_add(static_cast<uint64_t>(bytes_read));
         }
     done:
-        if (!useBufferedIO) {
-            // Always truncate on O_DIRECT path: removes the sector-alignment
-            // padding on success, and zeroes the file on cancel so a
-            // partially-written tail isn't left on 512e/4Kn media.
-            ftruncate(fd_out, GlobalState::g_operationCancelled.load()
-                                  ? 0
-                                  : static_cast<off_t>(fileSize));
+    if (!useBufferedIO) {
+        // Always truncate on O_DIRECT path: removes the sector-alignment
+        // padding on success, and zeroes the file on cancel so a
+        // partially-written tail isn't left on 512e/4Kn media.
+        if (GlobalState::g_operationCancelled.load()) {
+            [[maybe_unused]] const int r = ftruncate(fd_out, 0);
+        } else if (ftruncate(fd_out, static_cast<off_t>(fileSize)) != 0) {
+            success = false;
         }
+    }
 
         if (GlobalState::g_operationCancelled.load()) {
             posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
