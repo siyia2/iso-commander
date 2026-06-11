@@ -183,20 +183,16 @@ static std::string mountPointSuffix(const std::string& isoPath) {
  * Performs progressive validation (root → cancellation → existence → format) before
  * attempting mount, minimising unnecessary I/O. A single libmnt_context is allocated
  * once for the batch and reset via mnt_reset_context between files to avoid repeated
- * allocation overhead.
- *
- * Loop devices are automatically detached upon unmounting by enabling
- * mnt_context_enable_loopdel(ctx, 1) during setup, ensuring no dangling
- * devices persist in the kernel. The in-memory mount point cache is updated on
- * each successful mount so duplicate paths within the same batch are caught
- * without re-reading /proc/mounts.
+ * allocation overhead. The in-memory mount point cache is updated on each successful
+ * mount so duplicate paths within the same batch are caught without re-reading
+ * /proc/mounts.
  *
  * Mount points: /mnt/iso_<stem>~<5-char base-36 FNV-1a suffix>.
  *
  * Results are written directly to the global verboseSets:
- * - verboseSets.operationCompleted  Success messages (FS type included).
- * - verboseSets.operationSkipped    Already-mounted messages.
- * - verboseSets.operationFailed     Failure messages (needsRoot, cxl, missingISO, badFS, mkdir).
+ *   - verboseSets.operationCompleted  Success messages (FS type included).
+ *   - verboseSets.operationSkipped    Already-mounted messages.
+ *   - verboseSets.operationFailed     Failure messages (needsRoot, cxl, missingISO, badFS, mkdir).
  *
  * @param isoFiles        Absolute paths to ISO files to process.
  * @param completedTasks  Incremented for successes and skips.
@@ -337,11 +333,7 @@ void mountIsoFiles(
         mnt_context_set_options(ctx, "loop,ro");
         mnt_context_set_fstype_pattern(ctx, "udf,iso9660");
 
-        // Use the function your compiler suggested
-        // This instructs libmount to delete the loop device after unmounting
-        mnt_context_enable_loopdel(ctx, 1);
-
-                const int ret = mnt_context_mount(ctx);
+        const int ret = mnt_context_mount(ctx);
 
         if (ret == 0) {
             if (!silentMode) {

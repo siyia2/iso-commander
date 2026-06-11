@@ -15,6 +15,9 @@
 #include <sys/mount.h>
 #include <unistd.h>
 
+// Third-Party Library Headers
+#include <libmount/libmount.h>
+
 // Project Headers
 #include "../concurrency.h"
 #include "../display.h"
@@ -26,7 +29,7 @@
 
 /**
  * @brief Checks if a directory is empty.
- * @details Used primarily to determine if a mount point can be safely removed 
+ * @details Used primarily to determine if a mount point can be safely removed
  * if a umount2 call fails but the directory contains no data.
  * * @param path The absolute path to the directory.
  * @return True if the directory exists and contains no entries, false otherwise.
@@ -35,17 +38,17 @@ bool isDirectoryEmpty(const std::string& path) {
     if (!std::filesystem::exists(path)) {
         return false;
     }
-    
-    return std::filesystem::directory_iterator(path) == 
+
+    return std::filesystem::directory_iterator(path) ==
            std::filesystem::directory_iterator();
 }
 
 /**
  * @brief Formats a mount point path for console output.
- * @details Breaks the path into segments using parseMountPointComponents. 
- * Converts non-owning string_views into a styled, owning std::string based 
+ * @details Breaks the path into segments using parseMountPointComponents.
+ * Converts non-owning string_views into a styled, owning std::string based
  * on ANSI palette settings and user display configuration.
- * 
+ *
  * @param isoDir The directory path to format.
  * @param fmt Reference to the VerboseMessageFormatter.
  * @param messageKey The key for the specific message template.
@@ -53,18 +56,18 @@ bool isDirectoryEmpty(const std::string& path) {
  */
 static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessageFormatter& fmt, const char* messageKey) {
     auto dirParts = parseMountPointComponents(isoDir);
-    
+
     std::string formattedDir{std::get<1>(dirParts)};
     std::string_view squareColor = UI::Palette::DimGray;
 
     if (displayConfig::toggleFullListUmount) {
-        formattedDir = std::string(std::get<0>(dirParts)) 
-                       + formattedDir 
-                       + std::string(squareColor) 
-                       + std::string(std::get<2>(dirParts)) 
+        formattedDir = std::string(std::get<0>(dirParts))
+                       + formattedDir
+                       + std::string(squareColor)
+                       + std::string(std::get<2>(dirParts))
                        + std::string(UI::Palette::BoldReset);
     }
-    
+
     return fmt.format(messageKey, formattedDir);
 }
 
@@ -130,28 +133,49 @@ void unmountISO(
         return;
     }
     for (const auto& isoDir : isoDirs) {
-        if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
-            if (!silentMode)
-                errorMessages.push_back(
-                    formatDirForDisplay(isoDir, messageFormatter, "cancel"));
-            failedTasks->fetch_add(1, std::memory_order_relaxed);
+            if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
+                if (!silentMode)
+                    errorMessages.push_back(
+                        formatDirForDisplay(isoDir, messageFormatter, "cancel"));
+                failedTasks->fetch_add(1, std::memory_order_relaxed);
+                maybeFlush();
+                continue;
+            }
+
+            // 1. Allocate isolated libmount context
+            libmnt_context* ctx = mnt_new_context();
+            if (!ctx) {
+                failedTasks->fetch_add(1, std::memory_order_relaxed);
+                if (!silentMode)
+                    errorMessages.push_back(
+                        formatDirForDisplay(isoDir, messageFormatter, "error"));
+                maybeFlush();
+                continue;
+            }
+
+            // 2. Configure target, lazy unmount (MNT_DETACH), and loop cleanup
+            mnt_context_set_target(ctx, isoDir.c_str());
+            mnt_context_enable_lazy(ctx, 1);    // Matches MNT_DETACH
+            mnt_context_enable_loopdel(ctx, 1); // Cleans up /dev/loopX
+
+            // 3. Execute the unmount operation
+            const int result = mnt_context_umount(ctx);
+            mnt_free_context(ctx);
+
+            // 4. Handle results and directory removal using your original log buffers
+            if (result == 0 || isDirectoryEmpty(isoDir)) {
+                rmdir(isoDir.c_str());
+                completedTasks->fetch_add(1, std::memory_order_relaxed);
+                if (!silentMode)
+                    successMessages.push_back(
+                        formatDirForDisplay(isoDir, messageFormatter, "success"));
+            } else {
+                failedTasks->fetch_add(1, std::memory_order_relaxed);
+                if (!silentMode)
+                    errorMessages.push_back(
+                        formatDirForDisplay(isoDir, messageFormatter, "error"));
+            }
             maybeFlush();
-            continue;
         }
-        const int result = umount2(isoDir.c_str(), MNT_DETACH);
-        if (result == 0 || isDirectoryEmpty(isoDir)) {
-            rmdir(isoDir.c_str());
-            completedTasks->fetch_add(1, std::memory_order_relaxed);
-            if (!silentMode)
-                successMessages.push_back(
-                    formatDirForDisplay(isoDir, messageFormatter, "success"));
-        } else {
-            failedTasks->fetch_add(1, std::memory_order_relaxed);
-            if (!silentMode)
-                errorMessages.push_back(
-                    formatDirForDisplay(isoDir, messageFormatter, "error"));
-        }
-        maybeFlush();
-    }
     flushTemporaryBuffers();
 }
