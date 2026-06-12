@@ -161,7 +161,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append("\n").append(c.head);
         if (effectivePage > 0) output.append("[PgUp] Prev | ");
         if (effectivePage < totalPages - 1) output.append("[PgDn] Next | ");
-        output.append("[g#] ↵ GoTo | ").append(UI::Palette::BoldReset).append("\n");
+        output.append("[g#] ↵ GoTo").append(UI::Palette::BoldReset).append("\n");
     }
 
     // --- Pending Processes ---

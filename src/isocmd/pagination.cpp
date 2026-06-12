@@ -171,7 +171,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
             std::cout << "\n" << c.head;
             if (currentPage > 0)               std::cout << "[PgUp] Prev | ";
             if (currentPage < totalPages - 1)  std::cout << "[PgDn] Next | ";
-            std::cout << "[g#] ↵ GoTo | " << UI::Palette::BoldReset << "\n";
+            std::cout << "[g#] ↵ GoTo" << UI::Palette::BoldReset << "\n";
         }
 
         // 5. Construct the final prompt
