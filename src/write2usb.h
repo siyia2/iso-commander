@@ -6,6 +6,7 @@
 // C++ Standard Library Headers
 #include <atomic>
 #include <cstdint>
+#include <cstdlib>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -128,17 +129,19 @@ struct ScopedMount {
 struct AlignedBuffer {
     void* ptr  = nullptr;
     char* data = nullptr;
+    size_t size; // Store size to fulfill alignment requirements
 
-    AlignedBuffer(size_t size, int alignment) {
-        if (posix_memalign(&ptr, static_cast<size_t>(alignment), size) == 0)
+    AlignedBuffer(size_t size, size_t alignment) : size(size) {
+        size_t remainder = size % alignment;
+        size_t adjustedSize = (remainder == 0) ? size : (size + alignment - remainder);
+
+        ptr = std::aligned_alloc(alignment, adjustedSize);
+        if (ptr) {
             data = static_cast<char*>(ptr);
+        }
     }
 
-    // Non-copyable, non-movable.
-    AlignedBuffer(const AlignedBuffer&)            = delete;
-    AlignedBuffer& operator=(const AlignedBuffer&) = delete;
-
-    ~AlignedBuffer() { free(ptr); }
+    ~AlignedBuffer() { std::free(ptr); }
 
     bool ok() const { return data != nullptr; }
     explicit operator bool() const { return ok(); }
