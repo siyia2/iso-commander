@@ -561,7 +561,10 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             if (toESP) espEntries.push_back(std::move(e));
             else       ntfsEntries.push_back(std::move(e));
         }
-    } catch (...) { return fail(); }
+    } catch (...) {
+        if (!GlobalState::g_operationCancelled.load()) return fail();
+        return false;
+    }
 
     if (totalBytes == 0) return fail();
 
@@ -616,7 +619,10 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     const size_t     bufferSize      = (DESIRED_BUFFER / maxSectorSize) * maxSectorSize;
 
     AlignedBuffer ioBuf(bufferSize, maxSectorSize);
-    if (!ioBuf) return fail();
+    if (!ioBuf) {
+        if (!GlobalState::g_operationCancelled.load()) return fail();
+        return false;
+    }
 
     // ------------------------------------------------------------------ //
     // 6. Per-file copy with hybrid I/O                                   //
@@ -726,7 +732,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
                 if (!copyWithProgress(e.src, e.dst, e.size, sectorSize)) {
                     if (!GlobalState::g_operationCancelled.load()) {
-                    return fail();
+                        return fail();
                     } else {
                         return false;
                     }
