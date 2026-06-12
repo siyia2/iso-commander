@@ -140,13 +140,13 @@ void interactiveConfigEditor(const std::string& configPath) {
         }
 		setup_custom_keybindingsForSettingsEditor();
         std::cout << "\n" << tc.accent << "Actions: " << tc.warning << "1-" << (index-1)
-                  << tc.reset << " ↵ Edit | " << tc.warning << "r" << tc.reset << " Reset |" << tc.warning << " ?" << tc.reset << " help" << tc.reset << "\n";
+                  << tc.reset << " ↵ Edit | " << tc.warning << "r" << tc.reset << " Reset\n";
 
         std::string prompt = std::format(
-            "\n\001{}\002Action\001{}\002 ↵ | < \001{}\002Exit\001{}\002: \001{}\002",
+            "\n\001{}\002Action\001{}\002 ↵ for \001{}\002editor\001{}\002, ? for help: \001{}\002",
             UI::Palette::Yellow,
             tc.label,
-            UI::Palette::Red,
+            tc.warning,
             tc.label,
             tc.reset
         );
@@ -155,7 +155,7 @@ void interactiveConfigEditor(const std::string& configPath) {
         if (!rawInput) break;
 
         std::string input = trim(rawInput.get());
-        if (input == "<") break;
+        if (input == "\x1b") break;
 
         if (input == "?") {
             helpSettingsEditor();
@@ -236,7 +236,7 @@ void interactiveConfigEditor(const std::string& configPath) {
  * @param configPath Path to the @c .conf file for persistence.
  * @param key The unique configuration key to be modified.
  * @return true if the setting was updated, matched the current value, or was skipped.
- * @return false if the user aborted the prompt (e.g., via Ctrl+D).
+ * @return false if the user aborted the prompt (e.g., via Ctrl+D or Esc).
  */
 bool editSetting(const std::string& configPath, const std::string& key) {
     auto tc = resolveOptionsTheme();
@@ -252,6 +252,7 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 
     while (true) {
         clearScrollBuffer();
+        rl_bind_keyseq("\\e", exit_handler);
         std::cout << "\n" << tc.highlight << "=== Edit Setting ===\n\n" << tc.reset;
         std::cout << tc.label << "Setting: " << tc.reset << tc.warning << key << tc.reset << "\n";
         std::cout << tc.label << "Current: " << tc.reset << tc.highlight << current << tc.reset << "\n";
@@ -303,8 +304,8 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
 
-        // Handle Cancel (Ctrl+D or Empty Enter)
-        if (!rawInput) return false;
+        // Handle Cancel (Ctrl+D/Esc or Empty Enter)
+        if (!rawInput || rawInput.get()[0] == 27) return false;
         std::string newVal = trim(rawInput.get());
         if (newVal.empty() || newVal == current) return true;
 

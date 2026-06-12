@@ -97,21 +97,21 @@ void submenu1(std::atomic<bool>& isAtISOList,
         isAtISOList.store(false);
         clearScrollBuffer();
 
-        std::cout << color << "+-----------------------+\n"
-                  << "|     ↵ ManageISO        |\n"
+        std::cout << color << "+----------------------+\n"
+                  << "|      ManageISO        |\n"
+                  << "+----------------------+\n"
+                  << "| 1. Mount             |\n"
+                  << "+----------------------+\n"
+                  << "| 2. Unmount           |\n"
+                  << "+----------------------+\n"
+                  << "| 3. Delete            |\n"
                   << "+-----------------------+\n"
-                  << "| 1. Mount              |\n"
-                  << "+-----------------------+\n"
-                  << "| 2. Unmount            |\n"
-                  << "+-----------------------+\n"
-                  << "| 3. Delete             |\n"
-                  << "+-----------------------+\n"
-                  << "| 4. Move               |\n"
-                  << "+-----------------------+\n"
-                  << "| 5. Copy               |\n"
-                  << "+-----------------------+\n"
-                  << "| 6. Write              |\n"
-                  << "+-----------------------+" << "\n\n";
+                  << "| 4. Move              |\n"
+                  << "+----------------------+\n"
+                  << "| 5. Copy              |\n"
+                  << "+----------------------+\n"
+                  << "| 6. Write             |\n"
+                  << "+----------------------+" << "\n\n";
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
         char* rawInput = readline(( std::string(pt.primary) +
@@ -120,7 +120,7 @@ void submenu1(std::atomic<bool>& isAtISOList,
 
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
-        if (!input.get() || std::strlen(input.get()) == 0) {
+        if (!input || input.get()[0] == 27) {
             break;
         }
 
@@ -191,7 +191,7 @@ void submenu2(std::shared_ptr<RefreshState> state) {
         clearScrollBuffer();
 
         std::cout << color << "+------------------------+  \n"
-                  << "|     ↵ Convert2ISO       |\n"
+                  << "|      Convert2ISO        |\n"
                   << "+------------------------+\n"
                   << "| 1. CCD2ISO++           |\n"
                   << "+------------------------+\n"
@@ -211,7 +211,7 @@ void submenu2(std::shared_ptr<RefreshState> state) {
 
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
 
-        if (!input.get() || std::strlen(input.get()) == 0) {
+        if (!input || input.get()[0] == 27) {
             break;
         }
 
@@ -253,19 +253,19 @@ void submenu2(std::shared_ptr<RefreshState> state) {
  * @brief Prints the primary application menu options.
  */
 void printMenu() {
-    std::cout << color << "+-----------------------+\n"
-              << "|      Main Menu         |\n"
-              << "+-----------------------+\n"
-              << "| 1. ManageISO          |\n"
-              << "+-----------------------+\n"
-              << "| 2. Convert2ISO        |\n"
-              << "+-----------------------+\n"
-              << "| 3. ImportISO          |\n"
-              << "+-----------------------+\n"
-              << "| 4. Settings           |\n"
-              << "+-----------------------+\n"
-              << "| 5. Exit               |\n"
-              << "+-----------------------+" << "\n";
+    std::cout << color << "+----------------------+\n"
+              << "|      Main Menu        |\n"
+              << "+----------------------+\n"
+              << "| 1. ManageISO         |\n"
+              << "+----------------------+\n"
+              << "| 2. Convert2ISO       |\n"
+              << "+----------------------+\n"
+              << "| 3. ImportISO         |\n"
+              << "+----------------------+\n"
+              << "| 4. Settings          |\n"
+              << "+----------------------+\n"
+              << "| 5. Exit              |\n"
+              << "+----------------------+" << "\n";
 }
 
 /**

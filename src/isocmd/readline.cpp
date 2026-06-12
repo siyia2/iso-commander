@@ -535,13 +535,7 @@ int help_handler(int, int) {
 }
 
 int exit_handler(int, int) {
-    rl_replace_line("<", 0);
-    rl_done = 1;
-    return 0;
-}
-
-int exit_handler_filtering(int, int) {
-    rl_replace_line("/", 0);
+    rl_replace_line("\x1b", 0);
     rl_done = 1;
     return 0;
 }
@@ -561,7 +555,7 @@ void setup_custom_keybindingsForSelect(void) {
     rl_bind_keyseq("C", clr_handler);
     rl_bind_keyseq("R", refresh_handler);
     rl_bind_keyseq("~", toggleList_handler);
-    rl_bind_keyseq("<", exit_handler);
+    rl_bind_keyseq("\\e", exit_handler);
     rl_bind_keyseq("?", help_handler);
 }
 
@@ -571,7 +565,7 @@ void setup_custom_keybindingsForSelect(void) {
 void setup_custom_keybindingsForSettingsEditor(void) {
     rl_bind_keyseq("r", reset_handler);
     rl_bind_keyseq("?", help_handler);
-    rl_bind_keyseq("<", exit_handler);
+    rl_bind_keyseq("\\e", exit_handler);
 }
 
 /**
@@ -579,7 +573,7 @@ void setup_custom_keybindingsForSettingsEditor(void) {
  */
 void setup_custom_keybindingsForSearches(void) {
     rl_bind_keyseq("?", help_handler);
-    rl_bind_keyseq("<", exit_handler);
+    rl_bind_keyseq("\\e", exit_handler);
 }
 
 /**
@@ -597,8 +591,10 @@ void reset_custom_keybindingsForSelect(void) {
     rl_bind_keyseq("C", rl_insert);
     rl_bind_keyseq("R", rl_insert);
     rl_bind_keyseq("~", rl_insert);
-    rl_bind_keyseq("<", rl_insert);
     rl_bind_keyseq("?", rl_insert);
+
+    // Esc special case
+    rl_bind_keyseq("\\e", exit_handler);
 }
 
 /**
@@ -624,8 +620,10 @@ void reset_custom_keybindingsForRm(void) {
     rl_bind_keyseq("C", rl_insert);
     rl_bind_keyseq("R", rl_insert);
     rl_bind_keyseq("~", rl_insert);
-    rl_bind_keyseq("<", rl_insert);
     rl_bind_keyseq("?", rl_insert);
+
+    // Esc special case
+    rl_bind_keyseq("\\e", exit_handler);
 }
 
 /**
@@ -634,10 +632,14 @@ void reset_custom_keybindingsForRm(void) {
 void reset_custom_keybindingsForSettingsEditor(void) {
     rl_bind_keyseq("r", rl_insert);
     rl_bind_keyseq("?", rl_insert);
-    rl_bind_keyseq("<", rl_insert);
+
+    // Esc special case
+    rl_bind_keyseq("\\e", exit_handler);
 }
 
 void reset_custom_keybindingsForSearches(void) {
     rl_bind_keyseq("?", rl_insert);
-    rl_bind_keyseq("<", rl_insert);
+
+    // Esc special case
+    rl_bind_keyseq("\\e", exit_handler);
 }

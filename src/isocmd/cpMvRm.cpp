@@ -141,6 +141,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
 
     rl_attempted_completion_function = nullptr;
     reset_custom_keybindingsForRm();
+    rl_bind_keyseq("\\e", exit_handler);
 
     const CpMvRmColors colors = getCpMvRmColors();
     std::string green = "\001" + std::string(colors.prompt_green) + "\002";
@@ -281,7 +282,7 @@ bool& overwriteExisting) {
                 green + "ISO" +
                 blue + " to be " +
                 operationColor + operationDescription +
-                blue + " into, ? help, < return:\n" +
+                blue + " into, ? for help:\n" +
                 reset;
 
             userInput = handlePaginatedDisplay(
@@ -298,7 +299,7 @@ bool& overwriteExisting) {
                 userDestDir = "";
                 continue;
             }
-            if (userInput == "<") {
+            if (userInput == "\x1b") {
                 umountMvRmBreak = false;
                 userDestDir = "";
                 clear_history();

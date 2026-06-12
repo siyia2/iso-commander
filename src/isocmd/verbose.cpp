@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 // Third-Party Library Headers
+#include <readline/readline.h>
 #include <readline/history.h>
 
 // Project Headers
@@ -27,59 +28,87 @@
 #include "../databaseOps.h"
 #include "../display.h"
 #include "../inputHandling.h"
+#include "../readline.h"
 #include "../state.h"
 #include "../themes.h"
 #include "../verbose.h"
 
 /**
- * @brief Waits for the user to press Enter or Ctrl+D before allowing another attempt.
+ * @brief Waits for the user to press Enter, Esc or Ctrl+D before allowing another attempt.
  *
- * Uses raw fd read to correctly handle both Enter and Ctrl+D regardless of
- * tty VEOF state, avoiding buffering issues with std::cin in canonical mode.
+ * Switches the terminal to raw mode (no canonical buffering, no echo) so that
+ * Enter, Esc and Ctrl+D are detected immediately without requiring a newline.
+ * Restores the original terminal state before returning.
  */
 void pressEnterToTry() {
     enable_ctrl_d();
+    struct termios raw, saved;
+    tcgetattr(STDIN_FILENO, &saved);
+    raw = saved;
+    raw.c_lflag &= ~(ICANON | ECHO);
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
     std::cout << color << "\n↵ to try again..." << UI::Palette::BoldReset;
     std::cout.flush();
     char ch;
     while (read(STDIN_FILENO, &ch, 1) > 0) {
-        if (ch == '\n' || ch == 4) break;
+        if (ch == '\n' || ch == '\r' || ch == 4 || ch == 27) break;
     }
     tcflush(STDIN_FILENO, TCIFLUSH);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved);
 }
 
 /**
- * @brief Waits for the user to press Enter or Ctrl+D before returning to a previous menu or state.
+ * @brief Waits for the user to press Enter, Esc or Ctrl+D before returning to a previous menu or state.
  *
- * Uses raw fd read to correctly handle both Enter and Ctrl+D regardless of
- * tty VEOF state, avoiding buffering issues with std::cin in canonical mode.
+ * Switches the terminal to raw mode (no canonical buffering, no echo) so that
+ * Enter, Esc and Ctrl+D are detected immediately without requiring a newline.
+ * Restores the original terminal state before returning.
  */
 void pressEnterToReturn() {
     enable_ctrl_d();
+    struct termios raw, saved;
+    tcgetattr(STDIN_FILENO, &saved);
+    raw = saved;
+    raw.c_lflag &= ~(ICANON | ECHO);
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
     std::cout << color << "\n↵ to return..." << UI::Palette::BoldReset;
     std::cout.flush();
     char ch;
     while (read(STDIN_FILENO, &ch, 1) > 0) {
-        if (ch == '\n' || ch == 4) break;
+        if (ch == '\n' || ch == '\r' || ch == 4 || ch == 27) break;
     }
     tcflush(STDIN_FILENO, TCIFLUSH);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved);
 }
 
 /**
- * @brief Waits for the user to press Enter or Ctrl+D before continuing program execution.
+ * @brief Waits for the user to press Enter, Esc or Ctrl+D before continuing program execution.
  *
- * Uses raw fd read to correctly handle both Enter and Ctrl+D regardless of
- * tty VEOF state, avoiding buffering issues with std::cin in canonical mode.
+ * Switches the terminal to raw mode (no canonical buffering, no echo) so that
+ * Enter, Esc and Ctrl+D are detected immediately without requiring a newline.
+ * Restores the original terminal state before returning.
  */
 void pressEnterToContinue() {
     enable_ctrl_d();
+    struct termios raw, saved;
+    tcgetattr(STDIN_FILENO, &saved);
+    raw = saved;
+    raw.c_lflag &= ~(ICANON | ECHO);
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
     std::cout << color << "\n↵ to continue..." << UI::Palette::BoldReset;
     std::cout.flush();
     char ch;
     while (read(STDIN_FILENO, &ch, 1) > 0) {
-        if (ch == '\n' || ch == 4) break;
+        if (ch == '\n' || ch == '\r' || ch == 4 || ch == 27) break;
     }
     tcflush(STDIN_FILENO, TCIFLUSH);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved);
 }
 
 /**

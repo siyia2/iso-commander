@@ -45,7 +45,6 @@ void printVersionNumber(const std::string& version) {
     std::cout << UI::Palette::BoldReset << "Iso Commander v" << version << UI::Palette::Reset << "\n";
 }
 
-
 /**
  * @brief Entry point for the isocmd application - an ISO management and mounting utility.
  *
@@ -89,6 +88,10 @@ int main(int argc, char *argv[]) {
     /// Configure readline completion behavior
     rl_completer_word_break_characters = ";";
     rl_completion_display_matches_hook = customListingsFunction;
+
+    // Use Esc key as universal exit handler
+    rl_variable_bind("keyseq-timeout", "10");
+    rl_bind_keyseq("\\e", exit_handler);
 
     // Bind PgUp and PgDn to arrow keys
     rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));

@@ -467,7 +467,7 @@ void displayErrors();
  * Displays the sorted list of selected ISOs (largest first) alongside detected
  * removable USB devices, then reads mapping input via readline.  The loop
  * continues until the user provides a valid, confirmed set of mappings or
- * explicitly cancels with @c "<".
+ * explicitly cancels with @c "\x1b" Esc.
  *
  * Readline tab-completion is configured for both ISO indices and device paths.
  * A @c "?" input triggers the help screen.  After a valid mapping is entered,
@@ -603,7 +603,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         devicePromptStream << "\n" << wt.rl_labelCol << "Mappings"
                           << wt.rl_primaryCol << " ↵ as "
                           << wt.rl_highlightCol << "INDEX>DEVICE"
-                          << wt.rl_primaryCol << ", ? help, < return: "
+                          << wt.rl_primaryCol << ", ? for help: "
                           << wt.rl_resetCol;
 
         std::string devicePrompt = devicePromptStream.str();
@@ -622,7 +622,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         }
 
         std::string mainInputString(deviceInput.get());
-        if (mainInputString == "<") {
+        if (mainInputString == "\x1b") {
             restoreReadline();
             return {};
         }

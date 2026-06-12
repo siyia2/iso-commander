@@ -68,6 +68,7 @@ void helpSelections(bool& isAtISOListForHelp) {
     const ThemeColors tc;
     setupHelp("Help Guide For Lists", tc);
     printSection(tc, "1. Hotkeys:", std::string(UI::Palette::BoldReset) +
+        "   • Exit         : " + std::string(UI::Palette::Yellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
         "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u");
     printSection(tc, "\n2. Selecting Items (↵):", std::string(UI::Palette::BoldReset) +
@@ -99,6 +100,7 @@ void helpSettingsEditor() {
     const ThemeColors tc;
     setupHelp("Help Guide For Settings Editor", tc);
     printSection(tc, "1. Hotkeys:", std::string(UI::Palette::BoldReset) +
+        "   • Exit         : " + std::string(UI::Palette::Yellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
         "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u");
     printSection(tc, "\n2. Selecting Edits (↵):", std::string(UI::Palette::BoldReset) +
@@ -119,7 +121,9 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     setupHelp("Help Guide For " + titleStr + " Prompt", tc);
 
     // 1. Hotkeys
-    std::string keys = std::string(UI::Palette::BoldReset) + "   • Quick Return  : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n";
+    std::string keys =
+    "   • Exit          : " + std::string(UI::Palette::Yellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
+    "   • Quick Return  : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset);
     if (!isCpMv) keys += std::string(UI::Palette::BoldReset) + "   • Cancel Search : " + std::string(UI::Palette::Yellow) + "Ctrl+c\n";
     keys += std::string(UI::Palette::BoldReset) + "   • Clear Line    : " + std::string(UI::Palette::Yellow) + "Ctrl+u\n";
     keys += std::string(UI::Palette::BoldReset) + "   • Declutter     : " + std::string(UI::Palette::Yellow) + "Ctrl+l";
@@ -141,21 +145,21 @@ void helpSearches(bool isCpMv, bool import2ISO) {
         // 3. Cleanup/Display (convert2iso / import2iso specific)
         std::string displayCmds =
             "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
-            "'!clr'                " + std::string(UI::Palette::BoldReset) +
+            "'!clr'       " + std::string(UI::Palette::BoldReset) +
             (import2ISO ? " : Clear IsoDatabase\n" : " : Clear corresponding ImageCache\n") +
             "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
-            "'!clr_paths'          " + std::string(UI::Palette::BoldReset) + " : Clear FolderPath history\n" +
+            "'!clr_paths' " + std::string(UI::Palette::BoldReset) + " : Clear FolderPath history\n" +
             "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Yellow) +
-            "'!clr_filter'         " + std::string(UI::Palette::BoldReset) + " : Clear FilterTerm history\n";
+            "'!clr_filter'" + std::string(UI::Palette::BoldReset) + " : Clear FilterTerm history\n";
 
         if (!import2ISO) {
             displayCmds +=
                 "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) +
-                "'ls'|'*stats'         " + std::string(UI::Palette::BoldReset) + " : Display entries|stats";
+                "'ls'|'*stats'" + std::string(UI::Palette::BoldReset) + " : Display entries|stats";
         } else {
             displayCmds +=
                 "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) +
-                "'*stats'              " + std::string(UI::Palette::BoldReset) + " : Display stats";
+                "'*stats'     " + std::string(UI::Palette::BoldReset) + " : Display stats";
         }
         printSection(tc, "3. Cleanup/Display Commands (↵):", displayCmds);
         printSection(tc, "\n4. Tips:",
@@ -173,7 +177,8 @@ void helpMappings() {
     setupHelp("Help Guide For Mappings", tc);
 
     printSection(tc, "1. Hotkeys:",
-        std::string(UI::Palette::BoldReset) + "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
+        "   • Exit         : " + std::string(UI::Palette::Yellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
+        "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u\n" + std::string(UI::Palette::BoldReset) +
         "   • Declutter    : " + std::string(UI::Palette::Yellow) + "Ctrl+l");
 

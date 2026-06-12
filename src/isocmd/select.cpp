@@ -375,7 +375,7 @@ void selectForIsoFiles(const std::string& operation,
             pt.iso     + "ISO" +
             pt.primary + " ↵ for " + "\001" +
             operationColor + "\002" + operation +
-            pt.primary + ", ? help, < return: " +
+            pt.primary + ", ? for help: " +
             pt.reset;
 
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
@@ -418,7 +418,7 @@ void selectForIsoFiles(const std::string& operation,
             continue;
         }
 
-        if (inputString == "<") {
+        if (inputString == "\x1b") {
             if (isFiltered) {
                 isFiltered = false;
                 filteringStack.clear();
@@ -622,7 +622,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             pt.highlight + fileExtensionWithOutDots +
             pt.primary   + " ↵ for " +
             pt.highlight + operation +
-            pt.primary   + ", ? help, < return: " +
+            pt.primary   + ", ? for help: " +
             pt.reset;
 
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
@@ -631,7 +631,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
         std::string inputString(rawInput.get());
 
-        if (inputString == "<") {
+        if (inputString == "\x1b") {
             clearScrollBuffer();
             if (isFiltered) {
                 if (fileType == "bin" || fileType == "img") {
