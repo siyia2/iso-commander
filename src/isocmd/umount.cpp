@@ -71,11 +71,15 @@ static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessage
 
 /**
  * @brief Performs unmount operations on a list of ISO mount points.
- * @details Utilizes the libmount context API to perform lazy unmount operations
- * (equivalent to MNT_DETACH). Automatically identifies and detaches the
- * associated loop devices (/dev/loopX) to prevent resource leakage. Handles
- * root permission checks and cancellation signals, and cleans up empty mount
- * point directories after a successful unmount.
+ *
+ * Allocates a single libmount context (@c mnt_new_context) and reuses it
+ * across all entries via @c mnt_reset_context, avoiding per-iteration
+ * allocation overhead.  The context is managed by a RAII CtxGuard that
+ * guarantees @c mnt_free_context on any exit path.
+ *
+ * Each mount point is unmounted with lazy detach (@c MNT_DETACH) and
+ * automatic loop device cleanup (@c /dev/loopX).  Empty mount point
+ * directories are removed after a successful unmount.
  *
  * Results are written directly to the global verboseSets:
  *   - verboseSets.operationCompleted  Success messages.
@@ -83,10 +87,13 @@ static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessage
  *
  * @param isoDirs        Vector of mount point directories to unmount.
  * @param completedTasks Atomic counter incremented for each successful unmount.
- * @param failedTasks    Atomic counter incremented for each failure (including cancellation).
+ * @param failedTasks    Atomic counter incremented for each failure
+ *                       (including cancellation and context allocation failure).
  * @param silentMode     Suppresses all message generation; only counters are updated.
  *
  * @warning Requires root (geteuid() == 0). Without it every entry gets "root_error".
+ *          If the initial context allocation fails, all entries are marked failed
+ *          immediately.
  */
 void unmountISO(
     const std::vector<std::string>& isoDirs,
