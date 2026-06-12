@@ -165,6 +165,10 @@ struct ThreadGuard {
     ThreadGuard& operator=(const ThreadGuard&) = delete;
 
     ~ThreadGuard() {
+        stop();
+    }
+
+    void stop() {
         active.store(false);
         if (thread.joinable()) thread.join();
     }
