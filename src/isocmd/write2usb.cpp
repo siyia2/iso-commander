@@ -724,8 +724,13 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                                     (e.dst.string().rfind(ntfsMnt, 0) == 0);
                 const int sectorSize = toNtfs ? ntfsSectorSize : fatSectorSize;
 
-                if (!copyWithProgress(e.src, e.dst, e.size, sectorSize))
+                if (!copyWithProgress(e.src, e.dst, e.size, sectorSize)) {
+                    if (!GlobalState::g_operationCancelled.load()) {
                     return fail();
+                    } else {
+                        return false;
+                    }
+                }
             }
         }
         return true;
