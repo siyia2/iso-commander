@@ -168,10 +168,10 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
 
         // 4. Display Pagination Footer (Only if enabled and more than 1 page)
         if (!disablePagination && totalPages > 1) {
-            std::cout << "\n" << c.head << "Pagination: ";
-            if (currentPage > 0)               std::cout << "[PgUp] Previous | ";
+            std::cout << "\n" << c.head;
+            if (currentPage > 0)               std::cout << "[PgUp] Prev | ";
             if (currentPage < totalPages - 1)  std::cout << "[PgDn] Next | ";
-            std::cout << "[g<num>] ↵ GoTo | " << UI::Palette::BoldReset << "\n";
+            std::cout << "[g#] ↵ GoTo | " << UI::Palette::BoldReset << "\n";
         }
 
         // 5. Construct the final prompt
