@@ -74,7 +74,7 @@ void selectForIsoFiles(const std::string& operation,
  * @details
  * - **Loop entry:** @c isAtISOList is set to @c false and the scroll buffer is
  *   cleared on every iteration before the menu is drawn.
- * - **Exit condition:** A null readline return (Ctrl+D) or empty input breaks
+ * - **Exit condition:** A null readline return (Ctrl+D) or Esc breaks
  *   the loop and returns to the caller.
  * - **Readline keybindings:** @c \\f and @c \\t are bound to no-ops at the top
  *   of each iteration to prevent terminal corruption during menu input.
@@ -174,7 +174,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
  * ignored and the menu redraws.
  *
  * @details
- * - **Exit condition:** A null readline return (Ctrl+D) or empty input breaks
+ * - **Exit condition:** A null readline return (Ctrl+D) or Esc breaks
  *   the loop and returns to the caller.
  * - **Readline keybindings:** @c \\f and @c \\t are bound to no-ops at the top
  *   of each iteration to prevent terminal corruption during menu input.

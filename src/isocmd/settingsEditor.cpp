@@ -304,7 +304,7 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
 
-        // Handle Cancel (Ctrl+D/Esc or Empty Enter)
+        // Handle Cancel (Ctrl+D/Esc)
         if (!rawInput || rawInput.get()[0] == 27) return false;
         std::string newVal = trim(rawInput.get());
         if (newVal.empty() || newVal == current) return true;
