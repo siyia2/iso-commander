@@ -135,8 +135,8 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     if (isCpMv) {
         // 3. Tips (Cp/Mv specific)
         printSection(tc, "\n3. Tips:",
-            "   • 'mv' to a single destination on the same device is instant\n"
-            "   • 'mv' to multiple destinations uses cp and remove (slower)");
+            "   • 'mv' same-device: instant (metadata update)\n"
+            "   • 'mv' mult-dest: uses cp+rm (slower)");
     } else {
         // 3. Cleanup/Display (convert2iso / import2iso specific)
         std::string displayCmds =
