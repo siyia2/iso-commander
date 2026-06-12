@@ -5,7 +5,6 @@
 
 // C++ Standard Library Headers
 #include <atomic>
-#include <cstddef>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -19,8 +18,8 @@ namespace fs = std::filesystem;
 
 /**
  * @brief High-performance formatter for mount-related terminal output.
- * @details Utilizes a persistent internal buffer to minimize heap allocations 
- * and leverages std::string_view for zero-copy parameter passing. This ensures 
+ * @details Utilizes a persistent internal buffer to minimize heap allocations
+ * and leverages std::string_view for zero-copy parameter passing. This ensures
  * that verbose logging remains fast even during high-volume batch operations.
  */
 struct VerbosityFormatter {
@@ -40,7 +39,7 @@ struct VerbosityFormatter {
                     .append(tc.path).append("'").append(getPath(isoDir, isoFile)).append("'")
                     .append(tc.label).append(" mnt@: ")
                     .append(tc.highlight).append("'").append(mntDir).append("/").append(mntFile).append("'")
-                    .append(tc.label).append("."); 
+                    .append(tc.label).append(".");
 
         if (!fsType.empty()) {
             outputBuffer.append(" ").append(tc.label).append("{").append(fsType).append("}");
@@ -84,7 +83,7 @@ struct VerbosityFormatter {
         outputBuffer.clear();
         outputBuffer.append(tc.error).append("Failed to mnt: ")
                     .append(tc.warning).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(tc.error).append(". ").append(tc.label); 
+                    .append(tc.error).append(". ").append(tc.label);
 
         if (errorType == "clx")             outputBuffer.append("Operation was cancelled");
         else if (errorType == "needsRoot")  outputBuffer.append("Root privileges required");

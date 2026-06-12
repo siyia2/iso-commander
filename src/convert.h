@@ -5,7 +5,6 @@
 
 // C++ Standard Library Headers
 #include <atomic>
-#include <cstddef>
 #include <string>
 
 // CCD2ISO

@@ -4,13 +4,12 @@
 #define WRITE_H
 
 // C++ Standard Library Headers
-#include <algorithm>
 #include <atomic>
 #include <cstdint>
-#include <future>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 #include <unordered_set>
 

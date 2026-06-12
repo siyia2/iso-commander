@@ -7,10 +7,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
-#include <cstring>
-#include <functional>
 #include <future>
-#include <iostream>
 #include <memory>
 #include <new>
 #include <stdexcept>
