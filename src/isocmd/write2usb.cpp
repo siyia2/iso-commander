@@ -198,7 +198,7 @@ static int libMount(const char* src,
  * consistently, even if an initial standard unmount fails.
  * * @param path The mount point or device path to unmount.
  */
-static void safeUmount(const char* path) {
+void safeUmount(const char* path) {
     libmnt_context* ctx = mnt_new_context();
     if (!ctx) return;
 
