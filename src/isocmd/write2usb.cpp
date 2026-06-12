@@ -763,6 +763,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         if (fatFd >= 0) { syncfs(fatFd); close(fatFd); }
     }
 
+    threadGuard.stop();  // Sets monitoringActive=false and joins
+
     // ScopedMount destructors for ntfsScope, fatScope, isoScope fire here
     // in reverse declaration order: ntfs → fat → iso.
 
