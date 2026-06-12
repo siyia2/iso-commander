@@ -12,7 +12,6 @@
 
 // C / System Headers
 #include <stddef.h>
-#include <sys/mount.h>
 #include <unistd.h>
 
 // Third-Party Library Headers
