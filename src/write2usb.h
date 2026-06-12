@@ -13,6 +13,9 @@
 #include <vector>
 #include <unordered_set>
 
+// C / System Headers
+#include <unistd.h>
+
 // --- Data Structures ---
 
 /**
@@ -92,7 +95,7 @@ inline std::vector<ProgressInfo> progressData; ///< Shared progress state for al
  *   regardless of whether a mount succeeded.
  */
 
-static void safeUmount(const char* path);
+void safeUmount(const char* path);
 
 struct ScopedMount {
     std::string path;
