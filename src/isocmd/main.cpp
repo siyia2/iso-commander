@@ -2,7 +2,6 @@
 
 // C++ Standard Library Headers
 #include <atomic>
-#include <condition_variable>
 #include <csignal>
 #include <cstdlib>
 #include <filesystem>
@@ -11,13 +10,11 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <vector>
 
 // C / System Headers
 #include <fcntl.h>
-#include <stdio.h>
 #include <unistd.h>
 
 // Third-Party Library Headers
@@ -85,7 +82,7 @@ int main(int argc, char *argv[]) {
 
     // --- Version & Utility Command Dispatch ---
     if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v"))
-        return printVersionNumber("7.2.8"), 0;
+        return printVersionNumber("7.2.9"), 0;
     if (argc >= 3 || (argc == 2 && (std::string(argv[1]) == "umount" || std::string(argv[1]) == "unmount" || std::string(argv[1]) == "mount")))
         return handleMountUmountCommands(argc, argv);
 

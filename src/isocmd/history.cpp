@@ -8,7 +8,6 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -32,8 +31,8 @@
 
 /**
  * @brief Validates if a folder path history file is effectively empty.
- * * Performs checks for file existence, size, and content validity. A file is 
- * considered empty if it contains only whitespace or lacks any entries 
+ * * Performs checks for file existence, size, and content validity. A file is
+ * considered empty if it contains only whitespace or lacks any entries
  * starting with a forward slash.
  * * @param filePath The filesystem path to the history file.
  * @return true If the file is missing, size zero, or contains no valid paths.
@@ -80,8 +79,8 @@ bool isHistoryFileEmpty(const std::string& filePath) {
 
 /**
  * @brief Loads history from a file into the GNU Readline buffer.
- * * Swaps the current history context based on whether the user is filtering 
- * or navigating. Uses advisory file locking (flock) to ensure thread-safe 
+ * * Swaps the current history context based on whether the user is filtering
+ * or navigating. Uses advisory file locking (flock) to ensure thread-safe
  * and process-safe reads.
  * * @param filterHistory Boolean toggle; true for filter history, false for path history.
  */
@@ -122,8 +121,8 @@ void loadHistory(bool& filterHistory) {
 
 /**
  * @brief Saves the current Readline history to a persistent file.
- * * Performs deduplication (keeping only the most recent unique entries) 
- * and truncates the file to the maximum allowed lines. Employs exclusive 
+ * * Performs deduplication (keeping only the most recent unique entries)
+ * and truncates the file to the maximum allowed lines. Employs exclusive
  * file locking (flock) during the write process.
  * * @param filterHistory Boolean toggle; determines which database file to write to.
  */
@@ -196,7 +195,7 @@ void saveHistory(bool& filterHistory) {
 
 /**
  * @brief Clears the specified history database file and the current session history.
- * * Handles user commands to wipe either path or filter databases. 
+ * * Handles user commands to wipe either path or filter databases.
  * Re-routes output based on the active theme for error/success messaging.
  * * @param inputSearch The command string (e.g., "!clr_paths" or "!clr_filter").
  */
@@ -217,21 +216,21 @@ void clearHistory(const std::string& inputSearch) {
         filePath = basePath + "iso_commander_filter_database.txt";
         historyType = "FilterTerm";
     } else {
-        std::cerr << "\n" << (hc.error) << "Invalid command: " 
-                  << (hc.warning) << "'" << inputSearch << "'" 
+        std::cerr << "\n" << (hc.error) << "Invalid command: "
+                  << (hc.warning) << "'" << inputSearch << "'"
                   << (hc.error) << ".\033[J" << std::endl;
         return;
     }
 
     std::ofstream ofs(filePath, std::ofstream::out | std::ofstream::trunc);
     if (!ofs) {
-        std::cerr << "\n" << (hc.error) 
-                  << "Error clearing " << historyType << " database: " 
-                  << (hc.warning) << "'" << filePath << "'" 
+        std::cerr << "\n" << (hc.error)
+                  << "Error clearing " << historyType << " database: "
+                  << (hc.warning) << "'" << filePath << "'"
                   << (hc.error) << ". File missing or inaccessible.\033[J" << std::endl;
     } else {
         ofs.close();
-        std::cout << "\n" << (hc.highlight) 
+        std::cout << "\n" << (hc.highlight)
                   << historyType << " database cleared successfully.\033[J" << std::endl;
         clear_history();
     }

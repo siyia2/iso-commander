@@ -11,7 +11,6 @@
 #include <vector>
 
 // C / System Headers
-#include <stddef.h>
 #include <unistd.h>
 
 // Third-Party Library Headers

@@ -9,13 +9,9 @@
 #include <vector>
 
 // C / System Headers
-#include <fcntl.h>
-#include <linux/fs.h>
 #include <stdint.h>
 #include <string.h>
-#include <sys/ioctl.h>
 #include <sys/stat.h>
-#include <unistd.h>
 
 // Project Headers
 #include "../ccd.h"

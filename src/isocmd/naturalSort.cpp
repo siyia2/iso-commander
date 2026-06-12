@@ -12,9 +12,6 @@
 #include <utility>
 #include <vector>
 
-// C / System Headers
-#include <stddef.h>
-
 // Project Headers
 #include "../caches.h"
 #include "../concurrency.h"
@@ -23,18 +20,18 @@
 
 /**
  * @brief Compares two string views using natural order (e.g., "file2.txt" < "file10.txt").
- * 
- * Performs a case-insensitive natural sort comparison. If strings are alphabetically 
- * and numerically identical, it falls back to a case-sensitive comparison to ensure 
+ *
+ * Performs a case-insensitive natural sort comparison. If strings are alphabetically
+ * and numerically identical, it falls back to a case-sensitive comparison to ensure
  * a stable, deterministic sort order.
- * 
+ *
  * Numeric segments are compared by value, with leading zeros preserved as a
  * tiebreaker (e.g., "007" < "07" < "7" when numeric values are equal).
- * 
- * This version uses std::string_view to provide a zero-copy comparison, making it 
- * highly efficient for large collections or path-based sorting where substrings 
+ *
+ * This version uses std::string_view to provide a zero-copy comparison, making it
+ * highly efficient for large collections or path-based sorting where substrings
  * are frequently evaluated.
- * 
+ *
  * @param a The first string_view to compare.
  * @param b The second string_view to compare.
  * @return int Returns -1 if a < b, 1 if a > b, and 0 if a == b.
@@ -93,13 +90,13 @@ int naturalCompare(std::string_view a, std::string_view b) {
 
 /**
  * @brief Sorts a vector of file paths in natural order using a parallel merge sort approach.
- * 
- * The function divides the file list into chunks, sorts them in parallel via a ThreadPool, 
- * and performs a multi-pass merge of the sorted results. It utilizes zero-copy 
- * string_views to handle the `displayConfig::toggleNamesOnly` logic, ensuring 
+ *
+ * The function divides the file list into chunks, sorts them in parallel via a ThreadPool,
+ * and performs a multi-pass merge of the sorted results. It utilizes zero-copy
+ * string_views to handle the `displayConfig::toggleNamesOnly` logic, ensuring
  * high performance without redundant memory allocations.
- * 
- * @note Parallelism is capped by `GlobalConcurrency::SORT_THREAD_CAP` to prevent 
+ *
+ * @note Parallelism is capped by `GlobalConcurrency::SORT_THREAD_CAP` to prevent
  *       resource exhaustion.
  * @param files A reference to the vector of strings (file paths) to be sorted.
  */
@@ -162,9 +159,9 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
 
 /**
  * @brief Triggered when the 'filenamesOnly' flag is toggled.
- * 
- * Re-sorts all global file caches simultaneously in parallel. This function 
- * blocks the calling thread until all caches are fully sorted, ensuring 
+ *
+ * Re-sorts all global file caches simultaneously in parallel. This function
+ * blocks the calling thread until all caches are fully sorted, ensuring
  * data consistency before the UI refreshes.
  */
 void sortAfterFilenamesOnlyFlag() {

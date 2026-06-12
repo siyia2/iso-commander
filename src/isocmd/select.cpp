@@ -4,10 +4,8 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
-#include <chrono>
 #include <condition_variable>
 #include <cstdlib>
-#include <functional>
 #include <iostream>
 #include <memory>
 #include <mutex>

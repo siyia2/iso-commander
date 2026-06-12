@@ -4,15 +4,12 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <map>
 #include <string>
-#include <utility>
 #include <vector>
 
 // C / System Headers
 #include <ctype.h>
-#include <stddef.h>
 
 // Project Headers
 #include "../caches.h"
@@ -135,13 +132,13 @@ void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& c
 			return static_cast<size_t>(std::stoull(s));
 		} catch (...) { return defaultVal; }
 	};
-    
+
     GlobalState::MAX_HISTORY_LINES         		 = getVal("folder_path_history_lines",    30);
     GlobalState::MAX_HISTORY_PATTERN_LINES 		 = getVal("filter_history_lines",         15);
-    
+
     GlobalConcurrency::MAX_USEFUL_THREADS        = getVal("combined_thread_cap",               16);
     GlobalConcurrency::MOUNT_THREAD_CAP          = getVal("thread_cap_for_mount",             8);
-    GlobalConcurrency::UMOUNT_THREAD_CAP         = getVal("thread_cap_for_umount",            8); 
+    GlobalConcurrency::UMOUNT_THREAD_CAP         = getVal("thread_cap_for_umount",            8);
     GlobalConcurrency::CPMV_THREAD_CAP           = getVal("thread_cap_for_cp_mv",             4);
     GlobalConcurrency::RM_THREAD_CAP             = getVal("thread_cap_for_rm",                8);
     GlobalConcurrency::CONV_THREAD_CAP           = getVal("thread_cap_for_convert2iso",       4);
@@ -169,17 +166,17 @@ bool readUserConfigUpdates(const std::string& filePath) {
 bool paginationSet(const std::string& filePath) {
     syncCache(filePath);
     auto it = GlobalCaches::g_configCache.find("pagination");
-    
+
     if (it != GlobalCaches::g_configCache.end()) {
         for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
             if (entry.key == "pagination") {
                 if (entry.validate && entry.validate(it->second)) {
-                    try { 
-                        GlobalState::ITEMS_PER_PAGE = std::stoi(it->second); 
-                        return true; 
+                    try {
+                        GlobalState::ITEMS_PER_PAGE = std::stoi(it->second);
+                        return true;
                     } catch (...) { return false; }
                 }
-                break; 
+                break;
             }
         }
     }
@@ -192,23 +189,23 @@ bool paginationSet(const std::string& filePath) {
  */
 std::map<std::string, std::string> readUserConfigLists(const std::string& filePath) {
     fs::path configFilePath(filePath);
-    if (!fs::exists(configFilePath.parent_path()) && !configFilePath.parent_path().empty()) 
+    if (!fs::exists(configFilePath.parent_path()) && !configFilePath.parent_path().empty())
         fs::create_directories(configFilePath.parent_path());
- 
+
     syncCache(filePath);
- 
+
     displayConfig::toggleFullListMount       = (GlobalCaches::g_configCache["mount_list"]       == "full");
     displayConfig::toggleFullListUmount      = (GlobalCaches::g_configCache["umount_list"]      == "full");
     displayConfig::toggleFullListCpMvRm      = (GlobalCaches::g_configCache["cp_mv_rm_list"]    == "full");
     displayConfig::toggleFullListWrite2usb   = (GlobalCaches::g_configCache["write2usb_list"]       == "full");
     displayConfig::toggleFullListConvert2iso = (GlobalCaches::g_configCache["convert2iso_lists"] == "full");
     displayConfig::toggleNamesOnly           = (GlobalCaches::g_configCache["filenames_only"]   == "on");
- 
+
     skin        = GlobalCaches::g_configCache["skin"];
     color       = getskin();
     globalTheme = GlobalCaches::g_configCache["theme"];
- 
+
     applyThreadCapsAndHistoryLimits(GlobalCaches::g_configCache);
-    
+
     return GlobalCaches::g_configCache;
 }

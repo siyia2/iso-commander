@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <cctype>
 #include <sstream>
-#include <stddef.h>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -18,7 +17,7 @@
 
 /**
  * @brief Checks if a string has a leading zero.
- * @details Used to identify invalid numeric inputs where a leading zero might 
+ * @details Used to identify invalid numeric inputs where a leading zero might
  * imply octal or simply be an unsupported format for index selection.
  * @param str The string to check.
  * @return True if the string starts with '0'.
@@ -40,7 +39,7 @@ bool isNumeric(const std::string& str) {
 
 /**
  * @brief Parses user input strings into a set of unique file indices.
- * @details Supports individual indices (e.g., "5"), ranges (e.g., "1-10"), 
+ * @details Supports individual indices (e.g., "5"), ranges (e.g., "1-10"),
  * and reverse ranges (e.g., "10-1"). Performs extensive validation against
  * the current file list size and handles various formatting errors.
  * * @param input The raw input string from the user.
@@ -48,13 +47,13 @@ bool isNumeric(const std::string& str) {
  * @param uniqueErrorTokenMessages Set to store color-coded, categorized error strings.
  * @param processedIndices Set to store the successfully parsed unique indices.
  */
-void tokenizeInput(const std::string& input, 
-                   const std::vector<std::string>& isoFiles, 
+void tokenizeInput(const std::string& input,
+                   const std::vector<std::string>& isoFiles,
                    std::unordered_set<int>& processedIndices) {
-    
+
     std::istringstream iss(input);
     std::string token;
-    
+
     // Categorize errors to provide specific feedback
     std::unordered_set<std::string> invalidInputs;
     std::unordered_set<std::string> invalidIndices;
@@ -124,13 +123,13 @@ void tokenizeInput(const std::string& input,
 			invalidInputs.insert(token);
 		}
 	}
-    
+
     SemanticUIColors sc = resolveVerboseTheme();
 
     /**
 	* @brief Formats error categories with appropriate pluralization and ANSI colors.
 	*/
-	auto formatCategory = [&sc](std::string_view color, std::string_view singular, 
+	auto formatCategory = [&sc](std::string_view color, std::string_view singular,
 							 std::string_view plural, const auto& container) {
 		if (container.empty()) return std::string();
 
@@ -144,7 +143,7 @@ void tokenizeInput(const std::string& input,
 			oss << item;
 			first = false;
 		}
-		oss << "'" << sc.reset; 
+		oss << "'" << sc.reset;
 		return oss.str();
 	};
 

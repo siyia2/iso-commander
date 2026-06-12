@@ -11,12 +11,10 @@
 #include <memory>
 #include <sstream>
 #include <string>
-#include <string_view>
 
 // C / System Headers
 #include <fcntl.h>
 #include <poll.h>
-#include <stdint.h>
 #include <termios.h>
 #include <unistd.h>
 
