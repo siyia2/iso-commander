@@ -347,29 +347,33 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  * - **FAT32 files >= 4 GiB** fall back to buffered I/O to respect the FAT32
  *   per-file size limit.
  * - **NTFS files** always use buffered I/O with @c posix_fallocate pre-allocation
- *   to maximize sequential write throughput and minimize filesystem fragmentation.
+ *   to maximise sequential write throughput and minimise filesystem fragmentation.
  *
  * Sector alignment:
  * - Both logical (@c BLKSSZGET) and physical (@c BLKPBSZGET) sector sizes are
  *   queried on each partition node. The larger of the two is used to govern
  *   @c O_DIRECT buffer alignment and write padding, ensuring correct behaviour
  *   on 512n, 512e, and 4Kn drives. If either ioctl fails or returns a
- *   non-positive value, that size is treated as 512 bytes; the larger of the
- *   two resulting values is then used.
+ *   non-positive value, that size is treated as 512 bytes.
  *
  * Telemetry:
  * - Progress, speed, and byte accounting are handled by a dedicated background
- *   thread, keeping timing logic and speed calculations out of the critical
- *   I/O path.
+ *   thread, keeping timing logic and speed calculations out of the critical I/O path.
  *
  * Flush and unmount strategy:
  * - @c syncfs is called on each mounted filesystem fd before unmounting,
- *   flushing all dirty pages at the filesystem level explicitly. Unmounting
- *   is then delegated to @c safeUmount, which is expected to block until the
+ *   flushing all dirty pages at the filesystem level explicitly. Unmounting is
+ *   then delegated to @c safeUmount (via ScopedMount), which blocks until the
  *   kernel confirms all I/O is complete.
  *
  * For WindowsInstall, NTFS content is written before the ESP so the bootloader
  * only lands after the data it references is already on disk.
+ *
+ * Cleanup strategy:
+ * - All mount points and the I/O buffer are managed by RAII objects (ScopedMount,
+ *   AlignedBuffer). The progress thread is managed by ThreadGuard. Every early
+ *   return path is therefore cleanup-free: destructors fire in reverse declaration
+ *   order automatically.
  *
  * @param isoPath       Path to the source ISO file.
  * @param device        Target block device (e.g. @c /dev/sdb). Will be wiped.
@@ -389,25 +393,22 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ------------------------------------------------------------------ //
     // 0. Mount the ISO to inspect its layout                              //
     // ------------------------------------------------------------------ //
-    char isoMnt[] = "/tmp/win_iso_XXXXXX";
-    if (!mkdtemp(isoMnt)) return fail();
+    char isoMntBuf[] = "/tmp/win_iso_XXXXXX";
+    if (!mkdtemp(isoMntBuf)) return fail();
 
-    auto unmountIso = [&]() {
-        safeUmount(isoMnt);
-        rmdir(isoMnt);
-    };
+    // ScopedMount always removes the dir; setMounted() arms the safeUmount.
+    ScopedMount isoScope(isoMntBuf);
 
-    if (libMount(isoPath.c_str(), isoMnt, "ro,loop") != 0) {
-        unmountIso();
-        return fail();
-    }
+    if (libMount(isoPath.c_str(), isoMntBuf, "ro,loop") != 0) return fail();
+    isoScope.setMounted();
 
-    const IsoType isoType = detectIsoType(std::string(isoMnt));
+    const std::string isoMnt  = isoMntBuf;
+    const IsoType     isoType = detectIsoType(isoMnt);
 
     // ------------------------------------------------------------------ //
     // 1. Wipe + repartition                                               //
     // ------------------------------------------------------------------ //
-    if (!wipeDeviceSignatures(device)) { unmountIso(); return fail(); }
+    if (!wipeDeviceSignatures(device)) return fail();
 
     int partResult = -1;
     if (isoType == IsoType::WindowsInstall) {
@@ -424,39 +425,38 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                                  "set", "1", "esp",  "on",
                                  "set", "1", "boot", "on"});
     }
-    if (partResult != 0) { unmountIso(); return fail(); }
+    if (partResult != 0) return fail();
 
-    if (!waitForDevice(device)) { unmountIso(); return fail(); }
+    if (!waitForDevice(device)) return fail();
 
     auto derivePartition = [&](int n) -> std::string {
         std::string target = device + std::to_string(n);
         return waitForDevice(target, 30) ? target : std::string{};
     };
 
-    std::string fatPart  = derivePartition(1);
-    std::string ntfsPart = (isoType == IsoType::WindowsInstall)
-                               ? derivePartition(2)
-                               : std::string{};
+    const std::string fatPart  = derivePartition(1);
+    const std::string ntfsPart = (isoType == IsoType::WindowsInstall)
+                                     ? derivePartition(2)
+                                     : std::string{};
 
-    if (fatPart.empty()) { unmountIso(); return fail(); }
-    if (isoType == IsoType::WindowsInstall && ntfsPart.empty()) {
-        unmountIso(); return fail();
-    }
+    if (fatPart.empty()) return fail();
+    if (isoType == IsoType::WindowsInstall && ntfsPart.empty()) return fail();
 
     if (runCommand({"mkfs.fat", "-F", "32", "-n",
                     (isoType == IsoType::WindowsInstall ? "WINBOOT" : "WINPE"),
                     fatPart}) != 0) {
-        unmountIso(); return fail();
+        return fail();
     }
 
     if (isoType == IsoType::WindowsInstall) {
         if (runCommand({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA",
                         ntfsPart}) != 0) {
-            unmountIso(); return fail();
+            return fail();
         }
     }
 
-    // Sector size query
+    // Sector size query — returns the larger of logical and physical sector
+    // sizes. Falls back to 512 if either ioctl fails or returns non-positive.
     auto getBestSectorSize = [](const std::string& devNode) -> int {
         int fd = open(devNode.c_str(), O_RDONLY);
         if (fd < 0) return 512;
@@ -473,61 +473,52 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                                    ? getBestSectorSize(ntfsPart)
                                    : 512;
 
-    if (GlobalState::g_operationCancelled.load()) { unmountIso(); return false; }
+    if (GlobalState::g_operationCancelled.load()) return false;
 
     // ------------------------------------------------------------------ //
     // 2. Mount FAT32 partition (and NTFS for Windows installs)            //
     // ------------------------------------------------------------------ //
-    char fatMnt[]  = "/tmp/win_fat_XXXXXX";
-    char ntfsMnt[] = "/tmp/win_ntfs_XXXXXX";
+    char fatMntBuf[]  = "/tmp/win_fat_XXXXXX";
+    char ntfsMntBuf[] = "/tmp/win_ntfs_XXXXXX";
 
-    if (!mkdtemp(fatMnt)) { unmountIso(); return fail(); }
+    if (!mkdtemp(fatMntBuf)) return fail();
+    ScopedMount fatScope(fatMntBuf);
+
+    // ntfsScope is armed only for WindowsInstall; an empty path is a no-op.
+    if (isoType == IsoType::WindowsInstall) {
+        if (!mkdtemp(ntfsMntBuf)) return fail();
+    }
+    ScopedMount ntfsScope(isoType == IsoType::WindowsInstall
+                              ? std::string(ntfsMntBuf)
+                              : std::string{});
+
+    const std::string fatMnt  = fatMntBuf;
+    const std::string ntfsMnt = ntfsMntBuf;
+
+    if (libMount(fatPart.c_str(), fatMntBuf, "noatime") != 0) return fail();
+    fatScope.setMounted();
 
     if (isoType == IsoType::WindowsInstall) {
-        if (!mkdtemp(ntfsMnt)) { unmountIso(); rmdir(fatMnt); return fail(); }
-    }
-
-    bool alreadyUnmounted = false;
-    auto unmountAll = [&]() {
-        if (alreadyUnmounted) return;
-        alreadyUnmounted = true;
-
-        safeUmount(isoMnt);
-        safeUmount(fatMnt);
-        if (isoType == IsoType::WindowsInstall)
-            safeUmount(ntfsMnt);
-
-        rmdir(isoMnt);
-        rmdir(fatMnt);
-        if (isoType == IsoType::WindowsInstall)
-            rmdir(ntfsMnt);
-    };
-
-    if (libMount(fatPart.c_str(), fatMnt, "noatime") != 0) {
-        unmountAll(); return fail();
-    }
-
-    std::string ntfsDriver;
-    if (isoType == IsoType::WindowsInstall) {
-        ntfsDriver = getBestNtfsDriver();
-        if (ntfsDriver.empty()) { unmountAll(); return fail(); }
+        const std::string ntfsDriver = getBestNtfsDriver();
+        if (ntfsDriver.empty()) return fail();
 
         libmnt_context* ctx = mnt_new_context();
         mnt_context_set_source(ctx, ntfsPart.c_str());
-        mnt_context_set_target(ctx, ntfsMnt);
+        mnt_context_set_target(ctx, ntfsMntBuf);
         mnt_context_set_fstype(ctx, ntfsDriver.c_str());
         mnt_context_append_options(ctx, "noatime");
         mnt_context_disable_helpers(ctx, true);
-        int rc = mnt_context_mount(ctx);
+        const int rc = mnt_context_mount(ctx);
         mnt_free_context(ctx);
 
-        if (rc != 0) { unmountAll(); return fail(); }
+        if (rc != 0) return fail();
+        ntfsScope.setMounted();
     }
 
-    if (GlobalState::g_operationCancelled.load()) { unmountAll(); return false; }
+    if (GlobalState::g_operationCancelled.load()) return false;
 
     // ------------------------------------------------------------------ //
-    // 3. Collect and classify ISO entries                                //
+    // 3. Collect and classify ISO entries                                 //
     // ------------------------------------------------------------------ //
     struct IsoEntry {
         fs::path src;
@@ -558,26 +549,24 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     };
 
     try {
-        for (const auto& entry :
-             fs::recursive_directory_iterator(std::string(isoMnt))) {
-            fs::path rel   = fs::relative(entry.path(), std::string(isoMnt));
-            bool     toESP = belongsOnESP(rel);
-            fs::path dest  = fs::path(toESP ? std::string(fatMnt)
-                                            : std::string(ntfsMnt)) / rel;
+        for (const auto& entry : fs::recursive_directory_iterator(isoMnt)) {
+            const fs::path rel   = fs::relative(entry.path(), isoMnt);
+            const bool     toESP = belongsOnESP(rel);
+            const fs::path dest  = fs::path(toESP ? fatMnt : ntfsMnt) / rel;
+            const uint64_t sz    = entry.is_regular_file() ? entry.file_size() : 0;
 
-            uint64_t sz = entry.is_regular_file() ? entry.file_size() : 0;
             totalBytes += sz;
 
-            IsoEntry e { entry.path(), dest, sz, entry.is_directory() };
+            IsoEntry e{ entry.path(), dest, sz, entry.is_directory() };
             if (toESP) espEntries.push_back(std::move(e));
             else       ntfsEntries.push_back(std::move(e));
         }
-    } catch (...) { unmountAll(); return fail(); }
+    } catch (...) { return fail(); }
 
-    if (totalBytes == 0) { unmountAll(); return fail(); }
+    if (totalBytes == 0) return fail();
 
     // ------------------------------------------------------------------ //
-    // 4. Async progress monitoring thread                                //
+    // 4. Async progress monitoring thread                                 //
     // ------------------------------------------------------------------ //
     std::atomic<uint64_t> totalBytesWrittenAccumulator{0};
     std::atomic<bool>     monitoringActive{true};
@@ -589,15 +578,15 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         while (monitoringActive.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
-            auto now = std::chrono::high_resolution_clock::now();
-            auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           now - lastUpdate).count();
+            const auto now = std::chrono::high_resolution_clock::now();
+            const auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 now - lastUpdate).count();
             if (ms <= 0) continue;
 
-            uint64_t currentWritten = totalBytesWrittenAccumulator.load();
-            uint64_t deltaBytes     = (currentWritten >= lastWritten)
-                                          ? (currentWritten - lastWritten)
-                                          : 0;
+            const uint64_t currentWritten = totalBytesWrittenAccumulator.load();
+            const uint64_t deltaBytes     = (currentWritten >= lastWritten)
+                                                ? (currentWritten - lastWritten)
+                                                : 0;
 
             progressData[progressIndex].bytesWritten.store(currentWritten);
             progressData[progressIndex].progress.store(static_cast<int>(
@@ -605,8 +594,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                          (static_cast<double>(currentWritten) / totalBytes) * 100.0)));
 
             if (deltaBytes > 0) {
-                double speedMBs = (static_cast<double>(deltaBytes) /
-                                   (1024.0 * 1024.0)) / (ms / 1000.0);
+                const double speedMBs = (static_cast<double>(deltaBytes) /
+                                         (1024.0 * 1024.0)) / (ms / 1000.0);
                 progressData[progressIndex].speed.store(speedMBs);
             }
 
@@ -615,38 +604,42 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         }
     });
 
-    constexpr size_t DESIRED_BUFFER = 4 * 1024 * 1024;
-    const int maxSectorSize = std::max(fatSectorSize, ntfsSectorSize);
-    size_t bufferSize = (DESIRED_BUFFER / maxSectorSize) * maxSectorSize;
-
-    void* rawBuf = nullptr;
-    if (posix_memalign(&rawBuf, maxSectorSize, bufferSize) != 0) {
-        unmountAll(); return fail();
-    }
-    auto ioBuf = static_cast<char*>(rawBuf);
-    auto freeIoBuf = [&]() { free(rawBuf); };
+    // ThreadGuard ensures the thread is always stopped and joined on any
+    // return path — success, failure, or cancellation.
+    ThreadGuard threadGuard(progressMonitorThread, monitoringActive);
 
     // ------------------------------------------------------------------ //
-    // 5. Per-file copy with hybrid I/O                                   //
+    // 5. Aligned I/O buffer                                              //
+    // ------------------------------------------------------------------ //
+    constexpr size_t DESIRED_BUFFER  = 4 * 1024 * 1024;
+    const int        maxSectorSize   = std::max(fatSectorSize, ntfsSectorSize);
+    const size_t     bufferSize      = (DESIRED_BUFFER / maxSectorSize) * maxSectorSize;
+
+    AlignedBuffer ioBuf(bufferSize, maxSectorSize);
+    if (!ioBuf) return fail();
+
+    // ------------------------------------------------------------------ //
+    // 6. Per-file copy with hybrid I/O                                   //
     // ------------------------------------------------------------------ //
     auto copyWithProgress = [&](const fs::path& src, const fs::path& dst,
                                 uint64_t fileSize, int sectorSize) -> bool {
+        // ntfsMnt always holds a valid path; isoType check ensures this only
+        // matches for WindowsInstall destinations.
         const bool isNtfsDest = (isoType == IsoType::WindowsInstall) &&
                                 (dst.string().rfind(ntfsMnt, 0) == 0);
 
         constexpr uint64_t FAT32_FILE_LIMIT = 4ULL * 1024 * 1024 * 1024;
-        const bool isLargeFat32 = !isNtfsDest && (fileSize >= FAT32_FILE_LIMIT);
+        const bool isLargeFat32  = !isNtfsDest && (fileSize >= FAT32_FILE_LIMIT);
+        const bool useBufferedIO =  isNtfsDest || isLargeFat32;
 
-        const bool useBufferedIO = isNtfsDest || isLargeFat32;
-
-        int fd_in = open(src.c_str(), O_RDONLY);
+        const int fd_in = open(src.c_str(), O_RDONLY);
         if (fd_in < 0) return false;
         posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
 
         int outFlags = O_WRONLY | O_CREAT | O_TRUNC;
         if (!useBufferedIO) outFlags |= O_DIRECT;
 
-        int fd_out = open(dst.c_str(), outFlags, 0644);
+        const int fd_out = open(dst.c_str(), outFlags, 0644);
         if (fd_out < 0) { close(fd_in); return false; }
 
         if (useBufferedIO && fileSize > 0)
@@ -656,7 +649,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
         bool success = true;
         while (!GlobalState::g_operationCancelled.load()) {
-            ssize_t bytes_read = read(fd_in, ioBuf, bufferSize);
+            const ssize_t bytes_read = read(fd_in, ioBuf.data, bufferSize);
             if (bytes_read < 0) {
                 if (errno == EINTR) continue;
                 success = false;
@@ -666,9 +659,9 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
             ssize_t writeLen = bytes_read;
             if (!useBufferedIO) {
-                ssize_t aligned = (bytes_read + mask) & ~static_cast<ssize_t>(mask);
+                const ssize_t aligned = (bytes_read + mask) & ~static_cast<ssize_t>(mask);
                 if (aligned > bytes_read)
-                    memset(ioBuf + bytes_read, 0, aligned - bytes_read);
+                    memset(ioBuf.data + bytes_read, 0, aligned - bytes_read);
                 writeLen = aligned;
             }
 
@@ -678,9 +671,9 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                     success = false;
                     goto done;
                 }
-                ssize_t written = write(fd_out,
-                                        ioBuf + bytes_written,
-                                        writeLen - bytes_written);
+                const ssize_t written = write(fd_out,
+                                              ioBuf.data + bytes_written,
+                                              writeLen  - bytes_written);
                 if (written < 0) {
                     if (errno == EINTR) continue;
                     success = false;
@@ -706,21 +699,22 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
 
         posix_fadvise(fd_in, 0, 0, POSIX_FADV_DONTNEED);
+
         close(fd_in);
         close(fd_out);
         return success && !GlobalState::g_operationCancelled.load();
     };
 
     // ------------------------------------------------------------------ //
-    // 6. Copy passes (NTFS payload first, ESP second)                    //
+    // 7. Copy passes (NTFS payload first, ESP second)                    //
     // ------------------------------------------------------------------ //
-    auto startTime = std::chrono::high_resolution_clock::now();
+    const auto startTime = std::chrono::high_resolution_clock::now();
 
+    // Returns false on failure or cancellation; RAII handles all cleanup.
     auto processEntries = [&](const std::vector<IsoEntry>& entries) -> bool {
         for (const auto& e : entries) {
-            if (GlobalState::g_operationCancelled.load()) {
-                freeIoBuf(); unmountAll(); return false;
-            }
+            if (GlobalState::g_operationCancelled.load()) return false;
+
             if (e.isDir) {
                 fs::create_directories(e.dst);
             } else {
@@ -728,50 +722,46 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
                 const bool toNtfs = (isoType == IsoType::WindowsInstall) &&
                                     (e.dst.string().rfind(ntfsMnt, 0) == 0);
-                int sectorSize = toNtfs ? ntfsSectorSize : fatSectorSize;
+                const int sectorSize = toNtfs ? ntfsSectorSize : fatSectorSize;
 
-                if (!copyWithProgress(e.src, e.dst, e.size, sectorSize)) {
-                    freeIoBuf(); unmountAll(); return fail();
-                }
+                if (!copyWithProgress(e.src, e.dst, e.size, sectorSize))
+                    return fail();
             }
         }
         return true;
     };
 
-    if (!processEntries(ntfsEntries)) {
-        monitoringActive.store(false);
-        if (progressMonitorThread.joinable()) progressMonitorThread.join();
-        return false;
-    }
-    if (!processEntries(espEntries)) {
-        monitoringActive.store(false);
-        if (progressMonitorThread.joinable()) progressMonitorThread.join();
-        return false;
-    }
+    if (!processEntries(ntfsEntries)) return false;
+    if (!processEntries(espEntries))  return false;
 
-    freeIoBuf();
-
-    monitoringActive.store(false);
-    if (progressMonitorThread.joinable()) progressMonitorThread.join();
+    // ThreadGuard destructor stops + joins the monitor thread here on any
+    // early return. On the success path it fires at end of scope below.
 
     // ------------------------------------------------------------------ //
-    // 7. Flush and unmount                                                //
+    // 8. Flush filesystems before unmounting                             //
     // ------------------------------------------------------------------ //
+    // syncfs pushes all dirty pages at the filesystem level. safeUmount
+    // (called by ScopedMount destructors) then blocks until the kernel
+    // confirms all I/O has reached the device.
     if (!GlobalState::g_operationCancelled.load()) {
         if (isoType == IsoType::WindowsInstall) {
-            int ntfsFd = open(ntfsMnt, O_RDONLY);
+            const int ntfsFd = open(ntfsMnt.c_str(), O_RDONLY);
             if (ntfsFd >= 0) { syncfs(ntfsFd); close(ntfsFd); }
         }
-        int fatFd = open(fatMnt, O_RDONLY);
+        const int fatFd = open(fatMnt.c_str(), O_RDONLY);
         if (fatFd >= 0) { syncfs(fatFd); close(fatFd); }
     }
 
-    unmountAll();
+    // ScopedMount destructors for ntfsScope, fatScope, isoScope fire here
+    // in reverse declaration order: ntfs → fat → iso.
 
-    auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+    // ------------------------------------------------------------------ //
+    // 9. Final progress accounting                                        //
+    // ------------------------------------------------------------------ //
+    const auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now() - startTime);
-    double seconds  = totalElapsed.count() / 1000.0;
-    double avgSpeed = seconds > 0.0
+    const double seconds  = totalElapsed.count() / 1000.0;
+    const double avgSpeed = (seconds > 0.0)
         ? (static_cast<double>(totalBytes) / (1024.0 * 1024.0)) / seconds
         : 0.0;
 
