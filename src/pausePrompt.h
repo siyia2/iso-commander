@@ -5,9 +5,9 @@
 
 /**
  * @brief User Interaction: Blocking Prompts
- * 
- * These functions halt execution until the user provides an EOL (Enter) 
- * or EOT (Ctrl+D) signal. They are designed to handle raw terminal 
+ *
+ * These functions halt execution until the user provides an Esc, EOL (Enter)
+ * or EOT (Ctrl+D) signal. They are designed to handle raw terminal
  * input to avoid common buffering issues with std::cin.
  */
 
