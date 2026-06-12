@@ -192,22 +192,27 @@ static int libMount(const char* src,
 }
 
 /**
- * @brief Unmount @p target using libmnt_context with automatic loopdev cleanup.
- *
- * @param target Path to the mount point.
- * @param lazy   If true, perform lazy unmount (MNT_DETACH / umount -l).
- * @return 0 on success, non-zero on failure.
- *
- * @note Enables MNT_DETACH (when lazy=true) and LOOPDEL (always) flags.
+ * @brief Performs an unmount operation using libmount context.
+ * * Configures and executes an unmount for the specified target. Supports optional
+ * lazy detachment and forced unmounting, suitable for varying filesystem requirements.
+ * * @param target The mount point or device path to unmount.
+ * @param lazy   If true, performs a lazy unmount (MNT_DETACH).
+ * @param force  If true, attempts to force the unmount (MNT_FORCE), primarily for
+ * network filesystems.
+ * @return int   0 on success, -1 on allocation failure, or the libmount error code.
  */
-static int libUmount(const char* target, bool lazy = false)
+static int libUmount(const char* target, bool lazy = false, bool force = false)
 {
     libmnt_context* ctx = mnt_new_context();
     if (!ctx) return -1;
 
     mnt_context_set_target(ctx, target);
+
     if (lazy)
         mnt_context_enable_lazy(ctx, true);
+
+    if (force)
+        mnt_context_enable_force(ctx, true);
 
     mnt_context_enable_loopdel(ctx, true);
 
@@ -217,12 +222,26 @@ static int libUmount(const char* target, bool lazy = false)
 }
 
 /**
- * @brief Best-effort unmount: try normal first, fall back to lazy.
+ * @brief Best-effort unmount with optional forced cancellation.
+ * * Attempts a standard unmount. If the operation is cancelled via
+ * GlobalState::g_operationCancelled, it immediately executes a forced and
+ * lazy unmount. Otherwise, it falls back to a lazy unmount if the standard
+ * attempt fails.
+ * * @param path The mount point or device path to unmount.
  */
 static void safeUmount(const char* path)
 {
-    if (libUmount(path, false) != 0)
-        libUmount(path, true);
+    // Forceful/Fast path for cancellation
+    if (GlobalState::g_operationCancelled.load()) {
+        // Combination of Force and Lazy for absolute maximum speed/exit
+        libUmount(path, true, true);
+        return;
+    }
+
+    // Normal path: attempt standard, fallback to lazy if necessary
+    if (libUmount(path, false, false) != 0) {
+        libUmount(path, true, false);
+    }
 }
 
 /**
