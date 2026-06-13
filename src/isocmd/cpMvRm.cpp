@@ -281,6 +281,8 @@ bool& overwriteExisting) {
                 // RlStartupHookGuard is scoped to setupEnv's enclosing loop
                 // iteration (see below), so the hook is cleared whether
                 // handlePaginatedDisplay returns normally or early.
+
+                // Restore saved prompt
                 if (!RetainAndRestoreReadlineBuffer::g_rl_pending_text.empty()) {
                     rl_startup_hook = []() -> int {
                         if (!RetainAndRestoreReadlineBuffer::g_rl_pending_text.empty()) {
