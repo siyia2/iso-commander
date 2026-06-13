@@ -5,6 +5,7 @@
 
 // C++ Standard Library Headers
 #include <atomic>
+#include <cstddef>
 #include <mutex>
 #include <string>
 #include <vector>

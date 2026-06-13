@@ -5,6 +5,7 @@
 
 // C++ Standard Library Headers
 #include <atomic>
+#include <cstddef>
 #include <cstdlib>
 #include <string>
 #include <thread>

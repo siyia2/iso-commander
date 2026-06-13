@@ -5,7 +5,7 @@
 
 // C++ Standard Library Headers
 #include <atomic>
-#include <filesystem>
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -13,8 +13,6 @@
 // Project Headers
 #include "display.h"
 #include "themes.h"
-
-namespace fs = std::filesystem;
 
 /**
  * @brief High-performance formatter for mount-related terminal output.

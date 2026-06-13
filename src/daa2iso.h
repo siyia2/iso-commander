@@ -24,6 +24,7 @@
 #define DAA2ISO_H
 
 // C++ Standard Library Headers
+#include <cstddef>
 #include <cstdint>
 
 // ── Type aliases ───────────────────────────────────────────────────────────

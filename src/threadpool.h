@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <future>
 #include <memory>
 #include <new>

@@ -5,7 +5,9 @@
 
 // C++ Standard Library Headers
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <string>
 #include <vector>
 

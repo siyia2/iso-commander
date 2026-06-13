@@ -3,9 +3,6 @@
 #ifndef INPUTHANDLING_H
 #define INPUTHANDLING_H
 
-// C++ Standard Library Headers
-#include <csignal>
-
 /**
  * FUNCTION DECLARATIONS
  */

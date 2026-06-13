@@ -6,6 +6,7 @@
 // C++ Standard Library Headers
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <functional>
 #include <map>
 #include <string>

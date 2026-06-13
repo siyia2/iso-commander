@@ -167,9 +167,4 @@ void handleSelectIsoFilesResults(
     bool &umountMvRmBreak
 );
 
-/**
- * Helper for case-insensitive string comparisons.
- */
-void toLowerInPlace(std::string &str);
-
 #endif // SELECT_H
