@@ -6,6 +6,7 @@
 // C++ Standard Library Headers
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <functional>
 #include <string>
 #include <string_view>
