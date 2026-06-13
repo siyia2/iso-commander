@@ -21,14 +21,6 @@ namespace RetainAndRestoreReadlineBuffer {
 }
 
 /**
- * @brief Clears the terminal screen and the current Readline buffer.
- * @param count Numeric argument (standard Readline hook signature).
- * @param key Triggering key code.
- * @return 0 on success.
- */
-int clear_screen_and_buffer(int count, int key);
-
-/**
  * @brief TAB-completion handler that extends @c rl_complete with pagination reset.
  *
  * Delegates to @c rl_complete_internal('?') on double-TAB (list all matches)
