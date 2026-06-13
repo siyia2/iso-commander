@@ -667,6 +667,9 @@ void setup_custom_keybindingsForSettingsEditor(void) {
  * @brief Keybindings for the Search Prompts.
  */
 void setup_custom_keybindingsForSearches(void) {
+    rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+    rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+
     rl_bind_keyseq("?", help_handler);
     rl_bind_keyseq("\\e", exit_handler);
 }
