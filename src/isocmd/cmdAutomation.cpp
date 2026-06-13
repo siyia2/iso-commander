@@ -19,6 +19,7 @@
 #include "../inputHandling.h"
 #include "../mount.h"
 #include "../state.h"
+#include "../themes.h"
 #include "../umount.h"
 #include "../verbose.h"
 
