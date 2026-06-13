@@ -127,7 +127,7 @@ inline std::mutex g_drainingDevicesMutex;
 inline std::unordered_set<std::string> g_drainingDevices;
 inline std::atomic<bool> g_drainingCancelled{false};
 
-// ---------- End of [FLUSHING] device indicator ------------
+// ---------- End of [FLUSHING] device indicator block ------------
 
 /**
  * Performs the actual write2usb.
