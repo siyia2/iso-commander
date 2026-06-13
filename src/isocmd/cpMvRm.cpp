@@ -27,6 +27,7 @@
 
 // Project Headers
 #include "../concurrency.h"
+#include "../cpMvRm.h"
 #include "../display.h"
 #include "../history.h"
 #include "../inputHandling.h"
@@ -125,34 +126,36 @@ const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn
 /**
  * @brief Orchestrates user confirmation for permanent file deletion.
  *
- * Uses handlePaginatedDisplay to show the list of files and captures a Y/N
- * confirmation. Handles terminal environment setup and internal signal state.
+ * Renders the paginated ISO list via handlePaginatedDisplay and captures a Y/N
+ * confirmation. Configures the Readline environment for the delete prompt
+ * (Ctrl+L redraw, ESC exit handler). The '\f' key binding is restored
+ * automatically via RlFormFeedGuard on every exit path, including early returns
+ * and EOF. Pagination turns loop silently without treating the input as a
+ * confirmation.
  *
- * @param isoFiles        The list of ISO file paths.
- * @param indexChunks     Chunks for formatting the ISO list display.
- * @param umountMvRmBreak [out] Set to true if the user confirms, false if canceled or EOF.
- * @param abortDel        [out] Set to true if the user explicitly cancels or sends EOF.
- * @return True if the user confirmed with 'Y', false otherwise.
+ * @param isoFiles        The full list of ISO file paths to be shown and deleted.
+ * @param indexChunks     Chunks used for paginated list display formatting.
+ * @param umountMvRmBreak [out] Set to true when the user confirms ('Y'/'y');
+ *                        set to false on any cancel or EOF path.
+ * @param abortDel        [out] Set to true when the user explicitly cancels
+ *                        (non-Y input) or sends EOF; left unchanged on 'Y'.
+ * @return True if the user confirmed with 'Y' or 'y', false on any other input,
+ *         cancellation, or EOF.
  */
 bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
                            std::vector<std::vector<int>>& indexChunks,
                            bool& umountMvRmBreak,
                            bool& abortDel) {
-
     rl_attempted_completion_function = nullptr;
     reset_custom_keybindingsForRm();
     rl_bind_keyseq("\\e", exit_handler);
-
     const CpMvRmColors colors = getCpMvRmColors();
     std::string green = "\001" + std::string(colors.prompt_green) + "\002";
     std::string blue  = "\001" + std::string(colors.prompt_blue) + "\002";
     std::string red   = "\001" + std::string(UI::Palette::Red) + "\002";
     std::string reset = "\001" + std::string(UI::Palette::BoldReset) + "\002";
-
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
     sortFilesCaseInsensitive(entries);
-
-    // Setup prompt components
     std::string promptPrefix = "\n";
     std::string promptSuffix =
         blue + "The selected " +
@@ -161,13 +164,8 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
         red + "*PERMANENTLY DELETED FROM DISK*" +
         blue + ". Proceed? (y/n): " +
         reset;
-
     bool isPageTurn = false;
-
-    // Environment setup for Readline inside the loop
     auto setupEnv = [&]() {
-        // Only enable Ctrl+L (clear) if pagination is actually being used,
-        // or always enable it to re-draw the list from the top.
         rl_bind_key('\f', [](int count, int key) -> int {
             clear_screen_and_buffer(count, key);
             rl_on_new_line();
@@ -177,24 +175,21 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
         });
     };
     size_t currentPage = 0;
-
     while (true) {
-        std::string userInput = handlePaginatedDisplay(
-            entries, promptPrefix, promptSuffix, setupEnv, isPageTurn, currentPage
-        );
-
-        // Cleanup keybindings after returning
-        rl_bind_key('\f', prevent_readline_keybindings);
-
+        std::string userInput;
+        {
+            RlFormFeedGuard ffGuard; // restores '\f' → prevent_readline_keybindings on scope exit
+            userInput = handlePaginatedDisplay(
+                entries, promptPrefix, promptSuffix, setupEnv, isPageTurn, currentPage
+            );
+        }
         if (userInput == "EOF_SIGNAL") {
             umountMvRmBreak = false;
             abortDel = true;
             return false;
         }
-
         if (!isPageTurn && !userInput.empty()) {
             std::string choice = trimWhitespace(userInput);
-
             if (choice == "Y" || choice == "y") {
                 umountMvRmBreak = true;
                 return true;
@@ -213,21 +208,34 @@ void helpSearches(bool isCpMv, bool import2ISO);
  * @brief Prompts for a destination directory or routes to deletion confirmation.
  *
  * In Copy/Move mode: Validates Linux paths, handles pagination, processes
- * overwrite flags (-o), and manages Readline history.
+ * overwrite flags (-o), and manages Readline history. Readline state
+ * (key bindings, completion mode, startup hook) is restored automatically
+ * via RAII guards on every exit path.
  * In Delete mode: Proxies the request to handleDeleteOperation.
  *
- * @param isoFiles           List of source files.
- * @param indexChunks        Chunks for list display formatting.
- * @param userDestDir        [out] The resulting validated path(s).
- * @param operationColor     UI color string for the prompt.
- * @param operationDescription "copy", "move", or "delete".
- * @param umountMvRmBreak    [out] Control flag for the parent loop.
- * @param filterHistory      Flag for history management.
- * @param isDelete           Boolean toggle for Delete vs Copy/Move mode.
- * @param isCopy             Boolean toggle for Copy vs Move.
- * @param abortDel           [out] Set to true if operation is canceled.
- * @param overwriteExisting  [out] Set to true if "-o" flag is detected.
- * @return The validated destination string, empty if canceled, or "EOF_SIGNAL".
+ * @param isoFiles           List of source ISO files.
+ * @param indexChunks        Chunks used for paginated list display formatting.
+ * @param userDestDir        [out] The resulting validated destination path(s);
+ *                           empty if the operation was canceled.
+ * @param operationColor     ANSI color escape string applied to the operation
+ *                           label in the prompt.
+ * @param operationDescription  Human-readable verb shown in the prompt
+ *                              ("copy", "move", or "delete").
+ * @param umountMvRmBreak    [in/out] Controls whether the parent loop should
+ *                           unmount/break after the operation; set to false on
+ *                           ESC or Move cancel, true when entering Move mode.
+ * @param filterHistory      [in/out] Readline history filter flag; passed to
+ *                           loadHistory/saveHistory.
+ * @param isDelete           If true, routes to handleDeleteOperation instead
+ *                           of the path-input prompt.
+ * @param isCopy             Distinguishes Copy (true) from Move (false);
+ *                           affects umountMvRmBreak behaviour.
+ * @param abortDel           [out] Set to true by handleDeleteOperation when
+ *                           the deletion is canceled by the user.
+ * @param overwriteExisting  [out] Set to true when the user appends the "-o"
+ *                           flag to their input.
+ * @return The validated destination path string; empty string if canceled;
+ *         empty string on delete path (result conveyed via abortDel).
  */
 std::string userDestDirCpMv(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks,
 std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel,
@@ -237,7 +245,11 @@ bool& overwriteExisting) {
     sortFilesCaseInsensitive(entries);
     clearScrollBuffer();
 
-	reset_custom_keybindingsForCpMvWrite2Usb();
+    reset_custom_keybindingsForCpMvWrite2Usb();
+
+    // Restore g_rl_complete_mode to whatever it was when we return, throw, or
+    // break out of the loop — regardless of which exit path is taken.
+    RlCompleteModeGuard completeModeGuard;
 
     bool shouldContinue = true;
     std::string userInput;
@@ -246,33 +258,51 @@ bool& overwriteExisting) {
 
     while (shouldContinue) {
         resetReadlinePagination();
+        GlobalState::g_rl_complete_mode = 1;
         if (!isDelete) {
             bool isPageTurn = false;
 
             auto setupEnv = [&]() {
-				enable_ctrl_d();
-				setupSignalHandlerCancellations();
-				rl_bind_key('\f', [](int count, int key) -> int {
-					clear_screen_and_buffer(count, key); // Clear function
-					rl_on_new_line();                    // Reset readline's internal cursor state
-					rl_replace_line("", 0);              // Clear the current input buffer
-					rl_done = 1;                         // Force readline to exit and return to the loop
-					return 0;
-				});
+                enable_ctrl_d();
+                setupSignalHandlerCancellations();
+                rl_bind_key('\f', [](int count, int key) -> int {
+                    clear_screen_and_buffer(count, key);
+                    rl_on_new_line();
+                    rl_replace_line("", 0);
+                    rl_done = 1;
+                    return 0;
+                });
 
-				rl_bind_key('\t', rl_complete);
-				if (!isCopy) umountMvRmBreak = true;
-				if (!isPageTurn) {
-					clear_history();
-					filterHistory = false;
-					loadHistory(filterHistory);
-				}
-			};
+                rl_bind_key('\t', my_rl_complete);
+
+                // RlStartupHookGuard is scoped to setupEnv's enclosing loop
+                // iteration (see below), so the hook is cleared whether
+                // handlePaginatedDisplay returns normally or early.
+                if (!GlobalState::g_rl_pending_text.empty()) {
+                    rl_startup_hook = []() -> int {
+                        if (!GlobalState::g_rl_pending_text.empty()) {
+                            rl_insert_text(GlobalState::g_rl_pending_text.c_str());
+                            rl_point = rl_end;
+                            GlobalState::g_rl_pending_text = "";
+                        }
+                        return 0;
+                    };
+                } else {
+                    rl_startup_hook = nullptr;
+                }
+
+                if (!isCopy) umountMvRmBreak = true;
+                if (!isPageTurn) {
+                    clear_history();
+                    filterHistory = false;
+                    loadHistory(filterHistory);
+                }
+            };
 
             const CpMvRmColors colors = getCpMvRmColors();
 
             std::string green = "\001" + std::string(colors.prompt_green) + "\002";
-            std::string blue  = "\001" + std::string(colors.prompt_blue) + "\002";
+            std::string blue  = "\001" + std::string(colors.prompt_blue)  + "\002";
             std::string reset = "\001" + std::string(UI::Palette::BoldReset) + "\002";
 
             std::string promptPrefix = "\n";
@@ -285,12 +315,20 @@ bool& overwriteExisting) {
                 blue + " into, ? for help:\n" +
                 reset;
 
-            userInput = handlePaginatedDisplay(
+            // Guard scoped around handlePaginatedDisplay: the two rl_bind_key
+            // resets in its destructor always fire, even if the call exits via
+            // EOF_SIGNAL or any other early path. Replaces the two manual
+            // rl_bind_key calls that previously appeared only on the happy path.
+            // RlStartupHookGuard is also placed here so the hook set inside
+            // setupEnv is always cleared after each iteration.
+            {
+                RlKeyBindGuard     keyGuard;
+                RlStartupHookGuard hookGuard;
+
+                userInput = handlePaginatedDisplay(
                     entries, promptPrefix, promptSuffix, setupEnv, isPageTurn, currentPage
                 );
-
-            rl_bind_key('\f', prevent_readline_keybindings);
-            rl_bind_key('\t', prevent_readline_keybindings);
+            } // ← rl_bind_key resets and rl_startup_hook = nullptr fire here
 
             if (userInput == "EOF_SIGNAL") { shouldContinue = false; break; }
             if (userInput == "?") {

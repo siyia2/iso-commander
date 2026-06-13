@@ -67,7 +67,6 @@ bool isValidDirectory(const std::string& path) {
     return std::filesystem::is_directory(path);
 }
 
-
 //=============================================================================
 // ISO Section
 //=============================================================================
@@ -111,6 +110,7 @@ bool isValidDirectory(const std::string& path) {
 void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool& newISOFound) {
     struct KeybindingGuard {
         ~KeybindingGuard() {
+            rl_bind_key('\t', prevent_readline_keybindings);
             reset_custom_keybindingsForSearches();
         }
     };
@@ -134,7 +134,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             loadHistory(filterHistory);
 
             rl_bind_key('\f', clear_screen_and_buffer);
-            rl_bind_key('\t', rl_complete);
+            rl_bind_key('\t', my_rl_complete);
 
             std::string prompt;
             prompt.reserve(512);
@@ -890,6 +890,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
     struct KeybindingGuard {
         ~KeybindingGuard() {
             clear_history();
+            rl_bind_key('\t', prevent_readline_keybindings);
             reset_custom_keybindingsForSearches();
         }
     } guard;
@@ -937,7 +938,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         bool filterHistory = false;
         loadHistory(filterHistory);
         rl_bind_key('\f', clear_screen_and_buffer);
-        rl_bind_key('\t', rl_complete);
+        rl_bind_key('\t', my_rl_complete);
     };
 
     while (true) {

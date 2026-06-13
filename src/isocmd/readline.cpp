@@ -91,6 +91,22 @@ char** my_special_completion_entry(const char* text, int start, int end) {
 void customListingsFunction(char **matches, int num_matches, int max_length) {
     (void)max_length;
 
+    // DEBUG
+        FILE* dbg = fopen("/tmp/rl_debug.log", "a");
+        if (dbg) {
+            fprintf(dbg, "num_matches=%d\n", num_matches);
+            fprintf(dbg, "  matches[0]='%s'\n", matches[0] ? matches[0] : "NULL");
+            for (int i = 1; i <= num_matches && i <= 5; i++)
+                fprintf(dbg, "  matches[%d]='%s'\n", i, matches[i] ? matches[i] : "NULL");
+            fprintf(dbg, "---\n");
+            fclose(dbg);
+        }
+
+    if (num_matches == 1) {
+            clearScrollBuffer();
+            return;
+        }
+
     // Resolve the raw pointer struct
     ReadlineColors rc = resolveReadlineTheme();
 
@@ -454,6 +470,51 @@ int clear_screen_and_buffer(int, int) {
     last_common_prefix[0] = '\0';
 
     return 0;
+}
+
+/**
+ * @brief TAB-completion handler that extends @c rl_complete with pagination reset.
+ *
+ * Delegates to @c rl_complete_internal('?') on double-TAB (list all matches)
+ * or @c rl_complete_internal('!') on single TAB (insert/complete). If the
+ * cursor position or line buffer changed after completion, clears the scroll
+ * buffer. When @c GlobalState::g_rl_complete_mode is 1, additionally saves the
+ * completed text to @c GlobalState::g_rl_pending_text, clears the input buffer,
+ * and sets @c rl_done to exit readline — allowing the next loop iteration to
+ * redisplay with the pending text restored via the startup hook.
+ *
+ * @param ignore       Numeric argument (unused).
+ * @param invoking_key Triggering key (unused).
+ * @return Return value of @c rl_complete_internal.
+ */
+int my_rl_complete(int ignore, int invoking_key)
+{
+    (void)ignore;
+    (void)invoking_key;
+
+    int old_point = rl_point;
+    char *old_text = rl_copy_text(0, rl_end);
+
+    int ret;
+    if (rl_last_func == my_rl_complete)
+        ret = rl_complete_internal('?');
+    else
+        ret = rl_complete_internal('!');
+
+    char *new_text = rl_copy_text(0, rl_end);
+    if (rl_point != old_point || strcmp(old_text, new_text) != 0) {
+        clear_screen_and_buffer(0, 0);
+        if (GlobalState::g_rl_complete_mode == 1) {
+            GlobalState::g_rl_pending_text = new_text;  // save completed text
+            rl_replace_line("", 0);                      // clear buffer so empty is submitted
+            rl_done = 1;
+            GlobalState::g_rl_complete_mode = 0;
+        }
+    }
+
+    free(old_text);
+    free(new_text);
+    return ret;
 }
 
 //=============================================================================
