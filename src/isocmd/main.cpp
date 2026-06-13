@@ -113,9 +113,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Initialize static thread pool early for improved performance
-    getStaticThreadPool();
-
     /// @name Signal Handling
     /// Ignore Ctrl+C (SIGINT) in main loop; gracefully handle SIGTERM.
     /// @{
