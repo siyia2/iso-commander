@@ -8,7 +8,7 @@ CXX = g++
 CXXFLAGS_BASE = -std=c++20 -Wall -Wextra
 LDFLAGS_BASE  = -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
 # ---- Normal build ----
-CXXFLAGS_NORMAL = -O3 -flto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti
+CXXFLAGS_NORMAL = -O3 -flto=auto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti
 LDFLAGS_NORMAL  = -Wl,--gc-sections
 # ---- Sanitizer build ----
 ifeq ($(SANITIZE),1)
