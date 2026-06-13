@@ -81,7 +81,7 @@ struct ProgressInfo {
 
 inline std::vector<ProgressInfo> progressData; ///< Shared progress state for all active write tasks.
 
-// ---------- Used exclusively for the [FLUSING] device indicator ------------
+// ---------- Used exclusively for the [FLUSHING] device indicator ------------
 
 /**
  * @brief A thread-safe manager for tracking and joining background tasks.
@@ -127,11 +127,12 @@ inline std::mutex g_drainingDevicesMutex;
 inline std::unordered_set<std::string> g_drainingDevices;
 inline std::atomic<bool> g_drainingCancelled{false};
 
+// ---------- End of [FLUSHING] device indicator ------------
+
 /**
  * Performs the actual write2usb.
  */
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
-
 
 // --- Filesystem & Formatting Utilities ---
 
