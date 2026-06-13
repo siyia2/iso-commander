@@ -40,7 +40,7 @@
 #include "../themes.h"
 #include "../threadpool.h"
 #include "../tokenize.h"
-#include "../write2usb.h"
+#include "../write2usbUI.h"
 
 namespace fs = std::filesystem;
 

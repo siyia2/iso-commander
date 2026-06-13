@@ -34,6 +34,7 @@
 
 // Project Headers
 #include "../state.h"
+#include "../write2usbUI.h"
 #include "../write2usb.h"
 
 namespace fs = std::filesystem;

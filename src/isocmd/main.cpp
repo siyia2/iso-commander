@@ -32,7 +32,7 @@
 #include "../themes.h"
 #include "../settings.h"
 #include "../select.h"
-#include "../write2usb.h"
+#include "../write2usbUI.h"
 
 namespace fs = std::filesystem;
 
