@@ -25,7 +25,7 @@
  *   - uniqueErrorTokenMessages  Deduplicated user-input validation error tokens.
  *
  * Declared inline so the single definition lives in the header.
- * All concurrent writes must be protected by GlobalConcurrency::globalSetsMutex.
+ * All concurrent writes must be protected by GlobalMutexes::globalSetsMutex.
  */
 struct VerboseSets {
     std::unordered_set<std::string> operationCompleted;

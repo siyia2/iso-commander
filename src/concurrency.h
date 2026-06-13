@@ -4,18 +4,12 @@
 #define CONCURRENCY_H
 
 // C++ Standard Library Headers
-#include <algorithm>
 #include <cstddef>
-#include <mutex>
-#include <thread>
 
 //=======================================
-// GLOBAL CONCURRENCY SETTINGS AND MUTEX
+//     GLOBAL CONCURRENCY SETTINGS
 //=======================================
 namespace GlobalConcurrency {
-
-    // Thread Management
-    inline unsigned int maxThreads = std::max(2u, std::thread::hardware_concurrency());
 
     // Global cap for static threads
     inline size_t MAX_USEFUL_THREADS = 16;
@@ -38,12 +32,6 @@ namespace GlobalConcurrency {
     inline size_t SORT_THREAD_CAP   = 2;
     inline size_t FILTER_THREAD_CAP = 2;
 
-    // Mutex Protection For Verbose Sets
-    inline std::mutex globalSetsMutex;
-
-    // Mutex Protection For file counts in search.cpp
-    inline std::mutex couNtMutex;
-
-} // namespace GlobalConcurrency
+}
 
 #endif // CONCURRENCY_H

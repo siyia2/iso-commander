@@ -12,8 +12,8 @@
 #include <unordered_set>
 #include <vector>
 
-// Project Headers
-#include "./select.h"
+// Forward declaration of shared state
+struct RefreshState;
 
 // --- Filesystem Traversal ---
 

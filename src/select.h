@@ -5,35 +5,13 @@
 
 // C++ Standard Library Headers
 #include <atomic>
-#include <condition_variable>
 #include <cstddef>
-#include <mutex>
 #include <memory>
 #include <string>
 #include <vector>
 
-/**
- * @brief Shared display state for the ISO list view and its background refresh thread.
- */
-struct RefreshState {
-    std::vector<std::string> filteredFiles;
-    std::vector<std::string> pendingIndices;
-    bool isFiltered;
-    bool hasPendingProcess;
-    bool umountMvRmBreak;
-    std::string listSubtype;
-    size_t currentPage;
-    size_t originalPage;
-    std::mutex importMutex;
-    std::condition_variable importCV;
-    std::atomic<bool> isImportRunning{false};
-    std::atomic<bool> isWatcherRunning{false};
-    std::atomic<bool> stopImport{false};
-    std::mutex printMutex;
-    std::condition_variable workerCV;
-    std::mutex workerMutex;
-    std::atomic<size_t> activeWorkers{0};
-};
+// Forward declaration of shared state
+struct RefreshState;
 
 // --- Data Loading & List Display ---
 

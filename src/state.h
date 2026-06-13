@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 //==============================
 // GLOBAL APPLICATION STATE
@@ -35,8 +36,15 @@ namespace GlobalState {
     inline bool needSortingAfterflno      = false;
     inline size_t ITEMS_PER_PAGE          = 25;
     inline int lockFileDescriptor         = -1;
-    inline int g_rl_complete_mode         = 0;
-    inline std::string g_rl_pending_text  = "";
+
+
+    // Global vector state
+    inline std::vector<std::string> globalIsoFileList;
+    inline std::vector<std::string> binImgFilesCache;
+    inline std::vector<std::string> mdfMdsFilesCache;
+    inline std::vector<std::string> nrgFilesCache;
+    inline std::vector<std::string> chdFilesCache;
+    inline std::vector<std::string> daaGbiFilesCache;
 
 } // namespace GlobalState
 

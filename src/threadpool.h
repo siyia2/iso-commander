@@ -798,8 +798,9 @@ public:
  *         for the lifetime of the process.
  */
 inline ThreadPool& getStaticThreadPool() {
+    unsigned int maxThreads = std::max(2u, std::thread::hardware_concurrency());
     static ThreadPool instance(
-        std::min({ static_cast<size_t>(GlobalConcurrency::maxThreads),
+        std::min({ static_cast<size_t>(maxThreads),
                    GlobalConcurrency::MAX_USEFUL_THREADS }));
     return instance;
 }
