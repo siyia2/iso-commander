@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <atomic>
 #include <csignal>
+#include <cstddef>
 #include <filesystem>
 #include <future>
 #include <iostream>

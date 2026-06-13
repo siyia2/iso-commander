@@ -2,8 +2,9 @@
 
 // C++ Standard Library Headers
 #include <algorithm>
-#include <csignal>
 #include <cctype>
+#include <csignal>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <iostream>

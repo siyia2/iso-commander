@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 #include <csignal>
+#include <cstddef>
 #include <cstdlib>
 #include <format>
 #include <iomanip>

@@ -3,6 +3,7 @@
 // C++ Standard Library Headers
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -24,37 +25,37 @@ namespace fs = std::filesystem;
 
 /**
  * @brief Converts a CHD (Compressed Hunks of Data) file to a raw ISO image.
- * 
+ *
  * This function handles multiple CD-ROM sector layouts commonly found in CHD files:
  * - 2048 bytes/sector: Standard ISO (user data only, offset 0)
  * - 2352 bytes/sector: Raw Mode 1 (offset 16) or Mode 2 Form 1 (offset 24)
  * - 2448 bytes/sector: Raw with subchannel data (legacy offset 24) or cooked (modern offset 0)
- * 
+ *
  * Detection is performed by reading logical sector 16 (the ISO9660 Primary Volume
  * Descriptor) and locating the "CD001" signature to determine the correct user
  * data offset for this specific image. This unified approach works for both
  * legacy CHDs (created with older tools) and modern CHDs (e.g., from chdman).
- * 
+ *
  * Conversion strategy is chosen based on the output ISO size:
  * - For files ≤ 1 GiB: a single‑threaded, buffered write is used (low overhead).
  * - For files > 1 GiB: two threads decompress hunks in parallel, writing directly
  *   into a memory‑mapped output file. This provides a significant speedup without
  *   saturating all CPU cores, leaving system resources available for other tasks.
- * 
+ *
  * @param chdPath        Path to the source CHD file.
  * @param isoPath        Path where the output ISO file will be written.
  * @param completedBytes Optional atomic counter updated with the number of
  *                       user data bytes written so far. Useful for progress
  *                       reporting. May be nullptr.
- * 
+ *
  * @return true if conversion completed successfully, false on error or cancellation.
- * 
+ *
  * @note The conversion can be cancelled by setting GlobalState::g_operationCancelled to true.
  *       If cancelled, the partial ISO file is removed.
- * 
+ *
  * @note For large files, two independent CHD handles are opened internally;
  *       the original handle is used only for header reading and offset detection.
- * 
+ *
  * @see GlobalState::g_operationCancelled Global cancellation flag.
  */
 bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,

@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstddef>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>

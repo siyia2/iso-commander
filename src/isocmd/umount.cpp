@@ -2,6 +2,7 @@
 
 // C++ Standard Library Headers
 #include <atomic>
+#include <cstddef>
 #include <filesystem>
 #include <mutex>
 #include <string>

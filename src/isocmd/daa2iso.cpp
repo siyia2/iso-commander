@@ -9,7 +9,7 @@
  *
  * Enhancements:
  *  - Full 64-bit architecture support for files > 4GB (size_t/u64 migration)
- *  - Thread-safe refactor: all global/static state moved to per-instance 
+ *  - Thread-safe refactor: all global/static state moved to per-instance
  *    context for concurrent processing.
  *  - Removed legacy Windows dependencies and password/encryption logic.
  *
@@ -45,6 +45,7 @@
 
 // C++ Standard Library Headers
 #include <atomic>
+#include <cstddef>
 #include <filesystem>
 #include <string>
 
@@ -221,7 +222,7 @@ static size_t lzma_decode_full(CLzmaDec *p, const u8 *in, size_t insz, u8 *out, 
 
     unsigned state = 0;
     // Must be size_t. In a 4.5GB file, the distance back (rep) can exceed 2^32.
-    size_t rep0 = 1, rep1 = 1, rep2 = 1, rep3 = 1; 
+    size_t rep0 = 1, rep1 = 1, rep2 = 1, rep3 = 1;
     int len = 0;
     CLzmaProb *probs = p->probs;
 
@@ -807,7 +808,7 @@ struct DaaContext {
 		if (in) { free(in); in = nullptr; }
 		if (out_buf) { free(out_buf); out_buf = nullptr; }
 		if (multi_filename) { free(multi_filename); multi_filename = nullptr; }
-		
+
 		// Safety check for parallel threads
 		if (lzma.probs != nullptr) {
 			LzmaDec_Free(&lzma, &g_Alloc);

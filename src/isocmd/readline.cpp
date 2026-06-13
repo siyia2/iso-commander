@@ -2,6 +2,7 @@
 
 // C++ Standard Library Headers
 #include <algorithm>
+#include <cstddef>
 #include <cstdio>
 #include <string>
 #include <vector>

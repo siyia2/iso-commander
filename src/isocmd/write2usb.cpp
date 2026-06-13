@@ -8,6 +8,7 @@
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
+#include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <memory>

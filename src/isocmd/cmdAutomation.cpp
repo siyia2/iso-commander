@@ -3,6 +3,7 @@
 // C++ Standard Library Headers
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <filesystem>
 #include <iostream>
 #include <string>

@@ -3,6 +3,7 @@
 // C++ Standard Library Headers
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <sstream>
 #include <stdexcept>
 #include <string>

@@ -6,6 +6,7 @@
 #include <cctype>
 #include <chrono>
 #include <csignal>
+#include <cstddef>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>

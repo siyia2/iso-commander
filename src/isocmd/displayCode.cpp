@@ -3,6 +3,7 @@
 // C++ Standard Library Headers
 #include <algorithm>
 #include <csignal>
+#include <cstddef>
 #include <filesystem>
 #include <iostream>
 #include <memory>

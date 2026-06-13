@@ -2,6 +2,7 @@
 
 // C++ Standard Library Headers
 #include <algorithm>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <map>

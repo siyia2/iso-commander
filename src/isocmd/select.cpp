@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cctype>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
