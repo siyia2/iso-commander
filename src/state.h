@@ -35,6 +35,8 @@ namespace GlobalState {
     inline bool needSortingAfterflno      = false;
     inline size_t ITEMS_PER_PAGE          = 25;
     inline int lockFileDescriptor         = -1;
+    inline int g_rl_complete_mode         = 0;
+    inline std::string g_rl_pending_text  = "";
 
 } // namespace GlobalState
 
