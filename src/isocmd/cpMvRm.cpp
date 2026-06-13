@@ -5,12 +5,10 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
-#include <mutex>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -18,7 +16,6 @@
 #include <errno.h>
 #include <ctype.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 // Third-Party Library Headers
@@ -31,10 +28,8 @@
 #include "../display.h"
 #include "../history.h"
 #include "../inputHandling.h"
-#include "../pausePrompt.h"
 #include "../readline.h"
 #include "../sort.h"
-#include "../state.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
 #include "../verbose.h"
