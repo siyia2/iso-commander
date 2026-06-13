@@ -13,12 +13,14 @@
 #include <string.h>
 #include <sys/stat.h>
 
+// Third-Party Library Headers
+#include "chd.h"
+
 // Project Headers
 #include "../ccd.h"
 #include "../daa2iso.h"
 #include "../mdf.h"
 #include "../write2usb.h"
-#include "chd.h"
 
 //=============================================================================
 // Write2Usb Section

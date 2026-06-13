@@ -34,7 +34,6 @@
 #include "../globalMutexes.h"
 #include "../history.h"
 #include "../inputHandling.h"
-#include "../globalMutexes.h"
 #include "../pausePrompt.h"
 #include "../readline.h"
 #include "../search.h"
@@ -43,7 +42,6 @@
 #include "../themes.h"
 #include "../threadpool.h"
 #include "../verbose.h"
-#include "../sharedRefreshState.h"
 
 namespace fs = std::filesystem;
 

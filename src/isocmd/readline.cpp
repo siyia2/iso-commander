@@ -15,10 +15,10 @@
 
 // Project Headers
 #include "../inputHandling.h"
-#include "../write2usbUI.h"
 #include "../readline.h"
 #include "../state.h"
 #include "../themes.h"
+#include "../write2usbUI.h"
 
 /**
  * @file readline_completion.cpp

@@ -26,7 +26,6 @@
 #include <readline/readline.h>
 
 // Project Headers
-#include "../globalMutexes.h"
 #include "../cpMvRm.h"
 #include "../display.h"
 #include "../globalMutexes.h"
