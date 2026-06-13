@@ -5,13 +5,10 @@
 
 // C++ Standard Library Headers
 #include <atomic>
-#include <cstdint>
 #include <cstdlib>
 #include <string>
 #include <thread>
 #include <utility>
-
-#include <cstdlib>
 
 // C / System Headers
 #include <unistd.h>
