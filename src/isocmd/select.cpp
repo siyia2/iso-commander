@@ -26,7 +26,7 @@
 #include "../globalMutexes.h"
 #include "../readline.h"
 #include "../select.h"
-#include "../sharedState.h"
+#include "../sharedRefreshState.h"
 #include "../state.h"
 #include "../themes.h"
 #include "../verbose.h"

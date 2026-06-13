@@ -18,7 +18,7 @@
 #include "../filtering.h"
 #include "../databaseOps.h"
 #include "../main.h"
-#include "../sharedState.h"
+#include "../sharedRefreshState.h"
 #include "../state.h"
 #include "../stringManipulation.h"
 #include "../themes.h"

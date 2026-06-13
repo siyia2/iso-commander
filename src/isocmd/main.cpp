@@ -30,7 +30,7 @@
 #include "../state.h"
 #include "../themes.h"
 #include "../settings.h"
-#include "../sharedState.h"
+#include "../sharedRefreshState.h"
 #include "../write2usbUI.h"
 
 namespace fs = std::filesystem;

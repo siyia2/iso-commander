@@ -39,7 +39,7 @@
 #include "../inputHandling.h"
 #include "../globalMutexes.h"
 #include "../pausePrompt.h"
-#include "../sharedState.h"
+#include "../sharedRefreshState.h"
 #include "../state.h"
 #include "../themes.h"
 #include "../threadpool.h"

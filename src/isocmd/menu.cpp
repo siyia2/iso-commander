@@ -19,7 +19,7 @@
 #include "../inputHandling.h"
 #include "../readline.h"
 #include "../themes.h"
-#include "../sharedState.h"
+#include "../sharedRefreshState.h"
 
 /**
  * @brief Renders a multi-colored ASCII art banner to the terminal.

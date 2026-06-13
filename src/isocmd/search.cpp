@@ -43,7 +43,7 @@
 #include "../themes.h"
 #include "../threadpool.h"
 #include "../verbose.h"
-#include "../sharedState.h"
+#include "../sharedRefreshState.h"
 
 namespace fs = std::filesystem;
 
