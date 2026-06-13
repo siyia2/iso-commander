@@ -5,7 +5,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdlib>
-#include <cstring>
 #include <iostream>
 #include <memory>
 #include <string>

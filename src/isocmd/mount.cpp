@@ -32,6 +32,8 @@
 
 struct libmnt_context;
 
+namespace fs = std::filesystem;
+
 /**
  * @brief Provides default LSan suppression rules for known third-party leaks.
  *

@@ -22,6 +22,8 @@
 #include "../umount.h"
 #include "../verbose.h"
 
+namespace fs = std::filesystem;
+
 // ─── Palette helpers ─────────────────────────────────────────────────────────
 
 /**
@@ -157,7 +159,7 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
             out.paths.push_back(arg);
         }
     }
-	
+
 	if (captureWarn) {
 		std::cout << UI::Palette::Reset << "\n";
 		captureWarn = false;
