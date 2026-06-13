@@ -50,6 +50,8 @@ struct CompleterData {
 /** @brief Global access point for the completion data used by the Readline callback. */
 extern CompleterData g_completerData;
 
+/** @brief Clears readline list completions on exact matches. */
+int my_rl_complete(int ignore, int invoking_key);
 
 /**
  * KEYBINDING MANAGEMENT
