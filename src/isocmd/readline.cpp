@@ -132,11 +132,11 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
         const char* header_label = is_special_cmd_completion ? "CMD Completion Matches" : "Tab Completion Matches";
 
         if (total_pages > 1) {
-            printf("\n%s%s [page %d/%d%s] (%sCtrl+l%s → clear%s):%s\n\n",
+            printf("\n%s%s [page %d/%d%s] (%sEsc%s → clear%s):%s\n\n",
                    rc.label, header_label, current_page + 1, total_pages, rc.label,
                    rc.hint, rc.reset, rc.label, rc.reset);
         } else {
-            printf("\n%s%s (%sCtrl+l%s → clear%s):%s\n\n",
+            printf("\n%s%s (%sEsc%s → clear%s):%s\n\n",
                    rc.label, header_label, rc.hint, rc.reset, rc.label, rc.reset);
         }
     }
@@ -442,7 +442,16 @@ int prevent_readline_keybindings(int, int) {
 }
 
 /**
- * @brief Clears the terminal screen, scrollback buffer, and resets pagination.
+ * @brief Clears the terminal screen, scrollback buffer, and resets pagination/UI state.
+ *
+ * This function clears the terminal scrollback and forces a display update.
+ * It resets pagination variables and restores specific key bindings.
+ * If @c GlobalState::g_rl_complete_mode is active, it captures the current
+ * input line, forces a clean exit of the current Readline loop, and resets
+ * the completion mode to allow for a state-preserved refresh.
+ *
+ * @param ignore1 Unused parameter (typically 0).
+ * @param ignore2 Unused parameter (typically 0).
  * @return Always 0.
  */
 int clear_screen_and_buffer(int, int) {
@@ -452,6 +461,21 @@ int clear_screen_and_buffer(int, int) {
 
     current_page = 0;
     last_common_prefix[0] = '\0';
+    rl_bind_keyseq("\\e", exit_handler);
+
+    char *new_text = rl_copy_text(0, rl_end);
+
+    if (RetainAndRestoreReadlineBuffer::g_rl_complete_mode == 1) {
+        RetainAndRestoreReadlineBuffer::g_rl_pending_text = new_text;
+        rl_on_new_line();
+        rl_replace_line("", 0);
+        rl_done = 1;
+        RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 0;
+    }
+
+    // Note: If new_text was allocated, ensure it is freed here
+    // if it isn't being managed by g_rl_pending_text.
+    free(new_text);
 
     return 0;
 }
@@ -476,6 +500,7 @@ int clear_screen_and_buffer(int, int) {
  */
 int my_rl_complete(int ignore, int invoking_key)
 {
+    rl_bind_keyseq("\\e", clear_screen_and_buffer);
     (void)ignore;
     (void)invoking_key;
 
@@ -513,6 +538,7 @@ int my_rl_complete(int ignore, int invoking_key)
         clear_screen_and_buffer(0, 0);
         if (RetainAndRestoreReadlineBuffer::g_rl_complete_mode == 1) {
             RetainAndRestoreReadlineBuffer::g_rl_pending_text = new_text;
+            rl_on_new_line();
             rl_replace_line("", 0);
             rl_done = 1;
             RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 0;

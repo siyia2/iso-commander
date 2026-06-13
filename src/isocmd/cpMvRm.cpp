@@ -263,37 +263,18 @@ bool& overwriteExisting) {
 
             // Persist the current input line and cursor position across Ctrl+L screen clears.
             static std::string saved_line;
-            static int saved_point = 0;
 
             auto setupEnv = [&]() {
                 enable_ctrl_d();
                 setupSignalHandlerCancellations();
 
-                // Ctrl+L: save current input, clear the screen, then submit an empty line
-                // so the main loop handles the redraw. The saved input is restored on the
-                // next prompt via rl_pre_input_hook.
+                // Ctrl+L: save current input, clear the screen.
+                // The saved input is restored on the next prompt.
                 rl_bind_key('\f', [](int count, int key) -> int {
-                    saved_line = rl_copy_text(0, rl_end);
-                    saved_point = rl_point;
+                    static std::string saved_line = rl_copy_text(0, rl_end);
                     clear_screen_and_buffer(count, key);
-                    rl_on_new_line();
-                    rl_replace_line("", 0);
-                    rl_done = 1;
                     return 0;
                 });
-
-                // Before the next prompt accepts input, restore whatever the user had typed
-                // before the screen clear, including the cursor position, then redisplay.
-                rl_pre_input_hook = []() -> int {
-                    if (!saved_line.empty()) {
-                        rl_insert_text(saved_line.c_str());
-                        rl_point = saved_point;
-                        saved_line.clear();
-                        rl_redisplay();
-                    }
-                    rl_pre_input_hook = nullptr;
-                    return 0;
-                };
 
                 rl_bind_key('\t', my_rl_complete);
 
