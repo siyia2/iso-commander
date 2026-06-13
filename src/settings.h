@@ -30,6 +30,10 @@ struct ConfigEntry {
     std::function<bool(const std::string&)> validate;
 };
 
+/**
+ * @namespace ConfigCaches
+ * @brief Global storage for configuration state and file system paths.
+ */
 namespace ConfigCaches {
     inline std::map<std::string, std::string> g_configCache;
 	inline std::string g_cachedPath;
