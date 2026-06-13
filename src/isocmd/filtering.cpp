@@ -25,7 +25,6 @@
 #include <readline/readline.h>
 
 // Project Headers
-#include "../caches.h"
 #include "../concurrency.h"
 #include "../display.h"
 #include "../filtering.h"
@@ -33,6 +32,7 @@
 #include "../readline.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
+#include "../state.h"
 #include "../threadpool.h"
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -617,7 +617,7 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
     const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage)
 {
     const std::vector<std::string>& baseSource =
-        isFiltered ? filteredFiles : (isUnmount ? isoDirs : GlobalCaches::globalIsoFileList);
+        isFiltered ? filteredFiles : (isUnmount ? isoDirs : GlobalState::globalIsoFileList);
 
     return runSharedFilterFlow(inputString, {
         .files          = &filteredFiles,

@@ -13,9 +13,10 @@
 #include <vector>
 
 // Project Headers
-#include "../caches.h"
 #include "../concurrency.h"
 #include "../display.h"
+#include "../globalMutexes.h"
+#include "../state.h"
 #include "../threadpool.h"
 
 /**
@@ -174,12 +175,12 @@ void sortAfterFilenamesOnlyFlag() {
     workers.reserve(6);
 
     // Launch all 6 sorts at the same time
-    workers.emplace_back(sortJob, std::ref(GlobalCaches::globalIsoFileList), std::ref(GlobalCaches::updateListMutex));
-    workers.emplace_back(sortJob, std::ref(GlobalCaches::binImgFilesCache),  std::ref(GlobalCaches::binImgCacheMutex));
-    workers.emplace_back(sortJob, std::ref(GlobalCaches::mdfMdsFilesCache),  std::ref(GlobalCaches::mdfMdsCacheMutex));
-    workers.emplace_back(sortJob, std::ref(GlobalCaches::nrgFilesCache),     std::ref(GlobalCaches::nrgCacheMutex));
-    workers.emplace_back(sortJob, std::ref(GlobalCaches::chdFilesCache),     std::ref(GlobalCaches::chdCacheMutex));
-    workers.emplace_back(sortJob, std::ref(GlobalCaches::daaGbiFilesCache),  std::ref(GlobalCaches::daaGbiCacheMutex));
+    workers.emplace_back(sortJob, std::ref(GlobalState::globalIsoFileList), std::ref(GlobalMutexes::updateListMutex));
+    workers.emplace_back(sortJob, std::ref(GlobalState::binImgFilesCache),  std::ref(GlobalMutexes::binImgCacheMutex));
+    workers.emplace_back(sortJob, std::ref(GlobalState::mdfMdsFilesCache),  std::ref(GlobalMutexes::mdfMdsCacheMutex));
+    workers.emplace_back(sortJob, std::ref(GlobalState::nrgFilesCache),     std::ref(GlobalMutexes::nrgCacheMutex));
+    workers.emplace_back(sortJob, std::ref(GlobalState::chdFilesCache),     std::ref(GlobalMutexes::chdCacheMutex));
+    workers.emplace_back(sortJob, std::ref(GlobalState::daaGbiFilesCache),  std::ref(GlobalMutexes::daaGbiCacheMutex));
 
     // Block here until every single thread is finished to ensure sorting correctness for large lists
     for (auto& t : workers) {

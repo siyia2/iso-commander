@@ -21,11 +21,11 @@
 #include "../databaseOps.h"
 #include "../filtering.h"
 #include "../inputHandling.h"
+#include "../globalMutexes.h"
 #include "../pausePrompt.h"
 #include "../sort.h"
 #include "../state.h"
 #include "../themes.h"
-#include "../select.h"
 
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered,
@@ -66,23 +66,23 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
 
     bool isEmpty = false;
     {
-        std::lock_guard<std::mutex> lock(GlobalCaches::updateListMutex);
+        std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
 
         if (needToReload) {
-            GlobalCaches::globalIsoFileList = std::move(freshList);
+            GlobalState::globalIsoFileList = std::move(freshList);
             //  Only reset to originalPage if we are NOT actively filtered ---
             if (!isFiltered) {
                 currentPage = originalPage;
             }
             pendingIndices.clear();
             hasPendingProcess = false;
-            sortFilesCaseInsensitive(GlobalCaches::globalIsoFileList);
+            sortFilesCaseInsensitive(GlobalState::globalIsoFileList);
 
-            syncFilteringStackForIso(GlobalCaches::globalIsoFileList, filteringStack, filteredFiles, isFiltered);
+            syncFilteringStackForIso(GlobalState::globalIsoFileList, filteringStack, filteredFiles, isFiltered);
         }
 
         if (GlobalState::needSortingAfterflno) {
-            sortFilesCaseInsensitive(GlobalCaches::globalIsoFileList);
+            sortFilesCaseInsensitive(GlobalState::globalIsoFileList);
             GlobalState::needSortingAfterflno = false;
         }
 
@@ -95,10 +95,10 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
         clearScrollBuffer();
 
         // Use either the recently refreshed filteredFiles or the global master list
-        printList(isFiltered ? filteredFiles : GlobalCaches::globalIsoFileList, "ISO_FILES", listSubType,
+        printList(isFiltered ? filteredFiles : GlobalState::globalIsoFileList, "ISO_FILES", listSubType,
                   pendingIndices, hasPendingProcess, isFiltered, currentPage, state);
 
-        isEmpty = GlobalCaches::globalIsoFileList.empty();
+        isEmpty = GlobalState::globalIsoFileList.empty();
     }
 
     if (isEmpty) {
@@ -249,41 +249,41 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
 
     // Restore from the appropriate cache when not filtered and the cache is valid
     files =
-    (!isFiltered && !GlobalCaches::binImgFilesCache.empty() && (fileType == "bin" || fileType == "img") &&
-     (GlobalCaches::binImgFilesCache.size() != files.size() || !std::equal(GlobalCaches::binImgFilesCache.begin(), GlobalCaches::binImgFilesCache.end(), files.begin())))
-        ? (need2Sort = true, GlobalCaches::binImgFilesCache)
-    : (!isFiltered && !GlobalCaches::mdfMdsFilesCache.empty() && fileType == "mdf" &&
-       (GlobalCaches::mdfMdsFilesCache.size() != files.size() || !std::equal(GlobalCaches::mdfMdsFilesCache.begin(), GlobalCaches::mdfMdsFilesCache.end(), files.begin())))
-        ? (need2Sort = true, GlobalCaches::mdfMdsFilesCache)
-    : (!isFiltered && !GlobalCaches::nrgFilesCache.empty() && fileType == "nrg" &&
-       (GlobalCaches::nrgFilesCache.size() != files.size() || !std::equal(GlobalCaches::nrgFilesCache.begin(), GlobalCaches::nrgFilesCache.end(), files.begin())))
-        ? (need2Sort = true, GlobalCaches::nrgFilesCache)
-    : (!isFiltered && !GlobalCaches::chdFilesCache.empty() && fileType == "chd" &&
-       (GlobalCaches::chdFilesCache.size() != files.size() || !std::equal(GlobalCaches::chdFilesCache.begin(), GlobalCaches::chdFilesCache.end(), files.begin())))
-        ? (need2Sort = true, GlobalCaches::chdFilesCache)
-    : (!isFiltered && !GlobalCaches::daaGbiFilesCache.empty() && fileType == "daa" &&               // <-- DAA branch
-       (GlobalCaches::daaGbiFilesCache.size() != files.size() || !std::equal(GlobalCaches::daaGbiFilesCache.begin(), GlobalCaches::daaGbiFilesCache.end(), files.begin())))
-        ? (need2Sort = true, GlobalCaches::daaGbiFilesCache)
+    (!isFiltered && !GlobalState::binImgFilesCache.empty() && (fileType == "bin" || fileType == "img") &&
+     (GlobalState::binImgFilesCache.size() != files.size() || !std::equal(GlobalState::binImgFilesCache.begin(), GlobalState::binImgFilesCache.end(), files.begin())))
+        ? (need2Sort = true, GlobalState::binImgFilesCache)
+    : (!isFiltered && !GlobalState::mdfMdsFilesCache.empty() && fileType == "mdf" &&
+       (GlobalState::mdfMdsFilesCache.size() != files.size() || !std::equal(GlobalState::mdfMdsFilesCache.begin(), GlobalState::mdfMdsFilesCache.end(), files.begin())))
+        ? (need2Sort = true, GlobalState::mdfMdsFilesCache)
+    : (!isFiltered && !GlobalState::nrgFilesCache.empty() && fileType == "nrg" &&
+       (GlobalState::nrgFilesCache.size() != files.size() || !std::equal(GlobalState::nrgFilesCache.begin(), GlobalState::nrgFilesCache.end(), files.begin())))
+        ? (need2Sort = true, GlobalState::nrgFilesCache)
+    : (!isFiltered && !GlobalState::chdFilesCache.empty() && fileType == "chd" &&
+       (GlobalState::chdFilesCache.size() != files.size() || !std::equal(GlobalState::chdFilesCache.begin(), GlobalState::chdFilesCache.end(), files.begin())))
+        ? (need2Sort = true, GlobalState::chdFilesCache)
+    : (!isFiltered && !GlobalState::daaGbiFilesCache.empty() && fileType == "daa" &&               // <-- DAA branch
+       (GlobalState::daaGbiFilesCache.size() != files.size() || !std::equal(GlobalState::daaGbiFilesCache.begin(), GlobalState::daaGbiFilesCache.end(), files.begin())))
+        ? (need2Sort = true, GlobalState::daaGbiFilesCache)
     : files;
 
     if (!list || (list && GlobalState::needSortingAfterflno)) {
         if (need2Sort) {
             sortFilesCaseInsensitive(files);
             if (fileType == "bin" || fileType == "img") {
-                std::lock_guard<std::mutex> lock(GlobalCaches::binImgCacheMutex);
-                sortFilesCaseInsensitive(GlobalCaches::binImgFilesCache);
+                std::lock_guard<std::mutex> lock(GlobalMutexes::binImgCacheMutex);
+                sortFilesCaseInsensitive(GlobalState::binImgFilesCache);
             } else if (fileType == "mdf") {
-                std::lock_guard<std::mutex> lock(GlobalCaches::mdfMdsCacheMutex);
-                sortFilesCaseInsensitive(GlobalCaches::mdfMdsFilesCache);
+                std::lock_guard<std::mutex> lock(GlobalMutexes::mdfMdsCacheMutex);
+                sortFilesCaseInsensitive(GlobalState::mdfMdsFilesCache);
             } else if (fileType == "nrg") {
-                std::lock_guard<std::mutex> lock(GlobalCaches::nrgCacheMutex);
-                sortFilesCaseInsensitive(GlobalCaches::nrgFilesCache);
+                std::lock_guard<std::mutex> lock(GlobalMutexes::nrgCacheMutex);
+                sortFilesCaseInsensitive(GlobalState::nrgFilesCache);
             } else if (fileType == "chd") {
-                std::lock_guard<std::mutex> lock(GlobalCaches::chdCacheMutex);
-                sortFilesCaseInsensitive(GlobalCaches::chdFilesCache);
+                std::lock_guard<std::mutex> lock(GlobalMutexes::chdCacheMutex);
+                sortFilesCaseInsensitive(GlobalState::chdFilesCache);
             } else if (fileType == "daa") {
-                std::lock_guard<std::mutex> lock(GlobalCaches::daaGbiCacheMutex);
-                sortFilesCaseInsensitive(GlobalCaches::daaGbiFilesCache);
+                std::lock_guard<std::mutex> lock(GlobalMutexes::daaGbiCacheMutex);
+                sortFilesCaseInsensitive(GlobalState::daaGbiFilesCache);
             }
         }
         GlobalState::needSortingAfterflno = false;

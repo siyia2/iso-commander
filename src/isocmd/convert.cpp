@@ -18,8 +18,7 @@
 #include <unistd.h>
 
 // Project Headers
-#include "../caches.h"
-#include "../concurrency.h"
+#include "../globalMutexes.h"
 #include "../convert.h"
 #include "../display.h"
 #include "../state.h"
@@ -71,7 +70,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
     std::vector<std::string> localSuccessMsgs, localFailedMsgs, localSkippedMsgs;
 
     auto batchInsertMessages = [&]() {
-        std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
+        std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
         if (!localSuccessMsgs.empty()) {
             verboseSets.operationCompleted.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
             localSuccessMsgs.clear();
@@ -110,11 +109,11 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             localFailedMsgs.push_back(std::move(msg));
 
             {
-                std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
-                auto& cache = modeNrg ? GlobalCaches::nrgFilesCache :
-                              (modeMdf ? GlobalCaches::mdfMdsFilesCache :
-                               (modeChd ? GlobalCaches::chdFilesCache :
-                                (modeDaa ? GlobalCaches::daaGbiFilesCache : GlobalCaches::binImgFilesCache)));
+                std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
+                auto& cache = modeNrg ? GlobalState::nrgFilesCache :
+                              (modeMdf ? GlobalState::mdfMdsFilesCache :
+                               (modeChd ? GlobalState::chdFilesCache :
+                                (modeDaa ? GlobalState::daaGbiFilesCache : GlobalState::binImgFilesCache)));
                 cache.erase(std::remove(cache.begin(), cache.end(), inputPath), cache.end());
             }
 

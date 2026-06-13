@@ -20,12 +20,13 @@
 #include <readline/readline.h>
 
 // Project Headers
-#include "../caches.h"
 #include "../databaseOps.h"
 #include "../filtering.h"
 #include "../inputHandling.h"
+#include "../globalMutexes.h"
 #include "../readline.h"
 #include "../select.h"
+#include "../sharedState.h"
 #include "../state.h"
 #include "../themes.h"
 #include "../verbose.h"
@@ -67,7 +68,7 @@ void processOperationForSelectedIsoFiles(const std::string& inputString,
     if (operation == "mount" || operation == "umount") {
         if (operation == "umount") isUnmount = true;
         const std::vector<std::string>& activeList = isFiltered ? filteredFiles :
-                                                    (isUnmount ? isoDirs : GlobalCaches::globalIsoFileList);
+                                                    (isUnmount ? isoDirs : GlobalState::globalIsoFileList);
 
         if (operation == "umount") {
             umountMvRmBreak = true;
@@ -75,10 +76,10 @@ void processOperationForSelectedIsoFiles(const std::string& inputString,
 
         processInputForMountOrUmount(inputString, activeList, umountMvRmBreak, verbose, isUnmount);
     } else if (operation == "write2usb") {
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalCaches::globalIsoFileList;
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalState::globalIsoFileList;
         writeToUsb(inputString, activeList);
     } else {
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalCaches::globalIsoFileList;
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalState::globalIsoFileList;
         processInputForCpMvRm(inputString, activeList, operation, umountMvRmBreak, filterHistory, verbose);
     }
 
@@ -238,7 +239,7 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  *
  * @details **Key Behaviors:**
  * - **Dynamic Context:** Automatically toggles between the global ISO database
- * (@c GlobalCaches::globalIsoFileList) and active mount points (@c isoDirs)
+ * (@c GlobalState::globalIsoFileList) and active mount points (@c isoDirs)
  * based on @p operation; unmount operations skip database cleanup and disable
  * the manual-refresh keybinding.
  * - **Event-Driven Refresh:** Shares a @c RefreshState instance (via
@@ -330,7 +331,7 @@ void selectForIsoFiles(const std::string& operation,
         if (!isFiltered) originalPage = currentPage;
 
         if (!isUnmount) {
-            removeNonExistentPathsFromDatabase(GlobalCaches::globalIsoFileList);
+            removeNonExistentPathsFromDatabase(GlobalState::globalIsoFileList);
             isAtISOList.store(true);
         }
 
@@ -400,7 +401,7 @@ void selectForIsoFiles(const std::string& operation,
             continue;
         }
 
-        if (inputString == "R" && !isUnmount && !GlobalCaches::globalIsoFileList.empty() && !refreshState->isImportRunning.load()) {
+        if (inputString == "R" && !isUnmount && !GlobalState::globalIsoFileList.empty() && !refreshState->isImportRunning.load()) {
             backgroundThreads.erase(
                 std::remove_if(backgroundThreads.begin(), backgroundThreads.end(),
                     [](std::thread& t) {
@@ -448,8 +449,8 @@ void selectForIsoFiles(const std::string& operation,
 
         size_t totalPages = 0;
         {
-            std::lock_guard<std::mutex> lock(GlobalCaches::updateListMutex);
-            const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : GlobalCaches::globalIsoFileList);
+            std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
+            const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : GlobalState::globalIsoFileList);
             totalPages = (GlobalState::ITEMS_PER_PAGE != 0) ? ((currentList.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE) : 0;
         }
         bool need2Sort = false;
@@ -461,7 +462,7 @@ void selectForIsoFiles(const std::string& operation,
         // --- Mutation lock covers execution of handleFilteringForISO ---
         bool filteringHandled = false;
         {
-            std::lock_guard<std::mutex> lock(GlobalCaches::updateListMutex);
+            std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
             if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn,
                                       filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage)) {
                 filteringHandled = true;
@@ -635,15 +636,15 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             clearScrollBuffer();
             if (isFiltered) {
                 if (fileType == "bin" || fileType == "img") {
-                    files = GlobalCaches::binImgFilesCache;
+                    files = GlobalState::binImgFilesCache;
                 } else if (fileType == "mdf") {
-                    files = GlobalCaches::mdfMdsFilesCache;
+                    files = GlobalState::mdfMdsFilesCache;
                 } else if (fileType == "nrg") {
-                    files = GlobalCaches::nrgFilesCache;
+                    files = GlobalState::nrgFilesCache;
                 } else if (fileType == "chd") {
-                    files = GlobalCaches::chdFilesCache;
+                    files = GlobalState::chdFilesCache;
                 } else if (fileType == "daa") {
-                    files = GlobalCaches::daaGbiFilesCache;
+                    files = GlobalState::daaGbiFilesCache;
                 }
                 needsClrScrn = true;
                 isFiltered = false;

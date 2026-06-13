@@ -24,7 +24,7 @@
 #include <libmount/libmount.h>
 
 // Project Headers
-#include "../concurrency.h"
+#include "../globalMutexes.h"
 #include "../mount.h"
 #include "../state.h"
 #include "../stringManipulation.h"
@@ -202,7 +202,7 @@ static std::string mountPointSuffix(const std::string& isoPath) {
  * 2. **Inode-based:** Inspects `/sys/block/loopN/loop/backing_file` to detect files that have
  * been renamed or hard-linked but are already active, ensuring idempotency.
  * - **Concurrency Strategy:** Results are buffered in thread-local vectors and flushed to
- * `globalSets` periodically to minimize lock contention on `GlobalConcurrency::globalSetsMutex`.
+ * `globalSets` periodically to minimize lock contention on `GlobalMutexes::globalSetsMutex`.
  *
  * ### Mount Path Schema:
  * `/mnt/iso_<stem>~<5-char base-36 FNV-1a suffix>`
@@ -234,7 +234,7 @@ void mountIsoFiles(
                 auto [dir, file] = extractDirectoryAndFilename(isoFile, "mount");
                 fails.push_back(formatter.formatError(std::string(dir), std::string(file), "needsRoot"));
             }
-            std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
+            std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
             verboseSets.operationFailed.insert(fails.begin(), fails.end());
         }
         failedTasks->fetch_add(isoFiles.size(), std::memory_order_relaxed);
@@ -244,7 +244,7 @@ void mountIsoFiles(
     libmnt_context* ctx = mnt_new_context();
     if (!ctx) {
         if (!silentMode) {
-            std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
+            std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
             verboseSets.operationFailed.insert("\033[1;91mFailed to create mount context.\033[0m");
         }
         return;
@@ -350,7 +350,7 @@ void mountIsoFiles(
 
     auto flushBuffers = [&]() {
         if (silentMode) return;
-        std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
+        std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
         verboseSets.operationCompleted.insert(tempCompleted.begin(), tempCompleted.end());
         verboseSets.operationSkipped.insert(tempSkipped.begin(), tempSkipped.end());
         verboseSets.operationFailed.insert(tempFailed.begin(), tempFailed.end());

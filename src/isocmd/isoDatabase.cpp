@@ -37,7 +37,9 @@
 #include "../databaseOps.h"
 #include "../history.h"
 #include "../inputHandling.h"
+#include "../globalMutexes.h"
 #include "../pausePrompt.h"
+#include "../sharedState.h"
 #include "../state.h"
 #include "../themes.h"
 #include "../threadpool.h"
@@ -68,7 +70,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         int fd = open(GlobalState::databaseFilePath.c_str(), O_RDONLY);
         if (fd == -1) {
             if (errno == ENOENT) {
-                std::lock_guard<std::mutex> lock(GlobalCaches::updateListMutex);
+                std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
                 globalIsoFileList.clear();
             }
             return;
@@ -177,7 +179,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         GlobalState::isoListDirty.store(true);
     }
     if (anyRemoved) {
-        std::lock_guard<std::mutex> lock(GlobalCaches::updateListMutex);
+        std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
         globalIsoFileList = std::move(retained);
     }
 }
@@ -641,13 +643,13 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
         std::cout << str << "\nSTR → RAM: " << data
                   << (GlobalCaches::transformationCache.size() + GlobalCaches::cachedParsesForUmount.size()) << "\n";
 
-        std::cout << "\n" << label << "ISO → RAM: " << data << GlobalCaches::globalIsoFileList.size() << "\n";
+        std::cout << "\n" << label << "ISO → RAM: " << data << GlobalState::globalIsoFileList.size() << "\n";
 
-        std::cout << "\n" << warning << "BIN/IMG → RAM: " << data << GlobalCaches::binImgFilesCache.size() << "\n"
-                  << warning << "DAA/GBI → RAM: " << data << GlobalCaches::daaGbiFilesCache.size() << "\n"
-                  << warning << "CHD → RAM: " << data << GlobalCaches::chdFilesCache.size() << "\n"
-                  << warning << "MDF → RAM: " << data << GlobalCaches::mdfMdsFilesCache.size() << "\n"
-                  << warning << "NRG → RAM: " << data << GlobalCaches::nrgFilesCache.size() << "\n";
+        std::cout << "\n" << warning << "BIN/IMG → RAM: " << data << GlobalState::binImgFilesCache.size() << "\n"
+                  << warning << "DAA/GBI → RAM: " << data << GlobalState::daaGbiFilesCache.size() << "\n"
+                  << warning << "CHD → RAM: " << data << GlobalState::chdFilesCache.size() << "\n"
+                  << warning << "MDF → RAM: " << data << GlobalState::mdfMdsFilesCache.size() << "\n"
+                  << warning << "NRG → RAM: " << data << GlobalState::nrgFilesCache.size() << "\n";
 
     } catch (const std::filesystem::filesystem_error& e) {
         std::cerr << "\n" << error << "Error: Unable to access configuration file: "
@@ -691,7 +693,7 @@ void databaseSwitches(std::string& inputSearch) {
 
             std::cout << "\n" << db.highlight << "ISO database cleared successfully." << "\033[J" << std::endl;
             pressEnterToContinue();
-            std::vector<std::string>().swap(GlobalCaches::globalIsoFileList);
+            std::vector<std::string>().swap(GlobalState::globalIsoFileList);
         }
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
         clearHistory(inputSearch);

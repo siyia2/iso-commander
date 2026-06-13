@@ -29,11 +29,12 @@
 #include <readline/readline.h>
 
 // Project Headers
-#include "../caches.h"
 #include "../concurrency.h"
 #include "../databaseOps.h"
+#include "../globalMutexes.h"
 #include "../history.h"
 #include "../inputHandling.h"
+#include "../globalMutexes.h"
 #include "../pausePrompt.h"
 #include "../readline.h"
 #include "../search.h"
@@ -42,7 +43,8 @@
 #include "../themes.h"
 #include "../threadpool.h"
 #include "../verbose.h"
-#include "../select.h"
+#include "../sharedState.h"
+
 
 namespace fs = std::filesystem;
 
@@ -343,7 +345,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
             if (promptFlag && entry.is_regular_file()) {
                 uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (val % 100 == 0) {
-                    std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
+                    std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
                     std::cout << "\r" << color << "Total files processed: " << val << std::flush;
                 }
             }
@@ -490,28 +492,28 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
     if (modeDaa) {
         extensions = {".daa", ".gbi"};
         cacheType = "DAA/GBI";
-        cacheIsEmpty = GlobalCaches::daaGbiFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalCaches::daaGbiFilesCache);
+        cacheIsEmpty = GlobalState::daaGbiFilesCache.empty();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::daaGbiFilesCache);
     } else if (modeChd) {
         extensions = {".chd"};
         cacheType = "CHD";
-        cacheIsEmpty = GlobalCaches::chdFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalCaches::chdFilesCache);
+        cacheIsEmpty = GlobalState::chdFilesCache.empty();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::chdFilesCache);
     } else if (modeMdf) {
         extensions = {".mdf"};
         cacheType = "MDF";
-        cacheIsEmpty = GlobalCaches::mdfMdsFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalCaches::mdfMdsFilesCache);
+        cacheIsEmpty = GlobalState::mdfMdsFilesCache.empty();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::mdfMdsFilesCache);
     } else if (modeNrg) {
         extensions = {".nrg"};
         cacheType = "NRG";
-        cacheIsEmpty = GlobalCaches::nrgFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalCaches::nrgFilesCache);
+        cacheIsEmpty = GlobalState::nrgFilesCache.empty();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::nrgFilesCache);
     } else {
         extensions = {".bin", ".img"};
         cacheType = "BIN/IMG";
-        cacheIsEmpty = GlobalCaches::binImgFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalCaches::binImgFilesCache);
+        cacheIsEmpty = GlobalState::binImgFilesCache.empty();
+        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::binImgFilesCache);
     }
 
     if (cacheIsEmpty) {
@@ -624,7 +626,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (GlobalState::g_operationCancelled.load()) {
                 if (GlobalState::g_operationCancelled.load()) {
-					std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
+					std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
 
 					// Re-check under the lock to prevent races between threads
 					if (!g_CancelledMessageAdded.exchange(true)) {
@@ -645,26 +647,26 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                 if (entry.is_regular_file()) {
                     uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
                     if (val % 100 == 0) {
-                        std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
+                        std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
                         std::cout << "\r" << color << "Total files processed: " << val << std::flush;
                 }
 
                 if (blacklist(entry, blacklistMdf, blacklistNrg, blacklistChd, blacklistDaa)) {
                     std::string fileName = entry.path().string();
                     {
-                        std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
+                        std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
 
                         bool isInCache = false;
                         if (mode == "nrg") {
-                            isInCache = (std::find(GlobalCaches::nrgFilesCache.begin(), GlobalCaches::nrgFilesCache.end(), fileName) != GlobalCaches::nrgFilesCache.end());
+                            isInCache = (std::find(GlobalState::nrgFilesCache.begin(), GlobalState::nrgFilesCache.end(), fileName) != GlobalState::nrgFilesCache.end());
                         } else if (mode == "mdf") {
-                            isInCache = (std::find(GlobalCaches::mdfMdsFilesCache.begin(), GlobalCaches::mdfMdsFilesCache.end(), fileName) != GlobalCaches::mdfMdsFilesCache.end());
+                            isInCache = (std::find(GlobalState::mdfMdsFilesCache.begin(), GlobalState::mdfMdsFilesCache.end(), fileName) != GlobalState::mdfMdsFilesCache.end());
                         } else if (mode == "bin") {
-                            isInCache = (std::find(GlobalCaches::binImgFilesCache.begin(), GlobalCaches::binImgFilesCache.end(), fileName) != GlobalCaches::binImgFilesCache.end());
+                            isInCache = (std::find(GlobalState::binImgFilesCache.begin(), GlobalState::binImgFilesCache.end(), fileName) != GlobalState::binImgFilesCache.end());
                         } else if (mode == "chd") {
-                            isInCache = (std::find(GlobalCaches::chdFilesCache.begin(), GlobalCaches::chdFilesCache.end(), fileName) != GlobalCaches::chdFilesCache.end());
+                            isInCache = (std::find(GlobalState::chdFilesCache.begin(), GlobalState::chdFilesCache.end(), fileName) != GlobalState::chdFilesCache.end());
                         } else if (mode == "daa") {
-                            isInCache = (std::find(GlobalCaches::daaGbiFilesCache.begin(), GlobalCaches::daaGbiFilesCache.end(), fileName) != GlobalCaches::daaGbiFilesCache.end());
+                            isInCache = (std::find(GlobalState::daaGbiFilesCache.begin(), GlobalState::daaGbiFilesCache.end(), fileName) != GlobalState::daaGbiFilesCache.end());
                         }
 
                         if (!isInCache && localFileNames.insert(fileName).second) {
@@ -675,14 +677,14 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
             }
         }
     } catch (const std::filesystem::filesystem_error& e) {
-        std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
+        std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
 
         processedErrorsFind.insert(dt.red + "Error traversing path: " + path + " - " +
                                  e.what() + dt.reset);
     }
 
     {
-        std::lock_guard<std::mutex> lock(GlobalConcurrency::couNtMutex);
+        std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
         std::cout << "\r" << color << "Total files processed: " << totalFiles << dt.reset;
     }
 
@@ -730,20 +732,20 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
 
     std::vector<std::string>* currentCache = nullptr;
     if (mode == "bin") {
-        currentCacheOld = GlobalCaches::binImgFilesCache.size();
-        currentCache = &GlobalCaches::binImgFilesCache;
+        currentCacheOld = GlobalState::binImgFilesCache.size();
+        currentCache = &GlobalState::binImgFilesCache;
     } else if (mode == "mdf") {
-        currentCacheOld = GlobalCaches::mdfMdsFilesCache.size();
-        currentCache = &GlobalCaches::mdfMdsFilesCache;
+        currentCacheOld = GlobalState::mdfMdsFilesCache.size();
+        currentCache = &GlobalState::mdfMdsFilesCache;
     } else if (mode == "nrg") {
-        currentCacheOld = GlobalCaches::nrgFilesCache.size();
-        currentCache = &GlobalCaches::nrgFilesCache;
+        currentCacheOld = GlobalState::nrgFilesCache.size();
+        currentCache = &GlobalState::nrgFilesCache;
     } else if (mode == "chd") {
-        currentCacheOld = GlobalCaches::chdFilesCache.size();
-        currentCache = &GlobalCaches::chdFilesCache;
+        currentCacheOld = GlobalState::chdFilesCache.size();
+        currentCache = &GlobalState::chdFilesCache;
     } else if (mode == "daa") {
-        currentCacheOld = GlobalCaches::daaGbiFilesCache.size();
-        currentCache = &GlobalCaches::daaGbiFilesCache;
+        currentCacheOld = GlobalState::daaGbiFilesCache.size();
+        currentCache = &GlobalState::daaGbiFilesCache;
     } else {
         restoreInput();
         return {};
@@ -867,7 +869,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
     if (input == "ls") {
         list = true;
         ramCacheList(files, list, fileExtension,
-                     GlobalCaches::binImgFilesCache, GlobalCaches::mdfMdsFilesCache, GlobalCaches::nrgFilesCache, GlobalCaches::chdFilesCache, GlobalCaches::daaGbiFilesCache,
+                     GlobalState::binImgFilesCache, GlobalState::mdfMdsFilesCache, GlobalState::nrgFilesCache, GlobalState::chdFilesCache, GlobalState::daaGbiFilesCache,
                      modeMdf, modeNrg, modeChd, modeDaa);
         if (!files.empty())
             selectForImageFiles(fileType, files, list, state);

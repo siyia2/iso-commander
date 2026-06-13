@@ -17,8 +17,8 @@
 #include <libmount/libmount.h>
 
 // Project Headers
-#include "../concurrency.h"
 #include "../display.h"
+#include "../globalMutexes.h"
 #include "../state.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
@@ -111,7 +111,7 @@ void unmountISO(
     }
     auto flushTemporaryBuffers = [&]() {
         if (silentMode) return;
-        std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
+        std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
         if (!successMessages.empty()) {
             verboseSets.operationCompleted.insert(successMessages.begin(), successMessages.end());
             successMessages.clear();

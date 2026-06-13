@@ -22,7 +22,6 @@
 #include <readline/readline.h>
 
 // Project Headers
-#include "../caches.h"
 #include "../threadpool.h"
 #include "../databaseOps.h"
 #include "../inputHandling.h"
@@ -31,7 +30,7 @@
 #include "../state.h"
 #include "../themes.h"
 #include "../settings.h"
-#include "../select.h"
+#include "../sharedState.h"
 #include "../write2usbUI.h"
 
 namespace fs = std::filesystem;
@@ -70,12 +69,12 @@ int main(int argc, char *argv[]) {
     /// @}
 
     // Generous reserve for future lists
-    GlobalCaches::globalIsoFileList.reserve(1000);
-    GlobalCaches::binImgFilesCache.reserve(1000);
-    GlobalCaches::mdfMdsFilesCache.reserve(1000);
-    GlobalCaches::nrgFilesCache.reserve(1000);
-    GlobalCaches::chdFilesCache.reserve(1000);
-    GlobalCaches::daaGbiFilesCache.reserve(1000);
+    GlobalState::globalIsoFileList.reserve(1000);
+    GlobalState::binImgFilesCache.reserve(1000);
+    GlobalState::mdfMdsFilesCache.reserve(1000);
+    GlobalState::nrgFilesCache.reserve(1000);
+    GlobalState::chdFilesCache.reserve(1000);
+    GlobalState::daaGbiFilesCache.reserve(1000);
 
     setupReadlineToIgnoreCtrlC();
 

@@ -14,15 +14,14 @@
 #include <vector>
 
 // Project Headers
-#include "../caches.h"
 #include "../display.h"
 #include "../filtering.h"
 #include "../databaseOps.h"
 #include "../main.h"
+#include "../sharedState.h"
 #include "../state.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
-#include "../select.h"
 
 namespace fs = std::filesystem;
 
@@ -186,7 +185,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         const bool isIsoWithAutoUpdate = (state
             && state->isImportRunning.load(std::memory_order_relaxed)
             && isIsoMode
-            && !GlobalCaches::globalIsoFileList.empty());
+            && !GlobalState::globalIsoFileList.empty());
 
         if (isIsoWithAutoUpdate) {
             std::string syncLine;

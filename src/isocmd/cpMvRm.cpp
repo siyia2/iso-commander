@@ -26,13 +26,15 @@
 #include <readline/readline.h>
 
 // Project Headers
-#include "../concurrency.h"
+#include "../globalMutexes.h"
 #include "../cpMvRm.h"
 #include "../display.h"
+#include "../globalMutexes.h"
 #include "../history.h"
 #include "../inputHandling.h"
 #include "../readline.h"
 #include "../sort.h"
+#include "../state.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
 #include "../verbose.h"
@@ -256,7 +258,7 @@ bool& overwriteExisting) {
 
     while (shouldContinue) {
         resetReadlinePagination();
-        GlobalState::g_rl_complete_mode = 1;
+        RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 1;
         if (!isDelete) {
             bool isPageTurn = false;
 
@@ -299,12 +301,12 @@ bool& overwriteExisting) {
                 // RlStartupHookGuard is scoped to setupEnv's enclosing loop
                 // iteration (see below), so the hook is cleared whether
                 // handlePaginatedDisplay returns normally or early.
-                if (!GlobalState::g_rl_pending_text.empty()) {
+                if (!RetainAndRestoreReadlineBuffer::g_rl_pending_text.empty()) {
                     rl_startup_hook = []() -> int {
-                        if (!GlobalState::g_rl_pending_text.empty()) {
-                            rl_insert_text(GlobalState::g_rl_pending_text.c_str());
+                        if (!RetainAndRestoreReadlineBuffer::g_rl_pending_text.empty()) {
+                            rl_insert_text(RetainAndRestoreReadlineBuffer::g_rl_pending_text.c_str());
                             rl_point = rl_end;
-                            GlobalState::g_rl_pending_text = "";
+                            RetainAndRestoreReadlineBuffer::g_rl_pending_text = "";
                         }
                         return 0;
                     };
@@ -805,7 +807,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std:
 
     auto batchInsertMessages = [&]() {
         if (verboseIsos.size() >= BATCH_SIZE || verboseErrors.size() >= BATCH_SIZE) {
-            std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
+            std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
             verboseSets.operationFailed.insert(verboseErrors.begin(), verboseErrors.end());
             verboseSets.operationCompleted.insert(verboseIsos.begin(), verboseIsos.end());
             verboseIsos.clear();
@@ -947,7 +949,7 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles, const std:
     executeOperation(isoFilesToOperate);
 
     {
-        std::lock_guard<std::mutex> lock(GlobalConcurrency::globalSetsMutex);
+        std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
         verboseSets.operationFailed.insert(verboseErrors.begin(), verboseErrors.end());
         verboseSets.operationCompleted.insert(verboseIsos.begin(), verboseIsos.end());
     }

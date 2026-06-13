@@ -24,7 +24,6 @@
 #include <readline/history.h>
 
 // Project Headers
-#include "../caches.h"
 #include "../databaseOps.h"
 #include "../display.h"
 #include "../inputHandling.h"
@@ -456,7 +455,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    if (newISOFound) loadFromDatabase(GlobalCaches::globalIsoFileList);
+    if (newISOFound) loadFromDatabase(GlobalState::globalIsoFileList);
 
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
@@ -501,7 +500,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
     } else if (allIsoFiles.empty()) {
         std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No ISO found" << vt.green << "]" << vt.bold << "\n";
     } else if (!allIsoFiles.empty() && saveSuccess && newISOFound) {
-        int result = countDifferentEntries(allIsoFiles, GlobalCaches::globalIsoFileList);
+        int result = countDifferentEntries(allIsoFiles, GlobalState::globalIsoFileList);
         std::cout << "\n" << vt.green << "Database Refresh: [" << vt.magenta << result << " ISO imported" << vt.green << "]" << vt.bold << "\n";
     }
 
