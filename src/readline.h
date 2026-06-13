@@ -50,6 +50,17 @@ struct CompleterData {
 /** @brief Global access point for the completion data used by the Readline callback. */
 extern CompleterData g_completerData;
 
+/**
+ * @namespace RetainAndRestoreReadlineBuffer
+ * @brief Global state management for Readline buffer persistence during completion cycles.
+ */
+namespace RetainAndRestoreReadlineBuffer {
+    /// @brief Mode flag to determine if completion text should be persisted across Readline calls.
+    inline int g_rl_complete_mode = 0;
+    /// @brief Storage for the completed line text to be restored after a reset.
+    inline std::string g_rl_pending_text = "";
+}
+
 /** @brief Clears readline list completions on exact matches. */
 int my_rl_complete(int ignore, int invoking_key);
 
