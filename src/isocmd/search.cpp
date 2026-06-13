@@ -45,7 +45,6 @@
 #include "../verbose.h"
 #include "../sharedState.h"
 
-
 namespace fs = std::filesystem;
 
 /**
