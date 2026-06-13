@@ -17,7 +17,7 @@ namespace GlobalMutexes {
     // Mutex Protection For file counts in search.cpp
     inline std::mutex couNtMutex;
 
-    // --- Cache Mutexes ---
+    // --- Global State Mutexes ---
     inline std::mutex updateListMutex;
     inline std::mutex binImgCacheMutex;
     inline std::mutex mdfMdsCacheMutex;
