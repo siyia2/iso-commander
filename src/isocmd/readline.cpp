@@ -457,17 +457,20 @@ int clear_screen_and_buffer(int, int) {
 }
 
 /**
- * @brief TAB-completion handler that extends @c rl_complete with pagination reset.
+ * @brief TAB-completion handler that extends @c rl_complete with pagination reset
+ * and custom directory formatting.
  *
- * Delegates to @c rl_complete_internal('?') on double-TAB (list all matches)
- * or @c rl_complete_internal('!') on single TAB (insert/complete). If the
- * cursor position or line buffer changed after completion, clears the scroll
- * buffer. When @c GlobalState::g_rl_complete_mode is 1, additionally saves the
- * completed text to @c GlobalState::g_rl_pending_text, clears the input buffer,
- * and sets @c rl_done to exit readline — allowing the next loop iteration to
- * redisplay with the pending text restored via the startup hook.
+ * Delegates to @c rl_complete_internal('?') on double-TAB (list matches)
+ * or @c rl_complete_internal('!') on single TAB (insert/complete). After
+ * completion, if the result is a directory, it ensures a trailing slash is
+ * appended. If the cursor position or line buffer changed, it clears the
+ * scroll buffer.
  *
- * @param ignore       Numeric argument (unused).
+ * When @c GlobalState::g_rl_complete_mode is 1, it saves the completed
+ * text to @c g_rl_pending_text, clears the input buffer, and sets @c rl_done
+ * to exit readline, allowing the next loop iteration to restore the text.
+ *
+ * @param ignore      Numeric argument (unused).
  * @param invoking_key Triggering key (unused).
  * @return Return value of @c rl_complete_internal.
  */
@@ -475,6 +478,8 @@ int my_rl_complete(int ignore, int invoking_key)
 {
     (void)ignore;
     (void)invoking_key;
+
+    rl_completion_append_character = '\0';
 
     int old_point = rl_point;
     char *old_text = rl_copy_text(0, rl_end);
@@ -485,12 +490,30 @@ int my_rl_complete(int ignore, int invoking_key)
     else
         ret = rl_complete_internal('!');
 
+    // Post-completion check:
+    // If the match was a directory, Readline usually handles the slash.
+    // If you need manual override, check the result here:
     char *new_text = rl_copy_text(0, rl_end);
+
+    // Only if a change occurred
     if (rl_point != old_point || strcmp(old_text, new_text) != 0) {
+
+        // Check if the newly completed text is a directory
+        struct stat st;
+        if (stat(new_text, &st) == 0 && S_ISDIR(st.st_mode)) {
+            // If it's a directory and doesn't end in '/', append it
+            size_t len = strlen(new_text);
+            if (len > 0 && new_text[len - 1] != '/') {
+                // We use rl_insert_text to safely add the character to the buffer
+                rl_point = len; // move to end
+                rl_insert_text("/");
+            }
+        }
+
         clear_screen_and_buffer(0, 0);
         if (RetainAndRestoreReadlineBuffer::g_rl_complete_mode == 1) {
-            RetainAndRestoreReadlineBuffer::g_rl_pending_text = new_text;  // save completed text
-            rl_replace_line("", 0);                      // clear buffer so empty is submitted
+            RetainAndRestoreReadlineBuffer::g_rl_pending_text = new_text;
+            rl_replace_line("", 0);
             rl_done = 1;
             RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 0;
         }
