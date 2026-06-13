@@ -36,9 +36,6 @@ namespace GlobalCaches {
         StringViewHash,
         std::equal_to<>
     > cachedParsesForUmount;
-
-    inline std::map<std::string, std::string> g_configCache;
-	inline std::string g_cachedPath;
 }
 
 #endif // CACHES_H
