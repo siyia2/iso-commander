@@ -321,10 +321,14 @@ char** completion_cb(const char* text, int start, int end) {
                     possible_completions.push_back(opt);
             }
 
+            // Check if the candidate completions are already present at the
+            // *current word's position* in the line (not just anywhere in
+            // the line, which could falsely match an earlier clause that
+            // happens to reuse the same numeric index).
             bool all_present = true;
             std::string full_line(rl_line_buffer);
             for (const auto& comp : possible_completions) {
-                if (full_line.find(comp) == std::string::npos) {
+                if (full_line.compare(start, comp.size(), comp) != 0) {
                     all_present = false;
                     break;
                 }
@@ -368,10 +372,14 @@ char** completion_cb(const char* text, int start, int end) {
                 }
             }
 
+            // Compare against the line at the current word's
+            // start position rather than searching the whole line, so an
+            // identical prefix used in an earlier clause doesn't suppress
+            // completion for the current one.
             bool all_present = true;
             std::string full_line(rl_line_buffer);
             for (const auto& comp : possible_device_completions) {
-                if (full_line.find(comp) == std::string::npos) {
+                if (full_line.compare(start, comp.size(), comp) != 0) {
                     all_present = false;
                     break;
                 }
