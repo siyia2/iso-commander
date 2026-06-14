@@ -249,7 +249,7 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  * the list when the import thread signals completion via @c importCV.
  * - **Stacked Filtering:** Supports successive narrowing of results via
  * @c filteringStack. Read/write mutations to @c filteredFiles and sizing evaluations
- * are protected by @c GlobalCaches::updateListMutex to prevent data races with the
+ * are protected by @c GlobalMutexes::updateListMutex to prevent data races with the
  * background watcher thread. The @c '<' command unwinds the filter stack (restoring
  * @c originalPage) or, when no filter is active, returns to the previous menu.
  * - **Two-Phase Execution:** Implements an "Induction" model where selected
@@ -518,7 +518,7 @@ void selectForIsoFiles(const std::string& operation,
  *   non-empty) joins pending indices space-delimited and dispatches them to
  *   @c processInputForConversions. @c "clr" discards the pending set.
  * - **Cache Restoration:** On @c '<' when a filter is active, @p files is reloaded
- *   from the appropriate @c GlobalCaches entry, @c filteringStack is cleared, and
+ *   from the appropriate @c GlobalState entry, @c filteringStack is cleared, and
  *   @c currentPage is restored to @c originalPage. When no filter is active, @c '<'
  *   breaks the loop directly with no cache reload.
  * - **Verbose output:** @c verbose is a local bool reset to @c false each iteration;
@@ -534,7 +534,7 @@ void selectForIsoFiles(const std::string& operation,
  * @param fileType   The format category: "bin", "img", "mdf", "nrg", "chd", or "daa".
  *                   "bin" and "img" are treated identically (both map to ccd2iso).
  * @param files      Working list of image file paths to display and process; restored
- *                   from @c GlobalCaches on filter exit.
+ *                   from @c GlobalState on filter exit.
  * @param list       Passed directly into @c loadAndDisplayImageFiles; not read or
  *                   written by this function directly.
  * @param state      Shared @c RefreshState passed into @c loadAndDisplayImageFiles
