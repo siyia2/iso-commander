@@ -5,6 +5,7 @@
 
 // C++ Standard Library Headers
 #include <atomic>
+#include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -13,6 +14,13 @@
 #include <utility>
 #include <vector>
 #include <unordered_set>
+
+// Third-Party Library Headers
+#include <readline/readline.h>
+
+// Project Headers
+#include "./inputHandling.h"
+#include "./readline.h"
 
 // --- Data Structures ---
 
@@ -81,6 +89,106 @@ struct ProgressInfo {
 };
 
 inline std::vector<ProgressInfo> progressData; ///< Shared progress state for all active write tasks.
+
+/**
+ * @brief RAII guard for the readline/terminal state that needs to be set up
+ *        at the start of every loop iteration and torn down on every exit
+ *        path (return, continue, or exception).
+ */
+struct TerminalStateGuard {
+    /**
+     * @brief Configures readline bindings/hooks and disables SIGINT /
+     *        Ctrl-D for the duration of the guard's lifetime.
+     */
+    TerminalStateGuard() {
+        rl_completion_display_matches_hook = [](char **matches, int num_matches, int max_length) {
+            (void)matches;
+            (void)num_matches;
+            (void)max_length;
+        };
+
+        rl_attempted_completion_function = completion_cb;
+        rl_bind_key('\t', rl_complete);
+        rl_bind_key('\f', clear_screen_and_buffer);
+        rl_bind_keyseq("\033[A", rl_get_previous_history);
+        rl_bind_keyseq("\033[B", rl_get_next_history);
+        rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+        rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+
+        signal(SIGINT, SIG_IGN);
+        disable_ctrl_d();
+        clearScrollBuffer();
+    }
+
+    /**
+     * @brief Restores readline bindings/hooks via restoreReadline().
+     *
+     * @note restoreReadline() only resets readline bindings/hooks. The
+     *       SIGINT = SIG_IGN and disable_ctrl_d() set in the constructor
+     *       are NOT undone here, matching the original code's behavior
+     *       (it never restored these at any exit point either). If that's
+     *       actually a latent bug, it's pre-existing and separate from
+     *       this refactor.
+     */
+    ~TerminalStateGuard() {
+        restoreReadline();
+    }
+
+    TerminalStateGuard(const TerminalStateGuard&) = delete;
+    TerminalStateGuard& operator=(const TerminalStateGuard&) = delete;
+};
+
+/**
+ * @brief RAII guard for the brief window where readline is reconfigured to
+ *        ask the y/n confirmation question.
+ *
+ * Restores the *outer* (TerminalStateGuard) readline configuration on
+ * exit, regardless of how this scope is left.
+ */
+struct ConfirmationModeGuard {
+    /**
+     * @brief Switches readline into confirmation-prompt mode.
+     */
+    ConfirmationModeGuard() {
+        disableReadlineForConfirmation();
+    }
+
+    /**
+     * @brief Re-applies the main mappings-prompt readline configuration.
+     *
+     * Ensures that if the user says "no" and the outer loop continues,
+     * the next TerminalStateGuard iteration (or the existing one, if we
+     * don't reconstruct it) is in the expected state.
+     */
+    ~ConfirmationModeGuard() {
+        setupReadline();
+    }
+
+    ConfirmationModeGuard(const ConfirmationModeGuard&) = delete;
+    ConfirmationModeGuard& operator=(const ConfirmationModeGuard&) = delete;
+
+private:
+    /**
+     * @brief Mirrors the original setupReadline() lambda so this guard
+     *        doesn't depend on a free function with the same name living
+     *        elsewhere.
+     */
+    static void setupReadline() {
+        rl_completion_display_matches_hook = [](char **matches, int num_matches, int max_length) {
+            (void)matches;
+            (void)num_matches;
+            (void)max_length;
+        };
+
+        rl_attempted_completion_function = completion_cb;
+        rl_bind_key('\t', rl_complete);
+        rl_bind_key('\f', clear_screen_and_buffer);
+        rl_bind_keyseq("\033[A", rl_get_previous_history);
+        rl_bind_keyseq("\033[B", rl_get_next_history);
+        rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+        rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+    }
+};
 
 // ---------- Used exclusively for the [FLUSHING] device indicator ------------
 
