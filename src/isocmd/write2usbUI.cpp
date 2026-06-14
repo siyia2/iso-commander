@@ -24,9 +24,6 @@
 #include <utility>
 #include <vector>
 
-// C / System Headers
-#include <unistd.h>
-
 // Third-Party Library Headers
 #include <readline/history.h>
 #include <readline/readline.h>
