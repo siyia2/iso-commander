@@ -570,7 +570,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
     if (totalBytes == 0 ) {
         if (!GlobalState::g_operationCancelled.load()) {
-        return fail();
+            return fail();
         } else {
             return false;
         }
