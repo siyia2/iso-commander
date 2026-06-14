@@ -420,6 +420,8 @@ void restoreReadline() {
     rl_attempted_completion_function = nullptr;
     rl_bind_keyseq("\033[A", rl_get_previous_history);
     rl_bind_keyseq("\033[B", rl_get_next_history);
+    rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+    rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
 }
@@ -432,6 +434,8 @@ void disableReadlineForConfirmation() {
     rl_bind_key('\t', prevent_readline_keybindings);
     rl_bind_keyseq("\033[A", prevent_readline_keybindings);
     rl_bind_keyseq("\033[B", prevent_readline_keybindings);
+    rl_bind_keyseq("\\e[5~", prevent_readline_keybindings);
+    rl_bind_keyseq("\\e[6~", prevent_readline_keybindings);
 }
 
 /**
