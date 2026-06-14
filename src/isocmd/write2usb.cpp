@@ -568,8 +568,13 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         return false;
     }
 
-    if (totalBytes == 0) return fail();
-
+    if (totalBytes == 0 ) {
+        if (!GlobalState::g_operationCancelled.load()) {
+        return fail();
+        } else {
+            return false;
+        }
+    }
     // ------------------------------------------------------------------ //
     // 4. Async progress monitoring thread                                 //
     // ------------------------------------------------------------------ //
