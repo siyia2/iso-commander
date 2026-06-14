@@ -278,7 +278,7 @@ bool isDeviceMounted(const std::string& device) {
  *  -# Device is a removable USB device (via @ref isUsbDevice).
  *  -# Device is not currently mounted (via @ref isDeviceMounted).
  *  -# Device has no pending kernel-level tasks (not present in @ref g_drainingDevices).
- *  -# Device size can be determined; sets @p permissions flag to true on failure.
+ *  -# Device size can be determined; sets @p noPermissions flag to true on failure.
  *  -# ISO capacity check (ISO size <= device size).
  *
  * @note If any validation error occurs (including the early privilege check),
@@ -289,10 +289,10 @@ bool isDeviceMounted(const std::string& device) {
  *
  * @param deviceMap      Pairs of (1-based ISO index, device path) to validate.
  * @param selectedIsos   Ordered list of ISOs corresponding to the indices.
- * @param[in,out] permissions On entry, if true, aborts validation immediately
- *                            with a privilege error. On exit, set to true if
- *                            a size query failed (permissions issue); used to
- *                            determine the type of user prompt.
+ * @param[in,out] noPermissions On entry, if true, aborts validation
+ * immediately with a privilege error. noPermissions flag is also used
+ * to determine the type of user prompt.
+ *
  * @return A vector of valid (IsoInfo, device) pairs, or an empty vector if
  *         validation failed for any pair (or for the early privilege check).
  */
