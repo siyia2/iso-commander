@@ -481,32 +481,14 @@ void displayErrors();
  *
  * @param selectedIsos ISOs chosen by the user for writing.
  * @return Validated (IsoInfo, device) pairs ready for @ref performWriteOperation,
- *         or an empty vector if the user aborted.
+ *         or an empty vector if the user aborted, or if the number of selected
+ *         ISOs exceeds the thread pool size.
  */
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos) {
-    auto setupReadline = []() {
-        rl_completion_display_matches_hook = [](char **matches, int num_matches, int max_length) {
-            (void)matches;
-            (void)num_matches;
-            (void)max_length;
-        };
-
-        rl_attempted_completion_function = completion_cb;
-        rl_bind_key('\t', rl_complete);
-        rl_bind_key('\f', clear_screen_and_buffer);
-        rl_bind_keyseq("\033[A", rl_get_previous_history);
-        rl_bind_keyseq("\033[B", rl_get_next_history);
-        rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
-        rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
-    };
-
     const WriteTheme wt = getWriteTheme();
 
     while (true) {
-        setupReadline();
-        signal(SIGINT, SIG_IGN);
-        disable_ctrl_d();
-        clearScrollBuffer();
+        TerminalStateGuard termGuard;
 
         ThreadPool& pool = getStaticThreadPool();
         if (selectedIsos.size() > pool.threadCount()) {
@@ -518,7 +500,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                       << wt.speedCol << "\n";
 
             pressEnterToTry();
-            return {};
+            return {};  // termGuard destructor restores readline state
         }
 
         displayErrors();
@@ -616,18 +598,16 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         );
 
         if (!deviceInput) {
-            restoreReadline();
-            return {};
+            return {};  // termGuard destructor restores readline state
         }
 
         if (deviceInput.get()[0] == '\0') {
-            continue;
+            continue;  // termGuard destructor restores, next iteration re-acquires
         }
 
         std::string mainInputString(deviceInput.get());
         if (mainInputString == "\x1b") {
-            restoreReadline();
-            return {};
+            return {};  // termGuard destructor restores readline state
         }
 
         if (mainInputString == "?") {
@@ -648,7 +628,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         if (!errors.empty()) {
             std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
             for (const auto& err : errors) {
-                std::cerr << color<< "  • " << err << "\n";
+                std::cerr << color << "  • " << err << "\n";
             }
 
             pressEnterToTry();
@@ -674,12 +654,10 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             std::cout << UI::Palette::DimGray << "  {" << wt.deviceCol << device
                       << " " << color << "<" << driveName << ">" << UI::Palette::DimGray << " ("
                       << wt.sizeCol << deviceSizeStr
-                      << UI::Palette::DimGray << ")} " << color <<"←" << UI::Palette::DimGray << " {" << wt.fileCol
+                      << UI::Palette::DimGray << ")} " << color << "←" << UI::Palette::DimGray << " {" << wt.fileCol
                       << iso.filename << UI::Palette::DimGray << " (" << wt.sizeCol
                       << iso.sizeStr << UI::Palette::DimGray << ")}\n";
         }
-
-        disableReadlineForConfirmation();
 
         // Constructing the Readline prompt using theme colors
         const std::string confirmPrompt =
@@ -687,19 +665,21 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             "\nProceed? (y/n): "
             + wt.rl_resetCol;
 
-        std::unique_ptr<char, decltype(&std::free)> confirmation(
-            readline(confirmPrompt.c_str()),
-            &std::free
-        );
+        std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
+        {
+            ConfirmationModeGuard confirmGuard;
+            confirmation.reset(readline(confirmPrompt.c_str()));
+        }
+        // confirmGuard destructor has already re-applied the mappings-prompt
+        // readline configuration here.
 
         if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
-            restoreReadline();
             setupSignalHandlerCancellations();
             GlobalState::g_operationCancelled.store(false);
-            return validPairs;
+            return validPairs;  // termGuard destructor restores readline state
         }
 
-        restoreReadline();
+        // "no" -> loop continues; termGuard destructor restores readline state
     }
 }
 
