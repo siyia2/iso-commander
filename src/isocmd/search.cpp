@@ -518,10 +518,10 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
     }
 
     if (cacheIsEmpty) {
-        std::cout << "\n" << dt.yellow << cacheType << " buffer is empty. Nothing to clear.\033[J"
+        std::cout << "\n" << dt.yellow << cacheType << " cache is empty. Nothing to clear.\033[J"
                   << dt.reset << "\n";
     } else {
-        std::cout << "\n" << dt.green << cacheType << " buffer cleared.\033[J"
+        std::cout << "\n" << dt.green << cacheType << " cache cleared.\033[J"
                   << dt.reset << "\n";
     }
 
