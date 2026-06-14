@@ -271,23 +271,33 @@ bool isDeviceMounted(const std::string& device) {
 /**
  * @brief Validates a set of ISO-to-device mappings and returns only the viable pairs.
  *
- * Each candidate pair is checked in order:
+ * If @p noPermissions is already set to true on entry, validation is aborted
+ * immediately with a "root privileges required" error (see below).
+ *
+ * Otherwise, each candidate pair is checked in order:
  *  -# Device is a removable USB device (via @ref isUsbDevice).
  *  -# Device is not currently mounted (via @ref isDeviceMounted).
+ *  -# Device has no pending kernel-level tasks (not present in @ref g_drainingDevices).
  *  -# Device size can be determined; sets @p permissions flag to true on failure.
  *  -# ISO capacity check (ISO size <= device size).
  *
- * @note If any validation error occurs, all errors are printed, signal handlers are
- *       temporarily adjusted, and an empty vector is returned to trigger a retry.
+ * @note If any validation error occurs (including the early privilege check),
+ *       all errors are printed, signal handlers are temporarily adjusted, and
+ *       an empty vector is returned to trigger a retry -- even if some pairs
+ *       would otherwise have been valid. Valid pairs are only returned when
+ *       *every* candidate passes all checks.
  *
  * @param deviceMap      Pairs of (1-based ISO index, device path) to validate.
  * @param selectedIsos   Ordered list of ISOs corresponding to the indices.
- * @param[in,out] permissions Set to true if a size query fails (permissions issue);
- *                            used to determine the type of user prompt.
- * @return A vector of valid (IsoInfo, device) pairs, or an empty vector if validation failed.
+ * @param[in,out] permissions On entry, if true, aborts validation immediately
+ *                            with a privilege error. On exit, set to true if
+ *                            a size query failed (permissions issue); used to
+ *                            determine the type of user prompt.
+ * @return A vector of valid (IsoInfo, device) pairs, or an empty vector if
+ *         validation failed for any pair (or for the early privilege check).
  */
 std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<std::pair<size_t, std::string>>& deviceMap,
-                                                             const std::vector<IsoInfo>& selectedIsos, bool& permissions) {
+                                                             const std::vector<IsoInfo>& selectedIsos, bool& noPermissions) {
 
     const WriteTheme wt = getWriteTheme();
 
@@ -300,7 +310,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
         const auto& iso = selectedIsos[index - 1];
 
         // Early privilege check
-        if (permissions) {
+        if (noPermissions) {
             std::string errMsg;
             errMsg.append(wt.errLabel).append("Root privileges are required")
                   .append(wt.rl_resetCol);
@@ -345,10 +355,8 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
             std::string errMsg;
             errMsg.append(wt.errLabel).append("Failed to get size for ")
                   .append(wt.errPath).append("'").append(device).append("'")
-                  .append(wt.rl_resetCol).append(wt.errLabel).append(" check permissions")
                   .append(wt.rl_resetCol);
             validationErrors.push_back(std::move(errMsg));
-            permissions = true;
             continue;
         }
 
@@ -380,7 +388,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
 
         signal(SIGINT, SIG_IGN);
         disable_ctrl_d();
-        permissions ? (permissions = false, pressEnterToContinue()) : pressEnterToTry();
+        noPermissions ? (noPermissions = false, pressEnterToContinue()) : pressEnterToTry();
         return {};
     }
 
@@ -644,8 +652,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             continue;
         }
         // Check for Root privileges
-        bool permissions = (geteuid() != 0);
-        auto validPairs = validateDevices(deviceMap, sortedIsos, permissions);
+        bool noPermissions = (geteuid() != 0);
+        auto validPairs = validateDevices(deviceMap, sortedIsos, noPermissions);
         if (validPairs.empty()) {
             continue;
         }
