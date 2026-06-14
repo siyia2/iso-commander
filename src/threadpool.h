@@ -789,7 +789,7 @@ public:
  *     may reference are torn down.
  *
  * The pool size is determined at first call by
- * `GlobalConcurrency::maxThreads` (the runtime-detected hardware concurrency,
+ * `maxThreads` (the runtime-detected hardware concurrency,
  * typically from std::thread::hardware_concurrency()) capped at
  * `GlobalConcurrency::MAX_USEFUL_THREADS` (a compile-time upper bound defined
  * in GlobalConcurrency.h to avoid over-subscription on machines with very high
