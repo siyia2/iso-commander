@@ -245,13 +245,17 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  * the manual-refresh keybinding.
  * - **Event-Driven Refresh:** Shares a @c RefreshState instance (via
  * @c std::shared_ptr) with a detached watcher thread. The watcher is spawned
- * at most once per import session (guarded by @c isWatcherRunning) and redraws
- * the list when the import thread signals completion via @c importCV.
+ * only for non-unmount operations while an import is running, at most once per
+ * import session (guarded by @c isWatcherRunning), and redraws the list when the
+ * import thread signals completion via @c importCV.
  * - **Stacked Filtering:** Supports successive narrowing of results via
  * @c filteringStack. Read/write mutations to @c filteredFiles and sizing evaluations
  * are protected by @c GlobalMutexes::updateListMutex to prevent data races with the
- * background watcher thread. The @c '<' command unwinds the filter stack (restoring
- * @c originalPage) or, when no filter is active, returns to the previous menu.
+ * background watcher thread. On receiving the ESC character (@c '\\x1b', typically
+ * bound to the @c '<' key via @c setup_custom_keybindingsForSelect): if a filter is
+ * active, the filter stack is cleared, @c currentPage is restored to @c originalPage,
+ * and the loop continues; if no filter is active, the function resets keybindings
+ * and returns to the previous menu.
  * - **Two-Phase Execution:** Implements an "Induction" model where selected
  * indices are staged into @c pendingIndices (a @c std::vector<std::string>)
  * and batch-executed via the @c "P" command; @c "clr" discards the pending set.
@@ -263,9 +267,9 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  *
  * @param operation          Target system action ("mount", "umount", "cp", "mv",
  * "rm", or "write2usb").
- * @param isAtISOList        Set to @c true while the ISO list is displayed; cleared
- * to @c false before executing an operation. Also gates
- * watcher-thread repaints.
+ * @param isAtISOList        Set to @c true while the ISO list is displayed (only
+ * for non-unmount operations); cleared to @c false before executing
+ * an operation. Also gates watcher-thread repaints.
  * @param backgroundThreads Joinable worker threads (spawned by manual R-press
  * imports) retained for lifetime management; stale
  * completed threads are joined and erased before each
@@ -509,23 +513,20 @@ void selectForIsoFiles(const std::string& operation,
  *   @c handleFilteringConvert2ISO; input containing @c ';' (but not starting with
  *   @c '/') is forwarded to @c handlePendingInduction; all other non-empty input
  *   goes directly to @c processInputForConversions.
- * - **Input Sanitization:** Inputs starting with @c ';', starting with @c '/;',
- *   containing more than one @c '/', or containing @c ";;" are silently skipped
- *   (needsClrScrn = false) to prevent UI flickering or logic errors. Empty readline
- *   input is similarly skipped.
+ * - **Input Sanitization:** Input starting with @c ';' or containing @c ";;" is
+ *   silently skipped (needsClrScrn = false) to prevent UI flickering or logic
+ *   errors. Empty readline input is similarly skipped.
  * - **Batch Processing:** Supports staging multiple files via @c handlePendingInduction.
  *   The @c "P" command (when @c hasPendingProcess is true and @c pendingIndices is
  *   non-empty) joins pending indices space-delimited and dispatches them to
  *   @c processInputForConversions. @c "clr" discards the pending set.
- * - **Cache Restoration:** On @c '<' when a filter is active, @p files is reloaded
- *   from the appropriate @c GlobalState entry, @c filteringStack is cleared, and
- *   @c currentPage is restored to @c originalPage. When no filter is active, @c '<'
- *   breaks the loop directly with no cache reload.
- * - **Verbose output:** @c verbose is a local bool reset to @c false each iteration;
- *   when set by @c processInputForConversions, @c verbosePrint is called with layout
- *   mode @c 3 (conversion-specific argument order).
+ * - **Cache Restoration:** On receiving the ESC character when a filter
+ *   is active, @p files is reloaded from the appropriate @c GlobalState entry,
+ *   @c filteringStack is cleared, and @c currentPage is restored to @c originalPage.
+ *   When no filter is active, the same ESC input breaks the loop directly with no
+ *   cache reload.
  * - **`need2Sort`:** Initialized @c true; passed into @c loadAndDisplayImageFiles
- *   each redraw; set to @c false on @c '<' exit and filter-clear to avoid
+ *   each redraw; set to @c false on ESC-triggered exit and on filter-clear to avoid
  *   redundant sorting.
  * - **No watcher thread:** Unlike @c selectForIsoFiles, @p state is passed only
  *   into @c loadAndDisplayImageFiles; no watcher thread or condition variable wait

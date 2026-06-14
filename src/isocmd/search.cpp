@@ -83,7 +83,9 @@ bool isValidDirectory(const std::string& path) {
  * which calls @c saveToDatabase and may mutate @p newISOFound.
  *
  * @details **Control flow:**
- * - **Exit conditions:** @c '<' input or null return from readline (Ctrl+D).
+ * - **Exit conditions:** ESC input (@c "\\x1b", typically bound to the @c '<' key
+ *   via @c setup_custom_keybindingsForSearches) or null return from readline
+ *   (Ctrl+D) — both return from the function directly.
  * - **Continue conditions:** '?' (shows help via @c helpSearches), switch commands
  *   (@c *stats, @c !clr, @c !clr_paths, @c !clr_filter via @c databaseSwitches),
  *   empty/whitespace-only input, empty @p validPaths with no invalid paths, and
@@ -95,8 +97,9 @@ bool isValidDirectory(const std::string& path) {
  *   both the early-save and pre-scan sites to prevent spurious cancellation from
  *   a premature Ctrl+C before input is processed.
  * - **Keybinding reset:** A @c KeybindingGuard RAII object is constructed each
- *   iteration; its destructor calls @c reset_custom_keybindingsForSearches,
- *   ensuring cleanup on both normal and exceptional exits from the loop body.
+ *   iteration; its destructor rebinds @c \\t to @c prevent_readline_keybindings and
+ *   calls @c reset_custom_keybindingsForSearches, ensuring cleanup on both normal
+ *   and exceptional exits (including @c return and @c continue) from the loop body.
  *
  * @param promptFlag    Passed to @c traverse() to control scan behaviour.
  * @param maxDepth      Maximum directory recursion depth (-1 for unlimited).
