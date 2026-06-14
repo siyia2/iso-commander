@@ -302,8 +302,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
         // Early privilege check
         if (permissions) {
             std::string errMsg;
-            errMsg.append(wt.errLabel).append("Root acccess is required")
-                  .append(wt.rl_resetCol).append(wt.errLabel).append(" check permissions")
+            errMsg.append(wt.errLabel).append("Root privileges are required")
                   .append(wt.rl_resetCol);
             validationErrors.push_back(std::move(errMsg));
             break;
