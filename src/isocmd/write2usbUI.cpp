@@ -496,6 +496,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         rl_bind_key('\f', clear_screen_and_buffer);
         rl_bind_keyseq("\033[A", rl_get_previous_history);
         rl_bind_keyseq("\033[B", rl_get_next_history);
+        rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+        rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
     };
 
     const WriteTheme wt = getWriteTheme();
