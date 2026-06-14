@@ -24,6 +24,9 @@
 #include <utility>
 #include <vector>
 
+// C / System Headers
+#include <unistd.h>
+
 // Third-Party Library Headers
 #include <readline/history.h>
 #include <readline/readline.h>
@@ -295,6 +298,16 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
         size_t index = devicePair.first;
         const std::string& device = devicePair.second;
         const auto& iso = selectedIsos[index - 1];
+
+        // Early privilege check
+        if (permissions) {
+            std::string errMsg;
+            errMsg.append(wt.errLabel).append("Root acccess is required")
+                  .append(wt.rl_resetCol).append(wt.errLabel).append(" check permissions")
+                  .append(wt.rl_resetCol);
+            validationErrors.push_back(std::move(errMsg));
+            break;
+        }
 
         if (!isUsbDevice(device)) {
             std::string errMsg;
@@ -631,8 +644,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             pressEnterToTry();
             continue;
         }
-
-        bool permissions = false;
+        // Check for Root privileges
+        bool permissions = (geteuid() != 0);
         auto validPairs = validateDevices(deviceMap, sortedIsos, permissions);
         if (validPairs.empty()) {
             continue;
