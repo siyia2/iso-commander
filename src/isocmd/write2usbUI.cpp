@@ -275,111 +275,107 @@ bool isDeviceMounted(const std::string& device) {
  * immediately with a "root privileges required" error (see below).
  *
  * Otherwise, each candidate pair is checked in order:
- *  -# Device is a removable USB device (via @ref isUsbDevice).
- *  -# Device is not currently mounted (via @ref isDeviceMounted).
- *  -# Device has no pending kernel-level tasks (not present in @ref g_drainingDevices).
- *  -# Device size can be determined; sets @p noPermissions flag to true on failure.
- *  -# ISO capacity check (ISO size <= device size).
+ * -# Device is a removable USB device (via @ref isUsbDevice).
+ * -# Device is not currently mounted (via @ref isDeviceMounted).
+ * -# Device has no pending kernel-level tasks (not present in @ref g_drainingDevices).
+ * -# Device size can be determined; sets @p noPermissions flag to true on failure.
+ * -# ISO capacity check (ISO size <= device size).
  *
  * @note If any validation error occurs (including the early privilege check),
- *       all errors are printed, signal handlers are temporarily adjusted, and
- *       an empty vector is returned to trigger a retry -- even if some pairs
- *       would otherwise have been valid. Valid pairs are only returned when
- *       *every* candidate passes all checks.
+ * all errors are printed, signal handlers are temporarily adjusted, and
+ * an empty vector is returned to trigger a retry -- even if some pairs
+ * would otherwise have been valid. Valid pairs are only returned when
+ * *every* candidate passes all checks.
  *
  * @param deviceMap      Pairs of (1-based ISO index, device path) to validate.
  * @param selectedIsos   Ordered list of ISOs corresponding to the indices.
  * @param[in,out] noPermissions On entry, if true, aborts validation
- * immediately with a privilege error. noPermissions flag is also used
- * to determine the type of user prompt.
+ * immediately with a privilege error. This flag is also used to determine
+ * the type of user prompt upon failure.
  *
  * @return A vector of valid (IsoInfo, device) pairs, or an empty vector if
- *         validation failed for any pair (or for the early privilege check).
+ * validation failed for any pair (or for the early privilege check).
  */
 std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<std::pair<size_t, std::string>>& deviceMap,
-                                                             const std::vector<IsoInfo>& selectedIsos, bool& noPermissions) {
+                                                            const std::vector<IsoInfo>& selectedIsos, bool& noPermissions) {
 
     const WriteTheme wt = getWriteTheme();
 
     std::vector<std::string> validationErrors;
     std::vector<std::pair<IsoInfo, std::string>> validPairs;
 
-    for (const auto& devicePair : deviceMap) {
-        size_t index = devicePair.first;
-        const std::string& device = devicePair.second;
-        const auto& iso = selectedIsos[index - 1];
+    // Early exit check: If no permissions, add the error and skip the loop
+    if (noPermissions) {
+        validationErrors.push_back(std::string(wt.errLabel) + "Root privileges are required" + wt.rl_resetCol);
+    } else {
+        for (const auto& devicePair : deviceMap) {
+            size_t index = devicePair.first;
+            const std::string& device = devicePair.second;
+            const auto& iso = selectedIsos[index - 1];
 
-        // Early privilege check
-        if (noPermissions) {
-            std::string errMsg;
-            errMsg.append(wt.errLabel).append("Root privileges are required")
-                  .append(wt.rl_resetCol);
-            validationErrors.push_back(std::move(errMsg));
-            break;
-        }
-
-        if (!isUsbDevice(device)) {
-            std::string errMsg;
-            errMsg.append(wt.errPath).append("'").append(device).append("'")
-                  .append(wt.rl_resetCol).append(wt.errLabel).append(" is not a removable USB flash device")
-                  .append(wt.rl_resetCol);
-            validationErrors.push_back(std::move(errMsg));
-            continue;
-        }
-
-        if (isDeviceMounted(device)) {
-            std::string errMsg;
-            errMsg.append(wt.errPath).append("'").append(device).append("'")
-                  .append(wt.rl_resetCol).append(wt.errLabel).append(" or its partitions are mounted")
-                  .append(wt.rl_resetCol);
-            validationErrors.push_back(std::move(errMsg));
-            continue;
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-            if (g_drainingDevices.count(device)) {
+            if (!isUsbDevice(device)) {
                 std::string errMsg;
                 errMsg.append(wt.errPath).append("'").append(device).append("'")
-                      .append(wt.rl_resetCol).append(wt.errLabel)
-                      .append(" has pending kernel-level tasks")
+                      .append(wt.rl_resetCol).append(wt.errLabel).append(" is not a removable USB flash device")
                       .append(wt.rl_resetCol);
                 validationErrors.push_back(std::move(errMsg));
                 continue;
             }
+
+            if (isDeviceMounted(device)) {
+                std::string errMsg;
+                errMsg.append(wt.errPath).append("'").append(device).append("'")
+                      .append(wt.rl_resetCol).append(wt.errLabel).append(" or its partitions are mounted")
+                      .append(wt.rl_resetCol);
+                validationErrors.push_back(std::move(errMsg));
+                continue;
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+                if (g_drainingDevices.count(device)) {
+                    std::string errMsg;
+                    errMsg.append(wt.errPath).append("'").append(device).append("'")
+                          .append(wt.rl_resetCol).append(wt.errLabel)
+                          .append(" has pending kernel-level tasks")
+                          .append(wt.rl_resetCol);
+                    validationErrors.push_back(std::move(errMsg));
+                    continue;
+                }
+            }
+
+            uint64_t deviceSize = getBlockDeviceSize(device);
+            if (deviceSize == 0) {
+                std::string errMsg;
+                errMsg.append(wt.errLabel).append("Failed to get size for ")
+                      .append(wt.errPath).append("'").append(device).append("'")
+                      .append(wt.rl_resetCol);
+                validationErrors.push_back(std::move(errMsg));
+                continue;
+            }
+
+            if (iso.size > deviceSize) {
+                std::string deviceSizeStr = formatFileSize(deviceSize);
+                std::string driveName = getDriveName(device);
+                std::string errMsg;
+                errMsg.append(wt.warnLabel).append("'").append(wt.fileCol).append(iso.filename)
+                      .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
+                      .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol).append(UI::Palette::DimGray)
+                      .append(")").append(wt.warnLabel).append("'").append(wt.errLabel).append(" is too large for ")
+                      .append(wt.errPath).append("'").append(device).append(color)
+                      .append(" <").append(driveName).append(">")
+                      .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
+                      .append(wt.sizeCol).append(deviceSizeStr).append(UI::Palette::DimGray).append(")").append(wt.warnLabel).append("'")
+                      .append(wt.rl_resetCol);
+                validationErrors.push_back(std::move(errMsg));
+                continue;
+            }
+
+            validPairs.emplace_back(iso, device);
         }
-
-        uint64_t deviceSize = getBlockDeviceSize(device);
-
-        if (deviceSize == 0) {
-            std::string errMsg;
-            errMsg.append(wt.errLabel).append("Failed to get size for ")
-                  .append(wt.errPath).append("'").append(device).append("'")
-                  .append(wt.rl_resetCol);
-            validationErrors.push_back(std::move(errMsg));
-            continue;
-        }
-
-        if (iso.size > deviceSize) {
-            std::string deviceSizeStr = formatFileSize(deviceSize);
-            std::string driveName = getDriveName(device);
-            std::string errMsg;
-            errMsg.append(wt.warnLabel).append("'").append(wt.fileCol).append(iso.filename)
-                  .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
-                  .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol).append(UI::Palette::DimGray)
-                  .append(")").append(wt.warnLabel).append("'").append(wt.errLabel).append(" is too large for ")
-                  .append(wt.errPath).append("'").append(device).append(color)
-                  .append(" <").append(driveName).append(">")
-                  .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
-                  .append(wt.sizeCol).append(deviceSizeStr).append(UI::Palette::DimGray).append(")").append(wt.warnLabel).append("'")
-                  .append(wt.rl_resetCol);
-            validationErrors.push_back(std::move(errMsg));
-            continue;
-        }
-
-        validPairs.emplace_back(iso, device);
     }
 
+    // Unified error reporting block
     if (!validationErrors.empty()) {
         std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.rl_resetCol << wt.bold << "\n";
         for (const auto& err : validationErrors) {
