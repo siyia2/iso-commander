@@ -634,7 +634,7 @@ static void logOperationResult(OperationContext& ctx,
            .append(" → ")
            .append(colors.dest_path).append(destDirProcessed)
            .append(destFile)
-           .append(UI::Palette::BoldReset).append("'.");
+           .append(colors.success_label).append("'.");
 
         ctx.reporter.addSuccess(std::move(msg));
         if (ctx.completedTasks)
