@@ -96,13 +96,13 @@ void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& c
 inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     // --- Theme Settings ---
     {
-        "entry",                                             // key
+        "base",                                             // key
         "white",                                             // defaultValue
-        "Default input color (charcoal/obsidian/gray/silver/ash/white/steel)",
+        "Default state and input color (charcoal/black/gray/silver/ash/white/steel)",
         "Theme Settings",                                    // Section Header
         [](const std::string& v) {                           // validate
             static const std::unordered_set<std::string> valid = {
-                "charcoal", "obsidian", "gray", "silver", "ash", "white", "steel"
+                "charcoal", "black", "gray", "silver", "ash", "white", "steel"
             };
             return valid.count(v) > 0;
         }
@@ -111,11 +111,11 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "skin",                                     // key
         "white",                                    // defaultValue
-        "Menu and header accent color (green/cyan/white/purple/amber/rose/gray/obsidian)",  // comment
+        "Menu and header accent color (green/cyan/white/purple/amber/rose/gray/black)",  // comment
         "",                           // section
         [](const std::string& v) {                  // validate
             return v == "green" || v == "cyan" || v == "white" ||
-                   v == "purple" || v == "amber" || v == "rose" || v == "gray" || v == "obsidian" ;
+                   v == "purple" || v == "amber" || v == "rose" || v == "gray" || v == "black" ;
         }
     },
 
