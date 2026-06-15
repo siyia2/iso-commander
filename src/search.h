@@ -7,6 +7,45 @@
 #include <cstdint>
 #include <string>
 
+// Third-Party Library Headers
+#include <readline/readline.h>
+
+// Project Headers
+#include "./readline.h"
+
+/**
+ * @brief RAII guard for readline keybinding and completion state in search functions.
+ *
+ * Saves the current completion function on construction and restores it
+ * along with default keybindings on destruction. Uses
+ * @c reset_custom_keybindingsForSearches() for teardown, matching the
+ * @c setup_custom_keybindingsForSearches() call in the search function
+ * setup lambdas.
+ *
+ * @note Designed for @c refreshForDatabase and
+ *       @c promptSearchBinImgChdDaaMdfNrg. Not suitable for select
+ *       functions (those use @c reset_custom_keybindingsForSelect).
+ */
+class KeybindingGuard {
+public:
+    KeybindingGuard()
+        : oldCompletion_(rl_attempted_completion_function) {}
+
+    ~KeybindingGuard() {
+        rl_attempted_completion_function = oldCompletion_;
+        rl_bind_key('\t', prevent_readline_keybindings);
+        rl_bind_key('\f', rl_insert);
+        reset_custom_keybindingsForSearches();
+    }
+
+    // Non-copyable, non-movable
+    KeybindingGuard(const KeybindingGuard&) = delete;
+    KeybindingGuard& operator=(const KeybindingGuard&) = delete;
+
+private:
+    rl_completion_func_t* oldCompletion_;
+};
+
 /**
  * SEARCH DOCUMENTATION & HELP
  */
