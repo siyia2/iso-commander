@@ -14,17 +14,20 @@
 #include "./readline.h"
 
 /**
- * @brief RAII guard for readline keybinding and completion state in search functions.
+ * @brief RAII guard for Readline state and custom keybindings during search operations.
  *
- * Saves the current completion function on construction and restores it
- * along with default keybindings on destruction. Uses
- * @c reset_custom_keybindingsForSearches() for teardown, matching the
- * @c setup_custom_keybindingsForSearches() call in the search function
- * setup lambdas.
+ * This class ensures that Readline's completion function and custom keybindings
+ * are safely restored to their default or previous states upon exiting the scope,
+ * regardless of how that scope terminates (e.g., successful return or error handling).
  *
- * @note Designed for @c refreshForDatabase and
- *       @c promptSearchBinImgChdDaaMdfNrg. Not suitable for select
- *       functions (those use @c reset_custom_keybindingsForSelect).
+ * @details On construction, it captures the current Readline completion function.
+ * On destruction, it restores the captured completion function, resets specific
+ * keybindings (Tab/Form Feed), clears the history buffer, and executes
+ * @c reset_custom_keybindingsForSearches() to clean up search-specific configurations.
+ *
+ * @note Designed for search-focused logic (e.g., @c refreshForDatabase and
+ * @c promptSearchBinImgChdDaaMdfNrg). Do not use this for selection
+ * menus, which require @c reset_custom_keybindingsForSelect.
  */
 class KeybindingGuard {
 public:
