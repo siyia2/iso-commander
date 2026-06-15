@@ -270,11 +270,11 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 
         // --- Dynamic Hint Block ---
         std::cout << tc.label << "Valid values: " << tc.reset;
-		if (key == "skin") {
-			std::cout << "green, cyan, white, purple, amber, rose, gray\n";
-		} else if (key == "entry") {
-            std::cout << "black, gray, white, steel\n";
-        } else if (key == "theme") {
+        if (key == "entry") {
+            std::cout << "charcoal, obsidian, gray, silver, ash, white, steel\n";
+        } else if (key == "skin") {
+			std::cout << "green, cyan, white, purple, amber, rose, gray, obsidian\n";
+		} else if (key == "theme") {
 			std::cout << "original, classic, high_contrast, neon, ocean, sunset, forest,\n"
 					  << "               midnight, mono, retro, crimson, dracula, tokyo, paper, sakura\n";
 		} else if (key == "auto_update" || key == "filenames_only") {
