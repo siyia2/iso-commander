@@ -85,8 +85,8 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache) {
     if (cache.count("theme")) { globalTheme = cache.at("theme"); }
 
     // --- Update Default input Color ---
-    if (cache.count("entry")) {
-        UI::Palette::defaultText = cache.at("entry");
+    if (cache.count("base")) {
+        UI::Palette::defaultText = cache.at("base");
         UI::Palette::updateDefaultColors();
     }
     // --------------------------------------
@@ -270,10 +270,10 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 
         // --- Dynamic Hint Block ---
         std::cout << tc.label << "Valid values: " << tc.reset;
-        if (key == "entry") {
-            std::cout << "charcoal, obsidian, gray, silver, ash, white, steel\n";
+        if (key == "base") {
+            std::cout << "charcoal, black, gray, silver, ash, white, steel\n";
         } else if (key == "skin") {
-			std::cout << "green, cyan, white, purple, amber, rose, gray, obsidian\n";
+			std::cout << "green, cyan, white, purple, amber, rose, gray, black\n";
 		} else if (key == "theme") {
 			std::cout << "original, classic, high_contrast, neon, ocean, sunset, forest,\n"
 					  << "               midnight, mono, retro, crimson, dracula, tokyo, paper, sakura\n";
