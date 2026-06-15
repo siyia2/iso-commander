@@ -478,7 +478,7 @@ void reportErrorCpMvRm(OperationContext& ctx,
                 .append(vt.red).append(vt.yellow)
                 .append(displaySrc).append(vt.red)
                 .append(vt.reset).append(vt.red).append(" → ")
-                .append(vt.yellow).append(destDir).append(vt.red).append("': File exists ")
+                .append(vt.yellow).append(destDir).append(srcFile).append(vt.red).append("': File exists ")
                 .append("(overwrite with -o")
                 .append(vt.reset).append(vt.red).append(").")
                 .append(vt.reset);
@@ -613,7 +613,9 @@ static void logOperationResult(OperationContext& ctx,
         msg.append(colors.error_label).append("Error ").append(verb).append(": '")
            .append(colors.error_path).append(displaySrc)
            .append(UI::Palette::BoldReset).append(colors.error_label)
-           .append(" → ").append(destDirProcessed).append("': ")
+           .append(" → ").append(colors.error_path)
+           .append(destDirProcessed).append(destFile)
+           .append(colors.error_label).append("': ")
            .append(errorDetail).append(".")
            .append(UI::Palette::BoldReset);
 
