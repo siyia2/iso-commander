@@ -44,12 +44,12 @@ namespace UI {
         static constexpr std::string_view RL_Yellow = "\001\033[1;38;2;212;184;0m\002";
 
         // --- Dynamic Colors ---
-        inline std::string defaultText = "white";
+        inline std::string defaultColor = "white";
         inline std::string BoldReset = "\033[1;38;2;215;215;215m";
         inline std::string RL_BoldAlt = "\001\033[1;38;2;215;215;215m\002";
 
         /**
-        * @brief Updates BoldReset and RL_BoldAlt based on the current 'defaultText' string.
+        * @brief Updates BoldReset and RL_BoldAlt based on the current 'defaultColor' string.
         */
         inline void updateDefaultColors() {
             using namespace UI::Palette;
@@ -67,14 +67,14 @@ namespace UI {
             auto it = std::lower_bound(
                 std::begin(colorMap),
                 std::end(colorMap),
-                defaultText,
+                defaultColor,
                 [](const auto& entry, std::string_view val) {
                     return entry.first < val;
                 }
             );
 
             std::string_view code =
-                (it != std::end(colorMap) && it->first == defaultText)
+                (it != std::end(colorMap) && it->first == defaultColor)
                     ? it->second
                     : "\033[1;38;2;215;215;215m";
 
