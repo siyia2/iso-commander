@@ -34,7 +34,7 @@ namespace UI {
         static constexpr std::string_view Brown    = "\033[1;38;2;150;70;20m";
         static constexpr std::string_view Amber    = "\033[1;38;2;230;158;0m";
         static constexpr std::string_view Rose     = "\033[1;38;2;240;110;185m";
-        static constexpr std::string_view White    = "\033[1;38;2;215;215;215m";
+        static constexpr std::string_view White    = "\033[1;38;2;215;210;205m";
         static constexpr std::string_view Gray     = "\033[1;38;2;120;120;120m";
         static constexpr std::string_view BGNavy   = "\033[1;37;48;2;20;20;150m";
 
@@ -45,8 +45,8 @@ namespace UI {
 
         // --- Dynamic Colors ---
         inline std::string defaultColor = "white";
-        inline std::string BoldReset = "\033[1;38;2;215;215;215m";
-        inline std::string RL_BoldAlt = "\001\033[1;38;2;215;215;215m\002";
+        inline std::string BoldReset = "\033[1;38;2;215;210;205m";
+        inline std::string RL_BoldAlt = "\001\033[1;38;2;215;210;205m\002";
 
         /**
         * @brief Updates BoldReset and RL_BoldAlt based on the current 'defaultColor' string.
@@ -61,7 +61,7 @@ namespace UI {
                 {"gray",     "\033[1;38;2;120;120;120m"},
                 {"silver",   "\033[1;38;2;192;192;192m"},
                 {"steel",    "\033[1;38;2;112;128;144m"},
-                {"white",    "\033[1;38;2;215;215;215m"}
+                {"white",    "\033[1;38;2;215;210;205m"}
             };
 
             auto it = std::lower_bound(
@@ -76,7 +76,7 @@ namespace UI {
             std::string_view code =
                 (it != std::end(colorMap) && it->first == defaultColor)
                     ? it->second
-                    : "\033[1;38;2;215;215;215m";
+                    : "\033[1;38;2;215;210;205m";
 
             BoldReset = std::string(code);
 
