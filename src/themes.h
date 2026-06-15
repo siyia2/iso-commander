@@ -28,7 +28,7 @@ namespace UI {
         static constexpr std::string_view Magenta  = "\033[1;38;2;235;50;245m";
         static constexpr std::string_view Cyan     = "\033[1;38;2;80;190;195m";
         static constexpr std::string_view DarkCyan = "\033[1;38;2;0;160;160m";
-        static constexpr std::string_view black    = "\033[1;38;2;40;40;40m";
+        static constexpr std::string_view Black    = "\033[1;38;2;40;40;40m";
         static constexpr std::string_view Orange   = "\033[1;38;2;235;120;20m";
         static constexpr std::string_view Purple   = "\033[1;38;2;150;105;210m";
         static constexpr std::string_view Brown    = "\033[1;38;2;150;70;20m";
@@ -58,7 +58,7 @@ namespace UI {
                 {"ash",      "\033[1;38;2;178;190;181m"},
                 {"charcoal", "\033[1;38;2;54;69;79m"},
                 {"gray",     "\033[1;38;2;120;120;120m"},
-                {"black", "\033[1;38;2;40;40;40m"},
+                {"black",    "\033[1;38;2;40;40;40m"},
                 {"silver",   "\033[1;38;2;192;192;192m"},
                 {"steel",    "\033[1;38;2;112;128;144m"},
                 {"white",    "\033[1;38;2;215;215;215m"}
@@ -139,10 +139,10 @@ inline std::string_view getskin() {
     using namespace UI::Palette;
     static constexpr std::pair<std::string_view, std::string_view> skinMap[] = {
         {"amber",    Amber},
+        {"black",    Black},
         {"cyan",     Cyan},
         {"gray",     Gray},
         {"green",    Green},
-        {"black",    black},
         {"purple",   Purple},
         {"rose",     Rose},
         {"white",    White},
