@@ -35,6 +35,7 @@ public:
         rl_attempted_completion_function = oldCompletion_;
         rl_bind_key('\t', prevent_readline_keybindings);
         rl_bind_key('\f', rl_insert);
+        clear_history();
         reset_custom_keybindingsForSearches();
     }
 
