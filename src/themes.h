@@ -28,7 +28,7 @@ namespace UI {
         static constexpr std::string_view Magenta  = "\033[1;38;2;235;50;245m";
         static constexpr std::string_view Cyan     = "\033[1;38;2;80;190;195m";
         static constexpr std::string_view DarkCyan = "\033[1;38;2;0;160;160m";
-        static constexpr std::string_view black = "\033[1;38;2;40;40;40m";
+        static constexpr std::string_view black    = "\033[1;38;2;40;40;40m";
         static constexpr std::string_view Orange   = "\033[1;38;2;235;120;20m";
         static constexpr std::string_view Purple   = "\033[1;38;2;150;105;210m";
         static constexpr std::string_view Brown    = "\033[1;38;2;150;70;20m";
