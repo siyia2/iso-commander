@@ -96,10 +96,15 @@ bool isValidDirectory(const std::string& path) {
  * - **Cancellation guarding:** @c g_operationCancelled is reset to @c false at
  *   both the early-save and pre-scan sites to prevent spurious cancellation from
  *   a premature Ctrl+C before input is processed.
- * - **Keybinding reset:** A @c KeybindingGuard RAII object is constructed each
- *   iteration; its destructor rebinds @c \\t to @c prevent_readline_keybindings and
- *   calls @c reset_custom_keybindingsForSearches, ensuring cleanup on both normal
- *   and exceptional exits (including @c return and @c continue) from the loop body.
+ * - **RAII Keybinding Management:** A @c KeybindingGuard RAII object is
+ *   constructed at the start of each loop iteration (after @c rearmSetup).
+ *   It saves the current @c rl_attempted_completion_function on construction.
+ *   Its destructor restores the saved completion function, rebinds @c \\t to
+ *   @c prevent_readline_keybindings, rebinds @c \\f to @c rl_insert, and calls
+ *   @c reset_custom_keybindingsForSearches(). This guarantees cleanup on all
+ *   exit paths from the loop body: @c continue, @c return, and exceptions.
+ *   The guard is recreated each iteration so its saved completion state
+ *   always reflects the state just after @c rearmSetup runs.
  *
  * @param promptFlag    Passed to @c traverse() to control scan behaviour.
  * @param maxDepth      Maximum directory recursion depth (-1 for unlimited).
@@ -111,12 +116,6 @@ bool isValidDirectory(const std::string& path) {
  *                      @c saveToDatabase is responsible for setting it.
  */
 void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool& newISOFound) {
-    struct KeybindingGuard {
-        ~KeybindingGuard() {
-            rl_bind_key('\t', prevent_readline_keybindings);
-            reset_custom_keybindingsForSearches();
-        }
-    };
 
     auto rearmSetup = [&]() {
         enable_ctrl_d();
@@ -883,21 +882,44 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  * @brief Interactive search and caching controller for disc image files.
  *
  * Provides a terminal-based interface for scanning user-provided directories
- * for BIN/IMG, MDF, NRG, CHD, and DAA/GBI image files. Supports multi-path input,
- * directory validation, history management, and special command dispatch.
+ * for BIN/IMG, MDF, NRG, CHD, and DAA/GBI image files. Supports multi-path
+ * input (semicolon-delimited), directory validation with deduplication,
+ * readline history management, special command dispatch, and verbose result
+ * reporting.
  *
- * Discovered files are cached in memory and forwarded to the file selection
- * and conversion workflow when available.
+ * Discovered files are cached in memory and, if new files were found and the
+ * operation was not cancelled, forwarded to @c selectForImageFiles for
+ * interactive selection and conversion.
+ *
+ * @details **Control flow:**
+ * - **Exit conditions:** ESC input (@c "\\x1b", typically bound to the @c '<' key
+ *   via @c setup_custom_keybindingsForSearches) or null return from readline
+ *   (Ctrl+D) — both return from the function directly.
+ * - **Continue conditions:** Empty/whitespace-only input, special commands
+ *   handled by @c dispatchSpecialCommandForBinImgMdfNrgSearch, and scans
+ *   that find no new files.
+ * - **File type dispatch:** The @p fileTypeChoice parameter is mapped via a
+ *   static @c unordered_map to derive the file extension, display name, and
+ *   per-format boolean flags (@c modeMdf, @c modeNrg, @c modeChd, @c modeDaa)
+ *   used by downstream functions.
+ * - **RAII Keybinding Management:** A @c KeybindingGuard is constructed at
+ *   function scope (before the main loop). It saves the current
+ *   @c rl_attempted_completion_function on construction. Its destructor
+ *   restores the saved completion function, rebinds @c \\t to
+ *   @c prevent_readline_keybindings, rebinds @c \\f to @c rl_insert,
+ *   clears readline history, and calls @c reset_custom_keybindingsForSearches().
+ *   The guard is scoped to the entire function so cleanup runs once on
+ *   any exit path (return from ESC/Ctrl+D, or exception).
+ * - **Iteration state:** @c initIterationState is called at the top of each
+ *   loop iteration to re-establish keybindings, signal handlers, pagination,
+ *   completion function, and cancellation state before prompting for input.
+ *
+ * @param fileTypeChoice The format category: "bin", "img", "mdf", "nrg", "chd",
+ *                       or "daa". "bin" and "img" are treated identically.
+ * @param state          Shared @c RefreshState forwarded to
+ *                       @c selectForImageFiles for display coordination.
  */
 void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shared_ptr<RefreshState> state) {
-    struct KeybindingGuard {
-        ~KeybindingGuard() {
-            clear_history();
-            rl_bind_key('\t', prevent_readline_keybindings);
-            reset_custom_keybindingsForSearches();
-        }
-    } guard;
-
     struct FileTypeConfig {
         std::string extension;
         std::string name;
@@ -943,6 +965,8 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         rl_bind_key('\f', clear_screen_and_buffer);
         rl_bind_key('\t', my_rl_complete);
     };
+
+    KeybindingGuard guard;
 
     while (true) {
         int currentCacheOld = 0;
