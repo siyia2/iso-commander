@@ -86,7 +86,7 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache) {
 
     // --- Update Default input Color ---
     if (cache.count("base")) {
-        UI::Palette::defaultText = cache.at("base");
+        UI::Palette::defaultColor = cache.at("base");
         UI::Palette::updateDefaultColors();
     }
     // --------------------------------------

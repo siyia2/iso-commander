@@ -207,7 +207,7 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
     globalTheme   = ConfigCaches::g_configCache["theme"];
 
     // --- New: Update Default Text Color ---
-    UI::Palette::defaultText = ConfigCaches::g_configCache["base"];
+    UI::Palette::defaultColor = ConfigCaches::g_configCache["base"];
     UI::Palette::updateDefaultColors();
     // --------------------------------------
 
