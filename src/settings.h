@@ -96,15 +96,25 @@ void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& c
 inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     // --- Theme Settings ---
     {
+            "entry",                                    // key
+            "white",                                         // defaultValue
+            "Default input color (black/gray/white/steel)",
+            "Theme Settings",                                // Section Header
+            [](const std::string& v) {                       // validate
+                return v == "black" || v == "gray" || v == "white" || v == "steel";
+            }
+        },
+    {
         "skin",                                     // key
         "white",                                    // defaultValue
         "Menu and header accent color (green/cyan/white/purple/amber/rose/gray)",  // comment
-        "Theme Settings",                           // section
+        "",                           // section
         [](const std::string& v) {                  // validate
             return v == "green" || v == "cyan" || v == "white" ||
                    v == "purple" || v == "amber" || v == "rose" || v == "gray";
         }
     },
+
     {
         "theme",
         "original",
