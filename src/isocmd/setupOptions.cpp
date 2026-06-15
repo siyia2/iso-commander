@@ -194,16 +194,22 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 
     syncCache(filePath);
 
-    displayConfig::toggleFullListMount       = (ConfigCaches::g_configCache["mount_list"]       == "full");
-    displayConfig::toggleFullListUmount      = (ConfigCaches::g_configCache["umount_list"]      == "full");
-    displayConfig::toggleFullListCpMvRm      = (ConfigCaches::g_configCache["cp_mv_rm_list"]    == "full");
-    displayConfig::toggleFullListWrite2usb   = (ConfigCaches::g_configCache["write2usb_list"]       == "full");
-    displayConfig::toggleFullListConvert2iso = (ConfigCaches::g_configCache["convert2iso_lists"] == "full");
-    displayConfig::toggleNamesOnly           = (ConfigCaches::g_configCache["filenames_only"]   == "on");
+    // Existing configuration mappings
+    displayConfig::toggleFullListMount         = (ConfigCaches::g_configCache["mount_list"]         == "full");
+    displayConfig::toggleFullListUmount        = (ConfigCaches::g_configCache["umount_list"]        == "full");
+    displayConfig::toggleFullListCpMvRm        = (ConfigCaches::g_configCache["cp_mv_rm_list"]      == "full");
+    displayConfig::toggleFullListWrite2usb     = (ConfigCaches::g_configCache["write2usb_list"]     == "full");
+    displayConfig::toggleFullListConvert2iso   = (ConfigCaches::g_configCache["convert2iso_lists"] == "full");
+    displayConfig::toggleNamesOnly             = (ConfigCaches::g_configCache["filenames_only"]      == "on");
 
-    skin        = ConfigCaches::g_configCache["skin"];
-    color       = getskin();
-    globalTheme = ConfigCaches::g_configCache["theme"];
+    skin          = ConfigCaches::g_configCache["skin"];
+    color         = getskin();
+    globalTheme   = ConfigCaches::g_configCache["theme"];
+
+    // --- New: Update Default Text Color ---
+    UI::Palette::defaultText = ConfigCaches::g_configCache["entry"];
+    UI::Palette::updateDefaultColors();
+    // --------------------------------------
 
     applyThreadCapsAndHistoryLimits(ConfigCaches::g_configCache);
 

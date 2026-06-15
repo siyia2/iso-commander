@@ -36,7 +36,6 @@ namespace fs = std::filesystem;
 /**
  * DISK I/O & ERROR REPORTING
  */
-
 void printConfigError(const std::string& configPath) {
     auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
     std::cerr << "\n" << error
@@ -85,6 +84,13 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache) {
     if (cache.count("skin")) { skin = cache.at("skin"); color = getskin(); }
     if (cache.count("theme")) { globalTheme = cache.at("theme"); }
 
+    // --- Update Default input Color ---
+    if (cache.count("entry")) {
+        UI::Palette::defaultText = cache.at("entry");
+        UI::Palette::updateDefaultColors();
+    }
+    // --------------------------------------
+
     if (cache.count("pagination")) {
         try { GlobalState::ITEMS_PER_PAGE = std::stoul(cache.at("pagination")); } catch (...) {}
     }
@@ -131,12 +137,13 @@ void interactiveConfigEditor(const std::string& configPath) {
             }
             std::string val = ConfigCaches::g_configCache.count(entry.key) ? ConfigCaches::g_configCache[entry.key] : entry.defaultValue;
 
-            std::string_view valColor = (index == 1) ? color : std::string_view(tc.data);
+            std::string_view rowColor = (index == 1) ? UI::Palette::BoldReset :
+                                        ((index == 2) ? color : tc.data);
 
             std::cout << tc.warning << std::right << std::setw(2) << index++ << ". " << tc.reset
                       << tc.label << std::left << std::setw(32) << entry.key << tc.reset
                       << "= " << tc.reset
-                      << valColor << val << tc.reset << "\n";
+                      << rowColor << val << tc.reset << "\n";
         }
 		setup_custom_keybindingsForSettingsEditor();
         std::cout << "\n" << tc.accent << "Actions: " << tc.warning << "1-" << (index-1)
@@ -265,7 +272,9 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         std::cout << tc.label << "Valid values: " << tc.reset;
 		if (key == "skin") {
 			std::cout << "green, cyan, white, purple, amber, rose, gray\n";
-		} else if (key == "theme") {
+		} else if (key == "entry") {
+            std::cout << "black, gray, white, steel\n";
+        } else if (key == "theme") {
 			std::cout << "original, classic, high_contrast, neon, ocean, sunset, forest,\n"
 					  << "               midnight, mono, retro, crimson, dracula, tokyo, paper, sakura\n";
 		} else if (key == "auto_update" || key == "filenames_only") {
