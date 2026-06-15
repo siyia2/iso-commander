@@ -6,12 +6,134 @@
 // C++ Standard Library Headers
 #include <atomic>
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
 // Forward declaration of shared state
 struct RefreshState;
+
+// ======================================================================
+// RAII Guards for Select Functions
+// ======================================================================
+//
+// These guards manage terminal state, readline keybindings, atomic flags,
+// and cursor position across the interactive TUI selection functions
+// (selectForIsoFiles, selectForImageFiles). They eliminate manual cleanup
+// calls and guarantee proper teardown on all exit paths, including early
+// returns, loop breaks, and stack unwinding from exceptions.
+// ======================================================================
+
+/**
+ * @brief RAII guard that resets custom readline keybindings on scope exit.
+ */
+class ReadlineKeybindingGuard {
+public:
+    ReadlineKeybindingGuard() {
+        setup_custom_keybindingsForSelect();
+    }
+
+    ~ReadlineKeybindingGuard() {
+        reset_custom_keybindingsForSelect();
+    }
+
+    /**
+     * Re-establish custom keybindings after they were overridden by
+     * a sub-mode (e.g., filter flow). Call this after returning from
+     * runSharedFilterFlow or any function that replaces the selection
+     * keybindings.
+     */
+    void restore() {
+        setup_custom_keybindingsForSelect();
+    }
+
+    // Non-copyable, non-movable
+    ReadlineKeybindingGuard(const ReadlineKeybindingGuard&) = delete;
+    ReadlineKeybindingGuard& operator=(const ReadlineKeybindingGuard&) = delete;
+};
+
+/**
+ * @brief RAII guard for atomic boolean flag that restores on destruction.
+ *
+ * Sets the flag to @p activeValue on construction and restores it to
+ * !activeValue on destruction (unless release() is called).
+ */
+class AtomicFlagGuard {
+public:
+    explicit AtomicFlagGuard(std::atomic<bool>& flag, bool activeValue = true)
+        : flag_(flag), restoreValue_(!activeValue), released_(false) {
+        flag_.store(activeValue, std::memory_order_release);
+    }
+
+    ~AtomicFlagGuard() {
+        if (!released_) {
+            flag_.store(restoreValue_, std::memory_order_release);
+        }
+    }
+
+    /** Release ownership — the flag will not be restored on destruction. */
+    void release() { released_ = true; }
+
+    AtomicFlagGuard(const AtomicFlagGuard&) = delete;
+    AtomicFlagGuard& operator=(const AtomicFlagGuard&) = delete;
+
+private:
+    std::atomic<bool>& flag_;
+    bool restoreValue_;
+    bool released_;
+};
+
+/**
+ * @brief RAII guard for terminal cursor position.
+ *
+ * Optionally restores cursor to a saved position on destruction.
+ */
+class TerminalCursorGuard {
+public:
+    /** Saves current cursor position. */
+    TerminalCursorGuard() {
+        std::cout << "\033[s";  // Save cursor position
+    }
+
+    /** Restores cursor position. */
+    ~TerminalCursorGuard() {
+        std::cout << "\033[u";  // Restore cursor position
+    }
+
+    TerminalCursorGuard(const TerminalCursorGuard&) = delete;
+    TerminalCursorGuard& operator=(const TerminalCursorGuard&) = delete;
+};
+
+/**
+ * @brief RAII guard for controlling the "at ISO list" state.
+ *
+ * Ensures isAtISOList is restored to the desired value even on exception
+ * or early return paths.
+ */
+class IsoListStateGuard {
+public:
+    IsoListStateGuard(std::atomic<bool>& isAtISOList,
+                      const std::function<bool()>& isUnmountCheck)
+        : isAtISOList_(isAtISOList),
+          wasAtList_(isAtISOList.load(std::memory_order_acquire)),
+          isUnmountCheck_(isUnmountCheck) {}
+
+    ~IsoListStateGuard() {
+        // Restore to appropriate state based on operation type
+        if (!isUnmountCheck_()) {
+            isAtISOList_.store(wasAtList_, std::memory_order_release);
+        }
+    }
+
+    IsoListStateGuard(const IsoListStateGuard&) = delete;
+    IsoListStateGuard& operator=(const IsoListStateGuard&) = delete;
+
+private:
+    std::atomic<bool>& isAtISOList_;
+    bool wasAtList_;
+    std::function<bool()> isUnmountCheck_;
+};
 
 // --- Data Loading & List Display ---
 
