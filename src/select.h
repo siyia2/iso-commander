@@ -85,27 +85,6 @@ private:
 };
 
 /**
- * @brief RAII guard for terminal cursor position.
- *
- * Optionally restores cursor to a saved position on destruction.
- */
-class TerminalCursorGuard {
-public:
-    /** Saves current cursor position. */
-    TerminalCursorGuard() {
-        std::cout << "\033[s";  // Save cursor position
-    }
-
-    /** Restores cursor position. */
-    ~TerminalCursorGuard() {
-        std::cout << "\033[u";  // Restore cursor position
-    }
-
-    TerminalCursorGuard(const TerminalCursorGuard&) = delete;
-    TerminalCursorGuard& operator=(const TerminalCursorGuard&) = delete;
-};
-
-/**
  * @brief RAII guard for controlling the "at ISO list" state.
  *
  * Ensures isAtISOList is restored to the desired value even on exception
