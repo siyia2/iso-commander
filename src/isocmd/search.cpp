@@ -99,7 +99,7 @@ bool isValidDirectory(const std::string& path) {
  *   cancellation from a premature Ctrl+C before input is processed.
  * - **History management:** @c loadHistory(filterHistory) is called unconditionally
  *   each iteration. @c add_history is called for any non-empty input string before
- *   the whitespace-only check (so pure-whitespace input may be recorded).
+ *   the whitespace-only check.
  *   @c saveHistory(filterHistory) is called only when both @p validPaths and
  *   @p input are non-empty after a scan completes.
  * - **RAII Keybinding Management:** A @c SearchReadlineGuard RAII object is
