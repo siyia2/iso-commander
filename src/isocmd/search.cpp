@@ -102,11 +102,12 @@ bool isValidDirectory(const std::string& path) {
  *   the whitespace-only check (so pure-whitespace input may be recorded).
  *   @c saveHistory(filterHistory) is called only when both @p validPaths and
  *   @p input are non-empty after a scan completes.
- * - **RAII Keybinding Management:** A @c KeybindingGuard RAII object is
+ * - **RAII Keybinding Management:** A @c SearchReadlineGuard RAII object is
  *   constructed at the start of each loop iteration (after @c rearmSetup).
  *   It saves the current @c rl_attempted_completion_function on construction.
  *   Its destructor restores the saved completion function, rebinds @c \\t to
- *   @c prevent_readline_keybindings, rebinds @c \\f to @c rl_insert, and calls
+ *   @c prevent_readline_keybindings, rebinds @c \\f to @c rl_insert, clears
+ *   the history buffer, resets readline pagination, and calls
  *   @c reset_custom_keybindingsForSearches(). This guarantees cleanup on all
  *   exit paths from the loop body: @c continue, @c return, and exceptions.
  *   The guard is recreated each iteration so its saved completion state
@@ -133,7 +134,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
 
     while (true) {
         rearmSetup();
-        KeybindingGuard guard;
+        SearchReadlineGuard guard;
         try {
             const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
@@ -274,7 +275,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
 
             if (validPaths.empty()) {
                 input = "";
-                clear_history();
                 std::cout << "\033[1A\033[K";
             }
             if (!validPaths.empty() && !input.empty()) {
@@ -906,17 +906,15 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  *   static @c unordered_map to derive the file extension, display name, and
  *   per-format boolean flags (@c modeMdf, @c modeNrg, @c modeChd, @c modeDaa)
  *   used by downstream functions.
- * - **RAII Keybinding Management:** A @c KeybindingGuard is constructed at
+ * - **RAII Keybinding Management:** A @c SearchReadlineGuard is constructed at
  *   the top of each loop iteration (after @c initIterationState). It saves
  *   the current @c rl_attempted_completion_function on construction. Its
  *   destructor restores the saved completion function, rebinds @c \\t to
  *   @c prevent_readline_keybindings, rebinds @c \\f to @c rl_insert,
- *   clears readline history, and calls @c reset_custom_keybindingsForSearches().
- *   The guard is destroyed at the end of each iteration (or on any exit path
- *   such as ESC/Ctrl+D or exception), so cleanup runs once per loop cycle.
- * - **Iteration state:** @c initIterationState is called at the top of each
- *   loop iteration to re-establish keybindings, signal handlers, the
- *   completion function, and cancellation state before prompting for input.
+ *   clears readline history, resets readline pagination, and calls
+ *   @c reset_custom_keybindingsForSearches(). The guard is destroyed at
+ *   the end of each iteration (or on any exit path such as ESC/Ctrl+D
+ *   or exception), so cleanup runs once per loop cycle.
  * - **Iteration state:** @c initIterationState is called at the top of each
  *   loop iteration to re-establish keybindings, signal handlers, pagination,
  *   completion function, and cancellation state before prompting for input.
@@ -979,7 +977,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         bool filterHistory = false;
 
         initIterationState();
-        KeybindingGuard guard;
+        SearchReadlineGuard guard;
 
         const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
