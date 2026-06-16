@@ -400,7 +400,7 @@ void selectForIsoFiles(const std::string& operation,
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
-        if (isFiltered) rl_bind_keyseq("*", rl_insert);
+        isFiltered ? (void)rl_bind_keyseq("*", rl_insert) : setup_custom_keybindingsForSelect();
 
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
@@ -663,7 +663,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
-        if (isFiltered) rl_bind_keyseq("*", rl_insert);
+        isFiltered ? (void)rl_bind_keyseq("*", rl_insert) : setup_custom_keybindingsForSelect();
 
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
