@@ -93,9 +93,15 @@ bool isValidDirectory(const std::string& path) {
  * - **Early save path:** If all paths are invalid (validPaths empty, invalidPaths
  *   non-empty), resets @c g_operationCancelled and calls
  *   @c saveAndReportResultsForDatabase without scanning.
- * - **Cancellation guarding:** @c g_operationCancelled is reset to @c false at
- *   both the early-save and pre-scan sites to prevent spurious cancellation from
- *   a premature Ctrl+C before input is processed.
+ * - **Cancellation guarding:** @c g_operationCancelled is reset to @c false in
+ *   three places: inside @c rearmSetup (top of every iteration), before the
+ *   early-save path, and before the parallel scan block. This prevents spurious
+ *   cancellation from a premature Ctrl+C before input is processed.
+ * - **History management:** @c loadHistory(filterHistory) is called unconditionally
+ *   each iteration. @c add_history is called for any non-empty input string before
+ *   the whitespace-only check (so pure-whitespace input may be recorded).
+ *   @c saveHistory(filterHistory) is called only when both @p validPaths and
+ *   @p input are non-empty after a scan completes.
  * - **RAII Keybinding Management:** A @c KeybindingGuard RAII object is
  *   constructed at the start of each loop iteration (after @c rearmSetup).
  *   It saves the current @c rl_attempted_completion_function on construction.
@@ -120,7 +126,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
     auto rearmSetup = [&]() {
         enable_ctrl_d();
         setupSignalHandlerCancellations();
-        resetReadlinePagination();
         setup_custom_keybindingsForSearches();
         rl_attempted_completion_function = my_special_completion_entry;
         GlobalState::g_operationCancelled.store(false);
@@ -274,7 +279,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             }
             if (!validPaths.empty() && !input.empty()) {
                 saveHistory(filterHistory);
-                clear_history();
             }
             saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, newISOFound, start_time);
 
@@ -903,13 +907,16 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  *   per-format boolean flags (@c modeMdf, @c modeNrg, @c modeChd, @c modeDaa)
  *   used by downstream functions.
  * - **RAII Keybinding Management:** A @c KeybindingGuard is constructed at
- *   function scope (before the main loop). It saves the current
- *   @c rl_attempted_completion_function on construction. Its destructor
- *   restores the saved completion function, rebinds @c \\t to
+ *   the top of each loop iteration (after @c initIterationState). It saves
+ *   the current @c rl_attempted_completion_function on construction. Its
+ *   destructor restores the saved completion function, rebinds @c \\t to
  *   @c prevent_readline_keybindings, rebinds @c \\f to @c rl_insert,
  *   clears readline history, and calls @c reset_custom_keybindingsForSearches().
- *   The guard is scoped to the entire function so cleanup runs once on
- *   any exit path (return from ESC/Ctrl+D, or exception).
+ *   The guard is destroyed at the end of each iteration (or on any exit path
+ *   such as ESC/Ctrl+D or exception), so cleanup runs once per loop cycle.
+ * - **Iteration state:** @c initIterationState is called at the top of each
+ *   loop iteration to re-establish keybindings, signal handlers, the
+ *   completion function, and cancellation state before prompting for input.
  * - **Iteration state:** @c initIterationState is called at the top of each
  *   loop iteration to re-establish keybindings, signal handlers, pagination,
  *   completion function, and cancellation state before prompting for input.
@@ -954,19 +961,15 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
     auto initIterationState = [&]() {
         enable_ctrl_d();
         setupSignalHandlerCancellations();
-        resetReadlinePagination();
         rl_attempted_completion_function = my_special_completion_entry;
         setup_custom_keybindingsForSearches();
         GlobalState::g_operationCancelled.store(false);
         clearScrollBuffer();
-        clear_history();
         bool filterHistory = false;
         loadHistory(filterHistory);
         rl_bind_key('\f', clear_screen_and_buffer);
         rl_bind_key('\t', my_rl_complete);
     };
-
-    KeybindingGuard guard;
 
     while (true) {
         int currentCacheOld = 0;
@@ -976,6 +979,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         bool filterHistory = false;
 
         initIterationState();
+        KeybindingGuard guard;
 
         const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
