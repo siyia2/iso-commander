@@ -22,7 +22,8 @@
  *
  * @details On construction, it captures the current Readline completion function.
  * On destruction, it restores the captured completion function, resets specific
- * keybindings (Tab/Form Feed), clears the history buffer, and executes
+ * keybindings (Tab/Form Feed), clears the history buffer, resets Readline
+ * pagination via @c resetReadlinePagination(), and executes
  * @c reset_custom_keybindingsForSearches() to clean up search-specific configurations.
  *
  * @note Designed for search-focused logic (e.g., @c refreshForDatabase and
@@ -39,6 +40,7 @@ public:
         rl_bind_key('\t', prevent_readline_keybindings);
         rl_bind_key('\f', rl_insert);
         clear_history();
+        resetReadlinePagination();
         reset_custom_keybindingsForSearches();
     }
 
