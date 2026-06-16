@@ -14,7 +14,7 @@
 #include "./readline.h"
 
 /**
- * @brief RAII guard for Readline state and custom keybindings during search operations.
+ * @brief RAII guard for Readline session state during search operations.
  *
  * This class ensures that Readline's completion function and custom keybindings
  * are safely restored to their default or previous states upon exiting the scope,
@@ -30,12 +30,12 @@
  * @c promptSearchBinImgChdDaaMdfNrg). Do not use this for selection
  * menus, which require @c reset_custom_keybindingsForSelect.
  */
-class KeybindingGuard {
+class SearchReadlineGuard {
 public:
-    KeybindingGuard()
+    SearchReadlineGuard()
         : oldCompletion_(rl_attempted_completion_function) {}
 
-    ~KeybindingGuard() {
+    ~SearchReadlineGuard() {
         rl_attempted_completion_function = oldCompletion_;
         rl_bind_key('\t', prevent_readline_keybindings);
         rl_bind_key('\f', rl_insert);
@@ -45,8 +45,8 @@ public:
     }
 
     // Non-copyable, non-movable
-    KeybindingGuard(const KeybindingGuard&) = delete;
-    KeybindingGuard& operator=(const KeybindingGuard&) = delete;
+    SearchReadlineGuard(const SearchReadlineGuard&) = delete;
+    SearchReadlineGuard& operator=(const SearchReadlineGuard&) = delete;
 
 private:
     rl_completion_func_t* oldCompletion_;
