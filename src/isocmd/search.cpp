@@ -273,10 +273,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 std::cout << "\n";
             }
 
-            if (validPaths.empty()) {
-                input = "";
-                std::cout << "\033[1A\033[K";
-            }
             if (!validPaths.empty() && !input.empty()) {
                 saveHistory(filterHistory);
             }
