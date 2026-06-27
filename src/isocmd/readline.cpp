@@ -9,6 +9,7 @@
 
 // C / System Headers
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 
 // Third-Party Library Headers
@@ -231,10 +232,14 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     }
 
     // Column layout computation
-    int num_columns = (items_to_display <= 4) ? 1 : 3;
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    int term_width = (w.ws_col > 0) ? w.ws_col : 80;
     const int column_spacing = 4;
-    int column_width = (num_columns < 3) ? ((max_item_length + 2 > 60) ? 60 : max_item_length + 2)
-                                         : ((max_item_length < 38) ? max_item_length + 2 : 40);
+    int column_width = (int)max_item_length + 2;
+    int num_columns = std::max(1, (term_width + column_spacing) / (column_width + column_spacing));
+    num_columns = std::min(num_columns, 4);
+    if (items_to_display <= 4) num_columns = 1;
     const int total_column_width = column_width + column_spacing;
     int rows = (items_to_display + num_columns - 1) / num_columns;
 
