@@ -129,6 +129,8 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
         setupSignalHandlerCancellations();
         setup_custom_keybindingsForSearches();
         rl_attempted_completion_function = my_special_completion_entry;
+        rl_bind_key('\f', clear_screen_and_buffer);
+        rl_bind_key('\t', rl_complete);
         GlobalState::g_operationCancelled.store(false);
     };
 
@@ -140,9 +142,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
 
             clearScrollBuffer();
             loadHistory(filterHistory);
-
-            rl_bind_key('\f', clear_screen_and_buffer);
-            rl_bind_key('\t', my_rl_complete);
 
             std::string prompt;
             prompt.reserve(512);
@@ -962,7 +961,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         bool filterHistory = false;
         loadHistory(filterHistory);
         rl_bind_key('\f', clear_screen_and_buffer);
-        rl_bind_key('\t', my_rl_complete);
+        rl_bind_key('\t', rl_complete);
     };
 
     while (true) {
