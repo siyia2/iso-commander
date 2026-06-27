@@ -269,33 +269,7 @@ bool& overwriteExisting) {
                 enable_ctrl_d();
                 setupSignalHandlerCancellations();
 
-                // Ctrl+L: save current input, clear the screen.
-                // The saved input is restored on the next prompt.
-                rl_bind_key('\f', [](int count, int key) -> int {
-                    static std::string saved_line = rl_copy_text(0, rl_end);
-                    clear_screen_and_buffer(count, key);
-                    return 0;
-                });
-
-                rl_bind_key('\t', my_rl_complete);
-
-                // RlStartupHookGuard is scoped to setupEnv's enclosing loop
-                // iteration (see below), so the hook is cleared whether
-                // handlePaginatedDisplay returns normally or early.
-
-                // Restore the saved prompt
-                if (!RetainAndRestoreReadlineBuffer::g_rl_pending_text.empty()) {
-                    rl_startup_hook = []() -> int {
-                        if (!RetainAndRestoreReadlineBuffer::g_rl_pending_text.empty()) {
-                            rl_insert_text(RetainAndRestoreReadlineBuffer::g_rl_pending_text.c_str());
-                            rl_point = rl_end;
-                            RetainAndRestoreReadlineBuffer::g_rl_pending_text = "";
-                        }
-                        return 0;
-                    };
-                } else {
-                    rl_startup_hook = nullptr;
-                }
+                RestoreReadlineBuffer();
 
                 if (!isCopy) umountMvRmBreak = true;
                 if (!isPageTurn) {

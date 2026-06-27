@@ -129,19 +129,21 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
         setupSignalHandlerCancellations();
         setup_custom_keybindingsForSearches();
         rl_attempted_completion_function = my_special_completion_entry;
-        rl_bind_key('\f', clear_screen_and_buffer);
-        rl_bind_key('\t', rl_complete);
         GlobalState::g_operationCancelled.store(false);
+        RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 1;
     };
 
     while (true) {
         rearmSetup();
+        static std::string saved_line;
         SearchReadlineGuard guard;
         try {
             const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
             clearScrollBuffer();
             loadHistory(filterHistory);
+
+            RestoreReadlineBuffer();
 
             std::string prompt;
             prompt.reserve(512);
@@ -960,12 +962,12 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         clearScrollBuffer();
         bool filterHistory = false;
         loadHistory(filterHistory);
-        rl_bind_key('\f', clear_screen_and_buffer);
-        rl_bind_key('\t', rl_complete);
+        RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 1;
     };
 
     while (true) {
         int currentCacheOld = 0;
+        static std::string saved_line;
         std::vector<std::string> directoryPaths;
         std::unordered_set<std::string> uniquePaths, processedErrors, processedErrorsFind;
         std::unordered_set<std::string> invalidDirectoryPaths, fileNames;
@@ -973,6 +975,8 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 
         initIterationState();
         SearchReadlineGuard guard;
+
+        RestoreReadlineBuffer();
 
         const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 

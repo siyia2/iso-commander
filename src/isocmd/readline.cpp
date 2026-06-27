@@ -574,6 +574,51 @@ int my_rl_complete(int ignore, int invoking_key)
     return ret;
 }
 
+/**
+ * @brief Restores readline key bindings and re-inserts any pending buffer text.
+ *
+ * Rebinds readline keys and, if a pending input line was saved in
+ * RetainAndRestoreReadlineBuffer::g_rl_pending_text, installs a startup hook
+ * that re-inserts it into the readline buffer before the next prompt is
+ * displayed. If no pending text exists, the startup hook is cleared.
+ *
+ * Key bindings set:
+ * - `Ctrl+L` (`\f`): Clears the screen and current input buffer.
+ * - `Tab`    (`\t`): Invokes custom completion via @p my_rl_complete.
+ *
+ * @note The startup hook consumes @p g_rl_pending_text exactly once,
+ *       clearing it after insertion to prevent repeated re-insertion.
+ *
+ * @warning The `\f` lambda captures the current line text into a `static`
+ *          variable on its first invocation only — subsequent calls will
+ *          reuse the original captured value. This is likely unintentional.
+ *
+ * @see RetainAndRestoreReadlineBuffer::g_rl_pending_text
+ * @see clear_screen_and_buffer()
+ * @see my_rl_complete()
+ */
+void RestoreReadlineBuffer() {
+    rl_bind_key('\f', [](int count, int key) -> int {
+        static std::string saved_line = rl_copy_text(0, rl_end);
+        clear_screen_and_buffer(count, key);
+        return 0;
+    });
+    rl_bind_key('\t', my_rl_complete);
+
+    if (!RetainAndRestoreReadlineBuffer::g_rl_pending_text.empty()) {
+        rl_startup_hook = []() -> int {
+            if (!RetainAndRestoreReadlineBuffer::g_rl_pending_text.empty()) {
+                rl_insert_text(RetainAndRestoreReadlineBuffer::g_rl_pending_text.c_str());
+                rl_point = rl_end;
+                RetainAndRestoreReadlineBuffer::g_rl_pending_text = "";
+            }
+            return 0;
+        };
+    } else {
+        rl_startup_hook = nullptr;
+    }
+}
+
 //=============================================================================
 // Event Driven Key Section
 //=============================================================================
