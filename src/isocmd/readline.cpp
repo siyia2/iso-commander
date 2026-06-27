@@ -232,11 +232,15 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     }
 
     // Column layout computation
-    struct winsize w;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-    int term_width = (w.ws_col > 0) ? w.ws_col : 80;
+    struct winsize w = {};
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == -1 || w.ws_col == 0) {
+        if (ioctl(STDERR_FILENO, TIOCGWINSZ, &w) == -1 || w.ws_col == 0) {
+            w.ws_col = 80;
+        }
+    }
+    int term_width = w.ws_col;
     const int column_spacing = 4;
-    int column_width = (int)max_item_length + 2;
+    int column_width = std::max(8, (int)max_item_length + 2);
     int num_columns = std::max(1, (term_width + column_spacing) / (column_width + column_spacing));
     num_columns = std::min(num_columns, 4);
     if (items_to_display <= 4) num_columns = 1;
