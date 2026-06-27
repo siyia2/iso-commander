@@ -69,6 +69,9 @@ int my_rl_complete(int ignore, int invoking_key);
  * Functions to toggle between "Hotkeys" and "Standard Typing" modes.
  */
 
+// --- Restore Prompt After Completions ---
+void RestoreReadlineBuffer();
+
 // --- Exit Handler ---
 int exit_handler(int, int);
 
