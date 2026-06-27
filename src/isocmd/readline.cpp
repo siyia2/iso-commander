@@ -93,6 +93,8 @@ char** my_special_completion_entry(const char* text, int start, int end) {
 void customListingsFunction(char **matches, int num_matches, int max_length) {
     (void)max_length;
 
+    rl_bind_keyseq("\\e", clear_screen_and_buffer);
+
     // Resolve the raw pointer struct
     ReadlineColors rc = resolveReadlineTheme();
 
