@@ -135,7 +135,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
 
     while (true) {
         rearmSetup();
-        static std::string saved_line;
         SearchReadlineGuard guard;
         try {
             const VerboseAndDatabaseTheme dt = getDatabaseTheme();
@@ -967,7 +966,6 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 
     while (true) {
         int currentCacheOld = 0;
-        static std::string saved_line;
         std::vector<std::string> directoryPaths;
         std::unordered_set<std::string> uniquePaths, processedErrors, processedErrorsFind;
         std::unordered_set<std::string> invalidDirectoryPaths, fileNames;

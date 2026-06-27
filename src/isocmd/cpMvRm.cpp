@@ -262,9 +262,6 @@ bool& overwriteExisting) {
         if (!isDelete) {
             bool isPageTurn = false;
 
-            // Persist the current input line and cursor position across Ctrl+L screen clears.
-            static std::string saved_line;
-
             auto setupEnv = [&]() {
                 enable_ctrl_d();
                 setupSignalHandlerCancellations();
