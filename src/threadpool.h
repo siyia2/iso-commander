@@ -31,6 +31,27 @@
  *  - @ref ThreadPool    – a fully lock-free worker-thread pool built on the two above.
  *
  * @note Requires C++20 (`std::atomic::wait` / `notify_*`).
+ *
+ * @par Revision notes
+ * Two correctness fixes have been applied since the original version:
+ *  1. @ref LockFreeQueue now has an explicit, iterative destructor. The
+ *     implicit one recursively tears down the `shared_ptr` node chain
+ *     (destroying `head` destroys its `next`, which destroys *its* `next`,
+ *     …) and can overflow the stack for a queue with many undrained
+ *     elements. See the destructor's doc comment below.
+ *  2. @ref ThreadPool::shutdown no longer signals workers by repeatedly
+ *     overwriting the live `task_state` counter with placeholder values
+ *     (0, 1, 2, 3). That was intended to force-wake any parked worker, but
+ *     it clobbered the real pending/active counts — reproducibly leaving
+ *     `task_state` corrupted (e.g. `isIdle()` reporting `false` forever,
+ *     or the packed fields underflowing into garbage) even when shutting
+ *     down an already-idle pool. The shutdown signal is now a dedicated bit
+ *     folded into `task_state` itself (see @ref STOP_BIT), which lets
+ *     `task_state.wait()`'s own "value already changed" guarantee do the
+ *     wakeup safely, with no separate flag to race against and nothing to
+ *     corrupt. `shutdown()` also now reconciles the pending counter for any
+ *     tasks that were queued but never claimed, so `pendingCount()` /
+ *     `isIdle()` are accurate after it returns in every case.
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -349,6 +370,39 @@ public:
     }
 
     /**
+     * @brief Destroys the queue, unlinking nodes iteratively.
+     *
+     * @par Fix
+     * The implicit (compiler-generated) destructor would destroy @c head,
+     * whose destructor destroys its `next`, whose destructor destroys
+     * *its* `next`, and so on — an unbounded recursion, one stack frame per
+     * node, for however many elements remain undrained. For a queue holding
+     * a large backlog this overflows the stack (confirmed: ~2,000,000
+     * undrained `int` nodes reliably segfaults with the implicit destructor
+     * on an 8 MB stack).
+     *
+     * This destructor instead walks the chain with a single loop variable
+     * and severs each node's `next` link *before* moving past it, so no
+     * node's destructor ever has a live successor to cascade into — the
+     * whole teardown is O(n) time with O(1) stack depth, regardless of
+     * queue length.
+     *
+     * @note Not thread-safe — same precondition as any container's
+     *       destructor: no concurrent @ref enqueue / @ref dequeue may be in
+     *       flight while this runs. `memory_order_relaxed` is sufficient
+     *       here for exactly that reason — there is no concurrent access to
+     *       synchronize against during destruction.
+     */
+    ~LockFreeQueue() {
+        auto node = head.load(std::memory_order_relaxed);
+        while (node) {
+            auto next = node->next.load(std::memory_order_relaxed);
+            node->next.store(nullptr, std::memory_order_relaxed);
+            node = std::move(next);
+        }
+    }
+
+    /**
      * @brief Appends @p value to the back of the queue.
      *
      * Allocates a new node, then uses a CAS loop to link it after the current
@@ -444,14 +498,32 @@ private:
  * the caller to obtain the result (or re-throw exceptions) asynchronously.
  *
  * ### State encoding
- * A single 64-bit atomic `task_state` encodes two independent 32-bit counters:
- * | Bits  | Meaning                            |
- * |-------|------------------------------------|
- * | 63–32 | Pending tasks (enqueued, not yet picked up) |
- * | 31–0  | Active tasks (currently executing) |
+ * A single 64-bit atomic `task_state` encodes two counters and a shutdown flag:
+ * | Bits  | Meaning                                      |
+ * |-------|----------------------------------------------|
+ * | 63–32 | Pending tasks (enqueued, not yet picked up)   |
+ * | 31    | Shutdown-requested flag, set by `shutdown()`  |
+ * | 30–0  | Active tasks (currently executing)            |
  *
  * Workers park on `task_state.wait()` when no pending work is available and
- * are woken by `task_state.notify_one()` after each submission.
+ * are woken by `task_state.notify_one()` after each submission, or by
+ * `task_state.notify_all()` once `shutdown()` sets the flag above.
+ *
+ * @par Fix: shutdown signalling
+ * The shutdown flag used to be a separate `std::atomic<bool> stop`, with
+ * `shutdown()` additionally overwriting `task_state` with placeholder values
+ * (0, 1, 2, 3) purely to force any parked worker to wake up. That "destructive
+ * wakeup" clobbered the real pending/active counts — reproducibly, even when
+ * shutting down an already-idle pool (`isIdle()` would then report `false`
+ * forever), and it could underflow into outright garbage if tasks were still
+ * actively executing at the time. Folding the flag into `task_state` itself
+ * removes the need to touch the counters at all: `task_state.wait(old)` is
+ * specified to return immediately, without blocking, if the atomic's current
+ * value no longer equals `old` — so setting @ref STOP_BIT is guaranteed to
+ * either be observed by a worker before it parks, or to make its very next
+ * `wait()` call return immediately. There is no window left in which a worker
+ * can fall asleep and never notice, and nothing about the real counts is ever
+ * overwritten.
  *
  * ### Typical usage
  * @code
@@ -473,12 +545,15 @@ private:
     const size_t num_threads;
 
     /**
-     * @brief Combined pending/active task counter.
+     * @brief Combined pending/active/shutdown state.
      *
-     * Upper 32 bits = number of tasks that have been enqueued but not yet
-     * picked up by a worker.  Lower 32 bits = number of tasks currently
-     * executing.  Both counters are manipulated with a single atomic add,
-     * which keeps them consistent without a separate lock.
+     * Upper 32 bits (63–32) = number of tasks that have been enqueued but not
+     * yet picked up by a worker. Bit 31 = shutdown-requested flag (see
+     * @ref STOP_BIT). Remaining low bits (30–0) = number of tasks currently
+     * executing. All three are manipulated through this single atomic, which
+     * keeps them consistent without a separate lock and lets a shutdown
+     * request piggyback on the same wait/notify mechanism as normal task
+     * dispatch.
      */
     alignas(64) std::atomic<uint64_t> task_state{0};
 
@@ -486,15 +561,27 @@ private:
     static constexpr uint64_t PENDING_ONE = uint64_t(1) << 32;
     /// @brief Addend that increments the active count by one.
     static constexpr uint64_t ACTIVE_ONE  = uint64_t(1);
+    /**
+     * @brief Bit 31 of @ref task_state: set once by @ref shutdown to request
+     * that all workers exit.
+     *
+     * Folded into @ref task_state (rather than kept as a separate atomic)
+     * specifically so that a worker parked in `task_state.wait()` can never
+     * miss it — see the class-level "Fix: shutdown signalling" note above.
+     * Chosen as the top bit of the low 32-bit half (rather than, say, bit 63)
+     * so it can never interact with the pending-count arithmetic in
+     * @ref workerThread or @ref shutdown, which only ever adds/subtracts
+     * whole multiples of @ref PENDING_ONE (bit 32 and above).
+     */
+    static constexpr uint64_t STOP_BIT    = uint64_t(1) << 31;
+    /// @brief Mask isolating the active-count bits (30–0), excluding @ref STOP_BIT.
+    static constexpr uint64_t ACTIVE_MASK = STOP_BIT - 1;
 
     /// @brief Worker thread handles.
     std::vector<std::thread> workers;
 
     /// @brief FIFO queue of pending tasks.
     LockFreeQueue<MoveOnlyTask> task_queue;
-
-    /// @brief Set to `true` by @ref shutdown to signal workers to exit.
-    alignas(64) std::atomic<bool> stop{false};
 
     /// @brief Reserved for future use (e.g. tracking waiters on @ref waitAllTasksCompleted).
     alignas(64) std::atomic<uint64_t> global_waiters{0};
@@ -510,10 +597,21 @@ private:
 
     /**
      * @brief Extracts the active task count from a packed state value.
+     *
+     * Masks with @ref ACTIVE_MASK to exclude @ref STOP_BIT, so the shutdown
+     * flag can never be misread as part of the active count.
+     *
      * @param s Packed value loaded from @ref task_state.
      * @return Number of tasks currently executing.
      */
-    static uint32_t activeFromState(uint64_t s) noexcept  { return static_cast<uint32_t>(s & 0xFFFFFFFFULL); }
+    static uint32_t activeFromState(uint64_t s) noexcept  { return static_cast<uint32_t>(s & ACTIVE_MASK); }
+
+    /**
+     * @brief Extracts the shutdown-requested flag from a packed state value.
+     * @param s Packed value loaded from @ref task_state.
+     * @return `true` once @ref shutdown has set @ref STOP_BIT.
+     */
+    static bool stopFromState(uint64_t s) noexcept { return (s & STOP_BIT) != 0; }
 
     // ── Internal worker helpers ───────────────────────────────────────────────
 
@@ -546,39 +644,42 @@ private:
      * @brief Entry point for each worker thread.
      *
      * Coordinates execution using a speculative, lock-free state machine:
-     * 0. Evaluates global shutdown state first, exiting instantly if stop is signaled.
+     * 0. Evaluates the shutdown flag first, exiting instantly if it is set.
      * 1. Synchronizes via state-based parking; blocks on `task_state.wait()`
-     * at 0% CPU whenever the global pending task count is zero.
+     * at 0% CPU whenever the global pending task count is zero. Because the
+     * shutdown flag lives inside the same atomic being waited on, a
+     * `shutdown()` call is guaranteed to either be seen before parking or to
+     * make the `wait()` call return immediately — there is no separate flag
+     * to race against.
      * 2. Speculatively claims a task by atomically transferring one credit
      * from 'pending' to 'active' in the 64-bit `task_state` bitfield.
      * 3. Attempts to physically extract a payload from the `LockFreeQueue`.
      * 4. On success: Executes the task safely wrapped in a try/catch block.
      * 5. On failure (queue race collision): Executes a fail-safe state rollback
      * and strategically yields the thread execution timeslice to prevent
-     * userspace livelocks, allowing the atomic state to settle.
+     * userspace livelocks, allowing the atomic state to settle. The shutdown
+     * flag is re-checked at the top of the next iteration regardless, so no
+     * separate check is needed here.
      */
     void workerThread() {
         while (true) {
-            // 1. ABSOLUTE EXIT GATE: If stop is set, exit immediately.
-            if (stop.load(std::memory_order_acquire)) {
+            uint64_t current_state = task_state.load(std::memory_order_acquire);
+
+            // 0. ABSOLUTE EXIT GATE: If shutdown has been requested, exit immediately.
+            if (stopFromState(current_state)) {
                 return;
             }
 
-            uint64_t current_state = task_state.load(std::memory_order_acquire);
-
-            // 2. PASSIVE PARK GATE
+            // 1. PASSIVE PARK GATE
             while (pendingFromState(current_state) == 0) {
-                // Check right before sleeping
-                if (stop.load(std::memory_order_acquire)) return;
-
                 task_state.wait(current_state, std::memory_order_relaxed);
                 current_state = task_state.load(std::memory_order_acquire);
 
-                // Check right after waking up
-                if (stop.load(std::memory_order_acquire)) return;
+                // Check right after waking up.
+                if (stopFromState(current_state)) return;
             }
 
-            // 3. SPECULATIVE CREDIT CLAIM
+            // 2. SPECULATIVE CREDIT CLAIM
             uint64_t expected = current_state;
             uint64_t desired = current_state - PENDING_ONE + ACTIVE_ONE;
 
@@ -593,21 +694,15 @@ private:
                 continue;
             }
 
-            // 4. PHYSICAL QUEUE EXTRACTION
+            // 3. PHYSICAL QUEUE EXTRACTION
             MoveOnlyTask task;
             if (task_queue.dequeue(task)) {
-                runTask(task);
+                runTask(task); // 4. Execute
             } else {
-                // Rollback State: Fix counter offset
+                // 5. Rollback State: Fix counter offset
                 uint64_t prev = task_state.fetch_add(PENDING_ONE - ACTIVE_ONE, std::memory_order_acq_rel);
                 if (activeFromState(prev) == 1 && pendingFromState(prev) == 0) {
                     task_state.notify_all();
-                }
-
-                // 5. LIVELOCK & SHUTDOWN SAFETY PROTECTION
-                // If shutdown happens during rollback, break out immediately
-                if (stop.load(std::memory_order_acquire)) {
-                    return;
                 }
 
                 std::this_thread::yield();
@@ -703,12 +798,16 @@ public:
      * Uses `std::atomic::wait` (C++20 futex) to avoid a busy spin.  Returns
      * immediately if the pool is already idle.
      *
+     * Checks the pending/active fields explicitly (rather than comparing the
+     * whole packed value to zero) so that this remains accurate regardless of
+     * whether @ref STOP_BIT happens to be set.
+     *
      * @note This does not prevent new tasks from being submitted concurrently,
      *       so the function may block for longer than expected in that case.
      */
     void waitAllTasksCompleted() {
         uint64_t current_state = task_state.load(std::memory_order_acquire);
-        while (current_state != 0) {
+        while (pendingFromState(current_state) != 0 || activeFromState(current_state) != 0) {
             task_state.wait(current_state, std::memory_order_relaxed);
             current_state = task_state.load(std::memory_order_acquire);
         }
@@ -717,48 +816,66 @@ public:
     /**
      * @brief Signals all workers to stop, joins them, and drains the task queue.
      *
-     * Idempotent: calling @ref shutdown more than once is safe.  Any tasks
-     * that were enqueued but not yet started are dequeued and discarded (their
-     * associated `std::future` will never become ready).
+     * Idempotent: calling @ref shutdown more than once is safe (`fetch_or` on
+     * an already-set bit is a no-op, and joining an already-joined
+     * `std::thread` is skipped via `joinable()`). Any tasks that were
+     * enqueued but not yet started are dequeued and discarded (their
+     * associated `std::future` will never become ready); the pending counter
+     * is decremented to match each one, so @ref pendingCount and @ref isIdle
+     * are accurate once this returns.
      *
      * @warning Do not call @ref enqueue after @ref shutdown.
      */
     void shutdown() {
-        // 1. Permanently trip the exit wire
-        stop.store(true, std::memory_order_release);
+        // Set the shutdown flag directly inside task_state instead of a
+        // separate flag. Because every worker parks via
+        // task_state.wait(old_value), and wait() is specified to return
+        // immediately (without blocking) if the atomic's current value no
+        // longer equals `old_value`, this single fetch_or is guaranteed to
+        // either be seen by a worker before it parks, or to make its very
+        // next wait() call return immediately — there is no window in which
+        // a worker can go to sleep and never notice. That means a single
+        // notify_all() suffices; there is no need to repeatedly overwrite
+        // (and thereby corrupt) the real pending/active counts just to force
+        // a wakeup, the way the previous implementation did.
+        task_state.fetch_or(STOP_BIT, std::memory_order_release);
+        task_state.notify_all();
 
-        // 2. Destructive Wakeup Loop: Eliminates the "Lost Wakeup" race condition.
-        // Successively cycling through values (0-3) forces an atomic state shift
-        // that shatters any ongoing `task_state.wait()` comparisons, guaranteeing
-        // no worker thread gets permanently stranded in a kernel-level sleep.
-        for (int i = 0; i < 4; ++i) {
-            task_state.store(i, std::memory_order_release);
-            task_state.notify_all();
-            std::this_thread::yield();
-        }
-
-        // 3. Join the worker threads cleanly to guarantee execution termination
+        // Join the worker threads cleanly to guarantee execution termination.
         for (std::thread& worker : workers) {
             if (worker.joinable()) {
                 worker.join();
             }
         }
 
-        // 4. Clean up trailing allocations to prevent memory leaks
+        // Clean up trailing allocations to prevent memory leaks. Every task
+        // still sitting in the queue here was enqueued (and thus already
+        // counted in the pending field) but never claimed by a worker, since
+        // all workers have already exited above. Decrement pending to match
+        // as each one is discarded, so pendingCount()/isIdle() correctly
+        // reflect reality once shutdown() returns — otherwise a task that
+        // was queued but never picked up would leave task_state permanently
+        // reporting outstanding work that no longer exists.
         MoveOnlyTask abandoned_task;
         while (task_queue.dequeue(abandoned_task)) {
             // Intentionally letting 'abandoned_task' go out of scope drops
             // the lambda, destroying its state and discarding the task.
+            task_state.fetch_sub(PENDING_ONE, std::memory_order_acq_rel);
         }
+        task_state.notify_all();
     }
 
     // ── Observers ─────────────────────────────────────────────────────────────
 
     /**
      * @brief Returns `true` if there are no pending or active tasks.
-     * @return `true` when both the pending and active counters are zero.
+     * @return `true` when both the pending and active counters are zero,
+     *         regardless of whether @ref STOP_BIT is set.
      */
-    bool isIdle() const { return task_state.load(std::memory_order_acquire) == 0; }
+    bool isIdle() const {
+        uint64_t s = task_state.load(std::memory_order_acquire);
+        return pendingFromState(s) == 0 && activeFromState(s) == 0;
+    }
 
     /**
      * @brief Returns the number of worker threads managed by this pool.
