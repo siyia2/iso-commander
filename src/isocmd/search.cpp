@@ -435,7 +435,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
     }
 
     if (isEmpty && list) {
-        std::cout << "\n" << dt.yellow << "No " << fileExtension << " entries stored in RAM.\033[J"
+        std::cout << "\n" << dt.yellow << "No cached " << fileExtension << " entries.\033[J"
                   << dt.reset << "\n";
 
         pressEnterToContinue();
