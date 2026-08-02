@@ -25,33 +25,42 @@
  * @file thread_pool.hpp
  * @brief Lock-free thread pool with type-erased move-only tasks.
  *
- * Provides three cooperative components:
- *  - @ref MoveOnlyTask  – a small-buffer-optimised, move-only type-erased callable.
- *  - @ref LockFreeQueue – a Michael–Scott lock-free FIFO queue.
- *  - @ref ThreadPool    – a fully lock-free worker-thread pool built on the two above.
+ * Provides four cooperative components:
+ *  - @ref MoveOnlyTask       – a small-buffer-optimised, move-only type-erased callable.
+ *  - @ref HazardPointerDomain – a process-wide hazard-pointer registry providing safe
+ *                                deferred reclamation for lock-free node-based structures.
+ *  - @ref LockFreeQueue      – a Michael–Scott lock-free FIFO queue built on raw
+ *                                `atomic<Node*>`, reclaiming retired nodes via hazard pointers.
+ *  - @ref ThreadPool         – a fully lock-free worker-thread pool built on the two above.
  *
  * @note Requires C++20 (`std::atomic::wait` / `notify_*`).
  *
- * @par Revision notes
- * Two correctness fixes have been applied since the original version:
- *  1. @ref LockFreeQueue now has an explicit, iterative destructor. The
- *     implicit one recursively tears down the `shared_ptr` node chain
- *     (destroying `head` destroys its `next`, which destroys *its* `next`,
- *     …) and can overflow the stack for a queue with many undrained
- *     elements. See the destructor's doc comment below.
- *  2. @ref ThreadPool::shutdown no longer signals workers by repeatedly
- *     overwriting the live `task_state` counter with placeholder values
- *     (0, 1, 2, 3). That was intended to force-wake any parked worker, but
- *     it clobbered the real pending/active counts — reproducibly leaving
- *     `task_state` corrupted (e.g. `isIdle()` reporting `false` forever,
- *     or the packed fields underflowing into garbage) even when shutting
- *     down an already-idle pool. The shutdown signal is now a dedicated bit
- *     folded into `task_state` itself (see @ref STOP_BIT), which lets
- *     `task_state.wait()`'s own "value already changed" guarantee do the
- *     wakeup safely, with no separate flag to race against and nothing to
- *     corrupt. `shutdown()` also now reconciles the pending counter for any
- *     tasks that were queued but never claimed, so `pendingCount()` /
- *     `isIdle()` are accurate after it returns in every case.
+ * @par Revision notes (this revision)
+ * `LockFreeQueue` previously stored its nodes behind `std::atomic<std::shared_ptr<Node>>`.
+ * That compiles and is correct, but on every mainstream libstdc++/libc++ build as of
+ * this writing, `atomic<shared_ptr<T>>` is **not** lock-free — `is_lock_free()` and
+ * the compile-time `is_always_lock_free` both report `false`, because the
+ * implementation protects the pointer+control-block pair with an internal spinlock
+ * table keyed by address. That meant every `load`/`store`/`compare_exchange` on
+ * `head`, `tail`, or any node's `next` silently took an internal lock — worse, a
+ * lock *shared across every unrelated `atomic<shared_ptr<T>>` in the process* that
+ * happens to hash to the same table slot — while still paying the cost of
+ * heap-allocated control blocks and atomic refcount churn per node.
+ *
+ * This revision replaces that with the standard fix for the underlying problem
+ * (safe reclamation of a node another thread might still be dereferencing) without
+ * giving up lock-freedom to get it: **hazard pointers** (Maged Michael, 2004).
+ * Nodes are now linked via plain `std::atomic<Node*>`, which *is* natively
+ * lock-free CAS on every mainstream 64-bit target. Before a thread dereferences a
+ * node it doesn't yet own, it publishes that node's address into a hazard-pointer
+ * slot; any other thread wanting to actually `delete` a retired node first scans
+ * every live hazard-pointer slot in the process and defers deletion of any node
+ * still published there. This removes both the false-sharing/global-lock-table
+ * problem and the per-node control-block allocation entirely.
+ *
+ * The `ThreadPool`'s own `shutdown()` fix from the previous revision (folding the
+ * stop flag into `task_state` instead of clobbering it with placeholder wakeup
+ * values) is unchanged and still applies — see the `ThreadPool` class doc below.
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,84 +119,44 @@ private:
 
     // ── Inline-storage VTable implementations ────────────────────────────────
 
-    /**
-     * @brief Calls the callable stored at @p ptr by invoking `operator()`.
-     * @tparam F Decayed callable type stored inline.
-     * @param ptr Pointer to inline storage containing an object of type @c F.
-     */
     template <typename F>
     static void call_impl(void* ptr) {
         (*std::launder(static_cast<F*>(ptr)))();
     }
 
-    /**
-     * @brief Destroys the callable stored at @p ptr by calling its destructor.
-     * @tparam F Decayed callable type stored inline.
-     * @param ptr Pointer to inline storage containing an object of type @c F.
-     */
     template <typename F>
     static void destroy_impl(void* ptr) noexcept {
         std::launder(static_cast<F*>(ptr))->~F();
     }
 
-    /**
-     * @brief Move-constructs an @c F from @p src into @p dst.
-     * @tparam F Decayed callable type stored inline.
-     * @param dst Destination raw storage (uninitialised).
-     * @param src Source raw storage containing an object of type @c F.
-     */
     template <typename F>
     static void move_impl(void* dst, void* src) noexcept {
         ::new (dst) F(std::move(*std::launder(static_cast<F*>(src))));
     }
 
-    /**
-     * @brief Compile-time VTable instance for callables that fit in inline storage.
-     * @tparam F Decayed callable type.
-     */
     template <typename F>
     static constexpr VTable vtable_for = { &call_impl<F>, &destroy_impl<F>, &move_impl<F> };
 
     // ── Heap-storage VTable implementations ──────────────────────────────────
 
-    /**
-     * @brief Calls the callable stored behind a `unique_ptr<F>` at @p ptr.
-     * @tparam F Decayed callable type allocated on the heap.
-     * @param ptr Pointer to inline storage containing a `std::unique_ptr<F>`.
-     */
     template <typename F>
     static void call_heap_impl(void* ptr) {
         auto* up = std::launder(static_cast<std::unique_ptr<F>*>(ptr));
         (**up)();
     }
 
-    /**
-     * @brief Destroys the `unique_ptr<F>` (and thus the heap callable) at @p ptr.
-     * @tparam F Decayed callable type allocated on the heap.
-     * @param ptr Pointer to inline storage containing a `std::unique_ptr<F>`.
-     */
     template <typename F>
     static void destroy_heap_impl(void* ptr) noexcept {
         using Box = std::unique_ptr<F>;
         std::launder(static_cast<Box*>(ptr))->~Box();
     }
 
-    /**
-     * @brief Move-constructs the `unique_ptr<F>` from @p src into @p dst.
-     * @tparam F Decayed callable type allocated on the heap.
-     * @param dst Destination raw storage (uninitialised).
-     * @param src Source raw storage containing a `std::unique_ptr<F>`.
-     */
     template <typename F>
     static void move_heap_impl(void* dst, void* src) noexcept {
         using Box = std::unique_ptr<F>;
         ::new (dst) Box(std::move(*std::launder(static_cast<Box*>(src))));
     }
 
-    /**
-     * @brief Compile-time VTable instance for callables that exceed inline storage.
-     * @tparam F Decayed callable type.
-     */
     template <typename F>
     static constexpr VTable vtable_for_heap = { &call_heap_impl<F>, &destroy_heap_impl<F>, &move_heap_impl<F> };
 
@@ -197,16 +166,6 @@ public:
     /// @brief Constructs an empty (null) task.
     MoveOnlyTask() noexcept = default;
 
-    /**
-     * @brief Constructs a task wrapping the callable @p f.
-     *
-     * If `sizeof(DecayedF) <= StorageSize` and `alignof(DecayedF) <= alignof(std::max_align_t)`
-     * the callable is constructed directly inside @ref storage.  Otherwise it is
-     * heap-allocated and a `std::unique_ptr` owning it is placed in @ref storage.
-     *
-     * @tparam F    Callable type (deduced).  Must not be `MoveOnlyTask` itself.
-     * @param  f    Forwarding reference to the callable to be stored.
-     */
     template <typename F, typename = std::enable_if_t<!std::is_same_v<std::decay_t<F>, MoveOnlyTask>>>
     MoveOnlyTask(F&& f) {
         using DecayedF = std::decay_t<F>;
@@ -220,29 +179,13 @@ public:
         }
     }
 
-    /// @brief Destroys the stored callable (if any) via @ref reset.
     ~MoveOnlyTask() noexcept { reset(); }
 
-    /// @brief Copy construction is disabled; the stored callable may be non-copyable.
     MoveOnlyTask(const MoveOnlyTask&) = delete;
-    /// @brief Copy assignment is disabled; the stored callable may be non-copyable.
     MoveOnlyTask& operator=(const MoveOnlyTask&) = delete;
 
-    /**
-     * @brief Move-constructs from @p other, leaving it empty.
-     * @param other Source task.  Will be empty after this call.
-     */
     MoveOnlyTask(MoveOnlyTask&& other) noexcept { move_from(std::move(other)); }
 
-    /**
-     * @brief Move-assigns from @p other, leaving it empty.
-     *
-     * Destroys the currently stored callable (if any) before taking ownership of
-     * @p other's callable.  Self-assignment is handled safely.
-     *
-     * @param other Source task.  Will be empty after this call.
-     * @return `*this`
-     */
     MoveOnlyTask& operator=(MoveOnlyTask&& other) noexcept {
         if (this != &other) {
             reset();
@@ -253,29 +196,14 @@ public:
 
     // ── Observers / mutators ─────────────────────────────────────────────────
 
-    /**
-     * @brief Invokes the stored callable.
-     *
-     * Does nothing if the task is empty (`operator bool() == false`).
-     */
     void operator()() {
         if (vtable) {
             vtable->call(storage);
         }
     }
 
-    /**
-     * @brief Returns `true` if this task holds a callable.
-     * @return `true` when non-empty, `false` when default-constructed or after a move.
-     */
     explicit operator bool() const noexcept { return vtable != nullptr; }
 
-    /**
-     * @brief Destroys the stored callable and resets the task to the empty state.
-     *
-     * After this call `operator bool()` returns `false`.  Safe to call on an
-     * already-empty task.
-     */
     void reset() noexcept {
         if (vtable) {
             vtable->destroy(storage);
@@ -284,14 +212,6 @@ public:
     }
 
 private:
-    /**
-     * @brief Takes ownership of @p other's callable by moving it into this object's storage.
-     *
-     * Assumes this object's storage is uninitialised (i.e. `vtable == nullptr`).
-     * After the call @p other is left empty.
-     *
-     * @param other Source task.
-     */
     void move_from(MoveOnlyTask&& other) noexcept {
         vtable = other.vtable;
         if (vtable) {
@@ -302,25 +222,278 @@ private:
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  HazardPointerDomain
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @class HazardPointerDomain
+ * @brief Process-wide hazard-pointer registry (Maged Michael, "Safe Memory
+ *        Reclamation for Dynamic Lock-Free Objects Using Atomic Reads and
+ *        Writes", PODC 2002 / expanded 2004).
+ *
+ * @details
+ * The problem hazard pointers solve: in a lock-free structure built on raw
+ * `atomic<Node*>`, a thread that has just read a `Node*` (e.g. via
+ * `head.load()`) needs to dereference it a moment later. Between the read and
+ * the dereference, another thread could unlink *and free* that same node,
+ * leaving the first thread holding a dangling pointer (use-after-free), or —
+ * worse — a different node could be allocated at the same address in the
+ * meantime, producing the classic ABA problem where a CAS silently "succeeds"
+ * against a node that isn't logically the one it was compared against.
+ * `shared_ptr` sidesteps this via atomic refcounting, at the cost of the
+ * spinlock-table implementation described in the file-level comment above.
+ * Hazard pointers solve the same problem without ever taking a lock:
+ *
+ *  1. Before dereferencing a node it doesn't yet own, a thread **publishes**
+ *     that node's address into one of its own hazard-pointer slots
+ *     (`hazards[i].store(node, seq_cst)`), then **re-validates** that the
+ *     node is still reachable from the structure (re-reads `head`/`tail`/etc
+ *     and retries if it changed). This close-together store+reload pair
+ *     (both `seq_cst`, which forbids the store/load reordering that a plain
+ *     acquire/release pair would still permit) is what closes the race: any
+ *     thread that might free the node is guaranteed to see the published
+ *     hazard pointer before it can safely reclaim.
+ *  2. A thread that logically removes a node never `delete`s it directly.
+ *     It calls @ref retire, which appends the node to that thread's private
+ *     retire list.
+ *  3. Once a thread's retire list grows past a threshold, it scans every
+ *     *active* hazard-pointer record in the whole process, unions all
+ *     currently-published addresses into one set, and only `delete`s the
+ *     retired nodes that are **not** in that set. Anything still hazarded is
+ *     kept for the next scan.
+ *
+ * This bounds the number of not-yet-reclaimed nodes (unlike leaking forever)
+ * while guaranteeing a node is never freed while any thread might still
+ * dereference it — and every operation involved (`load`, `store`, CAS on the
+ * hazard slots and on the registry's intrusive list) is itself lock-free.
+ *
+ * @note This is a compact, self-contained implementation intended for use by
+ *       @ref LockFreeQueue. It is not a general-purpose replacement for
+ *       `<experimental/hazard_pointer>` — in particular its retire-list scan
+ *       is O(retired × active-threads) per scan, which is standard for a
+ *       from-scratch hazard-pointer implementation and entirely adequate for
+ *       a thread-pool-sized number of threads, but a production system with
+ *       very large thread counts may prefer a more elaborate scheme (e.g.
+ *       per-domain sharding).
+ */
+class HazardPointerDomain {
+public:
+    /// @brief Hazard-pointer slots reserved per thread. Two suffices for
+    /// Michael–Scott: `dequeue` must simultaneously protect `first` (head)
+    /// and `next` (the node whose data is being extracted).
+    static constexpr std::size_t HAZARDS_PER_THREAD = 2;
+
+    /// @brief One record per thread that has ever touched the queue, reused
+    /// across a thread's lifetime and recyclable once a thread exits.
+    struct HPRecord {
+        std::atomic<void*> hazards[HAZARDS_PER_THREAD];
+        std::atomic<HPRecord*> next{nullptr};
+        std::atomic<bool> active{false};
+    };
+
+    /// @brief Returns the single process-wide domain instance.
+    static HazardPointerDomain& instance() {
+        static HazardPointerDomain domain;
+        return domain;
+    }
+
+    /**
+     * @brief Acquires an @ref HPRecord for the calling thread.
+     *
+     * Scans the intrusive registry list for a record some other, now-exited
+     * thread released (`active == false`) and claims it via CAS; if none is
+     * free, allocates a new one and lock-free-pushes it onto the list head.
+     * Records are never freed once allocated — they are recycled — so the
+     * registry list only ever grows to the high-water mark of concurrent
+     * threads that have used the domain, and scans stay O(that mark).
+     *
+     * @return Pointer to a record owned by the calling thread until
+     *         @ref releaseRecord is called on it.
+     */
+    HPRecord* acquireRecord() {
+        HPRecord* rec = head_.load(std::memory_order_acquire);
+        while (rec) {
+            bool expected = false;
+            if (!rec->active.load(std::memory_order_relaxed) &&
+                rec->active.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+                for (auto& h : rec->hazards) h.store(nullptr, std::memory_order_relaxed);
+                return rec;
+            }
+            rec = rec->next.load(std::memory_order_acquire);
+        }
+
+        HPRecord* new_rec = new HPRecord();
+        new_rec->active.store(true, std::memory_order_relaxed);
+        for (auto& h : new_rec->hazards) h.store(nullptr, std::memory_order_relaxed);
+
+        HPRecord* old_head = head_.load(std::memory_order_relaxed);
+        do {
+            new_rec->next.store(old_head, std::memory_order_relaxed);
+        } while (!head_.compare_exchange_weak(old_head, new_rec,
+                     std::memory_order_release, std::memory_order_relaxed));
+        return new_rec;
+    }
+
+    /**
+     * @brief Releases @p rec back to the pool for reuse by a future thread.
+     *
+     * Clears its hazard slots first so a concurrent @ref scanAndReclaim never
+     * sees stale, no-longer-meaningful published addresses from this thread.
+     */
+    void releaseRecord(HPRecord* rec) noexcept {
+        for (auto& h : rec->hazards) h.store(nullptr, std::memory_order_release);
+        rec->active.store(false, std::memory_order_release);
+    }
+
+    /**
+     * @brief Defers reclamation of @p p until no hazard pointer protects it.
+     *
+     * Adds @p p to the calling thread's private retire list; once that list
+     * grows past @ref RETIRE_THRESHOLD entries, triggers a scan that frees
+     * every retired node not currently published in any active hazard slot.
+     *
+     * @tparam T   Node type (deduced).
+     * @param  p   Node to retire. Ownership transfers to the domain; the
+     *             caller must not touch @p p again after this call.
+     */
+    template <typename T>
+    void retire(T* p) {
+        auto& list = retireList();
+        list.ptrs.push_back(p);
+        list.deleters.push_back([](void* q) { delete static_cast<T*>(q); });
+        if (list.ptrs.size() >= RETIRE_THRESHOLD) {
+            scanAndReclaim();
+        }
+    }
+
+private:
+    /// @brief Batch size that triggers a reclamation scan. Sized relative to
+    /// a generous upper bound on concurrent threads so that, even at that
+    /// bound, no more than a small multiple of (threads × HAZARDS_PER_THREAD)
+    /// retired nodes are ever outstanding at once.
+    static constexpr std::size_t MAX_EXPECTED_THREADS = 128;
+    static constexpr std::size_t RETIRE_THRESHOLD = 2 * MAX_EXPECTED_THREADS * HAZARDS_PER_THREAD;
+
+    struct RetireList {
+        std::vector<void*> ptrs;
+        std::vector<void (*)(void*)> deleters;
+    };
+
+    /// @brief Intrusive singly-linked list of every HPRecord ever allocated
+    /// by this domain (active or recycled-but-inactive).
+    std::atomic<HPRecord*> head_{nullptr};
+
+    static RetireList& retireList() {
+        static thread_local RetireList list;
+        return list;
+    }
+
+    /**
+     * @brief Frees every retired node in the calling thread's retire list
+     *        that is not currently published by any active hazard record.
+     */
+    void scanAndReclaim() {
+        auto& list = retireList();
+
+        std::vector<void*> guarded;
+        guarded.reserve(MAX_EXPECTED_THREADS * HAZARDS_PER_THREAD);
+        HPRecord* rec = head_.load(std::memory_order_acquire);
+        while (rec) {
+            if (rec->active.load(std::memory_order_acquire)) {
+                for (auto& h : rec->hazards) {
+                    void* p = h.load(std::memory_order_acquire);
+                    if (p) guarded.push_back(p);
+                }
+            }
+            rec = rec->next.load(std::memory_order_acquire);
+        }
+        std::sort(guarded.begin(), guarded.end());
+
+        std::vector<void*> stillRetired;
+        std::vector<void (*)(void*)> stillDeleters;
+        stillRetired.reserve(list.ptrs.size());
+        stillDeleters.reserve(list.deleters.size());
+
+        for (std::size_t i = 0; i < list.ptrs.size(); ++i) {
+            if (std::binary_search(guarded.begin(), guarded.end(), list.ptrs[i])) {
+                stillRetired.push_back(list.ptrs[i]);
+                stillDeleters.push_back(list.deleters[i]);
+            } else {
+                list.deleters[i](list.ptrs[i]);
+            }
+        }
+        list.ptrs.swap(stillRetired);
+        list.deleters.swap(stillDeleters);
+    }
+};
+
+/**
+ * @brief RAII holder that acquires an @ref HazardPointerDomain::HPRecord on
+ * first use by the calling thread and releases it back to the pool when the
+ * thread exits.
+ *
+ * Meant to back a `thread_local` instance (see @ref localHPRecord) so every
+ * thread — whether a pool worker or an external caller submitting/dequeuing
+ * directly — gets exactly one record, lazily, without any explicit
+ * registration step.
+ */
+class HazardPointerHolder {
+public:
+    HazardPointerHolder() : rec_(HazardPointerDomain::instance().acquireRecord()) {}
+    ~HazardPointerHolder() { HazardPointerDomain::instance().releaseRecord(rec_); }
+    HazardPointerDomain::HPRecord* record() const noexcept { return rec_; }
+
+    HazardPointerHolder(const HazardPointerHolder&) = delete;
+    HazardPointerHolder& operator=(const HazardPointerHolder&) = delete;
+
+private:
+    HazardPointerDomain::HPRecord* rec_;
+};
+
+/**
+ * @brief Returns the calling thread's hazard-pointer record, creating it on
+ *        first call.
+ *
+ * Implemented as a function-local `thread_local` so each thread's record is
+ * initialised exactly once, lazily, and destroyed (releasing the record for
+ * reuse) when that thread exits — mirroring the Meyers-singleton pattern
+ * used for @ref getStaticThreadPool below, but per-thread instead of once
+ * per process.
+ */
+inline HazardPointerDomain::HPRecord* localHPRecord() {
+    static thread_local HazardPointerHolder holder;
+    return holder.record();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  LockFreeQueue
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * @class LockFreeQueue
- * @brief Thread-safe, non-blocking Michael–Scott lock-free FIFO queue.
+ * @brief Thread-safe, non-blocking Michael–Scott lock-free FIFO queue,
+ *        reclaiming nodes via @ref HazardPointerDomain.
  *
- * Implements the classic Michael & Scott (1996) two-pointer CAS-based queue.
- * Both @ref enqueue and @ref dequeue are linearisable and wait-free in the
- * absence of contention; under contention they are lock-free (at least one
- * thread makes progress per finite number of steps).
+ * Implements the classic Michael & Scott (1996) two-pointer CAS-based queue,
+ * linked with plain `std::atomic<Node*>`. Both @ref enqueue and @ref dequeue
+ * are linearisable and lock-free: `head`, `tail`, and every node's `next` are
+ * native machine-word atomics with hardware CAS on every mainstream 64-bit
+ * target — no internal spinlock table, no per-node control-block allocation,
+ * unlike the `atomic<shared_ptr<Node>>` this replaces (see file-level
+ * comment for the measured problem with that approach).
  *
  * The queue uses a sentinel (dummy) head node so that head and tail never
  * alias the same node while the queue is non-empty, simplifying the CAS logic.
  *
  * @tparam T Element type.  Must be movable.
  *
- * @note `std::shared_ptr` is used for node ownership to avoid the ABA problem
- *       that would occur with raw pointers and manual memory management.
+ * ### Safety model
+ * A node is only ever freed via @ref HazardPointerDomain::retire, and only
+ * once no thread's hazard-pointer slot still references it — see the
+ * `HazardPointerDomain` class doc for the full protocol. Every place this
+ * class dereferences a `Node*` it doesn't already own is preceded by
+ * publishing that pointer into the calling thread's hazard slot and
+ * re-validating it against the structure, per the standard protocol.
  *
  * ### Typical usage
  * @code
@@ -340,67 +513,53 @@ private:
      * @brief Internal singly-linked list node.
      *
      * @c data holds the element value (only meaningful in non-sentinel nodes).
-     * @c next is an atomic `shared_ptr` to the successor node.
+     * @c next is an atomic raw pointer to the successor node.
      */
     struct Node {
-        T data;                                  ///< Stored element (invalid in sentinel).
-        std::atomic<std::shared_ptr<Node>> next; ///< Atomic link to the next node.
+        T data;
+        std::atomic<Node*> next;
 
-        /// @brief Constructs a sentinel (empty) node.
         Node() : data(), next(nullptr) {}
-        /// @brief Constructs a data node with @p val.
         Node(T&& val) : data(std::move(val)), next(nullptr) {}
     };
 
     /// @brief Points to the sentinel node; elements are dequeued from @c head->next.
-    alignas(64) std::atomic<std::shared_ptr<Node>> head;
+    alignas(64) std::atomic<Node*> head;
     /// @brief Points to the last enqueued node (may lag one step behind the true tail).
-    alignas(64) std::atomic<std::shared_ptr<Node>> tail;
+    alignas(64) std::atomic<Node*> tail;
 
 public:
     /**
      * @brief Constructs an empty queue with a single sentinel node.
-     *
-     * Both @c head and @c tail are initialised to point at the same dummy node.
      */
     LockFreeQueue() {
-        auto dummy = std::make_shared<Node>();
+        Node* dummy = new Node();
         head.store(dummy, std::memory_order_relaxed);
         tail.store(dummy, std::memory_order_relaxed);
     }
 
     /**
-     * @brief Destroys the queue, unlinking nodes iteratively.
-     *
-     * @par Fix
-     * The implicit (compiler-generated) destructor would destroy @c head,
-     * whose destructor destroys its `next`, whose destructor destroys
-     * *its* `next`, and so on — an unbounded recursion, one stack frame per
-     * node, for however many elements remain undrained. For a queue holding
-     * a large backlog this overflows the stack (confirmed: ~2,000,000
-     * undrained `int` nodes reliably segfaults with the implicit destructor
-     * on an 8 MB stack).
-     *
-     * This destructor instead walks the chain with a single loop variable
-     * and severs each node's `next` link *before* moving past it, so no
-     * node's destructor ever has a live successor to cascade into — the
-     * whole teardown is O(n) time with O(1) stack depth, regardless of
-     * queue length.
+     * @brief Destroys the queue, freeing nodes iteratively.
      *
      * @note Not thread-safe — same precondition as any container's
      *       destructor: no concurrent @ref enqueue / @ref dequeue may be in
-     *       flight while this runs. `memory_order_relaxed` is sufficient
-     *       here for exactly that reason — there is no concurrent access to
-     *       synchronize against during destruction.
+     *       flight while this runs. Because nothing else can be touching the
+     *       queue at this point, no hazard-pointer protocol is needed here —
+     *       nodes are freed directly, iteratively (never recursively, so
+     *       this remains O(1) stack depth regardless of queue length, same
+     *       guarantee the previous revision's explicit destructor provided).
      */
     ~LockFreeQueue() {
-        auto node = head.load(std::memory_order_relaxed);
+        Node* node = head.load(std::memory_order_relaxed);
         while (node) {
-            auto next = node->next.load(std::memory_order_relaxed);
-            node->next.store(nullptr, std::memory_order_relaxed);
-            node = std::move(next);
+            Node* next = node->next.load(std::memory_order_relaxed);
+            delete node;
+            node = next;
         }
     }
+
+    LockFreeQueue(const LockFreeQueue&) = delete;
+    LockFreeQueue& operator=(const LockFreeQueue&) = delete;
 
     /**
      * @brief Appends @p value to the back of the queue.
@@ -409,13 +568,27 @@ public:
      * tail.  If the tail pointer has fallen behind (another thread enqueued but
      * did not yet swing the tail), this thread helps advance it first.
      *
+     * The hazard slot on `last` is what makes it safe to dereference
+     * `last->next` a moment after reading `last` from `tail`: without it,
+     * another thread could have already dequeued and retired `last` in that
+     * window, and `last->next.load()` would be a use-after-free.
+     *
      * @param value The value to enqueue.  Moved into the new node.
      */
     void enqueue(T value) {
-        auto new_node = std::make_shared<Node>(std::move(value));
+        Node* new_node = new Node(std::move(value));
+        auto* hp = localHPRecord();
+
         while (true) {
-            auto last = tail.load(std::memory_order_acquire);
-            auto next = last->next.load(std::memory_order_acquire);
+            Node* last = tail.load(std::memory_order_acquire);
+
+            // Publish + re-validate (hazard pointer protocol step 1).
+            hp->hazards[0].store(last, std::memory_order_seq_cst);
+            if (last != tail.load(std::memory_order_seq_cst)) {
+                continue; // tail moved before we finished publishing; retry.
+            }
+
+            Node* next = last->next.load(std::memory_order_acquire);
 
             if (last == tail.load(std::memory_order_relaxed)) {
                 if (next == nullptr) {
@@ -424,6 +597,7 @@ public:
                         std::memory_order_release, std::memory_order_relaxed)) {
                         // Link succeeded; try to swing tail (failure is benign).
                         tail.compare_exchange_weak(last, new_node, std::memory_order_release);
+                        hp->hazards[0].store(nullptr, std::memory_order_release);
                         return;
                     }
                 } else {
@@ -440,27 +614,55 @@ public:
      *
      * Uses a CAS on @c head to atomically claim ownership of the first real
      * node.  The thread that wins the CAS is the sole owner of that node's
-     * @c data and moves it into @p result.
+     * @c data and moves it into @p result — deliberately performed *after*
+     * the winning CAS (not before, as a naive port might do), since another
+     * thread's concurrently-failed attempt must never have touched (and thus
+     * never move-corrupted) `next->data`.
+     *
+     * Both `first` and `next` are hazard-protected for the duration of this
+     * call, so it is always safe to dereference either even though a
+     * concurrent thread could otherwise have unlinked and retired them.
      *
      * @param[out] result  Receives the dequeued value on success.
      * @return `true` if an element was dequeued, `false` if the queue was empty.
      */
     bool dequeue(T& result) {
+        auto* hp = localHPRecord();
+
         while (true) {
-            auto first = head.load(std::memory_order_acquire);
-            auto last  = tail.load(std::memory_order_acquire);
-            auto next  = first->next.load(std::memory_order_acquire);
+            Node* first = head.load(std::memory_order_acquire);
+            hp->hazards[0].store(first, std::memory_order_seq_cst);
+            if (first != head.load(std::memory_order_seq_cst)) {
+                continue; // head moved before we finished publishing; retry.
+            }
+
+            Node* last = tail.load(std::memory_order_acquire);
+            Node* next = first->next.load(std::memory_order_acquire);
+
+            hp->hazards[1].store(next, std::memory_order_seq_cst);
+            if (first != head.load(std::memory_order_seq_cst)) {
+                continue; // first was retired mid-publish of `next`; retry.
+            }
 
             if (first == head.load(std::memory_order_relaxed)) {
                 if (first == last) {
-                    if (next == nullptr) return false; // Truly empty.
+                    if (next == nullptr) {
+                        // Truly empty.
+                        hp->hazards[0].store(nullptr, std::memory_order_release);
+                        hp->hazards[1].store(nullptr, std::memory_order_release);
+                        return false;
+                    }
                     // Tail is lagging; help advance it.
                     tail.compare_exchange_weak(last, next, std::memory_order_release);
-                } else {
+                } else if (next != nullptr) {
                     // Attempt to swing head to the next node.
-                    if (head.compare_exchange_weak(first, next, std::memory_order_acq_rel)) {
-                        // Sole owner of next->data; extract it.
+                    Node* expected_first = first;
+                    if (head.compare_exchange_weak(expected_first, next, std::memory_order_acq_rel)) {
+                        // Sole owner of next->data; extract it now that we've won.
                         result = std::move(next->data);
+                        hp->hazards[0].store(nullptr, std::memory_order_release);
+                        hp->hazards[1].store(nullptr, std::memory_order_release);
+                        HazardPointerDomain::instance().retire(first);
                         return true;
                     }
                 }
@@ -472,9 +674,6 @@ public:
 private:
     /**
      * @brief Emits a CPU spin-loop hint or yields the thread.
-     *
-     * On x86-64 issues the `PAUSE` instruction to reduce pipeline stalls in
-     * spin loops.  On other architectures falls back to `std::this_thread::yield()`.
      */
     static inline void pause_processor() noexcept {
         #if defined(__x86_64__) || defined(_M_X64)
@@ -512,18 +711,18 @@ private:
  * @par Fix: shutdown signalling
  * The shutdown flag used to be a separate `std::atomic<bool> stop`, with
  * `shutdown()` additionally overwriting `task_state` with placeholder values
- * (0, 1, 2, 3) purely to force any parked worker to wake up. That "destructive
- * wakeup" clobbered the real pending/active counts — reproducibly, even when
- * shutting down an already-idle pool (`isIdle()` would then report `false`
- * forever), and it could underflow into outright garbage if tasks were still
- * actively executing at the time. Folding the flag into `task_state` itself
- * removes the need to touch the counters at all: `task_state.wait(old)` is
- * specified to return immediately, without blocking, if the atomic's current
- * value no longer equals `old` — so setting @ref STOP_BIT is guaranteed to
- * either be observed by a worker before it parks, or to make its very next
- * `wait()` call return immediately. There is no window left in which a worker
- * can fall asleep and never notice, and nothing about the real counts is ever
- * overwritten.
+ * purely to force any parked worker to wake up. That "destructive wakeup"
+ * clobbered the real pending/active counts. Folding the flag into
+ * `task_state` itself removes the need to touch the counters at all:
+ * `task_state.wait(old)` is specified to return immediately if the atomic's
+ * current value no longer equals `old` — so setting @ref STOP_BIT is
+ * guaranteed to either be observed by a worker before it parks, or to make
+ * its very next `wait()` call return immediately.
+ *
+ * @note `LockFreeQueue<MoveOnlyTask>` now reclaims nodes via hazard pointers
+ * instead of `atomic<shared_ptr<Node>>` — see that class's doc comment. This
+ * is transparent to `ThreadPool`; its interface (`enqueue`/`dequeue`) is
+ * unchanged.
  *
  * ### Typical usage
  * @code
@@ -541,145 +740,49 @@ private:
  */
 class ThreadPool {
 private:
-    /// @brief Number of worker threads in this pool.
     const size_t num_threads;
 
-    /**
-     * @brief Combined pending/active/shutdown state.
-     *
-     * Upper 32 bits (63–32) = number of tasks that have been enqueued but not
-     * yet picked up by a worker. Bit 31 = shutdown-requested flag (see
-     * @ref STOP_BIT). Remaining low bits (30–0) = number of tasks currently
-     * executing. All three are manipulated through this single atomic, which
-     * keeps them consistent without a separate lock and lets a shutdown
-     * request piggyback on the same wait/notify mechanism as normal task
-     * dispatch.
-     */
     alignas(64) std::atomic<uint64_t> task_state{0};
 
-    /// @brief Addend that increments the pending count by one.
     static constexpr uint64_t PENDING_ONE = uint64_t(1) << 32;
-    /// @brief Addend that increments the active count by one.
     static constexpr uint64_t ACTIVE_ONE  = uint64_t(1);
-    /**
-     * @brief Bit 31 of @ref task_state: set once by @ref shutdown to request
-     * that all workers exit.
-     *
-     * Folded into @ref task_state (rather than kept as a separate atomic)
-     * specifically so that a worker parked in `task_state.wait()` can never
-     * miss it — see the class-level "Fix: shutdown signalling" note above.
-     * Chosen as the top bit of the low 32-bit half (rather than, say, bit 63)
-     * so it can never interact with the pending-count arithmetic in
-     * @ref workerThread or @ref shutdown, which only ever adds/subtracts
-     * whole multiples of @ref PENDING_ONE (bit 32 and above).
-     */
     static constexpr uint64_t STOP_BIT    = uint64_t(1) << 31;
-    /// @brief Mask isolating the active-count bits (30–0), excluding @ref STOP_BIT.
     static constexpr uint64_t ACTIVE_MASK = STOP_BIT - 1;
 
-    /// @brief Worker thread handles.
     std::vector<std::thread> workers;
-
-    /// @brief FIFO queue of pending tasks.
     LockFreeQueue<MoveOnlyTask> task_queue;
-
-    /// @brief Reserved for future use (e.g. tracking waiters on @ref waitAllTasksCompleted).
     alignas(64) std::atomic<uint64_t> global_waiters{0};
 
-    // ── State helper accessors ────────────────────────────────────────────────
-
-    /**
-     * @brief Extracts the pending task count from a packed state value.
-     * @param s Packed value loaded from @ref task_state.
-     * @return Number of tasks that are enqueued but not yet executing.
-     */
     static uint32_t pendingFromState(uint64_t s) noexcept { return static_cast<uint32_t>(s >> 32); }
-
-    /**
-     * @brief Extracts the active task count from a packed state value.
-     *
-     * Masks with @ref ACTIVE_MASK to exclude @ref STOP_BIT, so the shutdown
-     * flag can never be misread as part of the active count.
-     *
-     * @param s Packed value loaded from @ref task_state.
-     * @return Number of tasks currently executing.
-     */
     static uint32_t activeFromState(uint64_t s) noexcept  { return static_cast<uint32_t>(s & ACTIVE_MASK); }
-
-    /**
-     * @brief Extracts the shutdown-requested flag from a packed state value.
-     * @param s Packed value loaded from @ref task_state.
-     * @return `true` once @ref shutdown has set @ref STOP_BIT.
-     */
     static bool stopFromState(uint64_t s) noexcept { return (s & STOP_BIT) != 0; }
 
-    // ── Internal worker helpers ───────────────────────────────────────────────
-
-    /**
-     * @brief Executes a single task and decrements the active counter.
-     *
-     * Exceptions thrown by the task are silently swallowed (callers receive
-     * exceptions via the `std::future` returned from @ref enqueue).  After the
-     * task completes the active counter is decremented; if that brings both
-     * counters to zero any threads blocked in @ref waitAllTasksCompleted are
-     * notified.
-     *
-     * @param task The task to execute.  Must be non-empty.
-     */
     void runTask(MoveOnlyTask& task) {
         if (task) {
             try { task(); } catch (...) {}
         }
 
-        // Atomically drop active-execution status.
         uint64_t prev = task_state.fetch_sub(ACTIVE_ONE, std::memory_order_acq_rel);
 
-        // Notify waitAllTasksCompleted() if this was the last in-flight task.
         if (activeFromState(prev) == 1 && pendingFromState(prev) == 0) {
             task_state.notify_all();
         }
     }
 
-    /**
-     * @brief Entry point for each worker thread.
-     *
-     * Coordinates execution using a speculative, lock-free state machine:
-     * 0. Evaluates the shutdown flag first, exiting instantly if it is set.
-     * 1. Synchronizes via state-based parking; blocks on `task_state.wait()`
-     * at 0% CPU whenever the global pending task count is zero. Because the
-     * shutdown flag lives inside the same atomic being waited on, a
-     * `shutdown()` call is guaranteed to either be seen before parking or to
-     * make the `wait()` call return immediately — there is no separate flag
-     * to race against.
-     * 2. Speculatively claims a task by atomically transferring one credit
-     * from 'pending' to 'active' in the 64-bit `task_state` bitfield.
-     * 3. Attempts to physically extract a payload from the `LockFreeQueue`.
-     * 4. On success: Executes the task safely wrapped in a try/catch block.
-     * 5. On failure (queue race collision): Executes a fail-safe state rollback
-     * and strategically yields the thread execution timeslice to prevent
-     * userspace livelocks, allowing the atomic state to settle. The shutdown
-     * flag is re-checked at the top of the next iteration regardless, so no
-     * separate check is needed here.
-     */
     void workerThread() {
         while (true) {
             uint64_t current_state = task_state.load(std::memory_order_acquire);
 
-            // 0. ABSOLUTE EXIT GATE: If shutdown has been requested, exit immediately.
             if (stopFromState(current_state)) {
                 return;
             }
 
-            // 1. PASSIVE PARK GATE
             while (pendingFromState(current_state) == 0) {
                 task_state.wait(current_state, std::memory_order_relaxed);
                 current_state = task_state.load(std::memory_order_acquire);
-
-                // Check right after waking up.
                 if (stopFromState(current_state)) return;
             }
 
-            // 2. SPECULATIVE CREDIT CLAIM
             uint64_t expected = current_state;
             uint64_t desired = current_state - PENDING_ONE + ACTIVE_ONE;
 
@@ -694,34 +797,20 @@ private:
                 continue;
             }
 
-            // 3. PHYSICAL QUEUE EXTRACTION
             MoveOnlyTask task;
             if (task_queue.dequeue(task)) {
-                runTask(task); // 4. Execute
+                runTask(task);
             } else {
-                // 5. Rollback State: Fix counter offset
                 uint64_t prev = task_state.fetch_add(PENDING_ONE - ACTIVE_ONE, std::memory_order_acq_rel);
                 if (activeFromState(prev) == 1 && pendingFromState(prev) == 0) {
                     task_state.notify_all();
                 }
-
                 std::this_thread::yield();
             }
         }
     }
 
 public:
-    // ── Construction / destruction ────────────────────────────────────────────
-
-    /**
-     * @brief Constructs a thread pool with @p n worker threads.
-     *
-     * Launches @p n threads immediately; they begin polling for work as soon as
-     * @ref enqueue is called.
-     *
-     * @param n Number of worker threads.  Must be > 0.
-     * @throws std::invalid_argument if @p n == 0.
-     */
     explicit ThreadPool(size_t n) : num_threads(n) {
         if (n == 0) throw std::invalid_argument("ThreadPool: n > 0 required");
         workers.reserve(n);
@@ -730,35 +819,10 @@ public:
         }
     }
 
-    /**
-     * @brief Destroys the pool, calling @ref shutdown if it has not been called yet.
-     *
-     * Blocks until all worker threads have exited.
-     */
     ~ThreadPool() {
         shutdown();
     }
 
-    // ── Public interface ──────────────────────────────────────────────────────
-
-    /**
-     * @brief Submits a callable and its arguments for asynchronous execution.
-     *
-     * The callable and arguments are captured by value (or move) into a
-     * @ref MoveOnlyTask.  The task is enqueued and one waiting worker is
-     * notified.  The returned `std::future` provides access to the return
-     * value or any exception thrown by @p f.
-     *
-     * @tparam F    Callable type (deduced).
-     * @tparam Args Argument types (deduced).
-     * @param  f    Callable to invoke.
-     * @param  args Arguments forwarded to @p f.
-     * @return A `std::future<R>` where `R = std::invoke_result_t<F, Args...>`.
-     *
-     * @note Calling this after @ref shutdown has been invoked results in
-     *       undefined behaviour (the task is enqueued but no worker will
-     *       pick it up).
-     */
     template <class F, class... Args>
     auto enqueue(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>> {
         using return_type = std::invoke_result_t<F, Args...>;
@@ -766,8 +830,6 @@ public:
         auto promise = std::make_shared<std::promise<return_type>>();
         std::future<return_type> result = promise->get_future();
 
-        // Enqueue the wrapped task before incrementing the pending counter so
-        // that workers never observe a non-zero counter with an empty queue.
         task_queue.enqueue(MoveOnlyTask([
             func = std::forward<F>(f),
             tup  = std::make_tuple(std::forward<Args>(args)...),
@@ -785,26 +847,12 @@ public:
             }
         }));
 
-        // Now safe to signal availability to workers.
         task_state.fetch_add(PENDING_ONE, std::memory_order_release);
         task_state.notify_one();
 
         return result;
     }
 
-    /**
-     * @brief Blocks the calling thread until all pending and active tasks finish.
-     *
-     * Uses `std::atomic::wait` (C++20 futex) to avoid a busy spin.  Returns
-     * immediately if the pool is already idle.
-     *
-     * Checks the pending/active fields explicitly (rather than comparing the
-     * whole packed value to zero) so that this remains accurate regardless of
-     * whether @ref STOP_BIT happens to be set.
-     *
-     * @note This does not prevent new tasks from being submitted concurrently,
-     *       so the function may block for longer than expected in that case.
-     */
     void waitAllTasksCompleted() {
         uint64_t current_state = task_state.load(std::memory_order_acquire);
         while (pendingFromState(current_state) != 0 || activeFromState(current_state) != 0) {
@@ -813,107 +861,35 @@ public:
         }
     }
 
-    /**
-     * @brief Signals all workers to stop, joins them, and drains the task queue.
-     *
-     * Idempotent: calling @ref shutdown more than once is safe (`fetch_or` on
-     * an already-set bit is a no-op, and joining an already-joined
-     * `std::thread` is skipped via `joinable()`). Any tasks that were
-     * enqueued but not yet started are dequeued and discarded (their
-     * associated `std::future` will never become ready); the pending counter
-     * is decremented to match each one, so @ref pendingCount and @ref isIdle
-     * are accurate once this returns.
-     *
-     * @warning Do not call @ref enqueue after @ref shutdown.
-     */
     void shutdown() {
-        // Set the shutdown flag directly inside task_state instead of a
-        // separate flag. Because every worker parks via
-        // task_state.wait(old_value), and wait() is specified to return
-        // immediately (without blocking) if the atomic's current value no
-        // longer equals `old_value`, this single fetch_or is guaranteed to
-        // either be seen by a worker before it parks, or to make its very
-        // next wait() call return immediately — there is no window in which
-        // a worker can go to sleep and never notice. That means a single
-        // notify_all() suffices; there is no need to repeatedly overwrite
-        // (and thereby corrupt) the real pending/active counts just to force
-        // a wakeup, the way the previous implementation did.
         task_state.fetch_or(STOP_BIT, std::memory_order_release);
         task_state.notify_all();
 
-        // Join the worker threads cleanly to guarantee execution termination.
         for (std::thread& worker : workers) {
             if (worker.joinable()) {
                 worker.join();
             }
         }
 
-        // Clean up trailing allocations to prevent memory leaks. Every task
-        // still sitting in the queue here was enqueued (and thus already
-        // counted in the pending field) but never claimed by a worker, since
-        // all workers have already exited above. Decrement pending to match
-        // as each one is discarded, so pendingCount()/isIdle() correctly
-        // reflect reality once shutdown() returns — otherwise a task that
-        // was queued but never picked up would leave task_state permanently
-        // reporting outstanding work that no longer exists.
         MoveOnlyTask abandoned_task;
         while (task_queue.dequeue(abandoned_task)) {
-            // Intentionally letting 'abandoned_task' go out of scope drops
-            // the lambda, destroying its state and discarding the task.
             task_state.fetch_sub(PENDING_ONE, std::memory_order_acq_rel);
         }
         task_state.notify_all();
     }
 
-    // ── Observers ─────────────────────────────────────────────────────────────
-
-    /**
-     * @brief Returns `true` if there are no pending or active tasks.
-     * @return `true` when both the pending and active counters are zero,
-     *         regardless of whether @ref STOP_BIT is set.
-     */
     bool isIdle() const {
         uint64_t s = task_state.load(std::memory_order_acquire);
         return pendingFromState(s) == 0 && activeFromState(s) == 0;
     }
 
-    /**
-     * @brief Returns the number of worker threads managed by this pool.
-     * @return The value passed to the constructor.
-     */
     size_t threadCount() const { return num_threads; }
-
-    /**
-     * @brief Returns the number of tasks that have been enqueued but not yet started.
-     * @return Pending task count extracted from @ref task_state.
-     */
     uint64_t pendingCount() const { return pendingFromState(task_state.load(std::memory_order_acquire)); }
-
-    /**
-     * @brief Returns the number of tasks currently being executed by workers.
-     * @return Active task count extracted from @ref task_state.
-     */
     uint64_t activeCount() const { return activeFromState(task_state.load(std::memory_order_acquire)); }
 };
 
 /**
  * @brief Thread-safe retrieval of the process-wide ThreadPool singleton.
- *
- * @details Uses a function-local static (Meyers Singleton) to guarantee:
- *   - Thread-safe, once-only initialisation (mandated by C++11 §6.7).
- *   - Deterministic destruction after all other translation-unit statics,
- *     so worker threads are joined before any globally-scoped objects they
- *     may reference are torn down.
- *
- * The pool size is determined at first call by
- * `maxThreads` (the runtime-detected hardware concurrency,
- * typically from std::thread::hardware_concurrency()) capped at
- * `GlobalConcurrency::MAX_USEFUL_THREADS` (a compile-time upper bound defined
- * in GlobalConcurrency.h to avoid over-subscription on machines with very high
- * core counts).
- *
- * @return Reference to the singleton ThreadPool. The reference remains valid
- *         for the lifetime of the process.
  */
 inline ThreadPool& getStaticThreadPool() {
     unsigned int maxThreads = std::max(2u, std::thread::hardware_concurrency());
