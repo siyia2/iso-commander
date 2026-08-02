@@ -584,26 +584,25 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     std::thread progressMonitorThread([&, totalBytes, progressIndex]() {
         auto     lastUpdate  = std::chrono::high_resolution_clock::now();
         uint64_t lastWritten = 0;
-
         while (monitoringActive.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+            const uint64_t currentWritten = totalBytesWrittenAccumulator.load();
+
+            // Always refresh bytes/progress for the UI
+            progressData[progressIndex].bytesWritten.store(currentWritten);
+            progressData[progressIndex].progress.store(static_cast<int>(
+                std::min(99.0, (static_cast<double>(currentWritten) / totalBytes) * 100.0)));
+
+            const uint64_t deltaBytes = (currentWritten >= lastWritten)
+                                            ? (currentWritten - lastWritten)
+                                            : 0;
+            if (deltaBytes == 0) continue;  // no new data — don't advance the clock
 
             const auto now = std::chrono::high_resolution_clock::now();
             const auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
                                  now - lastUpdate).count();
-            if (ms <= 0) continue;
-
-            const uint64_t currentWritten = totalBytesWrittenAccumulator.load();
-            const uint64_t deltaBytes     = (currentWritten >= lastWritten)
-                                                ? (currentWritten - lastWritten)
-                                                : 0;
-
-            progressData[progressIndex].bytesWritten.store(currentWritten);
-            progressData[progressIndex].progress.store(static_cast<int>(
-                std::min(99.0,
-                         (static_cast<double>(currentWritten) / totalBytes) * 100.0)));
-
-            if (deltaBytes > 0) {
+            if (ms > 0) {
                 const double speedMBs = (static_cast<double>(deltaBytes) /
                                          (1024.0 * 1024.0)) / (ms / 1000.0);
                 progressData[progressIndex].speed.store(speedMBs);
@@ -1149,19 +1148,19 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         while (monitoringActive.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
-            auto now = std::chrono::high_resolution_clock::now();
-            auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count();
-            if (ms <= 0) continue;
-
             uint64_t currentWritten = directBytesWrittenAccumulator.load();
-            uint64_t deltaBytes     = (currentWritten >= lastWritten) ? (currentWritten - lastWritten) : 0;
 
-            // Push current bytes and calculate absolute percentage out-of-band
+            // Always keep bytes/progress fresh for the UI
             progressData[progressIndex].bytesWritten.store(currentWritten);
             progressData[progressIndex].progress.store(static_cast<int>(
                 std::min(99.0, (static_cast<double>(currentWritten) / fileSize) * 100.0)));
 
-            if (deltaBytes > 0) {
+            uint64_t deltaBytes = (currentWritten >= lastWritten) ? (currentWritten - lastWritten) : 0;
+            if (deltaBytes == 0) continue;  // no new data yet — don't reset the clock
+
+            auto now = std::chrono::high_resolution_clock::now();
+            auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count();
+            if (ms > 0) {
                 double speedMBs = (static_cast<double>(deltaBytes) / (1024.0 * 1024.0)) / (ms / 1000.0);
                 progressData[progressIndex].speed.store(speedMBs);
             }
