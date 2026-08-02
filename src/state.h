@@ -60,6 +60,7 @@ namespace GlobalState {
     inline std::atomic<bool> g_pendingMenuRefresh{false};
     inline std::atomic<PendingRefreshKind> g_pendingRefreshKind{PendingRefreshKind::None};
     inline std::shared_ptr<RefreshState> g_pendingRefreshState{nullptr};
+    inline std::atomic<bool> g_suppressPendingRefresh{false};
     inline bool needSortingAfterflno      = false;
     inline size_t ITEMS_PER_PAGE          = 25;
     inline int lockFileDescriptor         = -1;
