@@ -19,7 +19,8 @@ Mount ISOs, convert images, write bootable USB drives — done right
 | Debian | `libreadline-dev` `libmount-dev` `libblkid-dev` |
 | Agnostic | `libchdr` (statically built and linked) |
 
-> Optional (for Windows writer support): `dosfstools` `ntfsprogs`/`ntfs-3g` `parted`
+Optional (for Windows writer support): 
+- `dosfstools` `ntfsprogs`/`ntfs-3g` `parted`
 
 <br>
 
