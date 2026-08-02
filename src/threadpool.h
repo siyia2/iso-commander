@@ -374,14 +374,69 @@ private:
     static constexpr std::size_t MAX_EXPECTED_THREADS = 128;
     static constexpr std::size_t RETIRE_THRESHOLD = 2 * MAX_EXPECTED_THREADS * HAZARDS_PER_THREAD;
 
+    /**
+     * @brief Per-thread retire list.
+     *
+     * @par Thread-exit leak fix
+     * A thread that retires only a handful of nodes (fewer than
+     * @ref RETIRE_THRESHOLD) and then exits would, under the original
+     * design, simply drop that list — the pointers it held were never
+     * freed, because nothing but @ref retire's threshold check ever
+     * triggered a scan. Confirmed by AddressSanitizer's LeakSanitizer:
+     * short-lived-thread-churn workloads (many threads each touching the
+     * queue once or twice, well below threshold, then exiting) leaked
+     * hundreds of KB of retired nodes in testing.
+     *
+     * The destructor below closes that gap: at thread-exit time it forces
+     * one last reclamation attempt on whatever remains in this thread's
+     * list, using the exact same guarded-address scan as
+     * @ref scanAndReclaim. Anything that scan still finds hazarded by some
+     * other, still-running thread (a legitimate, if rare, possibility even
+     * at the exact moment this thread is exiting) is handed off to a
+     * process-wide orphan list rather than dropped — @ref scanAndReclaim
+     * always folds that orphan list into its own next scan, so an orphaned
+     * node is guaranteed to be freed the next time *any* thread in the
+     * process crosses its own threshold, rather than being lost.
+     */
     struct RetireList {
         std::vector<void*> ptrs;
         std::vector<void (*)(void*)> deleters;
+
+        ~RetireList() {
+            if (!ptrs.empty()) {
+                HazardPointerDomain::instance().reclaimOnThreadExit(ptrs, deleters);
+            }
+        }
     };
 
     /// @brief Intrusive singly-linked list of every HPRecord ever allocated
     /// by this domain (active or recycled-but-inactive).
     std::atomic<HPRecord*> head_{nullptr};
+
+    /**
+     * @brief Singly-linked-list node used only for the orphan stack below.
+     * Distinct from the queue's own `Node` — this one belongs entirely to
+     * the reclamation machinery and is never hazard-protected itself: once
+     * a thread's @ref drainOrphans call atomically swaps @ref orphan_head_
+     * to `nullptr`, that thread holds the *only* reference to the whole
+     * chain, so no other thread can ever be mid-dereference of an
+     * OrphanNode. That's what makes exchange-based draining safe without
+     * hazard pointers of its own, and immune to the classic Treiber-stack
+     * pop ABA hazard (which arises from popping node-by-node while another
+     * thread might free-and-reuse the node in between reading it and
+     * CASing on it — draining the entire chain in one exchange has no such
+     * window).
+     */
+    struct OrphanNode {
+        void* ptr;
+        void (*deleter)(void*);
+        OrphanNode* next;
+    };
+
+    /// @brief Lock-free Treiber stack of nodes left behind by a thread that
+    /// force-reclaimed on exit (see @ref RetireList's destructor) but found
+    /// some still hazarded by another live thread at that moment.
+    std::atomic<OrphanNode*> orphan_head_{nullptr};
 
     static RetireList& retireList() {
         static thread_local RetireList list;
@@ -389,12 +444,11 @@ private:
     }
 
     /**
-     * @brief Frees every retired node in the calling thread's retire list
-     *        that is not currently published by any active hazard record.
+     * @brief Collects every address currently published in any active
+     *        hazard-pointer slot, process-wide.
+     * @return Sorted vector suitable for `std::binary_search`.
      */
-    void scanAndReclaim() {
-        auto& list = retireList();
-
+    std::vector<void*> collectGuardedAddresses() {
         std::vector<void*> guarded;
         guarded.reserve(MAX_EXPECTED_THREADS * HAZARDS_PER_THREAD);
         HPRecord* rec = head_.load(std::memory_order_acquire);
@@ -408,6 +462,87 @@ private:
             rec = rec->next.load(std::memory_order_acquire);
         }
         std::sort(guarded.begin(), guarded.end());
+        return guarded;
+    }
+
+    /**
+     * @brief Publishes a batch of leftover (ptr, deleter) pairs onto the
+     * orphan stack in a single CAS, regardless of batch size.
+     *
+     * Builds the whole chain locally first (not yet visible to any other
+     * thread), then attaches it in front of whatever @ref orphan_head_
+     * currently points to with one `compare_exchange_weak` loop — a
+     * standard batched Treiber push.
+     */
+    void pushOrphans(const std::vector<void*>& ptrs, const std::vector<void (*)(void*)>& deleters) {
+        OrphanNode* first = nullptr;
+        OrphanNode* last = nullptr;
+        for (std::size_t i = 0; i < ptrs.size(); ++i) {
+            OrphanNode* node = new OrphanNode{ptrs[i], deleters[i], nullptr};
+            if (!first) { first = last = node; }
+            else { last->next = node; last = node; }
+        }
+        if (!first) return;
+
+        OrphanNode* old_head = orphan_head_.load(std::memory_order_relaxed);
+        do {
+            last->next = old_head;
+        } while (!orphan_head_.compare_exchange_weak(old_head, first,
+                     std::memory_order_release, std::memory_order_relaxed));
+    }
+
+    /**
+     * @brief Atomically takes ownership of the entire orphan stack and
+     * appends its contents to @p target_ptrs / @p target_deleters, freeing
+     * the (now exclusively-owned) OrphanNode wrappers as it walks the chain.
+     */
+    void adoptOrphans(std::vector<void*>& target_ptrs, std::vector<void (*)(void*)>& target_deleters) {
+        OrphanNode* node = orphan_head_.exchange(nullptr, std::memory_order_acquire);
+        while (node) {
+            target_ptrs.push_back(node->ptr);
+            target_deleters.push_back(node->deleter);
+            OrphanNode* next = node->next;
+            delete node;
+            node = next;
+        }
+    }
+
+    /**
+     * @brief Forces a final reclamation pass for a thread's leftover retired
+     *        list at thread-exit time, called from @ref RetireList's
+     *        destructor. Anything still hazarded goes to the orphan stack.
+     */
+    void reclaimOnThreadExit(std::vector<void*>& ptrs, std::vector<void (*)(void*)>& deleters) {
+        std::vector<void*> guarded = collectGuardedAddresses();
+
+        std::vector<void*> leftover_ptrs;
+        std::vector<void (*)(void*)> leftover_deleters;
+        for (std::size_t i = 0; i < ptrs.size(); ++i) {
+            if (std::binary_search(guarded.begin(), guarded.end(), ptrs[i])) {
+                leftover_ptrs.push_back(ptrs[i]);
+                leftover_deleters.push_back(deleters[i]);
+            } else {
+                deleters[i](ptrs[i]);
+            }
+        }
+        pushOrphans(leftover_ptrs, leftover_deleters);
+    }
+
+    /**
+     * @brief Frees every retired node in the calling thread's retire list
+     *        that is not currently published by any active hazard record.
+     *
+     * Also adopts and attempts to reclaim anything sitting in the global
+     * orphan stack (see @ref reclaimOnThreadExit), so nodes left behind by
+     * an exited thread are guaranteed to eventually be freed by whichever
+     * thread next crosses its own @ref RETIRE_THRESHOLD.
+     */
+    void scanAndReclaim() {
+        auto& list = retireList();
+
+        adoptOrphans(list.ptrs, list.deleters);
+
+        std::vector<void*> guarded = collectGuardedAddresses();
 
         std::vector<void*> stillRetired;
         std::vector<void (*)(void*)> stillDeleters;
