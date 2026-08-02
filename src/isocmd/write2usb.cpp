@@ -583,49 +583,46 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     const auto startTime = std::chrono::high_resolution_clock::now();
 
     std::thread progressMonitorThread([&, totalBytes, progressIndex]() {
-        auto     lastSpeedUpdate = std::chrono::high_resolution_clock::now();
-        uint64_t lastWritten     = 0;
-        double   smoothedSpeed   = 0.0;
-        bool     haveEstimate    = false;
+        auto     lastUpdate    = std::chrono::high_resolution_clock::now();
+        uint64_t lastWritten   = 0;
+        double   smoothedSpeed = 0.0;
+        bool     haveEstimate  = false;
 
         // Higher alpha = more reactive to phase changes (NTFS -> ESP), lower = smoother.
-        constexpr double alpha        = 0.3;
-        constexpr auto   progressPoll = std::chrono::milliseconds(100);  // fine-grained UI updates
-        constexpr auto   speedPoll    = std::chrono::milliseconds(500);  // stable speed sampling window
+        constexpr double alpha = 0.3;
 
         while (monitoringActive.load()) {
-            std::this_thread::sleep_for(progressPoll);
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
             const uint64_t currentWritten = totalBytesWrittenAccumulator.load();
 
-            // Cheap, frequent — keeps the progress bar smooth instead of jumping
             progressData[progressIndex].bytesWritten.store(currentWritten);
             progressData[progressIndex].progress.store(static_cast<int>(
                 std::min(99.0, (static_cast<double>(currentWritten) / totalBytes) * 100.0)));
 
-            const auto now = std::chrono::high_resolution_clock::now();
-            const auto msSinceSpeed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                now - lastSpeedUpdate).count();
-
-            if (msSinceSpeed < speedPoll.count()) continue;  // not enough time elapsed yet
-
             const uint64_t deltaBytes = (currentWritten >= lastWritten)
                                             ? (currentWritten - lastWritten)
                                             : 0;
-            if (deltaBytes == 0) continue;  // no new data yet — don't reset the clock, keep waiting
+            if (deltaBytes == 0) continue;  // no new data — don't advance the clock
 
-            const double instantSpeed = (static_cast<double>(deltaBytes) /
-                                            (1024.0 * 1024.0)) / (msSinceSpeed / 1000.0);
+            const auto now = std::chrono::high_resolution_clock::now();
+            const auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    now - lastUpdate).count();
 
-            smoothedSpeed = haveEstimate
-                ? (alpha * instantSpeed + (1.0 - alpha) * smoothedSpeed)
-                : instantSpeed;   // seed the EMA with the first real sample
-            haveEstimate = true;
+            if (ms > 0) {
+                const double instantSpeed = (static_cast<double>(deltaBytes) /
+                                                (1024.0 * 1024.0)) / (ms / 1000.0);
 
-            progressData[progressIndex].speed.store(smoothedSpeed);
+                smoothedSpeed = haveEstimate
+                    ? (alpha * instantSpeed + (1.0 - alpha) * smoothedSpeed)
+                    : instantSpeed;
+                haveEstimate = true;
 
-            lastWritten     = currentWritten;
-            lastSpeedUpdate = now;
+                progressData[progressIndex].speed.store(smoothedSpeed);
+            }
+
+            lastWritten = currentWritten;
+            lastUpdate  = now;
         }
     });
 
@@ -1159,47 +1156,43 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     auto startTime = std::chrono::high_resolution_clock::now();
 
     std::thread progressMonitorThread([&, fileSize, progressIndex]() {
-        auto     lastSpeedUpdate = std::chrono::high_resolution_clock::now();
-        uint64_t lastWritten     = 0;
-        double   smoothedSpeed   = 0.0;
-        bool     haveEstimate    = false;
+        auto     lastUpdate    = std::chrono::high_resolution_clock::now();
+        uint64_t lastWritten   = 0;
+        double   smoothedSpeed = 0.0;
+        bool     haveEstimate  = false;
 
-        // Higher alpha = more reactive to speed changes, lower = smoother.
-        constexpr double alpha        = 0.3;
-        constexpr auto   progressPoll = std::chrono::milliseconds(100);  // fine-grained UI updates
-        constexpr auto   speedPoll    = std::chrono::milliseconds(500);  // stable speed sampling window
+        constexpr double alpha = 0.3;
 
         while (monitoringActive.load()) {
-            std::this_thread::sleep_for(progressPoll);
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
             uint64_t currentWritten = directBytesWrittenAccumulator.load();
 
-            // Cheap, frequent — keeps the progress bar smooth instead of jumping
+            // Always keep bytes/progress fresh — fine at 500ms since the
+            // terminal renderer only samples this value every 500ms anyway.
             progressData[progressIndex].bytesWritten.store(currentWritten);
             progressData[progressIndex].progress.store(static_cast<int>(
                 std::min(99.0, (static_cast<double>(currentWritten) / fileSize) * 100.0)));
 
-            auto now = std::chrono::high_resolution_clock::now();
-            auto msSinceSpeed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                now - lastSpeedUpdate).count();
-
-            if (msSinceSpeed < speedPoll.count()) continue;  // not enough time elapsed yet
-
             uint64_t deltaBytes = (currentWritten >= lastWritten) ? (currentWritten - lastWritten) : 0;
-            if (deltaBytes == 0) continue;  // no new data yet — don't reset the clock, keep waiting
+            if (deltaBytes == 0) continue;  // no new data yet — don't advance the clock
 
-            double instantSpeed = (static_cast<double>(deltaBytes) / (1024.0 * 1024.0)) /
-                                    (msSinceSpeed / 1000.0);
+            auto now = std::chrono::high_resolution_clock::now();
+            auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count();
 
-            smoothedSpeed = haveEstimate
-                ? (alpha * instantSpeed + (1.0 - alpha) * smoothedSpeed)
-                : instantSpeed;   // seed the EMA with the first real sample
-            haveEstimate = true;
+            if (ms > 0) {
+                double instantSpeed = (static_cast<double>(deltaBytes) / (1024.0 * 1024.0)) / (ms / 1000.0);
 
-            progressData[progressIndex].speed.store(smoothedSpeed);
+                smoothedSpeed = haveEstimate
+                    ? (alpha * instantSpeed + (1.0 - alpha) * smoothedSpeed)
+                    : instantSpeed;
+                haveEstimate = true;
 
-            lastWritten     = currentWritten;
-            lastSpeedUpdate = now;
+                progressData[progressIndex].speed.store(smoothedSpeed);
+            }
+
+            lastWritten = currentWritten;
+            lastUpdate  = now;
         }
     });
 
