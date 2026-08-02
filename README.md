@@ -55,7 +55,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 
 🖊️ **Best-in-Class USB Write Engine**
 - No wimlib, no file splitting — `install.wim` routed to NTFS natively
-- Two-pass write ordering — bootloader written last for integrity
+- Automatic ISO Detection — special write path for Windows vs. everything else
 - Dynamic NTFS driver selection — `NTFSPLUS` is preferred for best performance
 
 ## USB Boot Mode Support
