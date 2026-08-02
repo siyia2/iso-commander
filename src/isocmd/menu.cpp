@@ -15,8 +15,11 @@
 #include <readline/readline.h>
 
 // Project Headers
+#include "../globalMutexes.h"
 #include "../inputHandling.h"
 #include "../readline.h"
+#include "../select.h"
+#include "../state.h"
 #include "../themes.h"
 #include "../sharedRefreshState.h"
 
@@ -268,17 +271,73 @@ void printMenu() {
 }
 
 /**
- * @brief Observes background task completion and performs an asynchronous UI refresh.
+ * @brief Readline event hook that performs deferred UI refreshes on the main thread.
+ *
+ * Readline is not thread-safe, so no background thread may call Readline
+ * functions (@c rl_on_new_line, @c rl_redisplay, etc.) or write to the
+ * terminal while a @c readline() call may be active. Instead, background
+ * threads publish a @c PendingRefreshKind via @c GlobalState::g_pendingRefreshKind
+ * (see @c monitorAndClearMessage, @c clearMessageAfterTimeoutInMain,
+ * @c refreshListAfterAutoUpdate). This function is installed as
+ * @c rl_event_hook and is therefore invoked periodically by Readline itself,
+ * from the main thread, while idle and waiting for input. It drains any
+ * pending request and performs the corresponding redraw before restoring the
+ * user's current input line.
+ *
+ * @details
+ * - **MainMenu:** Clears the screen/scrollback and re-renders the ASCII
+ *   banner and main menu.
+ * - **IsoList:** Copies @c GlobalState::g_pendingRefreshState under its
+ *   dedicated mutex (the pointer handoff is not otherwise thread-safe), then
+ *   re-renders the ISO list via @c loadAndDisplayIso using that state.
+ * - **None:** No-op; returns immediately without touching Readline state.
+ * - In all non-@c None cases, finishes by calling @c rl_on_new_line() and
+ *   @c rl_redisplay() to repaint the user's prompt/input line beneath the
+ *   new output without discarding what they've typed.
+ *
+ * @return Always 0, per the @c rl_event_hook / @c rl_hook_func_t contract.
+ */
+int checkPendingRefresh() {
+    PendingRefreshKind kind = GlobalState::g_pendingRefreshKind.exchange(PendingRefreshKind::None);
+    if (kind == PendingRefreshKind::None) return 0;
+    if (kind == PendingRefreshKind::MainMenu) {
+        clearScrollBuffer();
+        print_ascii();
+        printMenu();
+        std::cout << "\n";
+    } else if (kind == PendingRefreshKind::IsoList) {
+        std::shared_ptr<RefreshState> state;
+        {
+            std::lock_guard<std::mutex> lk(GlobalMutexes::readLineMutex);
+            state = GlobalState::g_pendingRefreshState;
+        }
+        if (state) {
+            loadAndDisplayIso(state->filteredFiles, state->isFiltered, state->listSubtype,
+                              state->umountMvRmBreak, state->pendingIndices, state->hasPendingProcess,
+                              state->currentPage, state->originalPage, state);
+            std::cout << "\n";
+        }
+    }
+    rl_on_new_line();
+    rl_redisplay();
+    return 0;
+}
+
+/**
+ * @brief Observes background task completion and requests an asynchronous UI refresh.
  *
  * This function runs in a background thread to monitor the lifecycle of a database
  * import. Once the task finishes (or the program signals a shutdown), it evaluates
  * if the user is currently at the main menu.
  *
- * If active, it performs a "soft refresh" by:
- * 1. Clearing the terminal buffer to remove the "Auto-Update" status line.
- * 2. Re-rendering the ASCII art and menu options.
- * 3. Utilizing Readline's internal state functions (rl_on_new_line, rl_redisplay)
- *    to restore the user's current input prompt without clearing any text.
+ * If active, it requests a "soft refresh" by publishing
+ * @c PendingRefreshKind::MainMenu via @c GlobalState::g_pendingRefreshKind.
+ * The actual redraw — clearing the "Auto-Update" status line, re-rendering
+ * the ASCII art and menu, and restoring the user's current input prompt via
+ * Readline's @c rl_on_new_line() / @c rl_redisplay() — is performed later,
+ * on the main thread, by the Readline event hook @c checkPendingRefresh.
+ * This function itself makes no Readline calls and writes nothing to the
+ * terminal, since Readline is not thread-safe.
  *
  * @param state         Shared state with import flag; refresh occurs when import completes.
  * @param messageActive Atomic flag tracking if the status message is visible.
@@ -294,22 +353,21 @@ void monitorAndClearMessage(std::shared_ptr<RefreshState> state, std::atomic<boo
         });
     }
     if (messageActive.load() && !stopSignal.load() && isAtMain.load()) {
-        clearScrollBuffer();
-        print_ascii();
-        printMenu();
-        std::cout << "\n";
-        rl_on_new_line();
-        rl_redisplay();
         messageActive.store(false);
+        GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::MainMenu);
     }
 }
 
 /**
- * @brief Threaded worker that clears temporary status messages from the terminal after a delay.
+ * @brief Threaded worker that requests a status-message clear/redraw after a delay.
  *
- * Waits for a given number of 500ms ticks before clearing the message, checking
+ * Waits for a given number of 500ms ticks before requesting the clear, checking
  * a stop flag on each tick to allow prompt exit when the program terminates.
- * Triggers a UI redraw if the user is currently at the main menu.
+ * If the user is currently at the main menu, publishes
+ * @c PendingRefreshKind::MainMenu via @c GlobalState::g_pendingRefreshKind so
+ * that the main thread's Readline event hook (@c checkPendingRefresh) performs
+ * the actual redraw. This function makes no Readline calls and writes nothing
+ * to the terminal itself, since Readline is not thread-safe.
  *
  * @param timeoutTicks   Number of 500ms ticks to wait before clearing (e.g. 2 = 1s, 8 = 4s).
  * @param isAtMain       Tracks if the user is currently viewing the main menu.
@@ -327,16 +385,10 @@ void clearMessageAfterTimeoutInMain(int timeoutTicks, std::atomic<bool>& isAtMai
         elapsed++;
         if (stopMessage.load()) return;
     }
-
     if (!(state && state->isImportRunning.load())) {
         if (messageActive.load() && isAtMain.load()) {
-            clearScrollBuffer();
-            print_ascii();
-            printMenu();
-            std::cout << "\n";
-            rl_on_new_line();
-            rl_redisplay();
             messageActive.store(false);
+            GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::MainMenu);
         }
     }
 }

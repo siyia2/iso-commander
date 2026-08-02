@@ -145,6 +145,9 @@ int main(int argc, char *argv[]) {
     }
     paginationSet(GlobalState::configPath);
 
+    // Initialize readline refresh hook for pending UI refreshes
+    rl_event_hook = checkPendingRefresh;
+
     /**
      * @brief Main interactive loop
      * Displays ASCII art header, status messages for background tasks,

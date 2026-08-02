@@ -191,28 +191,40 @@ bool handlePendingProcess(const std::string& inputString, std::vector<std::strin
 }
 
 /**
- * @brief Background watcher thread that redraws the ISO list after an import completes.
+ * @brief Background watcher thread that requests an ISO-list redraw after an import completes.
  *
  * Blocks on a condition variable until signaled by the import thread, then
- * refreshes the display without interrupting the user's current Readline session.
+ * publishes a pending refresh request rather than touching the terminal or
+ * Readline directly. The actual redraw is deferred to the main thread's
+ * Readline event hook (@c checkPendingRefresh), which runs from inside
+ * Readline's own call stack and is the only thread permitted to call Readline
+ * functions or write to the terminal.
  *
  * @details **Concurrency & UI Logic:**
  * - **Thread Safety:** Utilizes @c std::shared_ptr<RefreshState> to ensure the
- *   thread accesses valid data even if the parent scope has exited.
+ *   thread accesses valid data even if the parent scope has exited. The pointer
+ *   handoff to @c GlobalState::g_pendingRefreshState is itself guarded by a
+ *   mutex, since a bare @c shared_ptr is not safe to read/write concurrently.
  * - **Event-Driven:** Blocks on @c RefreshState::importCV rather than polling,
  *   waking deterministically the instant the import thread calls @c notify_all().
- * - **Readline Integration:** Calls @c rl_on_new_line() and @c rl_redisplay()
- *   to gracefully repaint the prompt underneath the new list output.
- * - **Auto-Termination:** Executes once after the import signal is received,
- *   clears atomic flags, and terminates (non-looping design).
+ * - **No Direct Readline Access:** Performs no Readline calls and no terminal
+ *   output itself. It only stores the target @c RefreshState and publishes
+ *   @c PendingRefreshKind::IsoList via @c GlobalState::g_pendingRefreshKind;
+ *   the redraw (including @c rl_on_new_line() / @c rl_redisplay()) happens
+ *   later, on the main thread, inside @c checkPendingRefresh.
+ * - **Auto-Termination:** Executes once after the import signal is received
+ *   and terminates (non-looping design).
  *
- * @param isAtISOList      Atomic flag; refresh only occurs if the user is in the list view.
+ * @param isAtISOList      Atomic flag; a refresh is only requested if the user is in the list view.
  * @param state            Shared state container for:
  *                         - isImportRunning: Atomic flag used as CV predicate
  *                         - importMutex and importCV for event coordination
  *                         - filteredFiles, isFiltered, listSubtype for display context
  *                         - pendingIndices, hasPendingProcess, umountMvRmBreak for list state
  *                         - currentPage, originalPage for pagination
+ *
+ *                         Retained via @c GlobalState::g_pendingRefreshState until
+ *                         consumed by @c checkPendingRefresh on the main thread.
  */
 void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
                                 std::shared_ptr<RefreshState> state) {
@@ -223,12 +235,11 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
         });
     }
     if (isAtISOList.load()) {
-        loadAndDisplayIso(state->filteredFiles, state->isFiltered, state->listSubtype,
-                          state->umountMvRmBreak, state->pendingIndices, state->hasPendingProcess,
-                          state->currentPage, state->originalPage, state);
-        std::cout << "\n";
-        rl_on_new_line();
-        rl_redisplay();
+    {
+        std::lock_guard<std::mutex> lk(GlobalMutexes::readLineMutex);
+        GlobalState::g_pendingRefreshState = state;                        // set state first
+    }
+        GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::IsoList); // then publish
     }
 }
 
