@@ -54,7 +54,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 - Built-in theme engine with full RGB color support
 
 🖊️ **Best-in-Class USB Write Engine**
-- Automatic ISO Detection — custom write method for Windows vs. others
+- Automatic ISO detection — custom write method for Windows vs. others
 - No wimlib, no file splitting — `install.wim` routed to NTFS natively
 - Dynamic NTFS driver selection — `NTFSPLUS` is preferred for best performance
 
