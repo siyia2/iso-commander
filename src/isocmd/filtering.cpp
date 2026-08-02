@@ -539,6 +539,19 @@ void syncFilteringStackForIso(
  * @c FilterContext from @p cfg, then delegates to @c runFilterLoop. Returns early
  * without side effects if @p inputString is not @c "/".
  *
+ * While the nested FilterTerms prompt is active, pending asynchronous UI
+ * refreshes (see @c GlobalState::g_pendingRefreshKind / @c checkPendingRefresh)
+ * are suppressed via @c GlobalState::g_suppressPendingRefresh. This is
+ * necessary because @c checkPendingRefresh runs from Readline's event hook and
+ * would otherwise repaint the ISO list mid-call while this different, nested
+ * @c readline() prompt owns the terminal — desyncing Readline's internal
+ * cursor/line state and crashing. The suppression flag is set for the
+ * duration of this function via an RAII guard (a @c shared_ptr<void> with a
+ * custom deleter, to avoid a dedicated named type) and cleared on every exit
+ * path, including early return. Suppressed refresh requests are not dropped;
+ * @c checkPendingRefresh leaves the pending request in place and retries once
+ * suppression is lifted.
+ *
  * @param inputString  Raw input from the user; must be exactly @c "/" to trigger filtering.
  * @param cfg          Configuration struct with all state pointers and display options.
  *                     All non-optional pointer fields must be non-null.
@@ -549,6 +562,11 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
 {
     if (inputString != "/")
         return false;
+
+    GlobalState::g_suppressPendingRefresh.store(true);
+        std::shared_ptr<void> suppressGuard(nullptr, [](void*) {
+            GlobalState::g_suppressPendingRefresh.store(false);
+        });
 
     auto wrap = [](std::string_view s) -> std::string {
         return "\001" + std::string(s) + "\002";

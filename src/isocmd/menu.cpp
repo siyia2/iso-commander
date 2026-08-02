@@ -298,6 +298,8 @@ void printMenu() {
  * @return Always 0, per the @c rl_event_hook / @c rl_hook_func_t contract.
  */
 int checkPendingRefresh() {
+    if (GlobalState::g_suppressPendingRefresh.load()) return 0; // don't consume; retry later
+
     PendingRefreshKind kind = GlobalState::g_pendingRefreshKind.exchange(PendingRefreshKind::None);
     if (kind == PendingRefreshKind::None) return 0;
     if (kind == PendingRefreshKind::MainMenu) {
