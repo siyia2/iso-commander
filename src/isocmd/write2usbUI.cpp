@@ -862,7 +862,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     std::vector<std::future<void>> futures;
     for (size_t i = 0; i < totalTasks; ++i) {
-        futures.push_back(pool.enqueue([&, i]() {
+        futures.push_back(pool.enqueue([validPairs, i, &completedTasks]() {
             const auto& [iso, device] = validPairs[i];
             bool success = writeIsoToDevice(iso.path, device, i);
 
