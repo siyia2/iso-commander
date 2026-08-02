@@ -94,12 +94,12 @@ void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& c
  * Static list of all supported settings, defaults, and sections.
  */
 inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
-    // --- Theme Settings ---
+    // --- Appearance Settings ---
     {
         "base",                                             // key
         "white",                                             // defaultValue
         "Default state and input color (charcoal/black/gray/silver/ash/white/steel)",
-        "Theme Settings",                                    // Section Header
+        "Appearance Settings",                                    // Section Header
         [](const std::string& v) {                           // validate
             static const std::unordered_set<std::string> valid = {
                 "charcoal", "black", "gray", "silver", "ash", "white", "steel"
