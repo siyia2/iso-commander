@@ -285,6 +285,15 @@ void printMenu() {
  * user's current input line.
  *
  * @details
+ * - **Suppression:** If @c GlobalState::g_suppressPendingRefresh is set, the
+ *   hook returns immediately without consuming or acting on any pending
+ *   request. This is used by nested Readline prompts (e.g. the FilterTerms
+ *   prompt in @c runSharedFilterFlow) that use a different prompt/keybinding
+ *   context than the ISO list; redrawing over them mid-call would desync
+ *   Readline's internal cursor/line state and crash. Any pending request is
+ *   left intact in @c GlobalState::g_pendingRefreshKind and is retried on a
+ *   later poll once suppression is lifted — refreshes are deferred, not
+ *   dropped.
  * - **MainMenu:** Clears the screen/scrollback and re-renders the ASCII
  *   banner and main menu.
  * - **IsoList:** Copies @c GlobalState::g_pendingRefreshState under its
