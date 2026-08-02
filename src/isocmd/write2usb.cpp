@@ -581,11 +581,11 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     std::atomic<uint64_t> totalBytesWrittenAccumulator{0};
     std::atomic<bool>     monitoringActive{true};
 
-    std::thread progressMonitorThread([&, totalBytes, progressIndex]() {
-        auto     lastUpdate  = std::chrono::high_resolution_clock::now();
-        uint64_t lastWritten = 0;
+    const auto startTime = std::chrono::high_resolution_clock::now();
+
+    std::thread progressMonitorThread([&, totalBytes, progressIndex, startTime]() {
         while (monitoringActive.load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
             const uint64_t currentWritten = totalBytesWrittenAccumulator.load();
 
@@ -594,22 +594,14 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             progressData[progressIndex].progress.store(static_cast<int>(
                 std::min(99.0, (static_cast<double>(currentWritten) / totalBytes) * 100.0)));
 
-            const uint64_t deltaBytes = (currentWritten >= lastWritten)
-                                            ? (currentWritten - lastWritten)
-                                            : 0;
-            if (deltaBytes == 0) continue;  // no new data — don't advance the clock
-
             const auto now = std::chrono::high_resolution_clock::now();
-            const auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                 now - lastUpdate).count();
-            if (ms > 0) {
-                const double speedMBs = (static_cast<double>(deltaBytes) /
-                                         (1024.0 * 1024.0)) / (ms / 1000.0);
+            const double elapsedSec = std::chrono::duration<double>(now - startTime).count();
+
+            if (elapsedSec > 0.0 && currentWritten > 0) {
+                const double speedMBs = (static_cast<double>(currentWritten) /
+                                            (1024.0 * 1024.0)) / elapsedSec;
                 progressData[progressIndex].speed.store(speedMBs);
             }
-
-            lastWritten = currentWritten;
-            lastUpdate  = now;
         }
     });
 
@@ -720,7 +712,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ------------------------------------------------------------------ //
     // 7. Copy passes (NTFS payload first, ESP second)                    //
     // ------------------------------------------------------------------ //
-    const auto startTime = std::chrono::high_resolution_clock::now();
 
     // Returns false on failure or cancellation; RAII handles all cleanup.
     auto processEntries = [&](const std::vector<IsoEntry>& entries) -> bool {
@@ -1141,12 +1132,11 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     std::atomic<uint64_t> directBytesWrittenAccumulator{0};
     std::atomic<bool> monitoringActive{true};
 
-    std::thread progressMonitorThread([&, fileSize, progressIndex]() {
-        auto lastUpdate = std::chrono::high_resolution_clock::now();
-        uint64_t lastWritten = 0;
+    auto startTime = std::chrono::high_resolution_clock::now();   // moved up so the monitor thread can use it
 
+    std::thread progressMonitorThread([&, fileSize, progressIndex, startTime]() {
         while (monitoringActive.load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
             uint64_t currentWritten = directBytesWrittenAccumulator.load();
 
@@ -1155,22 +1145,16 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             progressData[progressIndex].progress.store(static_cast<int>(
                 std::min(99.0, (static_cast<double>(currentWritten) / fileSize) * 100.0)));
 
-            uint64_t deltaBytes = (currentWritten >= lastWritten) ? (currentWritten - lastWritten) : 0;
-            if (deltaBytes == 0) continue;  // no new data yet — don't reset the clock
-
             auto now = std::chrono::high_resolution_clock::now();
-            auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count();
-            if (ms > 0) {
-                double speedMBs = (static_cast<double>(deltaBytes) / (1024.0 * 1024.0)) / (ms / 1000.0);
+            double elapsedSec = std::chrono::duration<double>(now - startTime).count();
+
+            if (elapsedSec > 0.0 && currentWritten > 0) {
+                double speedMBs = (static_cast<double>(currentWritten) / (1024.0 * 1024.0)) / elapsedSec;
                 progressData[progressIndex].speed.store(speedMBs);
             }
-
-            lastWritten = currentWritten;
-            lastUpdate  = now;
         }
     });
 
-    auto startTime = std::chrono::high_resolution_clock::now();
     uint64_t localBytesWritten = 0;
 
     try {

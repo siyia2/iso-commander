@@ -704,7 +704,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  * - Caches device names, sizes, and formatted size strings
  * - Submits one @ref writeIsoToDevice call to the global @ref ThreadPool
  *
- * A background thread redraws per-task status at uniform 300 ms intervals using ANSI
+ * A background thread redraws per-task status at uniform 500 ms intervals using ANSI
  * cursor save/restore (\033[s / \033[u).
  * * @par Row Layout
  * Each row prints seamlessly side-by-side:
@@ -720,7 +720,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  *
  * @par Cancellation (Ctrl+C / SIGINT)
  * When @ref GlobalState::g_operationCancelled is tripped:
- * -# The main thread's future-polling loop breaks within 300 ms.
+ * -# The main thread's future-polling loop breaks within 500 ms.
  * -# The live UI render thread is flagged and joined immediately.
  * -# Terminal properties, standard input buffers, and layout configurations are restored @b instantly.
  * -# Operating system control is returned to the user's shell prompt without visual lag.
@@ -839,14 +839,14 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
         std::cout << std::flush;
     };
 
-    // UI render thread locked to 300ms pacing for optimal visual stability
+    // UI render thread locked to 500ms pacing for optimal visual stability
     bool isFirstUpdate = true;
     auto displayProgress = [&]() {
         while (!isProcessingComplete.load(std::memory_order_acquire) &&
                !GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
 
             if (!isFirstUpdate) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(300));
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 // Double check flags right after waking up to prevent stale prints on quick exit
                 if (isProcessingComplete.load(std::memory_order_acquire) ||
                     GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
@@ -877,10 +877,10 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     std::thread progressThread(displayProgress);
 
-    // Polling Loop: standard 300ms pulse heartbeat check matching the UI pacing layout
+    // Polling Loop: standard 500ms pulse heartbeat check matching the UI pacing layout
     for (auto& future : futures) {
         while (!GlobalState::g_operationCancelled.load()) {
-            auto status = future.wait_for(std::chrono::milliseconds(300));
+            auto status = future.wait_for(std::chrono::milliseconds(500));
             if (status == std::future_status::ready) {
                 break;
             }
