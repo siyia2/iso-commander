@@ -13,11 +13,12 @@ Mount ISOs, convert images, write bootable USB drives — done right
 
 ### Dependencies
 
-| Distro | Packages |
+| Platform | Packages |
 |--------|----------|
 | Arch | `readline` `util-linux` |
 | Debian | `libreadline-dev` `libmount-dev` `libblkid-dev` |
 | Agnostic | `libchdr` (statically built and linked) |
+
 | Optional (Windows writer) | `dosfstools` `ntfsprogs`/`ntfs-3g` `parted` |
 
 <br>
