@@ -10,16 +10,26 @@ LDFLAGS_BASE  = -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
 # ---- Normal build ----
 CXXFLAGS_NORMAL = -O3 -flto=auto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti
 LDFLAGS_NORMAL  = -Wl,--gc-sections
-# ---- Sanitizer build ----
+# ---- Sanitizer builds ----
 ifeq ($(SANITIZE),1)
+    # AddressSanitizer
     CXXFLAGS_EXTRA  = -O1 -g -fno-omit-frame-pointer -fsanitize=address
     LDFLAGS_EXTRA   = -fsanitize=address
     CXXFLAGS_NORMAL = -O1 -g -fno-omit-frame-pointer
     LDFLAGS_NORMAL  =
     LDFLAGS_STRIP   =
+else ifeq ($(SANITIZE),2)
+    # ThreadSanitizer
+    CXXFLAGS_EXTRA  = -O1 -g -fno-omit-frame-pointer -fsanitize=thread
+    LDFLAGS_EXTRA   = -fsanitize=thread
+    CXXFLAGS_NORMAL = -O1 -g -fno-omit-frame-pointer
+    LDFLAGS_NORMAL  =
+    LDFLAGS_STRIP   =
 else
+    # Normal build
     LDFLAGS_STRIP   = -Wl,--strip-all
 endif
+
 CXXFLAGS_COMMON = $(CXXFLAGS_BASE) $(CXXFLAGS_NORMAL) $(CXXFLAGS_EXTRA)
 LDFLAGS_COMMON  = $(LDFLAGS_BASE) $(LDFLAGS_NORMAL) $(LDFLAGS_EXTRA)
 # ---------- Shared library for both builds ----------
