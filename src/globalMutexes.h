@@ -24,6 +24,7 @@ namespace GlobalMutexes {
     inline std::mutex nrgCacheMutex;
     inline std::mutex chdCacheMutex;
     inline std::mutex daaGbiCacheMutex;
+    inline std::mutex readLineMutex;
 }
 
 #endif // GLOBALMUTEXES_H

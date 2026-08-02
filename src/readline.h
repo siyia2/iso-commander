@@ -61,6 +61,9 @@ namespace RetainAndRestoreReadlineBuffer {
     inline std::string g_rl_pending_text = "";
 }
 
+/** Hook for reloading readline async style. */
+int checkPendingRefresh();
+
 /** @brief Clears readline list completions on exact matches. */
 int my_rl_complete(int ignore, int invoking_key);
 
