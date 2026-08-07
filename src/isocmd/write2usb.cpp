@@ -590,6 +590,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
         // Higher alpha = more reactive to phase changes (NTFS -> ESP), lower = smoother.
         constexpr double alpha = 0.3;
+        // Minimum time between speed updates to avoid distortion
+        constexpr int MIN_UPDATE_INTERVAL_MS = 1000;
 
         while (monitoringActive.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -607,23 +609,32 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                                             ? (currentWritten - lastWritten)
                                             : 0;
 
-            if (deltaBytes > 0 && ms > 0) {
+            // Only calculate speed if enough time has passed for meaningful measurement
+            if (deltaBytes > 0 && ms >= MIN_UPDATE_INTERVAL_MS) {
                 const double instantSpeed = (static_cast<double>(deltaBytes) /
                                                 (1024.0 * 1024.0)) / (ms / 1000.0);
+
+                // Use adaptive smoothing: more reactive for slow drives
+                double smoothingFactor = (instantSpeed < 8.0) ? 0.6 : alpha;
+
                 smoothedSpeed = haveEstimate
-                    ? (alpha * instantSpeed + (1.0 - alpha) * smoothedSpeed)
+                    ? (smoothingFactor * instantSpeed + (1.0 - smoothingFactor) * smoothedSpeed)
                     : instantSpeed;
                 haveEstimate = true;
                 progressData[progressIndex].speed.store(smoothedSpeed);
-            } else if (deltaBytes == 0) {
-                // genuinely stalled — decay/zero the displayed speed instead of
-                // silently carrying a stale timestamp forward
-                progressData[progressIndex].speed.store(0.0);
-            }
 
-            lastWritten = currentWritten;
-            lastUpdate  = now;   // always advance, so the next real delta isn't
-                                  // measured against a stale clock
+                // Only update timestamps when we've actually measured something
+                lastWritten = currentWritten;
+                lastUpdate = now;
+            } else if (deltaBytes == 0 && ms >= MIN_UPDATE_INTERVAL_MS) {
+                // Only report stall after a meaningful period of no progress
+                progressData[progressIndex].speed.store(0.0);
+                // Reset timestamps to prevent measuring from the stall period
+                lastWritten = currentWritten;
+                lastUpdate = now;
+            }
+            // If ms < MIN_UPDATE_INTERVAL_MS, we do nothing - keep old speed value
+            // and don't update timestamps to accumulate more measurement time
         }
     });
 
@@ -1163,34 +1174,48 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         bool     haveEstimate  = false;
 
         constexpr double alpha = 0.3;
+        // Increase minimum time between updates for slow drives
+        constexpr int MIN_UPDATE_INTERVAL_MS = 1000;  // 1 second minimum
 
         while (monitoringActive.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
             auto now = std::chrono::high_resolution_clock::now();
-            auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count();
 
             uint64_t currentWritten = directBytesWrittenAccumulator.load();
+
+            // Always update progress even if no new data
             progressData[progressIndex].bytesWritten.store(currentWritten);
             progressData[progressIndex].progress.store(static_cast<int>(
                 std::min(99.0, (static_cast<double>(currentWritten) / fileSize) * 100.0)));
 
             uint64_t deltaBytes = (currentWritten >= lastWritten) ? (currentWritten - lastWritten) : 0;
 
-            if (deltaBytes > 0 && ms > 0) {
-                double instantSpeed = (static_cast<double>(deltaBytes) / (1024.0 * 1024.0)) / (ms / 1000.0);
+            // Only calculate speed if we have enough data and enough time has passed
+            if (deltaBytes > 0 && elapsed >= MIN_UPDATE_INTERVAL_MS) {
+                double instantSpeed = (static_cast<double>(deltaBytes) / (1024.0 * 1024.0)) / (elapsed / 1000.0);
+
+                // For slow drives (< 8 MB/s), use less smoothing to show real-time changes
+                double smoothingFactor = (instantSpeed < 8.0) ? 0.6 : alpha;
+
                 smoothedSpeed = haveEstimate
-                    ? (alpha * instantSpeed + (1.0 - alpha) * smoothedSpeed)
+                    ? (smoothingFactor * instantSpeed + (1.0 - smoothingFactor) * smoothedSpeed)
                     : instantSpeed;
                 haveEstimate = true;
+
+                // Update speed only when we have a valid measurement
                 progressData[progressIndex].speed.store(smoothedSpeed);
-            } else if (deltaBytes == 0) {
-                progressData[progressIndex].speed.store(0.0);  // honest: genuinely stalled right now
+            } else if (deltaBytes == 0 && elapsed >= MIN_UPDATE_INTERVAL_MS) {
+                // Only show stall if genuinely no progress over significant time
+                progressData[progressIndex].speed.store(0.0);
             }
 
-            lastWritten = currentWritten;
-            lastUpdate  = now;   // always advance — next real sample isn't measured
-                                  // against a stale timestamp
+            // Only update timestamps when we've actually consumed time
+            if (elapsed >= MIN_UPDATE_INTERVAL_MS) {
+                lastWritten = currentWritten;
+                lastUpdate = now;
+            }
         }
     });
 
