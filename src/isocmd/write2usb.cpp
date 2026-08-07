@@ -588,17 +588,23 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         double   smoothedSpeed = 0.0;
         bool     haveEstimate  = false;
 
+        // Stall tracking
+        auto     stallStart    = std::chrono::high_resolution_clock::now();
+        bool     stalled       = false;
+
         // Higher alpha = more reactive to phase changes (NTFS -> ESP), lower = smoother.
         constexpr double alpha = 0.3;
         // Minimum time between speed updates to avoid distortion
-        constexpr int MIN_UPDATE_INTERVAL_MS = 1000;
+        constexpr int MIN_UPDATE_INTERVAL_MS = 2000;
+        // Show 0 only after this many seconds of continuous stalling
+        constexpr int STALL_TIMEOUT_SECONDS = 10;
 
         while (monitoringActive.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
             const auto now = std::chrono::high_resolution_clock::now();
             const auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                  now - lastUpdate).count();
+                                    now - lastUpdate).count();
 
             const uint64_t currentWritten = totalBytesWrittenAccumulator.load();
             progressData[progressIndex].bytesWritten.store(currentWritten);
@@ -611,6 +617,9 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
             // Only calculate speed if enough time has passed for meaningful measurement
             if (deltaBytes > 0 && ms >= MIN_UPDATE_INTERVAL_MS) {
+                // Progress detected - reset stall tracking
+                stalled = false;
+
                 const double instantSpeed = (static_cast<double>(deltaBytes) /
                                                 (1024.0 * 1024.0)) / (ms / 1000.0);
 
@@ -627,8 +636,21 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                 lastWritten = currentWritten;
                 lastUpdate = now;
             } else if (deltaBytes == 0 && ms >= MIN_UPDATE_INTERVAL_MS) {
-                // Only report stall after a meaningful period of no progress
-                progressData[progressIndex].speed.store(0.0);
+                // Stall detected - track how long it's been
+                if (!stalled) {
+                    stalled = true;
+                    stallStart = now;
+                }
+
+                auto stallDuration = std::chrono::duration_cast<std::chrono::seconds>(
+                                        now - stallStart).count();
+
+                // Keep last known speed for STALL_TIMEOUT_SECONDS, then show 0
+                if (stallDuration >= STALL_TIMEOUT_SECONDS) {
+                    progressData[progressIndex].speed.store(0.0);
+                }
+                // Else: keep the existing smoothedSpeed (don't change it)
+
                 // Reset timestamps to prevent measuring from the stall period
                 lastWritten = currentWritten;
                 lastUpdate = now;
@@ -1173,9 +1195,15 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         double   smoothedSpeed = 0.0;
         bool     haveEstimate  = false;
 
+        // Stall tracking
+        auto     stallStart    = std::chrono::high_resolution_clock::now();
+        bool     stalled       = false;
+
         constexpr double alpha = 0.3;
         // Increase minimum time between updates for slow drives
-        constexpr int MIN_UPDATE_INTERVAL_MS = 1000;  // 1 second minimum
+        constexpr int MIN_UPDATE_INTERVAL_MS = 2000;  // 2 second minimum
+        // Show 0 only after this many seconds of continuous stalling
+        constexpr int STALL_TIMEOUT_SECONDS = 10;
 
         while (monitoringActive.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -1194,6 +1222,9 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 
             // Only calculate speed if we have enough data and enough time has passed
             if (deltaBytes > 0 && elapsed >= MIN_UPDATE_INTERVAL_MS) {
+                // Progress detected - reset stall tracking
+                stalled = false;
+
                 double instantSpeed = (static_cast<double>(deltaBytes) / (1024.0 * 1024.0)) / (elapsed / 1000.0);
 
                 // For slow drives (< 8 MB/s), use less smoothing to show real-time changes
@@ -1207,8 +1238,20 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                 // Update speed only when we have a valid measurement
                 progressData[progressIndex].speed.store(smoothedSpeed);
             } else if (deltaBytes == 0 && elapsed >= MIN_UPDATE_INTERVAL_MS) {
-                // Only show stall if genuinely no progress over significant time
-                progressData[progressIndex].speed.store(0.0);
+                // Stall detected - track how long it's been
+                if (!stalled) {
+                    stalled = true;
+                    stallStart = now;
+                }
+
+                auto stallDuration = std::chrono::duration_cast<std::chrono::seconds>(
+                                        now - stallStart).count();
+
+                // Keep last known speed for STALL_TIMEOUT_SECONDS, then show 0
+                if (stallDuration >= STALL_TIMEOUT_SECONDS) {
+                    progressData[progressIndex].speed.store(0.0);
+                }
+                // Else: keep the existing smoothedSpeed (don't change it)
             }
 
             // Only update timestamps when we've actually consumed time
