@@ -595,7 +595,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         // Higher alpha = more reactive to phase changes (NTFS -> ESP), lower = smoother.
         constexpr double alpha = 0.3;
         // Minimum time between speed updates to avoid distortion
-        constexpr int MIN_UPDATE_INTERVAL_MS = 2000;
+        constexpr int MIN_UPDATE_INTERVAL_MS = 1000;
         // Show 0 only after this many seconds of continuous stalling
         constexpr int STALL_TIMEOUT_SECONDS = 10;
 
@@ -1201,7 +1201,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 
         constexpr double alpha = 0.3;
         // Increase minimum time between updates for slow drives
-        constexpr int MIN_UPDATE_INTERVAL_MS = 2000;  // 2 second minimum
+        constexpr int MIN_UPDATE_INTERVAL_MS = 1000;
         // Show 0 only after this many seconds of continuous stalling
         constexpr int STALL_TIMEOUT_SECONDS = 10;
 
