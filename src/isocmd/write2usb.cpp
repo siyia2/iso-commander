@@ -594,8 +594,11 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         while (monitoringActive.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-            const uint64_t currentWritten = totalBytesWrittenAccumulator.load();
+            const auto now = std::chrono::high_resolution_clock::now();
+            const auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  now - lastUpdate).count();
 
+            const uint64_t currentWritten = totalBytesWrittenAccumulator.load();
             progressData[progressIndex].bytesWritten.store(currentWritten);
             progressData[progressIndex].progress.store(static_cast<int>(
                 std::min(99.0, (static_cast<double>(currentWritten) / totalBytes) * 100.0)));
@@ -603,26 +606,24 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             const uint64_t deltaBytes = (currentWritten >= lastWritten)
                                             ? (currentWritten - lastWritten)
                                             : 0;
-            if (deltaBytes == 0) continue;  // no new data — don't advance the clock
 
-            const auto now = std::chrono::high_resolution_clock::now();
-            const auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                    now - lastUpdate).count();
-
-            if (ms > 0) {
+            if (deltaBytes > 0 && ms > 0) {
                 const double instantSpeed = (static_cast<double>(deltaBytes) /
                                                 (1024.0 * 1024.0)) / (ms / 1000.0);
-
                 smoothedSpeed = haveEstimate
                     ? (alpha * instantSpeed + (1.0 - alpha) * smoothedSpeed)
                     : instantSpeed;
                 haveEstimate = true;
-
                 progressData[progressIndex].speed.store(smoothedSpeed);
+            } else if (deltaBytes == 0) {
+                // genuinely stalled — decay/zero the displayed speed instead of
+                // silently carrying a stale timestamp forward
+                progressData[progressIndex].speed.store(0.0);
             }
 
             lastWritten = currentWritten;
-            lastUpdate  = now;
+            lastUpdate  = now;   // always advance, so the next real delta isn't
+                                  // measured against a stale clock
         }
     });
 
@@ -1166,33 +1167,30 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         while (monitoringActive.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-            uint64_t currentWritten = directBytesWrittenAccumulator.load();
+            auto now = std::chrono::high_resolution_clock::now();
+            auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count();
 
-            // Always keep bytes/progress fresh — fine at 500ms since the
-            // terminal renderer only samples this value every 500ms anyway.
+            uint64_t currentWritten = directBytesWrittenAccumulator.load();
             progressData[progressIndex].bytesWritten.store(currentWritten);
             progressData[progressIndex].progress.store(static_cast<int>(
                 std::min(99.0, (static_cast<double>(currentWritten) / fileSize) * 100.0)));
 
             uint64_t deltaBytes = (currentWritten >= lastWritten) ? (currentWritten - lastWritten) : 0;
-            if (deltaBytes == 0) continue;  // no new data yet — don't advance the clock
 
-            auto now = std::chrono::high_resolution_clock::now();
-            auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count();
-
-            if (ms > 0) {
+            if (deltaBytes > 0 && ms > 0) {
                 double instantSpeed = (static_cast<double>(deltaBytes) / (1024.0 * 1024.0)) / (ms / 1000.0);
-
                 smoothedSpeed = haveEstimate
                     ? (alpha * instantSpeed + (1.0 - alpha) * smoothedSpeed)
                     : instantSpeed;
                 haveEstimate = true;
-
                 progressData[progressIndex].speed.store(smoothedSpeed);
+            } else if (deltaBytes == 0) {
+                progressData[progressIndex].speed.store(0.0);  // honest: genuinely stalled right now
             }
 
             lastWritten = currentWritten;
-            lastUpdate  = now;
+            lastUpdate  = now;   // always advance — next real sample isn't measured
+                                  // against a stale timestamp
         }
     });
 
