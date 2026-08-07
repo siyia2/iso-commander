@@ -620,17 +620,25 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                 // Progress detected - reset stall tracking
                 stalled = false;
 
-                const double instantSpeed = (static_cast<double>(deltaBytes) /
+                const double instantSpeedMBps = (static_cast<double>(deltaBytes) /
                                                 (1024.0 * 1024.0)) / (ms / 1000.0);
 
                 // Use adaptive smoothing: more reactive for slow drives
-                double smoothingFactor = (instantSpeed < 8.0) ? 0.6 : alpha;
+                double smoothingFactor = (instantSpeedMBps < 8.0) ? 0.6 : alpha;
 
                 smoothedSpeed = haveEstimate
-                    ? (smoothingFactor * instantSpeed + (1.0 - smoothingFactor) * smoothedSpeed)
-                    : instantSpeed;
+                    ? (smoothingFactor * instantSpeedMBps + (1.0 - smoothingFactor) * smoothedSpeed)
+                    : instantSpeedMBps;
                 haveEstimate = true;
-                progressData[progressIndex].speed.store(smoothedSpeed);
+
+                // Store speed in appropriate units
+                if (smoothedSpeed < 1.0) {
+                    // Under 1 MB/s - store as KB/s (negative value to indicate KB/s unit)
+                    progressData[progressIndex].speed.store(-smoothedSpeed * 1024.0);
+                } else {
+                    // 1 MB/s or above - store as MB/s (positive value)
+                    progressData[progressIndex].speed.store(smoothedSpeed);
+                }
 
                 // Only update timestamps when we've actually measured something
                 lastWritten = currentWritten;
@@ -1225,18 +1233,24 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                 // Progress detected - reset stall tracking
                 stalled = false;
 
-                double instantSpeed = (static_cast<double>(deltaBytes) / (1024.0 * 1024.0)) / (elapsed / 1000.0);
+                double instantSpeedMBps = (static_cast<double>(deltaBytes) / (1024.0 * 1024.0)) / (elapsed / 1000.0);
 
                 // For slow drives (< 8 MB/s), use less smoothing to show real-time changes
-                double smoothingFactor = (instantSpeed < 8.0) ? 0.6 : alpha;
+                double smoothingFactor = (instantSpeedMBps < 8.0) ? 0.6 : alpha;
 
                 smoothedSpeed = haveEstimate
-                    ? (smoothingFactor * instantSpeed + (1.0 - smoothingFactor) * smoothedSpeed)
-                    : instantSpeed;
+                    ? (smoothingFactor * instantSpeedMBps + (1.0 - smoothingFactor) * smoothedSpeed)
+                    : instantSpeedMBps;
                 haveEstimate = true;
 
-                // Update speed only when we have a valid measurement
-                progressData[progressIndex].speed.store(smoothedSpeed);
+                // Store speed in appropriate units
+                if (smoothedSpeed < 1.0) {
+                    // Under 1 MB/s - store as KB/s (negative value to indicate KB/s unit)
+                    progressData[progressIndex].speed.store(-smoothedSpeed * 1024.0);
+                } else {
+                    // 1 MB/s or above - store as MB/s (positive value)
+                    progressData[progressIndex].speed.store(smoothedSpeed);
+                }
             } else if (deltaBytes == 0 && elapsed >= MIN_UPDATE_INTERVAL_MS) {
                 // Stall detected - track how long it's been
                 if (!stalled) {
