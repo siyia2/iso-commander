@@ -76,22 +76,25 @@ std::string formatFileSize(uint64_t size) {
 }
 
 /**
- * @brief Formats a write speed as a human-readable string.
- *
- * Returns KB/s for speeds below 0.1 MB/s, otherwise MB/s, both with one
- * decimal place.
- *
- * @param mbPerSec Write speed in megabytes per second.
- * @return Formatted string such as @c "45.3 MB/s" or @c "98.4 KB/s".
- */
+* @brief Formats a write speed as a human-readable string.
+*
+* Returns KB/s (no decimal places) for speeds below 1 MB/s, otherwise
+* MB/s with one decimal place.
+*
+* @param mbPerSec Write speed in megabytes per second.
+* @return Formatted string such as @c "45.3 MB/s" or @c "543 KB/s".
+*/
 std::string formatSpeed(double mbPerSec) {
     std::ostringstream oss;
-    oss << std::fixed << std::setprecision(1);
-    if (mbPerSec < 0.1) {
-        oss << (mbPerSec * 1024) << " KB/s";
+
+    if (mbPerSec < 1) {
+        oss << std::fixed << std::setprecision(0)
+            << (mbPerSec * 1024) << " KB/s";
     } else {
-        oss << mbPerSec << " MB/s";
+        oss << std::fixed << std::setprecision(1)
+            << mbPerSec << " MB/s";
     }
+
     return oss.str();
 }
 
