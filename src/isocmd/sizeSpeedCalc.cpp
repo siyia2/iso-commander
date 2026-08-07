@@ -78,7 +78,7 @@ std::string formatFileSize(uint64_t size) {
 /**
  * @brief Formats a write speed as a human-readable string.
  *
- * Returns KB/s for speeds below 1 MB/s, otherwise MB/s, both with one
+ * Returns KB/s for speeds below 0.1 MB/s, otherwise MB/s, both with one
  * decimal place.
  *
  * @param mbPerSec Write speed in megabytes per second.
@@ -87,7 +87,7 @@ std::string formatFileSize(uint64_t size) {
 std::string formatSpeed(double mbPerSec) {
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(1);
-    if (mbPerSec < 1) {
+    if (mbPerSec < 0.1) {
         oss << (mbPerSec * 1024) << " KB/s";
     } else {
         oss << mbPerSec << " MB/s";
