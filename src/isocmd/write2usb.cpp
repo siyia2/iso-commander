@@ -1257,6 +1257,14 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 
                 // Update speed only when we have a valid measurement
                 progressData[progressIndex].speed.store(smoothedSpeed);
+
+                // Only reset the baseline when bytes actually arrived — this keeps
+                // `elapsed` spanning back to the last real data point instead of an
+                // arbitrary polling tick, which was previously truncating the window
+                // to ~1s and producing a spurious 4MB/s (bufferSize/interval) floor
+                // on slow/bursty O_DIRECT writers.
+                lastWritten = currentWritten;
+                lastUpdate  = now;
             } else if (deltaBytes == 0 && elapsed >= MIN_UPDATE_INTERVAL_MS) {
                 // Stall detected - track how long it's been
                 if (!stalled) {
@@ -1272,12 +1280,10 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                     progressData[progressIndex].speed.store(0.0);
                 }
                 // Else: keep the existing smoothedSpeed (don't change it)
-            }
 
-            // Only update timestamps when we've actually consumed time
-            if (elapsed >= MIN_UPDATE_INTERVAL_MS) {
-                lastWritten = currentWritten;
-                lastUpdate = now;
+                // Deliberately do NOT touch lastWritten/lastUpdate here — let the
+                // elapsed window keep growing while a slow write is still in flight,
+                // so the eventual speed sample reflects the true transfer duration.
             }
         }
     });
