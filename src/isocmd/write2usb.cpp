@@ -636,7 +636,18 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                 lastWritten = currentWritten;
                 lastUpdate = now;
             } else if (deltaBytes == 0 && ms >= MIN_UPDATE_INTERVAL_MS) {
-                // Stall detected - track how long it's been
+                // Stall detected - track how long it's been.
+                // IMPORTANT: do NOT reset lastUpdate/lastWritten here. A long
+                // in-flight write (e.g. a throttled 4MiB chunk on a slow USB
+                // NTFS target) can span many 500ms polling ticks with
+                // deltaBytes == 0 the whole time. Resetting the baseline on
+                // every tick would make the eventual big delta land right
+                // after the last reset, understating elapsed time and
+                // artificially flooring the reported speed at roughly
+                // bufferSize / MIN_UPDATE_INTERVAL_MS (~4 MB/s). By leaving
+                // lastUpdate/lastWritten untouched, once real progress does
+                // land, ms reflects the true elapsed time since data last
+                // moved and the speed calculation above is accurate.
                 if (!stalled) {
                     stalled = true;
                     stallStart = now;
@@ -650,10 +661,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                     progressData[progressIndex].speed.store(0.0);
                 }
                 // Else: keep the existing smoothedSpeed (don't change it)
-
-                // Reset timestamps to prevent measuring from the stall period
-                lastWritten = currentWritten;
-                lastUpdate = now;
             }
             // If ms < MIN_UPDATE_INTERVAL_MS, we do nothing - keep old speed value
             // and don't update timestamps to accumulate more measurement time
@@ -724,7 +731,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                 writeLen = aligned;
             }
 
-            ssize_t bytes_written = 0;
+            ssize_t  bytes_written    = 0;
+            uint64_t reportedThisChunk = 0; // real (non-padding) bytes already credited
             while (bytes_written < writeLen) {
                 if (GlobalState::g_operationCancelled.load()) {
                     success = false;
@@ -739,10 +747,22 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                     goto done;
                 }
                 bytes_written += written;
-            }
 
-            totalBytesWrittenAccumulator.fetch_add(
-                static_cast<uint64_t>(bytes_read));
+                // Report progress incrementally as each write() actually
+                // lands, rather than waiting for the whole (up to 4MiB)
+                // chunk to finish. This is what lets the monitor thread see
+                // real progress on slow devices instead of one big jump
+                // every several seconds. Cap at bytes_read so O_DIRECT
+                // alignment padding (writeLen > bytes_read) is never
+                // counted as real progress.
+                const uint64_t realBytesSoFar = static_cast<uint64_t>(
+                    std::min<ssize_t>(bytes_written, bytes_read));
+                if (realBytesSoFar > reportedThisChunk) {
+                    totalBytesWrittenAccumulator.fetch_add(
+                        realBytesSoFar - reportedThisChunk);
+                    reportedThisChunk = realBytesSoFar;
+                }
+            }
         }
 
     done:
