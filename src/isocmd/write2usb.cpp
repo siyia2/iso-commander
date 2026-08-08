@@ -624,7 +624,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                                                 (1024.0 * 1024.0)) / (ms / 1000.0);
 
                 // Use adaptive smoothing: more reactive for slow drives
-                double smoothingFactor = (instantSpeed < 8.0) ? 0.6 : alpha;
+                double smoothingFactor = (instantSpeed < 10.0) ? 0.6 : alpha;
 
                 smoothedSpeed = haveEstimate
                     ? (smoothingFactor * instantSpeed + (1.0 - smoothingFactor) * smoothedSpeed)
