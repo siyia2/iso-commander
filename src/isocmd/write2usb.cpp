@@ -1247,8 +1247,9 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 
                 double instantSpeed = (static_cast<double>(deltaBytes) / (1024.0 * 1024.0)) / (elapsed / 1000.0);
 
-                // For slow drives (< 8 MB/s), use less smoothing to show real-time changes
-                double smoothingFactor = (instantSpeed < 8.0) ? 0.6 : alpha;
+                // For slow drives (< 10 MB/s), apply heavier smoothing to reduce
+                // display jitter from bursty O_DIRECT writes at low throughput
+                double smoothingFactor = (instantSpeed < 10.0) ? 0.2 : alpha;
 
                 smoothedSpeed = haveEstimate
                     ? (smoothingFactor * instantSpeed + (1.0 - smoothingFactor) * smoothedSpeed)
