@@ -377,9 +377,8 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  * - **FAT32 destination files** use unbuffered Direct I/O (@c O_DIRECT) to bypass the
  *   Linux page cache, ensuring user-initiated cancellations abort cleanly without
  *   post-cancel dirty writeback flushing to the device in the background.
- * - **NTFS destination files** always use buffered I/O with @c posix_fallocate pre-allocation,
- *   with an initial attempt at kernel-side @c copy_file_range optimization to maximise
- *   throughput.
+ * - **NTFS destination files** use buffered I/O with @c posix_fallocate pre-allocation,
+ *   copied via a manual read/write loop.
  *
  * Sector alignment:
  * - Both logical (@c BLKSSZGET) and physical (@c BLKPBSZGET) sector sizes are
@@ -388,9 +387,19 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  *   on 512n, 512e, and 4Kn drives. If either ioctl fails or returns a
  *   non-positive value, that size is treated as 512 bytes.
  *
+ * Cancellation:
+ * - Setup steps (ISO mount, wipe, partition, format, FAT/NTFS mount) treat a
+ *   concurrent user cancellation as a clean abort rather than a failure: a
+ *   step that errors out while @c g_operationCancelled is already set returns
+ *   @c false without marking the operation as failed. Only genuine errors
+ *   (cancellation not in effect) flip the failed flag.
+ *
  * Telemetry:
  * - Progress, speed, and byte accounting are handled by a dedicated background
  *   thread, keeping timing logic and speed calculations out of the critical I/O path.
+ *   Reported speed is held at its last known value for up to 300 seconds of
+ *   stalled (zero-delta) writes before falling back to 0, since a single slow
+ *   write on throttled USB media can legitimately span many polling ticks.
  *
  * Flush and unmount strategy:
  * - @c syncfs is called on each mounted filesystem fd before unmounting,
@@ -720,7 +729,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     }
 
     // ------------------------------------------------------------------ //
-    // 6. Per-file copy with hybrid I/O and copy_file_range optimization   //
+    // 6. Per-file copy with hybrid I/O                                   //
     // ------------------------------------------------------------------ //
     auto copyWithProgress = [&](const fs::path& src, const fs::path& dst,
                                 uint64_t fileSize, int sectorSize) -> bool {
@@ -741,106 +750,56 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         if (useBufferedIO && fileSize > 0)
             posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
 
+        const size_t mask = static_cast<size_t>(sectorSize) - 1;
+
         bool success = true;
-        uint64_t totalCopiedViaKernel = 0;
+        while (!GlobalState::g_operationCancelled.load()) {
+            const ssize_t bytes_read = read(fd_in, ioBuf.data, bufferSize);
+            if (bytes_read < 0) {
+                if (errno == EINTR) continue;
+                success = false;
+                break;
+            }
+            if (bytes_read == 0) break;
 
-        // --- OPTIMIZATION: Try kernel-side copy_file_range first ---
-        // copy_file_range bypasses userspace entirely, keeping signatures intact
-        // and maximizing throughput if supported across the mount points.
-        if (useBufferedIO && fileSize > 0) {
-            off_t off_in = 0, off_out = 0;
-            uint64_t remaining = fileSize;
-            bool exdevFallback = false;
+            ssize_t writeLen = bytes_read;
+            if (!useBufferedIO) {
+                const ssize_t aligned = (bytes_read + mask) & ~static_cast<ssize_t>(mask);
+                if (aligned > bytes_read)
+                    memset(ioBuf.data + bytes_read, 0, aligned - bytes_read);
+                writeLen = aligned;
+            }
 
-            while (remaining > 0 && !GlobalState::g_operationCancelled.load()) {
-                size_t chunk = std::min<uint64_t>(remaining, 32ULL * 1024 * 1024); // 32MB chunks
-                ssize_t ret = copy_file_range(fd_in, &off_in, fd_out, &off_out, chunk, 0);
-
-                if (ret < 0) {
-                    if (errno == EINTR) continue;
-                    if (errno == EXDEV || errno == EINVAL || errno == ENOSYS) {
-                        // Cross-device link not supported or unsupported FS combination;
-                        // reset offsets and fall back to standard read/write loop.
-                        exdevFallback = true;
-                        off_in = 0;
-                        off_out = 0;
-                        ftruncate(fd_out, 0); // Reset destination file
-                        if (useBufferedIO && fileSize > 0) {
-                            posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
-                        }
-                    } else {
-                        success = false;
-                    }
-                    break;
+            ssize_t  bytes_written    = 0;
+            uint64_t reportedThisChunk = 0; // real (non-padding) bytes already credited
+            while (bytes_written < writeLen) {
+                if (GlobalState::g_operationCancelled.load()) {
+                    success = false;
+                    goto done;
                 }
-                if (ret == 0) break;
-
-                remaining -= ret;
-                totalCopiedViaKernel += ret;
-                totalBytesWrittenAccumulator.fetch_add(ret);
-            }
-
-            if (exdevFallback) {
-                // Reset file position pointers for the standard fallback loop
-                lseek(fd_in, 0, SEEK_SET);
-                lseek(fd_out, 0, SEEK_SET);
-                totalBytesWrittenAccumulator.fetch_sub(totalCopiedViaKernel);
-                totalCopiedViaKernel = 0;
-            } else {
-                goto done; // Kernel copy completed successfully!
-            }
-        }
-
-        // --- FALLBACK: Standard userspace read/write loop ---
-        {
-            const size_t mask = static_cast<size_t>(sectorSize) - 1;
-            while (!GlobalState::g_operationCancelled.load()) {
-                const ssize_t bytes_read = read(fd_in, ioBuf.data, bufferSize);
-                if (bytes_read < 0) {
+                const ssize_t written = write(fd_out,
+                                              ioBuf.data + bytes_written,
+                                              writeLen  - bytes_written);
+                if (written < 0) {
                     if (errno == EINTR) continue;
                     success = false;
-                    break;
+                    goto done;
                 }
-                if (bytes_read == 0) break;
+                bytes_written += written;
 
-                ssize_t writeLen = bytes_read;
-                if (!useBufferedIO) {
-                    const ssize_t aligned = (bytes_read + mask) & ~static_cast<ssize_t>(mask);
-                    if (aligned > bytes_read)
-                        memset(ioBuf.data + bytes_read, 0, aligned - bytes_read);
-                    writeLen = aligned;
-                }
-
-                ssize_t  bytes_written    = 0;
-                uint64_t reportedThisChunk = 0;
-                while (bytes_written < writeLen) {
-                    if (GlobalState::g_operationCancelled.load()) {
-                        success = false;
-                        goto done;
-                    }
-                    const ssize_t written = write(fd_out,
-                                                ioBuf.data + bytes_written,
-                                                writeLen  - bytes_written);
-                    if (written < 0) {
-                        if (errno == EINTR) continue;
-                        success = false;
-                        goto done;
-                    }
-                    bytes_written += written;
-                    // Report progress incrementally as each write() actually
-                    // lands, rather than waiting for the whole (up to 4MiB)
-                    // chunk to finish. This is what lets the monitor thread see
-                    // real progress on slow devices instead of one big jump
-                    // every several seconds. Cap at bytes_read so O_DIRECT
-                    // alignment padding (writeLen > bytes_read) is never
-                    // counted as real progress.
-                    const uint64_t realBytesSoFar = static_cast<uint64_t>(
-                        std::min<ssize_t>(bytes_written, bytes_read));
-                    if (realBytesSoFar > reportedThisChunk) {
-                        totalBytesWrittenAccumulator.fetch_add(
-                            realBytesSoFar - reportedThisChunk);
-                        reportedThisChunk = realBytesSoFar;
-                    }
+                // Report progress incrementally as each write() actually
+                // lands, rather than waiting for the whole (up to 4MiB)
+                // chunk to finish. This is what lets the monitor thread see
+                // real progress on slow devices instead of one big jump
+                // every several seconds. Cap at bytes_read so O_DIRECT
+                // alignment padding (writeLen > bytes_read) is never
+                // counted as real progress.
+                const uint64_t realBytesSoFar = static_cast<uint64_t>(
+                    std::min<ssize_t>(bytes_written, bytes_read));
+                if (realBytesSoFar > reportedThisChunk) {
+                    totalBytesWrittenAccumulator.fetch_add(
+                        realBytesSoFar - reportedThisChunk);
+                    reportedThisChunk = realBytesSoFar;
                 }
             }
         }
