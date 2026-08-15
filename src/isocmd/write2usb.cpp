@@ -26,6 +26,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -43,29 +44,59 @@ namespace fs = std::filesystem;
 /**
  * @brief Runs an external command with stdout/stderr suppressed.
  *
- * Forks a child process, redirects its stdout and stderr to /dev/null,
- * and exec's the given argument vector. The parent waits for the child
- * and returns its exit code.
+ * Uses posix_spawn instead of fork()+exec() to avoid duplicating the
+ * calling process's threads, held locks, or memory state into the child.
+ * fork() in a multithreaded process only carries the calling thread
+ * forward — if another thread held e.g. glibc's malloc arena lock or a
+ * libmount/libblkid internal lock at the moment of fork(), the child can
+ * deadlock on its very first allocation before exec() ever replaces it.
+ * posix_spawn sidesteps this entirely since no such fork-without-exec
+ * window exists.
  *
  * @param args Argument vector where args[0] is the executable name.
- * @return Exit code of the child process, or -1 on fork/exec failure.
+ * @return Exit code of the child process, or -1 on spawn/wait failure.
  */
 int runCommand(const std::vector<std::string>& args) {
-    std::vector<const char*> argv;
-    for (const auto& a : args) argv.push_back(a.c_str());
+    if (args.empty()) return -1;
+
+    std::vector<char*> argv;
+    argv.reserve(args.size() + 1);
+    for (const auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
     argv.push_back(nullptr);
 
-    pid_t pid = fork();
-    if (pid < 0) return -1;
-    if (pid == 0) {
-        int devNull = open("/dev/null", O_WRONLY);
-        dup2(devNull, STDOUT_FILENO);
-        dup2(devNull, STDERR_FILENO);
-        execvp(argv[0], const_cast<char* const*>(argv.data()));
-        _exit(127);
+    // Redirect child's stdout/stderr to /dev/null via posix_spawn's
+    // file_actions — this replaces the dup2() calls that used to run
+    // post-fork in the child.
+    posix_spawn_file_actions_t fileActions;
+    if (posix_spawn_file_actions_init(&fileActions) != 0) return -1;
+
+    int devNull = open("/dev/null", O_WRONLY);
+    if (devNull < 0) {
+        posix_spawn_file_actions_destroy(&fileActions);
+        return -1;
     }
+
+    posix_spawn_file_actions_adddup2(&fileActions, devNull, STDOUT_FILENO);
+    posix_spawn_file_actions_adddup2(&fileActions, devNull, STDERR_FILENO);
+    posix_spawn_file_actions_addclose(&fileActions, devNull);
+
+    pid_t pid;
+    // Search PATH like execvp did — posix_spawnp is the PATH-searching
+    // variant of posix_spawn, matching the original execvp() behavior.
+    int rc = posix_spawnp(&pid, argv[0], &fileActions, nullptr,
+                          argv.data(), environ);
+
+    posix_spawn_file_actions_destroy(&fileActions);
+    close(devNull);
+
+    if (rc != 0) {
+        // posix_spawn returns the error code directly rather than setting
+        // errno; a nonzero rc means the child never launched at all.
+        return -1;
+    }
+
     int status = 0;
-    waitpid(pid, &status, 0);
+    if (waitpid(pid, &status, 0) < 0) return -1;
     return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 }
 
