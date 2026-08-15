@@ -23,10 +23,10 @@
 // C / System Headers
 #include <fcntl.h>
 #include <linux/fs.h>
+#include <spawn.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
