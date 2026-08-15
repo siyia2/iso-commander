@@ -822,7 +822,13 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                         goto done;
                     }
                     bytes_written += written;
-
+                    // Report progress incrementally as each write() actually
+                    // lands, rather than waiting for the whole (up to 4MiB)
+                    // chunk to finish. This is what lets the monitor thread see
+                    // real progress on slow devices instead of one big jump
+                    // every several seconds. Cap at bytes_read so O_DIRECT
+                    // alignment padding (writeLen > bytes_read) is never
+                    // counted as real progress.
                     const uint64_t realBytesSoFar = static_cast<uint64_t>(
                         std::min<ssize_t>(bytes_written, bytes_read));
                     if (realBytesSoFar > reportedThisChunk) {
