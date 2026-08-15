@@ -960,14 +960,23 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
         std::vector<std::string> deviceNames;
         deviceNames.reserve(validPairs.size());
 
+        bool anyDraining = false;
         {
             std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-            for (const auto& [iso, device] : validPairs) {
-                g_drainingDevices.insert(device);
+            for (size_t i = 0; i < validPairs.size(); ++i) {
+                const std::string& device = validPairs[i].second;
                 deviceNames.push_back(device);
+
+                // Only devices whose task was still actively running when
+                // cancellation hit need draining. Completed and failed tasks
+                // have already returned from writeIsoToDevice and are flush-clean.
+                if (!progressData[i].completed.load() && !progressData[i].failed.load()) {
+                    g_drainingDevices.insert(device);
+                    anyDraining = true;
+                }
             }
         }
-        g_drainingCancelled.store(true);
+        g_drainingCancelled.store(anyDraining);
 
         g_drainingManager.add(std::thread([
             capturedFutures = std::move(futures),
@@ -978,14 +987,11 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
                     capturedFutures[i].wait();
                 }
 
-                {
-                    std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-                    g_drainingDevices.erase(devices[i]);
+                std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+                g_drainingDevices.erase(devices[i]); // no-op if never inserted
 
-                    // Signal completion only when the last device is handled
-                    if (g_drainingDevices.empty()) {
-                        g_drainingCancelled.store(false);
-                    }
+                if (g_drainingDevices.empty()) {
+                    g_drainingCancelled.store(false);
                 }
             }
         }));
