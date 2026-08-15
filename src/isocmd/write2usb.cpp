@@ -627,7 +627,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         // Minimum time between speed updates to avoid distortion
         constexpr int MIN_UPDATE_INTERVAL_MS = 1000;
         // Show 0 only after this many seconds of continuous stalling
-        constexpr int STALL_TIMEOUT_SECONDS = 60;
+        constexpr int STALL_TIMEOUT_SECONDS = 300;
 
         while (monitoringActive.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
