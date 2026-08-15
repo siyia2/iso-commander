@@ -375,8 +375,7 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  *
  * I/O strategy per file:
  * - **FAT32 destination files** use unbuffered Direct I/O (@c O_DIRECT) to bypass the
- *   Linux page cache, ensuring user-initiated cancellations abort cleanly without
- *   post-cancel dirty writeback flushing to the device in the background.
+ *   Linux page cache.
  * - **NTFS destination files** use buffered I/O with @c posix_fallocate pre-allocation,
  *   copied via a manual read/write loop.
  *
