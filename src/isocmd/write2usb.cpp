@@ -422,6 +422,11 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         return false;
     };
 
+    auto failUnlessCancelled = [&]() -> bool {
+        if (GlobalState::g_operationCancelled.load()) return false;
+        return fail();
+    };
+
     // ------------------------------------------------------------------ //
     // 0. Mount the ISO to inspect its layout                              //
     // ------------------------------------------------------------------ //
@@ -431,7 +436,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ScopedMount always removes the dir; setMounted() arms the safeUmount.
     ScopedMount isoScope(isoMntBuf);
 
-    if (libMount(isoPath.c_str(), isoMntBuf, "ro,loop") != 0) return fail();
+    if (libMount(isoPath.c_str(), isoMntBuf, "ro,loop") != 0) return failUnlessCancelled();
     isoScope.setMounted();
 
     const std::string isoMnt  = isoMntBuf;
@@ -440,7 +445,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ------------------------------------------------------------------ //
     // 1. Wipe + repartition                                               //
     // ------------------------------------------------------------------ //
-    if (!wipeDeviceSignatures(device)) return fail();
+    if (!wipeDeviceSignatures(device)) return failUnlessCancelled();
 
     int partResult = -1;
     if (isoType == IsoType::WindowsInstall) {
@@ -457,9 +462,9 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                                  "set", "1", "esp",  "on",
                                  "set", "1", "boot", "on"});
     }
-    if (partResult != 0) return fail();
+    if (partResult != 0) return failUnlessCancelled();
 
-    if (!waitForDevice(device)) return fail();
+    if (!waitForDevice(device)) return failUnlessCancelled();
 
     auto derivePartition = [&](int n) -> std::string {
         std::string target = device + std::to_string(n);
@@ -471,19 +476,19 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                                      ? derivePartition(2)
                                      : std::string{};
 
-    if (fatPart.empty()) return fail();
-    if (isoType == IsoType::WindowsInstall && ntfsPart.empty()) return fail();
+    if (fatPart.empty()) return failUnlessCancelled();
+    if (isoType == IsoType::WindowsInstall && ntfsPart.empty()) return failUnlessCancelled();
 
     if (runCommand({"mkfs.fat", "-F", "32", "-n",
                     (isoType == IsoType::WindowsInstall ? "WINBOOT" : "WINPE"),
                     fatPart}) != 0) {
-        return fail();
+        return failUnlessCancelled();
     }
 
     if (isoType == IsoType::WindowsInstall) {
         if (runCommand({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA",
                         ntfsPart}) != 0) {
-            return fail();
+            return failUnlessCancelled();
         }
     }
 
@@ -527,12 +532,12 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     const std::string fatMnt  = fatMntBuf;
     const std::string ntfsMnt = ntfsMntBuf;
 
-    if (libMount(fatPart.c_str(), fatMntBuf, "noatime") != 0) return fail();
+    if (libMount(fatPart.c_str(), fatMntBuf, "noatime") != 0) return failUnlessCancelled();
     fatScope.setMounted();
 
     if (isoType == IsoType::WindowsInstall) {
         const std::string ntfsDriver = getBestNtfsDriver();
-        if (ntfsDriver.empty()) return fail();
+        if (ntfsDriver.empty()) return failUnlessCancelled();
 
         libmnt_context* ctx = mnt_new_context();
         mnt_context_set_source(ctx, ntfsPart.c_str());
@@ -543,7 +548,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         const int rc = mnt_context_mount(ctx);
         mnt_free_context(ctx);
 
-        if (rc != 0) return fail();
+        if (rc != 0) return failUnlessCancelled();
         ntfsScope.setMounted();
     }
 
