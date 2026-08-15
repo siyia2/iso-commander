@@ -845,6 +845,15 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
         while (!isProcessingComplete.load(std::memory_order_acquire) &&
                !GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
 
+            // Check if all tasks are completed
+            if (completedTasks.load() == totalTasks) {
+                // Force one final render and exit the display thread
+                std::cout << "\033[u";
+                displayAllProgress();
+                isProcessingComplete.store(true, std::memory_order_release);
+                break;
+            }
+
             if (!isFirstUpdate) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 // Double check flags right after waking up to prevent stale prints on quick exit
