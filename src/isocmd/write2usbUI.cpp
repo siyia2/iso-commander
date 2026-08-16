@@ -709,7 +709,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  * A background thread redraws per-task status, waking immediately whenever a task
  * completes (via a condition variable notified from each pooled task) and otherwise
  * falling back to a 500 ms pulse if nothing new has happened, using ANSI cursor
- * save/restore (\033[s / \033[u).
+ * save/restore (\033[s / \033[u). The main thread waits on the same condition
+ * variable to detect overall completion, also waking instantly on task completion.
  *
  * @par Row Layout
  * Each row prints seamlessly side-by-side:
@@ -725,7 +726,9 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  *
  * @par Cancellation (Ctrl+C / SIGINT)
  * When @ref GlobalState::g_operationCancelled is tripped:
- * -# The main thread's future-polling loop breaks within 500 ms.
+ * -# The main thread's condition-variable wait (shared with the display thread)
+ *    re-checks @ref GlobalState::g_operationCancelled at least every 500 ms and
+ *    breaks as soon as it observes the flag set.
  * -# The live UI render thread is flagged, notified via condition variable to wake
  *    from any in-progress wait, and joined immediately.
  * -# Terminal properties, standard input buffers, and layout configurations are restored @b instantly.
@@ -737,8 +740,9 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  * the device selection screen to clear the @b [FLUSHING] indicator per-device as soon as it is safe.
  *
  * @par Normal Completion
- * All futures are sequentially polled to completion, the UI rendering loop is closed natively,
- * a final static frame update is committed, and lingering thread handles are cleanly joined.
+ * The main thread's condition-variable wait unblocks once every task has finished
+ * (succeeded or failed), the UI rendering loop is closed natively, a final static
+ * frame update is committed, and lingering thread handles are cleanly joined.
  *
  * @par Summary Line
  * On execution exit, the primary cursor moves up to print an operational status overview:
@@ -766,6 +770,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
 
     std::atomic<size_t> completedTasks(0);
+    std::atomic<size_t> finishedTasks(0);   // success OR failure — drives "all done" detection
     std::atomic<bool> isProcessingComplete(false);
     const size_t totalTasks = validPairs.size();
 
@@ -862,8 +867,8 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
         while (!isProcessingComplete.load(std::memory_order_acquire) &&
                !GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
 
-            // Check if all tasks are completed
-            if (completedTasks.load() == totalTasks) {
+            // Check if all tasks are finished (succeeded or failed)
+            if (finishedTasks.load() == totalTasks) {
                 // Force one final render and exit the display thread
                 std::cout << "\033[u";
                 displayAllProgress();
@@ -876,7 +881,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
                 progressCv.wait_for(lock, std::chrono::milliseconds(500), [&] {
                     return isProcessingComplete.load(std::memory_order_acquire) ||
                            GlobalState::g_operationCancelled.load(std::memory_order_acquire) ||
-                           completedTasks.load() == totalTasks;
+                           finishedTasks.load() == totalTasks;
                 });
                 lock.unlock();
 
@@ -895,7 +900,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     std::vector<std::future<void>> futures;
     for (size_t i = 0; i < totalTasks; ++i) {
-        futures.push_back(pool.enqueue([validPairs, i, &completedTasks, &progressCv, &progressCvMutex]() {
+        futures.push_back(pool.enqueue([validPairs, i, &completedTasks, &finishedTasks, &progressCv, &progressCvMutex]() {
             const auto& [iso, device] = validPairs[i];
             bool success = writeIsoToDevice(iso.path, device, i);
 
@@ -905,6 +910,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             } else if (!GlobalState::g_operationCancelled.load()) {
                 progressData[i].failed.store(true);
             }
+            finishedTasks.fetch_add(1);
 
             // Wake the display thread immediately instead of waiting for
             // its next 500ms poll tick. Acquiring/releasing the mutex here,
@@ -920,13 +926,20 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     std::thread progressThread(displayProgress);
 
-    // Polling Loop: standard 500ms pulse heartbeat check matching the UI pacing layout
-    for (auto& future : futures) {
-        while (!GlobalState::g_operationCancelled.load()) {
-            auto status = future.wait_for(std::chrono::milliseconds(500));
-            if (status == std::future_status::ready) {
-                break;
-            }
+    // Wait for all tasks to finish, woken instantly by each task's
+    // notify_one() rather than polling each future individually. Still
+    // time-boxed to a 500ms cycle (not an unbounded wait) because
+    // g_operationCancelled is set from a SIGINT handler, which cannot
+    // safely call notify_one() — so cancellation must also be picked up
+    // by periodic re-check, not solely by notification.
+    {
+        std::unique_lock<std::mutex> lock(progressCvMutex);
+        while (finishedTasks.load() != totalTasks &&
+               !GlobalState::g_operationCancelled.load()) {
+            progressCv.wait_for(lock, std::chrono::milliseconds(500), [&] {
+                return finishedTasks.load() == totalTasks ||
+                       GlobalState::g_operationCancelled.load();
+            });
         }
     }
 
