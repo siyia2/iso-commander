@@ -12,6 +12,7 @@
 #include <vector>
 
 // C / System Headers
+#include <sys/stat.h>
 #include <unistd.h>
 
 // Third-Party Library Headers
@@ -26,23 +27,20 @@
 #include "../umount.h"
 #include "../verbose.h"
 
-namespace fs = std::filesystem;
-
 /**
  * @brief Checks if a directory is empty.
  * @details Used primarily to determine if a mount point can be safely removed
  * if a umount2 call fails but the directory contains no data.
- *
- * @param path The absolute path to the directory.
+ * * @param path The absolute path to the directory.
  * @return True if the directory exists and contains no entries, false otherwise.
  */
 bool isDirectoryEmpty(const std::string& path) {
-    if (!fs::exists(path)) {
+    if (!std::filesystem::exists(path)) {
         return false;
     }
 
-    return fs::directory_iterator(path) ==
-           fs::directory_iterator();
+    return std::filesystem::directory_iterator(path) ==
+           std::filesystem::directory_iterator();
 }
 
 /**
@@ -64,27 +62,26 @@ static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessage
 
     if (displayConfig::toggleFullListUmount) {
         formattedDir = std::string(std::get<0>(dirParts))
-                     + formattedDir
-                     + std::string(squareColor)
-                     + std::string(std::get<2>(dirParts))
-                     + std::string(UI::Palette::BoldReset);
+                       + formattedDir
+                       + std::string(squareColor)
+                       + std::string(std::get<2>(dirParts))
+                       + std::string(UI::Palette::BoldReset);
     }
 
     return fmt.format(messageKey, formattedDir);
 }
 
 /**
- * @brief Performs unmount operations on a list of ISO mount points securely.
+ * @brief Performs unmount operations on a list of ISO mount points.
  *
  * Allocates a single libmount context (@c mnt_new_context) and reuses it
  * across all entries via @c mnt_reset_context, avoiding per-iteration
  * allocation overhead.  The context is managed by a RAII CtxGuard that
  * guarantees @c mnt_free_context on any exit path.
  *
- * Each mount point is validated against a secure path schema to prevent
- * arbitrary directory traversal or deletion, unmounted with lazy detach
- * (@c MNT_DETACH), and automatic loop device cleanup (@c /dev/loopX).
- * Empty mount point directories are removed after a successful unmount.
+ * Each mount point is unmounted with lazy detach (@c MNT_DETACH) and
+ * automatic loop device cleanup (@c /dev/loopX).  Empty mount point
+ * directories are removed after a successful unmount.
  *
  * Results are written directly to the global verboseSets:
  *   - verboseSets.operationCompleted  Success messages.
@@ -93,7 +90,7 @@ static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessage
  * @param isoDirs        Vector of mount point directories to unmount.
  * @param completedTasks Atomic counter incremented for each successful unmount.
  * @param failedTasks    Atomic counter incremented for each failure
- *                       (including cancellation, path validation, and context allocation failure).
+ *                       (including cancellation and context allocation failure).
  * @param silentMode     Suppresses all message generation; only counters are updated.
  *
  * @warning Requires root (geteuid() == 0). Without it every entry gets "root_error".
@@ -144,43 +141,12 @@ void unmountISO(
         failedTasks->fetch_add(isoDirs.size(), std::memory_order_relaxed);
         return;
     }
-
-    // Secure path validation lambda to prevent arbitrary system directory deletion/traversal
-    auto isSafeMountPath = [](const std::string& pathStr) -> bool {
-        fs::path p(pathStr);
-        if (!p.is_absolute()) return false;
-
-        fs::path normalized = p.lexically_normal();
-        std::string s = normalized.string();
-
-        // Must strictly reside under /mnt/iso_ to match authorized mount schema
-        if (s.rfind("/mnt/iso_", 0) != 0) {
-            return false;
-        }
-
-        // Ensure no component contains path traversal sequences ("..")
-        for (auto const& part : normalized) {
-            if (part == "..") return false;
-        }
-        return true;
-    };
-
     for (const auto& isoDir : isoDirs) {
         if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
             if (!silentMode)
                 errorMessages.push_back(
                     formatDirForDisplay(isoDir, messageFormatter, "cancel"));
             failedTasks->fetch_add(1, std::memory_order_relaxed);
-            maybeFlush();
-            continue;
-        }
-
-        // SECURE FIX: Validate path schema before performing any unmount or rmdir operations
-        if (!isSafeMountPath(isoDir)) {
-            failedTasks->fetch_add(1, std::memory_order_relaxed);
-            if (!silentMode)
-                errorMessages.push_back(
-                    formatDirForDisplay(isoDir, messageFormatter, "error"));
             maybeFlush();
             continue;
         }
@@ -207,8 +173,7 @@ void unmountISO(
 
         // Handle results and directory removal verbose output
         if (result == 0 || isDirectoryEmpty(isoDir)) {
-            std::error_code ec;
-            fs::remove(isoDir, ec); // Safely remove empty directory using filesystem library
+            rmdir(isoDir.c_str());
             completedTasks->fetch_add(1, std::memory_order_relaxed);
             if (!silentMode)
                 successMessages.push_back(
