@@ -458,16 +458,36 @@ void mountIsoFiles(
         std::error_code ec;
         fs::create_directory(mountPoint, ec);
 
-        if ((ec && ec != std::errc::file_exists) ||
-            (fs::exists(mountPoint) && !fs::is_directory(mountPoint))) {
+        // Verify + open in one atomic step: O_NOFOLLOW fails immediately if the
+        // path is a symlink, and there is no window between "checked" and "used"
+        // because the fd IS the verified object — nothing to swap underneath it.
+        if (mkdir(mountPoint.c_str(), 0755) != 0 && errno != EEXIST) {
             recordFail(isoFile, "mkdir failed");
             maybeFlush();
             continue;
         }
 
+        const int dirFd = open(mountPoint.c_str(),
+                               O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        if (dirFd < 0) {
+            recordFail(isoFile, "badMountTarget");
+            maybeFlush();
+            continue;
+        }
+        struct DirFdGuard { int fd; ~DirFdGuard() { if (fd >= 0) close(fd); } } dirFdGuard{dirFd};
+
+        struct stat mountSt{};
+        if (fstat(dirFd, &mountSt) != 0 || mountSt.st_uid != geteuid()) {
+            recordFail(isoFile, "badMountTarget");
+            maybeFlush();
+            continue;
+        }
+
+        const std::string mountTargetFdPath = "/proc/self/fd/" + std::to_string(dirFd);
+
         mnt_reset_context(ctx);
         mnt_context_set_source(ctx, isoFile.c_str());
-        mnt_context_set_target(ctx, mountPoint.c_str());
+        mnt_context_set_target(ctx, mountTargetFdPath.c_str());   // pinned — no re-resolution possible
         mnt_context_set_options(ctx, "loop,ro");
         mnt_context_set_fstype_pattern(ctx, "udf,iso9660");
 
