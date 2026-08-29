@@ -12,6 +12,7 @@
 #include <vector>
 
 // C / System Headers
+#include <fcntl.h>
 #include <unistd.h>
 
 // Third-Party Library Headers
@@ -140,6 +141,7 @@ void unmountISO(
         failedTasks->fetch_add(isoDirs.size(), std::memory_order_relaxed);
         return;
     }
+
     for (const auto& isoDir : isoDirs) {
         if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
             if (!silentMode)
@@ -149,6 +151,27 @@ void unmountISO(
             maybeFlush();
             continue;
         }
+
+        // SECURE FIX: Open directory with O_NOFOLLOW to completely prevent symlink traversal
+        const int dirFd = open(isoDir.c_str(),
+                               O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        if (dirFd < 0) {
+            failedTasks->fetch_add(1, std::memory_order_relaxed);
+            if (!silentMode)
+                errorMessages.push_back(
+                    formatDirForDisplay(isoDir, messageFormatter, "error"));
+            maybeFlush();
+            continue;
+        }
+
+        // RAII guard for file descriptor
+        struct FdGuard {
+            int fd;
+            ~FdGuard() { if (fd >= 0) close(fd); }
+        } fdGuard{dirFd};
+
+        // SECURE FIX: Use /proc/self/fd/ to pin the target - prevents path re-resolution
+        const std::string targetPath = "/proc/self/fd/" + std::to_string(dirFd);
 
         // Allocate isolated libmount context
         libmnt_context* ctx = mnt_new_context();
@@ -161,14 +184,19 @@ void unmountISO(
             continue;
         }
 
-        // Configure target, lazy unmount (MNT_DETACH), and loop cleanup
-        mnt_context_set_target(ctx, isoDir.c_str());
+        // RAII for context cleanup
+        struct CtxGuard {
+            libmnt_context* c;
+            ~CtxGuard() { if (c) mnt_free_context(c); }
+        } ctxGuard{ctx};
+
+        // Configure target using pinned path, lazy unmount (MNT_DETACH), and loop cleanup
+        mnt_context_set_target(ctx, targetPath.c_str());
         mnt_context_enable_lazy(ctx, 1);    // Matches MNT_DETACH
         mnt_context_enable_loopdel(ctx, 1); // Cleans up /dev/loopX
 
         // Execute the unmount operation
         const int result = mnt_context_umount(ctx);
-        mnt_free_context(ctx);
 
         // Handle results and directory removal verbose output
         if (result == 0 || isDirectoryEmpty(isoDir)) {
