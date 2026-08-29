@@ -53,14 +53,14 @@ extern "C" const char* __lsan_default_suppressions() {
 }
 
 /**
- * @brief Heuristic check to determine if a file is a valid ISO 9660 or UDF disk image.
+ * @brief Heuristic check to determine if a file descriptor is a valid ISO 9660 or UDF disk image.
  *
  * Performs a series of signature-based checks to identify disk image formats.
  * Validation is heuristic: it confirms the presence of standard volume descriptors
  * but does not perform a full filesystem integrity parse.
  *
- * @param path Filesystem path to the file to be checked.
- * @param st   The stat struct of the file (used for an initial size gate).
+ * @param fd Filesystem file descriptor to the file to be checked (opened with O_NOFOLLOW).
+ * @param st The stat struct of the file (obtained securely via fstat).
  * @return true if a recognized disk image signature is found, false otherwise.
  *
  * @note Performs binary reads only; does not modify the file.
@@ -79,23 +79,12 @@ extern "C" const char* __lsan_default_suppressions() {
  *
  * @see ECMA-119 (ISO 9660), ECMA-167 §7.2 (UDF VRS).
  */
-static bool isValidIsoFile(const std::string& path, const struct stat& st) {
-    // Early size check using pre-existing stat
+static bool isValidIsoFile(int fd, const struct stat& st) {
+    // Early size check using secure fstat result
     if (st.st_size < 34816) {
         return false;
     }
     const off_t fileSize = st.st_size;
-
-    const int fd = open(path.c_str(), O_RDONLY | O_NOATIME | O_CLOEXEC);
-    // Note: O_NOATIME silently has no effect if caller doesn't own the file;
-    // open() still succeeds, so this is safe for a read-only validator.
-    if (fd < 0) return false;
-
-    // RAII guard for file descriptor
-    struct FdGuard {
-        int fd;
-        ~FdGuard() { if (fd >= 0) close(fd); }
-    } fdGuard{fd};
 
     posix_fadvise(fd, 0, 0, POSIX_FADV_RANDOM);
 
@@ -143,7 +132,6 @@ static bool isValidIsoFile(const std::string& path, const struct stat& st) {
 
     posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
     return found;
-    // fdGuard automatically closes the file descriptor
 }
 
 /**
@@ -191,10 +179,11 @@ static std::string mountPointSuffix(const std::string& isoPath) {
 }
 
 /**
- * @brief Mounts a batch of ISO files to unique directories under /mnt using loop devices.
+ * @brief Mounts a batch of ISO files to unique directories under /mnt using loop devices securely.
  *
  * This function handles bulk mounting by performing multi-stage validation (root privileges,
- * cancellation state, file existence, and filesystem format) to minimize unnecessary I/O.
+ * cancellation state, secure descriptor validation via O_NOFOLLOW, and filesystem format)
+ * to minimize unnecessary I/O and prevent TOCTOU symlink race conditions.
  *
  * ### Integrity & Performance Features:
  * - **Resource Efficiency:** Uses a single `libmnt_context` per batch, reset via `mnt_reset_context`
@@ -389,10 +378,24 @@ void mountIsoFiles(
             continue;
         }
 
-        // Single stat() call for existence check, validation, and inode cache
-        struct stat isoStat{};
-        if (::stat(isoFile.c_str(), &isoStat) != 0) {
+        // SECURE FIX: Open file with O_NOFOLLOW to completely prevent symlink traversal/TOCTOU races
+        const int fd = open(isoFile.c_str(), O_RDONLY | O_NOATIME | O_CLOEXEC | O_NOFOLLOW);
+        if (fd < 0) {
             recordFail(isoFile, "missingISO");
+            maybeFlush();
+            continue;
+        }
+
+        // RAII guard for file descriptor
+        struct FdGuard {
+            int fd;
+            ~FdGuard() { if (fd >= 0) close(fd); }
+        } fdGuard{fd};
+
+        // SECURE FIX: fstat directly on the secure descriptor avoids path-based TOCTOU gaps
+        struct stat isoStat{};
+        if (fstat(fd, &isoStat) != 0) {
+            recordFail(isoFile, "badFS");
             maybeFlush();
             continue;
         }
@@ -404,8 +407,8 @@ void mountIsoFiles(
             continue;
         }
 
-        // Validate ISO format using pre-existing stat result (avoids redundant stat)
-        if (!isValidIsoFile(isoFile, isoStat)) {
+        // Validate ISO format using the open file descriptor
+        if (!isValidIsoFile(fd, isoStat)) {
             recordFail(isoFile, "badFS");
             maybeFlush();
             continue;
@@ -438,9 +441,9 @@ void mountIsoFiles(
         // --- inode-based skip (file was renamed after being mounted) ---
         // The kernel tracks loop-device backing files by inode, so a rename
         // leaves the original mount intact but under a stale path in our
-        // name-derived mountPointCache.  Detect this by checking whether the
+        // name-derived mountPointCache. Detect this by checking whether the
         // file's (dev, inode) pair is already present in the live mount table.
-        // Reuse the isoStat we already have
+        // Reuse the isoStat we securely obtained via fstat
         if (mountedInodes.count(makeInodeKey(isoStat))) {
             if (!silentMode)
                 tempSkipped.push_back(
