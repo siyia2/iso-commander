@@ -80,20 +80,24 @@ int runCommand(const std::vector<std::string>& args) {
     posix_spawn_file_actions_adddup2(&fileActions, devNull, STDERR_FILENO);
     posix_spawn_file_actions_addclose(&fileActions, devNull);
 
+    // Fixed, trusted search path for privileged helper binaries — deliberately
+    // NOT the inherited `environ`, whose PATH could be attacker-influenced
+    // (e.g. via sudo/pkexec with preserved env, or a less-trusted parent).
+    // Covers the standard sbin/bin split across major distros (Debian/Ubuntu,
+    // Fedora/RHEL, Arch's merged-/usr layout) without hardcoding a single
+    // absolute binary path.
+    static char trustedPath[] =
+        "PATH=/usr/sbin:/usr/bin:/sbin:/bin";
+    char* const spawnEnv[] = { trustedPath, nullptr };
+
     pid_t pid;
-    // Search PATH like execvp did — posix_spawnp is the PATH-searching
-    // variant of posix_spawn, matching the original execvp() behavior.
     int rc = posix_spawnp(&pid, argv[0], &fileActions, nullptr,
-                          argv.data(), environ);
+                            argv.data(), spawnEnv);
 
     posix_spawn_file_actions_destroy(&fileActions);
     close(devNull);
 
-    if (rc != 0) {
-        // posix_spawn returns the error code directly rather than setting
-        // errno; a nonzero rc means the child never launched at all.
-        return -1;
-    }
+    if (rc != 0) return -1;
 
     int status = 0;
     if (waitpid(pid, &status, 0) < 0) return -1;
@@ -156,18 +160,34 @@ std::string getBestNtfsDriver() {
 // ---------------------------------------------------------------------------
 
 /**
- * @brief Erase all filesystem/partition signatures on @p device.
+ * @brief Erase all filesystem/partition signatures on an already-open device fd.
  *
- * Equivalent to `wipefs -a <device>`.  Uses libblkid's probe-and-wipe loop
- * so no child process is spawned.
+ * Equivalent to `wipefs -a <device>`, but operates on a caller-supplied file
+ * descriptor rather than re-resolving a device path. This anchors the wipe to
+ * the exact device object the caller opened, closing the TOCTOU window where
+ * a `/dev/sdX`-style node name could be reused by a different disk between
+ * the caller opening it and this function acting on it (e.g. if the original
+ * device were unplugged and a new one enumerated onto the same name in that
+ * interval). Uses libblkid's probe-and-wipe loop directly, so no child
+ * process is spawned.
  *
- * @param device Block device path (e.g. "/dev/sdb").
- * @return true on success (including the case where no signatures were found).
+ * @param devFd Open, writable file descriptor referencing the target block
+ *              device. Ownership is not taken — the caller remains
+ *              responsible for closing it; this function only reads from
+ *              and wipes signatures on the referenced device.
+ * @return true on success (including the case where no signatures were
+ *         found); false if the probe could not be created or bound to
+ *         @p devFd.
  */
-static bool wipeDeviceSignatures(const std::string& device)
+static bool wipeDeviceSignatures(int devFd)
 {
-    blkid_probe pr = blkid_new_probe_from_filename(device.c_str());
+    blkid_probe pr = blkid_new_probe();
     if (!pr) return false;
+
+    if (blkid_probe_set_device(pr, devFd, 0, 0) != 0) {
+        blkid_free_probe(pr);
+        return false;
+    }
 
     blkid_probe_enable_superblocks(pr, true);
     blkid_probe_set_superblocks_flags(pr,
@@ -176,10 +196,8 @@ static bool wipeDeviceSignatures(const std::string& device)
     blkid_probe_enable_partitions(pr, true);
     blkid_probe_set_partitions_flags(pr, BLKID_PARTS_MAGIC);
 
-    // Loop until no more signatures are found.
-    // blkid_do_probe() returns 0 while signatures remain, 1 when done.
     while (blkid_do_probe(pr) == 0)
-        blkid_do_wipe(pr, false /* not dry-run */);
+        blkid_do_wipe(pr, false);
 
     blkid_free_probe(pr);
     return true;
@@ -453,23 +471,44 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ------------------------------------------------------------------ //
     // 1. Wipe + repartition                                               //
     // ------------------------------------------------------------------ //
-    if (!wipeDeviceSignatures(device)) return failUnlessCancelled();
+
+    // Open once and hold the fd across both the wipe and the partition
+    // step. Both operations are then anchored to this exact device object
+    // via /proc/self/fd, closing the TOCTOU window where the /dev node
+    // name could be reused by a different disk between the two calls.
+    // O_EXCL additionally fails fast if something else already has the
+    // device open exclusively (e.g. it's mounted).
+    int devFd = open(device.c_str(), O_RDWR | O_EXCL);
+    if (devFd < 0) return failUnlessCancelled();
+
+    if (!wipeDeviceSignatures(devFd)) {
+        close(devFd);
+        return failUnlessCancelled();
+    }
+
+    // Route parted through the held fd rather than the raw path string —
+    // /proc/self/fd/N always resolves to the fd's current target, so this
+    // is guaranteed to be the same device wipeDeviceSignatures just wiped.
+    const std::string devFdPath = "/proc/self/fd/" + std::to_string(devFd);
 
     int partResult = -1;
     if (isoType == IsoType::WindowsInstall) {
-        partResult = runCommand({"parted", "-s", device,
+        partResult = runCommand({"parted", "-s", devFdPath,
                                  "mklabel", "gpt",
                                  "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
                                  "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
                                  "set", "1", "esp",  "on",
                                  "set", "1", "boot", "on"});
     } else {
-        partResult = runCommand({"parted", "-s", device,
+        partResult = runCommand({"parted", "-s", devFdPath,
                                  "mklabel", "gpt",
                                  "mkpart", "WINPE", "fat32", "1MiB", "100%",
                                  "set", "1", "esp",  "on",
                                  "set", "1", "boot", "on"});
     }
+
+    close(devFd);  // Done with the pinned handle; partitions get their own nodes.
+
     if (partResult != 0) return failUnlessCancelled();
 
     if (!waitForDevice(device)) return failUnlessCancelled();
@@ -594,7 +633,17 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     };
 
     try {
-        for (const auto& entry : fs::recursive_directory_iterator(isoMnt)) {
+        for (const auto& entry : fs::recursive_directory_iterator(
+                 isoMnt, fs::directory_options::skip_permission_denied)) {
+
+            // Reject symlinks outright — a malicious ISO (Rock Ridge/UDF) could
+            // embed a symlink pointing at an arbitrary host path (e.g. /etc/shadow).
+            // Following it here would read host files with this process's
+            // privileges and copy their contents onto the target device.
+            if (fs::is_symlink(entry.symlink_status())) {
+                continue;
+            }
+
             const fs::path rel   = fs::relative(entry.path(), isoMnt);
             const bool     toESP = belongsOnESP(rel);
             const fs::path dest  = fs::path(toESP ? fatMnt : ntfsMnt) / rel;
@@ -736,7 +785,9 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                                 (dst.string().rfind(ntfsMnt, 0) == 0);
         const bool useBufferedIO = isNtfsDest;
 
-        const int fd_in = open(src.c_str(), O_RDONLY);
+        // O_NOFOLLOW: refuse to open the source if it is (or races to become)
+        // a symlink, regardless of the earlier filesystem-walk check.
+        const int fd_in = open(src.c_str(), O_RDONLY | O_NOFOLLOW);
         if (fd_in < 0) return false;
         posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
 
