@@ -12,7 +12,6 @@
 #include <vector>
 
 // C / System Headers
-#include <sys/stat.h>
 #include <unistd.h>
 
 // Third-Party Library Headers
