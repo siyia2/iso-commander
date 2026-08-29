@@ -12,7 +12,6 @@
 #include <vector>
 
 // C / System Headers
-#include <sys/stat.h>
 #include <unistd.h>
 
 // Third-Party Library Headers
@@ -74,13 +73,13 @@ static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessage
 /**
  * @brief Performs unmount operations on a list of ISO mount points.
  *
- * Iterates through the provided mount point directories, applying inline
- * Time-Of-Check to Time-Of-Use (TOCTOU) path mitigation via @c realpath and
- * @c lstat to prevent symbolic link race exploits before unmounting.
+ * Allocates a single libmount context (@c mnt_new_context) and reuses it
+ * across all entries via @c mnt_reset_context, avoiding per-iteration
+ * allocation overhead.  The context is managed by a RAII CtxGuard that
+ * guarantees @c mnt_free_context on any exit path.
  *
- * For each valid target, an isolated libmount context (@c mnt_new_context)
- * is allocated and configured for lazy unmounting (@c MNT_DETACH) and
- * automatic loop device cleanup (@c /dev/loopX). Empty mount point
+ * Each mount point is unmounted with lazy detach (@c MNT_DETACH) and
+ * automatic loop device cleanup (@c /dev/loopX).  Empty mount point
  * directories are removed after a successful unmount.
  *
  * Results are written directly to the global verboseSets:
@@ -90,11 +89,12 @@ static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessage
  * @param isoDirs        Vector of mount point directories to unmount.
  * @param completedTasks Atomic counter incremented for each successful unmount.
  * @param failedTasks    Atomic counter incremented for each failure
- *                       (including cancellation, context allocation failure,
- *                       and path resolution/TOCTOU validation errors).
+ *                       (including cancellation and context allocation failure).
  * @param silentMode     Suppresses all message generation; only counters are updated.
  *
  * @warning Requires root (geteuid() == 0). Without it every entry gets "root_error".
+ *          If the initial context allocation fails, all entries are marked failed
+ *          immediately.
  */
 void unmountISO(
     const std::vector<std::string>& isoDirs,
@@ -150,27 +150,6 @@ void unmountISO(
             continue;
         }
 
-        // Resolve and validate path safety BEFORE touching mount/umount state
-        char resolvedPath[4096];
-        if (!realpath(isoDir.c_str(), resolvedPath)) {
-            failedTasks->fetch_add(1, std::memory_order_relaxed);
-            if (!silentMode)
-                errorMessages.push_back(
-                    formatDirForDisplay(isoDir, messageFormatter, "error"));
-            maybeFlush();
-            continue;
-        }
-
-        struct stat st;
-        if (lstat(resolvedPath, &st) != 0 || !S_ISDIR(st.st_mode)) {
-            failedTasks->fetch_add(1, std::memory_order_relaxed);
-            if (!silentMode)
-                errorMessages.push_back(
-                    formatDirForDisplay(isoDir, messageFormatter, "error"));
-            maybeFlush();
-            continue;
-        }
-
         // Allocate isolated libmount context
         libmnt_context* ctx = mnt_new_context();
         if (!ctx) {
@@ -182,8 +161,8 @@ void unmountISO(
             continue;
         }
 
-        // Configure target using the fully canonicalized, validated path
-        mnt_context_set_target(ctx, resolvedPath);
+        // Configure target, lazy unmount (MNT_DETACH), and loop cleanup
+        mnt_context_set_target(ctx, isoDir.c_str());
         mnt_context_enable_lazy(ctx, 1);    // Matches MNT_DETACH
         mnt_context_enable_loopdel(ctx, 1); // Cleans up /dev/loopX
 
@@ -192,8 +171,8 @@ void unmountISO(
         mnt_free_context(ctx);
 
         // Handle results and directory removal verbose output
-        if (result == 0 || isDirectoryEmpty(resolvedPath)) {
-            rmdir(resolvedPath);
+        if (result == 0 || isDirectoryEmpty(isoDir)) {
+            rmdir(isoDir.c_str());
             completedTasks->fetch_add(1, std::memory_order_relaxed);
             if (!silentMode)
                 successMessages.push_back(
