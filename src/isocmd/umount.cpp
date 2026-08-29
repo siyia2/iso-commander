@@ -12,7 +12,7 @@
 #include <vector>
 
 // C / System Headers
-#include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 // Third-Party Library Headers
@@ -74,13 +74,13 @@ static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessage
 /**
  * @brief Performs unmount operations on a list of ISO mount points.
  *
- * Allocates a single libmount context (@c mnt_new_context) and reuses it
- * across all entries via @c mnt_reset_context, avoiding per-iteration
- * allocation overhead.  The context is managed by a RAII CtxGuard that
- * guarantees @c mnt_free_context on any exit path.
+ * Iterates through the provided mount point directories, applying inline
+ * Time-Of-Check to Time-Of-Use (TOCTOU) path mitigation via @c realpath and
+ * @c lstat to prevent symbolic link race exploits before unmounting.
  *
- * Each mount point is unmounted with lazy detach (@c MNT_DETACH) and
- * automatic loop device cleanup (@c /dev/loopX).  Empty mount point
+ * For each valid target, an isolated libmount context (@c mnt_new_context)
+ * is allocated and configured for lazy unmounting (@c MNT_DETACH) and
+ * automatic loop device cleanup (@c /dev/loopX). Empty mount point
  * directories are removed after a successful unmount.
  *
  * Results are written directly to the global verboseSets:
@@ -90,12 +90,11 @@ static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessage
  * @param isoDirs        Vector of mount point directories to unmount.
  * @param completedTasks Atomic counter incremented for each successful unmount.
  * @param failedTasks    Atomic counter incremented for each failure
- *                       (including cancellation and context allocation failure).
+ *                       (including cancellation, context allocation failure,
+ *                       and path resolution/TOCTOU validation errors).
  * @param silentMode     Suppresses all message generation; only counters are updated.
  *
  * @warning Requires root (geteuid() == 0). Without it every entry gets "root_error".
- *          If the initial context allocation fails, all entries are marked failed
- *          immediately.
  */
 void unmountISO(
     const std::vector<std::string>& isoDirs,
@@ -141,7 +140,6 @@ void unmountISO(
         failedTasks->fetch_add(isoDirs.size(), std::memory_order_relaxed);
         return;
     }
-
     for (const auto& isoDir : isoDirs) {
         if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
             if (!silentMode)
@@ -152,10 +150,9 @@ void unmountISO(
             continue;
         }
 
-        // SECURE FIX: Open directory with O_NOFOLLOW to completely prevent symlink traversal
-        const int dirFd = open(isoDir.c_str(),
-                               O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
-        if (dirFd < 0) {
+        // Resolve and validate path safety BEFORE touching mount/umount state
+        char resolvedPath[4096];
+        if (!realpath(isoDir.c_str(), resolvedPath)) {
             failedTasks->fetch_add(1, std::memory_order_relaxed);
             if (!silentMode)
                 errorMessages.push_back(
@@ -164,14 +161,15 @@ void unmountISO(
             continue;
         }
 
-        // RAII guard for file descriptor
-        struct FdGuard {
-            int fd;
-            ~FdGuard() { if (fd >= 0) close(fd); }
-        } fdGuard{dirFd};
-
-        // SECURE FIX: Use /proc/self/fd/ to pin the target - prevents path re-resolution
-        const std::string targetPath = "/proc/self/fd/" + std::to_string(dirFd);
+        struct stat st;
+        if (lstat(resolvedPath, &st) != 0 || !S_ISDIR(st.st_mode)) {
+            failedTasks->fetch_add(1, std::memory_order_relaxed);
+            if (!silentMode)
+                errorMessages.push_back(
+                    formatDirForDisplay(isoDir, messageFormatter, "error"));
+            maybeFlush();
+            continue;
+        }
 
         // Allocate isolated libmount context
         libmnt_context* ctx = mnt_new_context();
@@ -184,23 +182,18 @@ void unmountISO(
             continue;
         }
 
-        // RAII for context cleanup
-        struct CtxGuard {
-            libmnt_context* c;
-            ~CtxGuard() { if (c) mnt_free_context(c); }
-        } ctxGuard{ctx};
-
-        // Configure target using pinned path, lazy unmount (MNT_DETACH), and loop cleanup
-        mnt_context_set_target(ctx, targetPath.c_str());
+        // Configure target using the fully canonicalized, validated path
+        mnt_context_set_target(ctx, resolvedPath);
         mnt_context_enable_lazy(ctx, 1);    // Matches MNT_DETACH
         mnt_context_enable_loopdel(ctx, 1); // Cleans up /dev/loopX
 
         // Execute the unmount operation
         const int result = mnt_context_umount(ctx);
+        mnt_free_context(ctx);
 
         // Handle results and directory removal verbose output
-        if (result == 0 || isDirectoryEmpty(isoDir)) {
-            rmdir(isoDir.c_str());
+        if (result == 0 || isDirectoryEmpty(resolvedPath)) {
+            rmdir(resolvedPath);
             completedTasks->fetch_add(1, std::memory_order_relaxed);
             if (!silentMode)
                 successMessages.push_back(
