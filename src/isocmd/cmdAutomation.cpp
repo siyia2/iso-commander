@@ -333,7 +333,7 @@ static int handleUmount(const ParsedArgs& args) {
                         mountPoints.insert(canonical);
                     } else {
                         warnMsg(args.silentMode,
-                                "is not allowed. Only /mnt/ISOs or /mnt/ISOs/iso* are valid.",
+                                "is not allowed. Only /mnt/ISOs or /mnt/ISOs/isoFolder are valid.",
                                 rawPath);
                         hasErrors = true;
                     }
