@@ -115,7 +115,7 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
 /**
  * @brief Base path where ISO files are mounted.
  */
-const std::string MOUNTED_ISO_PATH = "/mnt";
+const std::string MOUNTED_ISO_PATH = "/mnt/ISOs";
 
 /**
  * @brief Scans, filters, and renders currently mounted ISO directories.
@@ -200,7 +200,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         const std::string_view warnColor = isOriginal ? UI::Palette::Yellow : theme->warning;
         const std::string_view reset     = UI::Palette::BoldReset;
 
-        std::cerr << "\n" << warnColor << "No paths matching the '/mnt/iso_{name}' pattern found." << reset << "\n";
+        std::cerr << "\n" << warnColor << "No paths matching the '/mnt/ISOs/iso_{name}' pattern found." << reset << "\n";
         pressEnterToReturn();
 
         std::vector<std::string>().swap(lastSortedDirs);

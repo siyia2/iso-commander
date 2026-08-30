@@ -207,7 +207,7 @@ static std::string mountPointSuffix(const std::string& isoPath) {
  * `globalSets` periodically to minimize lock contention on `GlobalMutexes::globalSetsMutex`.
  *
  * ### Mount Path Schema:
- * `/mnt/iso_<stem>~<5-char base-36 FNV-1a suffix>`
+ * `/mnt/ISOs/iso_<stem>~<5-char base-36 FNV-1a suffix>`
  *
  * @param isoFiles      Vector of absolute paths to the ISO files.
  * @param completedTasks Atomic counter for successful mounts and skipped duplicates.
@@ -414,7 +414,7 @@ void mountIsoFiles(
         // Construct mount point with minimal allocations
         const fs::path isoPath(isoFile);
         mountPointBuffer.clear();
-        mountPointBuffer = "/mnt/iso_";
+        mountPointBuffer = "/mnt/ISOs/iso_";
         mountPointBuffer += isoPath.stem().string();
         mountPointBuffer += "~";
         mountPointBuffer += mountPointSuffix(isoFile);
@@ -453,11 +453,11 @@ void mountIsoFiles(
         }
 
         std::error_code ec;
-        fs::create_directory(mountPoint, ec);
+        fs::create_directories(mountPoint, ec);
 
         if ((ec && ec != std::errc::file_exists) ||
             (fs::exists(mountPoint) && !fs::is_directory(mountPoint))) {
-            recordFail(isoFile, "mkdir failed");
+            recordFail(isoFile, "mkdirFailed");
             maybeFlush();
             continue;
         }

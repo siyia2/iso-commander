@@ -281,7 +281,7 @@ static int handleUmount(const ParsedArgs& args) {
     std::unordered_set<std::string> mountPoints;
     bool hasErrors = false;
 
-    // Collect every iso_* subdirectory under a given /mnt path.
+    // Collect every iso_* subdirectory under a given /mnt/ISOs path.
     auto collectFromMnt = [&](const fs::path& mntPath) {
         disableInput();
         verboseInfo(args.silentMode,
@@ -298,17 +298,17 @@ static int handleUmount(const ParsedArgs& args) {
                 }
             }
         } catch (const fs::filesystem_error& e) {
-            errMsg(std::string("Error scanning /mnt: ") + e.what());
+            errMsg(std::string("Error scanning /mnt/ISOs: ") + e.what());
             hasErrors = true;
         }
     };
 
-    // No paths supplied (or only "all") → scan all of /mnt.
+    // No paths supplied (or only "all") → scan all of /mnt/ISOs.
     const bool scanAllMnt = args.paths.empty() ||
                             (args.paths.size() == 1 && args.paths[0] == "all");
 
     if (scanAllMnt) {
-        collectFromMnt("/mnt");
+        collectFromMnt("/mnt/ISOs");
         if (GlobalState::g_operationCancelled.load()) {
             verboseWarn(args.silentMode, "Operation cancelled by user.");
             return 1;
@@ -326,20 +326,20 @@ static int handleUmount(const ParsedArgs& args) {
                 if (fs::exists(path) && fs::is_directory(path)) {
                     const std::string canonical = fs::canonical(path).string();
 
-                    if (canonical == "/mnt") {
+                    if (canonical == "/mnt/ISOs") {
                         collectFromMnt(path);
-                    } else if (canonical.rfind("/mnt/iso_", 0) == 0) {
+                    } else if (canonical.rfind("/mnt/ISOs/iso_", 0) == 0) {
                         mountPoints.insert(canonical);
                     } else {
                         warnMsg(args.silentMode,
-                                "is not allowed. Only /mnt or /mnt/iso_* are valid.",
+                                "is not allowed. Only /mnt/ISOs or /mnt/ISOs/iso_* are valid.",
                                 rawPath);
                         hasErrors = true;
                     }
                 } else {
-                    // Accept bare names: "mydisc" → /mnt/iso_mydisc
+                    // Accept bare names: "mydisc" → /mnt/ISOs/iso_mydisc
                     fs::path candidate = path.is_relative()
-                        ? fs::path("/mnt") / ("iso_" + path.filename().string())
+                        ? fs::path("/mnt/ISOs") / ("iso_" + path.filename().string())
                         : path;
 
                     if (fs::exists(candidate) && fs::is_directory(candidate)) {

@@ -26,6 +26,8 @@
 #include "../umount.h"
 #include "../verbose.h"
 
+namespace fs = std::filesystem;
+
 /**
  * @brief Checks if a directory is empty.
  * @details Used primarily to determine if a mount point can be safely removed
@@ -184,6 +186,16 @@ void unmountISO(
                     formatDirForDisplay(isoDir, messageFormatter, "error"));
         }
         maybeFlush();
+    }
+    // Clean up the parent /mnt/ISOs directory if it's now empty.
+    // Only attempt this if we actually have root (checked above) and
+    // at least attempted some unmounts, to avoid a stray rmdir on every call.
+    {
+        std::error_code ec;
+        const char* isosParent = "/mnt/ISOs";
+        if (fs::is_directory(isosParent, ec) && fs::is_empty(isosParent, ec)) {
+            fs::remove(isosParent, ec); // ignore failure; non-critical
+        }
     }
     flushTemporaryBuffers();
 }
