@@ -50,7 +50,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 
 🖥️ **Terminal Interface**
 - Tab completion, pagination, and command history
-- Real-time progress tracking and non-interactive mode
+- Real-time progress tracking with input locking
 - Built-in theme engine with full RGB color support
 
 🖊️ **Best-in-Class USB Write Engine**
