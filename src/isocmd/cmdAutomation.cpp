@@ -299,7 +299,7 @@ static int handleUmount(const ParsedArgs& args) {
             }
         } catch (const fs::filesystem_error& e) {
             if (!args.silentMode) {
-            errMsg(std::string("Error scanning /mnt/ISOs: ") + e.what());
+                errMsg(std::string("Error scanning /mnt/ISOs: ") + e.what());
             }
             hasErrors = true;
         }
