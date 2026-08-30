@@ -75,14 +75,19 @@ int main(int argc, char *argv[]) {
     GlobalState::nrgFilesCache.reserve(1000);
     GlobalState::chdFilesCache.reserve(1000);
     GlobalState::daaGbiFilesCache.reserve(1000);
-
-    setupReadlineToIgnoreCtrlC();
+    /**
+     * @brief Single-instance lock mechanism
+     * - `config` contains user-defined folder paths and settings
+     */
+    std::map<std::string, std::string> config = readUserConfigLists(GlobalState::configPath);
 
     // --- Version & Utility Command Dispatch ---
     if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v"))
         return printVersionNumber("7.4.6"), 0;
     if (argc >= 3 || (argc == 2 && (std::string(argv[1]) == "umount" || std::string(argv[1]) == "unmount" || std::string(argv[1]) == "mount")))
         return handleMountUmountCommands(argc, argv);
+
+    setupReadlineToIgnoreCtrlC();
 
     /// Configure readline completion behavior
     rl_completer_word_break_characters = ";";
@@ -123,12 +128,10 @@ int main(int argc, char *argv[]) {
     /**
      * @brief Configuration loading and background task initialization
      * - `search` controls whether auto-update scanning is enabled
-     * - `config` contains user-defined folder paths and settings
      */
     bool exitProgram = false;
     std::atomic<bool> search{readUserConfigUpdates(GlobalState::configPath)};
 
-    std::map<std::string, std::string> config = readUserConfigLists(GlobalState::configPath);
     std::vector<std::thread> backgroundThreads;
 
     // Shared state for background import coordination (isImportRunning, stopImport, worker sync)
