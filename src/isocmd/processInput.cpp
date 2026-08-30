@@ -32,6 +32,8 @@
 #include "../tokenize.h"
 #include "../umount.h"
 
+namespace fs = std::filesystem;
+
 /**
  * @file operations.cpp
  * @brief High-level processing functions for mounting, file management (Cp/Mv/Rm), and format conversions.
@@ -134,6 +136,12 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     isProcessingComplete.store(true);
     signal(SIGINT, SIG_IGN);
     progressThread.join();
+
+    // Clean up the parent /mnt/ISOs directory if it's now empty after all processing is done.
+    {
+        std::error_code ec;
+        fs::remove("/mnt/ISOs", ec);
+    }
 }
 
 /**

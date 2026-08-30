@@ -207,7 +207,7 @@ static std::string mountPointSuffix(const std::string& isoPath) {
  * `globalSets` periodically to minimize lock contention on `GlobalMutexes::globalSetsMutex`.
  *
  * ### Mount Path Schema:
- * `/mnt/ISOs/iso_<stem>~<5-char base-36 FNV-1a suffix>`
+ * `/mnt/ISOs/<stem>~<5-char base-36 FNV-1a suffix>`
  *
  * @param isoFiles      Vector of absolute paths to the ISO files.
  * @param completedTasks Atomic counter for successful mounts and skipped duplicates.
@@ -255,6 +255,13 @@ void mountIsoFiles(
         libmnt_context* c;
         ~CtxGuard() { mnt_free_context(c); }
     } ctxGuard{ctx};
+
+    // Ensure the base ISOs directory exists once, up front, so we don't
+    // redundantly re-check/re-create it on every iteration of the loop below.
+    {
+        std::error_code baseEc;
+        fs::create_directories("/mnt/ISOs", baseEc);
+    }
 
     // Pack (st_dev, st_ino) into a single uint64_t key so the cache is
     // correct across multiple filesystems (inodes are only unique per device).
@@ -414,7 +421,7 @@ void mountIsoFiles(
         // Construct mount point with minimal allocations
         const fs::path isoPath(isoFile);
         mountPointBuffer.clear();
-        mountPointBuffer = "/mnt/ISOs/iso_";
+        mountPointBuffer = "/mnt/ISOs/";
         mountPointBuffer += isoPath.stem().string();
         mountPointBuffer += "~";
         mountPointBuffer += mountPointSuffix(isoFile);
@@ -494,6 +501,5 @@ void mountIsoFiles(
 
         maybeFlush();
     }
-
     flushBuffers();
 }
