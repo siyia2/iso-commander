@@ -281,7 +281,7 @@ static int handleUmount(const ParsedArgs& args) {
     std::unordered_set<std::string> mountPoints;
     bool hasErrors = false;
 
-    // Collect every iso_* subdirectory under a given /mnt/ISOs path.
+    // Collect every iso subdirectory under a given /mnt/ISOs path.
     auto collectFromMnt = [&](const fs::path& mntPath) {
         disableInput();
         verboseInfo(args.silentMode,
@@ -293,8 +293,7 @@ static int handleUmount(const ParsedArgs& args) {
                 if (GlobalState::g_operationCancelled.load()) return;
                 if (entry.is_directory()) {
                     const std::string name = entry.path().filename().string();
-                    if (name.rfind("iso_", 0) == 0)
-                        mountPoints.insert(fs::canonical(entry.path()).string());
+                    mountPoints.insert(fs::canonical(entry.path()).string());
                 }
             }
         } catch (const fs::filesystem_error& e) {
@@ -330,18 +329,18 @@ static int handleUmount(const ParsedArgs& args) {
 
                     if (canonical == "/mnt/ISOs") {
                         collectFromMnt(path);
-                    } else if (canonical.rfind("/mnt/ISOs/iso_", 0) == 0) {
+                    } else if (canonical.rfind("/mnt/ISOs/", 0) == 0) {
                         mountPoints.insert(canonical);
                     } else {
                         warnMsg(args.silentMode,
-                                "is not allowed. Only /mnt/ISOs or /mnt/ISOs/iso_* are valid.",
+                                "is not allowed. Only /mnt/ISOs or /mnt/ISOs/iso* are valid.",
                                 rawPath);
                         hasErrors = true;
                     }
                 } else {
                     // Accept bare names: "mydisc" → /mnt/ISOs/iso_mydisc
                     fs::path candidate = path.is_relative()
-                        ? fs::path("/mnt/ISOs") / ("iso_" + path.filename().string())
+                        ? fs::path("/mnt/ISOs") / (path.filename().string())
                         : path;
 
                     if (fs::exists(candidate) && fs::is_directory(candidate)) {

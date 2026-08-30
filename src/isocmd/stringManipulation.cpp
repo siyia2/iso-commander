@@ -115,12 +115,15 @@ std::pair<std::string_view, std::string_view> extractDirectoryAndFilename(std::s
 
 /**
  * @brief Parses a complex mount point name into structural components.
- * @details Expected format: "directory_filename~hash".
+ * @details Expected format: "directoryISOs/filename~hash".
  * Used primarily for unmount displays to style different parts of the path.
- * * @param dir The directory string view to parse.
- * @return A tuple of {DirectoryPart_, FilenamePart, ~HashPart}.
+ *
+ * @param dir The directory string view to parse.
+ * @return A tuple of {DirectoryISOs/Part, FilenamePart, ~HashPart}.
  */
 std::tuple<std::string_view, std::string_view, std::string_view> parseMountPointComponents(std::string_view dir) {
+    static constexpr std::string_view kDelim = "ISOs/";
+
     // 1. Transparent lookup: 0 allocations to check the cache
     if (auto it = GlobalCaches::cachedParsesForUmount.find(dir);
              it != GlobalCaches::cachedParsesForUmount.end()) {
@@ -129,22 +132,23 @@ std::tuple<std::string_view, std::string_view, std::string_view> parseMountPoint
     }
 
     // 2. Logic: Find positions using string_view (no copies)
-    size_t underscorePos = dir.find('_');
-    if (underscorePos == std::string_view::npos) {
+    size_t delimPos = dir.find(kDelim);
+    if (delimPos == std::string_view::npos) {
         auto& stored = GlobalCaches::cachedParsesForUmount[std::string(dir)] = {std::string(dir), "", ""};
         return {std::get<0>(stored), "", ""};
     }
 
     size_t lastTildePos = dir.find_last_of('~');
+    size_t afterDelim = delimPos + kDelim.size();
 
-    std::string directoryPart(dir.substr(0, underscorePos + 1));
+    std::string directoryPart(dir.substr(0, afterDelim));
     std::string filenamePart;
     std::string hashPart;
 
-    if (lastTildePos == std::string_view::npos || lastTildePos <= underscorePos) {
-        filenamePart = std::string(dir.substr(underscorePos + 1));
+    if (lastTildePos == std::string_view::npos || lastTildePos <= afterDelim - 1) {
+        filenamePart = std::string(dir.substr(afterDelim));
     } else {
-        filenamePart = std::string(dir.substr(underscorePos + 1, lastTildePos - underscorePos - 1));
+        filenamePart = std::string(dir.substr(afterDelim, lastTildePos - afterDelim));
         hashPart = std::string(dir.substr(lastTildePos));
     }
 
