@@ -199,7 +199,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         const std::string_view warnColor = isOriginal ? UI::Palette::Yellow : theme->warning;
         const std::string_view reset     = UI::Palette::BoldReset;
 
-        std::cerr << "\n" << warnColor << "No paths matching the '/mnt/ISOs/{name}' pattern found." << reset << "\n";
+        std::cerr << "\n" << warnColor << "No paths matching the '/mnt/ISOs/{isoDirName}' pattern found." << reset << "\n";
         pressEnterToReturn();
 
         std::vector<std::string>().swap(lastSortedDirs);
