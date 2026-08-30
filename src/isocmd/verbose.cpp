@@ -260,7 +260,7 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
                   << "No valid input provided."
                   << UI::Palette::BoldReset << "\n";
 
-        pressEnterToContinue();
+        pressEnterToReturn();
     }
     else if (verbose) {
         clearScrollBuffer();

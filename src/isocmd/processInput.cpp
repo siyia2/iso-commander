@@ -395,7 +395,7 @@ void processInputForConversions(const std::string& input,
         clearScrollBuffer();
         std::cout << "\n" << (isOrig ? UI::Palette::Red : theme->secondary)
                   << "No valid input provided." << UI::Palette::BoldReset << "\n";
-        pressEnterToContinue();
+        pressEnterToReturn();
         return;
     }
 
