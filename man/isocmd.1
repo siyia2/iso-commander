@@ -21,7 +21,7 @@ Max recursion depth when scanning for ISOs (default: unlimited).
 Mount one or more ISO files or directories containing ISOs (requires root).
 .TP
 .B umount | unmount
-Unmount ISO mount points; without arguments or with \fBall\fR, unmounts all under /mnt (requires root).
+Unmount ISO mount points; without arguments or with \fBall\fR, unmounts all under /mnt/ISOs (requires root).
 .SH EXAMPLES
 .TS
 tab(@);
@@ -30,8 +30,8 @@ isocmd /path/to/file1.iso /path/to/file2.iso mount@Mount specific ISOs
 isocmd /path/to/dir mount@Mount all ISOs in a directory
 isocmd \-d2 /path/to/dir mount@Mount ISOs up to depth 2
 isocmd \-\-silent /path/to/file.iso mount@Mount silently
-isocmd /mnt/iso_example /mnt/iso_other umount@Unmount specific mount points
-isocmd \-\-silent /mnt/iso_example umount@Unmount specific mount point silently
+isocmd /mnt/ISOs/iso_example /mnt/ISOs/iso_other umount@Unmount specific mount points
+isocmd \-\-silent /mnt/ISOs/iso_example umount@Unmount specific mount point silently
 isocmd umount@Unmount all ISO mount points
 isocmd \-\-silent umount@Unmount all silently
 .TE
