@@ -382,6 +382,12 @@ static int handleUmount(const ParsedArgs& args) {
     unmountISO(std::vector<std::string>(mountPoints.begin(), mountPoints.end()),
                &completedTasks, &failedTasks, args.silentMode);
 
+    // Clean up the parent /mnt/ISOs directory if it's now empty after all processing is done.
+    {
+        std::error_code ec;
+        fs::remove("/mnt/ISOs", ec);
+    }
+
     if (!args.silentMode) {
         for (const auto& msg : verboseSets.operationCompleted)  std::cout << msg << "\n";
         for (const auto& msg : verboseSets.operationFailed) std::cout << msg << "\n";
