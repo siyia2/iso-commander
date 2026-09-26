@@ -64,28 +64,39 @@ void printSection(const ThemeColors& tc, std::string_view head, const std::strin
 /**
  * @brief Displays an interactive help guide detailing how to select and filter items within lists.
  */
-void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount) {
+void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool& isMount) {
     const ThemeColors tc;
-    setupHelp("Help Guide For Lists", tc);
+    const char* helpTitle = isUnmount ? "Help Guide For Umount List" : isMount ? "Help Guide For Mount List" : "Help Guide For Lists";
+    setupHelp(helpTitle, tc);
     printSection(tc, "1. Hotkeys:", std::string(UI::Palette::BoldReset) +
         "   • Exit         : " + std::string(UI::Palette::Yellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
         "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u");
-    printSection(tc, isUnmount ? "\n2. Selecting Mount-Points (↵):" : "\n2. Selecting Files (↵):", std::string(UI::Palette::BoldReset) +
-        "   • Single/Multiple : " + std::string(UI::Palette::Purple) + "'1' or '1 5 6'\n" + std::string(UI::Palette::BoldReset) +
-        "   • Range/Combine   : " + std::string(UI::Palette::Purple) + "'1-3' or '1-3 5 7-9'\n" + std::string(UI::Palette::BoldReset) +
-        "   • Pending/All     : " + std::string(UI::Palette::Purple) + "'1-3 5;' or '00' " + std::string(UI::Palette::Yellow) + "('00'↔mount/umount)");
+
+    printSection(
+        tc,
+        isUnmount ? "\n2. Selecting Mount-Points (↵):" : "\n2. Selecting Files (↵):",
+        std::string(UI::Palette::BoldReset) +
+        "   • Single/Multiple : " + std::string(UI::Palette::Purple) + "'1' or '1 5 6'\n" +
+        std::string(UI::Palette::BoldReset) +
+        "   • Range/Combine   : " + std::string(UI::Palette::Purple) + "'1-3' or '1-3 5 7-9'\n" +
+        std::string(UI::Palette::BoldReset) +
+        "   • Pending" + ((isUnmount || isMount) ? "/All" : "    ") + "     : " +
+        std::string(UI::Palette::Purple) +
+        "'1-3 5;'" + ((isUnmount || isMount) ? " or '00'" : "")
+    );
     printSection(tc, "\n3. Special Keys:",
-    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~'" + std::string(UI::Palette::BoldReset) + "                : View Full/Compact\n" +
-    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'*'" + std::string(UI::Palette::BoldReset) + "                : View FilenamesOnly (¬filtered, ¬umount)\n" +
-    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'/'" + std::string(UI::Palette::BoldReset) + "                : Filter (e.g. term1;term2)\n" +
-    (isAtISOListForHelp ?
-        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'R'" + std::string(UI::Palette::BoldReset) + "                : Refresh ISO list from FolderPath history\n"
-        : "") +
-    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process|Clear pending items\n" +
-    "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgDn'|'PgUp'|'g#' " + std::string(UI::Palette::BoldReset) + ": Pagination Next|Previous|GoTo page");
-    printSection(tc, "\n   Legend:",
-        "   " + std::string(UI::Palette::BoldReset) + "¬ : not for    ↔ : only for");
+        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'~'" + std::string(UI::Palette::BoldReset) + "                : View Full/Compact\n" +
+        (!isUnmount ?
+            "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'*'" + std::string(UI::Palette::BoldReset) + "                : View FilenamesOnly (¬filtered)\n"
+            : "") +
+        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'/'" + std::string(UI::Palette::BoldReset) + "                : Filter (e.g. term1;term2)\n" +
+        (isAtISOListForHelp ?
+            "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'R'" + std::string(UI::Palette::BoldReset) + "                : Refresh ISO list from FolderPath history\n"
+            : "") +
+        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process|Clear pending items\n" +
+        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(UI::Palette::Blue) + "'PgDn'|'PgUp'|'g#' " + std::string(UI::Palette::BoldReset) + ": Pagination Next|Previous|GoTo page"
+    );
     printSection(tc, "\n4. Tips:",
         "   • Indexes correspond only to their generated list\n"
         "   • Indexes^ refer to the original unfiltered list\n"

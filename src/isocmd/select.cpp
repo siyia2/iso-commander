@@ -367,6 +367,7 @@ void selectForIsoFiles(const std::string& operation,
     );
 
     const bool isUnmount = (operation == "umount");
+    const bool isMount = (operation == "mount");
     listSubtype = (operation == "mount") ? "mount" : (operation == "write2usb") ? "write2usb" : "cp_mv_rm";
 
     // --- RAII: isAtISOList state automatically managed ---
