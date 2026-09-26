@@ -1,139 +1,112 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
-#include "../display.h"
+// C++ Standard Library Headers
+#include <algorithm>
+#include <atomic>
+#include <cctype>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdlib>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <sstream>
+#include <string>
+#include <thread>
+#include <unordered_set>
+#include <vector>
+
+// Third-Party Library Headers
+#include <readline/history.h>
+#include <readline/readline.h>
+
+// Project Headers
+#include "../databaseOps.h"
 #include "../filtering.h"
+#include "../inputHandling.h"
+#include "../globalMutexes.h"
+#include "../readline.h"
+#include "../select.h"
+#include "../sharedRefreshState.h"
+#include "../state.h"
 #include "../themes.h"
+#include "../verbose.h"
 
 /**
- * @brief Processes and displays the results of ISO file selection operations.
- * * Handles error messaging, verbose output, and screen refresh logic after
- * a mount, unmount, or file operation has been attempted.
- * * @param uniqueErrorMessages Set of unique error strings collected during the operation.
- * @param operationFiles Set of files successfully operated on.
- * @param operationFails Set of files that failed the operation.
- * @param skippedMessages Set of messages for files that were skipped.
- * @param operation String representing the current operation (e.g., "mv", "rm").
- * @param verbose Boolean flag for detailed output.
- * @param isMount Boolean indicating if the operation was a mount.
- * @param isFiltered Boolean indicating if a filter is currently active.
- * @param umountMvRmBreak Flag to trigger screen break on destructive actions.
- * @param isUnmount Boolean indicating if the operation was an unmount.
- * @param needsClrScrn Output flag to signal if the screen should be cleared.
+ * @brief Routes validated user input to specific filesystem or mounting logic.
+ *
+ * This function acts as a dispatcher, determining the "active" file list based on
+ * the current UI state (filtered vs. global) and the nature of the operation.
+ *
+ * @details **State Transitions:**
+ * - **List Selection:** Prioritizes @p filteredFiles if @p isFiltered is true.
+ *   Otherwise, defaults to @c globalIsoFileList (or @p isoDirs for unmounting).
+ * - **UI Locking:** Sets @p isAtISOList to @c false to prevent concurrent UI
+ *   refreshes during blocking operations.
+ * - **Destructive Safety:** Sets @p umountMvRmBreak to force a view refresh
+ *   following operations that modify the source list (move, remove, unmount).
+ *
+ * @param inputString      Raw user string (usually indices or paths).
+ * @param[in,out] isFiltered Updated if the operation invalidates the current filter.
+ * @param filteredFiles    The subset of files currently visible in the UI.
+ * @param isoDirs          The list of currently active mount points.
+ * @param operation        String identifier for logging and UI feedback.
+ * @param umountMvRmBreak  Flag to interrupt the persistent loop on destructive actions.
+ * @param filterHistory    Flag to clear/update the readline search history.
  */
-void handleSelectIsoFilesResults(std::unordered_set<std::string>& uniqueErrorMessages, 
-                                 std::unordered_set<std::string>& operationFiles, 
-                                 std::unordered_set<std::string>& operationFails, 
-                                 std::unordered_set<std::string>& skippedMessages, 
-                                 const std::string& operation, bool& verbose, bool isMount, 
-                                 bool& isFiltered, bool& umountMvRmBreak, bool isUnmount, 
-                                 bool& needsClrScrn) {
-    
-    const ListTheme* theme = getActiveTheme();
-    const bool isOrig = (globalTheme == "original");
-    
-    if (!uniqueErrorMessages.empty() && operationFiles.empty() && 
-         operationFails.empty() && skippedMessages.empty()) {
-        
-        clearScrollBuffer();
-        needsClrScrn = true;
-        
-        std::cout << "\n" << (isOrig ? originalColors::red : theme->secondary) 
-                  << "No valid input provided." 
-                  << originalColors::boldAlt << "\n\n";
+void processOperationForSelectedIsoFiles(const std::string& inputString,
+                                         bool& isFiltered,
+                                         const std::vector<std::string>& filteredFiles,
+										 std::vector<std::string>& isoDirs,
+										 const std::string& operation,
+										 bool& umountMvRmBreak,
+										 bool& filterHistory) {
 
-        std::cout << color << "↵ to continue..." << reset; 
-        
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    } 
-    else if (verbose) {
-        clearScrollBuffer();
-        needsClrScrn = true;
-        
-        std::unordered_set<std::string> conditionalSet = isMount ? skippedMessages : std::unordered_set<std::string>{};
-        verbosePrint(operationFiles, operationFails, conditionalSet, uniqueErrorMessages, isMount ? 2 : 1);
-    }
-
-    if ((operation == "mv" || operation == "rm" || operation == "umount") && isFiltered && umountMvRmBreak) {
-        clear_history();
-        needsClrScrn = true;
-    }
-
-    if (!isUnmount && globalIsoFileList.empty()) {
-        clearScrollBuffer();
-        needsClrScrn = true;
-        
-        std::cout << "\n" << (isOrig ? originalColors::yellow : theme->warning) 
-                  << "No ISO available for " << operation << "." 
-                  << originalColors::boldAlt << "\n\n";
-        
-        std::cout << color << "↵ to continue..." << reset; 
-
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        return;
-    }
-}
-
-/**
- * @brief Routes the user input to the specific logic for mounting, writing, or file manipulation.
- * * @param inputString Raw user input from readline.
- * @param isMount Operation is a mount.
- * @param isUnmount Operation is an unmount.
- * @param write Operation is a USB write.
- * @param isFiltered Current list state.
- * @param filteredFiles Vector of currently filtered file paths.
- * @param isoDirs Vector of mounted directories.
- * @param operationFiles Set for tracking successful files.
- * @param operationFails Set for tracking failed files.
- * @param uniqueErrorMessages Set for tracking error strings.
- * @param skippedMessages Set for tracking skipped files.
- * @param needsClrScrn Boolean to control screen refreshing.
- * @param operation The operation name string.
- * @param isAtISOList Atomic flag indicating if the UI is at the ISO list.
- * @param umountMvRmBreak Boolean to break list view on specific actions.
- * @param filterHistory Flag for filtering history state.
- * @param newISOFound Atomic flag for background refresh.
- */
-void processOperationForSelectedIsoFiles(const std::string& inputString, bool isMount, bool isUnmount, bool write, bool& isFiltered, const std::vector<std::string>& filteredFiles, std::vector<std::string>& isoDirs, std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& operationFails, std::unordered_set<std::string>& uniqueErrorMessages, std::unordered_set<std::string>& skippedMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
-    
     clearScrollBuffer();
-    needsClrScrn = true;
     bool verbose = false;
-    
-    if (isMount || isUnmount) {
-        isAtISOList.store(false);
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : 
-                                                    (isUnmount ? isoDirs : globalIsoFileList);
-        
-        if (isUnmount) {
+    bool isUnmount = false;
+
+    if (operation == "mount" || operation == "umount") {
+        if (operation == "umount") isUnmount = true;
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles :
+                                                    (isUnmount ? isoDirs : GlobalState::globalIsoFileList);
+
+        if (operation == "umount") {
             umountMvRmBreak = true;
         }
-        
-        processInputForMountOrUmount(inputString, activeList, operationFiles, skippedMessages, 
-                            operationFails, uniqueErrorMessages, umountMvRmBreak, verbose, isUnmount);
-    } else if (write) {
-        isAtISOList.store(false);
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-        writeToUsb(inputString, activeList, uniqueErrorMessages);
+
+        processInputForMountOrUmount(inputString, activeList, umountMvRmBreak, verbose, isUnmount);
+    } else if (operation == "write2usb") {
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalState::globalIsoFileList;
+        writeToUsb(inputString, activeList);
     } else {
-        isAtISOList.store(false);
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : globalIsoFileList;
-        processInputForCpMvRm(inputString, activeList, operation, operationFiles, operationFails, 
-                             uniqueErrorMessages, umountMvRmBreak, filterHistory, verbose, newISOFound);
+        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalState::globalIsoFileList;
+        processInputForCpMvRm(inputString, activeList, operation, umountMvRmBreak, filterHistory, verbose);
     }
-    
-    handleSelectIsoFilesResults(uniqueErrorMessages, operationFiles, operationFails, skippedMessages, 
-                               operation, verbose, isMount, isFiltered, umountMvRmBreak, isUnmount, needsClrScrn);
+
+    handleSelectIsoFilesResults(operation, verbose, isFiltered, umountMvRmBreak);
 }
 
 /**
- * @brief Parses input for semicolon-delimited indices to be processed later.
- * * @param inputString Raw user input.
- * @param pendingIndices Vector to store indices for delayed processing.
- * @param hasPendingProcess Flag indicating if pending items exist.
- * @param needsClrScrn Flag to control screen refreshing.
- * @return true If indices were successfully added to the pending queue.
- * @return false If the input format was invalid for induction.
+ * @brief Parses and queues semicolon-delimited indices for batch processing.
+ *
+ * Separates "induction" input (e.g., `1 2 3;`) from direct commands. This allows
+ * the user to stage multiple indices into a pending queue without executing
+ * them immediately.
+ *
+ * @details **Parsing Rules:**
+ * - **Trigger:** Requires a semicolon (`;`) to initiate induction logic.
+ * - **Sanity Check:** Aborts if a forward slash (`/`) is found, assuming the
+ *   input is a direct file path rather than an index list.
+ * - **Deduplication:** Uses an internal @c std::unordered_set to ensure only
+ *   unique indices are added to the @p pendingIndices vector.
+ *
+ * @param inputString          The raw line from @c readline.
+ * @param[out] pendingIndices  Vector where unique staged tokens are appended.
+ * @param[out] hasPendingProcess Set to true if at least one new index was queued.
+ * @param[out] needsClrScrn    Signals the UI to refresh to show the updated queue.
+ * @return **true** if the input was valid induction syntax and was queued.
+ * @return **false** if the input should be treated as a standard command.
  */
 bool handlePendingInduction(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& needsClrScrn) {
     if (inputString.find(';') == std::string::npos || inputString.find('/') != std::string::npos) {
@@ -141,31 +114,31 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
     }
 
     std::string indicesInput = inputString.substr(0, inputString.find(';'));
-    
+
     while (!indicesInput.empty() && std::isspace(indicesInput.back())) {
         indicesInput.pop_back();
     }
-    
+
     if (!indicesInput.empty()) {
         std::istringstream iss(indicesInput);
         std::string token;
         std::unordered_set<std::string> uniqueTokens;
-        
+
         for (const auto& index : pendingIndices) {
             uniqueTokens.insert(index);
         }
-        
+
         std::vector<std::string> newIndices;
-        
+
         while (iss >> token) {
             if (uniqueTokens.find(token) == uniqueTokens.end()) {
                 newIndices.push_back(token);
                 uniqueTokens.insert(token);
             }
         }
-        
+
         pendingIndices.insert(pendingIndices.end(), newIndices.begin(), newIndices.end());
-        
+
         if (!pendingIndices.empty()) {
             hasPendingProcess = true;
             needsClrScrn = true;
@@ -176,16 +149,31 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
 }
 
 /**
- * @brief Triggers the batch processing of indices stored in the pending queue.
- * * @param inputString The command string (expects "proc").
- * @param pendingIndices The queue of file indices.
- * @param hasPendingProcess State flag for pending operations.
- * @return true If the "proc" command was executed.
- * @return false Otherwise.
+ * @brief Executes a batch operation by serializing and routing queued indices.
+ *
+ * Converts the @p pendingIndices vector into a space-delimited string and
+ * dispatches it to @c processOperationForSelectedIsoFiles. This acts as the
+ * "commit" phase for staged user selections.
+ *
+ * @details **Workflow:**
+ * - **Command Guard:** Only executes if @p inputString exactly matches "P".
+ * - **Serialization:** Concatenates all queued tokens into a single command-line
+ *   compatible string.
+ * - **Execution:** Routes the combined input through the standard operation
+ *   logic (Mount, Unmount, Write, or CP/MV/RM).
+ *
+ * @param inputString      User command (must be "P" to trigger).
+ * @param pendingIndices   The collection of staged index tokens.
+ * @param hasPendingProcess Flag indicating if a queue currently exists.
+ * @return **true** if the "P" command was recognized and executed.
+ * @return **false** if the queue was empty or the command was invalid.
  */
-bool handlePendingProcess(const std::string& inputString,std::vector<std::string>& pendingIndices,bool& hasPendingProcess,bool isMount,bool isUnmount,bool write,bool isFiltered, std::vector<std::string>& filteredFiles,std::vector<std::string>& isoDirs,std::unordered_set<std::string>& operationFiles, std::unordered_set<std::string>& skippedMessages,std::unordered_set<std::string>& operationFails,std::unordered_set<std::string>& uniqueErrorMessages, bool& needsClrScrn, const std::string& operation, std::atomic<bool>& isAtISOList, bool& umountMvRmBreak, bool& filterHistory, std::atomic<bool>& newISOFound) {
-    
-    if (hasPendingProcess && !pendingIndices.empty() && inputString == "proc") {
+bool handlePendingProcess(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
+                          bool isFiltered, std::vector<std::string>& filteredFiles,
+						  std::vector<std::string>& isoDirs, const std::string& operation,
+						  bool& umountMvRmBreak, bool& filterHistory) {
+
+    if (hasPendingProcess && !pendingIndices.empty() && inputString == "P") {
         std::string combinedIndices = "";
         for (size_t i = 0; i < pendingIndices.size(); ++i) {
             combinedIndices += pendingIndices[i];
@@ -193,164 +181,289 @@ bool handlePendingProcess(const std::string& inputString,std::vector<std::string
                 combinedIndices += " ";
             }
         }
-        
-        processOperationForSelectedIsoFiles(combinedIndices, isMount, isUnmount, write, isFiltered, 
-                     filteredFiles, isoDirs, operationFiles, 
-                     operationFails, uniqueErrorMessages, skippedMessages,
-                     needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-                     filterHistory, newISOFound);
+
+        processOperationForSelectedIsoFiles(combinedIndices, isFiltered, filteredFiles, isoDirs, operation, umountMvRmBreak, filterHistory);
 
         return true;
     }
-    
+
     return false;
 }
 
 /**
- * @brief Background thread function to refresh the ISO list when data changes.
- * * @param timeoutS for polling set to 1s.
- * @param isAtISOList Flag indicating if list view is active.
- * @param isImportRunning Flag preventing refresh during active imports.
- * @param updateHasRun Atomic trigger for a refresh.
+ * @brief Background watcher thread that requests an ISO-list redraw after an import completes.
+ *
+ * Blocks on a condition variable until signaled by the import thread, then
+ * publishes a pending refresh request rather than touching the terminal or
+ * Readline directly. The actual redraw is deferred to the main thread's
+ * Readline event hook (@c checkPendingRefresh), which runs from inside
+ * Readline's own call stack and is the only thread permitted to call Readline
+ * functions or write to the terminal.
+ *
+ * @details **Concurrency & UI Logic:**
+ * - **Thread Safety:** Utilizes @c std::shared_ptr<RefreshState> to ensure the
+ *   thread accesses valid data even if the parent scope has exited. The pointer
+ *   handoff to @c GlobalState::g_pendingRefreshState is itself guarded by a
+ *   mutex, since a bare @c shared_ptr is not safe to read/write concurrently.
+ * - **Event-Driven:** Blocks on @c RefreshState::importCV rather than polling,
+ *   waking deterministically the instant the import thread calls @c notify_all().
+ * - **No Direct Readline Access:** Performs no Readline calls and no terminal
+ *   output itself. It only stores the target @c RefreshState and publishes
+ *   @c PendingRefreshKind::IsoList via @c GlobalState::g_pendingRefreshKind;
+ *   the redraw (including @c rl_on_new_line() / @c rl_redisplay()) happens
+ *   later, on the main thread, inside @c checkPendingRefresh.
+ * - **Auto-Termination:** Executes once after the import signal is received
+ *   and terminates (non-looping design).
+ *
+ * @param isAtISOList      Atomic flag; a refresh is only requested if the user is in the list view.
+ * @param state            Shared state container for:
+ *                         - isImportRunning: Atomic flag used as CV predicate
+ *                         - importMutex and importCV for event coordination
+ *                         - filteredFiles, isFiltered, listSubtype for display context
+ *                         - pendingIndices, hasPendingProcess, umountMvRmBreak for list state
+ *                         - currentPage, originalPage for pagination
+ *
+ *                         Retained via @c GlobalState::g_pendingRefreshState until
+ *                         consumed by @c checkPendingRefresh on the main thread.
  */
-void refreshListAfterAutoUpdate(int timeoutS, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& updateHasRun, bool& umountMvRmBreak, std::vector<std::string>& filteredFiles, bool& isFiltered, std::string& listSubtype, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::atomic<bool>& newISOFound) {
-    
-    while (true) {
-        std::this_thread::sleep_for(std::chrono::seconds(timeoutS));
-
-        if (!isImportRunning.load()) {
-
-            if (isAtISOList.load() && !isFiltered) {
-                loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning);
-                std::cout << "\n";
-                
-                rl_on_new_line();
-                rl_redisplay();
-            }
-
-            updateHasRun.store(false);
-            newISOFound.store(false);
-            
-            break;
-        }
+void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
+                                std::shared_ptr<RefreshState> state) {
+    {
+        std::unique_lock<std::mutex> lock(state->importMutex);
+        state->importCV.wait(lock, [&] {
+            return !state->isImportRunning.load(std::memory_order_acquire);
+        });
+    }
+    if (isAtISOList.load()) {
+    {
+        std::lock_guard<std::mutex> lk(GlobalMutexes::readLineMutex);
+        GlobalState::g_pendingRefreshState = state;                        // set state first
+    }
+        GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::IsoList); // then publish
     }
 }
 
 /**
- * @brief The main menu loop for ISO operations (mount, umount, cp, mv, rm, write).
- * * Provides a paginated, filterable interface for selecting ISO files and executing 
- * system operations.
+ * @brief Interactive TUI for batch ISO operations (mount, umount, cp, mv, rm, write2usb).
+ *
+ * Provides a paginated, multi-layer filterable interface for selecting ISO files
+ * and executing system operations. Manages terminal state, background imports,
+ * and operation dispatch within a readline-driven event loop.
+ *
+ * @details **Key Behaviors:**
+ * - **Dynamic Context:** Automatically toggles between the global ISO database
+ *   (@c GlobalState::globalIsoFileList) and active mount points (@c isoDirs)
+ *   based on @p operation; unmount operations skip database cleanup and disable
+ *   the manual-refresh keybinding (R). The operation colour is derived from
+ *   @p operation at entry: red for rm, green for cp/mount, yellow for
+ *   mv/write2usb/umount.
+ * - **RAII Keybinding Management:** Custom readline keybindings are managed via
+ *   @c ReadlineKeybindingGuard, which calls @c setup_custom_keybindingsForSelect()
+ *   on construction and @c reset_custom_keybindingsForSelect() on destruction.
+ *   This guarantees cleanup on all exit paths (break, return from ESC, exception)
+ *   without manual reset calls. The guard is scoped to the entire function,
+ *   covering the main event loop and both early-return paths.
+ * - **RAII Atomic Flag Management:** The @p isAtISOList flag is guarded by
+ *   @c AtomicFlagGuard during operation execution blocks. The flag is
+ *   automatically set to @c false before processing and restored to @c true
+ *   afterward (or on exception), preventing stale-state leaks. For non-unmount
+ *   operations, an @c IsoListStateGuard ensures the flag is restored to its
+ *   prior value on scope exit.
+ * - **Event-Driven Refresh:** Shares a @c RefreshState instance (via
+ *   @c std::shared_ptr) with a detached watcher thread. The watcher is spawned
+ *   only for non-unmount operations while an import is running, at most once per
+ *   import session (guarded by @c isWatcherRunning), and redraws the list when the
+ *   import thread signals completion via @c importCV.
+ * - **Stacked Filtering:** Supports successive narrowing of results via
+ *   @c filteringStack. Read/write mutations to @c filteredFiles and sizing evaluations
+ *   are protected by @c GlobalMutexes::updateListMutex to prevent data races with the
+ *   background watcher thread. On receiving the ESC character (@c '\\x1b', typically
+ *   bound to the @c '<' key via @c setup_custom_keybindingsForSelect): if a filter is
+ *   active, the filter stack is cleared, @c currentPage is restored to @c originalPage,
+ *   and the loop continues; if no filter is active, the function sets @c currentPage
+ *   to 0 and returns to the previous menu (keybinding cleanup handled automatically
+ *   by the RAII guard).
+ * - **Two-Phase Execution:** Implements an "Induction" model where selected
+ *   indices are staged into @c pendingIndices (a @c std::vector<std::string>)
+ *   and batch-executed via the @c "P" command; @c "clr" discards the pending set.
+ *   The @c "P" command with an empty pending set displays a warning and continues.
+ * - **Manual Refresh:** Pressing @c "R" (when not unmount, the ISO list is
+ *   non-empty, and no import is running) spawns a background database import
+ *   thread. Stale completed threads in @p backgroundThreads are joined and
+ *   erased before each new import is launched.
+ * - **Persistent Directory State:** @c isoDirs is @c static, so its contents
+ *   survive re-entry into this function across the lifetime of the process.
+ * - **Terminal Integrity:** Binds @c \\f and @c \\t to no-ops via Readline to
+ *   prevent terminal corruption, and uses ANSI escape sequences (@c \\033[1A\\033[K,
+ *   @c \\033[1B\\033[K) to maintain a static-feeling interface during input.
+ *   PgUp/PgDn keybindings are disabled when @c ITEMS_PER_PAGE is 0.
+ *
+ * @param operation          Target system action ("mount", "umount", "cp", "mv",
+ *                           "rm", or "write2usb"). Determines list source,
+ *                           colour scheme, and operation dispatch.
+ * @param isAtISOList        Set to @c true while the ISO list is displayed (only
+ *                           for non-unmount operations); automatically managed
+ *                           by RAII guards during operation execution. Also
+ *                           gates watcher-thread repaints.
+ * @param backgroundThreads  Joinable worker threads (spawned by manual R-press
+ *                           imports) retained for lifetime management; stale
+ *                           completed threads are joined and erased before each
+ *                           new import.
+ * @param refreshState       Shared UI state and condition variable used to
+ *                           synchronize the watcher with the active import session.
+ *                           If @c nullptr, a new @c RefreshState is constructed
+ *                           internally.
  */
-void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHasRun, std::atomic<bool>& isAtISOList, std::atomic<bool>& isImportRunning, std::atomic<bool>& newISOFound) {
+void selectForIsoFiles(const std::string& operation,
+                       std::atomic<bool>& isAtISOList,
+                       std::vector<std::thread>& backgroundThreads,
+                       std::shared_ptr<RefreshState> refreshState) {
+
+    // --- RAII: Keybindings are automatically reset on any exit path ---
+    ReadlineKeybindingGuard keybindingGuard;
+
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
-    
-    std::unordered_set<std::string> operationFiles, skippedMessages, operationFails, uniqueErrorMessages;
-    std::vector<std::string> filteredFiles;
-    static std::vector<std::string> isoDirs; 
-    
-    std::vector<std::string> pendingIndices;
-    bool hasPendingProcess = false;
-    
-    globalIsoFileList.reserve(100);
-    filteredFiles.reserve(100);
-    isoDirs.reserve(100);
-    
-    bool isFiltered = false;
-    bool needsClrScrn = true;
-    bool umountMvRmBreak = false;
+
+    static std::vector<std::string> isoDirs;
+    isoDirs.reserve(1000);
+
+    if (!refreshState) refreshState = std::make_shared<RefreshState>();
+
+    std::vector<std::string>& filteredFiles = refreshState->filteredFiles;
+    std::vector<std::string>& pendingIndices = refreshState->pendingIndices;
+    bool& isFiltered                         = refreshState->isFiltered;
+    bool& hasPendingProcess                  = refreshState->hasPendingProcess;
+    bool& umountMvRmBreak                    = refreshState->umountMvRmBreak;
+    std::string& listSubtype                 = refreshState->listSubtype;
+    size_t& currentPage                      = refreshState->currentPage;
+    size_t& originalPage                     = refreshState->originalPage;
+
+    filteredFiles.reserve(1000);
+    isFiltered        = false;
+    hasPendingProcess = false;
+    umountMvRmBreak   = false;
+    currentPage       = 0;
+    originalPage      = 0;
+
+    bool needsClrScrn  = true;
     bool filterHistory = false;
-    size_t currentPage = 0;
-    size_t originalPage = currentPage;
 
     std::string operationColor = std::string(
-		operation == "rm"     ? originalColors::red    :
-		operation == "cp"     ? originalColors::green  :
-		operation == "mv"     ? originalColors::yellow :
-		operation == "mount"  ? originalColors::green  :
-		operation == "write"  ? originalColors::yellow :
-		operation == "umount" ? originalColors::yellow : originalColors::rl_boldAlt
-	);
-                                 
-    bool isMount = (operation == "mount");
-    bool isUnmount = (operation == "umount");
-    bool write = (operation == "write");
-    bool isConversion = false;
-    
-    std::string listSubtype = isMount ? "mount" : (write ? "write" : "cp_mv_rm");
-    
+        operation == "rm"        ? UI::Palette::Red    :
+        operation == "cp"        ? UI::Palette::Green  :
+        operation == "mv"        ? UI::Palette::Yellow :
+        operation == "mount"     ? UI::Palette::Green  :
+        operation == "write2usb" ? UI::Palette::Yellow :
+        operation == "umount"    ? UI::Palette::Yellow : UI::Palette::RL_BoldAlt
+    );
+
+    const bool isUnmount = (operation == "umount");
+    listSubtype = (operation == "mount") ? "mount" : (operation == "write2usb") ? "write2usb" : "cp_mv_rm";
+
+    // --- RAII: isAtISOList state automatically managed ---
+    IsoListStateGuard isoListGuard(isAtISOList, [&isUnmount]() { return isUnmount; });
+
     while (true) {
+        clearGlobalVerboseSets();
         enable_ctrl_d();
         setupSignalHandlerCancellations();
-        g_operationCancelled.store(false);
-        resetVerboseSets(operationFiles, skippedMessages, operationFails, uniqueErrorMessages);
+        GlobalState::g_operationCancelled.store(false);
         filterHistory = false;
         clear_history();
-        
+
         if (!isFiltered) originalPage = currentPage;
-        
+
         if (!isUnmount) {
-            removeNonExistentPathsFromDatabase(globalIsoFileList);
+            removeNonExistentPathsFromDatabase(GlobalState::globalIsoFileList);
             isAtISOList.store(true);
         }
-        
+
         if (needsClrScrn) {
             if (!isUnmount) {
-                if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning))
+                if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState))
                     break;
             } else {
-                if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, isImportRunning))
+                if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState))
                     break;
             }
-            
+            if (isUnmount) rl_bind_keyseq("R", rl_insert);
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
-        if (updateHasRun.load() && !isUnmount && !globalIsoFileList.empty()) {
-            std::thread(refreshListAfterAutoUpdate, 1, std::ref(isAtISOList), 
-                        std::ref(isImportRunning), std::ref(updateHasRun), std::ref(umountMvRmBreak),
-                        std::ref(filteredFiles), std::ref(isFiltered), std::ref(listSubtype), std::ref(pendingIndices), 
-                        std::ref(hasPendingProcess), std::ref(currentPage), std::ref(originalPage), std::ref(newISOFound)).detach();
+
+        if (refreshState->isImportRunning.load() && !isUnmount) {
+            bool watcherExpected = false;
+            if (refreshState->isWatcherRunning.compare_exchange_strong(watcherExpected, true)) {
+                std::thread([&isAtISOList, refreshState]() {
+                    refreshListAfterAutoUpdate(isAtISOList, refreshState);
+                    refreshState->isWatcherRunning.store(false);
+                }).detach();
+            }
         }
-        
+
         std::cout << "\033[1A\033[K";
 
-        // Helper to wrap raw ANSI strings for readline
-		auto wrap = [](std::string_view s) -> std::string {
-			return "\001" + std::string(s) + "\002";
-		};
+        if (GlobalState::ITEMS_PER_PAGE == 0) {
+            rl_bind_keyseq("\\e[5~", rl_insert);
+            rl_bind_keyseq("\\e[6~", rl_insert);
+        }
 
-		const ListTheme* theme = getActiveTheme();
-		const bool isOriginal = (globalTheme == "original");
+        const ReadlineAndPromptTheme pt = getPromptTheme();
 
-		// Wrap themed colors, keep originalColors::rl_ as-is
-		std::string colorIso    = isOriginal ? std::string(originalColors::rl_green) : wrap(theme->accent);
-		std::string colorMuted  = isOriginal ? std::string(originalColors::rl_blue)  : wrap(theme->muted);
-		std::string colorFilter = isOriginal ? std::string(originalColors::rl_cyan)  : wrap(theme->accent);
-		std::string colorReset  = isOriginal ? std::string(originalColors::rl_boldAlt) : wrap(originalColors::boldAlt);
+        isFiltered ? (void)rl_bind_keyseq("*", rl_insert) : setup_custom_keybindingsForSelect();
 
-		// operationColor usually comes from a raw theme member, so wrap it
-		std::string safeOpColor = wrap(operationColor);
+        std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
-		// Build the prompt
-		// Prefix calculation now uses the safely wrapped colorFilter
-		std::string prefix = isFiltered ? (colorFilter + "F⊳ ") : "";
+        std::string prompt =
+            prefix +
+            pt.iso     + "ISO" +
+            pt.primary + " ↵ for " + "\001" +
+            operationColor + "\002" + operation +
+            pt.primary + ", ? for help: " +
+            pt.reset;
 
-		std::string prompt = 
-			prefix + 
-			colorIso       + "ISO" + 
-			colorMuted     + " ↵ for " + 
-			safeOpColor    + operation + 
-			colorMuted     + ", ? ↵ for help, < ↵ to return: " + 
-			colorReset;
+        std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
 
-        std::unique_ptr<char[], decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-        
-        if (!input.get()) break;
-            
-        std::string inputString(input.get());
-        
-        if (inputString == "<") {
+        if (!rawInput) break;
+
+        std::string inputString(rawInput.get());
+
+        if (inputString[0] == ';' || inputString.find(";;") != std::string::npos) {
+            needsClrScrn = false;
+            continue;
+        }
+
+        if (rawInput.get()[0] == '\0') {
+            needsClrScrn = false;
+            continue;
+        }
+
+        if (inputString[0] == 'R' && refreshState->isImportRunning.load()) {
+            std::cout << "\033[1B\033[K";
+            needsClrScrn = false;
+            continue;
+        }
+
+        if (inputString == "R" && !isUnmount && !GlobalState::globalIsoFileList.empty() && !refreshState->isImportRunning.load()) {
+            backgroundThreads.erase(
+                std::remove_if(backgroundThreads.begin(), backgroundThreads.end(),
+                    [](std::thread& t) {
+                        if (t.joinable()) { t.join(); return true; }
+                        return false;
+                    }),
+                backgroundThreads.end()
+            );
+            needsClrScrn = true;
+            refreshState->isImportRunning.store(true);
+            backgroundThreads.emplace_back([refreshState] {
+                backgroundDatabaseImport(refreshState);
+                refreshState->isWatcherRunning.store(false);
+            });
+            continue;
+        }
+
+        if (inputString == "\x1b") {
             if (isFiltered) {
                 isFiltered = false;
                 filteringStack.clear();
@@ -358,223 +471,292 @@ void selectForIsoFiles(const std::string& operation, std::atomic<bool>& updateHa
                 needsClrScrn = true;
                 continue;
             } else {
+                // Keybinding guard handles reset_custom_keybindingsForSelect()
                 currentPage = 0;
                 return;
             }
         }
-        
-        if (inputString == "proc" && pendingIndices.empty()) {
+
+        if (inputString == "P" && pendingIndices.empty()) {
+            std::cout << "\033[1B\033[K";
+            needsClrScrn = false;
             hasPendingProcess = false;
             continue;
         }
-            
+
         if (inputString == "clr") {
             pendingIndices.clear();
             hasPendingProcess = false;
             needsClrScrn = true;
             continue;
         }
-        
-        if (input && input[0] == ';') {
-            needsClrScrn = false;
-            continue;
-        }
 
-        const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : globalIsoFileList);
-        size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((currentList.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
+        size_t totalPages = 0;
+        {
+            std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
+            const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : GlobalState::globalIsoFileList);
+            totalPages = (GlobalState::ITEMS_PER_PAGE != 0) ? ((currentList.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE) : 0;
+        }
         bool need2Sort = false;
-        
-        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, isMount, isUnmount, write, isConversion, need2Sort, isAtISOList);
+
+        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, operation, need2Sort, &isAtISOList);
 
         if (validCommand) continue;
-        
-        if (inputString.empty()) {
-            needsClrScrn = false; 
-            continue; 
+
+        // --- RAII: Lock guard automatically releases when scope exits ---
+        bool filteringHandled = false;
+        {
+            std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
+            if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn,
+                                      filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage,
+                                      refreshState)) {
+                filteringHandled = true;
+            }
         }
 
-        bool pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isMount, isUnmount, write, isFiltered, 
-                                                    filteredFiles, isoDirs, operationFiles, skippedMessages, operationFails, uniqueErrorMessages,
-                                                    needsClrScrn, operation, isAtISOList, umountMvRmBreak, filterHistory, newISOFound);
-        if (pendingExecuted) {
+        if (filteringHandled) {
+            keybindingGuard.restore();
+            std::cout << "\033[1B\033[K";
             continue;
-        }
-
-        if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn, 
-                                    filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage)) {
-                continue;
         }
 
         bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn);
-        if (pendingHandled) {
-            continue;
-        }
+        if (pendingHandled) continue;
 
-        processOperationForSelectedIsoFiles(inputString, isMount, isUnmount, write, isFiltered, 
-                                           filteredFiles, isoDirs, operationFiles, 
-                                           operationFails, uniqueErrorMessages, skippedMessages,
-                                           needsClrScrn, operation, isAtISOList, umountMvRmBreak, 
-                                           filterHistory, newISOFound);
+        // --- RAII: Atomic flag guard for processing block ---
+        bool pendingExecuted = false;
+        {
+            AtomicFlagGuard processingGuard(isAtISOList, false);
+
+            needsClrScrn = true;
+
+            pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isFiltered, filteredFiles, isoDirs,
+                                                   operation, umountMvRmBreak, filterHistory);
+
+            if (!pendingExecuted) {
+                processOperationForSelectedIsoFiles(inputString, isFiltered, filteredFiles, isoDirs,
+                                                    operation, umountMvRmBreak, filterHistory);
+            }
+        }
+        // isAtISOList automatically restored here
+        keybindingGuard.restore();
+        if (pendingExecuted) continue;
     }
+    // Keybinding guard destructor automatically calls reset_custom_keybindingsForSelect()
 }
 
 /**
- * @brief Interactive file selection and conversion controller for disk image formats.
+ * @brief TUI controller for converting proprietary disk images to standard ISO format.
  *
- * Provides a terminal-based interface for browsing, filtering, and selecting
- * BIN/IMG, MDF, NRG, and CHD image files. Supports pagination, batch selection,
- * and command-based input for triggering conversions.
+ * Provides a paginated, filterable interface for selecting non-standard disk images
+ * (BIN/IMG, MDF, NRG, CHD, DAA/GBI) and dispatching them to format-specific
+ * conversion backends (ccd2iso, mdf2iso, nrg2iso, chd2iso, daa2iso).
  *
- * Handles user interaction, cache restoration, pending selection processing,
- * and dispatches selected files to the appropriate conversion utilities.
+ * @details **Operational Logic:**
+ * - **Dynamic Context:** Derives @c fileExtension, @c fileExtensionWithOutDots, and
+ *   @c operation from @p fileType at entry; an unrecognised @p fileType falls back
+ *   to empty extension and "FILES" label with no operation string.
+ * - **Input Routing:** After pagination/help is handled by
+ *   @c processPaginationHelpAndDisplay, input starting with @c '/' is forwarded to
+ *   @c handleFilteringConvert2ISO; input containing @c ';' (but not starting with
+ *   @c '/') is forwarded to @c handlePendingInduction; all other non-empty input
+ *   goes directly to @c processInputForConversions.
+ * - **Input Sanitization:** Input starting with @c ';' or containing @c ";;" is
+ *   silently skipped (needsClrScrn = false) to prevent UI flickering or logic
+ *   errors. Empty readline input is similarly skipped.
+ * - **Batch Processing:** Supports staging multiple files via @c handlePendingInduction.
+ *   The @c "P" command (when @c hasPendingProcess is true and @c pendingIndices is
+ *   non-empty) joins pending indices space-delimited and dispatches them to
+ *   @c processInputForConversions. @c "clr" discards the pending set.
+ * - **Cache Restoration:** On receiving the ESC character when a filter
+ *   is active, @p files is reloaded from the appropriate @c GlobalState cache
+ *   (@c binImgFilesCache, @c mdfMdsFilesCache, @c nrgFilesCache, @c chdFilesCache,
+ *   or @c daaGbiFilesCache based on @p fileType), @c filteringStack is cleared,
+ *   and @c currentPage is restored to @c originalPage. When no filter is active,
+ *   ESC breaks out of the loop and returns to the caller.
+ * - **RAII Keybinding Management:** Custom readline keybindings are managed via
+ *   @c ReadlineKeybindingGuard, which calls @c setup_custom_keybindingsForSelect()
+ *   on construction and @c reset_custom_keybindingsForSelect() on destruction.
+ *   This guarantees cleanup on all exit paths (break, return, exception) without
+ *   manual reset calls.
+ * - **`need2Sort`:** Initialized @c true; passed into @c loadAndDisplayImageFiles
+ *   each redraw; set to @c false on ESC-triggered exit and on filter-clear to avoid
+ *   redundant sorting.
+ * - **No watcher thread:** Unlike @c selectForIsoFiles, @p state is passed only
+ *   into @c loadAndDisplayImageFiles; no watcher thread or condition variable wait
+ *   is used in this function. The manual-update keybinding (R) is explicitly
+ *   disabled for image lists via @c rl_bind_keyseq("R", rl_insert).
+
+ * @param fileType   The format category: "bin", "img", "mdf", "nrg", "chd", or "daa".
+ *                   "bin" and "img" are treated identically (both map to ccd2iso).
+ * @param files      Working list of image file paths to display and process; restored
+ *                   from @c GlobalState on filter exit.
+ * @param list       Passed directly into @c loadAndDisplayImageFiles; not read or
+ *                   written by this function directly.
+ * @param state      Shared @c RefreshState passed into @c loadAndDisplayImageFiles
+ *                   for display coordination; no watcher thread is spawned here.
  */
-void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, std::atomic<bool>& newISOFound, bool& list, std::atomic<bool>& isImportRunning) {
+void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files,
+                         bool& list, std::shared_ptr<RefreshState> state) {
+
+    // --- RAII: Keybindings are automatically reset on any exit path ---
+    ReadlineKeybindingGuard keybindingGuard;
 
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
-    
-    std::unordered_set<std::string> processedErrors, successOuts, skippedOuts, failedOuts;
+
     std::vector<std::string> pendingIndices;
     bool hasPendingProcess = false;
-    
+
     size_t currentPage = 0;
     size_t originalPage = currentPage;
-    
-    bool isFiltered = false; 
+
+    bool isFiltered = false;
     bool needsClrScrn = true;
     bool filterHistory = false;
     bool need2Sort = true;
 
-    // Determine file extension string for display and cache
     std::string fileExtension;
     std::string fileExtensionWithOutDots;
+    std::string operation;
     if (fileType == "bin" || fileType == "img") {
         fileExtension = ".bin/.img";
+        operation = "ccd2iso";
         fileExtensionWithOutDots = "BIN/IMG";
     } else if (fileType == "mdf") {
         fileExtension = ".mdf";
         fileExtensionWithOutDots = "MDF";
+        operation = "mdf2iso";
     } else if (fileType == "nrg") {
         fileExtension = ".nrg";
         fileExtensionWithOutDots = "NRG";
+        operation = "nrg2iso";
     } else if (fileType == "chd") {
         fileExtension = ".chd";
         fileExtensionWithOutDots = "CHD";
-    } else if (fileType == "daa") {                     // <-- DAA branch
-        fileExtension = ".daa";
-        fileExtensionWithOutDots = "DAA";
+        operation = "chd2iso";
+    } else if (fileType == "daa") {
+        fileExtension = ".daa/.gbi";
+        fileExtensionWithOutDots = "DAA/GBI";
+        operation = "daa2iso";
     } else {
-        // fallback (should not happen)
         fileExtension = "";
         fileExtensionWithOutDots = "FILES";
     }
-    
+
     while (true) {
+        clearGlobalVerboseSets();
         enable_ctrl_d();
         setupSignalHandlerCancellations();
-        g_operationCancelled.store(false);
-        bool verbose = false; 
-        resetVerboseSets(processedErrors, successOuts, skippedOuts, failedOuts);
-        
+        // setup_custom_keybindingsForSelect() handled by keybindingGuard constructor
+
+        // Reset manual-update key for image lists
+        rl_bind_keyseq("R", rl_insert);
+        GlobalState::g_operationCancelled.store(false);
+        bool verbose = false;
+
         if (!isFiltered) originalPage = currentPage;
-        
+
         clear_history();
-        if (needsClrScrn) loadAndDisplayImageFiles(files, fileType, need2Sort, isFiltered, list, pendingIndices, hasPendingProcess, currentPage, isImportRunning);
-        
-        std::cout << "\n\n";
+        if (needsClrScrn) {
+            loadAndDisplayImageFiles(files, fileType, need2Sort, isFiltered, list,
+                                     pendingIndices, hasPendingProcess, currentPage,
+                                     state);
+            std::cout << "\n\n";
+        }
+
         std::cout << "\033[1A\033[K";
-        
-        // Helper to wrap raw ANSI strings for readline
-        auto wrap = [](std::string_view s) -> std::string {
-            return "\001" + std::string(s) + "\002";
-        };
 
-        const ListTheme* theme = getActiveTheme();
-        const bool isOriginal = (globalTheme == "original");
+        // Disable PgUp&PgDn when pagination is not enabled
+        if (GlobalState::ITEMS_PER_PAGE == 0) {
+            rl_bind_keyseq("\\e[5~", rl_insert);
+            rl_bind_keyseq("\\e[6~", rl_insert);
+        }
 
-        // Wrap themed colors, keep originalColors::rl_ as-is
-        std::string colorMuted     = isOriginal ? std::string(originalColors::rl_blue)   : wrap(theme->muted);
-        std::string colorFilter    = isOriginal ? std::string(originalColors::rl_cyan)   : wrap(theme->accent);
-        std::string colorHighlight = isOriginal ? std::string(originalColors::rl_orange) : wrap(theme->highlight);
-        std::string colorReset     = isOriginal ? std::string(originalColors::rl_boldAlt)  : wrap(originalColors::boldAlt);
+        const ReadlineAndPromptTheme pt = getPromptTheme();
 
-        // Construct prefix based on filter state
-        std::string prefix = isFiltered ? (colorFilter + "F⊳ ") : "";
+        isFiltered ? (void)rl_bind_keyseq("*", rl_insert) : setup_custom_keybindingsForSelect();
 
-        std::string prompt = 
-            prefix + 
-            colorHighlight + fileExtensionWithOutDots + 
-            colorMuted     + " ↵ for " + 
-            colorHighlight + "conversion" + 
-            colorMuted     + ", ? ↵ for help, < ↵ to return: " + 
-            colorReset;
-        
+        std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
+
+        std::string prompt =
+            prefix +
+            pt.highlight + fileExtensionWithOutDots +
+            pt.primary   + " ↵ for " +
+            pt.highlight + operation +
+            pt.primary   + ", ? for help: " +
+            pt.reset;
+
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
-        
+
         if (!rawInput) break;
-        
+
         std::string inputString(rawInput.get());
-        
-        if (inputString == "<") {
+
+        if (inputString == "\x1b") {
             clearScrollBuffer();
             if (isFiltered) {
-                // Restore original file list from the appropriate cache
+                // Restore original unfiltered file list
                 if (fileType == "bin" || fileType == "img") {
-                    files = binImgFilesCache;
+                    files = GlobalState::binImgFilesCache;
                 } else if (fileType == "mdf") {
-                    files = mdfMdsFilesCache;
+                    files = GlobalState::mdfMdsFilesCache;
                 } else if (fileType == "nrg") {
-                    files = nrgFilesCache;
+                    files = GlobalState::nrgFilesCache;
                 } else if (fileType == "chd") {
-                    files = chdFilesCache;
-                } else if (fileType == "daa") {          // <-- DAA cache restore
-                    files = daaFilesCache;
+                    files = GlobalState::chdFilesCache;
+                } else if (fileType == "daa") {
+                    files = GlobalState::daaGbiFilesCache;
                 }
                 needsClrScrn = true;
-                isFiltered = false; 
+                isFiltered = false;
                 filteringStack.clear();
                 currentPage = originalPage;
                 need2Sort = false;
                 continue;
             } else {
+                // Keybinding guard handles cleanup via destructor
                 currentPage = 0;
                 need2Sort = false;
-                break; 
+                return;  // No more manual reset_custom_keybindingsForSelect() needed!
             }
         }
-        
-        if (inputString == "proc" && pendingIndices.empty()) {
+
+        if (inputString == "P" && pendingIndices.empty()) {
+            std::cout << "\033[1B\033[K";
             hasPendingProcess = false;
+            needsClrScrn = false;
             continue;
         }
-        
+
         if (inputString == "clr") {
             pendingIndices.clear();
             hasPendingProcess = false;
             needsClrScrn = true;
             continue;
         }
-        
-        if (rawInput && rawInput.get()[0] == ';') {
-             std::cout << "\033[2A\033[K"; 
-             needsClrScrn = false;
-             continue;
-        }
-        
-        std::atomic<bool> isAtISOList{false};
-        
-        size_t totalPages = (ITEMS_PER_PAGE != 0) ? ((files.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE) : 0;
-        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, false, false, false, true, need2Sort, isAtISOList);
-        
-        if (validCommand) continue;
-                
-        if (rawInput.get()[0] == '\0') {
-            std::cout << "\033[2A\033[K";
+
+        if (inputString[0] == ';' || inputString.find(";;") != std::string::npos) {
             needsClrScrn = false;
-            continue; 
+            continue;
         }
-        
-        if (inputString == "proc" && hasPendingProcess && !pendingIndices.empty()) {
+
+        if (rawInput.get()[0] == '\0') {
+            needsClrScrn = false;
+            continue;
+        }
+
+        size_t totalPages = (GlobalState::ITEMS_PER_PAGE != 0)
+            ? ((files.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE)
+            : 0;
+
+        bool validCommand = processPaginationHelpAndDisplay(
+            inputString, totalPages, currentPage, isFiltered,
+            needsClrScrn, operation, need2Sort, nullptr);
+
+        if (validCommand) continue;
+
+        if (inputString == "P" && hasPendingProcess && !pendingIndices.empty()) {
             std::string combinedIndices = "";
             for (size_t i = 0; i < pendingIndices.size(); ++i) {
                 combinedIndices += pendingIndices[i];
@@ -582,46 +764,55 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                     combinedIndices += " ";
                 }
             }
-            
-            // Call processInputForConversions with the correct mode flags (now with DAA)
-            processInputForConversions(combinedIndices, files, 
-                                       (fileType == "mdf"),   // modeMdf
-                                       (fileType == "nrg"),   // modeNrg
-                                       (fileType == "chd"),   // modeChd
-                                       (fileType == "daa"),   // modeDaa  <-- added
-                                       processedErrors, successOuts, skippedOuts, failedOuts, 
-                                       verbose, needsClrScrn, newISOFound);
-            
+
+            processInputForConversions(combinedIndices, files,
+                                       (fileType == "mdf"),
+                                       (fileType == "nrg"),
+                                       (fileType == "chd"),
+                                       (fileType == "daa"),
+                                       verbose);
+            keybindingGuard.restore();
+
             needsClrScrn = true;
             if (verbose) {
-                verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3);
+                verbosePrint(verboseSets.uniqueErrorTokenMessages,
+                            verboseSets.operationCompleted,
+                            verboseSets.operationSkipped,
+                            verboseSets.operationFailed, 3);
             }
             continue;
-        }       
+        }
 
         if (inputString == "/" || (!inputString.empty() && inputString[0] == '/')) {
-            handleFilteringConvert2ISO(inputString, files, fileExtensionWithOutDots, isFiltered, needsClrScrn, filterHistory, need2Sort, currentPage);
+            handleFilteringConvert2ISO(inputString, files, operation, isFiltered,
+                                       needsClrScrn, filterHistory, need2Sort, currentPage,
+                                       pendingIndices, hasPendingProcess, state);
+            keybindingGuard.restore();
+            std::cout << "\033[1B\033[K";
             continue;
         }
         else if (inputString.find(';') != std::string::npos) {
             if (handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn)) {
-                continue; 
+                continue;
             }
         }
         else {
-            // Direct conversion without pending list (now with DAA)
-            processInputForConversions(inputString, files, 
-                                       (fileType == "mdf"),   // modeMdf
-                                       (fileType == "nrg"),   // modeNrg
-                                       (fileType == "chd"),   // modeChd
-                                       (fileType == "daa"),   // modeDaa  <-- added
-                                       processedErrors, successOuts, skippedOuts, failedOuts, 
-                                       verbose, needsClrScrn, newISOFound);
+            processInputForConversions(inputString, files,
+                                       (fileType == "mdf"),
+                                       (fileType == "nrg"),
+                                       (fileType == "chd"),
+                                       (fileType == "daa"),
+                                       verbose);
             needsClrScrn = true;
             if (verbose) {
-                verbosePrint(processedErrors, successOuts, skippedOuts, failedOuts, 3);
+                verbosePrint(verboseSets.uniqueErrorTokenMessages,
+                            verboseSets.operationCompleted,
+                            verboseSets.operationSkipped,
+                            verboseSets.operationFailed, 3);
                 needsClrScrn = true;
             }
+            keybindingGuard.restore();
         }
     }
+    // Keybinding guard destructor automatically calls reset_custom_keybindingsForSelect()
 }

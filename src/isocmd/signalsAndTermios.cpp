@@ -1,11 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
+// C++ Standard Library Headers
+#include <atomic>
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
+
+// C / System Headers
+#include <termios.h>
+#include <unistd.h>
+
+// Third-Party Library Headers
+#include <readline/readline.h>
+
+// Project Headers
+#include "../inputHandling.h"
+#include "../state.h"
 
 /**
  * @brief Disables EOF (Ctrl+D) processing in the terminal.
- * @details Modifies the termios control characters to disable VEOF. 
- * This prevents the program from receiving an EOF signal which usually 
+ * @details Modifies the termios control characters to disable VEOF.
+ * This prevents the program from receiving an EOF signal which usually
  * terminates a shell or input loop.
  */
 void disable_ctrl_d() {
@@ -37,7 +52,7 @@ void flushStdin() {
 
 /**
  * @brief Disables canonical mode and echoing.
- * @details Used during heavy processing or custom UI rendering to prevent 
+ * @details Used during heavy processing or custom UI rendering to prevent
  * user keystrokes from appearing on the screen or being buffered as line input.
  */
 void disableInput() {
@@ -61,7 +76,7 @@ void restoreInput() {
 
 /**
  * @brief Configures the environment to ignore SIGINT (Ctrl+C).
- * @details Specifically instructs GNU Readline to stop catching signals 
+ * @details Specifically instructs GNU Readline to stop catching signals
  * and sets the system-wide SIGINT handler to SIG_IGN.
  */
 void setupReadlineToIgnoreCtrlC() {
@@ -82,13 +97,13 @@ void setupReadlineToIgnoreCtrlC() {
 void signalHandlerCancellations(int signal) {
     if (signal == SIGINT) {
         // Atomic flag used by worker threads to stop processing
-        g_operationCancelled = true;
+        GlobalState::g_operationCancelled = true;
     }
 }
 
 /**
  * @brief Sets up a handler to catch Ctrl+C for graceful cancellation.
- * @details Instead of terminating, the program sets a global flag 
+ * @details Instead of terminating, the program sets a global flag
  * allowing current tasks to finish or clean up before returning.
  */
 void setupSignalHandlerCancellations() {
@@ -101,7 +116,7 @@ void setupSignalHandlerCancellations() {
 
 /**
  * @brief Global termination signal handler.
- * @details Handles fatal signals or exits by cleaning up UI buffers 
+ * @details Handles fatal signals or exits by cleaning up UI buffers
  * and releasing filesystem locks before terminating.
  * @param signum The signal number triggering the exit.
  */
@@ -110,8 +125,8 @@ void signalHandler(int signum) {
     clearScrollBuffer();
 
     // Release global lock if held
-    if (lockFileDescriptor != -1) {
-        close(lockFileDescriptor);
+    if (GlobalState::lockFileDescriptor != -1) {
+        close(GlobalState::lockFileDescriptor);
     }
 
     exit(signum);

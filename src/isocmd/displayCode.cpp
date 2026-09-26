@@ -1,69 +1,90 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
-#include "../display.h"
+// C++ Standard Library Headers
+#include <algorithm>
+#include <csignal>
+#include <cstddef>
+#include <filesystem>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
+#include <vector>
+
+// C / System Headers
+#include <sys/stat.h>
+
+// Project Headers
+#include "../caches.h"
+#include "../databaseOps.h"
 #include "../filtering.h"
+#include "../inputHandling.h"
+#include "../globalMutexes.h"
+#include "../pausePrompt.h"
+#include "../sort.h"
+#include "../state.h"
 #include "../themes.h"
 
-/**
- * @namespace displayConfig
- * @brief Default display configuration options for UI lists.
- */
-namespace displayConfig {
-    bool toggleFullListMount = false;
-    bool toggleFullListUmount = true;
-    bool toggleFullListCpMvRm = false;
-    bool toggleFullListWrite = false;
-    bool toggleFullListConversions = false;
-    bool toggleNamesOnly = false;
-}
+void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
+               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered,
+               size_t& currentPage, std::shared_ptr<RefreshState> state);
 
 /**
  * @brief Loads ISO files from the database and updates the display.
- * Reloads the global ISO list from the database when the dirty flag is set,
- * and handles UI state updates including filtering and pagination.
  *
- * @param filteredFiles Reference to the vector of currently filtered files.
- * @param isFiltered Boolean flag indicating if a filter is active.
- * @param listSubType String representing the sub-category of the list.
- * @param umountMvRmBreak Flag to force a break/refresh in the UI state.
- * @param pendingIndices Vector of indices currently marked for processing.
- * @param hasPendingProcess Boolean flag indicating if there are active background tasks.
- * @param currentPage Current page index for pagination.
- * @param originalPage Backup of the page index before filtering.
- * @param isImportRunning Atomic flag monitoring active import operations.
+ * Synchronizes the global ISO list with the database when the dirty flag is set.
+ * If a filter is active during a reload, it is re-applied to ensure the visible
+ * results and original index mappings remain consistent with the new data.
+ *
+ * @note If a re-applied filter returns no results, the filter stack is cleared
+ * and the view resets to the full list to prevent a blank UI.
+ *
+ * @param filteredFiles      Reference to the vector of currently filtered files.
+ * @param isFiltered         Boolean flag indicating if a filter is active.
+ * @param listSubType        String representing the sub-category of the list.
+ * @param umountMvRmBreak    Flag to force a break/refresh in the UI state.
+ * @param pendingIndices     Vector of indices currently marked for processing.
+ * @param hasPendingProcess  Boolean flag indicating if there are active background tasks.
+ * @param currentPage        Current page index for pagination.
+ * @param originalPage       Backup of the page index before filtering.
+ * @param state              Shared state with import flag and CV for event coordination.
  * @return true if the list contains items, false if the cache is empty.
  */
 bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
+size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    bool needToReload = isoListDirty.exchange(false);
-
-    clearScrollBuffer();
-
+    bool needToReload = GlobalState::isoListDirty.exchange(false);
     std::vector<std::string> freshList;
+
     if (needToReload) {
         loadFromDatabase(freshList);
     }
 
     bool isEmpty = false;
     {
-        std::lock_guard<std::mutex> lock(updateListMutex);
+        std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
 
         if (needToReload) {
-            globalIsoFileList = std::move(freshList);
-            currentPage = originalPage;
+            GlobalState::globalIsoFileList = std::move(freshList);
+            //  Only reset to originalPage if we are NOT actively filtered ---
+            if (!isFiltered) {
+                currentPage = originalPage;
+            }
             pendingIndices.clear();
             hasPendingProcess = false;
-        
-            sortFilesCaseInsensitive(globalIsoFileList);
+            sortFilesCaseInsensitive(GlobalState::globalIsoFileList);
+
+            syncFilteringStackForIso(GlobalState::globalIsoFileList, filteringStack, filteredFiles, isFiltered);
         }
 
-        if (needSortingAfterflno) {
-            sortFilesCaseInsensitive(globalIsoFileList);
-            needSortingAfterflno = false;
+        if (GlobalState::needSortingAfterflno) {
+            sortFilesCaseInsensitive(GlobalState::globalIsoFileList);
+            GlobalState::needSortingAfterflno = false;
         }
 
         if (umountMvRmBreak) {
@@ -72,22 +93,19 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
             isFiltered = false;
         }
 
-        printList(isFiltered ? filteredFiles : globalIsoFileList, "ISO_FILES", listSubType,
-                  pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
+        clearScrollBuffer();
 
-        isEmpty = globalIsoFileList.empty();
+        // Use either the recently refreshed filteredFiles or the global master list
+        printList(isFiltered ? filteredFiles : GlobalState::globalIsoFileList, "ISO_FILES", listSubType,
+                  pendingIndices, hasPendingProcess, isFiltered, currentPage, state);
+
+        isEmpty = GlobalState::globalIsoFileList.empty();
     }
 
     if (isEmpty) {
-        const ListTheme* theme = getActiveTheme();
-        const bool isOriginal = (globalTheme == "original");
-
-        const std::string_view warnColor = isOriginal ? originalColors::yellow : theme->warning;
-        const std::string_view reset     = originalColors::boldAlt;
-
-        std::cout << "\n" << warnColor << "ISO Cache is empty. Choose 'ImportISO' from the Main Menu Options." << reset << "\n";
-        std::cout << color << "\n↵ to return..." << reset;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        const PrintListTheme c = getListColors();
+        std::cout << "\n" << c.num << "ISO database is empty. Choose 'ImportISO' from the Main Menu." << c.dir << "\n";
+        pressEnterToReturn();
         return false;
     }
 
@@ -97,26 +115,39 @@ size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
 /**
  * @brief Base path where ISO files are mounted.
  */
-const std::string MOUNTED_ISO_PATH = "/mnt";
+const std::string MOUNTED_ISO_PATH = "/mnt/ISOs";
 
 /**
- * @brief Scans and displays currently mounted ISO directories.
- * Checks for directories matching the 'iso_' pattern in the mount path and uses
- * stat()-based change detection to determine if the directory list requires a re-sort/refresh.
- * Rescans only when directory metadata changes, and resets state only when iso_ contents differ.
+ * @brief Scans, filters, and renders currently mounted ISO directories.
  *
- * @param isoDirs Vector to store found mount paths.
- * @param filteredFiles Reference to filtered results.
- * @param isFiltered Filter state.
- * @param umountMvRmBreak UI refresh flag.
- * @param pendingIndices Marks items for processing.
- * @param hasPendingProcess Process state flag.
- * @param currentPage Current pagination index.
- * @param originalPage Original page index backup.
- * @param isImportRunning Atomic flag for import status.
- * @return true if mount points exist, false otherwise.
+ * Uses stat-based caching to detect changes in MOUNTED_ISO_PATH. A full re-scan
+ * and re-sort occur only if the directory's modification time or link count changes.
+ *
+ * If changes are detected and the resulting directory list differs from the cache:
+ * - Updates the static cache.
+ * - Resets pending process states and indices.
+ *
+ * If no ISOs are found, it clears internal caches and displays a warning.
+ * Otherwise, it manages pagination state and invokes the UI rendering (printList).
+ *
+ * @note Temporarily ignores SIGINT and disables Ctrl+D during execution.
+ *
+ * @param isoDirs            [out] Vector populated with current mount paths.
+ * @param filteredFiles      [in/out] List of files post-filtering.
+ * @param isFiltered         [in/out] Boolean toggle for filtering mode.
+ * @param umountMvRmBreak    [in] UI flag to force a refresh/reset of the view.
+ * @param pendingIndices     [in/out] Tracks items marked for batch operations.
+ * @param hasPendingProcess  [in/out] Flag indicating active background tasks.
+ * @param currentPage        [in/out] Current UI pagination index.
+ * @param originalPage       [out] Backup of page index when filtering is reset.
+ * @param state              [in] Shared state with import flag and CV for event coordination.
+ * @return true if ISOs were found and displayed; false if the directory is empty.
  */
-bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles, bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, size_t& originalPage, std::atomic<bool>& isImportRunning) {
+bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles,
+                               bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices,
+                               bool& hasPendingProcess, size_t& currentPage,
+                               size_t& originalPage, std::shared_ptr<RefreshState> state) {
+
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
@@ -142,8 +173,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
                 if (ec) break;
                 if (entry.is_directory()) {
                     auto filename = entry.path().filename().string();
-                    if (filename.find("iso_") == 0)
-                        newIsoDirs.push_back(entry.path().string());
+                    newIsoDirs.push_back(entry.path().string());
                 }
             }
             sortFilesCaseInsensitive(newIsoDirs);
@@ -163,19 +193,18 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     if (isoDirs.empty()) {
         clearScrollBuffer();
 
-        const ListTheme* theme = getActiveTheme();
+        const MainTheme* theme = getActiveTheme();
         const bool isOriginal  = (globalTheme == "original");
 
-        const std::string_view warnColor = isOriginal ? originalColors::yellow : theme->warning;
-        const std::string_view reset     = originalColors::boldAlt;
+        const std::string_view warnColor = isOriginal ? UI::Palette::Yellow : theme->warning;
+        const std::string_view reset     = UI::Palette::BoldReset;
 
-        std::cerr << "\n" << warnColor << "No paths matching the '/mnt/iso_{name}' pattern found." << reset << "\n";
-        std::cout << color << "\n↵ to return..." << reset;
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        std::cerr << "\n" << warnColor << "No paths matching the '/mnt/ISOs/{isoDirName}' pattern found." << reset << "\n";
+        pressEnterToReturn();
 
         std::vector<std::string>().swap(lastSortedDirs);
-		lastIsoCount = 0;
-        std::unordered_map<std::string, std::tuple<std::string, std::string, std::string>>().swap(cachedParsesForUmount);
+        lastIsoCount = 0;
+        GlobalCaches::cachedParsesForUmount.clear();
 
         return false;
     }
@@ -189,14 +218,14 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         filteredFiles.clear();
     }
 
-    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
+    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, isFiltered, currentPage, state);
     return true;
 }
 
 /**
  * @brief Prepares and displays cached disc image file lists.
  *
- * Restores file lists from the appropriate format cache (BIN/IMG, MDF, NRG, CHD, DAA)
+ * Restores file lists from the appropriate format cache (BIN/IMG, MDF, NRG, CHD, DAA/GBI)
  * when not filtered and when cache state differs from the current view.
  *
  * If required, sorts both the active file list and the corresponding cache,
@@ -204,62 +233,62 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
  *
  * Finally delegates rendering and interaction to the list display system.
  *
- * @param files Current working file list (may be replaced by cache)
- * @param fileType File extension type ("bin", "img", "mdf", "nrg", "chd", "daa")
- * @param need2Sort Flag indicating whether sorting is required
- * @param isFiltered Filter state affecting cache restoration
- * @param list Controls whether list refresh behavior is executed
- * @param pendingIndices Files queued for processing or conversion
+ * @param files            Current working file list (may be replaced by cache)
+ * @param fileType         File extension type ("bin", "img", "mdf", "nrg", "chd", "daa", "gbi")
+ * @param need2Sort        Flag indicating whether sorting is required
+ * @param isFiltered       Filter state affecting cache restoration
+ * @param list             Controls whether list refresh behavior is executed
+ * @param pendingIndices   Files queued for processing or convert2iso
  * @param hasPendingProcess Global processing state flag
- * @param currentPage Pagination state for UI display
- * @param isImportRunning Importer activity flag
+ * @param currentPage      Pagination state for UI display
+ * @param state            Shared state with import flag and CV for event coordination
  */
 void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,
-                              std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::atomic<bool>& isImportRunning) {
+                              std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::shared_ptr<RefreshState> state) {
     clearScrollBuffer();
-    
+
     // Restore from the appropriate cache when not filtered and the cache is valid
-    files = 
-    (!isFiltered && !binImgFilesCache.empty() && (fileType == "bin" || fileType == "img") &&
-     (binImgFilesCache.size() != files.size() || !std::equal(binImgFilesCache.begin(), binImgFilesCache.end(), files.begin())))
-        ? (need2Sort = true, binImgFilesCache) 
-    : (!isFiltered && !mdfMdsFilesCache.empty() && fileType == "mdf" &&
-       (mdfMdsFilesCache.size() != files.size() || !std::equal(mdfMdsFilesCache.begin(), mdfMdsFilesCache.end(), files.begin())))
-        ? (need2Sort = true, mdfMdsFilesCache) 
-    : (!isFiltered && !nrgFilesCache.empty() && fileType == "nrg" &&
-       (nrgFilesCache.size() != files.size() || !std::equal(nrgFilesCache.begin(), nrgFilesCache.end(), files.begin())))
-        ? (need2Sort = true, nrgFilesCache)
-    : (!isFiltered && !chdFilesCache.empty() && fileType == "chd" &&
-       (chdFilesCache.size() != files.size() || !std::equal(chdFilesCache.begin(), chdFilesCache.end(), files.begin())))
-        ? (need2Sort = true, chdFilesCache)
-    : (!isFiltered && !daaFilesCache.empty() && fileType == "daa" &&               // <-- DAA branch
-       (daaFilesCache.size() != files.size() || !std::equal(daaFilesCache.begin(), daaFilesCache.end(), files.begin())))
-        ? (need2Sort = true, daaFilesCache)
+    files =
+    (!isFiltered && !GlobalState::binImgFilesCache.empty() && (fileType == "bin" || fileType == "img") &&
+     (GlobalState::binImgFilesCache.size() != files.size() || !std::equal(GlobalState::binImgFilesCache.begin(), GlobalState::binImgFilesCache.end(), files.begin())))
+        ? (need2Sort = true, GlobalState::binImgFilesCache)
+    : (!isFiltered && !GlobalState::mdfMdsFilesCache.empty() && fileType == "mdf" &&
+       (GlobalState::mdfMdsFilesCache.size() != files.size() || !std::equal(GlobalState::mdfMdsFilesCache.begin(), GlobalState::mdfMdsFilesCache.end(), files.begin())))
+        ? (need2Sort = true, GlobalState::mdfMdsFilesCache)
+    : (!isFiltered && !GlobalState::nrgFilesCache.empty() && fileType == "nrg" &&
+       (GlobalState::nrgFilesCache.size() != files.size() || !std::equal(GlobalState::nrgFilesCache.begin(), GlobalState::nrgFilesCache.end(), files.begin())))
+        ? (need2Sort = true, GlobalState::nrgFilesCache)
+    : (!isFiltered && !GlobalState::chdFilesCache.empty() && fileType == "chd" &&
+       (GlobalState::chdFilesCache.size() != files.size() || !std::equal(GlobalState::chdFilesCache.begin(), GlobalState::chdFilesCache.end(), files.begin())))
+        ? (need2Sort = true, GlobalState::chdFilesCache)
+    : (!isFiltered && !GlobalState::daaGbiFilesCache.empty() && fileType == "daa" &&               // <-- DAA branch
+       (GlobalState::daaGbiFilesCache.size() != files.size() || !std::equal(GlobalState::daaGbiFilesCache.begin(), GlobalState::daaGbiFilesCache.end(), files.begin())))
+        ? (need2Sort = true, GlobalState::daaGbiFilesCache)
     : files;
-            
-    if (!list || (list && needSortingAfterflno)) {
+
+    if (!list || (list && GlobalState::needSortingAfterflno)) {
         if (need2Sort) {
             sortFilesCaseInsensitive(files);
             if (fileType == "bin" || fileType == "img") {
-                std::lock_guard<std::mutex> lock(binImgCacheMutex);
-                sortFilesCaseInsensitive(binImgFilesCache);
+                std::lock_guard<std::mutex> lock(GlobalMutexes::binImgCacheMutex);
+                sortFilesCaseInsensitive(GlobalState::binImgFilesCache);
             } else if (fileType == "mdf") {
-                std::lock_guard<std::mutex> lock(mdfMdsCacheMutex);
-                sortFilesCaseInsensitive(mdfMdsFilesCache);
+                std::lock_guard<std::mutex> lock(GlobalMutexes::mdfMdsCacheMutex);
+                sortFilesCaseInsensitive(GlobalState::mdfMdsFilesCache);
             } else if (fileType == "nrg") {
-                std::lock_guard<std::mutex> lock(nrgCacheMutex);
-                sortFilesCaseInsensitive(nrgFilesCache);
+                std::lock_guard<std::mutex> lock(GlobalMutexes::nrgCacheMutex);
+                sortFilesCaseInsensitive(GlobalState::nrgFilesCache);
             } else if (fileType == "chd") {
-                std::lock_guard<std::mutex> lock(chdCacheMutex);
-                sortFilesCaseInsensitive(chdFilesCache);
-            } else if (fileType == "daa") {                                         // <-- DAA sorting
-                std::lock_guard<std::mutex> lock(daaCacheMutex);
-                sortFilesCaseInsensitive(daaFilesCache);
+                std::lock_guard<std::mutex> lock(GlobalMutexes::chdCacheMutex);
+                sortFilesCaseInsensitive(GlobalState::chdFilesCache);
+            } else if (fileType == "daa") {
+                std::lock_guard<std::mutex> lock(GlobalMutexes::daaGbiCacheMutex);
+                sortFilesCaseInsensitive(GlobalState::daaGbiFilesCache);
             }
         }
-        needSortingAfterflno = false;
+        GlobalState::needSortingAfterflno = false;
         need2Sort = false;
     }
-    
-    printList(files, "IMAGE_FILES", "conversions", pendingIndices, hasPendingProcess, isFiltered, currentPage, isImportRunning);
+
+    printList(files, "IMAGE_FILES", "convert2iso", pendingIndices, hasPendingProcess, isFiltered, currentPage, state);
 }

@@ -1,9 +1,29 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../headers.h"
+// C++ Standard Library Headers
+#include <algorithm>
+#include <atomic>
+#include <charconv>
+#include <cstddef>
+#include <filesystem>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <vector>
+
+// Project Headers
 #include "../display.h"
 #include "../filtering.h"
+#include "../databaseOps.h"
+#include "../main.h"
+#include "../sharedRefreshState.h"
+#include "../state.h"
+#include "../stringManipulation.h"
 #include "../themes.h"
+
+namespace fs = std::filesystem;
 
 /**
  * @file list_renderer.cpp
@@ -25,52 +45,52 @@ struct IntBuf {
 
 /**
  * @brief Renders formatted lists (ISO, Image, or Mounts) to the terminal.
- * * Performance Note: Uses a large reserved std::string buffer and std::cout.write 
+ *
+ * Performance Note: Uses a large reserved std::string buffer and std::cout.write
  * to minimize syscall overhead and flickering during high-frequency updates.
- * * @param items The list of strings to display.
- * @param listType Category of the list (e.g., "ISO_FILES").
- * @param listSubType Extension or sub-format details.
- * @param pendingIndices Current user selection indices awaiting processing.
- * @param hasPendingProcess Flag indicating if a process action is staged.
- * @param isFiltered Flag indicating if a search filter is currently active.
- * @param currentPage Mutable reference to the current pagination index.
- * @param isImportRunning Atomic flag to detect if a background scan is active.
+ *
+ * Thread Safety: The sync indicator read and terminal write are performed
+ * atomically under printMutex, preventing stale indicator display during
+ * concurrent background ISO imports.
+ *
+ * @param items              The list of strings to display.
+ * @param listType           Category of the list (e.g., "ISO_FILES").
+ * @param listSubType        Extension or sub-format details.
+ * @param pendingIndices     Current user selection indices awaiting processing.
+ * @param hasPendingProcess  Flag indicating if a process action is staged.
+ * @param isFiltered         Flag indicating if a search filter is currently active.
+ * @param currentPage        Mutable reference to the current pagination index.
+ * @param state              Shared state providing printMutex and isImportRunning
+ *                           flag; guards the "[↻ Syncing: NewISO → Restructure]"
+ *                           indicator against races with background import completion.
  */
-void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType, 
-               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered, 
-               size_t& currentPage, std::atomic<bool>& isImportRunning) {
-    
+void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
+               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered,
+               size_t& currentPage, std::shared_ptr<RefreshState> state) {
+
     if (items.empty()) return;
 
-    const ListTheme* theme = getActiveTheme();
-    const bool isOriginal = (globalTheme == "original");
-    
+    const PrintListTheme c = getListColors();
+
     // --- Pagination Logic ---
     const size_t totalItems = items.size();
-    const bool disablePagination = (ITEMS_PER_PAGE == 0 || totalItems <= ITEMS_PER_PAGE);
-    const size_t totalPages = disablePagination ? 1 : (totalItems + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
-    
-    // Bounds check
+    const bool disablePagination = (GlobalState::ITEMS_PER_PAGE == 0 || totalItems <= GlobalState::ITEMS_PER_PAGE);
+    const size_t totalPages = disablePagination ? 1 : (totalItems + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE;
+
     size_t effectivePage = (disablePagination) ? 0 : (currentPage >= totalPages ? totalPages - 1 : currentPage);
-    const size_t startIndex = disablePagination ? 0 : (effectivePage * ITEMS_PER_PAGE);
-    const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + ITEMS_PER_PAGE, totalItems);
+    const size_t startIndex = disablePagination ? 0 : (effectivePage * GlobalState::ITEMS_PER_PAGE);
+    const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + GlobalState::ITEMS_PER_PAGE, totalItems);
 
-    // --- Performance: Pre-calculate Gutter Width ---
-    IntBuf<> ib1, ib2, ib3, ib4; 
-    // Use endIndex for maxDigits so the list doesn't have a massive empty gap on page 1
+    // --- Flags & Config ---
+    const bool isIsoMode      = (listType == "ISO_FILES");
+    const bool isImgMode      = (listType == "IMAGE_FILES");
+    const bool isMountedMode  = (listType == "MOUNTED_ISOS");
+    const bool isFileMode     = (isIsoMode || isImgMode);
+    const bool showNamesOnly  = displayConfig::toggleNamesOnly;
+    const bool showFullUmount = displayConfig::toggleFullListUmount;
+
+    IntBuf<> ib1, ib2, ib3, ib4;
     const size_t maxDigits = ib1.format(endIndex).length();
-    const bool isIsoWithAutoUpdate = (isImportRunning.load() && listType == "ISO_FILES" && !isFiltered && !globalIsoFileList.empty());
-
-    // --- Color Mapping ---
-    std::string_view accentColor = isOriginal ? originalColors::darkCyan : theme->accent;
-    std::string_view headColor   = isOriginal ? originalColors::brown    : theme->muted; 
-    std::string_view numColor    = isOriginal ? originalColors::yellow   : theme->warning; 
-    std::string_view isoColor    = isOriginal ? originalColors::magenta  : theme->accent; 
-    std::string_view imgColor    = isOriginal ? originalColors::orange   : theme->highlight; 
-    std::string_view mntColor    = isOriginal ? originalColors::blue     : theme->secondary; 
-    std::string_view squareColor = originalColors::dimGray;
-    std::string_view indexA      = isOriginal ? originalColors::red      : theme->secondary;
-    std::string_view indexB      = isOriginal ? originalColors::green    : theme->accent;
 
     // --- Output Buffering ---
     std::string output;
@@ -78,96 +98,111 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     output += '\n';
 
     // --- Header ---
+    size_t syncInsertPos = std::string::npos;
     if (!disablePagination) {
-        output.append(headColor).append("Page ")
-              .append(accentColor).append(ib1.format(effectivePage + 1))
-              .append(headColor).append("/").append(numColor).append(ib2.format(totalPages))
-              .append(headColor).append(" (Items (")
-              .append(accentColor).append(ib3.format(startIndex + 1))
-              .append("-").append(ib4.format(endIndex)).append(headColor).append(")/").append(numColor)
-              .append(ib1.format(totalItems)).append(headColor).append(")");
-        
-        if (isIsoWithAutoUpdate) {
-            output.append(originalColors::dim).append("\n\n[Auto-Update: List restructures if newISOFound]");
-        }
-        output.append(originalColors::boldAlt).append("\n\n");
-    } 
-    else if (isIsoWithAutoUpdate) {
-        output.append(originalColors::dim).append("[Auto-Update: List restructures if newISOFound]\n\n");
+        output.append(c.head).append("Page ")
+              .append(c.accent).append(ib1.format(effectivePage + 1))
+              .append(c.head).append("/").append(c.num).append(ib2.format(totalPages))
+              .append(c.head).append(" (Items (")
+              .append(c.accent).append(ib3.format(startIndex + 1))
+              .append("-").append(ib4.format(endIndex)).append(c.head).append(")/").append(c.num)
+              .append(ib1.format(totalItems)).append(c.head).append(")");
+
+        syncInsertPos = output.size(); // mark insertion point before BoldReset+\n\n
+        output.append(UI::Palette::BoldReset).append("\n\n");
+    } else {
+        syncInsertPos = output.size(); // mark insertion point after leading \n
     }
 
     // --- Main Item Loop ---
     for (size_t i = startIndex; i < endIndex; ++i) {
-        const std::string_view seqColor = (i % 2 == 0) ? indexA : indexB;
+        const std::string_view seqColor = (i % 2 == 0) ? c.indexA : c.indexB;
         std::string_view idxStr = ib1.format(i + 1);
-        
+
         output.append(seqColor);
-        
-        // Performance Fix: Efficient right-alignment padding
-        if (idxStr.length() < maxDigits) {
-            output.append(maxDigits - idxStr.length(), ' ');
-        }
+        if (idxStr.length() < maxDigits) output.append(maxDigits - idxStr.length(), ' ');
         output.append(idxStr);
 
-        // Filter indices logic
         if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
-            output.append(":").append(originalColors::boldAlt).append(squareColor); 
+            output.append(":").append(UI::Palette::BoldReset).append(c.square);
             output.append(ib2.format(filteringStack.back().originalIndices[i] + 1));
-            output.append(originalColors::boldAlt).append(squareColor).append("^ ");
+            output.append(UI::Palette::BoldReset).append(c.square).append("^ ")
+            .append(UI::Palette::BoldReset);
         } else {
-            output.append(". ").append(originalColors::boldAlt);
+            output.append(". ").append(UI::Palette::BoldReset);
         }
 
         const std::string& item = items[i];
-        
-        // Optimization: Use boolean flags for type checking outside the loop or cache them
-        if (listType == "ISO_FILES" || listType == "IMAGE_FILES") {
+
+        if (isFileMode) {
             auto [dir, fname] = extractDirectoryAndFilename(item, listSubType);
-            if (!displayConfig::toggleNamesOnly) {
-                output.append(isOriginal ? originalColors::boldAlt : theme->muted).append(dir).append(originalColors::boldAlt).append("/");
+            if (!showNamesOnly) {
+                output.append(c.dir).append(dir).append(UI::Palette::BoldReset).append("/");
             }
-            output.append(listType == "ISO_FILES" ? isoColor : imgColor).append(fname);
-        } 
-        else if (listType == "MOUNTED_ISOS") {
+            output.append(isIsoMode ? c.iso : c.img).append(fname);
+        }
+        else if (isMountedMode) {
             auto [dirPart, pathPart, hashPart] = parseMountPointComponents(item);
-            if (displayConfig::toggleFullListUmount) {
-                output.append(mntColor).append(dirPart)
-                      .append(isoColor).append(pathPart)
-                      .append(squareColor).append(hashPart);
+            if (showFullUmount) {
+                output.append(c.mnt)
+                      .append(dirPart).append(UI::Palette::Reset).append(UI::Palette::BoldReset)
+                      .append(c.iso).append(pathPart)
+                      .append(c.square).append(hashPart);
             } else {
-                output.append(isoColor).append(pathPart);
+                output.append(c.iso).append(pathPart);
             }
         }
-        output.append(originalColors::boldAlt).append("\n");
+        output.append(UI::Palette::Reset).append(UI::Palette::BoldReset).append("\n");
     }
 
     // --- Footer ---
     if (!disablePagination) {
-        output.append("\n").append(headColor).append("Pagination: ");
-        if (effectivePage > 0) output.append("[p] ↵ Previous | ");
-        if (effectivePage < totalPages - 1) output.append("[n] ↵ Next | ");
-        output.append("[g<num>] ↵ Go to | ").append(originalColors::boldAlt).append("\n");
+        output.append("\n").append(c.head);
+        if (effectivePage > 0) output.append("[PgUp] Prev | ");
+        if (effectivePage < totalPages - 1) output.append("[PgDn] Next | ");
+        output.append("[g#] ↵ GoTo").append(UI::Palette::BoldReset).append("\n");
     }
 
     // --- Pending Processes ---
     if (hasPendingProcess && !pendingIndices.empty()) {
         output.append("\n");
-        std::string_view bracketBg = isOriginal ? originalColors::bgNavy : theme->background;
-        std::string_view procText   = isOriginal ? originalColors::green  : theme->accent;
+        output.append(c.bracketBg).append("Pending Indices [")
+              .append(c.procText).append("P")
+              .append(UI::Palette::BoldReset).append(c.bracketBg).append("]: ");
 
-        output.append(bracketBg).append("Pending for [")
-              .append(procText).append("proc")
-              .append(originalColors::boldAlt).append(bracketBg).append("]: ");
-
-        std::string_view pColor = (listType != "IMAGE_FILES") ? isoColor : imgColor;
-        output.append(pColor);
+        output.append(!isImgMode ? c.iso : c.img);
         for (size_t i = 0; i < pendingIndices.size(); ++i) {
             output.append(pendingIndices[i]);
             if (i < pendingIndices.size() - 1) output.push_back(' ');
         }
-        output.append(originalColors::boldAlt).append("\n");
+        output.append(UI::Palette::Reset).append(UI::Palette::BoldReset).append("\n");
     }
 
-    // Atomic write to stdout
-    std::cout.write(output.data(), output.size());
+    // --- Sync-safe print ---
+    {
+        std::lock_guard<std::mutex> lk(state->printMutex);
+
+        const bool isIsoWithAutoUpdate = (state
+            && state->isImportRunning.load(std::memory_order_relaxed)
+            && isIsoMode
+            && !GlobalState::globalIsoFileList.empty());
+
+        if (isIsoWithAutoUpdate) {
+            std::string syncLine;
+            syncLine.append(UI::Palette::Dim);
+            if (!isHistoryFileEmpty(GlobalState::historyFilePath) && fs::is_regular_file(GlobalState::historyFilePath)) {
+                syncLine.append(disablePagination
+                    ? "[↻ Syncing: NewISO → Restructure]\n\n"
+                    : "\n\n[↻ Syncing: NewISO → Restructure]");
+            } else {
+                syncLine.append(disablePagination
+                    ? "[No FolderPath history — nothing to sync]\n\n"
+                    : "\n\n[No FolderPath history — nothing to sync]");
+            }
+            syncLine.append(UI::Palette::BoldReset);
+            output.insert(syncInsertPos, syncLine);
+        }
+
+        std::cout.write(output.data(), output.size());
+    }
 }
