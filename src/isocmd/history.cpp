@@ -88,6 +88,8 @@ bool isHistoryFileEmpty(const std::string& filePath) {
 void loadHistory(bool& filterHistory) {
     clear_history();
     std::string targetFilePath = !filterHistory ? GlobalState::historyFilePath : GlobalState::filterHistoryFilePath;
+    size_t maxLines = !filterHistory ? GlobalState::MAX_HISTORY_LINES : GlobalState::MAX_HISTORY_PATTERN_LINES;
+    if (maxLines == 0) return;
 
     if (!std::filesystem::exists(targetFilePath)) {
         return;
@@ -131,6 +133,13 @@ void saveHistory(bool& filterHistory) {
     std::string targetFilePath = !filterHistory ? GlobalState::historyFilePath : GlobalState::filterHistoryFilePath;
     size_t maxLines = !filterHistory ? GlobalState::MAX_HISTORY_LINES : GlobalState::MAX_HISTORY_PATTERN_LINES;
 
+    if (maxLines == 0) {
+        // History is disabled for this type: don't touch the file on disk at all,
+        // just drop whatever's in RAM for this session.
+        clear_history();
+        return;
+    }
+
     std::filesystem::path dirPath = std::filesystem::path(targetFilePath).parent_path();
     if (!dirPath.empty() && !std::filesystem::exists(dirPath)) {
         std::filesystem::create_directories(dirPath);
@@ -145,12 +154,6 @@ void saveHistory(bool& filterHistory) {
     }
 
     if (ftruncate(fd, 0) == -1) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        return;
-    }
-
-    if (maxLines == 0) {
         flock(fd, LOCK_UN);
         close(fd);
         return;
