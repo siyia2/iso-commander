@@ -82,7 +82,9 @@ bool isHistoryFileEmpty(const std::string& filePath) {
  * @brief Loads history from a file into the GNU Readline buffer.
  * * Swaps the current history context based on whether the user is filtering
  * or navigating. Uses advisory file locking (flock) to ensure thread-safe
- * and process-safe reads.
+ * and process-safe reads. If the configured max lines for this history type
+ * is 0, history is disabled: the in-memory list is cleared and the function
+ * returns without touching the file on disk.
  * * @param filterHistory Boolean toggle; true for filter history, false for path history.
  */
 void loadHistory(bool& filterHistory) {
@@ -126,7 +128,10 @@ void loadHistory(bool& filterHistory) {
  * @brief Saves the current Readline history to a persistent file.
  * * Performs deduplication (keeping only the most recent unique entries)
  * and truncates the file to the maximum allowed lines. Employs exclusive
- * file locking (flock) during the write process.
+ * file locking (flock) during the write process. If the configured max
+ * lines for this history type is 0, history is disabled: the in-memory
+ * list is cleared and the function returns without opening, truncating,
+ * or otherwise modifying the file on disk.
  * * @param filterHistory Boolean toggle; determines which database file to write to.
  */
 void saveHistory(bool& filterHistory) {
