@@ -516,8 +516,10 @@ void selectForIsoFiles(const std::string& operation,
                 GlobalState::g_filteringIndicator.store(false);
                 filteringHandled = true;
                                       }
-            } else {
+            } else if ((inputString == "/" || (!inputString.empty() && inputString[0] == '/')) && refreshState->isImportRunning.load()){
                 GlobalState::g_filteringIndicator.store(true);
+                continue;
+            } else {
                 continue;
             }
         }
