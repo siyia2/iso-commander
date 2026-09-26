@@ -75,7 +75,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.reserve(64);
         output += '\n';
         output.append(c.num); // Warning color for empty items/filter match
-        output.append("No results found. Try adjusting your filter terms.");
+        output.append("No results found. Adjust filter terms.");
         output.append(UI::Palette::Reset).append(UI::Palette::BoldReset);
 
         std::lock_guard<std::mutex> lk(state->printMutex);
