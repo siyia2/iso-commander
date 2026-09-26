@@ -108,8 +108,16 @@ inline std::vector<FilteringState> filteringStack;
 
 /**
  * @brief Filters file indices based on a search query using the Boyer-Moore algorithm.
+ *
+ * @param precomputedLower Optional parallel array, same size as @p files, holding
+ *        each entry of @p files already lowercased. When a caller runs the same
+ *        @p files list through many queries in a row (e.g. the live filter
+ *        preview, once per keystroke), passing this lets it lowercase each
+ *        entry once instead of on every call. Defaults to nullptr, which
+ *        preserves the original per-call lowercasing behavior.
  */
-std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query);
+std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query,
+                                        const std::vector<std::string>* precomputedLower = nullptr);
 
 /**
  * @brief Synchronizes the filtered results by iteratively applying the filtering stack.
