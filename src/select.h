@@ -238,7 +238,8 @@ bool handleFilteringForISO(
     const std::string &operationColor,
     const std::vector<std::string> &isoDirs,
     bool isUnmount,
-    size_t &currentPage
+    size_t &currentPage,
+    std::shared_ptr<RefreshState> state = nullptr
 );
 
 /**
@@ -252,7 +253,10 @@ void handleFilteringConvert2ISO(
     bool &needsClrScrn,
     bool &filterHistory,
     bool &need2Sort,
-    size_t &currentPage
+    size_t &currentPage,
+    std::vector<std::string> &pendingIndices,
+    bool &hasPendingProcess,
+    std::shared_ptr<RefreshState> state = nullptr
 );
 
 

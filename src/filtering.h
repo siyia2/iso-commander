@@ -5,9 +5,13 @@
 
 // C++ Standard Library Headers
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
+
+// Forward declaration of shared state (needed for live main-list rendering)
+struct RefreshState;
 
 /**
  * DATA STRUCTURES
@@ -49,6 +53,18 @@ struct FilterContext {
     const std::vector<std::string>* sourceOverride = nullptr;
     bool isUnmount = false;
     bool toggleFullListUmount = false;
+
+    // --- Live main-list rendering (optional) ---
+    // When listType is non-empty (and pendingIndices/hasPendingProcess/state
+    // are all set), the FilterTerms prompt repaints the real printList
+    // output on every keystroke, narrowing/widening it live as the query
+    // changes, instead of leaving the list static until Enter. Leaving
+    // listType empty disables this and keeps the classic Enter-only prompt.
+    std::string listType{};       // e.g. "ISO_FILES", "IMAGE_FILES", "MOUNTED_ISOS"
+    std::string listSubType{};
+    std::vector<std::string>* pendingIndices = nullptr;
+    bool* hasPendingProcess = nullptr;
+    std::shared_ptr<RefreshState> state = nullptr;
 };
 
 /**
@@ -66,6 +82,14 @@ struct FilterCallConfig {
     size_t* currentPage = nullptr;
     bool isUnmount = false;
     bool toggleFullList = false;
+
+    // Optional: see FilterContext above. Populate all four to enable live
+    // repainting of the real list while the user types.
+    std::string listType{};
+    std::string listSubType{};
+    std::vector<std::string>* pendingIndices = nullptr;
+    bool* hasPendingProcess = nullptr;
+    std::shared_ptr<RefreshState> state = nullptr;
 };
 
 /**
@@ -91,9 +115,9 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
  * @brief Synchronizes the filtered results by iteratively applying the filtering stack.
  */
 void syncFilteringStackForIso(
-    const std::vector<std::string>& globalIsoFileList, 
-    std::vector<FilteringState>& filteringStack, 
-    std::vector<std::string>& filteredFiles, 
+    const std::vector<std::string>& globalIsoFileList,
+    std::vector<FilteringState>& filteringStack,
+    std::vector<std::string>& filteredFiles,
     bool& isFiltered
 );
 
