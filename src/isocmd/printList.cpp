@@ -202,10 +202,10 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             syncLine.append(UI::Palette::Dim);
             if (!isHistoryFileEmpty(GlobalState::historyFilePath) && fs::is_regular_file(GlobalState::historyFilePath)) {
                 syncLine.append(disablePagination
-                    ? "[↻ Syncing: NewISO → Restructure]\n"
+                    ? "[↻ Syncing: NewISO → Restructure]\n\n"
                     : "\n\n[↻ Syncing: NewISO → Restructure]")
                 .append(GlobalState::g_filteringIndicator
-                    ? (disablePagination ? "[ℹ  Filtering locked during sync]\n\n"
+                    ? (disablePagination ? "\033[1A\033[K[ℹ  Filtering locked during sync]\n\n"
                                             : "\n[ℹ  Filtering locked during sync]")
                     : "");
             } else {
