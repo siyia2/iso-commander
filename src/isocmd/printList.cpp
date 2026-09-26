@@ -206,7 +206,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                     ? "[↻ Syncing: NewISO → Restructure]\n\n"
                     : "\n\n[↻ Syncing: NewISO → Restructure]")
                        .append(GlobalState::g_filteringIndicator
-                    ? "\n[ℹ  Filtering is unavailable while syncing]\n"
+                    ? "\n[ℹ  Filtering locked during sync]\n"
                     : "");
             } else {
                 syncLine.append(disablePagination
