@@ -339,7 +339,10 @@ static std::string extractUnmountKey(const std::string& path) {
  * false if the query is empty or no matches exist.
  */
 static bool applyFilterCore(const std::string& searchString, FilterContext& ctx) {
-    if (searchString.empty()) return false;
+    if (searchString.empty()) {
+        std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+        return false;
+    }
 
     const std::vector<std::string>& sourceList =
         ctx.sourceOverride ? *ctx.sourceOverride : ctx.files;
@@ -999,7 +1002,7 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
 	std::cout << "\n";
 	reset_custom_keybindingsForSelect();
 	rl_bind_keyseq("\\e", exit_handler);
-	std::cout << "\033[1A\033[K";
+	std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
 
     const ReadlineAndPromptTheme ft = getFilterTheme("", false);
     const std::string prompt =
