@@ -64,14 +64,14 @@ void printSection(const ThemeColors& tc, std::string_view head, const std::strin
 /**
  * @brief Displays an interactive help guide detailing how to select and filter items within lists.
  */
-void helpSelections(bool& isAtISOListForHelp) {
+void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount) {
     const ThemeColors tc;
     setupHelp("Help Guide For Lists", tc);
     printSection(tc, "1. Hotkeys:", std::string(UI::Palette::BoldReset) +
         "   • Exit         : " + std::string(UI::Palette::Yellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
         "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u");
-    printSection(tc, "\n2. Selecting Items (↵):", std::string(UI::Palette::BoldReset) +
+    printSection(tc, isUnmount ? "\n2. Selecting Mount-Points (↵):" : "\n2. Selecting Files (↵):", std::string(UI::Palette::BoldReset) +
         "   • Single/Multiple : " + std::string(UI::Palette::Purple) + "'1' or '1 5 6'\n" + std::string(UI::Palette::BoldReset) +
         "   • Range/Combine   : " + std::string(UI::Palette::Purple) + "'1-3' or '1-3 5 7-9'\n" + std::string(UI::Palette::BoldReset) +
         "   • Pending/All     : " + std::string(UI::Palette::Purple) + "'1-3 5;' or '00' " + std::string(UI::Palette::Yellow) + "('00'↔mount/umount)");

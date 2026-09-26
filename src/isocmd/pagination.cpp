@@ -24,7 +24,7 @@
 #include "../themes.h"
 #include "../verbose.h"
 
-void helpSelections(bool& isAtISOListForHelp);
+void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount);
 
 /**
  * @file pagination.cpp
@@ -85,7 +85,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
     if (command == "?") {
         bool isAtISOListForHelp = isAtISOList ? isAtISOList->load() : false;
         if (isAtISOList) isAtISOList->store(false);
-        helpSelections(isAtISOListForHelp);
+        helpSelections(isAtISOListForHelp, isUnmount);
         needsClrScrn = true;
         return true;
     }
