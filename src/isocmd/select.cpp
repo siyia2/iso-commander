@@ -556,7 +556,6 @@ void selectForIsoFiles(const std::string& operation,
         }
         // isAtISOList automatically restored here
         keybindingGuard.restore();
-        GlobalState::g_filteringIndicator.store(false);
         if (pendingExecuted) continue;
     }
     // Keybinding guard destructor automatically calls reset_custom_keybindingsForSelect()
