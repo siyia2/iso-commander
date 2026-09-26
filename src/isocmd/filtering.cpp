@@ -171,9 +171,17 @@ static std::vector<QueryToken> buildQueryTokens(const std::string& query) {
  *
  * @param files Vector of file paths to filter
  * @param query Search query with semicolon-separated terms
+ * @param precomputedLower Optional parallel array, same size as @p files, holding
+ *        each entry of @p files already lowercased. When provided (and its size
+ *        matches @p files), it is used in place of lowercasing each entry inline,
+ *        letting a caller that runs this same @p files list through many queries
+ *        in a row (e.g. the live filter preview, once per keystroke) lowercase
+ *        each entry exactly once instead of on every call. Pass nullptr (the
+ *        default) to preserve the original per-call lowercasing behavior.
  * @return Vector of indices matching the search criteria
  */
-std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query)
+std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query,
+                                        const std::vector<std::string>* precomputedLower)
 {
     if (files.empty() || query.empty()) return {};
 
@@ -186,6 +194,11 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
 
     const bool needLower = std::any_of(queryTokens.begin(), queryTokens.end(),
                                [](const QueryToken& qt) { return !qt.isCaseSensitive; });
+
+    // Only trust a caller-supplied lowercase cache if it actually lines up
+    // with `files` — otherwise silently fall back to lowercasing inline, so
+    // a stale/mismatched cache can never produce wrong indices.
+    const bool useCachedLower = precomputedLower && precomputedLower->size() == files.size();
 
     ThreadPool&  pool       = getStaticThreadPool();
     const size_t numThreads = std::min({
@@ -205,29 +218,35 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
         if (start >= end) break;
 
         futures.emplace_back(pool.enqueue(
-            [&files, start, end, needLower, &queryTokens]() -> std::vector<size_t> {
+            [&files, start, end, needLower, &queryTokens, precomputedLower, useCachedLower]() -> std::vector<size_t> {
                 std::vector<size_t> localMatches;
                 localMatches.reserve((end - start) / 4);
 
-                std::string fileLower;
-                if (needLower)
-                    fileLower.reserve(256);
+                std::string fileLowerScratch;
+                if (needLower && !useCachedLower)
+                    fileLowerScratch.reserve(256);
 
                 for (size_t j = start; j < end; ++j) {
                     const std::string& file = files[j];
 
+                    const std::string* fileLower = nullptr;
                     if (needLower) {
-                        fileLower = file;
-                        toLowerInPlace(fileLower);
+                        if (useCachedLower) {
+                            fileLower = &(*precomputedLower)[j];
+                        } else {
+                            fileLowerScratch = file;
+                            toLowerInPlace(fileLowerScratch);
+                            fileLower = &fileLowerScratch;
+                        }
                     }
 
                     for (const auto& qt : queryTokens) {
                         bool match;
                         if (qt.isCaseSensitive) {
-                            match = boyerMooreSearchExists(file,      qt.original,
+                            match = boyerMooreSearchExists(file,       qt.original,
                                                             qt.originalBadChar, qt.originalGoodSuffix);
                         } else {
-                            match = boyerMooreSearchExists(fileLower, qt.lower,
+                            match = boyerMooreSearchExists(*fileLower, qt.lower,
                                                             qt.lowerBadChar,    qt.lowerGoodSuffix);
                         }
                         if (match) {
@@ -421,6 +440,15 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 // path as before (applyFilterCore + saveQueryToHistory), so history and
 // nested-filter-stack semantics are unchanged.
 //
+// Search-corpus caching: the text actually searched per source entry (its
+// basename, its unmount key, or the raw path) and that text's lowercased
+// form depend only on `sourceList` + the useNameOnly/useUnmountKey toggles
+// — never on the in-progress query. Both are therefore computed exactly
+// once per runFilterLoop() invocation (primeLivePreviewCaches, called
+// before the readline() loop starts) rather than being rebuilt from
+// scratch on every keystroke, which used to mean a full pass of string
+// allocation + case-folding over the whole source list per frame.
+//
 // Trade-offs worth knowing about:
 //  - Because filteringStack isn't updated until commit, the live repaint
 //    always renders with isFiltered=false while a query is in progress, so
@@ -431,6 +459,11 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 //    kLivePreviewSourceCap source items we skip live repainting entirely
 //    and fall back to the old Enter-only behavior, to keep typing responsive
 //    on very large lists.
+//  - The derived/lowercase caches are primed once per runFilterLoop() call
+//    and intentionally never refreshed mid-loop: sourceList only changes on
+//    a successful filter commit, which immediately ends the loop, so there
+//    is no point in the loop's lifetime where the cache could go stale
+//    while still being read from.
 
 namespace {
 
@@ -452,6 +485,16 @@ struct LiveFilterPreview {
     bool*                         hasPendingProcess = nullptr;
     std::shared_ptr<RefreshState> state = nullptr;
 
+    // Derived-label ("name only" / unmount-key) and lowercased search
+    // corpora for `*sourceList`. Both depend only on sourceList and the
+    // useNameOnly/useUnmountKey toggles above, never on the in-progress
+    // query, so they are computed exactly once per runFilterLoop()
+    // invocation (see primeLivePreviewCaches) instead of being rebuilt on
+    // every keystroke.
+    bool                      hasDerivedCache = false; // true => search derivedCache, not *sourceList
+    std::vector<std::string>  derivedCache;
+    std::vector<std::string>  lowerCache;             // lowercased derivedCache (or *sourceList if !hasDerivedCache)
+
     std::string lastQuery;
     bool        primed        = false;  // a frame has been drawn for the *current* readline() call
     bool        everRepainted = false;  // a real repaint has happened at least once this runFilterLoop call
@@ -466,14 +509,23 @@ LiveFilterPreview g_livePreview;
 // behavior for huge lists.
 constexpr size_t kLivePreviewSourceCap = 20000;
 
-bool liveMainListEnabled() {
-    return g_livePreview.active
-        && g_livePreview.sourceList
+/**
+ * @brief True once sourceList + the printList() wiring have been set up and
+ * are within the size cap, regardless of whether a readline() call is
+ * currently in flight. Used to decide whether it is worth priming the
+ * derived/lowercase caches before the runFilterLoop while-loop starts.
+ */
+bool livePreviewConfigured() {
+    return g_livePreview.sourceList
         && !g_livePreview.listType.empty()
         && g_livePreview.pendingIndices
         && g_livePreview.hasPendingProcess
         && g_livePreview.state
         && g_livePreview.sourceList->size() <= kLivePreviewSourceCap;
+}
+
+bool liveMainListEnabled() {
+    return g_livePreview.active && livePreviewConfigured();
 }
 
 /** Derives the text actually searched/shown for one source entry. */
@@ -486,22 +538,56 @@ std::string livePreviewLabel(const std::string& path) {
     return path;
 }
 
+/**
+ * @brief Builds g_livePreview.derivedCache / lowerCache exactly once, from
+ * the current sourceList + useNameOnly/useUnmountKey toggles.
+ *
+ * Must be called after those fields are set (see runFilterLoop) and before
+ * the first keystroke of a runFilterLoop() invocation is processed. The
+ * result stays valid for every readline() call and every keystroke within
+ * that invocation: sourceList itself cannot change until a filter is
+ * actually committed, and a successful commit immediately ends the loop
+ * (see the "Search-corpus caching" note above), so there's no window in
+ * which a stale cache could be read.
+ */
+void primeLivePreviewCaches() {
+    const std::vector<std::string>& source = *g_livePreview.sourceList;
+
+    g_livePreview.hasDerivedCache = g_livePreview.useNameOnly || g_livePreview.useUnmountKey;
+
+    g_livePreview.derivedCache.clear();
+    if (g_livePreview.hasDerivedCache) {
+        g_livePreview.derivedCache.reserve(source.size());
+        for (const auto& path : source)
+            g_livePreview.derivedCache.push_back(livePreviewLabel(path));
+    }
+
+    const std::vector<std::string>& searchable =
+        g_livePreview.hasDerivedCache ? g_livePreview.derivedCache : source;
+
+    g_livePreview.lowerCache.clear();
+    g_livePreview.lowerCache.reserve(searchable.size());
+    for (const auto& s : searchable) {
+        std::string lower = s;
+        toLowerInPlace(lower);
+        g_livePreview.lowerCache.push_back(std::move(lower));
+    }
+}
+
 /** Computes the "would-be" filtered list for the in-progress query, without
  *  touching filteringStack — mirrors applyFilterCore's source resolution
- *  and name/unmount-key handling, but is purely a preview. */
+ *  and name/unmount-key handling, but is purely a preview. Reads from the
+ *  per-invocation derived/lowercase caches (primeLivePreviewCaches) instead
+ *  of rebuilding them from `source` on every keystroke. */
 std::vector<std::string> computeLivePreviewItems(const std::string& query) {
     const std::vector<std::string>& source = *g_livePreview.sourceList;
     if (query.empty()) return source;
 
-    std::vector<size_t> matches;
-    if (g_livePreview.useNameOnly || g_livePreview.useUnmountKey) {
-        std::vector<std::string> derived;
-        derived.reserve(source.size());
-        for (const auto& path : source) derived.push_back(livePreviewLabel(path));
-        matches = filterFilesIndices(derived, query);
-    } else {
-        matches = filterFilesIndices(source, query);
-    }
+    const std::vector<std::string>& searchable =
+        g_livePreview.hasDerivedCache ? g_livePreview.derivedCache : source;
+
+    const std::vector<size_t> matches =
+        filterFilesIndices(searchable, query, &g_livePreview.lowerCache);
 
     std::vector<std::string> items;
     items.reserve(matches.size());
@@ -571,7 +657,7 @@ void liveFilterRedisplayHook() {
 struct LivePreviewGuard {
     LivePreviewGuard() { rl_redisplay_function = liveFilterRedisplayHook; }
     ~LivePreviewGuard() {
-        g_livePreview = LiveFilterPreview{}; // drop all pointers/shared_ptr, reset flags
+        g_livePreview = LiveFilterPreview{}; // drop all pointers/shared_ptr, reset flags + caches
         rl_redisplay_function = rl_redisplay;
     }
     LivePreviewGuard(const LivePreviewGuard&) = delete;
@@ -613,23 +699,42 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
     // guarantees cleanup on all exit paths, including thrown exceptions).
     LivePreviewGuard livePreviewGuard;
 
+    // Point the live preview at whatever runFilterLoop itself would search
+    // (same source-resolution rule as applyFilterCore). This — and the
+    // derived/lowercase search caches primed just below — are resolved
+    // ONCE for the whole invocation, not per readline() call or per
+    // keystroke: ctx.files is only ever reassigned on a successful filter
+    // commit (inside applyFilterCore), and a successful commit immediately
+    // breaks out of the while-loop below, so nothing here can change out
+    // from under us while the loop is still running.
+    const std::vector<std::string>& previewSource =
+        ctx.sourceOverride ? *ctx.sourceOverride : ctx.files;
+    g_livePreview.sourceList        = &previewSource;
+    g_livePreview.useNameOnly       = displayConfig::toggleNamesOnly && !ctx.isUnmount;
+    g_livePreview.useUnmountKey     = ctx.isUnmount && !ctx.toggleFullListUmount;
+    g_livePreview.actualIsFiltered  = &ctx.isFiltered;
+    g_livePreview.actualCurrentPage = &ctx.currentPage;
+    g_livePreview.listType          = ctx.listType;
+    g_livePreview.listSubType       = ctx.listSubType;
+    g_livePreview.pendingIndices    = ctx.pendingIndices;
+    g_livePreview.hasPendingProcess = ctx.hasPendingProcess;
+    g_livePreview.state             = ctx.state;
+
+    // Expensive (name/unmount-key derivation + full lowercasing over the
+    // whole source list) and, prior to this change, redone from scratch on
+    // every single keystroke. Now done exactly once here, up front. Only
+    // worth doing if the live preview will actually run for this session;
+    // livePreviewConfigured() mirrors liveMainListEnabled() minus the
+    // "readline() call currently in flight" check, which can't be true yet
+    // at this point in the function.
+    if (livePreviewConfigured())
+        primeLivePreviewCaches();
+
     while (true) {
-        // Point the live preview at whatever runFilterLoop itself would
-        // search (same source-resolution rule as applyFilterCore), and
-        // reset per-call state so the very first keystroke of this line
-        // always triggers a fresh live repaint.
-        const std::vector<std::string>& previewSource =
-            ctx.sourceOverride ? *ctx.sourceOverride : ctx.files;
-        g_livePreview.sourceList        = &previewSource;
-        g_livePreview.useNameOnly       = displayConfig::toggleNamesOnly && !ctx.isUnmount;
-        g_livePreview.useUnmountKey     = ctx.isUnmount && !ctx.toggleFullListUmount;
-        g_livePreview.actualIsFiltered  = &ctx.isFiltered;
-        g_livePreview.actualCurrentPage = &ctx.currentPage;
-        g_livePreview.listType          = ctx.listType;
-        g_livePreview.listSubType       = ctx.listSubType;
-        g_livePreview.pendingIndices    = ctx.pendingIndices;
-        g_livePreview.hasPendingProcess = ctx.hasPendingProcess;
-        g_livePreview.state             = ctx.state;
+        // Per-readline()-call reset only. sourceList / useNameOnly /
+        // useUnmountKey / derivedCache / lowerCache are deliberately left
+        // untouched here — see the priming block above for why they stay
+        // valid across every iteration of this loop.
         g_livePreview.lastQuery.clear();
         g_livePreview.primed = false;
         g_livePreview.active = true;
