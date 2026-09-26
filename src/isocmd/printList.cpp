@@ -134,7 +134,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         if (idxStr.length() < maxDigits) output.append(maxDigits - idxStr.length(), ' ');
         output.append(idxStr);
 
-        if (isFiltered && !filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
+        if (!filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
             output.append(":").append(UI::Palette::BoldReset).append(c.square);
             output.append(ib2.format(filteringStack.back().originalIndices[i] + 1));
             output.append(UI::Palette::BoldReset).append(c.square).append("^ ")

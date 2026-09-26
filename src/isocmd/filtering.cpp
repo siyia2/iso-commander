@@ -467,6 +467,11 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 
 namespace {
 
+struct LivePreviewResult {
+    std::vector<std::string> items;
+    std::vector<size_t> indices;
+};
+
 struct LiveFilterPreview {
     const std::vector<std::string>* sourceList     = nullptr;
     bool                             useNameOnly   = false;
@@ -579,9 +584,20 @@ void primeLivePreviewCaches() {
  *  and name/unmount-key handling, but is purely a preview. Reads from the
  *  per-invocation derived/lowercase caches (primeLivePreviewCaches) instead
  *  of rebuilding them from `source` on every keystroke. */
-std::vector<std::string> computeLivePreviewItems(const std::string& query) {
+LivePreviewResult computeLivePreviewItems(const std::string& query)
+{
     const std::vector<std::string>& source = *g_livePreview.sourceList;
-    if (query.empty()) return source;
+
+    LivePreviewResult result;
+
+    if (query.empty()) {
+        result.items = source;
+
+        result.indices.resize(source.size());
+        std::iota(result.indices.begin(), result.indices.end(), 0);
+
+        return result;
+    }
 
     const std::vector<std::string>& searchable =
         g_livePreview.hasDerivedCache ? g_livePreview.derivedCache : source;
@@ -589,10 +605,32 @@ std::vector<std::string> computeLivePreviewItems(const std::string& query) {
     const std::vector<size_t> matches =
         filterFilesIndices(searchable, query, &g_livePreview.lowerCache);
 
-    std::vector<std::string> items;
-    items.reserve(matches.size());
-    for (size_t idx : matches) items.push_back(source[idx]);
-    return items;
+    result.items.reserve(matches.size());
+    result.indices.reserve(matches.size());
+
+    for (size_t idx : matches) {
+        result.items.push_back(source[idx]);
+
+        size_t globalIdx = idx;
+
+        // Translate from current preview source -> globalIsoFileList
+        // exactly like applyFilterCore().
+        if (!filteringStack.empty()) {
+            for (int lvl = static_cast<int>(filteringStack.size()) - 1;
+                 lvl >= 0;
+                 --lvl)
+            {
+                const auto& lvlIndices = filteringStack[lvl].originalIndices;
+
+                if (globalIdx < lvlIndices.size())
+                    globalIdx = lvlIndices[globalIdx];
+            }
+        }
+
+        result.indices.push_back(globalIdx);
+    }
+
+    return result;
 }
 
 /**
@@ -629,16 +667,36 @@ void liveFilterRedisplayHook() {
     }
     g_livePreview.lastQuery = query;
 
-    std::vector<std::string> previewItems = computeLivePreviewItems(query);
+    LivePreviewResult preview = computeLivePreviewItems(query);
 
     clearScrollBuffer();
 
     size_t previewPage      = query.empty() ? *g_livePreview.actualCurrentPage : 0;
-    bool   previewIsFiltered = query.empty() ? *g_livePreview.actualIsFiltered : false;
+    bool previewIsFiltered = query.empty() ? *g_livePreview.actualIsFiltered : false;
 
-    printList(previewItems, g_livePreview.listType, g_livePreview.listSubType,
-              *g_livePreview.pendingIndices, *g_livePreview.hasPendingProcess,
-              previewIsFiltered, previewPage, g_livePreview.state);
+
+    // Live preview has its own temporary index mapping.
+    // This makes printList() display indexes relative to the original ISO list
+    // without modifying the real filtering stack.
+    FilteringState previewState;
+    previewState.originalIndices = preview.indices;
+
+    const bool addPreviewStack = !query.empty();
+
+    if (addPreviewStack)
+        filteringStack.push_back(std::move(previewState));
+
+    printList(preview.items,
+              g_livePreview.listType,
+              g_livePreview.listSubType,
+              *g_livePreview.pendingIndices,
+              *g_livePreview.hasPendingProcess,
+              previewIsFiltered,
+              previewPage,
+              g_livePreview.state);
+
+    if (addPreviewStack)
+        filteringStack.pop_back();
 
     // We just repainted the whole screen out from under readline; force it
     // to redraw its prompt + in-progress query fresh rather than attempting
