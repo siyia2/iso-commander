@@ -67,9 +67,17 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
                size_t& currentPage, std::shared_ptr<RefreshState> state) {
 
+                   // --- Flags & Config ---
+                   const bool isIsoMode      = (listType == "ISO_FILES");
+                   const bool isImgMode      = (listType == "IMAGE_FILES");
+                   const bool isMountedMode  = (listType == "MOUNTED_ISOS");
+                   const bool isFileMode     = (isIsoMode || isImgMode);
+                   const bool showNamesOnly  = displayConfig::toggleNamesOnly;
+                   const bool showFullUmount = displayConfig::toggleFullListUmount;
+
     const PrintListTheme c = getListColors();
     bool noFilterResults = false;
-    if (items.empty() && !GlobalState::globalIsoFileList.empty()) {
+    if ((items.empty() && !GlobalState::globalIsoFileList.empty() && isIsoMode) || (items.empty() && !isIsoMode)) {
         std::string output;
         output.reserve(64);
         output += '\n';
@@ -90,14 +98,6 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
     size_t effectivePage = (disablePagination) ? 0 : (currentPage >= totalPages ? totalPages - 1 : currentPage);
     const size_t startIndex = disablePagination ? 0 : (effectivePage * GlobalState::ITEMS_PER_PAGE);
     const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + GlobalState::ITEMS_PER_PAGE, totalItems);
-
-    // --- Flags & Config ---
-    const bool isIsoMode      = (listType == "ISO_FILES");
-    const bool isImgMode      = (listType == "IMAGE_FILES");
-    const bool isMountedMode  = (listType == "MOUNTED_ISOS");
-    const bool isFileMode     = (isIsoMode || isImgMode);
-    const bool showNamesOnly  = displayConfig::toggleNamesOnly;
-    const bool showFullUmount = displayConfig::toggleFullListUmount;
 
     IntBuf<> ib1, ib2, ib3, ib4;
     const size_t maxDigits = ib1.format(endIndex).length();
