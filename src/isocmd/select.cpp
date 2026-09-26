@@ -212,19 +212,22 @@ bool handlePendingProcess(const std::string& inputString, std::vector<std::strin
  *   @c PendingRefreshKind::IsoList via @c GlobalState::g_pendingRefreshKind;
  *   the redraw (including @c rl_on_new_line() / @c rl_redisplay()) happens
  *   later, on the main thread, inside @c checkPendingRefresh.
+ * - **Filtering Indicator Reset:** Clears @c GlobalState::g_filteringIndicator
+ *   (setting it to @c false) to stop displaying any active filtering/sync status
+ *   messages once the import and refresh flow concludes.
  * - **Auto-Termination:** Executes once after the import signal is received
  *   and terminates (non-looping design).
  *
- * @param isAtISOList      Atomic flag; a refresh is only requested if the user is in the list view.
- * @param state            Shared state container for:
- *                         - isImportRunning: Atomic flag used as CV predicate
- *                         - importMutex and importCV for event coordination
- *                         - filteredFiles, isFiltered, listSubtype for display context
- *                         - pendingIndices, hasPendingProcess, umountMvRmBreak for list state
- *                         - currentPage, originalPage for pagination
+ * @param isAtISOList     Atomic flag; a refresh is only requested if the user is in the list view.
+ * @param state           Shared state container for:
+ *                        - isImportRunning: Atomic flag used as CV predicate
+ *                        - importMutex and importCV for event coordination
+ *                        - filteredFiles, isFiltered, listSubtype for display context
+ *                        - pendingIndices, hasPendingProcess, umountMvRmBreak for list state
+ *                        - currentPage, originalPage for pagination
  *
- *                         Retained via @c GlobalState::g_pendingRefreshState until
- *                         consumed by @c checkPendingRefresh on the main thread.
+ *                        Retained via @c GlobalState::g_pendingRefreshState until
+ *                        consumed by @c checkPendingRefresh on the main thread.
  */
 void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
                                 std::shared_ptr<RefreshState> state) {
@@ -284,6 +287,10 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  *   and the loop continues; if no filter is active, the function sets @c currentPage
  *   to 0 and returns to the previous menu (keybinding cleanup handled automatically
  *   by the RAII guard).
+ * - **Filtering Lock Enforcement:** If the user attempts to filter while a background
+ *   import is active, the operation is blocked, and the UI status flag
+ *   @c GlobalState::g_filteringIndicator is set to @c true ("Filtering locked during sync")
+ *   to notify the user via screen output.
  * - **Two-Phase Execution:** Implements an "Induction" model where selected
  *   indices are staged into @c pendingIndices (a @c std::vector<std::string>)
  *   and batch-executed via the @c "P" command; @c "clr" discards the pending set.
@@ -299,21 +306,21 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  *   @c \\033[1B\\033[K) to maintain a static-feeling interface during input.
  *   PgUp/PgDn keybindings are disabled when @c ITEMS_PER_PAGE is 0.
  *
- * @param operation          Target system action ("mount", "umount", "cp", "mv",
- *                           "rm", or "write2usb"). Determines list source,
- *                           colour scheme, and operation dispatch.
- * @param isAtISOList        Set to @c true while the ISO list is displayed (only
- *                           for non-unmount operations); automatically managed
- *                           by RAII guards during operation execution. Also
- *                           gates watcher-thread repaints.
- * @param backgroundThreads  Joinable worker threads (spawned by manual R-press
- *                           imports) retained for lifetime management; stale
- *                           completed threads are joined and erased before each
- *                           new import.
- * @param refreshState       Shared UI state and condition variable used to
- *                           synchronize the watcher with the active import session.
- *                           If @c nullptr, a new @c RefreshState is constructed
- *                           internally.
+ * @param operation         Target system action ("mount", "umount", "cp", "mv",
+ *                          "rm", or "write2usb"). Determines list source,
+ *                          colour scheme, and operation dispatch.
+ * @param isAtISOList       Set to @c true while the ISO list is displayed (only
+ *                          for non-unmount operations); automatically managed
+ *                          by RAII guards during operation execution. Also
+ *                          gates watcher-thread repaints.
+ * @param backgroundThreads Joinable worker threads (spawned by manual R-press
+ *                          imports) retained for lifetime management; stale
+ *                          completed threads are joined and erased before each
+ *                          new import.
+ * @param refreshState      Shared UI state and condition variable used to
+ *                          synchronize the watcher with the active import session.
+ *                          If @c nullptr, a new @c RefreshState is constructed
+ *                          internally.
  */
 void selectForIsoFiles(const std::string& operation,
                        std::atomic<bool>& isAtISOList,
