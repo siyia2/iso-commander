@@ -518,8 +518,10 @@ void selectForIsoFiles(const std::string& operation,
                                       }
             } else if ((inputString == "/" || (!inputString.empty() && inputString[0] == '/')) && refreshState->isImportRunning.load()){
                 GlobalState::g_filteringIndicator.store(true);
+                needsClrScrn = true;
                 continue;
             } else {
+                std::cout << "\033[1B\033[K";
                 continue;
             }
         }
