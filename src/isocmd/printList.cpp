@@ -67,13 +67,13 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
                size_t& currentPage, std::shared_ptr<RefreshState> state) {
 
-                   // --- Flags & Config ---
-                   const bool isIsoMode      = (listType == "ISO_FILES");
-                   const bool isImgMode      = (listType == "IMAGE_FILES");
-                   const bool isMountedMode  = (listType == "MOUNTED_ISOS");
-                   const bool isFileMode     = (isIsoMode || isImgMode);
-                   const bool showNamesOnly  = displayConfig::toggleNamesOnly;
-                   const bool showFullUmount = displayConfig::toggleFullListUmount;
+    // --- Flags & Config ---
+    const bool isIsoMode      = (listType == "ISO_FILES");
+    const bool isImgMode      = (listType == "IMAGE_FILES");
+    const bool isMountedMode  = (listType == "MOUNTED_ISOS");
+    const bool isFileMode     = (isIsoMode || isImgMode);
+    const bool showNamesOnly  = displayConfig::toggleNamesOnly;
+    const bool showFullUmount = displayConfig::toggleFullListUmount;
 
     const PrintListTheme c = getListColors();
     bool noFilterResults = false;
