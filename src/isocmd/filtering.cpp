@@ -286,6 +286,30 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
 // ─── Shared filtering core ───────────────────────────────────────────────────
 
 /**
+ * @brief Translates a filter match's local index (relative to the current
+ * display list) into its corresponding globalIsoFileList index.
+ *
+ * filteringStack[lvl].originalIndices always stores fully-resolved global
+ * indices at every level (see syncFilteringStackForIso, which builds each
+ * level from currentIndices — itself already global from the prior
+ * iteration). So resolving a local index only ever requires one lookup,
+ * against the top of the stack; it must not walk back through earlier
+ * levels, whose entries are unrelated positions once idx no longer refers
+ * to them.
+ *
+ * @param localIdx Index into the list currently being searched/displayed.
+ * @return The corresponding index into globalIsoFileList.
+ */
+static size_t resolveGlobalIndex(size_t localIdx) {
+    if (!filteringStack.empty()) {
+        const auto& top = filteringStack.back().originalIndices;
+        if (localIdx < top.size())
+            return top[localIdx];
+    }
+    return localIdx;
+}
+
+/**
  * @brief Derives the short "unmount key" label used to match/display an
  * already-mounted ISO (basename with any trailing "~hash" suffix stripped).
  * Shared by @c applyFilterCore and the live filter preview so both stay
@@ -374,24 +398,8 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
     newState.query      = searchString;  // save query
     newState.isFiltered = true;
 
-	for (size_t idx : tempIndices) {
-		size_t globalIdx = idx;
-		// Walk all existing stack levels to translate idx (relative to the
-		// current display list) all the way back to a globalIsoFileList index.
-		// Each level's originalIndices maps its local positions to the level
-		// below, until we reach level 0 whose indices ARE already global.
-		if (!filteringStack.empty()) {
-			// tempIndices are local to sourceList. sourceList was built from
-			// filteringStack levels in order, so we need to chain through them.
-			// Start from the innermost (back) and work outward.
-			for (int lvl = static_cast<int>(filteringStack.size()) - 1; lvl >= 0; --lvl) {
-				const auto& lvlIndices = filteringStack[lvl].originalIndices;
-				if (globalIdx < lvlIndices.size())
-					globalIdx = lvlIndices[globalIdx];
-			}
-		}
-		newState.originalIndices.push_back(globalIdx);
-	}
+    for (size_t idx : tempIndices)
+        newState.originalIndices.push_back(resolveGlobalIndex(idx));
 
     filteringStack.push_back(std::move(newState));
 
@@ -652,23 +660,7 @@ LivePreviewResult computeLivePreviewItems(const std::string& query)
     for (size_t idx : matches) {
         result.items.push_back(source[idx]);
 
-        size_t globalIdx = idx;
-
-        // Translate from current preview source -> globalIsoFileList
-        // exactly like applyFilterCore().
-        if (!filteringStack.empty()) {
-            for (int lvl = static_cast<int>(filteringStack.size()) - 1;
-                 lvl >= 0;
-                 --lvl)
-            {
-                const auto& lvlIndices = filteringStack[lvl].originalIndices;
-
-                if (globalIdx < lvlIndices.size())
-                    globalIdx = lvlIndices[globalIdx];
-            }
-        }
-
-        result.indices.push_back(globalIdx);
+        result.indices.push_back(resolveGlobalIndex(idx));
     }
 
     return result;
