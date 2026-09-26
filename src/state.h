@@ -49,8 +49,8 @@ namespace GlobalState {
     inline const std::string configPath = configDirectory + "config";
 
     // Configuration Limits
-    inline int MAX_HISTORY_LINES         = 100;
-    inline int MAX_HISTORY_PATTERN_LINES = 50;
+    inline int MAX_HISTORY_LINES         = 30;
+    inline int MAX_HISTORY_PATTERN_LINES = 15;
 
     inline constexpr uintmax_t maxDatabaseSize = 1024 * 1024 * 1; // 1MB
 
