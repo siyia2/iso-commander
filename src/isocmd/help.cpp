@@ -191,13 +191,13 @@ void helpMappings() {
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u\n" + std::string(UI::Palette::BoldReset) +
         "   • Declutter    : " + std::string(UI::Palette::Yellow) + "Ctrl+l");
 
-    printSection(tc, "\n2. Selecting Mappings (↵):",
+    printSection(tc, "\n2. Selecting Pairs (↵):",
         "   • Syntax   : Index>Device (e.g., '1>/dev/sdc')\n"
         "   • Multiple : Separate with ';' (e.g., '1>/dev/sdc;2>/dev/sdd')");
 
     printSection(tc, "\n3. Tips:",
         "   • Press Enter to refresh USB Flash Devices\n"
-        "   • Tab-complete INDEX>DEVICE pairs for faster mapping\n"
+        "   • Tab-complete INDEX>DEVICE pairs for faster assignment\n"
         "   • Only unmounted parent devices are eligible for write2usb");
 
     pressEnterToReturn();
