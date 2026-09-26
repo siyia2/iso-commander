@@ -801,10 +801,6 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
             GlobalState::g_suppressPendingRefresh.store(false);
         });
 
-    auto wrap = [](std::string_view s) -> std::string {
-        return "\001" + std::string(s) + "\002";
-    };
-
 	rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
 	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
 	std::cout << "\n";
@@ -815,10 +811,7 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
     const ReadlineAndPromptTheme ft = getFilterTheme("", false);
     const std::string prompt =
         "\n" +
-        ft.filter  + "FilterTerms" +
-        ft.primary + " ↵ for " +
-        wrap(cfg.operationColor) + cfg.operation +
-        ft.primary + ": " +
+        ft.filter  + "Filter: " +
         ft.reset;
 
     FilterContext ctx {
