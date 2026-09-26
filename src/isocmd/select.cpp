@@ -402,7 +402,7 @@ void selectForIsoFiles(const std::string& operation,
             }
         }
 
-        std::cout << "\033[1A\033[K";
+        std::cout << "\033[2A\033[K";
 
         if (GlobalState::ITEMS_PER_PAGE == 0) {
             rl_bind_keyseq("\\e[5~", rl_insert);
@@ -416,6 +416,7 @@ void selectForIsoFiles(const std::string& operation,
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
         std::string prompt =
+            "\n" +
             prefix +
             pt.iso     + "ISO" +
             pt.primary + " ↵ for " + "\001" +
@@ -665,7 +666,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             std::cout << "\n\n";
         }
 
-        std::cout << "\033[1A\033[K";
+        std::cout << "\033[2A\033[K";
 
         // Disable PgUp&PgDn when pagination is not enabled
         if (GlobalState::ITEMS_PER_PAGE == 0) {
@@ -680,6 +681,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
         std::string prompt =
+            "\n" +
             prefix +
             pt.highlight + fileExtensionWithOutDots +
             pt.primary   + " ↵ for " +

@@ -810,8 +810,11 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
 	std::cout << "\n";
 	reset_custom_keybindingsForSelect();
 	rl_bind_keyseq("\\e", exit_handler);
+	std::cout << "\033[1A\033[K";
+
     const ReadlineAndPromptTheme ft = getFilterTheme("", false);
     const std::string prompt =
+        "\n" +
         ft.filter  + "FilterTerms" +
         ft.primary + " ↵ for " +
         wrap(cfg.operationColor) + cfg.operation +
