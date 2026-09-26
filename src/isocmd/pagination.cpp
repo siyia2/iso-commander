@@ -87,6 +87,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
         if (isAtISOList) isAtISOList->store(false);
         helpSelections(isAtISOListForHelp);
         needsClrScrn = true;
+        GlobalState::g_filteringIndicator.store(false);
         return true;
     }
 
