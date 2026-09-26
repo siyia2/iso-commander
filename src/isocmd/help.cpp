@@ -66,7 +66,7 @@ void printSection(const ThemeColors& tc, std::string_view head, const std::strin
  */
 void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool& isMount) {
     const ThemeColors tc;
-    const char* helpTitle = isUnmount ? "Help Guide For Umount List" : isMount ? "Help Guide For Mount List" : "Help Guide For Lists";
+    const char* helpTitle = isUnmount ? "Help Guide For Umount Prompt" : isMount ? "Help Guide For Mount Prompt" : "Help Guide For Selection Prompt";
     setupHelp(helpTitle, tc);
     printSection(tc, "1. Hotkeys:", std::string(UI::Palette::BoldReset) +
         "   • Exit         : " + std::string(UI::Palette::Yellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
@@ -183,7 +183,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
  */
 void helpMappings() {
     const ThemeColors tc;
-    setupHelp("Help Guide For Mappings", tc);
+    setupHelp("Help Guide For Write2Usb", tc);
 
     printSection(tc, "1. Hotkeys:",
         "   • Exit         : " + std::string(UI::Palette::Yellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
