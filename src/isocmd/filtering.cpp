@@ -27,7 +27,6 @@
 
 // Project Headers
 #include "../concurrency.h"
-#include "../databaseOps.h"
 #include "../display.h"
 #include "../filtering.h"
 #include "../history.h"
@@ -437,9 +436,6 @@ namespace {
 
 struct LiveFilterPreview {
     const std::vector<std::string>* sourceList     = nullptr;
-    // Temporary read-only database snapshot used while readline is active.
-    // Avoids pointing live preview at stale globalIsoFileList.
-    std::vector<std::string> refreshSnapshot;
     bool                             useNameOnly   = false;
     bool                             useUnmountKey = false;
 
@@ -547,13 +543,6 @@ void liveFilterRedisplayHook() {
     }
     g_livePreview.lastQuery = query;
 
-    if (GlobalState::isoListDirty.load(std::memory_order_relaxed)) {
-        g_livePreview.refreshSnapshot.clear();
-        loadFromDatabase(g_livePreview.refreshSnapshot);
-
-        g_livePreview.sourceList = &g_livePreview.refreshSnapshot;
-    }
-
     std::vector<std::string> previewItems = computeLivePreviewItems(query);
 
     clearScrollBuffer();
@@ -623,8 +612,6 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
     // Installed for the whole loop (covers every readline() call below, and
     // guarantees cleanup on all exit paths, including thrown exceptions).
     LivePreviewGuard livePreviewGuard;
-
-    g_livePreview.refreshSnapshot.clear();
 
     while (true) {
         // Point the live preview at whatever runFilterLoop itself would

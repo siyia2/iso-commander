@@ -241,6 +241,7 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
     }
         GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::IsoList); // then publish
     }
+    GlobalState::g_filteringIndicator.store(false);
 }
 
 /**
@@ -507,11 +508,17 @@ void selectForIsoFiles(const std::string& operation,
         // --- RAII: Lock guard automatically releases when scope exits ---
         bool filteringHandled = false;
         {
+            if ((inputString == "/" || (!inputString.empty() && inputString[0] == '/')) && !refreshState->isImportRunning.load()) {
             std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
             if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn,
                                       filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage,
                                       refreshState)) {
+                GlobalState::g_filteringIndicator.store(false);
                 filteringHandled = true;
+                                      }
+            } else {
+                GlobalState::g_filteringIndicator.store(true);
+                continue;
             }
         }
 

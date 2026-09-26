@@ -204,7 +204,10 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             if (!isHistoryFileEmpty(GlobalState::historyFilePath) && fs::is_regular_file(GlobalState::historyFilePath)) {
                 syncLine.append(disablePagination
                     ? "[↻ Syncing: NewISO → Restructure]\n\n"
-                    : "\n\n[↻ Syncing: NewISO → Restructure]");
+                    : "\n\n[↻ Syncing: NewISO → Restructure]")
+                       .append(GlobalState::g_filteringIndicator
+                    ? "\n[ℹ  Filtering is unavailable while syncing]\n"
+                    : "");
             } else {
                 syncLine.append(disablePagination
                     ? "[No FolderPath history — nothing to sync]\n\n"
