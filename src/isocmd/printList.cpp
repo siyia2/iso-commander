@@ -69,7 +69,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                size_t& currentPage, std::shared_ptr<RefreshState> state) {
 
     const PrintListTheme c = getListColors();
-
+    bool noFilterResults = false;
     if (items.empty() && !GlobalState::globalIsoFileList.empty()) {
         std::string output;
         output.reserve(64);
@@ -77,6 +77,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.append(c.num); // Warning color for empty items/filter match
         output.append("No results to display. Adjust filter terms.");
         output.append(UI::Palette::Reset).append(UI::Palette::BoldReset);
+        noFilterResults = true;
 
         std::lock_guard<std::mutex> lk(state->printMutex);
         std::cout.write(output.data(), output.size());
@@ -197,7 +198,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
             && isIsoMode
             && !GlobalState::globalIsoFileList.empty());
 
-        if (isIsoWithAutoUpdate) {
+        if (isIsoWithAutoUpdate && !noFilterResults) {
             std::string syncLine;
             syncLine.append(UI::Palette::Dim);
             if (!isHistoryFileEmpty(GlobalState::historyFilePath) && fs::is_regular_file(GlobalState::historyFilePath)) {
