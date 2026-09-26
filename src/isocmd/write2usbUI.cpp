@@ -601,9 +601,9 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         g_completerData.usbDevices = &usbDevices;
         reset_custom_keybindingsForCpMvWrite2Usb();
 
-        devicePromptStream << "\n" << UI::Palette::Green << "IDX>DEVICE"
+        devicePromptStream << "\n" << UI::Palette::RL_idxGreen << "IDX>DEVICE"
                           << wt.rl_primaryCol << " ↵ for "
-                          << UI::Palette::Yellow << "write2usb"
+                          << UI::Palette::RL_Yellow << "write2usb"
                           << wt.rl_primaryCol << ", ? for help: "
                           << wt.rl_resetCol;
 
