@@ -58,14 +58,13 @@ struct IntBuf {
  * @param listSubType        Extension or sub-format details.
  * @param pendingIndices     Current user selection indices awaiting processing.
  * @param hasPendingProcess  Flag indicating if a process action is staged.
- * @param isFiltered         Flag indicating if a search filter is currently active.
  * @param currentPage        Mutable reference to the current pagination index.
  * @param state              Shared state providing printMutex and isImportRunning
  *                           flag; guards the "[↻ Syncing: NewISO → Restructure]"
  *                           indicator against races with background import completion.
  */
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
-               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered,
+               std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
                size_t& currentPage, std::shared_ptr<RefreshState> state) {
 
     const PrintListTheme c = getListColors();

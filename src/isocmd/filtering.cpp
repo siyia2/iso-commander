@@ -42,7 +42,7 @@
 // does) so the live filter preview below can repaint the real list, not a
 // stand-in, on every keystroke.
 void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
-               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered,
+               std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
                size_t& currentPage, std::shared_ptr<RefreshState> state);
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -672,8 +672,6 @@ void liveFilterRedisplayHook() {
     clearScrollBuffer();
 
     size_t previewPage      = query.empty() ? *g_livePreview.actualCurrentPage : 0;
-    bool previewIsFiltered = query.empty() ? *g_livePreview.actualIsFiltered : false;
-
 
     // Live preview has its own temporary index mapping.
     // This makes printList() display indexes relative to the original ISO list
@@ -691,7 +689,6 @@ void liveFilterRedisplayHook() {
               g_livePreview.listSubType,
               *g_livePreview.pendingIndices,
               *g_livePreview.hasPendingProcess,
-              previewIsFiltered,
               previewPage,
               g_livePreview.state);
 
