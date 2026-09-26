@@ -286,6 +286,22 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
 // ─── Shared filtering core ───────────────────────────────────────────────────
 
 /**
+ * @brief Derives the short "unmount key" label used to match/display an
+ * already-mounted ISO (basename with any trailing "~hash" suffix stripped).
+ * Shared by @c applyFilterCore and the live filter preview so both stay
+ * in sync on exactly what text is being matched against.
+ *
+ * @param path Full or partial path to an ISO's mount entry.
+ * @return The entry's basename with any trailing "~hash" suffix removed.
+ */
+static std::string extractUnmountKey(const std::string& path) {
+    size_t lastSlash = path.find_last_of('/');
+    std::string name = (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
+    size_t lastTilde = name.find_last_of('~');
+    return (lastTilde != std::string::npos) ? name.substr(0, lastTilde) : name;
+}
+
+/**
  * @brief Executes core filtering logic with support for nested filter stacks.
  * * * Transforms source paths into searchable strings based on context (e.g.,
  * filename only or unmount-specific keys).
@@ -298,19 +314,6 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
  * @return true if matches were found and the filter stack was updated;
  * false if the query is empty or no matches exist.
  */
-/**
- * @brief Derives the short "unmount key" label used to match/display an
- * already-mounted ISO (basename with any trailing "~hash" suffix stripped).
- * Shared by @c applyFilterCore and the live filter preview so both stay
- * in sync on exactly what text is being matched against.
- */
-static std::string extractUnmountKey(const std::string& path) {
-    size_t lastSlash = path.find_last_of('/');
-    std::string name = (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
-    size_t lastTilde = name.find_last_of('~');
-    return (lastTilde != std::string::npos) ? name.substr(0, lastTilde) : name;
-}
-
 static bool applyFilterCore(const std::string& searchString, FilterContext& ctx) {
     if (searchString.empty()) return false;
 
@@ -467,11 +470,25 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 
 namespace {
 
+/**
+ * @brief Result of a single live-preview filter pass: the matching entries
+ * from the preview's source list, alongside the corresponding indices
+ * already translated back to @c globalIsoFileList (see
+ * @c computeLivePreviewItems).
+ */
 struct LivePreviewResult {
     std::vector<std::string> items;
     std::vector<size_t> indices;
 };
 
+/**
+ * @brief Holds all state for one live filter-preview session (i.e. one
+ * @c runFilterLoop() invocation): the source list and how to derive its
+ * searchable labels, the printList() wiring needed to repaint the real
+ * on-screen list, the per-invocation derived/lowercase search caches
+ * (see @c primeLivePreviewCaches), and the bookkeeping used to decide
+ * whether a given readline() keystroke needs a fresh repaint.
+ */
 struct LiveFilterPreview {
     const std::vector<std::string>* sourceList     = nullptr;
     bool                             useNameOnly   = false;
@@ -519,6 +536,8 @@ constexpr size_t kLivePreviewSourceCap = 20000;
  * are within the size cap, regardless of whether a readline() call is
  * currently in flight. Used to decide whether it is worth priming the
  * derived/lowercase caches before the runFilterLoop while-loop starts.
+ *
+ * @return true if the live preview has everything it needs to run safely.
  */
 bool livePreviewConfigured() {
     return g_livePreview.sourceList
@@ -529,11 +548,26 @@ bool livePreviewConfigured() {
         && g_livePreview.sourceList->size() <= kLivePreviewSourceCap;
 }
 
+/**
+ * @brief True while a readline() call is actually in flight and the live
+ * preview is fully configured, i.e. exactly when @c liveFilterRedisplayHook
+ * should recompute and repaint rather than falling back to plain
+ * @c rl_redisplay().
+ *
+ * @return true if the live main-list repaint should run for this frame.
+ */
 bool liveMainListEnabled() {
     return g_livePreview.active && livePreviewConfigured();
 }
 
-/** Derives the text actually searched/shown for one source entry. */
+/**
+ * @brief Derives the text actually searched/shown for one source entry,
+ * according to the current @c useUnmountKey / @c useNameOnly toggles.
+ *
+ * @param path Full source-list entry (a path) to derive the label from.
+ * @return The unmount key, the basename, or @p path unchanged, depending
+ * on which toggle (if any) is active.
+ */
 std::string livePreviewLabel(const std::string& path) {
     if (g_livePreview.useUnmountKey) return extractUnmountKey(path);
     if (g_livePreview.useNameOnly) {
@@ -579,11 +613,18 @@ void primeLivePreviewCaches() {
     }
 }
 
-/** Computes the "would-be" filtered list for the in-progress query, without
- *  touching filteringStack — mirrors applyFilterCore's source resolution
- *  and name/unmount-key handling, but is purely a preview. Reads from the
- *  per-invocation derived/lowercase caches (primeLivePreviewCaches) instead
- *  of rebuilding them from `source` on every keystroke. */
+/**
+ * @brief Computes the "would-be" filtered list for the in-progress query,
+ * without touching filteringStack — mirrors applyFilterCore's source
+ * resolution and name/unmount-key handling, but is purely a preview. Reads
+ * from the per-invocation derived/lowercase caches (primeLivePreviewCaches)
+ * instead of rebuilding them from @c source on every keystroke.
+ *
+ * @param query The in-progress (uncommitted) query text from the readline
+ * input buffer. An empty query returns every entry of the source list.
+ * @return The matching entries (from the preview's source list) alongside
+ * their indices, already translated back to @c globalIsoFileList indices.
+ */
 LivePreviewResult computeLivePreviewItems(const std::string& query)
 {
     const std::vector<std::string>& source = *g_livePreview.sourceList;
