@@ -426,7 +426,7 @@ void selectForIsoFiles(const std::string& operation,
         std::string prompt =
             "\n" +
             prefix +
-            std::string(UI::Palette::idxGreen) + "IDX" +
+            std::string(UI::Palette::RL_idxGreen) + "IDX" +
             pt.primary + " ↵ for " + "\001" +
             operationColor + "\002" + operation +
             pt.primary + ", ? for help: " +
@@ -698,7 +698,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         std::string prompt =
             "\n" +
             prefix +
-            std::string(UI::Palette::idxGreen) + "IDX" +
+            std::string(UI::Palette::RL_idxGreen) + "IDX" +
             pt.primary   + " ↵ for " +
             pt.highlight + operation +
             pt.primary   + ", ? for help: " +
