@@ -137,7 +137,7 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "auto_update",
         "off",
-        "Enable background metadata updates from folder path history on startup (on/off)",
+        "Refresh ISO database on startup using folder path history (on/off)",
         "General Settings",
         isOnOff
     },
