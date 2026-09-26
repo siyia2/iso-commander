@@ -68,9 +68,19 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered,
                size_t& currentPage, std::shared_ptr<RefreshState> state) {
 
-    if (items.empty()) return;
-
     const PrintListTheme c = getListColors();
+
+    if (items.empty() && !GlobalState::globalIsoFileList.empty()) {
+        std::string output;
+        output.reserve(64);
+        output += '\n';
+        output.append(c.num); // Warning color for empty items/filter match
+        output.append("No matching results");
+        output.append(UI::Palette::Reset).append(UI::Palette::BoldReset);
+
+        std::lock_guard<std::mutex> lk(state->printMutex);
+        std::cout.write(output.data(), output.size());
+    }
 
     // --- Pagination Logic ---
     const size_t totalItems = items.size();

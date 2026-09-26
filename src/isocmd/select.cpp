@@ -402,7 +402,7 @@ void selectForIsoFiles(const std::string& operation,
             }
         }
 
-        std::cout << "\033[1A\033[K";
+        std::cout << "\033[2A\033[K";
 
         if (GlobalState::ITEMS_PER_PAGE == 0) {
             rl_bind_keyseq("\\e[5~", rl_insert);
@@ -416,8 +416,9 @@ void selectForIsoFiles(const std::string& operation,
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
         std::string prompt =
+            "\n" +
             prefix +
-            pt.iso     + "ISO" +
+            pt.iso     + "IDX" +
             pt.primary + " ↵ for " + "\001" +
             operationColor + "\002" + operation +
             pt.primary + ", ? for help: " +
@@ -508,7 +509,8 @@ void selectForIsoFiles(const std::string& operation,
         {
             std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
             if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn,
-                                      filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage)) {
+                                      filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage,
+                                      refreshState)) {
                 filteringHandled = true;
             }
         }
@@ -664,7 +666,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             std::cout << "\n\n";
         }
 
-        std::cout << "\033[1A\033[K";
+        std::cout << "\033[2A\033[K";
 
         // Disable PgUp&PgDn when pagination is not enabled
         if (GlobalState::ITEMS_PER_PAGE == 0) {
@@ -679,8 +681,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
         std::string prompt =
+            "\n" +
             prefix +
-            pt.highlight + fileExtensionWithOutDots +
+            pt.iso + "IDX" +
             pt.primary   + " ↵ for " +
             pt.highlight + operation +
             pt.primary   + ", ? for help: " +
@@ -784,7 +787,8 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
         if (inputString == "/" || (!inputString.empty() && inputString[0] == '/')) {
             handleFilteringConvert2ISO(inputString, files, operation, isFiltered,
-                                       needsClrScrn, filterHistory, need2Sort, currentPage);
+                                       needsClrScrn, filterHistory, need2Sort, currentPage,
+                                       pendingIndices, hasPendingProcess, state);
             keybindingGuard.restore();
             std::cout << "\033[1B\033[K";
             continue;

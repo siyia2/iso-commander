@@ -30,11 +30,20 @@
 #include "../display.h"
 #include "../filtering.h"
 #include "../history.h"
+#include "../inputHandling.h"
 #include "../readline.h"
+#include "../sharedRefreshState.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
 #include "../state.h"
 #include "../threadpool.h"
+
+// Defined in printList.cpp. Forward-declared here (same as displayCode.cpp
+// does) so the live filter preview below can repaint the real list, not a
+// stand-in, on every keystroke.
+void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
+               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered,
+               size_t& currentPage, std::shared_ptr<RefreshState> state);
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -270,18 +279,24 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
  * @return true if matches were found and the filter stack was updated;
  * false if the query is empty or no matches exist.
  */
+/**
+ * @brief Derives the short "unmount key" label used to match/display an
+ * already-mounted ISO (basename with any trailing "~hash" suffix stripped).
+ * Shared by @c applyFilterCore and the live filter preview so both stay
+ * in sync on exactly what text is being matched against.
+ */
+static std::string extractUnmountKey(const std::string& path) {
+    size_t lastSlash = path.find_last_of('/');
+    std::string name = (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
+    size_t lastTilde = name.find_last_of('~');
+    return (lastTilde != std::string::npos) ? name.substr(0, lastTilde) : name;
+}
+
 static bool applyFilterCore(const std::string& searchString, FilterContext& ctx) {
     if (searchString.empty()) return false;
 
     const std::vector<std::string>& sourceList =
         ctx.sourceOverride ? *ctx.sourceOverride : ctx.files;
-
-    auto extractUnmountKey = [](const std::string& path) -> std::string {
-        size_t lastSlash = path.find_last_of('/');
-        std::string name = (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
-        size_t lastTilde = name.find_last_of('~');
-        return (lastTilde != std::string::npos) ? name.substr(0, lastTilde) : name;
-    };
 
     std::vector<std::string> tempFiltered;
     std::vector<size_t>      tempIndices;
@@ -380,6 +395,191 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
     clear_history();
 }
 
+// ─── Live incremental filter preview ─────────────────────────────────────────
+//
+// Historically, matches were only computed (and shown) after the user
+// pressed Enter on the FilterTerms prompt. This section adds a live,
+// "type-to-narrow" repaint of the REAL on-screen list: GNU Readline calls
+// rl_redisplay_function every time it redraws the input line — i.e. after
+// essentially every keystroke, including backspaces — so we hook that call
+// to recompute matches against the in-progress (uncommitted) query and
+// repaint the same printList() the rest of the app uses, right where the
+// list is already displayed.
+//
+// Mechanics: each repaint does clearScrollBuffer() + printList(), which
+// wipes and redraws the whole screen, so readline's own idea of "what's
+// currently on screen" (used for its normal incremental redraw) is now
+// stale. We correct that with rl_forced_update_display(), which — unlike
+// the rl_redisplay_function pointer we've hooked — is a real, directly
+// callable Readline entry point that unconditionally repaints the prompt
+// and in-progress line fresh, ignoring its stale cache. When nothing has
+// changed since the last frame (e.g. pure cursor movement), we skip the
+// repaint and just call the ordinary rl_redisplay() instead.
+//
+// Important: all of this is purely visual until Enter. filteringStack and
+// ctx.files are never touched here — Enter still runs the exact same commit
+// path as before (applyFilterCore + saveQueryToHistory), so history and
+// nested-filter-stack semantics are unchanged.
+//
+// Trade-offs worth knowing about:
+//  - Because filteringStack isn't updated until commit, the live repaint
+//    always renders with isFiltered=false while a query is in progress, so
+//    the "[123]^" original-index tags (drawn from filteringStack.back())
+//    don't show mid-type; they reappear normally once Enter commits.
+//  - A full clearScrollBuffer()+printList() every keystroke is heavier than
+//    a delta redraw and can flicker on slow/high-latency terminals. Above
+//    kLivePreviewSourceCap source items we skip live repainting entirely
+//    and fall back to the old Enter-only behavior, to keep typing responsive
+//    on very large lists.
+
+namespace {
+
+struct LiveFilterPreview {
+    const std::vector<std::string>* sourceList     = nullptr;
+    bool                             useNameOnly   = false;
+    bool                             useUnmountKey = false;
+
+    // Set up per readline() call (see runFilterLoop); mirrors the *actual*
+    // current ctx state so the empty-query frame can render an exact match
+    // of what's already on screen instead of resetting page/annotations.
+    bool*   actualIsFiltered = nullptr;
+    size_t* actualCurrentPage = nullptr;
+
+    // Wiring needed to call the real printList().
+    std::string                   listType{};
+    std::string                   listSubType{};
+    std::vector<std::string>*     pendingIndices    = nullptr;
+    bool*                         hasPendingProcess = nullptr;
+    std::shared_ptr<RefreshState> state = nullptr;
+
+    std::string lastQuery;
+    bool        primed        = false;  // a frame has been drawn for the *current* readline() call
+    bool        everRepainted = false;  // a real repaint has happened at least once this runFilterLoop call
+    bool        active        = false;
+};
+
+LiveFilterPreview g_livePreview;
+
+// Above this source size, live-filtering on every keystroke (each of which
+// re-runs the threaded Boyer-Moore search plus a full screen repaint) would
+// add visible input lag, so we silently fall back to the old Enter-only
+// behavior for huge lists.
+constexpr size_t kLivePreviewSourceCap = 20000;
+
+bool liveMainListEnabled() {
+    return g_livePreview.active
+        && g_livePreview.sourceList
+        && !g_livePreview.listType.empty()
+        && g_livePreview.pendingIndices
+        && g_livePreview.hasPendingProcess
+        && g_livePreview.state
+        && g_livePreview.sourceList->size() <= kLivePreviewSourceCap;
+}
+
+/** Derives the text actually searched/shown for one source entry. */
+std::string livePreviewLabel(const std::string& path) {
+    if (g_livePreview.useUnmountKey) return extractUnmountKey(path);
+    if (g_livePreview.useNameOnly) {
+        size_t lastSlash = path.find_last_of('/');
+        return (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
+    }
+    return path;
+}
+
+/** Computes the "would-be" filtered list for the in-progress query, without
+ *  touching filteringStack — mirrors applyFilterCore's source resolution
+ *  and name/unmount-key handling, but is purely a preview. */
+std::vector<std::string> computeLivePreviewItems(const std::string& query) {
+    const std::vector<std::string>& source = *g_livePreview.sourceList;
+    if (query.empty()) return source;
+
+    std::vector<size_t> matches;
+    if (g_livePreview.useNameOnly || g_livePreview.useUnmountKey) {
+        std::vector<std::string> derived;
+        derived.reserve(source.size());
+        for (const auto& path : source) derived.push_back(livePreviewLabel(path));
+        matches = filterFilesIndices(derived, query);
+    } else {
+        matches = filterFilesIndices(source, query);
+    }
+
+    std::vector<std::string> items;
+    items.reserve(matches.size());
+    for (size_t idx : matches) items.push_back(source[idx]);
+    return items;
+}
+
+/**
+ * @brief Installed as rl_redisplay_function for the lifetime of one
+ * FilterTerms readline() call; invoked by readline on (almost) every
+ * keystroke, including backspace, so the real list both narrows and widens
+ * live as the query changes.
+ */
+void liveFilterRedisplayHook() {
+    if (!liveMainListEnabled()) {
+        rl_redisplay();
+        return;
+    }
+
+    const std::string query(rl_line_buffer ? rl_line_buffer : "");
+    const bool isFirstFrameOfThisCall = !g_livePreview.primed;
+    g_livePreview.primed = true;
+
+    if (query.empty() && isFirstFrameOfThisCall && !g_livePreview.everRepainted) {
+        // Truly pristine: the screen already shows exactly this (unfiltered)
+        // list, untouched since before this FilterTerms prompt began — just
+        // let readline draw its own prompt line without repainting above it.
+        g_livePreview.lastQuery = query;
+        rl_redisplay();
+        return;
+    }
+
+    if (!isFirstFrameOfThisCall && query == g_livePreview.lastQuery) {
+        // Text unchanged (e.g. pure cursor movement) — the terminal still
+        // matches what we last painted, so the ordinary incremental
+        // redisplay is correct, and cheaper than a full repaint.
+        rl_redisplay();
+        return;
+    }
+    g_livePreview.lastQuery = query;
+
+    std::vector<std::string> previewItems = computeLivePreviewItems(query);
+
+    clearScrollBuffer();
+
+    size_t previewPage      = query.empty() ? *g_livePreview.actualCurrentPage : 0;
+    bool   previewIsFiltered = query.empty() ? *g_livePreview.actualIsFiltered : false;
+
+    printList(previewItems, g_livePreview.listType, g_livePreview.listSubType,
+              *g_livePreview.pendingIndices, *g_livePreview.hasPendingProcess,
+              previewIsFiltered, previewPage, g_livePreview.state);
+
+    // We just repainted the whole screen out from under readline; force it
+    // to redraw its prompt + in-progress query fresh rather than attempting
+    // an incremental diff against a screen state that no longer exists.
+    rl_forced_update_display();
+    g_livePreview.everRepainted = true;
+}
+
+/**
+ * @brief RAII guard that installs/tears down the live preview hook for the
+ * lifetime of one runFilterLoop() call. Guarantees rl_redisplay_function is
+ * restored on every exit path — normal break, continue-driven loop exit, or
+ * an exception propagating out of a keystroke (e.g. filterFilesIndices
+ * rethrowing a worker exception).
+ */
+struct LivePreviewGuard {
+    LivePreviewGuard() { rl_redisplay_function = liveFilterRedisplayHook; }
+    ~LivePreviewGuard() {
+        g_livePreview = LiveFilterPreview{}; // drop all pointers/shared_ptr, reset flags
+        rl_redisplay_function = rl_redisplay;
+    }
+    LivePreviewGuard(const LivePreviewGuard&) = delete;
+    LivePreviewGuard& operator=(const LivePreviewGuard&) = delete;
+};
+
+} // namespace
+
 // ─── Interactive / quick filter driver ───────────────────────────────────────
 
 /**
@@ -409,9 +609,42 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
     ctx.filterHistory = true;
     loadHistory(ctx.filterHistory);
 
+    // Installed for the whole loop (covers every readline() call below, and
+    // guarantees cleanup on all exit paths, including thrown exceptions).
+    LivePreviewGuard livePreviewGuard;
+
     while (true) {
+        // Point the live preview at whatever runFilterLoop itself would
+        // search (same source-resolution rule as applyFilterCore), and
+        // reset per-call state so the very first keystroke of this line
+        // always triggers a fresh live repaint.
+        const std::vector<std::string>& previewSource =
+            ctx.sourceOverride ? *ctx.sourceOverride : ctx.files;
+        g_livePreview.sourceList        = &previewSource;
+        g_livePreview.useNameOnly       = displayConfig::toggleNamesOnly && !ctx.isUnmount;
+        g_livePreview.useUnmountKey     = ctx.isUnmount && !ctx.toggleFullListUmount;
+        g_livePreview.actualIsFiltered  = &ctx.isFiltered;
+        g_livePreview.actualCurrentPage = &ctx.currentPage;
+        g_livePreview.listType          = ctx.listType;
+        g_livePreview.listSubType       = ctx.listSubType;
+        g_livePreview.pendingIndices    = ctx.pendingIndices;
+        g_livePreview.hasPendingProcess = ctx.hasPendingProcess;
+        g_livePreview.state             = ctx.state;
+        g_livePreview.lastQuery.clear();
+        g_livePreview.primed = false;
+        g_livePreview.active = true;
+
         std::unique_ptr<char, decltype(&std::free)> raw(
             readline(promptText.c_str()), &std::free);
+
+        g_livePreview.active = false;
+
+        // If the query got live-repainted onto the real list (any branch
+        // below that loops back for another attempt, or that cancels out),
+        // the outer caller's own needsClrScrn-driven refresh — set on
+        // success by applyFilterCore below, or already true from before
+        // this prompt started otherwise — repaints the screen properly
+        // afterward exactly as it did before this feature existed.
 
         //---- Robust handling of FilterTerms prompt ----
         if (!raw || raw.get()[0] == 27) {
@@ -568,21 +801,17 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
             GlobalState::g_suppressPendingRefresh.store(false);
         });
 
-    auto wrap = [](std::string_view s) -> std::string {
-        return "\001" + std::string(s) + "\002";
-    };
-
 	rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
 	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
 	std::cout << "\n";
 	reset_custom_keybindingsForSelect();
 	rl_bind_keyseq("\\e", exit_handler);
+	std::cout << "\033[1A\033[K";
+
     const ReadlineAndPromptTheme ft = getFilterTheme("", false);
     const std::string prompt =
-        ft.filter  + "FilterTerms" +
-        ft.primary + " ↵ for " +
-        wrap(cfg.operationColor) + cfg.operation +
-        ft.primary + ": " +
+        "\n" +
+        ft.filter  + "Filter: " +
         ft.reset;
 
     FilterContext ctx {
@@ -597,6 +826,14 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
         ctx.isUnmount            = cfg.isUnmount;
         ctx.toggleFullListUmount = cfg.toggleFullList;
     }
+
+    // Live main-list rendering is opt-in: only wired up when the caller
+    // supplied everything printList() needs (see FilterContext).
+    ctx.listType          = cfg.listType;
+    ctx.listSubType       = cfg.listSubType;
+    ctx.pendingIndices    = cfg.pendingIndices;
+    ctx.hasPendingProcess = cfg.hasPendingProcess;
+    ctx.state             = cfg.state;
 
     auto onEmptyInput = [&]() {
         *cfg.needsClrScrn = *cfg.isFiltered;
@@ -633,12 +870,13 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
 bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles,
     bool& isFiltered, bool& needsClrScrn, bool& filterHistory,
     const std::string& operation, const std::string& operationColor,
-    const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage)
+    const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage,
+    std::shared_ptr<RefreshState> state)
 {
     const std::vector<std::string>& baseSource =
         isFiltered ? filteredFiles : (isUnmount ? isoDirs : GlobalState::globalIsoFileList);
 
-    return runSharedFilterFlow(inputString, {
+    FilterCallConfig cfg {
         .files          = &filteredFiles,
         .sourceOverride = &baseSource,
         .operation      = operation,
@@ -649,7 +887,20 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
         .currentPage    = &currentPage,
         .isUnmount      = isUnmount,
         .toggleFullList = displayConfig::toggleFullListUmount
-    });
+    };
+
+    // pendingIndices/hasPendingProcess/listSubtype all already live inside
+    // the shared RefreshState for this call path, so no extra parameters
+    // are needed beyond state itself to enable the live main-list repaint.
+    if (state) {
+        cfg.listType          = isUnmount ? "MOUNTED_ISOS" : "ISO_FILES";
+        cfg.listSubType       = isUnmount ? "" : state->listSubtype;
+        cfg.pendingIndices    = &state->pendingIndices;
+        cfg.hasPendingProcess = &state->hasPendingProcess;
+        cfg.state             = state;
+    }
+
+    return runSharedFilterFlow(inputString, cfg);
 }
 
 /**
@@ -669,9 +920,11 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
  */
 void handleFilteringConvert2ISO(const std::string& inputString, std::vector<std::string>& files,
     const std::string& operation, bool& isFiltered, bool& needsClrScrn,
-    bool& filterHistory, bool& need2Sort, size_t& currentPage)
+    bool& filterHistory, bool& need2Sort, size_t& currentPage,
+    std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
+    std::shared_ptr<RefreshState> state)
 {
-    runSharedFilterFlow(inputString, {
+    FilterCallConfig cfg {
         .files          = &files,
         .operation      = operation,
         .operationColor = UI::Palette::Orange,
@@ -680,5 +933,17 @@ void handleFilteringConvert2ISO(const std::string& inputString, std::vector<std:
         .filterHistory  = &filterHistory,
         .need2Sort      = &need2Sort,
         .currentPage    = &currentPage
-    });
+    };
+
+    // Unlike the ISO path, pendingIndices/hasPendingProcess here are the
+    // caller's own locals (selectForImageFiles), not fields of state.
+    if (state) {
+        cfg.listType          = "IMAGE_FILES";
+        cfg.listSubType       = "convert2iso";
+        cfg.pendingIndices    = &pendingIndices;
+        cfg.hasPendingProcess = &hasPendingProcess;
+        cfg.state             = state;
+    }
+
+    runSharedFilterFlow(inputString, cfg);
 }
