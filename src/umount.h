@@ -3,70 +3,56 @@
 #ifndef UMOUNT_H
 #define UMOUNT_H
 
+// C++ Standard Library Headers
+#include <atomic>
+#include <cstddef>
+#include <string>
+#include <string_view>
+#include <vector>
+
+// Project Headers
 #include "themes.h"
 
 /**
- * @brief Canonical list of all supported configuration settings with validation.
- * @details Formats terminal output messages for unmounting operations using 
- * ANSI color codes and theme-aware styling.
+ * @brief Formatter for unmount-specific verbose terminal messages.
+ * @details Generates ANSI color-coded strings for unmounting operations,
+ * utilizing std::string_view and buffer reservation to ensure high performance
+ * and minimal heap allocations during batch processing.
  */
 struct VerboseMessageFormatter {
-    const ListTheme* theme;
-    const bool isOriginal;
+    const SemanticUIColors tc;
 
-    // --- Cached Styling ---
-    std::string_view errLabel; 
-    std::string_view errPath;  
-    std::string_view errDesc;  
-    std::string_view okLabel;  
-    std::string_view okPath;   
+    VerboseMessageFormatter() : tc(resolveVerboseTheme()) {}
 
-    VerboseMessageFormatter()
-        : theme(getActiveTheme()), 
-          isOriginal(globalTheme == "original"),
-          errLabel(isOriginal ? originalColors::red     : theme->secondary),
-          errPath (isOriginal ? originalColors::yellow  : theme->warning),
-          errDesc (isOriginal ? originalColors::boldAlt : theme->muted),
-          okLabel (isOriginal ? originalColors::boldAlt : theme->muted),
-          okPath  (isOriginal ? originalColors::green   : theme->primary) 
-    {}
-	
-    /**
-     * @brief Generates a formatted string based on the status of an unmount attempt.
-     */
-    std::string format(const std::string& messageType, const std::string& path) {
+    // Change parameters to std::string_view to avoid caller-side allocations
+    std::string format(std::string_view messageType, std::string_view path) const {
         std::string buf;
-        buf.reserve(256);
+        // Pre-calculating a safe minimum size prevents multiple reallocations during append
+        buf.reserve(128 + path.size());
 
         auto appendError = [&](std::string_view tag) {
-            buf.append(errLabel).append("Failed to unmount: ")
-               .append(errPath).append("'").append(path)
-               .append(errPath).append("'")
-               .append(errLabel).append(".")
-               .append(" ")
-               .append(errDesc).append("{").append(tag).append("}") 
-               .append(originalColors::boldAlt);
+            buf.append(tc.error).append("Failed to unmount: ")
+               .append(tc.warning).append("'").append(path).append(tc.warning).append("'")
+               .append(tc.error).append(". ")
+               .append(tc.label).append("{").append(tag).append("}")
+               .append(tc.reset);
         };
 
+        // Comparison of string_view with "literals" is highly optimized in C++20
         if (messageType == "success") {
-            buf.append(okLabel).append("Unmounted: ")
-               .append(okPath).append("'").append(path)
-               .append(okPath).append("'")
-               .append(okLabel).append(".")
-               .append(originalColors::boldAlt);
+            buf.append(tc.label).append("Unmounted: ")
+               .append(tc.path).append("'").append(path).append(tc.path).append("'")
+               .append(tc.label).append(".")
+               .append(tc.reset);
         }
-        else if (messageType == "root_error") {
-            appendError("needsRoot");
-        }
-        else if (messageType == "error") {
-            appendError("notAnISO");
-        }
-        else if (messageType == "cancel") {
-            appendError("cxl");
-        }
+        else if (messageType == "root_error") appendError("needsRoot");
+        else if (messageType == "error")      appendError("notAnISO");
+        else if (messageType == "cancel")     appendError("cxl");
 
         return buf;
     }
 };
+
+void unmountISO(const std::vector<std::string>& isoDirs, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool silentMode);
 
 #endif // UMOUNT_H

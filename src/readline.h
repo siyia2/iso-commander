@@ -3,31 +3,46 @@
 #ifndef READLINE_H
 #define READLINE_H
 
-#include "write.h"
+// C++ Standard Library Headers
+#include <vector>
+#include <string>
 
+/**
+ * C-LINKAGE INTERFACE
+ * Required for callbacks passed to the GNU Readline C library.
+ */
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/**
- * @brief Bridge function for Readline tab-completion.
- */
+// Bridge function for Readline tab-completion
 char** my_special_completion_entry(const char* text, int start, int end);
+
+// Callback invoked by Readline for context-aware completions
+char** completion_cb(const char* text, int start, int end);
+
+// Keybinding utility functions
+int prevent_readline_keybindings(int count, int key);
+int clear_screen_and_buffer(int count, int key);
 
 #ifdef __cplusplus
 }
-
-struct IsoInfo;
+#endif
 
 /**
- * @brief Canonical list of all supported configuration settings with validation.
- * @details Encapsulates the datasets required for tab-completion, including 
- * available ISO images and detected USB devices.
+ * C++ DATA STRUCTURES
+ */
+
+struct IsoInfo; // Forward declaration
+
+/**
+ * @struct CompleterData
+ * @brief Encapsulates datasets required for tab-completion.
  */
 struct CompleterData {
     /** @brief Pointer to the processed list of ISO images. */
     const std::vector<IsoInfo>* sortedIsos;
-    
+
     /** @brief Pointer to the list of available USB device paths. */
     const std::vector<std::string>* usbDevices;
 };
@@ -36,13 +51,48 @@ struct CompleterData {
 extern CompleterData g_completerData;
 
 /**
- * @brief Callback function invoked by Readline to provide context-aware completions.
- * @param text The current word being typed.
- * @param start The start index of the word in the line buffer.
- * @param end The end index of the word in the line buffer.
- * @return An array of strings representing possible matches.
+ * @namespace RetainAndRestoreReadlineBuffer
+ * @brief Global state management for Readline buffer persistence during completion cycles.
  */
-char** completion_cb(const char* text, int start, int end);
+namespace RetainAndRestoreReadlineBuffer {
+    /// @brief Mode flag to determine if completion text should be persisted across Readline calls.
+    inline int g_rl_complete_mode = 0;
+    /// @brief Storage for the completed line text to be restored after a reset.
+    inline std::string g_rl_pending_text = "";
+}
 
-#endif
+/** Hook for reloading readline async style. */
+int checkPendingRefresh();
+
+/** @brief Clears readline list completions on exact matches. */
+int my_rl_complete(int ignore, int invoking_key);
+
+/**
+ * KEYBINDING MANAGEMENT
+ * Functions to toggle between "Hotkeys" and "Standard Typing" modes.
+ */
+
+// --- Restore Prompt After Completions ---
+void RestoreReadlineBuffer();
+
+// --- Exit Handler ---
+int exit_handler(int, int);
+
+// --- File Selection Mode ---
+void setup_custom_keybindingsForSelect(void);
+void reset_custom_keybindingsForSelect(void);
+
+// --- Settings Editor Mode ---
+void setup_custom_keybindingsForSettingsEditor(void);
+void reset_custom_keybindingsForSettingsEditor(void);
+
+// --- File Operations Mode (Cp/Mv/USB) ---
+void reset_custom_keybindingsForCpMvWrite2Usb(void);
+// --- File Operations Mode (RM) ---
+void reset_custom_keybindingsForRm(void);
+
+// --- Search Prompts ---
+void setup_custom_keybindingsForSearches(void);
+void reset_custom_keybindingsForSearches(void);
+
 #endif // READLINE_H

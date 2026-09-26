@@ -3,20 +3,122 @@
 #ifndef FILTERING_H
 #define FILTERING_H
 
+// C++ Standard Library Headers
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
+
+// Forward declaration of shared state (needed for live main-list rendering)
+struct RefreshState;
+
 /**
- * @brief Canonical list of all supported configuration settings with validation.
- * @details Manages the state of filtered list views, allowing for nested filtering 
- * levels by mapping visible items back to their original data positions.
+ * DATA STRUCTURES
+ */
+
+/**
+ * @brief Represents a single search token with precomputed Boyer-Moore tables.
+ */
+struct QueryToken {
+    std::string original;
+    std::string lower;
+    bool isCaseSensitive;
+
+    std::vector<int> originalBadChar;
+    std::vector<int> originalGoodSuffix;
+
+    std::vector<int> lowerBadChar;
+    std::vector<int> lowerGoodSuffix;
+};
+
+/**
+ * @brief Stores a single level of filter state for nested filtering support.
  */
 struct FilteringState {
-    /** @brief Collection of indices pointing to the original, unfiltered dataset. */
     std::vector<size_t> originalIndices;
-
-    /** @brief Flag indicating if a filter is currently applied to this state. */
+    std::string query;
     bool isFiltered;
 };
 
-/** @brief Global stack used to track and revert through multiple levels of filtering. */
-extern std::vector<FilteringState> filteringStack;
+/**
+ * @brief Binds all mutable state needed by a single filter operation.
+ */
+struct FilterContext {
+    std::vector<std::string>& files;
+    bool& isFiltered;
+    bool& needsClrScrn;
+    bool& filterHistory;
+    size_t& currentPage;
+    const std::vector<std::string>* sourceOverride = nullptr;
+    bool isUnmount = false;
+    bool toggleFullListUmount = false;
+
+    // --- Live main-list rendering (optional) ---
+    // When listType is non-empty (and pendingIndices/hasPendingProcess/state
+    // are all set), the FilterTerms prompt repaints the real printList
+    // output on every keystroke, narrowing/widening it live as the query
+    // changes, instead of leaving the list static until Enter. Leaving
+    // listType empty disables this and keeps the classic Enter-only prompt.
+    std::string listType{};       // e.g. "ISO_FILES", "IMAGE_FILES", "MOUNTED_ISOS"
+    std::string listSubType{};
+    std::vector<std::string>* pendingIndices = nullptr;
+    bool* hasPendingProcess = nullptr;
+    std::shared_ptr<RefreshState> state = nullptr;
+};
+
+/**
+ * @brief Configuration passed to runSharedFilterFlow to drive a filter operation.
+ */
+struct FilterCallConfig {
+    std::vector<std::string>* files = nullptr;
+    const std::vector<std::string>* sourceOverride = nullptr;
+    std::string operation;
+    std::string_view operationColor;
+    bool* isFiltered = nullptr;
+    bool* needsClrScrn = nullptr;
+    bool* filterHistory = nullptr;
+    bool* need2Sort = nullptr;
+    size_t* currentPage = nullptr;
+    bool isUnmount = false;
+    bool toggleFullList = false;
+
+    // Optional: see FilterContext above. Populate all four to enable live
+    // repainting of the real list while the user types.
+    std::string listType{};
+    std::string listSubType{};
+    std::vector<std::string>* pendingIndices = nullptr;
+    bool* hasPendingProcess = nullptr;
+    std::shared_ptr<RefreshState> state = nullptr;
+};
+
+/**
+ * GLOBAL STATE
+ */
+
+/**
+ * @brief Global stack tracking all active filter levels in LIFO order.
+ */
+inline std::vector<FilteringState> filteringStack;
+
+
+/**
+ * FILTERING LOGIC & SYNC
+ */
+
+/**
+ * @brief Filters file indices based on a search query using the Boyer-Moore algorithm.
+ */
+std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query);
+
+/**
+ * @brief Synchronizes the filtered results by iteratively applying the filtering stack.
+ */
+void syncFilteringStackForIso(
+    const std::vector<std::string>& globalIsoFileList,
+    std::vector<FilteringState>& filteringStack,
+    std::vector<std::string>& filteredFiles,
+    bool& isFiltered
+);
 
 #endif // FILTERING_H

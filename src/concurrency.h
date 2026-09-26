@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#ifndef CONCURRENCY_H
+#define CONCURRENCY_H
+
+// C++ Standard Library Headers
+#include <cstddef>
+
+//=======================================
+//     GLOBAL CONCURRENCY SETTINGS
+//=======================================
+namespace GlobalConcurrency {
+
+    // Global cap for static threads
+    inline size_t MAX_USEFUL_THREADS = 16;
+
+    // Operation thread caps for static pool
+
+    // High I/O
+    inline size_t CPMV_THREAD_CAP   = 4;
+    inline size_t CONV_THREAD_CAP   = 4;
+
+    // Moderate I/O
+    inline size_t MOUNT_THREAD_CAP  = 8;
+    inline size_t CLEAN_THREAD_CAP  = 4;
+
+    // Low I/O
+    inline size_t UMOUNT_THREAD_CAP = 8;
+    inline size_t RM_THREAD_CAP     = 8;
+
+    // Low I/O but fast
+    inline size_t SORT_THREAD_CAP   = 2;
+    inline size_t FILTER_THREAD_CAP = 2;
+
+}
+
+#endif // CONCURRENCY_H

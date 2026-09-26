@@ -3,7 +3,6 @@
 #ifndef CCD_H
 #define CCD_H
 
-
 // Special thanks to the original authors of ccd2iso:
 
 // Danny Kurniawan and Kerry Harris (ccd2iso).
@@ -32,6 +31,10 @@
  *   Free Software Foundation, Inc.,                                       *
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
+
+// C++ Standard Library Headers
+#include <cstddef>
+#include <cstdint>
 
 const size_t DATA_SIZE = 2048;
 
