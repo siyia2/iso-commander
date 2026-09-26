@@ -73,9 +73,7 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
         "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u");
 
-    printSection(
-        tc,
-        isUnmount ? "\n2. Selecting Mount-Points (↵):" : "\n2. Selecting Files (↵):",
+    printSection(tc, isUnmount ? "\n2. Selecting Mount-Points (↵):" : "\n2. Selecting Files (↵):",
         std::string(UI::Palette::BoldReset) +
         "   • Single/Multiple : " + std::string(UI::Palette::Purple) + "'1' or '1 5 6'\n" +
         std::string(UI::Palette::BoldReset) +
