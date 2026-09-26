@@ -520,9 +520,6 @@ void selectForIsoFiles(const std::string& operation,
                 GlobalState::g_filteringIndicator.store(true);
                 needsClrScrn = true;
                 continue;
-            } else {
-                std::cout << "\033[1B\033[K";
-                continue;
             }
         }
 
