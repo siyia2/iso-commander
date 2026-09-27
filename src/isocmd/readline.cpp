@@ -720,8 +720,6 @@ void setup_custom_keybindingsForSelect(void) {
     rl_bind_keyseq("~", toggleList_handler);
     rl_bind_keyseq("\\e", exit_handler);
     rl_bind_keyseq("?", help_handler);
-
-    GlobalState::g_filteringIndicator.store(false);
 }
 
 /**
