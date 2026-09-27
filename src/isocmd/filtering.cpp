@@ -860,15 +860,6 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
             break;
         }
 
-        if (raw.get()[0] == ';'
-        || strstr(raw.get(), ";;") != nullptr) {
-            std::cout << AnsiEscape::CLEAR_TWO_LINES_ABOVE;
-            std::cout << AnsiEscape::CLEAR_LINE_BELOW;
-            std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
-            handleEmpty();
-            continue;
-        }
-
         std::string query(raw.get());
         if (tryFilter(query)) {
             saveQueryToHistory(query, ctx.filterHistory, true);
