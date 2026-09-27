@@ -25,6 +25,9 @@ std::map<std::string, std::string> readUserConfigLists(const std::string& filePa
 // Specific check for UI pagination status
 bool paginationSet(const std::string& filePath);
 
+// Specific check for UI live filter status
+bool liveFilteringSet(const std::string& filePath);
+
 // Validation for history state
 bool isHistoryFileEmpty(const std::string& filePath);
 
