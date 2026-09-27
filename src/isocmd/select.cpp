@@ -395,7 +395,6 @@ void selectForIsoFiles(const std::string& operation,
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState))
                     break;
             }
-            if (isUnmount) rl_bind_keyseq("R", rl_insert);
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
@@ -420,6 +419,12 @@ void selectForIsoFiles(const std::string& operation,
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
         isFiltered ? (void)rl_bind_keyseq("*", rl_insert) : setup_custom_keybindingsForSelect();
+
+        // Unbind unused hotkeys for umount prompt
+        if (isUnmount) {
+            rl_bind_keyseq("R", rl_insert);
+            rl_bind_keyseq("*", rl_insert);
+        }
 
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
@@ -556,8 +561,6 @@ void selectForIsoFiles(const std::string& operation,
         }
         // isAtISOList automatically restored here
         keybindingGuard.restore();
-        // Remove filtering lock indicator after pending execution
-        GlobalState::g_filteringIndicator.store(false);
         if (pendingExecuted) continue;
     }
     // Keybinding guard destructor automatically calls reset_custom_keybindingsForSelect()
@@ -668,8 +671,6 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         setupSignalHandlerCancellations();
         // setup_custom_keybindingsForSelect() handled by keybindingGuard constructor
 
-        // Reset manual-update key for image lists
-        rl_bind_keyseq("R", rl_insert);
         GlobalState::g_operationCancelled.store(false);
         bool verbose = false;
 
@@ -694,6 +695,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
         isFiltered ? (void)rl_bind_keyseq("*", rl_insert) : setup_custom_keybindingsForSelect();
+
+        // Unused in convert2iso prompts
+        rl_bind_keyseq("R", rl_insert);
 
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
