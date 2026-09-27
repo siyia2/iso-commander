@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
 
     // --- Version & Utility Command Dispatch ---
     if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v"))
-        return printVersionNumber("7.5.2"), 0;
+        return printVersionNumber("7.5.1"), 0;
     if (argc >= 3 || (argc == 2 && (std::string(argv[1]) == "umount" || std::string(argv[1]) == "unmount" || std::string(argv[1]) == "mount")))
         return handleMountUmountCommands(argc, argv);
 
@@ -147,6 +147,7 @@ int main(int argc, char *argv[]) {
         });
     }
     paginationSet(GlobalState::configPath);
+    liveFilteringSet(GlobalState::configPath);
 
     // Initialize readline refresh hook for pending UI refreshes
     rl_event_hook = checkPendingRefresh;
