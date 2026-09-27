@@ -11,6 +11,9 @@
 #include <string>
 #include <vector>
 
+// Project Headers
+#include "./state.h"
+
 // Forward declaration of shared state
 struct RefreshState;
 
@@ -88,12 +91,13 @@ private:
  * @brief RAII guard for controlling the "at ISO list" state.
  *
  * Ensures isAtISOList is restored to the desired value even on exception
- * or early return paths.
+ * or early return paths. Also guarantees the global filtering indicator
+ * is cleared when the guard goes out of scope.
  */
 class IsoListStateGuard {
 public:
     IsoListStateGuard(std::atomic<bool>& isAtISOList,
-                      const std::function<bool()>& isUnmountCheck)
+                       const std::function<bool()>& isUnmountCheck)
         : isAtISOList_(isAtISOList),
           wasAtList_(isAtISOList.load(std::memory_order_acquire)),
           isUnmountCheck_(isUnmountCheck) {}
@@ -103,6 +107,10 @@ public:
         if (!isUnmountCheck_()) {
             isAtISOList_.store(wasAtList_, std::memory_order_release);
         }
+
+        // Always ensure the filtering indicator is cleared, regardless
+        // of exception or early-return paths.
+        GlobalState::g_filteringIndicator.store(false, std::memory_order_release);
     }
 
     IsoListStateGuard(const IsoListStateGuard&) = delete;
