@@ -548,6 +548,7 @@ void selectForIsoFiles(const std::string& operation,
         bool pendingExecuted = false;
         {
             AtomicFlagGuard processingGuard(isAtISOList, false);
+            AtomicFlagGuard filteringGuard(GlobalState::g_filteringIndicator, true);
 
             needsClrScrn = true;
 
@@ -561,8 +562,6 @@ void selectForIsoFiles(const std::string& operation,
         }
         // isAtISOList automatically restored here
         keybindingGuard.restore();
-        // Remove filtering lock indicator after pending execution
-        GlobalState::g_filteringIndicator.store(false);
         if (pendingExecuted) continue;
     }
     // Keybinding guard destructor automatically calls reset_custom_keybindingsForSelect()
