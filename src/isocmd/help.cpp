@@ -33,17 +33,6 @@ struct ThemeColors {
 };
 
 /**
- * @brief Standardizes help screen initialization and header rendering.
- */
-void setupHelp(std::string_view title, const ThemeColors& tc) {
-    signal(SIGINT, SIG_IGN);
-    disable_ctrl_d();
-    clearScrollBuffer();
-    std::cout << "\n" << tc.title << "===== " << title << " ====="
-              << UI::Palette::BoldReset << "\n" << std::endl;
-}
-
-/**
  * @brief Helper to print a themed section header and its bulleted content.
  */
 void printSection(const ThemeColors& tc, std::string_view head, const std::string& body) {
@@ -65,10 +54,10 @@ void printSection(const ThemeColors& tc, std::string_view head, const std::strin
  * @brief Displays an interactive help guide detailing how to select and filter items within lists.
  */
 void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool& isMount) {
+    clearScrollBuffer();
     const ThemeColors tc;
-    const char* helpTitle = isUnmount ? "Help Guide For Umount Prompt" : isMount ? "Help Guide For Mount Prompt" : "Help Guide For Selection Prompt";
-    setupHelp(helpTitle, tc);
-    printSection(tc, "1. Hotkeys:", std::string(UI::Palette::BoldReset) +
+
+    printSection(tc, "\n1. Hotkeys:", std::string(UI::Palette::BoldReset) +
         "   • Exit         : " + std::string(UI::Palette::Yellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
         "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u");
@@ -106,9 +95,10 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
  * @brief Displays a help guide for the settings editor.
  */
 void helpSettingsEditor() {
+    clearScrollBuffer();
     const ThemeColors tc;
-    setupHelp("Help Guide For Settings Editor", tc);
-    printSection(tc, "1. Hotkeys:", std::string(UI::Palette::BoldReset) +
+
+    printSection(tc, "\n1. Hotkeys:", std::string(UI::Palette::BoldReset) +
         "   • Exit         : " + std::string(UI::Palette::Yellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
         "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u");
@@ -125,9 +115,8 @@ void helpSettingsEditor() {
  * @brief Displays a help guide for directory-related prompts (Copy/Move and ISO convert2iso).
  */
 void helpSearches(bool isCpMv, bool import2ISO) {
+    clearScrollBuffer();
     const ThemeColors tc;
-    std::string titleStr = isCpMv ? "Cp/Mv FolderPath" : (import2ISO ? "ImportISO FolderPath" : "Convert2ISO FolderPath");
-    setupHelp("Help Guide For " + titleStr + " Prompt", tc);
 
     // 1. Hotkeys
     std::string keys =
@@ -136,7 +125,7 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     if (!isCpMv) keys += std::string(UI::Palette::BoldReset) + "   • Cancel Search : " + std::string(UI::Palette::Yellow) + "Ctrl+c\n";
     keys += std::string(UI::Palette::BoldReset) + "   • Clear Line    : " + std::string(UI::Palette::Yellow) + "Ctrl+u\n";
     keys += std::string(UI::Palette::BoldReset) + "   • Declutter     : " + std::string(UI::Palette::Yellow) + "Ctrl+l";
-    printSection(tc, "1. Hotkeys:", keys);
+    printSection(tc, "\n1. Hotkeys:", keys);
 
     // 2. Selecting FolderPaths
     std::string paths =
@@ -182,10 +171,10 @@ void helpSearches(bool isCpMv, bool import2ISO) {
  * @brief Displays a help guide for ISO-to-Device mappings.
  */
 void helpMappings() {
+    clearScrollBuffer();
     const ThemeColors tc;
-    setupHelp("Help Guide For Write2Usb", tc);
 
-    printSection(tc, "1. Hotkeys:",
+    printSection(tc, "\n1. Hotkeys:",
         "   • Exit         : " + std::string(UI::Palette::Yellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
         "   • Quick Return : " + std::string(UI::Palette::Yellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
         "   • Clear Line   : " + std::string(UI::Palette::Yellow) + "Ctrl+u\n" + std::string(UI::Palette::BoldReset) +
