@@ -212,9 +212,6 @@ bool handlePendingProcess(const std::string& inputString, std::vector<std::strin
  *   @c PendingRefreshKind::IsoList via @c GlobalState::g_pendingRefreshKind;
  *   the redraw (including @c rl_on_new_line() / @c rl_redisplay()) happens
  *   later, on the main thread, inside @c checkPendingRefresh.
- * - **Filtering Indicator Reset:** Clears @c GlobalState::g_filteringIndicator
- *   (setting it to @c false) to stop displaying any active filtering/sync status
- *   messages once the import and refresh flow concludes.
  * - **Auto-Termination:** Executes once after the import signal is received
  *   and terminates (non-looping design).
  *
@@ -244,7 +241,6 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
     }
         GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::IsoList); // then publish
     }
-    GlobalState::g_filteringIndicator.store(false);
 }
 
 /**
@@ -556,6 +552,7 @@ void selectForIsoFiles(const std::string& operation,
         }
         // isAtISOList automatically restored here
         keybindingGuard.restore();
+        // Remove filtering lock indicator after pending execution
         GlobalState::g_filteringIndicator.store(false);
         if (pendingExecuted) continue;
     }
