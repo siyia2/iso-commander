@@ -149,6 +149,13 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
         isOnOff
     },
     {
+        "live_filter_limit",
+        "10000",
+        "Maximum number of entries for live filtering (0 to disable)",
+        "",
+        [](const std::string& v) { return isNum(v, 0, 100000); }
+    },
+    {
         "pagination",
         "25",
         "Items per page in list view (0 to disable)",
