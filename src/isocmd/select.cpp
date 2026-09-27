@@ -395,7 +395,6 @@ void selectForIsoFiles(const std::string& operation,
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState))
                     break;
             }
-            if (isUnmount) rl_bind_keyseq("R", rl_insert);
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
@@ -420,6 +419,12 @@ void selectForIsoFiles(const std::string& operation,
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
         isFiltered ? (void)rl_bind_keyseq("*", rl_insert) : setup_custom_keybindingsForSelect();
+
+        // Unbind unused hotkeys for umount prompt
+        if (isUnmount) {
+            rl_bind_keyseq("R", rl_insert);
+            rl_bind_keyseq("*", rl_insert);
+        }
 
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
