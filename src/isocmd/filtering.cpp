@@ -368,7 +368,10 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
         }
 
         auto matchedIndices = filterFilesIndices(derived, searchString);
-        if (matchedIndices.empty()) return false;
+        if (matchedIndices.empty()) {
+            std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+            return false;
+        }
 
         tempFiltered.reserve(matchedIndices.size());
         tempIndices.reserve(matchedIndices.size());
@@ -378,7 +381,10 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
         }
     } else {
         tempIndices = filterFilesIndices(sourceList, searchString);
-        if (tempIndices.empty()) return false;
+        if (tempIndices.empty()) {
+            std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+            return false;
+        }
 
         tempFiltered.reserve(tempIndices.size());
         for (size_t idx : tempIndices) {
