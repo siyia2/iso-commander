@@ -184,6 +184,29 @@ bool paginationSet(const std::string& filePath) {
 }
 
 /**
+ * @brief Optimized: Loads live_filter_limit setting into the global LIVE_FILTER_LIMIT via cache.
+ */
+bool liveFilteringSet(const std::string& filePath) {
+    syncCache(filePath);
+    auto it = ConfigCaches::g_configCache.find("live_filter_limit");
+
+    if (it != ConfigCaches::g_configCache.end()) {
+        for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
+            if (entry.key == "live_filter_limit") {
+                if (entry.validate && entry.validate(it->second)) {
+                    try {
+                        GlobalState::LIVE_FILTER_LIMIT = std::stoi(it->second);
+                        return true;
+                    } catch (...) { return false; }
+                }
+                break;
+            }
+        }
+    }
+    return false;
+}
+
+/**
  * @brief Main entry point for loading all config settings at app startup.
  * Performs the initial population of the memory cache.
  */

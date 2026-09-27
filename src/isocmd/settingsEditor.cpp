@@ -94,6 +94,9 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache) {
     if (cache.count("pagination")) {
         try { GlobalState::ITEMS_PER_PAGE = std::stoul(cache.at("pagination")); } catch (...) {}
     }
+    if (cache.count("live_filter_limit")) {
+        try { GlobalState::LIVE_FILTER_LIMIT = std::stoul(cache.at("live_filter_limit")); } catch (...) {}
+    }
 }
 
 void helpSettingsEditor();
@@ -279,20 +282,21 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 					  << "               midnight, mono, retro, crimson, dracula, tokyo, paper, sakura\n";
 		} else if (key == "auto_update" || key == "filenames_only") {
 			std::cout << "on, off\n";
-		} else if (key == "pagination" || key.find("thread_cap") != std::string::npos || key.find("_lines") != std::string::npos) {
+		} else if (key == "pagination" || key == "live_filter_limit" || key.find("thread_cap") != std::string::npos || key.find("_lines") != std::string::npos) {
 			int min = 1, max = 256;
-			if (key == "pagination")                          { min = 0;  max = 1000; }
-			else if (key == "folder_path_history_lines")      { min = 0;  max = 5000; }
-			else if (key == "filter_history_lines")           { min = 0;  max = 1000; }
-			else if (key == "combined_thread_cap")            { min = 1;  max = 256;  }
-			else if (key == "thread_cap_for_mount")           { min = 1;  max = 128;  }
-			else if (key == "thread_cap_for_umount")          { min = 1;  max = 128;  }
-			else if (key == "thread_cap_for_cp_mv")           { min = 1;  max = 128;  }
-			else if (key == "thread_cap_for_rm")              { min = 1;  max = 128;  }
-			else if (key == "thread_cap_for_convert2iso")     { min = 1;  max = 128;  }
-			else if (key == "thread_cap_for_database_cleanup"){ min = 1;  max = 128;  }
-			else if (key == "thread_cap_for_list_sorting")    { min = 1;  max = 64;   }
-			else if (key == "thread_cap_for_list_filtering")  { min = 1;  max = 64;   }
+			if (key == "live_filter_limit")                   { min = 0;  max = 100000; }
+			if (key == "pagination")                          { min = 0;  max = 1000;  }
+			else if (key == "folder_path_history_lines")      { min = 0;  max = 5000;  }
+			else if (key == "filter_history_lines")           { min = 0;  max = 1000;  }
+			else if (key == "combined_thread_cap")            { min = 1;  max = 256;   }
+			else if (key == "thread_cap_for_mount")           { min = 1;  max = 128;   }
+			else if (key == "thread_cap_for_umount")          { min = 1;  max = 128;   }
+			else if (key == "thread_cap_for_cp_mv")           { min = 1;  max = 128;   }
+			else if (key == "thread_cap_for_rm")              { min = 1;  max = 128;   }
+			else if (key == "thread_cap_for_convert2iso")     { min = 1;  max = 128;   }
+			else if (key == "thread_cap_for_database_cleanup"){ min = 1;  max = 128;   }
+			else if (key == "thread_cap_for_list_sorting")    { min = 1;  max = 64;    }
+			else if (key == "thread_cap_for_list_filtering")  { min = 1;  max = 64;    }
 
 			std::cout << "numeric value (min - max: " << min << " - " << max << ")\n";
 		} else if (key.find("_list") != std::string::npos) {

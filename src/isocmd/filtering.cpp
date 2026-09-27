@@ -470,7 +470,7 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 //    don't show mid-type; they reappear normally once Enter commits.
 //  - A full clearScrollBuffer()+printList() every keystroke is heavier than
 //    a delta redraw and can flicker on slow/high-latency terminals. Above
-//    kLivePreviewSourceCap source items we skip live repainting entirely
+//    LIVE_FILTER_LIMIT source items we skip live repainting entirely
 //    and fall back to the old Enter-only behavior, to keep typing responsive
 //    on very large lists.
 //  - The derived/lowercase caches are primed once per runFilterLoop() call
@@ -536,27 +536,28 @@ struct LiveFilterPreview {
 
 LiveFilterPreview g_livePreview;
 
-// Above this source size, live-filtering on every keystroke (each of which
-// re-runs the threaded Boyer-Moore search plus a full screen repaint) would
-// add visible input lag, so we silently fall back to the old Enter-only
-// behavior for huge lists.
-constexpr size_t kLivePreviewSourceCap = 20000;
-
 /**
  * @brief True once sourceList + the printList() wiring have been set up and
  * are within the size cap, regardless of whether a readline() call is
  * currently in flight. Used to decide whether it is worth priming the
  * derived/lowercase caches before the runFilterLoop while-loop starts.
  *
+ * @c GlobalState::LIVE_FILTERING_LIMIT == 0 is a deliberate kill-switch: it
+ * always disables live filtering, regardless of source list size (including
+ * an empty source list, which would otherwise satisfy the size check
+ * trivially).
+ *
  * @return true if the live preview has everything it needs to run safely.
  */
 bool livePreviewConfigured() {
+    if (GlobalState::LIVE_FILTER_LIMIT == 0) return false;
+
     return g_livePreview.sourceList
         && !g_livePreview.listType.empty()
         && g_livePreview.pendingIndices
         && g_livePreview.hasPendingProcess
         && g_livePreview.state
-        && g_livePreview.sourceList->size() <= kLivePreviewSourceCap;
+        && g_livePreview.sourceList->size() <= GlobalState::LIVE_FILTER_LIMIT;
 }
 
 /**
