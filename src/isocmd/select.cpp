@@ -671,8 +671,6 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         setupSignalHandlerCancellations();
         // setup_custom_keybindingsForSelect() handled by keybindingGuard constructor
 
-        // Reset manual-update key for image lists
-        rl_bind_keyseq("R", rl_insert);
         GlobalState::g_operationCancelled.store(false);
         bool verbose = false;
 
@@ -697,6 +695,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
         isFiltered ? (void)rl_bind_keyseq("*", rl_insert) : setup_custom_keybindingsForSelect();
+
+        // Unused in convert2iso prompts
+        rl_bind_keyseq("R", rl_insert);
 
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
