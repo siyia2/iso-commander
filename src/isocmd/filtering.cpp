@@ -49,7 +49,8 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
 
 namespace AnsiEscape {
     constexpr const char* CLEAR_LINE_ABOVE = "\033[1A\033[K";
-    constexpr const char* CLEAR_TWO_LINES  = "\033[2A\033[K";
+    constexpr const char* CLEAR_TWO_LINES_ABOVE  = "\033[2A\033[K";
+    constexpr const char* CLEAR_LINE_BELOW  = "\033[1B\033[K";
 }
 
 // ─── Boyer-Moore implementation ──────────────────────────────────────────────
@@ -783,7 +784,7 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
     };
 
     auto defaultEmptyInput = [&]() {
-        std::cout << AnsiEscape::CLEAR_TWO_LINES;
+        std::cout << AnsiEscape::CLEAR_TWO_LINES_ABOVE;
         ctx.needsClrScrn = false;
     };
 
@@ -861,6 +862,8 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
 
         if (raw.get()[0] == ';'
         || strstr(raw.get(), ";;") != nullptr) {
+            std::cout << AnsiEscape::CLEAR_TWO_LINES_ABOVE;
+            std::cout << AnsiEscape::CLEAR_LINE_BELOW;
             std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
             handleEmpty();
             continue;
