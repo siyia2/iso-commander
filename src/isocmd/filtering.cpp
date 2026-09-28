@@ -31,7 +31,6 @@
 #include "../filtering.h"
 #include "../history.h"
 #include "../inputHandling.h"
-#include "../printList.h"
 #include "../readline.h"
 #include "../sharedRefreshState.h"
 #include "../stringManipulation.h"
@@ -39,16 +38,12 @@
 #include "../state.h"
 #include "../threadpool.h"
 
-// Defined in printList.cpp. Forward-declared here so the live filter preview
-// below can repaint the real list, not a stand-in, on every keystroke.
-//
-// printListView renders from a non-owning ItemsView (so the preview never has
-// to copy matched strings) and takes the "[123]^" original-index tags
-// explicitly via @p tagIndices instead of reading filteringStack itself.
-void printListView(const ItemsView& items, const std::string& listType, const std::string& listSubType,
-                   std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-                   size_t& currentPage, std::shared_ptr<RefreshState> state,
-                   const std::vector<size_t>* tagIndices);
+// Defined in printList.cpp. Forward-declared here (same as displayCode.cpp
+// does) so the live filter preview below can repaint the real list, not a
+// stand-in, on every keystroke.
+void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
+               std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
+               size_t& currentPage, std::shared_ptr<RefreshState> state);
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -63,36 +58,27 @@ namespace AnsiEscape {
 /**
  * @brief Precomputes Boyer-Moore bad character and good suffix tables for a pattern
  *
- * The good-suffix table follows the standard Charras–Lecroq construction:
- * case 2 of the rule (a prefix of the pattern that is also a suffix, i.e. a
- * border) is filled from the *longest border that fits inside the matched
- * suffix*, and case 1 (the matched suffix reoccurs earlier in the pattern)
- * then overrides it with the tighter shift.
- *
  * @param pattern The search pattern to precompute tables for
  * @param badCharTable Output table mapping characters to their last occurrence index
  * @param goodSuffixTable Output table with safe skip distances for suffix mismatches
  */
 void precomputeBoyerMooreTables(const std::string& pattern, std::vector<int>& badCharTable, std::vector<int>& goodSuffixTable)
 {
-    const int m             = static_cast<int>(pattern.size());
-    const int ALPHABET_SIZE = 256;
+    const size_t m             = pattern.size();
+    const int    ALPHABET_SIZE = 256;
 
     badCharTable.assign(ALPHABET_SIZE, -1);
-    goodSuffixTable.clear();
-    if (m == 0) return;
-
-    for (int i = 0; i < m; ++i)
+    for (int i = 0; i < static_cast<int>(m); ++i)
         badCharTable[static_cast<unsigned char>(pattern[i])] = i;
 
-    // suffix[i] = length of the longest substring ending at i that is also
-    // a suffix of the whole pattern.
+    goodSuffixTable.resize(m, static_cast<int>(m));
     std::vector<int> suffix(m, 0);
-    suffix[m - 1] = m;
-    int g = m - 1;
-    int f = m - 1;
 
-    for (int i = m - 2; i >= 0; --i) {
+    suffix[m - 1] = static_cast<int>(m);
+    int g = static_cast<int>(m) - 1;
+    int f = static_cast<int>(m) - 1;
+
+    for (int i = static_cast<int>(m) - 2; i >= 0; --i) {
         if (i > g && suffix[i + m - 1 - f] < i - g) {
             suffix[i] = suffix[i + m - 1 - f];
         } else {
@@ -104,23 +90,14 @@ void precomputeBoyerMooreTables(const std::string& pattern, std::vector<int>& ba
         }
     }
 
-    goodSuffixTable.assign(m, m);
+    for (int i = 0; i < static_cast<int>(m) - 1; ++i)
+        goodSuffixTable[i] = static_cast<int>(m) - 1 - suffix[0];
 
-    // Case 2: a border (prefix [0..i] that is also a suffix) bounds the
-    // shift for every mismatch position j < m - 1 - i not yet set.
-    int j = 0;
-    for (int i = m - 1; i >= 0; --i) {
-        if (suffix[i] == i + 1) {
-            for (; j < m - 1 - i; ++j) {
-                if (goodSuffixTable[j] == m)
-                    goodSuffixTable[j] = m - 1 - i;
-            }
-        }
+    for (int i = 0; i <= static_cast<int>(m) - 2; ++i) {
+        const int j = static_cast<int>(m) - 1 - suffix[i];
+        if (goodSuffixTable[j] > static_cast<int>(m) - 1 - i)
+            goodSuffixTable[j] = static_cast<int>(m) - 1 - i;
     }
-
-    // Case 1: the matched suffix occurs again earlier in the pattern.
-    for (int i = 0; i <= m - 2; ++i)
-        goodSuffixTable[m - 1 - suffix[i]] = m - 1 - i;
 }
 
 /**
@@ -466,18 +443,18 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 // rl_redisplay_function every time it redraws the input line — i.e. after
 // essentially every keystroke, including backspaces — so we hook that call
 // to recompute matches against the in-progress (uncommitted) query and
-// repaint the same list renderer the rest of the app uses, right where the
+// repaint the same printList() the rest of the app uses, right where the
 // list is already displayed.
 //
 // The live preview is ALWAYS rendered unpaginated. Every repaint
 // (including the empty-query frame) temporarily sets
-// GlobalState::ITEMS_PER_PAGE = 0 around the render call via
-// UnpaginatedScope, which makes the renderer take its disablePagination path
+// GlobalState::ITEMS_PER_PAGE = 0 around the printList() call via
+// UnpaginatedScope, which makes printList() take its disablePagination path
 // (all items, no "Page x/y" header, no PgUp/PgDn footer). The real setting
 // is restored immediately afterward, so committed (Enter) results and every
 // other screen keep their normal pagination.
 //
-// Mechanics: each repaint does clearScrollBuffer() + printListView(), which
+// Mechanics: each repaint does clearScrollBuffer() + printList(), which
 // wipes and redraws the whole screen, so readline's own idea of "what's
 // currently on screen" (used for its normal incremental redraw) is now
 // stale. We correct that with rl_forced_update_display(), which — unlike
@@ -492,13 +469,6 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 // path as before (applyFilterCore + saveQueryToHistory), so history and
 // nested-filter-stack semantics are unchanged.
 //
-// Zero-copy rendering: a frame never copies matched strings. The preview
-// produces only index vectors (matches into the source list, plus the
-// resolved global indices used for the "[123]^" tags) and hands printListView
-// a non-owning ItemsView over the source list. The "[123]^" tags are passed
-// explicitly, so the preview no longer has to push/pop a temporary entry on
-// the global filteringStack around the render call.
-//
 // Search-corpus caching: the text actually searched per source entry (its
 // basename, its unmount key, or the raw path) and that text's lowercased
 // form depend only on `sourceList` + the useNameOnly/useUnmountKey toggles
@@ -509,9 +479,13 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 // allocation + case-folding over the whole source list per frame.
 //
 // Trade-offs worth knowing about:
-//  - A full clearScrollBuffer()+render every keystroke is heavier than
+//  - Because filteringStack isn't updated until commit, the live repaint
+//    always renders with isFiltered=false while a query is in progress, so
+//    the "[123]^" original-index tags (drawn from filteringStack.back())
+//    don't show mid-type; they reappear normally once Enter commits.
+//  - A full clearScrollBuffer()+printList() every keystroke is heavier than
 //    a delta redraw and can flicker on slow/high-latency terminals. Since
-//    the preview is unpaginated, each frame's cost scales with the whole
+//    the preview is now unpaginated, each frame's cost scales with the whole
 //    match set rather than one page. Above LIVE_FILTER_LIMIT source items we
 //    skip live repainting entirely and fall back to the old Enter-only
 //    behavior, to keep typing responsive on very large lists.
@@ -524,25 +498,20 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 namespace {
 
 /**
- * @brief Result of a single live-preview filter pass, expressed purely as
- * indices so no strings are copied per frame.
- *
- * @c local  indexes into the preview's source list (what the renderer reads).
- * @c global is the same set of matches translated back to
- *           @c globalIsoFileList indices (what the "[123]^" tags display).
- *
- * Both are left empty for an empty query; the caller treats that as an
- * identity view of the whole source list.
+ * @brief Result of a single live-preview filter pass: the matching entries
+ * from the preview's source list, alongside the corresponding indices
+ * already translated back to @c globalIsoFileList (see
+ * @c computeLivePreviewItems).
  */
 struct LivePreviewResult {
-    std::vector<size_t> local;
-    std::vector<size_t> global;
+    std::vector<std::string> items;
+    std::vector<size_t> indices;
 };
 
 /**
  * @brief Holds all state for one live filter-preview session (i.e. one
  * @c runFilterLoop() invocation): the source list and how to derive its
- * searchable labels, the render wiring needed to repaint the real
+ * searchable labels, the printList() wiring needed to repaint the real
  * on-screen list, the per-invocation derived/lowercase search caches
  * (see @c primeLivePreviewCaches), and the bookkeeping used to decide
  * whether a given readline() keystroke needs a fresh repaint.
@@ -557,7 +526,7 @@ struct LiveFilterPreview {
     bool*   actualIsFiltered = nullptr;
     size_t* actualCurrentPage = nullptr;
 
-    // Wiring needed to call the real list renderer.
+    // Wiring needed to call the real printList().
     std::string                   listType{};
     std::string                   listSubType{};
     std::vector<std::string>*     pendingIndices    = nullptr;
@@ -583,7 +552,7 @@ struct LiveFilterPreview {
 LiveFilterPreview g_livePreview;
 
 /**
- * @brief True once sourceList + the render wiring have been set up and
+ * @brief True once sourceList + the printList() wiring have been set up and
  * are within the size cap, regardless of whether a readline() call is
  * currently in flight. Used to decide whether it is worth priming the
  * derived/lowercase caches before the runFilterLoop while-loop starts.
@@ -672,40 +641,52 @@ void primeLivePreviewCaches() {
 }
 
 /**
- * @brief Computes the "would-be" match set for the in-progress query,
+ * @brief Computes the "would-be" filtered list for the in-progress query,
  * without touching filteringStack — mirrors applyFilterCore's source
  * resolution and name/unmount-key handling, but is purely a preview. Reads
  * from the per-invocation derived/lowercase caches (primeLivePreviewCaches)
- * instead of rebuilding them from the source list on every keystroke.
- *
- * Returns indices only — no strings are copied. An empty query returns an
- * empty result, which the caller interprets as "show the whole source list
- * unchanged" (an identity ItemsView), so that case allocates nothing.
+ * instead of rebuilding them from @c source on every keystroke.
  *
  * @param query The in-progress (uncommitted) query text from the readline
- * input buffer.
- * @return Matches as indices into the source list (@c local) and into
- * @c globalIsoFileList (@c global).
+ * input buffer. An empty query returns every entry of the source list.
+ * @return The matching entries (from the preview's source list) alongside
+ * their indices, already translated back to @c globalIsoFileList indices.
  */
-LivePreviewResult computeLivePreviewMatches(const std::string& query)
+LivePreviewResult computeLivePreviewItems(const std::string& query)
 {
+    const std::vector<std::string>& source = *g_livePreview.sourceList;
+
     LivePreviewResult result;
-    if (query.empty()) return result;
+
+    if (query.empty()) {
+        result.items = source;
+
+        result.indices.resize(source.size());
+        std::iota(result.indices.begin(), result.indices.end(), 0);
+
+        return result;
+    }
 
     const std::vector<std::string>& searchable =
-        g_livePreview.hasDerivedCache ? g_livePreview.derivedCache : *g_livePreview.sourceList;
+        g_livePreview.hasDerivedCache ? g_livePreview.derivedCache : source;
 
-    result.local = filterFilesIndices(searchable, query, &g_livePreview.lowerCache);
+    const std::vector<size_t> matches =
+        filterFilesIndices(searchable, query, &g_livePreview.lowerCache);
 
-    result.global.reserve(result.local.size());
-    for (size_t idx : result.local)
-        result.global.push_back(resolveGlobalIndex(idx));
+    result.items.reserve(matches.size());
+    result.indices.reserve(matches.size());
+
+    for (size_t idx : matches) {
+        result.items.push_back(source[idx]);
+
+        result.indices.push_back(resolveGlobalIndex(idx));
+    }
 
     return result;
 }
 
 /**
- * @brief RAII guard that forces the renderer into its unpaginated
+ * @brief RAII guard that forces printList() into its unpaginated
  * path (GlobalState::ITEMS_PER_PAGE == 0) for one live-preview repaint and
  * restores the user's real setting on every exit path, including exceptions.
  *
@@ -736,8 +717,10 @@ void liveFilterRedisplayHook() {
     const bool isFirstFrameOfThisCall = !g_livePreview.primed;
     g_livePreview.primed = true;
 
-    // The live view is unpaginated from the very first frame, so it must be
-    // repainted even for an empty query (no "pristine first frame" shortcut).
+    // The old "pristine first frame" shortcut (empty query on the
+    // first frame => let readline draw over the existing paginated screen)
+    // was removed. The live view is now unpaginated from the very first
+    // frame, so it must be repainted even for an empty query.
 
     if (!isFirstFrameOfThisCall && query == g_livePreview.lastQuery) {
         // Text unchanged (e.g. pure cursor movement) — the terminal still
@@ -748,37 +731,38 @@ void liveFilterRedisplayHook() {
     }
     g_livePreview.lastQuery = query;
 
-    const bool identity = query.empty();
-    LivePreviewResult preview = computeLivePreviewMatches(query);
+    LivePreviewResult preview = computeLivePreviewItems(query);
 
     clearScrollBuffer();
 
-    // unpaginated => everything lives on "page 0"; the renderer
+    // unpaginated => everything lives on "page 0"; printList()
     // ignores this value when pagination is disabled.
     size_t previewPage = 0;
 
-    // Non-owning view over the source list: identity for an empty query,
-    // otherwise just the matching positions. No strings are copied.
-    const ItemsView view{ g_livePreview.sourceList, identity ? nullptr : &preview.local };
+    // Live preview has its own temporary index mapping.
+    // This makes printList() display indexes relative to the original ISO list
+    // without modifying the real filtering stack.
+    FilteringState previewState;
+    previewState.originalIndices = preview.indices;
 
-    // "[123]^" tags: for an empty query, keep whatever the committed filter
-    // stack shows (the list is unchanged); otherwise show the would-be
-    // global indices. filteringStack itself is never modified.
-    const std::vector<size_t>* tags = identity
-        ? (filteringStack.empty() ? nullptr : &filteringStack.back().originalIndices)
-        : &preview.global;
+    const bool addPreviewStack = !query.empty();
+
+    if (addPreviewStack)
+        filteringStack.push_back(std::move(previewState));
 
     {
         UnpaginatedScope unpaginated;
-        printListView(view,
-                      g_livePreview.listType,
-                      g_livePreview.listSubType,
-                      *g_livePreview.pendingIndices,
-                      *g_livePreview.hasPendingProcess,
-                      previewPage,
-                      g_livePreview.state,
-                      tags);
+        printList(preview.items,
+                  g_livePreview.listType,
+                  g_livePreview.listSubType,
+                  *g_livePreview.pendingIndices,
+                  *g_livePreview.hasPendingProcess,
+                  previewPage,
+                  g_livePreview.state);
     }
+
+    if (addPreviewStack)
+        filteringStack.pop_back();
 
     // We just repainted the whole screen out from under readline; force it
     // to redraw its prompt + in-progress query fresh rather than attempting
@@ -830,7 +814,6 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
     };
 
     const auto& handleEmpty = onEmptyInput ? onEmptyInput : defaultEmptyInput;
-    (void)handleEmpty;
 
     std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
     ctx.filterHistory = true;
@@ -862,8 +845,9 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
     g_livePreview.state             = ctx.state;
 
     // Expensive (name/unmount-key derivation + full lowercasing over the
-    // whole source list). Done exactly once here, up front, and only if the
-    // live preview will actually run for this session;
+    // whole source list) and, prior to this change, redone from scratch on
+    // every single keystroke. Now done exactly once here, up front. Only
+    // worth doing if the live preview will actually run for this session;
     // livePreviewConfigured() mirrors liveMainListEnabled() minus the
     // "readline() call currently in flight" check, which can't be true yet
     // at this point in the function.
@@ -1040,16 +1024,16 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
         return false;
 
     GlobalState::g_suppressPendingRefresh.store(true);
-    std::shared_ptr<void> suppressGuard(nullptr, [](void*) {
-        GlobalState::g_suppressPendingRefresh.store(false);
-    });
+        std::shared_ptr<void> suppressGuard(nullptr, [](void*) {
+            GlobalState::g_suppressPendingRefresh.store(false);
+        });
 
-    rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
-    rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
-    std::cout << "\n";
-    reset_custom_keybindingsForSelect();
-    rl_bind_keyseq("\\e", exit_handler);
-    std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+	rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+	std::cout << "\n";
+	reset_custom_keybindingsForSelect();
+	rl_bind_keyseq("\\e", exit_handler);
+	std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
 
     const ReadlineAndPromptTheme ft = getFilterTheme("", false);
     const std::string prompt =
@@ -1071,7 +1055,7 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
     }
 
     // Live main-list rendering is opt-in: only wired up when the caller
-    // supplied everything the list renderer needs (see FilterContext).
+    // supplied everything printList() needs (see FilterContext).
     ctx.listType          = cfg.listType;
     ctx.listSubType       = cfg.listSubType;
     ctx.pendingIndices    = cfg.pendingIndices;
