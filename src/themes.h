@@ -42,7 +42,7 @@ namespace UI {
         static constexpr std::string_view RL_Green  = "\001\033[1;38;2;90;215;35m\002";
         static constexpr std::string_view RL_Red    = "\001\033[1;38;2;235;40;40m\002";
         static constexpr std::string_view RL_Yellow = "\001\033[1;38;2;212;184;0m\002";
-        static constexpr std::string_view RL_idxGreen = "\001\033[1;38;2;55;185;95m\002";
+        static constexpr std::string_view RL_idxGreen = "\001\033[1;38;2;60;190;100m\002";
 
 
         // --- Dynamic Colors ---
