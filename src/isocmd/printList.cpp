@@ -17,7 +17,6 @@
 #include "../display.h"
 #include "../filtering.h"
 #include "../databaseOps.h"
-#include "../printList.h"
 #include "../main.h"
 #include "../sharedRefreshState.h"
 #include "../state.h"
@@ -45,9 +44,7 @@ struct IntBuf {
 };
 
 /**
- * @brief Renders formatted lists (ISO, Image, or Mounts) to the terminal from a
- * non-owning view, so callers can display a subset of a larger list without
- * copying any strings.
+ * @brief Renders formatted lists (ISO, Image, or Mounts) to the terminal.
  *
  * Performance Note: Uses a large reserved std::string buffer and std::cout.write
  * to minimize syscall overhead and flickering during high-frequency updates.
@@ -56,8 +53,7 @@ struct IntBuf {
  * atomically under printMutex, preventing stale indicator display during
  * concurrent background ISO imports.
  *
- * @param items              View over the strings to display. The underlying
- *                           storage must outlive this call.
+ * @param items              The list of strings to display.
  * @param listType           Category of the list (e.g., "ISO_FILES").
  * @param listSubType        Extension or sub-format details.
  * @param pendingIndices     Current user selection indices awaiting processing.
@@ -66,15 +62,10 @@ struct IntBuf {
  * @param state              Shared state providing printMutex and isImportRunning
  *                           flag; guards the "[↻ Syncing: NewISO → Restructure]"
  *                           indicator against races with background import completion.
- * @param tagIndices         Optional. When non-null, entry i of the displayed
- *                           list is tagged "[tagIndices[i]+1]^" (its original
- *                           position in the unfiltered list). Pass nullptr for
- *                           no tags. Entries beyond tagIndices->size() get no tag.
  */
-void printListView(const ItemsView& items, const std::string& listType, const std::string& listSubType,
-                   std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-                   size_t& currentPage, std::shared_ptr<RefreshState> state,
-                   const std::vector<size_t>* tagIndices) {
+void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
+               std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
+               size_t& currentPage, std::shared_ptr<RefreshState> state) {
 
     // --- Flags & Config ---
     const bool isIsoMode      = (listType == "ISO_FILES");
@@ -142,9 +133,9 @@ void printListView(const ItemsView& items, const std::string& listType, const st
         if (idxStr.length() < maxDigits) output.append(maxDigits - idxStr.length(), ' ');
         output.append(idxStr);
 
-        if (tagIndices && i < tagIndices->size()) {
+        if (!filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
             output.append(":").append(UI::Palette::BoldReset).append(c.square);
-            output.append(ib2.format((*tagIndices)[i] + 1));
+            output.append(ib2.format(filteringStack.back().originalIndices[i] + 1));
             output.append(UI::Palette::BoldReset).append(c.square).append("^ ")
             .append(UI::Palette::BoldReset);
         } else {
@@ -228,27 +219,4 @@ void printListView(const ItemsView& items, const std::string& listType, const st
 
         std::cout.write(output.data(), output.size());
     }
-}
-
-/**
- * @brief Renders a plain list, tagging entries from the active filter stack.
- *
- * Thin wrapper over @c printListView that preserves the original signature for
- * every existing caller: the items are shown as-is (identity view) and the
- * "[123]^" tags come from the top of @c filteringStack, exactly as before.
- *
- * @param items              The list of strings to display.
- * @param listType           Category of the list (e.g., "ISO_FILES").
- * @param listSubType        Extension or sub-format details.
- * @param pendingIndices     Current user selection indices awaiting processing.
- * @param hasPendingProcess  Flag indicating if a process action is staged.
- * @param currentPage        Mutable reference to the current pagination index.
- * @param state              Shared state providing printMutex and isImportRunning.
- */
-void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
-               std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-               size_t& currentPage, std::shared_ptr<RefreshState> state) {
-    printListView(ItemsView{ &items, nullptr }, listType, listSubType,
-                  pendingIndices, hasPendingProcess, currentPage, state,
-                  filteringStack.empty() ? nullptr : &filteringStack.back().originalIndices);
 }
