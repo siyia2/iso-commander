@@ -154,7 +154,7 @@ void interactiveConfigEditor(const std::string& configPath) {
 
         std::string prompt = std::format(
             "\n\001{}\002IDX\001{}\002 ↵ for \001{}\002editor\001{}\002, ? for help: \001{}\002",
-            UI::Palette::Green,
+            UI::Palette::RL_idxGreen,
             tc.label,
             tc.warning,
             tc.label,

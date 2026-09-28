@@ -82,7 +82,7 @@ void printList(const std::vector<std::string>& items, const std::string& listTyp
         output.reserve(64);
         output += '\n';
         output.append(c.num); // Warning color for empty items/filter match
-        output.append("No filter results.");
+        output.append("No filter results");
         output.append(UI::Palette::Reset).append(UI::Palette::BoldReset);
         noFilterResults = true;
 
