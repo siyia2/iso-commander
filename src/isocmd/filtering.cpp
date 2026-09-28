@@ -64,21 +64,24 @@ namespace AnsiEscape {
  */
 void precomputeBoyerMooreTables(const std::string& pattern, std::vector<int>& badCharTable, std::vector<int>& goodSuffixTable)
 {
-    const size_t m             = pattern.size();
-    const int    ALPHABET_SIZE = 256;
+    const int m             = static_cast<int>(pattern.size());
+    const int ALPHABET_SIZE = 256;
 
     badCharTable.assign(ALPHABET_SIZE, -1);
-    for (int i = 0; i < static_cast<int>(m); ++i)
+    goodSuffixTable.clear();
+    if (m == 0) return;
+
+    for (int i = 0; i < m; ++i)
         badCharTable[static_cast<unsigned char>(pattern[i])] = i;
 
-    goodSuffixTable.resize(m, static_cast<int>(m));
+    // suffix[i] = length of the longest substring ending at i that is also
+    // a suffix of the whole pattern.
     std::vector<int> suffix(m, 0);
+    suffix[m - 1] = m;
+    int g = m - 1;
+    int f = m - 1;
 
-    suffix[m - 1] = static_cast<int>(m);
-    int g = static_cast<int>(m) - 1;
-    int f = static_cast<int>(m) - 1;
-
-    for (int i = static_cast<int>(m) - 2; i >= 0; --i) {
+    for (int i = m - 2; i >= 0; --i) {
         if (i > g && suffix[i + m - 1 - f] < i - g) {
             suffix[i] = suffix[i + m - 1 - f];
         } else {
@@ -90,14 +93,23 @@ void precomputeBoyerMooreTables(const std::string& pattern, std::vector<int>& ba
         }
     }
 
-    for (int i = 0; i < static_cast<int>(m) - 1; ++i)
-        goodSuffixTable[i] = static_cast<int>(m) - 1 - suffix[0];
+    goodSuffixTable.assign(m, m);
 
-    for (int i = 0; i <= static_cast<int>(m) - 2; ++i) {
-        const int j = static_cast<int>(m) - 1 - suffix[i];
-        if (goodSuffixTable[j] > static_cast<int>(m) - 1 - i)
-            goodSuffixTable[j] = static_cast<int>(m) - 1 - i;
+    // Case 2: a border (prefix [0..i] that is also a suffix) bounds the
+    // shift for every mismatch position j < m - 1 - i not yet set.
+    int j = 0;
+    for (int i = m - 1; i >= 0; --i) {
+        if (suffix[i] == i + 1) {
+            for (; j < m - 1 - i; ++j) {
+                if (goodSuffixTable[j] == m)
+                    goodSuffixTable[j] = m - 1 - i;
+            }
+        }
     }
+
+    // Case 1: the matched suffix occurs again earlier in the pattern.
+    for (int i = 0; i <= m - 2; ++i)
+        goodSuffixTable[m - 1 - suffix[i]] = m - 1 - i;
 }
 
 /**
