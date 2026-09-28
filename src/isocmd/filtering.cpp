@@ -446,6 +446,14 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 // repaint the same printList() the rest of the app uses, right where the
 // list is already displayed.
 //
+// The live preview is ALWAYS rendered unpaginated. Every repaint
+// (including the empty-query frame) temporarily sets
+// GlobalState::ITEMS_PER_PAGE = 0 around the printList() call via
+// UnpaginatedScope, which makes printList() take its disablePagination path
+// (all items, no "Page x/y" header, no PgUp/PgDn footer). The real setting
+// is restored immediately afterward, so committed (Enter) results and every
+// other screen keep their normal pagination.
+//
 // Mechanics: each repaint does clearScrollBuffer() + printList(), which
 // wipes and redraws the whole screen, so readline's own idea of "what's
 // currently on screen" (used for its normal incremental redraw) is now
@@ -476,10 +484,11 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 //    the "[123]^" original-index tags (drawn from filteringStack.back())
 //    don't show mid-type; they reappear normally once Enter commits.
 //  - A full clearScrollBuffer()+printList() every keystroke is heavier than
-//    a delta redraw and can flicker on slow/high-latency terminals. Above
-//    LIVE_FILTER_LIMIT source items we skip live repainting entirely
-//    and fall back to the old Enter-only behavior, to keep typing responsive
-//    on very large lists.
+//    a delta redraw and can flicker on slow/high-latency terminals. Since
+//    the preview is now unpaginated, each frame's cost scales with the whole
+//    match set rather than one page. Above LIVE_FILTER_LIMIT source items we
+//    skip live repainting entirely and fall back to the old Enter-only
+//    behavior, to keep typing responsive on very large lists.
 //  - The derived/lowercase caches are primed once per runFilterLoop() call
 //    and intentionally never refreshed mid-loop: sourceList only changes on
 //    a successful filter commit, which immediately ends the loop, so there
@@ -513,8 +522,7 @@ struct LiveFilterPreview {
     bool                             useUnmountKey = false;
 
     // Set up per readline() call (see runFilterLoop); mirrors the *actual*
-    // current ctx state so the empty-query frame can render an exact match
-    // of what's already on screen instead of resetting page/annotations.
+    // current ctx state.
     bool*   actualIsFiltered = nullptr;
     size_t* actualCurrentPage = nullptr;
 
@@ -678,6 +686,22 @@ LivePreviewResult computeLivePreviewItems(const std::string& query)
 }
 
 /**
+ * @brief RAII guard that forces printList() into its unpaginated
+ * path (GlobalState::ITEMS_PER_PAGE == 0) for one live-preview repaint and
+ * restores the user's real setting on every exit path, including exceptions.
+ *
+ * Safe against concurrent repaints because runSharedFilterFlow suppresses
+ * pending async refreshes (g_suppressPendingRefresh) for the whole prompt.
+ */
+struct UnpaginatedScope {
+    const std::size_t saved = GlobalState::ITEMS_PER_PAGE;
+    UnpaginatedScope() { GlobalState::ITEMS_PER_PAGE = 0; }
+    ~UnpaginatedScope() { GlobalState::ITEMS_PER_PAGE = saved; }
+    UnpaginatedScope(const UnpaginatedScope&) = delete;
+    UnpaginatedScope& operator=(const UnpaginatedScope&) = delete;
+};
+
+/**
  * @brief Installed as rl_redisplay_function for the lifetime of one
  * FilterTerms readline() call; invoked by readline on (almost) every
  * keystroke, including backspace, so the real list both narrows and widens
@@ -693,14 +717,10 @@ void liveFilterRedisplayHook() {
     const bool isFirstFrameOfThisCall = !g_livePreview.primed;
     g_livePreview.primed = true;
 
-    if (query.empty() && isFirstFrameOfThisCall && !g_livePreview.everRepainted) {
-        // Truly pristine: the screen already shows exactly this (unfiltered)
-        // list, untouched since before this FilterTerms prompt began — just
-        // let readline draw its own prompt line without repainting above it.
-        g_livePreview.lastQuery = query;
-        rl_redisplay();
-        return;
-    }
+    // The old "pristine first frame" shortcut (empty query on the
+    // first frame => let readline draw over the existing paginated screen)
+    // was removed. The live view is now unpaginated from the very first
+    // frame, so it must be repainted even for an empty query.
 
     if (!isFirstFrameOfThisCall && query == g_livePreview.lastQuery) {
         // Text unchanged (e.g. pure cursor movement) — the terminal still
@@ -715,7 +735,9 @@ void liveFilterRedisplayHook() {
 
     clearScrollBuffer();
 
-    size_t previewPage      = query.empty() ? *g_livePreview.actualCurrentPage : 0;
+    // unpaginated => everything lives on "page 0"; printList()
+    // ignores this value when pagination is disabled.
+    size_t previewPage = 0;
 
     // Live preview has its own temporary index mapping.
     // This makes printList() display indexes relative to the original ISO list
@@ -728,13 +750,16 @@ void liveFilterRedisplayHook() {
     if (addPreviewStack)
         filteringStack.push_back(std::move(previewState));
 
-    printList(preview.items,
-              g_livePreview.listType,
-              g_livePreview.listSubType,
-              *g_livePreview.pendingIndices,
-              *g_livePreview.hasPendingProcess,
-              previewPage,
-              g_livePreview.state);
+    {
+        UnpaginatedScope unpaginated;
+        printList(preview.items,
+                  g_livePreview.listType,
+                  g_livePreview.listSubType,
+                  *g_livePreview.pendingIndices,
+                  *g_livePreview.hasPendingProcess,
+                  previewPage,
+                  g_livePreview.state);
+    }
 
     if (addPreviewStack)
         filteringStack.pop_back();
@@ -846,15 +871,20 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
         // If the query got live-repainted onto the real list (any branch
         // below that loops back for another attempt, or that cancels out),
         // the outer caller's own needsClrScrn-driven refresh — set on
-        // success by applyFilterCore below, or already true from before
-        // this prompt started otherwise — repaints the screen properly
-        // afterward exactly as it did before this feature existed.
+        // success by applyFilterCore below, or forced on cancel below —
+        // repaints the screen properly afterward.
 
         //---- Robust handling of FilterTerms prompt ----
         if (!raw || raw.get()[0] == 27) {
             if (!raw) {
                 std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
             }
+            // The live preview painted an unpaginated list over the
+            // screen. Make the caller redo its normal (paginated) refresh so
+            // cancelling doesn't leave the long list behind.
+            if (g_livePreview.everRepainted)
+                ctx.needsClrScrn = true;
+
             // EOF (Ctrl+D) - exit
             clear_history();
             break;
