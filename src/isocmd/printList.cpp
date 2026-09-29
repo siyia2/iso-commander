@@ -11,6 +11,7 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 // Project Headers
@@ -20,6 +21,7 @@
 #include "../main.h"
 #include "../sharedRefreshState.h"
 #include "../state.h"
+#include "../stringListView.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
 
@@ -53,7 +55,8 @@ struct IntBuf {
  * atomically under printMutex, preventing stale indicator display during
  * concurrent background ISO imports.
  *
- * @param items              The list of strings to display.
+ * @param items              Non-owning view of the strings to display (no copies are made;
+ *                           the underlying vectors must outlive this call).
  * @param listType           Category of the list (e.g., "ISO_FILES").
  * @param listSubType        Extension or sub-format details.
  * @param pendingIndices     Current user selection indices awaiting processing.
@@ -63,7 +66,7 @@ struct IntBuf {
  *                           flag; guards the "[↻ Syncing: NewISO → Restructure]"
  *                           indicator against races with background import completion.
  */
-void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
+void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
                size_t& currentPage, std::shared_ptr<RefreshState> state) {
 

@@ -23,12 +23,13 @@
 #include "../filtering.h"
 #include "../inputHandling.h"
 #include "../globalMutexes.h"
+#include "../stringListView.h"
 #include "../pausePrompt.h"
 #include "../sort.h"
 #include "../state.h"
 #include "../themes.h"
 
-void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
+void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
                size_t& currentPage, std::shared_ptr<RefreshState> state);
 

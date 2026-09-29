@@ -36,12 +36,13 @@
 #include "../stringManipulation.h"
 #include "../themes.h"
 #include "../state.h"
+#include "../stringListView.h"
 #include "../threadpool.h"
 
 // Defined in printList.cpp. Forward-declared here (same as displayCode.cpp
 // does) so the live filter preview below can repaint the real list, not a
 // stand-in, on every keystroke.
-void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
+void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
                size_t& currentPage, std::shared_ptr<RefreshState> state);
 
@@ -510,14 +511,17 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 namespace {
 
 /**
- * @brief Result of a single live-preview filter pass: the matching entries
- * from the preview's source list, alongside the corresponding indices
- * already translated back to @c globalIsoFileList (see
- * @c computeLivePreviewItems).
+ * @brief Result of a single live-preview filter pass. Holds indices only;
+ * no string is ever copied. @c local indexes into the preview's source list
+ * (see @c LiveFilterPreview::sourceList) and @c global holds the same
+ * entries translated back to @c globalIsoFileList indices (see
+ * @c computeLivePreviewMatches). When @c identity is true the preview shows
+ * the whole source list unchanged (empty query) and both vectors are unused.
  */
 struct LivePreviewResult {
-    std::vector<std::string> items;
-    std::vector<size_t> indices;
+    std::vector<size_t> local;
+    std::vector<size_t> global;
+    bool                identity = false;
 };
 
 /**
@@ -653,46 +657,35 @@ void primeLivePreviewCaches() {
 }
 
 /**
- * @brief Computes the "would-be" filtered list for the in-progress query,
- * without touching filteringStack — mirrors applyFilterCore's source
+ * @brief Computes the "would-be" filtered match set for the in-progress
+ * query, without touching filteringStack — mirrors applyFilterCore's source
  * resolution and name/unmount-key handling, but is purely a preview. Reads
  * from the per-invocation derived/lowercase caches (primeLivePreviewCaches)
- * instead of rebuilding them from @c source on every keystroke.
+ * instead of rebuilding them from the source list on every keystroke.
+ * Returns indices only; the caller wraps them in a zero-copy StringListView.
  *
  * @param query The in-progress (uncommitted) query text from the readline
- * input buffer. An empty query returns every entry of the source list.
- * @return The matching entries (from the preview's source list) alongside
- * their indices, already translated back to @c globalIsoFileList indices.
+ * input buffer. An empty query yields an identity result (whole source list).
+ * @return Matching local indices plus their @c globalIsoFileList translation.
  */
-LivePreviewResult computeLivePreviewItems(const std::string& query)
+LivePreviewResult computeLivePreviewMatches(const std::string& query)
 {
-    const std::vector<std::string>& source = *g_livePreview.sourceList;
-
     LivePreviewResult result;
 
     if (query.empty()) {
-        result.items = source;
-
-        result.indices.resize(source.size());
-        std::iota(result.indices.begin(), result.indices.end(), 0);
-
+        result.identity = true;   // zero allocation, zero copies
         return result;
     }
 
+    const std::vector<std::string>& source = *g_livePreview.sourceList;
     const std::vector<std::string>& searchable =
         g_livePreview.hasDerivedCache ? g_livePreview.derivedCache : source;
 
-    const std::vector<size_t> matches =
-        filterFilesIndices(searchable, query, &g_livePreview.lowerCache);
+    result.local = filterFilesIndices(searchable, query, &g_livePreview.lowerCache);
 
-    result.items.reserve(matches.size());
-    result.indices.reserve(matches.size());
-
-    for (size_t idx : matches) {
-        result.items.push_back(source[idx]);
-
-        result.indices.push_back(resolveGlobalIndex(idx));
-    }
+    result.global.reserve(result.local.size());
+    for (size_t idx : result.local)
+        result.global.push_back(resolveGlobalIndex(idx));
 
     return result;
 }
@@ -743,7 +736,7 @@ void liveFilterRedisplayHook() {
     }
     g_livePreview.lastQuery = query;
 
-    LivePreviewResult preview = computeLivePreviewItems(query);
+    LivePreviewResult preview = computeLivePreviewMatches(query);
 
     clearScrollBuffer();
 
@@ -751,30 +744,42 @@ void liveFilterRedisplayHook() {
     // ignores this value when pagination is disabled.
     size_t previewPage = 0;
 
-    // Live preview has its own temporary index mapping.
-    // This makes printList() display indexes relative to the original ISO list
-    // without modifying the real filtering stack.
-    FilteringState previewState;
-    previewState.originalIndices = preview.indices;
-
-    const bool addPreviewStack = !query.empty();
-
-    if (addPreviewStack)
-        filteringStack.push_back(std::move(previewState));
-
     {
+        // Zero-copy view over the source list (optionally narrowed by the
+        // matched local indices). Nothing is copied; both referenced vectors
+        // outlive the printList() call below.
+        const std::vector<std::string>& source = *g_livePreview.sourceList;
+        const StringListView view = preview.identity
+            ? StringListView(source)
+            : StringListView(source, preview.local);
+
+        // Live preview has its own temporary index mapping. This makes
+        // printList() display indexes relative to the original ISO list
+        // without modifying the real filtering stack. RAII so the stack is
+        // restored even if printList() throws. The index vector is moved in,
+        // not copied. (Empty query: nothing is pushed, as before.)
+        struct PreviewStackGuard {
+            bool pushed;
+            PreviewStackGuard(std::vector<size_t>&& globals, bool push) : pushed(push) {
+                if (!pushed) return;
+                FilteringState s;
+                s.originalIndices = std::move(globals);
+                filteringStack.push_back(std::move(s));
+            }
+            ~PreviewStackGuard() { if (pushed) filteringStack.pop_back(); }
+            PreviewStackGuard(const PreviewStackGuard&) = delete;
+            PreviewStackGuard& operator=(const PreviewStackGuard&) = delete;
+        } stackGuard(std::move(preview.global), !preview.identity);
+
         UnpaginatedScope unpaginated;
-        printList(preview.items,
+        printList(view,
                   g_livePreview.listType,
                   g_livePreview.listSubType,
                   *g_livePreview.pendingIndices,
                   *g_livePreview.hasPendingProcess,
                   previewPage,
                   g_livePreview.state);
-    }
-
-    if (addPreviewStack)
-        filteringStack.pop_back();
+    }   // unpaginated restored, then stackGuard pops, before the readline redraw below
 
     // We just repainted the whole screen out from under readline; force it
     // to redraw its prompt + in-progress query fresh rather than attempting
