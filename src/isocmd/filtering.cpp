@@ -42,7 +42,8 @@
 
 // Defined in printList.cpp. Forward-declared here (same as displayCode.cpp
 // does) so the live filter preview below can repaint the real list, not a
-// stand-in, on every keystroke.
+// stand-in, on every keystroke. The list is passed as a non-owning
+// StringListView, so the preview never has to copy the matching strings.
 void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
                size_t& currentPage, std::shared_ptr<RefreshState> state);
@@ -58,14 +59,35 @@ namespace AnsiEscape {
 // ─── SIMD Search Implementation (SSE2) ───────────────────────────────────────
 
 /**
- * @brief Blazing-fast SSE2-accelerated pattern search using 128-bit vector registers.
+ * @brief Tests whether @p pattern occurs anywhere in @p text, using SSE2
+ * to scan 16 bytes at a time for the pattern's first character.
  *
- * Scans the provided text using 128-bit SSE2 vector instructions to find the first character
- * of the pattern simultaneously, followed by verification on candidate matches.
+ * Algorithm: broadcast the pattern's first byte into a 128-bit register,
+ * compare it against each 16-byte block of @p text, and turn the comparison
+ * into a bitmask. Every set bit is a candidate position, verified with a
+ * full @p pattern comparison. Bytes left over after the last full 16-byte
+ * block (and any text shorter than 16 bytes) are handled by a scalar loop
+ * that starts exactly where the vector loop stopped, so no start position
+ * is skipped or checked twice.
  *
- * @param text The text string view to search within.
- * @param pattern The pattern string view to search for.
- * @return true if pattern is found, false otherwise.
+ * Complexity: O(n) scan plus one verification per first-character hit. It
+ * is fastest when the pattern's first byte is rare in the text; a very
+ * common first byte (e.g. '/') produces many candidates to verify.
+ *
+ * Platform: requires x86/x86-64 (SSE2 is part of the x86-64 baseline) and a
+ * compiler providing @c __builtin_ctz (GCC/Clang). It will not build on
+ * other architectures as written.
+ *
+ * Safety: the vector loop only loads a block when @c i + 16 <= n, so it
+ * never reads past the end of @p text. The scalar loop's @c n - m cannot
+ * underflow because @c m <= n is checked first.
+ *
+ * @param text    The text to search within (the entry being tested).
+ * @param pattern The substring to look for. Case handling is the caller's
+ *                job: pass an already-lowercased text/pattern pair for a
+ *                case-insensitive match.
+ * @return true if @p pattern occurs in @p text; false otherwise. An empty
+ *         @p pattern, or one longer than @p text, never matches.
  */
 inline bool simdSearchExists(std::string_view text, std::string_view pattern)
 {
@@ -111,12 +133,16 @@ inline bool simdSearchExists(std::string_view text, std::string_view pattern)
 /**
  * @brief Builds query tokens from a semicolon-separated query string.
  *
- * Parses the query string, splits it by semicolons, determines case sensitivity
- * based on the presence of uppercase characters, and prepares lowercased versions
- * for case-insensitive matching where applicable.
+ * The query is split on ';' and each non-empty piece becomes one token;
+ * an entry matches if it contains ANY token (OR semantics). Matching is
+ * "smart case": a token containing at least one uppercase letter is matched
+ * case-sensitively against the original text, while an all-lowercase token
+ * is matched case-insensitively (its @c lower form is searched against the
+ * lowercased text).
  *
  * @param query The query string to tokenize.
- * @return Vector of QueryToken objects ready for searching.
+ * @return The tokens in query order. Empty if the query contains no
+ *         non-empty piece (e.g. "" or ";;").
  */
 static std::vector<QueryToken> buildQueryTokens(const std::string& query) {
     std::vector<QueryToken> tokens;
@@ -144,13 +170,19 @@ static std::vector<QueryToken> buildQueryTokens(const std::string& query) {
 // ─── Core filter engine ──────────────────────────────────────────────────────
 
 /**
- * @brief Filters file indices based on a search query using SIMD search.
+ * @brief Filters a list of entries against a query and returns the indices
+ * of the entries that match, using SIMD substring search on a thread pool.
  *
- * Distributes the search workload across multiple worker threads in the thread pool,
- * matching file paths or precomputed lowercased paths against individual query tokens.
+ * The list is split into contiguous chunks, one per worker (bounded by the
+ * pool size, the list size and @c GlobalConcurrency::FILTER_THREAD_CAP).
+ * Each worker tests its chunk against every query token and returns the
+ * matching indices in ascending order; the chunks are concatenated in
+ * order, so the result is ascending overall. If any worker throws, the first
+ * exception is rethrown after all workers have been collected.
  *
- * @param files Vector of file paths to filter.
- * @param query Search query with semicolon-separated terms.
+ * @param files Vector of entries to filter.
+ * @param query Search query; ';' separates OR-ed terms (see
+ *        @c buildQueryTokens for the smart-case rules).
  * @param precomputedLower Optional parallel array, same size as @p files, holding
  *        each entry of @p files already lowercased. When provided (and its size
  *        matches @p files), it is used in place of lowercasing each entry inline,
@@ -158,7 +190,10 @@ static std::vector<QueryToken> buildQueryTokens(const std::string& query) {
  *        in a row (e.g. the live filter preview, once per keystroke) lowercase
  *        each entry exactly once instead of on every call. Pass nullptr (the
  *        default) to preserve the original per-call lowercasing behavior.
- * @return Vector of indices matching the search criteria.
+ *        A cache whose size does not match is ignored, never trusted.
+ * @return Ascending indices into @p files of the matching entries. Empty if
+ *         @p files or @p query is empty. If the query has no non-empty token
+ *         (e.g. ";"), every index is returned.
  */
 std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query,
                                         const std::vector<std::string>* precomputedLower)
@@ -262,18 +297,32 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
 }
 
 /**
- * @brief Filters only a previously established subset of file indices.
+ * @brief Like @c filterFilesIndices, but tests only a previously established
+ * subset of @p files instead of the whole list.
  *
- * The returned indices remain indices into @p files, not indices into
- * @p candidateIndices. This allows a progressively extended query such as
- * "is" -> "iso" -> "isob" to search only the previous match set without
- * requiring any string copies.
+ * Used by the live preview for incremental narrowing: when the user extends
+ * the previous query (e.g. "is" -> "iso" -> "isob"), every entry matching
+ * the new query must already have matched the old one, so only the previous
+ * match set needs to be re-tested. No strings are copied.
  *
- * @param files Vector of all file paths.
- * @param candidateIndices Subset of indices from previous filtering step to evaluate.
- * @param query Search query to apply.
- * @param precomputedLower Optional parallel array of lowercased file paths.
- * @return Vector of indices matching the refined criteria.
+ * The returned indices remain indices into @p files, not positions within
+ * @p candidateIndices, and stay in the candidates' order (ascending when
+ * @p candidateIndices is ascending, as produced by the filter functions).
+ *
+ * Correctness precondition: the caller must only pass a candidate set that
+ * is a superset of the new query's matches. The live preview guarantees
+ * this by using it only when the new query strictly extends the previous
+ * one and neither contains ';' (see @c computeLivePreviewMatches).
+ *
+ * @param files Vector of all entries; candidates index into this.
+ * @param candidateIndices Indices into @p files to evaluate (typically the
+ *        previous keystroke's matches).
+ * @param query Search query to apply (same syntax as @c filterFilesIndices).
+ * @param precomputedLower Optional parallel array of lowercased entries,
+ *        same size as @p files; ignored if the size does not match.
+ * @return Indices into @p files (a subset of @p candidateIndices) that match.
+ *         Empty if @p files, @p candidateIndices or @p query is empty; the
+ *         candidates unchanged if the query has no non-empty token.
  */
 static std::vector<size_t> filterFilesIndicesSubset(
     const std::vector<std::string>& files,
@@ -445,10 +494,16 @@ static std::string extractUnmountKey(const std::string& path) {
  * `filteringStack` to ensure that local indices are correctly mapped back to the
  * global database indices. Manages UI state by resetting pagination and marking the screen for refresh.
  *
+ * This is the COMMIT path, run when the user presses Enter. It is separate
+ * from the live preview (see the "Live incremental filter preview" section),
+ * which never touches `filteringStack` or `ctx.files`.
+ *
  * @param searchString The substring pattern to filter by (saved for state recovery).
  * @param ctx FilterContext providing source lists, unmount flags, and UI state.
  * @return true if matches were found and the filter stack was updated;
- * false if the query is empty or no matches exist.
+ * false if the query is empty or no matches exist. Also returns true, without
+ * pushing a new level, when the query matches every entry (the filter would
+ * change nothing).
  */
 static bool applyFilterCore(const std::string& searchString, FilterContext& ctx) {
     if (searchString.empty()) {
@@ -547,47 +602,165 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 }
 
 // ─── Live incremental filter preview ─────────────────────────────────────────
+//
+// Matches used to be computed (and shown) only after the user pressed Enter
+// on the FilterTerms prompt. This section adds a live, "type-to-narrow"
+// repaint of the REAL on-screen list: GNU Readline calls
+// rl_redisplay_function every time it redraws the input line — i.e. after
+// essentially every keystroke, including backspaces — so we hook that call
+// to recompute matches against the in-progress (uncommitted) query and
+// repaint the same printList() the rest of the app uses, right where the
+// list is already displayed.
+//
+// Unpaginated rendering: the live preview is ALWAYS rendered unpaginated.
+// Every repaint (including the empty-query frame) temporarily sets
+// GlobalState::ITEMS_PER_PAGE = 0 around the printList() call via
+// UnpaginatedScope, which makes printList() take its disablePagination path
+// (all items, no "Page x/y" header, no PgUp/PgDn footer). The real setting
+// is restored immediately afterward, so committed (Enter) results and every
+// other screen keep their normal pagination.
+//
+// Repaint mechanics: each repaint does clearScrollBuffer() + printList(),
+// which wipes and redraws the whole screen, so readline's own idea of "what's
+// currently on screen" (used for its normal incremental redraw) is now
+// stale. We correct that with rl_forced_update_display(), which — unlike
+// the rl_redisplay_function pointer we've hooked — is a real, directly
+// callable Readline entry point that unconditionally repaints the prompt
+// and in-progress line fresh, ignoring its stale cache. When the query text
+// is unchanged since the last frame (e.g. pure cursor movement), we skip the
+// repaint and just call the ordinary rl_redisplay() instead.
+//
+// Purely visual until Enter: filteringStack and ctx.files are never
+// permanently modified here — Enter still runs the exact same commit path
+// as before (applyFilterCore + saveQueryToHistory), so history and
+// nested-filter-stack semantics are unchanged. (The only touch on
+// filteringStack is a temporary entry pushed for the duration of one
+// printList() call and popped by an RAII guard; see liveFilterRedisplayHook.)
+//
+// Zero-copy rendering: a frame never copies the matching strings. The
+// matches are computed as indices, and printList() receives a
+// StringListView — a non-owning view over the preview's source list,
+// optionally narrowed by the matched indices. An empty query shows the
+// whole source list through the view with no allocation at all.
+//
+// Search-corpus caching: the text actually searched per source entry (its
+// basename, its unmount key, or the raw path) and that text's lowercased
+// form depend only on `sourceList` + the useNameOnly/useUnmountKey toggles
+// — never on the in-progress query. Both are therefore computed exactly
+// once per runFilterLoop() invocation (primeLivePreviewCaches, called
+// before the readline() loop starts) rather than being rebuilt from
+// scratch on every keystroke.
+//
+// Incremental narrowing: when the new query strictly extends the previous
+// one ("is" -> "iso"), every match must already be in the previous match
+// set, so only that set is re-tested (filterFilesIndicesSubset) instead of
+// the whole list. Backspacing, pasting a different query, going back to an
+// empty query, or using ';' (multi-term) queries fall back to a full search.
+// This is valid for the smart-case rules too: extending a query can only
+// keep or add uppercase letters, and any entry containing the longer text
+// also contains the shorter prefix.
+//
+// Trade-offs worth knowing about:
+//  - Index tags: for a non-empty query the preview pushes a temporary
+//    filteringStack entry so printList() draws the "[123]^" original-index
+//    tags relative to the full list while typing. For an empty query nothing
+//    is pushed and printList() uses the real stack, so an already-committed
+//    filter's tags show as usual.
+//  - A full clearScrollBuffer()+printList() every keystroke is heavier than
+//    a delta redraw and can flicker on slow/high-latency terminals. Since
+//    the preview is unpaginated, each frame's cost scales with the whole
+//    match set rather than one page. Above LIVE_FILTER_LIMIT source items we
+//    skip live repainting entirely and fall back to the old Enter-only
+//    behavior, to keep typing responsive on very large lists.
+//  - The derived/lowercase caches are primed once per runFilterLoop() call
+//    and intentionally never refreshed mid-loop: sourceList only changes on
+//    a successful filter commit, which immediately ends the loop, so there
+//    is no point in the loop's lifetime where the cache could go stale
+//    while still being read from.
 
 namespace {
 
+/**
+ * @brief Result of a single live-preview filter pass. Holds indices only;
+ * no string is ever copied.
+ *
+ * @c local indexes into the preview's source list (or its derived label
+ * cache — both share the same indexing) and is what the StringListView is
+ * built from. @c global holds the same entries translated back to
+ * @c globalIsoFileList indices (see @c resolveGlobalIndex) and feeds the
+ * temporary filteringStack entry used for the "[N]^" tags. When @c identity
+ * is true the preview shows the whole source list unchanged (empty query)
+ * and both vectors are left empty.
+ */
 struct LivePreviewResult {
     std::vector<size_t> local;
     std::vector<size_t> global;
     bool                identity = false;
 };
 
+/**
+ * @brief Holds all state for one live filter-preview session (i.e. one
+ * @c runFilterLoop() invocation): the source list and how to derive its
+ * searchable labels, the printList() wiring needed to repaint the real
+ * on-screen list, the per-invocation derived/lowercase search caches
+ * (see @c primeLivePreviewCaches), the previous query and its matches
+ * (for incremental narrowing), and the bookkeeping used to decide whether
+ * a given readline() keystroke needs a fresh repaint.
+ */
 struct LiveFilterPreview {
     const std::vector<std::string>* sourceList     = nullptr;
-    bool                             hasLastMatches = false;
+    bool                             hasLastMatches = false; // lastMatches is valid for lastQuery
     bool                             useNameOnly    = false;
     bool                             useUnmountKey  = false;
 
+    // Set up per runFilterLoop() call; mirror the *actual* current ctx
+    // state. (Currently only stored, not read by the preview itself.)
     bool*   actualIsFiltered = nullptr;
     size_t* actualCurrentPage = nullptr;
 
+    // Wiring needed to call the real printList().
     std::string                   listType{};
     std::string                   listSubType{};
     std::vector<std::string>*     pendingIndices    = nullptr;
     bool*                         hasPendingProcess = nullptr;
     std::shared_ptr<RefreshState> state = nullptr;
 
-    bool                      hasDerivedCache = false;
+    // Derived-label ("name only" / unmount-key) and lowercased search
+    // corpora for `*sourceList`. Both depend only on sourceList and the
+    // useNameOnly/useUnmountKey toggles above, never on the in-progress
+    // query, so they are computed exactly once per runFilterLoop()
+    // invocation (see primeLivePreviewCaches) instead of being rebuilt on
+    // every keystroke.
+    bool                      hasDerivedCache = false; // true => search derivedCache, not *sourceList
     std::vector<std::string>  derivedCache;
-    std::vector<std::string>  lowerCache;
+    std::vector<std::string>  lowerCache;             // lowercased derivedCache (or *sourceList if !hasDerivedCache)
 
+    // Incremental-narrowing state, reset at the start of every readline()
+    // call. lastMatches holds the previous frame's local match indices
+    // (into the searchable list) and is only meaningful while
+    // hasLastMatches is true.
     std::string lastQuery;
     std::vector<size_t> lastMatches;
 
-    bool        primed        = false;
-    bool        everRepainted = false;
-    bool        active        = false;
+    bool        primed        = false;  // a frame has been drawn for the *current* readline() call
+    bool        everRepainted = false;  // a real repaint has happened at least once this runFilterLoop call
+    bool        active        = false;  // a readline() call is currently in flight
 };
 
 LiveFilterPreview g_livePreview;
 
 /**
- * @brief Checks if live filter previewing is correctly configured and enabled.
- * @return true if configured and active, false otherwise.
+ * @brief True once sourceList + the printList() wiring have been set up and
+ * are within the size cap, regardless of whether a readline() call is
+ * currently in flight. Used to decide whether it is worth priming the
+ * derived/lowercase caches before the runFilterLoop while-loop starts.
+ *
+ * @c GlobalState::LIVE_FILTER_LIMIT == 0 is a deliberate kill-switch: it
+ * always disables live filtering, regardless of source list size (including
+ * an empty source list, which would otherwise satisfy the size check
+ * trivially).
+ *
+ * @return true if the live preview has everything it needs to run safely.
  */
 bool livePreviewConfigured() {
     if (GlobalState::LIVE_FILTER_LIMIT == 0) return false;
@@ -601,17 +774,24 @@ bool livePreviewConfigured() {
 }
 
 /**
- * @brief Determines whether the main list live filter preview is enabled.
- * @return true if live preview should be executed during redisplay.
+ * @brief True while a readline() call is actually in flight and the live
+ * preview is fully configured, i.e. exactly when @c liveFilterRedisplayHook
+ * should recompute and repaint rather than falling back to plain
+ * @c rl_redisplay().
+ *
+ * @return true if the live main-list repaint should run for this frame.
  */
 bool liveMainListEnabled() {
     return g_livePreview.active && livePreviewConfigured();
 }
 
 /**
- * @brief Generates the preview label for an entry based on active display options.
- * @param path The target file or mount path.
- * @return The formatted label string.
+ * @brief Derives the text actually searched/shown for one source entry,
+ * according to the current @c useUnmountKey / @c useNameOnly toggles.
+ *
+ * @param path Full source-list entry (a path) to derive the label from.
+ * @return The unmount key, the basename, or @p path unchanged, depending
+ * on which toggle (if any) is active.
  */
 std::string livePreviewLabel(const std::string& path) {
     if (g_livePreview.useUnmountKey) return extractUnmountKey(path);
@@ -623,7 +803,20 @@ std::string livePreviewLabel(const std::string& path) {
 }
 
 /**
- * @brief Primes caches required for efficient live filter evaluation.
+ * @brief Builds g_livePreview.derivedCache / lowerCache exactly once, from
+ * the current sourceList + useNameOnly/useUnmountKey toggles.
+ *
+ * Must be called after those fields are set (see runFilterLoop) and before
+ * the first keystroke of a runFilterLoop() invocation is processed. The
+ * result stays valid for every readline() call and every keystroke within
+ * that invocation: sourceList itself cannot change until a filter is
+ * actually committed, and a successful commit immediately ends the loop
+ * (see the "Search-corpus caching" note above), so there's no window in
+ * which a stale cache could be read.
+ *
+ * Note that lowerCache is a full lowercased copy of the searchable list
+ * and stays allocated for the whole prompt; it trades memory for not
+ * lowercasing every entry on every keystroke.
  */
 void primeLivePreviewCaches() {
     const std::vector<std::string>& source = *g_livePreview.sourceList;
@@ -650,9 +843,26 @@ void primeLivePreviewCaches() {
 }
 
 /**
- * @brief Computes search matches for the live filter preview framework.
- * @param query The current filter query typed in the input line.
- * @return LivePreviewResult containing local and global matching indices.
+ * @brief Computes the "would-be" match set for the in-progress query,
+ * without touching filteringStack — mirrors applyFilterCore's source
+ * resolution and name/unmount-key handling, but is purely a preview.
+ * Returns indices only; the caller wraps them in a zero-copy StringListView.
+ *
+ * Reads from the per-invocation derived/lowercase caches
+ * (primeLivePreviewCaches) instead of rebuilding them on every keystroke,
+ * and narrows incrementally when possible: if @p query strictly extends
+ * @c g_livePreview.lastQuery (and neither contains ';'), only the previous
+ * frame's matches are re-tested via @c filterFilesIndicesSubset; otherwise
+ * the whole list is searched. Because it reads the previous query, the
+ * caller must update @c lastQuery only AFTER this returns.
+ *
+ * Side effects: updates @c lastMatches / @c hasLastMatches (cleared for an
+ * empty query, set to this result otherwise).
+ *
+ * @param query The in-progress (uncommitted) query text from the readline
+ * input buffer. An empty query yields an identity result (whole source list).
+ * @return The matching local indices plus their @c globalIsoFileList
+ * translation, or an identity result for an empty query.
  */
 LivePreviewResult computeLivePreviewMatches(const std::string& query)
 {
@@ -671,6 +881,9 @@ LivePreviewResult computeLivePreviewMatches(const std::string& query)
             ? g_livePreview.derivedCache
             : source;
 
+    // Strict prefix extension of the previous query, single-term only: the
+    // only case where "matches(new) is a subset of matches(old)" is
+    // guaranteed under OR semantics and smart-case matching.
     const bool progressiveExtension =
         !g_livePreview.lastQuery.empty() &&
         query.size() > g_livePreview.lastQuery.size() &&
@@ -705,6 +918,14 @@ LivePreviewResult computeLivePreviewMatches(const std::string& query)
     return result;
 }
 
+/**
+ * @brief RAII guard that forces printList() into its unpaginated
+ * path (GlobalState::ITEMS_PER_PAGE == 0) for one live-preview repaint and
+ * restores the user's real setting on every exit path, including exceptions.
+ *
+ * Safe against concurrent repaints because runSharedFilterFlow suppresses
+ * pending async refreshes (g_suppressPendingRefresh) for the whole prompt.
+ */
 struct UnpaginatedScope {
     const std::size_t saved = GlobalState::ITEMS_PER_PAGE;
     UnpaginatedScope() { GlobalState::ITEMS_PER_PAGE = 0; }
@@ -714,7 +935,24 @@ struct UnpaginatedScope {
 };
 
 /**
- * @brief Readline redisplay hook used to update the live filter preview on each keystroke.
+ * @brief Installed as rl_redisplay_function for the lifetime of one
+ * runFilterLoop() call; invoked by readline on (almost) every keystroke,
+ * including backspace, so the real list both narrows and widens live as
+ * the query changes.
+ *
+ * Per invocation it: (1) falls back to plain rl_redisplay() if the preview
+ * is not enabled or the query text is unchanged; (2) computes the match
+ * set; (3) records the query as the new @c lastQuery (after the compute, so
+ * incremental narrowing sees the previous one); (4) clears the screen and
+ * repaints the real list through printList() using a zero-copy
+ * StringListView, unpaginated; (5) asks readline to redraw its prompt from
+ * scratch via rl_forced_update_display().
+ *
+ * For a non-empty query, a temporary filteringStack entry (holding the
+ * matches' global indices, moved in, not copied) is pushed so printList()
+ * shows original-list index tags; an RAII guard pops it even if printList()
+ * throws. The view, the stack guard and the unpaginated scope all live in
+ * an inner block so they are released BEFORE the readline redraw.
  */
 void liveFilterRedisplayHook() {
     if (!liveMainListEnabled()) {
@@ -727,24 +965,39 @@ void liveFilterRedisplayHook() {
     g_livePreview.primed = true;
 
     if (!isFirstFrameOfThisCall && query == g_livePreview.lastQuery) {
+        // Text unchanged (e.g. pure cursor movement) — the terminal still
+        // matches what we last painted, so the ordinary incremental
+        // redisplay is correct, and cheaper than a full repaint.
         rl_redisplay();
         return;
     }
 
+    // Must run before lastQuery is overwritten: the incremental-narrowing
+    // check compares the new query against the previous one.
     LivePreviewResult preview = computeLivePreviewMatches(query);
 
     g_livePreview.lastQuery = query;
 
     clearScrollBuffer();
 
+    // unpaginated => everything lives on "page 0"; printList()
+    // ignores this value when pagination is disabled.
     size_t previewPage = 0;
 
     {
+        // Zero-copy view over the source list (optionally narrowed by the
+        // matched local indices). Nothing is copied; both referenced vectors
+        // outlive the printList() call below.
         const std::vector<std::string>& source = *g_livePreview.sourceList;
         const StringListView view = preview.identity
             ? StringListView(source)
             : StringListView(source, preview.local);
 
+        // Temporary index mapping so printList() displays indexes relative
+        // to the original ISO list without modifying the real filtering
+        // stack. RAII so the stack is restored even if printList() throws.
+        // The index vector is moved in, not copied. (Empty query: nothing
+        // is pushed.)
         struct PreviewStackGuard {
             bool pushed;
             PreviewStackGuard(std::vector<size_t>&& globals, bool push) : pushed(push) {
@@ -766,16 +1019,26 @@ void liveFilterRedisplayHook() {
                   *g_livePreview.hasPendingProcess,
                   previewPage,
                   g_livePreview.state);
-    }
+    }   // unpaginated restored, then stackGuard pops, before the readline redraw below
 
+    // We just repainted the whole screen out from under readline; force it
+    // to redraw its prompt + in-progress query fresh rather than attempting
+    // an incremental diff against a screen state that no longer exists.
     rl_forced_update_display();
     g_livePreview.everRepainted = true;
 }
 
+/**
+ * @brief RAII guard that installs/tears down the live preview hook for the
+ * lifetime of one runFilterLoop() call. Guarantees rl_redisplay_function is
+ * restored on every exit path — normal break, continue-driven loop exit, or
+ * an exception propagating out of a keystroke (e.g. filterFilesIndices
+ * rethrowing a worker exception).
+ */
 struct LivePreviewGuard {
     LivePreviewGuard() { rl_redisplay_function = liveFilterRedisplayHook; }
     ~LivePreviewGuard() {
-        g_livePreview = LiveFilterPreview{};
+        g_livePreview = LiveFilterPreview{}; // drop all pointers/shared_ptr, reset flags + caches
         rl_redisplay_function = rl_redisplay;
     }
     LivePreviewGuard(const LivePreviewGuard&) = delete;
@@ -787,12 +1050,34 @@ struct LivePreviewGuard {
 // ─── Interactive / quick filter driver ───────────────────────────────────────
 
 /**
- * @brief Runs the interactive filtering loop with readline prompt and hooks.
+ * @brief Runs an interactive filter session: shows the Filter prompt,
+ * (optionally) live-previews matches as the user types, and commits the
+ * filter on Enter.
  *
- * @param promptText The text displayed at the input prompt.
- * @param ctx Context structures managing files and UI states.
- * @param onSuccess Callback executed when a filter query succeeds.
- * @param onEmptyInput Optional callback executed when input is empty.
+ * Setup, done once per call: loads filter history, installs the live preview
+ * hook (LivePreviewGuard), points the preview at the list this function would
+ * search (same source-resolution rule as applyFilterCore), and primes the
+ * derived/lowercase search caches. ctx.files is only ever reassigned on a
+ * successful filter commit (inside applyFilterCore), and a successful commit
+ * immediately breaks out of the loop, so none of that setup can change out
+ * from under the loop while it runs.
+ *
+ * Loop, one readline() per iteration: the per-call incremental-narrowing
+ * state (lastQuery / lastMatches / primed) is reset each time. Then:
+ *  - Esc as the first character, or EOF (Ctrl+D), cancels: history is
+ *    cleared and the loop ends. If the preview repainted the screen,
+ *    ctx.needsClrScrn is set so the caller redraws the normal paginated list
+ *    instead of leaving the long unpaginated one behind.
+ *  - Otherwise the entered text is committed via applyFilterCore. On success
+ *    the query is saved to history, @p onSuccess runs and the loop ends; on
+ *    failure (empty query or no matches) the prompt is shown again.
+ *
+ * @param promptText   The prompt text to display.
+ * @param ctx          FilterContext containing state.
+ * @param onSuccess    Callback invoked when a filter is successfully applied.
+ * @param onEmptyInput Optional callback for empty/cancelled input. Note: it
+ *                     is currently bound but not invoked by the loop body;
+ *                     cancellation is handled inline as described above.
  */
 static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
     const std::function<void()>& onSuccess,
@@ -813,8 +1098,18 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
     ctx.filterHistory = true;
     loadHistory(ctx.filterHistory);
 
+    // Installed for the whole loop (covers every readline() call below, and
+    // guarantees cleanup on all exit paths, including thrown exceptions).
     LivePreviewGuard livePreviewGuard;
 
+    // Point the live preview at whatever runFilterLoop itself would search
+    // (same source-resolution rule as applyFilterCore). This — and the
+    // derived/lowercase search caches primed just below — are resolved
+    // ONCE for the whole invocation, not per readline() call or per
+    // keystroke: ctx.files is only ever reassigned on a successful filter
+    // commit (inside applyFilterCore), and a successful commit immediately
+    // breaks out of the while-loop below, so nothing here can change out
+    // from under us while the loop is still running.
     const std::vector<std::string>& previewSource =
         ctx.sourceOverride ? *ctx.sourceOverride : ctx.files;
     g_livePreview.sourceList        = &previewSource;
@@ -828,10 +1123,21 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
     g_livePreview.hasPendingProcess = ctx.hasPendingProcess;
     g_livePreview.state             = ctx.state;
 
+    // Expensive (name/unmount-key derivation + full lowercasing over the
+    // whole source list) and, if done per keystroke, wasteful. Done exactly
+    // once here, up front. Only worth doing if the live preview will
+    // actually run for this session; livePreviewConfigured() mirrors
+    // liveMainListEnabled() minus the "readline() call currently in flight"
+    // check, which can't be true yet at this point in the function.
     if (livePreviewConfigured())
         primeLivePreviewCaches();
 
     while (true) {
+        // Per-readline()-call reset only. sourceList / useNameOnly /
+        // useUnmountKey / derivedCache / lowerCache are deliberately left
+        // untouched here — see the priming block above for why they stay
+        // valid across every iteration of this loop. The incremental
+        // narrowing state, by contrast, belongs to a single readline() call.
         g_livePreview.lastQuery.clear();
         g_livePreview.lastMatches.clear();
         g_livePreview.primed = false;
@@ -842,13 +1148,24 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
 
         g_livePreview.active = false;
 
+        // If the query got live-repainted onto the real list (any branch
+        // below that loops back for another attempt, or that cancels out),
+        // the outer caller's own needsClrScrn-driven refresh — set on
+        // success by applyFilterCore below, or forced on cancel below —
+        // repaints the screen properly afterward.
+
+        //---- Robust handling of FilterTerms prompt ----
         if (!raw || raw.get()[0] == 27) {
             if (!raw) {
                 std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
             }
+            // The live preview painted an unpaginated list over the
+            // screen. Make the caller redo its normal (paginated) refresh so
+            // cancelling doesn't leave the long list behind.
             if (g_livePreview.everRepainted)
                 ctx.needsClrScrn = true;
 
+            // EOF (Ctrl+D) or Esc - exit
             clear_history();
             break;
         }
@@ -867,15 +1184,43 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
 // ─── Filter stack sync ───────────────────────────────────────────────────
 
 /**
- * @brief Synchronizes the filtering stack against updated global file lists for ISOs.
+ * @brief Performs multi-stage filtering on the global ISO file list.
  *
- * Re-evaluates existing query filters in the stack against the current file database
- * to keep indices consistent when external changes or refreshes occur.
+ * Re-applies every level of @ref filteringStack, in order, against the
+ * current @p globalIsoFileList, so that the filtered view and each level's
+ * stored indices stay consistent after the underlying list changes (e.g. a
+ * background refresh). Each level applies its saved query to the results of
+ * the previous level.
  *
- * @param globalIsoFileList Reference global file list.
- * @param filteringStack Active filtering stack to synchronize.
- * @param filteredFiles Target filtered files collection to update.
- * @param isFiltered Reference to active filter state boolean.
+ * @section filtering_logic Logic Flow:
+ * 1.  **Initialization**: Starts with the full range of indices [0, N) over
+ *     @p globalIsoFileList.
+ * 2.  **Iterative filtering**: For each @ref FilteringState in the stack:
+ *     - Builds the search strings for the surviving entries: basenames when
+ *       @ref displayConfig::toggleNamesOnly is set, full paths otherwise.
+ *     - Runs @ref filterFilesIndices with the level's saved query.
+ *     - Maps the resulting local indices back to global file indices and
+ *       stores them in the level's @c originalIndices.
+ *     - Uses them as the working set for the next level.
+ * 3.  **Break condition**: If any level yields zero matches, the stack is
+ *     cleared, @p filteredFiles is emptied and @p isFiltered is set to false.
+ * 4.  **Finalization**: Otherwise @p filteredFiles is rebuilt from the final
+ *     set of surviving global indices.
+ *
+ * @note Indices are moved between levels (not copied) to avoid extra
+ * allocations. This is the same stack the commit path (applyFilterCore) and
+ * printList()'s "[N]^" tags rely on; @ref resolveGlobalIndex depends on every
+ * level storing fully-resolved global indices.
+ *
+ * @param globalIsoFileList The full, current ISO list to filter.
+ * @param filteringStack   Filter levels to re-apply; updated in place.
+ * @param filteredFiles    Output: the subset of @p globalIsoFileList that
+ *                         satisfies all levels (cleared if the stack broke).
+ * @param isFiltered       In/out: must be true on entry for any work to be
+ *                         done; set to false if the stack broke.
+ *
+ * @pre `isFiltered` is true and `filteringStack` is not empty (otherwise the
+ *      function returns immediately without changes).
  */
 void syncFilteringStackForIso(
     const std::vector<std::string>& globalIsoFileList,
@@ -887,15 +1232,18 @@ void syncFilteringStackForIso(
         return;
     }
 
+    // Initialize currentIndices with all possible file indices [0, 1, ..., N-1]
     std::vector<size_t> currentIndices(globalIsoFileList.size());
     std::iota(currentIndices.begin(), currentIndices.end(), 0);
 
     bool broken = false;
 
+    // Iterate through each filter in the stack
     for (auto& state : filteringStack) {
         std::vector<std::string> searchList;
         searchList.reserve(currentIndices.size());
 
+        // Prepare the strings to search (Full Path vs File Name only)
         for (size_t idx : currentIndices) {
             const std::string& path = globalIsoFileList[idx];
             if (displayConfig::toggleNamesOnly) {
@@ -906,6 +1254,7 @@ void syncFilteringStackForIso(
             }
         }
 
+        // Apply the filter query to the current subset
         auto localMatches = filterFilesIndices(searchList, state.query);
 
         if (localMatches.empty()) {
@@ -913,16 +1262,19 @@ void syncFilteringStackForIso(
             break;
         }
 
+        // Map local relative indices back to the global indices
         std::vector<size_t> nextIndices;
         nextIndices.reserve(localMatches.size());
         for (size_t localIdx : localMatches) {
             nextIndices.push_back(currentIndices[localIdx]);
         }
 
+        // Update the stack state and the "active" working set for the next iteration
         state.originalIndices = nextIndices;
         currentIndices = std::move(nextIndices);
     }
 
+    // Finalize results
     if (broken) {
         filteringStack.clear();
         filteredFiles.clear();
@@ -936,14 +1288,38 @@ void syncFilteringStackForIso(
     }
 }
 
-// ─── Public API ────────────────────────────────______________________________
+// ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * @brief Runs the shared filter flow when triggered by the shortcut input string.
+ * @brief Core implementation shared by all filter entry points.
+ * @details Validates the input string, builds the readline prompt, constructs a
+ * @c FilterContext from @p cfg, then delegates to @c runFilterLoop. Returns early
+ * without side effects if @p inputString is not @c "/".
  *
- * @param inputString Character input triggering the filter flow.
- * @param cfg Configuration options for the filter call.
- * @return true if the filter flow was handled, false otherwise.
+ * While the nested FilterTerms prompt is active, pending asynchronous UI
+ * refreshes (see @c GlobalState::g_pendingRefreshKind / @c checkPendingRefresh)
+ * are suppressed via @c GlobalState::g_suppressPendingRefresh. This is
+ * necessary because @c checkPendingRefresh runs from Readline's event hook and
+ * would otherwise repaint the ISO list mid-call while this different, nested
+ * @c readline() prompt owns the terminal — desyncing Readline's internal
+ * cursor/line state and crashing. The suppression flag is set for the
+ * duration of this function via an RAII guard (a @c shared_ptr<void> with a
+ * custom deleter, to avoid a dedicated named type) and cleared on every exit
+ * path, including early return. Suppressed refresh requests are not dropped;
+ * @c checkPendingRefresh leaves the pending request in place and retries once
+ * suppression is lifted. The same suppression is what makes the live
+ * preview's temporary ITEMS_PER_PAGE override (UnpaginatedScope) safe.
+ *
+ * The live main-list preview is opt-in: it is only wired up when @p cfg
+ * supplies everything printList() needs (listType, pendingIndices,
+ * hasPendingProcess and state); otherwise the prompt behaves as the classic
+ * Enter-only filter.
+ *
+ * @param inputString  Raw input from the user; must be exactly @c "/" to trigger filtering.
+ * @param cfg          Configuration struct with all state pointers and display options.
+ *                     All non-optional pointer fields must be non-null.
+ * @return @c true if @p inputString was recognised as a filter command and handled,
+ *         @c false otherwise.
  */
 bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig& cfg)
 {
@@ -981,6 +1357,8 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
         ctx.toggleFullListUmount = cfg.toggleFullList;
     }
 
+    // Live main-list rendering is opt-in: only wired up when the caller
+    // supplied everything printList() needs (see FilterContext).
     ctx.listType          = cfg.listType;
     ctx.listSubType       = cfg.listSubType;
     ctx.pendingIndices    = cfg.pendingIndices;
@@ -1000,20 +1378,31 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
 }
 
 /**
- * @brief Entry point for filtering operations specific to ISO files and mounts.
+ * @brief Filter entry point for ISO file operations (mount, unmount, etc.).
+ * @details Resolves the correct source list based on the current filter and unmount
+ * state, then forwards to @c runSharedFilterFlow. The source list priority is:
+ * -# @p filteredFiles — if a filter is already active
+ * -# @p isoDirs       — if in unmount mode with no active filter
+ * -# @c globalIsoFileList — otherwise
  *
- * @param inputString Trigger input character.
- * @param filteredFiles Output vector for filtered files.
- * @param isFiltered Reference to filter state flag.
- * @param needsClrScrn Reference to clear screen trigger flag.
- * @param filterHistory Reference to history tracking flag.
- * @param operation Current operation descriptor.
- * @param operationColor Color code styling string.
- * @param isoDirs Vector of source ISO directories.
- * @param isUnmount Flag indicating unmount context.
- * @param currentPage Current pagination index.
- * @param state Shared refresh state reference.
- * @return true if filtering was handled successfully.
+ * When @p state is provided it also enables the live main-list preview:
+ * the list type is @c "MOUNTED_ISOS" in unmount mode and @c "ISO_FILES"
+ * otherwise, and @c pendingIndices / @c hasPendingProcess / the list
+ * subtype are taken from the shared @c RefreshState, so no extra parameters
+ * are needed.
+ *
+ * @param inputString    Raw user input; must be exactly @c "/" to trigger filtering.
+ * @param filteredFiles  The currently displayed (possibly already filtered) file list.
+ * @param isFiltered     True if @p filteredFiles is a subset of the full source list.
+ * @param needsClrScrn   Set to true when the display requires a full redraw.
+ * @param filterHistory  Set to true when the filter term should be saved to history.
+ * @param operation      Name of the ISO operation shown in the prompt (e.g. "Mount").
+ * @param operationColor Raw ANSI escape code used to colorise @p operation in the prompt.
+ * @param isoDirs        Mounted ISO paths used as the source list in unmount mode.
+ * @param isUnmount      True when the caller is performing an unmount operation.
+ * @param currentPage    Current page index; may be reset after filtering.
+ * @param state          Shared refresh state; enables the live preview when non-null.
+ * @return @c true if @p inputString was handled as a filter command, @c false otherwise.
  */
 bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles,
     bool& isFiltered, bool& needsClrScrn, bool& filterHistory,
@@ -1037,6 +1426,9 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
         .toggleFullList = displayConfig::toggleFullListUmount
     };
 
+    // pendingIndices/hasPendingProcess/listSubtype all already live inside
+    // the shared RefreshState for this call path, so no extra parameters
+    // are needed beyond state itself to enable the live main-list repaint.
     if (state) {
         cfg.listType          = isUnmount ? "MOUNTED_ISOS" : "ISO_FILES";
         cfg.listSubType       = isUnmount ? "" : state->listSubtype;
@@ -1049,19 +1441,27 @@ bool handleFilteringForISO(const std::string& inputString, std::vector<std::stri
 }
 
 /**
- * @brief Specialized filter handler wrapper for convert-to-ISO flows.
+ * @brief Filter entry point for convert-to-ISO operations.
+ * @details Forwards directly to @c runSharedFilterFlow using a fixed orange
+ * operation color. Unlike @c handleFilteringForISO there is no unmount mode
+ * or source list override — the files vector is always used as-is.
  *
- * @param inputString Trigger input string.
- * @param files File list vector.
- * @param operation Operation descriptor string.
- * @param isFiltered Reference to filter state flag.
- * @param needsClrScrn Reference to clear screen trigger flag.
- * @param filterHistory Reference to history flag.
- * @param need2Sort Reference to sorting requirement flag.
- * @param currentPage Current pagination index.
- * @param pendingIndices Pending processing indices vector.
- * @param hasPendingProcess Reference to pending process flag.
- * @param state Shared refresh state reference.
+ * When @p state is provided it enables the live main-list preview for the
+ * @c "IMAGE_FILES" list (subtype @c "convert2iso"). Unlike the ISO path,
+ * @p pendingIndices and @p hasPendingProcess here are the caller's own locals
+ * (selectForImageFiles), not fields of @p state.
+ *
+ * @param inputString  Raw user input; must be exactly @c "/" to trigger filtering.
+ * @param files        The list of convertible files to filter in place.
+ * @param operation    Name of the conversion operation shown in the prompt.
+ * @param isFiltered   True if @p files is already a filtered subset.
+ * @param needsClrScrn Set to true when the display requires a full redraw.
+ * @param filterHistory Set to true when the filter term should be saved to history.
+ * @param need2Sort    Set to true when the result list needs resorting after filtering.
+ * @param currentPage  Current page index; may be reset after filtering.
+ * @param pendingIndices    Caller's pending-selection indices, shown under the list.
+ * @param hasPendingProcess Caller's flag: true if a process action is staged.
+ * @param state        Shared refresh state; enables the live preview when non-null.
  */
 void handleFilteringConvert2ISO(const std::string& inputString, std::vector<std::string>& files,
     const std::string& operation, bool& isFiltered, bool& needsClrScrn,
@@ -1080,6 +1480,8 @@ void handleFilteringConvert2ISO(const std::string& inputString, std::vector<std:
         .currentPage    = &currentPage
     };
 
+    // Unlike the ISO path, pendingIndices/hasPendingProcess here are the
+    // caller's own locals (selectForImageFiles), not fields of state.
     if (state) {
         cfg.listType          = "IMAGE_FILES";
         cfg.listSubType       = "convert2iso";
