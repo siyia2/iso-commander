@@ -55,13 +55,13 @@ namespace AnsiEscape {
     constexpr const char* CLEAR_LINE_BELOW  = "\033[1B\033[K";
 }
 
-// ─── SIMD Search Implementation ──────────────────────────────────────────────
+// ─── SIMD Search Implementation (SSE2) ───────────────────────────────────────
 
 /**
- * @brief Blazing-fast SIMD-accelerated pattern search using AVX2 or SSE2 intrinsics.
+ * @brief Blazing-fast SSE2-accelerated pattern search using 128-bit vector registers.
  *
- * Scans the provided text using vectorized instructions to find the first character
- * of the pattern and performs a verification on candidate matches.
+ * Scans the provided text using 128-bit SSE2 vector instructions to find the first character
+ * of the pattern simultaneously, followed by verification on candidate matches.
  *
  * @param text The text string view to search within.
  * @param pattern The pattern string view to search for.
@@ -76,27 +76,6 @@ inline bool simdSearchExists(std::string_view text, std::string_view pattern)
     char firstChar = pattern[0];
     size_t i = 0;
 
-#if defined(__AVX2__)
-    // AVX2 processes 32 bytes simultaneously using 256-bit vector registers
-    const __m256i target = _mm256_set1_epi8(firstChar);
-
-    while (i + 32 <= n) {
-        __m256i chunk = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(text.data() + i));
-        __m256i cmp = _mm256_cmpeq_epi8(chunk, target);
-        uint32_t mask = static_cast<uint32_t>(_mm256_movemask_epi8(cmp));
-
-        while (mask != 0) {
-            int bitPos = __builtin_ctz(mask);
-            size_t matchIndex = i + bitPos;
-
-            if (matchIndex + m <= n && std::string_view(text.data() + matchIndex, m) == pattern) {
-                return true;
-            }
-            mask &= mask - 1;
-        }
-        i += 32;
-    }
-#elif defined(__SSE2__)
     // SSE2 processes 16 bytes simultaneously using 128-bit vector registers
     const __m128i target = _mm_set1_epi8(firstChar);
 
@@ -116,9 +95,8 @@ inline bool simdSearchExists(std::string_view text, std::string_view pattern)
         }
         i += 16;
     }
-#endif
 
-    // Scalar fallback loop for remaining bytes or non-vectorized hardware
+    // Scalar fallback loop for remaining bytes
     for (; i <= n - m; ++i) {
         if (text[i] == firstChar && std::string_view(text.data() + i, m) == pattern) {
             return true;
