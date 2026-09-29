@@ -18,18 +18,13 @@ struct RefreshState;
  */
 
 /**
- * @brief Represents a single search token with precomputed Boyer-Moore tables.
+ * @brief Represents a single search token: the original text and, for
+ * case-insensitive tokens, its lowercased form.
  */
 struct QueryToken {
     std::string original;
     std::string lower;
-    bool isCaseSensitive;
-
-    std::vector<int> originalBadChar;
-    std::vector<int> originalGoodSuffix;
-
-    std::vector<int> lowerBadChar;
-    std::vector<int> lowerGoodSuffix;
+    bool isCaseSensitive = false;
 };
 
 /**
@@ -107,7 +102,8 @@ inline std::vector<FilteringState> filteringStack;
  */
 
 /**
- * @brief Filters file indices based on a search query using the Boyer-Moore algorithm.
+ * @brief Filters file indices based on a search query using SIMD-accelerated
+ * substring search.
  *
  * @param precomputedLower Optional parallel array, same size as @p files, holding
  *        each entry of @p files already lowercased. When a caller runs the same
