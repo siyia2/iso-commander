@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef CONFIG_UI_OPS_H
-#define CONFIG_UI_OPS_H
+#ifndef MAIN_H
+#define MAIN_H
 
 // C++ Standard Library Headers
 #include <atomic>
@@ -84,4 +84,4 @@ void monitorAndClearMessage(
 
 int handleMountUmountCommands(int argc, char* argv[]);
 
-#endif // CONFIG_UI_OPS_H
+#endif // MAIN_H

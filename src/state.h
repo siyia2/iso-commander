@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef GLOBALS_H
-#define GLOBALS_H
+#ifndef STATE_H
+#define STATE_H
 
 // C++ Standard Library Headers
 #include <atomic>
@@ -78,4 +78,4 @@ namespace GlobalState {
 
 } // namespace GlobalState
 
-#endif // GLOBALS_H
+#endif // STATE_H

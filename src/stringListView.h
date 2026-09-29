@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef LISTVIEW_H
-#define LISTVIEW_H
+#ifndef STRINGLISTVIEW_H
+#define STRINGLISTVIEW_H
 
 #include <cstddef>
 #include <iterator>
@@ -61,4 +61,4 @@ private:
     const std::vector<size_t>*      subset_ = nullptr;
 };
 
-#endif // LISTVIEW_H
+#endif // STRINGLISTVIEW_H
