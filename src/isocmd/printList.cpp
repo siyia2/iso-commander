@@ -44,7 +44,7 @@ constexpr std::string_view kSyncEnd               = "\033[?2026l";
 constexpr std::size_t kPerRowOverhead = 96;
 
 /// Retained thread_local buffer capacity above which we release memory after a render.
-constexpr std::size_t kMaxRetainedCapacity = 1u << 20; // 1 MiB
+constexpr std::size_t kMaxRetainedCapacity = 2u << 20; // 2 MiB
 
 /// Number of decimal digits in value (value 0 -> 1 digit).
 inline std::size_t digitCount(std::size_t value) noexcept {
