@@ -411,11 +411,6 @@ void selectForIsoFiles(const std::string& operation,
 
         std::cout << "\033[2A\033[K";
 
-        if (GlobalState::ITEMS_PER_PAGE == 0) {
-            rl_bind_keyseq("\\e[5~", rl_insert);
-            rl_bind_keyseq("\\e[6~", rl_insert);
-        }
-
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
         isFiltered ? (void)rl_bind_keyseq("*", rl_insert) : setup_custom_keybindingsForSelect();
@@ -717,12 +712,6 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         }
 
         std::cout << "\033[2A\033[K";
-
-        // Disable PgUp&PgDn when pagination is not enabled
-        if (GlobalState::ITEMS_PER_PAGE == 0) {
-            rl_bind_keyseq("\\e[5~", rl_insert);
-            rl_bind_keyseq("\\e[6~", rl_insert);
-        }
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
