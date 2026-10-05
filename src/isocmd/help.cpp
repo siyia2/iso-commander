@@ -19,9 +19,9 @@ namespace {
      */
     enum class ColorRole : std::uint8_t {
         Accent,
-        Warning,
+        Highlight,
         Primary,
-        Secondary,
+        Muted,
     };
 
     /**
@@ -41,9 +41,9 @@ namespace {
 
         switch (role) {
             case ColorRole::Accent:    return theme->accent;
-            case ColorRole::Warning:   return theme->warning;
+            case ColorRole::Highlight:   return theme->highlight;
             case ColorRole::Primary:   return theme->primary;
-            case ColorRole::Secondary: return theme->secondary;
+            case ColorRole::Muted: return theme->muted;
         }
         return originalColor; // unreachable, silences some compilers
     }
@@ -69,9 +69,9 @@ namespace {
               isOriginal(globalTheme == "original"),
               title     (resolveColor(theme, isOriginal, UI::Palette::Cyan,   ColorRole::Accent)),
               head      (resolveColor(theme, isOriginal, UI::Palette::Green,  ColorRole::Accent)),
-              keysYellow(resolveColor(theme, isOriginal, UI::Palette::Yellow, ColorRole::Warning)),
+              keysYellow(resolveColor(theme, isOriginal, UI::Palette::Yellow, ColorRole::Highlight)),
               keysBlue  (resolveColor(theme, isOriginal, UI::Palette::Blue,   ColorRole::Primary)),
-              keysPurple(resolveColor(theme, isOriginal, UI::Palette::Purple, ColorRole::Secondary))
+              keysPurple(resolveColor(theme, isOriginal, UI::Palette::Purple, ColorRole::Muted))
         {}
     };
 
