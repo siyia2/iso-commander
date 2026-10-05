@@ -32,24 +32,57 @@ namespace fs = std::filesystem;
  * @brief Optimized terminal list rendering with pagination, color themes, and stack-based formatting.
  */
 
-/**
- * @brief Reusable stack buffer for fast integer-to-string conversion without heap allocation.
- * Defaults to 20 characters, sufficient for a 64-bit integer.
- */
-template<std::size_t N = 20>
-struct IntBuf {
-    char data[N];
-    std::string_view format(std::size_t value) {
-        auto [end, ec] = std::to_chars(data, data + N, value);
-        return {data, static_cast<std::size_t>(end - data)};
-    }
-};
+namespace {
+
+/// Wrap each frame in "synchronized output" (DEC mode 2026) to eliminate tearing.
+/// Terminals that don't support it silently ignore the sequences.
+constexpr bool             kUseSynchronizedOutput = true;
+constexpr std::string_view kSyncBegin             = "\033[?2026h";
+constexpr std::string_view kSyncEnd               = "\033[?2026l";
+
+/// Rough per-row overhead (index digits, color escapes, separators) used to size the buffer.
+constexpr std::size_t kPerRowOverhead = 96;
+
+/// Retained thread_local buffer capacity above which we release memory after a render.
+constexpr std::size_t kMaxRetainedCapacity = 1u << 20; // 1 MiB
+
+/// Number of decimal digits in value (value 0 -> 1 digit).
+inline std::size_t digitCount(std::size_t value) noexcept {
+    std::size_t d = 1;
+    while (value >= 10) { value /= 10; ++d; }
+    return d;
+}
+
+/// Formats value into a stack buffer and appends it to out (no heap allocation, no shared state).
+inline void appendNum(std::string& out, std::size_t value) {
+    char buf[20]; // enough for a 64-bit unsigned integer
+    const auto res = std::to_chars(buf, buf + sizeof(buf), value);
+    out.append(buf, static_cast<std::size_t>(res.ptr - buf));
+}
+
+/// Like appendNum, but right-aligns the number to the given width using spaces.
+inline void appendNumPadded(std::string& out, std::size_t value, std::size_t width) {
+    char buf[20];
+    const auto res = std::to_chars(buf, buf + sizeof(buf), value);
+    const std::size_t len = static_cast<std::size_t>(res.ptr - buf);
+    if (len < width) out.append(width - len, ' ');
+    out.append(buf, len);
+}
+
+} // namespace
 
 /**
  * @brief Renders formatted lists (ISO, Image, or Mounts) to the terminal.
  *
- * Performance Note: Uses a large reserved std::string buffer and std::cout.write
- * to minimize syscall overhead and flickering during high-frequency updates.
+ * Performance Notes:
+ *  - The frame is built in a thread_local std::string that keeps its capacity across
+ *    redraws, so steady-state rendering performs no heap allocation for the buffer.
+ *  - Numbers are formatted via std::to_chars straight into the buffer.
+ *  - Everything that can be computed without the print lock (filesystem checks, sync
+ *    indicator text) is computed before locking. The critical section only re-reads
+ *    the isImportRunning flag, writes the frame (in segments, no mid-buffer insert),
+ *    and flushes once.
+ *  - The frame is wrapped in synchronized-output escape sequences to avoid tearing.
  *
  * Thread Safety: The sync indicator read and terminal write are performed
  * atomically under printMutex, preventing stale indicator display during
@@ -79,47 +112,89 @@ void printList(const StringListView& items, const std::string& listType, const s
     const bool showFullUmount = displayConfig::toggleFullListUmount;
 
     const PrintListTheme c = getListColors();
-    bool noFilterResults = false;
-    if ((items.empty() && !GlobalState::globalIsoFileList.empty() && isIsoMode) || (items.empty() && !isIsoMode)) {
-        std::string output;
-        output.reserve(64);
-        output += '\n';
-        output.append(c.num); // Warning color for empty items/filter match
-        output.append("No filter results");
-        output.append(UI::Palette::Reset).append(UI::Palette::BoldReset);
-        noFilterResults = true;
 
-        std::lock_guard<std::mutex> lk(state->printMutex);
-        std::cout.write(output.data(), output.size());
-    }
+    const bool noFilterResults =
+        (items.empty() && !GlobalState::globalIsoFileList.empty() && isIsoMode) ||
+        (items.empty() && !isIsoMode);
 
     // --- Pagination Logic ---
     const size_t totalItems = items.size();
     const bool disablePagination = (GlobalState::ITEMS_PER_PAGE == 0 || totalItems <= GlobalState::ITEMS_PER_PAGE);
     const size_t totalPages = disablePagination ? 1 : (totalItems + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE;
 
-    size_t effectivePage = (disablePagination) ? 0 : (currentPage >= totalPages ? totalPages - 1 : currentPage);
+    const size_t effectivePage = disablePagination ? 0 : (currentPage >= totalPages ? totalPages - 1 : currentPage);
     const size_t startIndex = disablePagination ? 0 : (effectivePage * GlobalState::ITEMS_PER_PAGE);
     const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + GlobalState::ITEMS_PER_PAGE, totalItems);
 
-    IntBuf<> ib1, ib2, ib3, ib4;
-    const size_t maxDigits = ib1.format(endIndex).length();
+    const size_t maxDigits = digitCount(endIndex);
 
-    // --- Output Buffering ---
-    std::string output;
-    output.reserve(((endIndex - startIndex) * 128) + 1024);
+    // --- Sync indicator preparation (done BEFORE taking the print lock) ---
+    // The atomic is read here only as a cheap pre-check to avoid filesystem syscalls when no
+    // import is running. It is re-read under the lock below, which is the authoritative check.
+    const bool wantSync = isIsoMode && !noFilterResults && !GlobalState::globalIsoFileList.empty();
+    const bool maybeSyncing = wantSync && state->isImportRunning.load(std::memory_order_acquire);
+
+    std::string syncLine;
+    if (maybeSyncing) {
+        const bool historyOk = !isHistoryFileEmpty(GlobalState::historyFilePath)
+                               && fs::is_regular_file(GlobalState::historyFilePath);
+        syncLine.reserve(192);
+        syncLine.append(UI::Palette::Dim);
+        if (historyOk) {
+            syncLine.append(disablePagination
+                ? "[↻ Syncing: NewISO → Restructure]\n\n"
+                : "\n\n[↻ Syncing: NewISO → Restructure]");
+            if (GlobalState::g_filteringIndicator) {
+                syncLine.append(disablePagination
+                    ? "\033[1A\033[K[ℹ  Filtering locked during sync]\n\n"
+                    : "\n[ℹ  Filtering locked during sync]");
+            }
+        } else {
+            syncLine.append(disablePagination
+                ? "[No FolderPath history — nothing to sync]\n\n"
+                : "\n\n[No FolderPath history — nothing to sync]");
+        }
+        syncLine.append(UI::Palette::BoldReset);
+    }
+
+    // --- Output Buffering (capacity retained across calls) ---
+    static thread_local std::string output;
+    output.clear();
+
+    {
+        std::size_t estimate = 1024;
+        for (size_t i = startIndex; i < endIndex; ++i) {
+            estimate += items[i].size() + kPerRowOverhead;
+        }
+        if (output.capacity() < estimate) output.reserve(estimate);
+    }
+
+    if (kUseSynchronizedOutput) output.append(kSyncBegin);
     output += '\n';
+
+    // Single-buffer "No filter results" message (previously a separate locked write).
+    if (noFilterResults) {
+        output.append(c.num); // Warning color for empty items/filter match
+        output.append("No filter results");
+        output.append(UI::Palette::Reset).append(UI::Palette::BoldReset);
+        output += '\n';
+    }
 
     // --- Header ---
     size_t syncInsertPos = std::string::npos;
     if (!disablePagination) {
-        output.append(c.head).append("Page ")
-              .append(c.accent).append(ib1.format(effectivePage + 1))
-              .append(c.head).append("/").append(c.num).append(ib2.format(totalPages))
-              .append(c.head).append(" (Items (")
-              .append(c.accent).append(ib3.format(startIndex + 1))
-              .append("-").append(ib4.format(endIndex)).append(c.head).append(")/").append(c.num)
-              .append(ib1.format(totalItems)).append(c.head).append(")");
+        output.append(c.head).append("Page ");
+        output.append(c.accent);
+        appendNum(output, effectivePage + 1);
+        output.append(c.head).append("/").append(c.num);
+        appendNum(output, totalPages);
+        output.append(c.head).append(" (Items (").append(c.accent);
+        appendNum(output, startIndex + 1);
+        output.append("-");
+        appendNum(output, endIndex);
+        output.append(c.head).append(")/").append(c.num);
+        appendNum(output, totalItems);
+        output.append(c.head).append(")");
 
         syncInsertPos = output.size(); // mark insertion point before BoldReset+\n\n
         output.append(UI::Palette::BoldReset).append("\n\n");
@@ -127,20 +202,22 @@ void printList(const StringListView& items, const std::string& listType, const s
         syncInsertPos = output.size(); // mark insertion point after leading \n
     }
 
+    // --- Hoisted per-frame lookups ---
+    const auto* origIdx = filteringStack.empty() ? nullptr : &filteringStack.back().originalIndices;
+    const size_t origSize = origIdx ? origIdx->size() : 0;
+
     // --- Main Item Loop ---
     for (size_t i = startIndex; i < endIndex; ++i) {
         const std::string_view seqColor = (i % 2 == 0) ? c.indexA : c.indexB;
-        std::string_view idxStr = ib1.format(i + 1);
 
         output.append(seqColor);
-        if (idxStr.length() < maxDigits) output.append(maxDigits - idxStr.length(), ' ');
-        output.append(idxStr);
+        appendNumPadded(output, i + 1, maxDigits);
 
-        if (!filteringStack.empty() && i < filteringStack.back().originalIndices.size()) {
+        if (origIdx && i < origSize) {
             output.append(":").append(UI::Palette::BoldReset).append(c.square);
-            output.append(ib2.format(filteringStack.back().originalIndices[i] + 1));
+            appendNum(output, static_cast<std::size_t>((*origIdx)[i]) + 1);
             output.append(UI::Palette::BoldReset).append(c.square).append("^ ")
-            .append(UI::Palette::BoldReset);
+                  .append(UI::Palette::BoldReset);
         } else {
             output.append(". ").append(UI::Palette::BoldReset);
         }
@@ -191,35 +268,32 @@ void printList(const StringListView& items, const std::string& listType, const s
         output.append(UI::Palette::Reset).append(UI::Palette::BoldReset).append("\n");
     }
 
-    // --- Sync-safe print ---
+    if (kUseSynchronizedOutput) output.append(kSyncEnd);
+
+    // --- Sync-safe print (minimal critical section) ---
     {
         std::lock_guard<std::mutex> lk(state->printMutex);
 
-        const bool isIsoWithAutoUpdate = (state
-            && state->isImportRunning.load(std::memory_order_relaxed)
-            && isIsoMode
-            && !GlobalState::globalIsoFileList.empty());
+        // Authoritative read: guarantees we never show a stale "Syncing" indicator.
+        const bool syncing = maybeSyncing
+            && state->isImportRunning.load(std::memory_order_acquire);
 
-        if (isIsoWithAutoUpdate && !noFilterResults) {
-            std::string syncLine;
-            syncLine.append(UI::Palette::Dim);
-            if (!isHistoryFileEmpty(GlobalState::historyFilePath) && fs::is_regular_file(GlobalState::historyFilePath)) {
-                syncLine.append(disablePagination
-                    ? "[↻ Syncing: NewISO → Restructure]\n\n"
-                    : "\n\n[↻ Syncing: NewISO → Restructure]")
-                .append(GlobalState::g_filteringIndicator
-                    ? (disablePagination ? "\033[1A\033[K[ℹ  Filtering locked during sync]\n\n"
-                                            : "\n[ℹ  Filtering locked during sync]")
-                    : "");
-            } else {
-                syncLine.append(disablePagination
-                    ? "[No FolderPath history — nothing to sync]\n\n"
-                    : "\n\n[No FolderPath history — nothing to sync]");
-            }
-            syncLine.append(UI::Palette::BoldReset);
-            output.insert(syncInsertPos, syncLine);
+        if (syncing) {
+            // Write in three segments instead of output.insert() (no memmove / realloc).
+            std::cout.write(output.data(), static_cast<std::streamsize>(syncInsertPos));
+            std::cout.write(syncLine.data(), static_cast<std::streamsize>(syncLine.size()));
+            std::cout.write(output.data() + syncInsertPos,
+                            static_cast<std::streamsize>(output.size() - syncInsertPos));
+        } else {
+            std::cout.write(output.data(), static_cast<std::streamsize>(output.size()));
         }
 
-        std::cout.write(output.data(), output.size());
+        // Single flush per frame, done under the lock so no other thread touches the stream.
+        std::cout.flush();
+    }
+
+    // Don't let one huge render pin a large buffer for the life of the thread.
+    if (output.capacity() > kMaxRetainedCapacity) {
+        std::string().swap(output);
     }
 }
