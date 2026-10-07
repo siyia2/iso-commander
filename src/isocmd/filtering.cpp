@@ -46,7 +46,7 @@
 // StringListView, so the preview never has to copy the matching strings.
 void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-               size_t& currentPage, std::shared_ptr<RefreshState> state);
+               size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst = true);
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

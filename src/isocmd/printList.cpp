@@ -40,6 +40,10 @@ constexpr bool             kUseSynchronizedOutput = true;
 constexpr std::string_view kSyncBegin             = "\033[?2026h";
 constexpr std::string_view kSyncEnd               = "\033[?2026l";
 
+/// Clear screen + scrollback, home cursor, reset attributes. Emitted inside the sync frame
+/// so the clear and the new content are presented atomically.
+constexpr std::string_view kClearSeq = "\033[2J\033[3J\033[H\033[0m";
+
 /// Rough per-row overhead (index digits, color escapes, separators) used to size the buffer.
 constexpr std::size_t kPerRowOverhead = 96;
 
@@ -98,10 +102,13 @@ inline void appendNumPadded(std::string& out, std::size_t value, std::size_t wid
  * @param state              Shared state providing printMutex and isImportRunning
  *                           flag; guards the "[↻ Syncing: NewISO → Restructure]"
  *                           indicator against races with background import completion.
+ * @param clearFirst         If true, clears the screen and scrollback inside the same
+ *                           synchronized-output frame, so clear and content present
+ *                           atomically (no blank flash). Default is declared in the header.
  */
 void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-               size_t& currentPage, std::shared_ptr<RefreshState> state) {
+               size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst) {
 
     // --- Flags & Config ---
     const bool isIsoMode      = (listType == "ISO_FILES");
@@ -170,6 +177,7 @@ void printList(const StringListView& items, const std::string& listType, const s
     }
 
     if (kUseSynchronizedOutput) output.append(kSyncBegin);
+    if (clearFirst) output.append(kClearSeq);
     output += '\n';
 
     // Single-buffer "No filter results" message (previously a separate locked write).

@@ -31,7 +31,7 @@
 
 void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-               size_t& currentPage, std::shared_ptr<RefreshState> state);
+               size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst = true);
 
 /**
  * @brief Loads ISO files from the database and updates the display.
@@ -94,11 +94,9 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
             isFiltered = false;
         }
 
-        clearScrollBuffer();
-
         // Use either the recently refreshed filteredFiles or the global master list
         printList(isFiltered ? filteredFiles : GlobalState::globalIsoFileList, "ISO_FILES", listSubType,
-                  pendingIndices, hasPendingProcess, currentPage, state);
+                  pendingIndices, hasPendingProcess, currentPage, state, true);
 
         isEmpty = GlobalState::globalIsoFileList.empty();
     }
@@ -210,8 +208,6 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         return false;
     }
 
-    clearScrollBuffer();
-
     if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {
         originalPage = currentPage;
         filteringStack.clear();
@@ -219,7 +215,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         filteredFiles.clear();
     }
 
-    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, currentPage, state);
+    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, currentPage, state, true);
     return true;
 }
 
@@ -246,7 +242,6 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
  */
 void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,
                               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::shared_ptr<RefreshState> state) {
-    clearScrollBuffer();
 
     // Restore from the appropriate cache when not filtered and the cache is valid
     files =
@@ -291,5 +286,5 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
         need2Sort = false;
     }
 
-    printList(files, "IMAGE_FILES", "convert2iso", pendingIndices, hasPendingProcess, currentPage, state);
+    printList(files, "IMAGE_FILES", "convert2iso", pendingIndices, hasPendingProcess, currentPage, state, true);
 }
