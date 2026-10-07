@@ -620,7 +620,7 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 // is restored immediately afterward, so committed (Enter) results and every
 // other screen keep their normal pagination.
 //
-// Repaint mechanics: each repaint does clearScrollBuffer() + printList(),
+// Repaint mechanics: each repaint does printList(),
 // which wipes and redraws the whole screen, so readline's own idea of "what's
 // currently on screen" (used for its normal incremental redraw) is now
 // stale. We correct that with rl_forced_update_display(), which — unlike
@@ -666,7 +666,7 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 //    tags relative to the full list while typing. For an empty query nothing
 //    is pushed and printList() uses the real stack, so an already-committed
 //    filter's tags show as usual.
-//  - A full clearScrollBuffer()+printList() every keystroke is heavier than
+//  - A full printList() every keystroke is heavier than
 //    a delta redraw and can flicker on slow/high-latency terminals. Since
 //    the preview is unpaginated, each frame's cost scales with the whole
 //    match set rather than one page. Above LIVE_FILTER_LIMIT source items we
