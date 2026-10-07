@@ -978,8 +978,6 @@ void liveFilterRedisplayHook() {
 
     g_livePreview.lastQuery = query;
 
-    clearScrollBuffer();
-
     // unpaginated => everything lives on "page 0"; printList()
     // ignores this value when pagination is disabled.
     size_t previewPage = 0;
