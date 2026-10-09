@@ -1042,6 +1042,16 @@ void liveFilterRedisplayHook() {
     const bool isFirstFrameOfThisCall = !g_livePreview.primed;
     g_livePreview.primed = true;
 
+    // A trailing backslash may escape the next '&' or ';'. Keep the list
+    // exactly as it was until the following character disambiguates the
+    // query; only redraw the readline prompt/cursor for this keystroke.
+    // Do not update lastQuery or lastMatches here, so the next complete
+    // query is compared against the last query that actually repainted.
+    if (!query.empty() && query.back() == '\\') {
+        rl_redisplay();
+        return;
+    }
+
     if (!isFirstFrameOfThisCall && query == g_livePreview.lastQuery) {
         // Text unchanged (e.g. pure cursor movement) — the terminal still
         // matches what we last painted, so the ordinary incremental
