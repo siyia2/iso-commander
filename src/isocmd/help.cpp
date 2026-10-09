@@ -120,7 +120,7 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
         (!isUnmount ?
             "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysBlue) + "'*'" + std::string(UI::Palette::BoldReset) + "                : View FilenamesOnly (¬filtered)\n"
             : "") +
-        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysBlue) + "'/'" + std::string(UI::Palette::BoldReset) + "                : Filter (e.g. term1;term2)\n" +
+        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysBlue) + "'/'" + std::string(UI::Palette::BoldReset) + "                : Filter (e.g. term1;term2 or term1&term2)\n" +
         (isAtISOListForHelp ?
             "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysBlue) + "'R'" + std::string(UI::Palette::BoldReset) + "                : Refresh ISO list from FolderPath history\n"
             : "") +

@@ -128,43 +128,110 @@ inline bool simdSearchExists(std::string_view text, std::string_view pattern)
     return false;
 }
 
-// ─── Query tokenization ──────────────────────────────────────────────────────
+// ─── Query parsing ───────────────────────────────────────────────────────────
 
 /**
- * @brief Builds query tokens from a semicolon-separated query string.
- *
- * The query is split on ';' and each non-empty piece becomes one token;
- * an entry matches if it contains ANY token (OR semantics). Matching is
- * "smart case": a token containing at least one uppercase letter is matched
- * case-sensitively against the original text, while an all-lowercase token
- * is matched case-insensitively (its @c lower form is searched against the
- * lowercased text).
- *
- * @param query The query string to tokenize.
- * @return The tokens in query order. Empty if the query contains no
- *         non-empty piece (e.g. "" or ";;").
+ * One OR-branch of a query: every term in the group must match (AND
+ * semantics). A query is a list of such groups; an entry matches if ANY
+ * group is fully satisfied (OR semantics).
  */
-static std::vector<QueryToken> buildQueryTokens(const std::string& query) {
-    std::vector<QueryToken> tokens;
-    std::stringstream ss(query);
-    std::string token;
+using QueryGroup = std::vector<QueryToken>;
 
-    while (std::getline(ss, token, ';')) {
-        if (token.empty()) continue;
+/**
+ * @brief Parses a query string into OR-ed groups of AND-ed terms.
+ *
+ * Grammar:
+ * @code
+ *   query := group (';' group)*      // ';' = OR
+ *   group := term  ('&' term)*       // '&' = AND
+ * @endcode
+ * AND binds tighter than OR, so "a&b;c" means (a AND b) OR c.
+ *
+ * Empty terms and empty groups are dropped: "a&&b" is "a&b", "a;;b" is
+ * "a;b", and "a&" is "a".
+ *
+ * Matching is "smart case" per term: a term containing at least one
+ * uppercase letter is matched case-sensitively against the original text,
+ * while an all-lowercase term is matched case-insensitively (its @c lower
+ * form is searched against the lowercased text).
+ *
+ * @param query The query string to parse.
+ * @return The groups in query order. Empty if the query contains no
+ *         non-empty term (e.g. "", ";;" or "&").
+ */
+static std::vector<QueryGroup> buildQueryGroups(const std::string& query) {
+    std::vector<QueryGroup> groups;
+    std::stringstream orStream(query);
+    std::string orPart;
 
-        QueryToken qt;
-        qt.original        = token;
-        qt.isCaseSensitive = std::any_of(token.begin(), token.end(),
-                                 [](unsigned char c) { return std::isupper(c); });
+    while (std::getline(orStream, orPart, ';')) {
+        QueryGroup group;
+        std::stringstream andStream(orPart);
+        std::string term;
 
-        if (!qt.isCaseSensitive) {
-            qt.lower = token;
-            toLowerInPlace(qt.lower);
+        while (std::getline(andStream, term, '&')) {
+            if (term.empty()) continue;
+
+            QueryToken qt;
+            qt.original        = term;
+            qt.isCaseSensitive = std::any_of(term.begin(), term.end(),
+                                     [](unsigned char c) { return std::isupper(c); });
+
+            if (!qt.isCaseSensitive) {
+                qt.lower = term;
+                toLowerInPlace(qt.lower);
+            }
+
+            group.push_back(std::move(qt));
         }
 
-        tokens.push_back(std::move(qt));
+        if (!group.empty())
+            groups.push_back(std::move(group));
     }
-    return tokens;
+    return groups;
+}
+
+/**
+ * @brief True if any term in any group is case-insensitive, i.e. a
+ * lowercased copy of each entry is needed to evaluate the query.
+ */
+static bool groupsNeedLower(const std::vector<QueryGroup>& groups) {
+    for (const auto& group : groups)
+        for (const auto& qt : group)
+            if (!qt.isCaseSensitive) return true;
+    return false;
+}
+
+/**
+ * @brief Tests one entry against a parsed query.
+ *
+ * Returns true if at least one group is satisfied (OR), where a group is
+ * satisfied only when every one of its terms occurs in the entry (AND).
+ * Short-circuits at both levels.
+ *
+ * @param groups    Parsed query (see @c buildQueryGroups); must be non-empty.
+ * @param file      The entry text, original case.
+ * @param fileLower The entry text lowercased. May be nullptr only when
+ *                  @c groupsNeedLower(groups) is false.
+ */
+static inline bool matchesAnyGroup(const std::vector<QueryGroup>& groups,
+                                   const std::string& file,
+                                   const std::string* fileLower)
+{
+    for (const auto& group : groups) {
+        bool allMatch = true;
+        for (const auto& qt : group) {
+            const bool hit = qt.isCaseSensitive
+                ? simdSearchExists(file, qt.original)
+                : simdSearchExists(*fileLower, qt.lower);
+            if (!hit) {
+                allMatch = false;
+                break;
+            }
+        }
+        if (allMatch) return true;
+    }
+    return false;
 }
 
 // ─── Core filter engine ──────────────────────────────────────────────────────
@@ -175,14 +242,15 @@ static std::vector<QueryToken> buildQueryTokens(const std::string& query) {
  *
  * The list is split into contiguous chunks, one per worker (bounded by the
  * pool size, the list size and @c GlobalConcurrency::FILTER_THREAD_CAP).
- * Each worker tests its chunk against every query token and returns the
- * matching indices in ascending order; the chunks are concatenated in
- * order, so the result is ascending overall. If any worker throws, the first
- * exception is rethrown after all workers have been collected.
+ * Each worker tests its chunk against the query and returns the matching
+ * indices in ascending order; the chunks are concatenated in order, so the
+ * result is ascending overall. If any worker throws, the first exception is
+ * rethrown after all workers have been collected.
  *
  * @param files Vector of entries to filter.
- * @param query Search query; ';' separates OR-ed terms (see
- *        @c buildQueryTokens for the smart-case rules).
+ * @param query Search query; ';' separates OR-ed groups and '&' separates
+ *        AND-ed terms within a group (see @c buildQueryGroups for the
+ *        grammar and the smart-case rules).
  * @param precomputedLower Optional parallel array, same size as @p files, holding
  *        each entry of @p files already lowercased. When provided (and its size
  *        matches @p files), it is used in place of lowercasing each entry inline,
@@ -192,23 +260,22 @@ static std::vector<QueryToken> buildQueryTokens(const std::string& query) {
  *        default) to preserve the original per-call lowercasing behavior.
  *        A cache whose size does not match is ignored, never trusted.
  * @return Ascending indices into @p files of the matching entries. Empty if
- *         @p files or @p query is empty. If the query has no non-empty token
- *         (e.g. ";"), every index is returned.
+ *         @p files or @p query is empty. If the query has no non-empty term
+ *         (e.g. ";" or "&"), every index is returned.
  */
 std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query,
                                         const std::vector<std::string>* precomputedLower)
 {
     if (files.empty() || query.empty()) return {};
 
-    const std::vector<QueryToken> queryTokens = buildQueryTokens(query);
-    if (queryTokens.empty()) {
+    const std::vector<QueryGroup> queryGroups = buildQueryGroups(query);
+    if (queryGroups.empty()) {
         std::vector<size_t> allIndices(files.size());
         std::iota(allIndices.begin(), allIndices.end(), 0);
         return allIndices;
     }
 
-    const bool needLower = std::any_of(queryTokens.begin(), queryTokens.end(),
-                               [](const QueryToken& qt) { return !qt.isCaseSensitive; });
+    const bool needLower = groupsNeedLower(queryGroups);
 
     // Only trust a caller-supplied lowercase cache if it actually lines up
     // with `files` — otherwise silently fall back to lowercasing inline, so
@@ -233,7 +300,7 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
         if (start >= end) break;
 
         futures.emplace_back(pool.enqueue(
-            [&files, start, end, needLower, &queryTokens, precomputedLower, useCachedLower]() -> std::vector<size_t> {
+            [&files, start, end, needLower, &queryGroups, precomputedLower, useCachedLower]() -> std::vector<size_t> {
                 std::vector<size_t> localMatches;
                 localMatches.reserve((end - start) / 4);
 
@@ -255,18 +322,8 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
                         }
                     }
 
-                    for (const auto& qt : queryTokens) {
-                        bool match;
-                        if (qt.isCaseSensitive) {
-                            match = simdSearchExists(file, qt.original);
-                        } else {
-                            match = simdSearchExists(*fileLower, qt.lower);
-                        }
-                        if (match) {
-                            localMatches.push_back(j);
-                            break;
-                        }
-                    }
+                    if (matchesAnyGroup(queryGroups, file, fileLower))
+                        localMatches.push_back(j);
                 }
                 return localMatches;
             }
@@ -312,7 +369,10 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
  * Correctness precondition: the caller must only pass a candidate set that
  * is a superset of the new query's matches. The live preview guarantees
  * this by using it only when the new query strictly extends the previous
- * one and neither contains ';' (see @c computeLivePreviewMatches).
+ * one and neither contains ';' (see @c computeLivePreviewMatches). Queries
+ * using '&' qualify: with a single AND-group, extending the text can only
+ * lengthen a term or add another AND-ed term, both of which only tighten
+ * the match.
  *
  * @param files Vector of all entries; candidates index into this.
  * @param candidateIndices Indices into @p files to evaluate (typically the
@@ -322,7 +382,7 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
  *        same size as @p files; ignored if the size does not match.
  * @return Indices into @p files (a subset of @p candidateIndices) that match.
  *         Empty if @p files, @p candidateIndices or @p query is empty; the
- *         candidates unchanged if the query has no non-empty token.
+ *         candidates unchanged if the query has no non-empty term.
  */
 static std::vector<size_t> filterFilesIndicesSubset(
     const std::vector<std::string>& files,
@@ -333,13 +393,11 @@ static std::vector<size_t> filterFilesIndicesSubset(
     if (files.empty() || candidateIndices.empty() || query.empty())
         return {};
 
-    const std::vector<QueryToken> queryTokens = buildQueryTokens(query);
-    if (queryTokens.empty())
+    const std::vector<QueryGroup> queryGroups = buildQueryGroups(query);
+    if (queryGroups.empty())
         return candidateIndices;
 
-    const bool needLower = std::any_of(
-        queryTokens.begin(), queryTokens.end(),
-        [](const QueryToken& qt) { return !qt.isCaseSensitive; });
+    const bool needLower = groupsNeedLower(queryGroups);
 
     const bool useCachedLower =
         precomputedLower && precomputedLower->size() == files.size();
@@ -368,7 +426,7 @@ static std::vector<size_t> filterFilesIndicesSubset(
 
         futures.emplace_back(pool.enqueue(
             [&files, &candidateIndices, start, end,
-             needLower, &queryTokens, precomputedLower,
+             needLower, &queryGroups, precomputedLower,
              useCachedLower]() -> std::vector<size_t> {
 
                 std::vector<size_t> localMatches;
@@ -397,20 +455,9 @@ static std::vector<size_t> filterFilesIndicesSubset(
                         }
                     }
 
-                    for (const auto& qt : queryTokens) {
-                        bool match;
-
-                        if (qt.isCaseSensitive) {
-                            match = simdSearchExists(file, qt.original);
-                        } else {
-                            match = simdSearchExists(*fileLower, qt.lower);
-                        }
-
-                        if (match) {
-                            // Preserve the original index into `files`.
-                            localMatches.push_back(fileIndex);
-                            break;
-                        }
+                    if (matchesAnyGroup(queryGroups, file, fileLower)) {
+                        // Preserve the original index into `files`.
+                        localMatches.push_back(fileIndex);
                     }
                 }
 
@@ -498,7 +545,8 @@ static std::string extractUnmountKey(const std::string& path) {
  * from the live preview (see the "Live incremental filter preview" section),
  * which never touches `filteringStack` or `ctx.files`.
  *
- * @param searchString The substring pattern to filter by (saved for state recovery).
+ * @param searchString The query to filter by (saved for state recovery).
+ *        ';' separates OR-ed groups, '&' separates AND-ed terms in a group.
  * @param ctx FilterContext providing source lists, unmount flags, and UI state.
  * @return true if matches were found and the filter stack was updated;
  * false if the query is empty or no matches exist. Also returns true, without
@@ -652,13 +700,16 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 // scratch on every keystroke.
 //
 // Incremental narrowing: when the new query strictly extends the previous
-// one ("is" -> "iso"), every match must already be in the previous match
-// set, so only that set is re-tested (filterFilesIndicesSubset) instead of
-// the whole list. Backspacing, pasting a different query, going back to an
-// empty query, or using ';' (multi-term) queries fall back to a full search.
-// This is valid for the smart-case rules too: extending a query can only
-// keep or add uppercase letters, and any entry containing the longer text
-// also contains the shorter prefix.
+// one ("is" -> "iso", or "iso" -> "iso&boot"), every match must already be
+// in the previous match set, so only that set is re-tested
+// (filterFilesIndicesSubset) instead of the whole list. Backspacing, pasting
+// a different query, going back to an empty query, or using ';' (OR-ed,
+// multi-group) queries fall back to a full search. '&' (AND) queries are
+// fine: with a single AND-group, extending the text can only lengthen a
+// term or add another AND-ed term, which only tightens the match. This is
+// valid for the smart-case rules too: extending a query can only keep or
+// add uppercase letters, and any entry containing the longer text also
+// contains the shorter prefix.
 //
 // Trade-offs worth knowing about:
 //  - Index tags: for a non-empty query the preview pushes a temporary
@@ -853,8 +904,10 @@ void primeLivePreviewCaches() {
  * and narrows incrementally when possible: if @p query strictly extends
  * @c g_livePreview.lastQuery (and neither contains ';'), only the previous
  * frame's matches are re-tested via @c filterFilesIndicesSubset; otherwise
- * the whole list is searched. Because it reads the previous query, the
- * caller must update @c lastQuery only AFTER this returns.
+ * the whole list is searched. '&' (AND) queries are eligible for the
+ * incremental path (see the "Incremental narrowing" note above). Because it
+ * reads the previous query, the caller must update @c lastQuery only AFTER
+ * this returns.
  *
  * Side effects: updates @c lastMatches / @c hasLastMatches (cleared for an
  * empty query, set to this result otherwise).
@@ -881,9 +934,10 @@ LivePreviewResult computeLivePreviewMatches(const std::string& query)
             ? g_livePreview.derivedCache
             : source;
 
-    // Strict prefix extension of the previous query, single-term only: the
-    // only case where "matches(new) is a subset of matches(old)" is
-    // guaranteed under OR semantics and smart-case matching.
+    // Strict prefix extension of the previous query, single OR-group only
+    // (no ';'): the only case where "matches(new) is a subset of
+    // matches(old)" is guaranteed under smart-case matching. '&' is safe
+    // here because it only ever adds constraints to the one group.
     const bool progressiveExtension =
         !g_livePreview.lastQuery.empty() &&
         query.size() > g_livePreview.lastQuery.size() &&
@@ -1187,8 +1241,9 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
  * Re-applies every level of @ref filteringStack, in order, against the
  * current @p globalIsoFileList, so that the filtered view and each level's
  * stored indices stay consistent after the underlying list changes (e.g. a
- * background refresh). Each level applies its saved query to the results of
- * the previous level.
+ * background refresh). Each level applies its saved query (with the same
+ * ';' OR / '&' AND syntax as the commit path) to the results of the
+ * previous level.
  *
  * @section filtering_logic Logic Flow:
  * 1.  **Initialization**: Starts with the full range of indices [0, N) over
