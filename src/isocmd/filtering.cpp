@@ -142,10 +142,13 @@ using QueryGroup = std::vector<QueryToken>;
  *
  * Grammar:
  * @code
- *   query := group (';' group)*      // ';' = OR
- *   group := term  ('&' term)*       // '&' = AND
+ *   query := group (';' group)*       // unescaped ';' = OR
+ *   group := term  ('&' term)*        // unescaped '&' = AND
+ *   escape := '\\&' | '\\;'         // literal '&' or ';' inside a term
  * @endcode
  * AND binds tighter than OR, so "a&b;c" means (a AND b) OR c.
+ * Use "\\&" or "\\;" to search for a literal delimiter. A backslash
+ * before any other character is preserved as part of the term.
  *
  * Empty terms and empty groups are dropped: "a&&b" is "a&b", "a;;b" is
  * "a;b", and "a&" is "a".
@@ -161,36 +164,55 @@ using QueryGroup = std::vector<QueryToken>;
  */
 static std::vector<QueryGroup> buildQueryGroups(const std::string& query) {
     std::vector<QueryGroup> groups;
-    std::stringstream orStream(query);
-    std::string orPart;
+    QueryGroup group;
+    std::string term;
+    term.reserve(query.size());
 
-    while (std::getline(orStream, orPart, ';')) {
-        QueryGroup group;
-        std::stringstream andStream(orPart);
-        std::string term;
+    const auto finishTerm = [&]() {
+        if (term.empty())
+            return;
 
-        while (std::getline(andStream, term, '&')) {
-            if (term.empty()) continue;
+        QueryToken qt;
+        qt.original        = std::move(term);
+        qt.isCaseSensitive = std::any_of(
+            qt.original.begin(), qt.original.end(),
+            [](unsigned char c) { return std::isupper(c); });
 
-            QueryToken qt;
-            qt.original        = term;
-            qt.isCaseSensitive = std::any_of(term.begin(), term.end(),
-                                     [](unsigned char c) { return std::isupper(c); });
-
-            if (!qt.isCaseSensitive) {
-                qt.lower = term;
-                toLowerInPlace(qt.lower);
-            }
-
-            group.push_back(std::move(qt));
+        if (!qt.isCaseSensitive) {
+            qt.lower = qt.original;
+            toLowerInPlace(qt.lower);
         }
 
+        group.push_back(std::move(qt));
+        term.clear();
+    };
+
+    const auto finishGroup = [&]() {
+        finishTerm();
         if (!group.empty())
             groups.push_back(std::move(group));
+    };
+
+    for (size_t i = 0; i < query.size(); ++i) {
+        const char c = query[i];
+
+        // Backslash escapes only the query delimiters. A backslash before
+        // any other character remains part of the search term.
+        if (c == '\\' && i + 1 < query.size() &&
+            (query[i + 1] == '&' || query[i + 1] == ';')) {
+            term.push_back(query[++i]);
+        } else if (c == '&') {
+            finishTerm();
+        } else if (c == ';') {
+            finishGroup();
+        } else {
+            term.push_back(c);
+        }
     }
+
+    finishGroup();
     return groups;
 }
-
 /**
  * @brief True if any term in any group is case-insensitive, i.e. a
  * lowercased copy of each entry is needed to evaluate the query.
@@ -248,9 +270,9 @@ static inline bool matchesAnyGroup(const std::vector<QueryGroup>& groups,
  * rethrown after all workers have been collected.
  *
  * @param files Vector of entries to filter.
- * @param query Search query; ';' separates OR-ed groups and '&' separates
- *        AND-ed terms within a group (see @c buildQueryGroups for the
- *        grammar and the smart-case rules).
+ * @param query Search query; unescaped ';' separates OR-ed groups and
+ *        unescaped '&' separates AND-ed terms. Use '\\&' and '\\;' to
+ *        search for literal delimiters (see @c buildQueryGroups).
  * @param precomputedLower Optional parallel array, same size as @p files, holding
  *        each entry of @p files already lowercased. When provided (and its size
  *        matches @p files), it is used in place of lowercasing each entry inline,
@@ -546,7 +568,8 @@ static std::string extractUnmountKey(const std::string& path) {
  * which never touches `filteringStack` or `ctx.files`.
  *
  * @param searchString The query to filter by (saved for state recovery).
- *        ';' separates OR-ed groups, '&' separates AND-ed terms in a group.
+ *        Unescaped ';' separates OR-ed groups and unescaped '&' separates
+ *        AND-ed terms; '\\;' and '\\&' match literal delimiters.
  * @param ctx FilterContext providing source lists, unmount flags, and UI state.
  * @return true if matches were found and the filter stack was updated;
  * false if the query is empty or no matches exist. Also returns true, without
@@ -940,6 +963,7 @@ LivePreviewResult computeLivePreviewMatches(const std::string& query)
     // here because it only ever adds constraints to the one group.
     const bool progressiveExtension =
         !g_livePreview.lastQuery.empty() &&
+        g_livePreview.lastQuery.back() != '\\' &&
         query.size() > g_livePreview.lastQuery.size() &&
         g_livePreview.lastQuery.find(';') == std::string::npos &&
         query.find(';') == std::string::npos &&
