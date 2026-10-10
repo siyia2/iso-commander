@@ -1,4 +1,4 @@
-.TH ISOCMD 1 "October 2026" "Iso Commander 7.6.1" "Iso-Commander Manual"
+.TH ISOCMD 1 "October 2026" "Iso Commander 7.6.0" "Iso-Commander Manual"
 
 .SH NAME
 Iso Commander (isocmd) \- A single binary command-line utility for managing .iso files and converting image formats.
@@ -66,6 +66,36 @@ Converts .bin, .img, .chd, .daa, .gbi, .mdf, and .nrg files to .iso.
 
 .B ImportISO
 Creates and updates a local ISO database. The database has a maximum file size limit of \fB1MB\fR.
+
+.SH FILTERING
+Press \fB/\fR in a list to open the filter prompt. Matching is a plain substring search. The list
+updates live as you type (see \fBlive_filter_limit\fR), and Enter applies the filter. Esc or Ctrl+D cancels.
+.SS Syntax
+.TS
+tab(@);
+lb l.
+;@OR: an entry matches if it satisfies any group
+&@AND: within a group, an entry must contain every term
+\e;@Literal ';'
+\e&@Literal '&'
+.TE
+.PP
+AND binds tighter than OR, so \fBping&pong;metal&gear\fR matches entries containing both
+\fIping\fR and \fIpong\fR, or both \fImetal\fR and \fIgear\fR.
+.br
+Empty terms are ignored
+(\fBa&&b\fR is the same as \fBa&b\fR, and \fBa&\fR is the same as \fBa\fR). A backslash before any
+other character is treated as a normal character.
+.SS Case sensitivity
+Matching is "smart case" per term: a term with no uppercase letters is case-insensitive, and a term
+containing at least one uppercase letter is case-sensitive.
+.SS What is matched
+With \fBfilenames_only\fR enabled, only filenames are searched. In the umount
+list, the mount-point names are searched (without its trailing \fB~hash\fR suffix) unless the full
+list is displayed.
+.SS Nested filters
+Applying a filter while one is already active narrows the current results further. Filters are
+re-applied automatically when the list refreshes.
 
 .SH CONFIGURATION
 The configuration file is located at \fI~/.config/isocmd/config\fR and uses a \fIkey = value\fR format.
