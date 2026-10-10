@@ -189,8 +189,10 @@ static std::vector<QueryGroup> buildQueryGroups(const std::string& query) {
 
     const auto finishGroup = [&]() {
         finishTerm();
-        if (!group.empty())
+        if (!group.empty()) {
             groups.push_back(std::move(group));
+            group.clear();
+        }
     };
 
     for (size_t i = 0; i < query.size(); ++i) {
