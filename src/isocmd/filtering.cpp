@@ -976,7 +976,10 @@ LivePreviewResult computeLivePreviewMatches(const std::string& query)
 {
     LivePreviewResult result;
 
-    if (query.empty()) {
+    // An empty query, or one that parses to no terms (e.g. "\", ";", "&",
+    // ";;"), matches everything. Show the plain source list (identity),
+    // not a "filtered" view with index tags.
+    if (query.empty() || buildQueryGroups(query).empty()) {
         result.identity = true;
         g_livePreview.lastMatches.clear();
         g_livePreview.hasLastMatches = false;
