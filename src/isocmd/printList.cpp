@@ -2,6 +2,7 @@
 
 // C++ Standard Library Headers
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <charconv>
 #include <cstddef>
@@ -47,8 +48,18 @@ constexpr std::string_view kClearSeq = "\033[2J\033[3J\033[H\033[0m";
 /// Rough per-row overhead (index digits, color escapes, separators) used to size the buffer.
 constexpr std::size_t kPerRowOverhead = 96;
 
-/// Retained thread_local buffer capacity above which we release memory after a render.
+/// Retained capacity (per list-type buffer) above which we release memory after a render.
 constexpr std::size_t kMaxRetainedCapacity = 2u << 20; // 2 MiB
+
+/// Which list a frame is being rendered for. Each kind owns its own retained buffer.
+enum class ListKind : std::size_t { Iso, Image, Mounted, Count };
+
+/// One retained thread_local buffer per list type, so rendering one list type never
+/// grows, shrinks, or reallocates the buffer used by another.
+inline std::string& bufferFor(ListKind kind) {
+    static thread_local std::array<std::string, static_cast<std::size_t>(ListKind::Count)> buffers;
+    return buffers[static_cast<std::size_t>(kind)];
+}
 
 /// Number of decimal digits in value (value 0 -> 1 digit).
 inline std::size_t digitCount(std::size_t value) noexcept {
@@ -79,8 +90,10 @@ inline void appendNumPadded(std::string& out, std::size_t value, std::size_t wid
  * @brief Renders formatted lists (ISO, Image, or Mounts) to the terminal.
  *
  * Performance Notes:
- *  - The frame is built in a thread_local std::string that keeps its capacity across
- *    redraws, so steady-state rendering performs no heap allocation for the buffer.
+ *  - The frame is built in a thread_local std::string (one per list type: ISO, Image,
+ *    Mounts) that keeps its capacity across redraws, so steady-state rendering performs
+ *    no heap allocation for the buffer, and switching between list types never
+ *    reallocates.
  *  - Numbers are formatted via std::to_chars straight into the buffer.
  *  - Everything that can be computed without the print lock (filesystem checks, sync
  *    indicator text) is computed before locking. The critical section only re-reads
@@ -164,8 +177,11 @@ void printList(const StringListView& items, const std::string& listType, const s
         syncLine.append(UI::Palette::BoldReset);
     }
 
-    // --- Output Buffering (capacity retained across calls) ---
-    static thread_local std::string output;
+    // --- Output Buffering (per-list-type buffer, capacity retained across calls) ---
+    const ListKind kind = isIsoMode ? ListKind::Iso
+                        : isImgMode ? ListKind::Image
+                                    : ListKind::Mounted;
+    std::string& output = bufferFor(kind);
     output.clear();
 
     {
@@ -301,6 +317,7 @@ void printList(const StringListView& items, const std::string& listType, const s
     }
 
     // Don't let one huge render pin a large buffer for the life of the thread.
+    // Only this list type's buffer is released; the other buffers are untouched.
     if (output.capacity() > kMaxRetainedCapacity) {
         std::string().swap(output);
     }
