@@ -198,6 +198,12 @@ static std::vector<QueryGroup> buildQueryGroups(const std::string& query) {
     for (size_t i = 0; i < query.size(); ++i) {
         const char c = query[i];
 
+        // A backslash with nothing after it is a dangling escape (the user
+        // is mid-typing, or backspaced onto it). It has no delimiter to
+        // escape, so ignore it instead of searching for a literal '\'.
+        if (c == '\\' && i + 1 == query.size())
+            continue;
+
         // Backslash escapes only the query delimiters. A backslash before
         // any other character remains part of the search term.
         if (c == '\\' && i + 1 < query.size() &&
@@ -1044,14 +1050,20 @@ void liveFilterRedisplayHook() {
     const bool isFirstFrameOfThisCall = !g_livePreview.primed;
     g_livePreview.primed = true;
 
-    // A trailing backslash may escape the next '&' or ';'. Keep the list
-    // exactly as it was until the following character disambiguates the
-    // query; only redraw the readline prompt/cursor for this keystroke.
-    // Do not update lastQuery or lastMatches here, so the next complete
-    // query is compared against the last query that actually repainted.
+    // A trailing backslash may escape the next '&' or ';'. Hold the list
+    // only while the user is typing forward onto it (pure append to the
+    // last painted query). When arriving at a trailing backslash any other
+    // way (backspace, paste, history recall), nothing is pending, so fall
+    // through and repaint.
     if (!query.empty() && query.back() == '\\') {
-        rl_redisplay();
-        return;
+        const bool typedForward =
+            query.size() > g_livePreview.lastQuery.size() &&
+            query.compare(0, g_livePreview.lastQuery.size(),
+                          g_livePreview.lastQuery) == 0;
+        if (typedForward) {
+            rl_redisplay();
+            return;
+        }
     }
 
     if (!isFirstFrameOfThisCall && query == g_livePreview.lastQuery) {
