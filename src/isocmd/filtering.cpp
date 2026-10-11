@@ -2,9 +2,10 @@
 
 // C++ Standard Library Headers
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <cstdlib>
-#include <cctype>
+#include <cstring>
 #include <exception>
 #include <functional>
 #include <future>
@@ -60,69 +61,74 @@ namespace AnsiEscape {
 
 /**
  * @brief Tests whether @p pattern occurs anywhere in @p text, using SSE2
- * to scan 16 bytes at a time for the pattern's first character.
+ * to scan 16 start positions at a time.
  *
- * Algorithm: broadcast the pattern's first byte into a 128-bit register,
- * compare it against each 16-byte block of @p text, and turn the comparison
- * into a bitmask. Every set bit is a candidate position, verified with a
- * full @p pattern comparison. Bytes left over after the last full 16-byte
- * block (and any text shorter than 16 bytes) are handled by a scalar loop
- * that starts exactly where the vector loop stopped, so no start position
- * is skipped or checked twice.
+ * Algorithm: broadcast the pattern's first and last byte into two 128-bit
+ * registers, load two 16-byte blocks of @p text (at @c i and @c i + m - 1),
+ * compare each against its byte, and AND the results into a bitmask. Every
+ * set bit is a start position whose first and last bytes both match; only
+ * those candidates are verified by comparing the @c m - 2 middle bytes with
+ * @c memcmp. This removes most false candidates when the first byte is
+ * common (e.g. '/' or 't' in file paths). Single-byte patterns use
+ * @c memchr. The remaining start positions (fewer than 16) are checked by a
+ * scalar loop that begins exactly where the vector loop stopped, so no start
+ * position is skipped or checked twice.
  *
- * Complexity: O(n) scan plus one verification per first-character hit. It
- * is fastest when the pattern's first byte is rare in the text; a very
- * common first byte (e.g. '/') produces many candidates to verify.
+ * Complexity: O(n) scan plus one verification per first/last-byte hit.
+ * Worst case is O(n * m) for adversarial input where many positions share
+ * both end bytes with the pattern.
  *
  * Platform: requires x86/x86-64 (SSE2 is part of the x86-64 baseline) and a
- * compiler providing @c __builtin_ctz (GCC/Clang). It will not build on
- * other architectures as written.
+ * compiler providing @c __builtin_ctz (GCC/Clang). It will not build on other
+ * architectures or MSVC as written.
  *
- * Safety: the vector loop only loads a block when @c i + 16 <= n, so it
- * never reads past the end of @p text. The scalar loop's @c n - m cannot
- * underflow because @c m <= n is checked first.
+ * Safety: the vector loop runs only while @c i + m + 15 <= n, so both
+ * unaligned 16-byte loads stay inside @p text. All bounds are written as
+ * additions (@c i + m <= n) rather than @c n - m, and @c m <= n is checked
+ * first, so no unsigned subtraction can wrap.
+ *
+ * Case handling is the caller's job: pass an already-lowercased text/pattern
+ * pair for a case-insensitive match.
  *
  * @param text    The text to search within (the entry being tested).
- * @param pattern The substring to look for. Case handling is the caller's
- *                job: pass an already-lowercased text/pattern pair for a
- *                case-insensitive match.
+ * @param pattern The substring to look for.
  * @return true if @p pattern occurs in @p text; false otherwise. An empty
  *         @p pattern, or one longer than @p text, never matches.
  */
 inline bool simdSearchExists(std::string_view text, std::string_view pattern)
 {
+
     const size_t n = text.size();
     const size_t m = pattern.size();
     if (m == 0 || m > n) return false;
 
-    char firstChar = pattern[0];
-    size_t i = 0;
-
-    // SSE2 processes 16 bytes simultaneously using 128-bit vector registers
-    const __m128i target = _mm_set1_epi8(firstChar);
-
-    while (i + 16 <= n) {
-        __m128i chunk = _mm_loadu_si128(reinterpret_cast<const __m128i*>(text.data() + i));
-        __m128i cmp = _mm_cmpeq_epi8(chunk, target);
-        int mask = _mm_movemask_epi8(cmp);
-
-        while (mask != 0) {
-            int bitPos = __builtin_ctz(mask);
-            size_t matchIndex = i + bitPos;
-
-            if (matchIndex + m <= n && std::string_view(text.data() + matchIndex, m) == pattern) {
-                return true;
-            }
-            mask &= mask - 1;
-        }
-        i += 16;
+    if (m == 1) {
+        return std::memchr(text.data(), pattern[0], n) != nullptr;
     }
 
-    // Scalar fallback loop for remaining bytes
-    for (; i <= n - m; ++i) {
-        if (text[i] == firstChar && std::string_view(text.data() + i, m) == pattern) {
-            return true;
+    const char* const t = text.data();
+    const char* const p = pattern.data();
+    const __m128i first = _mm_set1_epi8(p[0]);
+    const __m128i last = _mm_set1_epi8(p[m - 1]);
+    size_t i = 0;
+
+    for (; i + m + 15 <= n; i += 16) {
+        const __m128i a = _mm_loadu_si128(reinterpret_cast<const __m128i*>(t + i));
+        const __m128i b = _mm_loadu_si128(reinterpret_cast<const __m128i*>(t + i + m - 1));
+        unsigned mask = static_cast<unsigned>(_mm_movemask_epi8(
+            _mm_and_si128(_mm_cmpeq_epi8(a, first), _mm_cmpeq_epi8(b, last))));
+
+        while (mask != 0) {
+            const unsigned bit = static_cast<unsigned>(__builtin_ctz(mask));
+            // First and last bytes already match; compare the middle (m - 2 bytes).
+            if (std::memcmp(t + i + bit + 1, p + 1, m - 2) == 0) return true;
+            mask &= mask - 1;
         }
+    }
+
+    // Scalar tail for the remaining start positions.
+    for (; i + m <= n; ++i) {
+        if (t[i] == p[0] && std::memcmp(t + i + 1, p + 1, m - 1) == 0) return true;
     }
 
     return false;
