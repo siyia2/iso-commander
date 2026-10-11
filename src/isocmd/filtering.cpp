@@ -144,17 +144,31 @@ inline bool simdSearchExists(std::string_view text, std::string_view pattern)
 using QueryGroup = std::vector<QueryToken>;
 
 /**
+ * @brief True if @p query ends in an unpaired backslash, i.e. an escape
+ * still waiting for the character it escapes. Backslashes pair up left to
+ * right ("\\\\" is one literal '\'), so only an odd-length trailing run is
+ * dangling.
+ */
+static bool hasDanglingBackslash(const std::string& query) {
+    size_t run = 0;
+    for (size_t i = query.size(); i > 0 && query[i - 1] == '\\'; --i)
+        ++run;
+    return (run % 2) == 1;
+}
+
+/**
  * @brief Parses a query string into OR-ed groups of AND-ed terms.
  *
  * Grammar:
  * @code
  *   query := group (';' group)*       // unescaped ';' = OR
  *   group := term  ('&' term)*        // unescaped '&' = AND
- *   escape := '\\&' | '\\;'         // literal '&' or ';' inside a term
+ *   escape := '\\&' | '\\;' | '\\\\'   // literal '&', ';' or '\' inside a term
  * @endcode
  * AND binds tighter than OR, so "a&b;c" means (a AND b) OR c.
- * Use "\\&" or "\\;" to search for a literal delimiter. A backslash
- * before any other character is preserved as part of the term.
+ * Use "\\&" or "\\;" to search for a literal delimiter, and "\\\\" to search
+ * for a literal backslash. A backslash before any other character is
+ * preserved as part of the term.
  *
  * Empty terms and empty groups are dropped: "a&&b" is "a&b", "a;;b" is
  * "a;b", and "a&" is "a".
@@ -210,10 +224,10 @@ static std::vector<QueryGroup> buildQueryGroups(const std::string& query) {
         if (c == '\\' && i + 1 == query.size())
             continue;
 
-        // Backslash escapes only the query delimiters. A backslash before
+        // Backslash escapes only '&', ';' and '\' itself. A backslash before
         // any other character remains part of the search term.
         if (c == '\\' && i + 1 < query.size() &&
-            (query[i + 1] == '&' || query[i + 1] == ';')) {
+            (query[i + 1] == '&' || query[i + 1] == ';' || query[i + 1] == '\\')) {
             term.push_back(query[++i]);
         } else if (c == '&') {
             finishTerm();
@@ -285,8 +299,9 @@ static inline bool matchesAnyGroup(const std::vector<QueryGroup>& groups,
  *
  * @param files Vector of entries to filter.
  * @param query Search query; unescaped ';' separates OR-ed groups and
- *        unescaped '&' separates AND-ed terms. Use '\\&' and '\\;' to
- *        search for literal delimiters (see @c buildQueryGroups).
+ *        unescaped '&' separates AND-ed terms. Use '\\&', '\\;' and '\\\\'
+ *        to search for literal delimiters / backslash (see
+ *        @c buildQueryGroups).
  * @param precomputedLower Optional parallel array, same size as @p files, holding
  *        each entry of @p files already lowercased. When provided (and its size
  *        matches @p files), it is used in place of lowercasing each entry inline,
@@ -583,7 +598,8 @@ static std::string extractUnmountKey(const std::string& path) {
  *
  * @param searchString The query to filter by (saved for state recovery).
  *        Unescaped ';' separates OR-ed groups and unescaped '&' separates
- *        AND-ed terms; '\\;' and '\\&' match literal delimiters.
+ *        AND-ed terms; '\\;', '\\&' and '\\\\' match a literal ';', '&'
+ *        and '\'.
  * @param ctx FilterContext providing source lists, unmount flags, and UI state.
  * @return true if matches were found and the filter stack was updated;
  * false if the query is empty or no matches exist. Also returns true, without
@@ -746,7 +762,9 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 // term or add another AND-ed term, which only tightens the match. This is
 // valid for the smart-case rules too: extending a query can only keep or
 // add uppercase letters, and any entry containing the longer text also
-// contains the shorter prefix.
+// contains the shorter prefix. A previous query that ends in an unpaired
+// backslash (see hasDanglingBackslash) is not trusted as a prefix, since
+// the next character may turn that backslash into an escape.
 //
 // Trade-offs worth knowing about:
 //  - Index tags: for a non-empty query the preview pushes a temporary
@@ -974,10 +992,13 @@ LivePreviewResult computeLivePreviewMatches(const std::string& query)
     // Strict prefix extension of the previous query, single OR-group only
     // (no ';'): the only case where "matches(new) is a subset of
     // matches(old)" is guaranteed under smart-case matching. '&' is safe
-    // here because it only ever adds constraints to the one group.
+    // here because it only ever adds constraints to the one group. A
+    // previous query ending in an unpaired backslash is excluded: its
+    // trailing '\' was ignored by the parser, but the next character can
+    // turn it into an escape and change the meaning of the term.
     const bool progressiveExtension =
         !g_livePreview.lastQuery.empty() &&
-        g_livePreview.lastQuery.back() != '\\' &&
+        !hasDanglingBackslash(g_livePreview.lastQuery) &&
         query.size() > g_livePreview.lastQuery.size() &&
         g_livePreview.lastQuery.find(';') == std::string::npos &&
         query.find(';') == std::string::npos &&
@@ -1056,12 +1077,13 @@ void liveFilterRedisplayHook() {
     const bool isFirstFrameOfThisCall = !g_livePreview.primed;
     g_livePreview.primed = true;
 
-    // A trailing backslash may escape the next '&' or ';'. Hold the list
-    // only while the user is typing forward onto it (pure append to the
-    // last painted query). When arriving at a trailing backslash any other
-    // way (backspace, paste, history recall), nothing is pending, so fall
-    // through and repaint.
-    if (!query.empty() && query.back() == '\\') {
+    // An unpaired trailing backslash may escape the next '&', ';' or '\'.
+    // Hold the list only while the user is typing forward onto it (pure
+    // append to the last painted query). When arriving at a dangling
+    // backslash any other way (backspace, paste, history recall), nothing
+    // is pending, so fall through and repaint. A completed pair ("\\") is
+    // not dangling and repaints normally.
+    if (hasDanglingBackslash(query)) {
         const bool typedForward =
             query.size() > g_livePreview.lastQuery.size() &&
             query.compare(0, g_livePreview.lastQuery.size(),
@@ -1296,8 +1318,8 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
  * current @p globalIsoFileList, so that the filtered view and each level's
  * stored indices stay consistent after the underlying list changes (e.g. a
  * background refresh). Each level applies its saved query (with the same
- * ';' OR / '&' AND syntax as the commit path) to the results of the
- * previous level.
+ * ';' OR / '&' AND / '\\' escape syntax as the commit path) to the results
+ * of the previous level.
  *
  * @section filtering_logic Logic Flow:
  * 1.  **Initialization**: Starts with the full range of indices [0, N) over
