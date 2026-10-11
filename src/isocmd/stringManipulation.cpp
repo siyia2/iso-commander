@@ -45,7 +45,7 @@ void toLowerInPlace(std::string& str) {
  * or the 'GlobalCaches::transformationCache' (if shortened).
  */
 std::pair<std::string_view, std::string_view> extractDirectoryAndFilename(std::string_view path, const std::string& location) {
-    const auto lastSlashPos = path.find_last_of("/\\");
+    const auto lastSlashPos = path.find_last_of('/');
 
     // 1. Filename is always a slice of the input path
     const std::string_view filename = (lastSlashPos == std::string_view::npos) ?
@@ -80,7 +80,7 @@ std::pair<std::string_view, std::string_view> extractDirectoryAndFilename(std::s
 
     size_t start = 0;
     while (start < originalDir.size()) {
-        auto end = originalDir.find_first_of("/\\", start);
+        auto end = originalDir.find_first_of('/', start);
         if (end == std::string_view::npos) end = originalDir.size();
 
         std::string_view component = originalDir.substr(start, end - start);
