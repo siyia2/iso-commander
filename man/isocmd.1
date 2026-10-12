@@ -75,8 +75,8 @@ updates live as you type (see \fBlive_filter_limit\fR), and Enter applies the fi
 tab(@);
 lb l.
 ;@OR: an entry matches if it satisfies any group
-&@AND: within a group, an entry must satisfy every term
-!@NOT: at the start of a term, the entry must not contain it
+&@AND: within a group, an entry must contain every non-negated term
+!@NOT: at the start of a term, excludes entries containing it (applies to the whole query)
 \e;@Literal ';'
 \e&@Literal '&'
 \e!@Literal '!'
@@ -86,11 +86,11 @@ lb l.
 AND binds tighter than OR, so \fBping&pong;metal&gear\fR matches entries containing both
 \fIping\fR and \fIpong\fR, or both \fImetal\fR and \fIgear\fR.
 .br
-A term starting with \fB!\fR is negated: \fBiso&!boot\fR matches entries that contain
-\fIiso\fR but not \fIboot\fR. Negation applies per term, and a \fB!\fR anywhere else is literal.
+A term starting with \fB!\fR excludes every entry containing it, in any group:
+\fBa;b&!t\fR matches entries with \fIa\fR or \fIb\fR, but never \fIt\fR. A \fB!\fR elsewhere in a
+term is literal (use \fB\e!\fR for a leading one).
 .br
-Empty terms are ignored
-(\fBa&&b\fR is the same as \fBa&b\fR, and \fBa&\fR is the same as \fBa\fR). A backslash before any
+Empty terms are ignored (\fBa&&b\fR is \fBa&b\fR). A backslash before any
 other character is treated as a normal character.
 
 .SS Case sensitivity
