@@ -49,7 +49,7 @@ constexpr std::string_view kClearSeq = "\033[2J\033[3J\033[H\033[0m";
 constexpr std::size_t kPerRowOverhead = 96;
 
 /// Retained capacity (per list-type buffer) above which we release memory after a render.
-constexpr std::size_t kMaxRetainedCapacity = 2u << 20; // 2 MiB
+constexpr std::size_t kMaxRetainedCapacity = 5u << 20; // 5 MiB
 
 /// Which list a frame is being rendered for. Each kind owns its own retained buffer.
 enum class ListKind : std::size_t { Iso, Image, Mounted, Count };
