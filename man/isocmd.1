@@ -90,12 +90,12 @@ Empty terms are ignored
 (\fBa&&b\fR is the same as \fBa&b\fR, and \fBa&\fR is the same as \fBa\fR). A backslash before any
 other character is treated as a normal character.
 .SS Negation
-A \fB!\fR at the start of a term negates it: the term is satisfied when the entry does \fInot\fR
+\fB!\fR at the start of a term negates it: the term is satisfied when the entry does \fInot\fR
 contain the text. \fB!a\fR matches entries without \fIa\fR, and \fBiso&!boot\fR matches entries that
 contain \fIiso\fR but not \fIboot\fR.
 .br
 Negation applies per term, so \fB!a;b\fR matches entries
-without \fIa\fR, or entries containing \fIb\fR. A \fB!\fR anywhere other than the start of
+without \fIa\fR, or entries containing \fIb\fR. \fB!\fR anywhere other than the start of
 a term is literal (\fBfoo!bar\fR searches for \fIfoo!bar\fR).
 .br
 To search for text that begins with \fB!\fR, escape it (\fB\e!foo\fR). A lone
