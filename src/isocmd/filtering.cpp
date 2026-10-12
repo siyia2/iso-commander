@@ -41,6 +41,15 @@
 #include "../stringListView.h"
 #include "../threadpool.h"
 
+// NOTE: filtering.h must declare QueryToken with a `negated` member:
+//
+//   struct QueryToken {
+//       std::string original;
+//       std::string lower;
+//       bool isCaseSensitive = false;
+//       bool negated = false;   // term must NOT occur in the entry
+//   };
+
 // Defined in printList.cpp. Forward-declared here (same as displayCode.cpp
 // does) so the live filter preview below can repaint the real list, not a
 // stand-in, on every keystroke. The list is passed as a non-owning
@@ -140,6 +149,9 @@ inline bool simdSearchExists(std::string_view text, std::string_view pattern)
  * One OR-branch of a query: every term in the group must match (AND
  * semantics). A query is a list of such groups; an entry matches if ANY
  * group is fully satisfied (OR semantics).
+ *
+ * A term may be negated (see @c QueryToken::negated), in which case it is
+ * satisfied when the term does NOT occur in the entry.
  */
 using QueryGroup = std::vector<QueryToken>;
 
@@ -163,12 +175,20 @@ static bool hasDanglingBackslash(const std::string& query) {
  * @code
  *   query := group (';' group)*       // unescaped ';' = OR
  *   group := term  ('&' term)*        // unescaped '&' = AND
- *   escape := '\\&' | '\\;' | '\\\\'   // literal '&', ';' or '\' inside a term
+ *   term  := '!'? text                // leading unescaped '!' negates the term
+ *   escape := '\\&' | '\\;' | '\\!' | '\\\\'   // literal '&', ';', '!' or '\' inside a term
  * @endcode
  * AND binds tighter than OR, so "a&b;c" means (a AND b) OR c.
- * Use "\\&" or "\\;" to search for a literal delimiter, and "\\\\" to search
- * for a literal backslash. A backslash before any other character is
- * preserved as part of the term.
+ * Use "\\&" or "\\;" to search for a literal delimiter, "\\!" to search for
+ * a literal '!', and "\\\\" to search for a literal backslash. A backslash
+ * before any other character is preserved as part of the term.
+ *
+ * Negation: an unescaped '!' at the very START of a term negates that term,
+ * so "a&!b" means "contains a AND does not contain b", and "!a;b" means
+ * "(does not contain a) OR (contains b)". A '!' anywhere else in a term is
+ * literal ("foo!bar" searches for "foo!bar"). Only the first '!' of a term
+ * negates: "!!a" is the negation of the literal text "!a". A lone "!" (no
+ * text after it) is an empty term and is dropped, like any other empty term.
  *
  * Empty terms and empty groups are dropped: "a&&b" is "a&b", "a;;b" is
  * "a;b", and "a&" is "a".
@@ -176,24 +196,29 @@ static bool hasDanglingBackslash(const std::string& query) {
  * Matching is "smart case" per term: a term containing at least one
  * uppercase letter is matched case-sensitively against the original text,
  * while an all-lowercase term is matched case-insensitively (its @c lower
- * form is searched against the lowercased text).
+ * form is searched against the lowercased text). This applies to negated
+ * terms the same way.
  *
  * @param query The query string to parse.
  * @return The groups in query order. Empty if the query contains no
- *         non-empty term (e.g. "", ";;" or "&").
+ *         non-empty term (e.g. "", ";;", "&" or "!").
  */
 static std::vector<QueryGroup> buildQueryGroups(const std::string& query) {
     std::vector<QueryGroup> groups;
     QueryGroup group;
     std::string term;
+    bool negate = false;   // the term currently being built started with an unescaped '!'
     term.reserve(query.size());
 
     const auto finishTerm = [&]() {
+        const bool wasNegated = negate;
+        negate = false;    // reset even when the term is empty (a lone "!")
         if (term.empty())
             return;
 
         QueryToken qt;
         qt.original        = std::move(term);
+        qt.negated         = wasNegated;
         qt.isCaseSensitive = std::any_of(
             qt.original.begin(), qt.original.end(),
             [](unsigned char c) { return std::isupper(c); });
@@ -224,15 +249,20 @@ static std::vector<QueryGroup> buildQueryGroups(const std::string& query) {
         if (c == '\\' && i + 1 == query.size())
             continue;
 
-        // Backslash escapes only '&', ';' and '\' itself. A backslash before
-        // any other character remains part of the search term.
+        // Backslash escapes only '&', ';', '!' and '\' itself. A backslash
+        // before any other character remains part of the search term.
         if (c == '\\' && i + 1 < query.size() &&
-            (query[i + 1] == '&' || query[i + 1] == ';' || query[i + 1] == '\\')) {
+            (query[i + 1] == '&' || query[i + 1] == ';' ||
+             query[i + 1] == '!' || query[i + 1] == '\\')) {
             term.push_back(query[++i]);
         } else if (c == '&') {
             finishTerm();
         } else if (c == ';') {
             finishGroup();
+        } else if (c == '!' && term.empty() && !negate) {
+            // Unescaped '!' at the start of a term: negate it. Any later '!'
+            // in the same term (including a second leading one) is literal.
+            negate = true;
         } else {
             term.push_back(c);
         }
@@ -253,11 +283,27 @@ static bool groupsNeedLower(const std::vector<QueryGroup>& groups) {
 }
 
 /**
+ * @brief True if any term in any group is negated ('!').
+ *
+ * Negation breaks the monotonicity that incremental narrowing relies on:
+ * extending a negated term ("!a" -> "!ab") WIDENS the match set, because
+ * entries containing "a" but not "ab" start to match. The live preview
+ * therefore never narrows incrementally from a negated query.
+ */
+static bool groupsHaveNegation(const std::vector<QueryGroup>& groups) {
+    for (const auto& group : groups)
+        for (const auto& qt : group)
+            if (qt.negated) return true;
+    return false;
+}
+
+/**
  * @brief Tests one entry against a parsed query.
  *
  * Returns true if at least one group is satisfied (OR), where a group is
- * satisfied only when every one of its terms occurs in the entry (AND).
- * Short-circuits at both levels.
+ * satisfied only when every one of its terms is satisfied (AND): a normal
+ * term is satisfied when it occurs in the entry, a negated term when it does
+ * NOT occur. Short-circuits at both levels.
  *
  * @param groups    Parsed query (see @c buildQueryGroups); must be non-empty.
  * @param file      The entry text, original case.
@@ -274,7 +320,8 @@ static inline bool matchesAnyGroup(const std::vector<QueryGroup>& groups,
             const bool hit = qt.isCaseSensitive
                 ? simdSearchExists(file, qt.original)
                 : simdSearchExists(*fileLower, qt.lower);
-            if (!hit) {
+            // Positive term: fail when not found. Negated term: fail when found.
+            if (hit == qt.negated) {
                 allMatch = false;
                 break;
             }
@@ -299,9 +346,9 @@ static inline bool matchesAnyGroup(const std::vector<QueryGroup>& groups,
  *
  * @param files Vector of entries to filter.
  * @param query Search query; unescaped ';' separates OR-ed groups and
- *        unescaped '&' separates AND-ed terms. Use '\\&', '\\;' and '\\\\'
- *        to search for literal delimiters / backslash (see
- *        @c buildQueryGroups).
+ *        unescaped '&' separates AND-ed terms. A leading unescaped '!' on a
+ *        term negates it. Use '\\&', '\\;', '\\!' and '\\\\' to search for
+ *        literal delimiters / '!' / backslash (see @c buildQueryGroups).
  * @param precomputedLower Optional parallel array, same size as @p files, holding
  *        each entry of @p files already lowercased. When provided (and its size
  *        matches @p files), it is used in place of lowercasing each entry inline,
@@ -312,7 +359,7 @@ static inline bool matchesAnyGroup(const std::vector<QueryGroup>& groups,
  *        A cache whose size does not match is ignored, never trusted.
  * @return Ascending indices into @p files of the matching entries. Empty if
  *         @p files or @p query is empty. If the query has no non-empty term
- *         (e.g. ";" or "&"), every index is returned.
+ *         (e.g. ";", "&" or "!"), every index is returned.
  */
 std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query,
                                         const std::vector<std::string>* precomputedLower)
@@ -420,10 +467,12 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
  * Correctness precondition: the caller must only pass a candidate set that
  * is a superset of the new query's matches. The live preview guarantees
  * this by using it only when the new query strictly extends the previous
- * one and neither contains ';' (see @c computeLivePreviewMatches). Queries
- * using '&' qualify: with a single AND-group, extending the text can only
- * lengthen a term or add another AND-ed term, both of which only tighten
- * the match.
+ * one, neither contains ';', and the new query contains no negated term
+ * (see @c computeLivePreviewMatches). Queries using '&' qualify: with a
+ * single AND-group, extending the text can only lengthen a term or add
+ * another AND-ed term, both of which only tighten the match. Negated ('!')
+ * terms do NOT qualify: extending a negated term ("!a" -> "!ab") widens the
+ * match set, so the previous matches would be an incomplete candidate set.
  *
  * @param files Vector of all entries; candidates index into this.
  * @param candidateIndices Indices into @p files to evaluate (typically the
@@ -598,7 +647,8 @@ static std::string extractUnmountKey(const std::string& path) {
  *
  * @param searchString The query to filter by (saved for state recovery).
  *        Unescaped ';' separates OR-ed groups and unescaped '&' separates
- *        AND-ed terms; '\\;', '\\&' and '\\\\' match a literal ';', '&'
+ *        AND-ed terms; a leading unescaped '!' on a term negates it.
+ *        '\\;', '\\&', '\\!' and '\\\\' match a literal ';', '&', '!'
  *        and '\'.
  * @param ctx FilterContext providing source lists, unmount flags, and UI state.
  * @return true if matches were found and the filter stack was updated;
@@ -765,6 +815,13 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 // contains the shorter prefix. A previous query that ends in an unpaired
 // backslash (see hasDanglingBackslash) is not trusted as a prefix, since
 // the next character may turn that backslash into an escape.
+//
+// Negated ('!') queries ALWAYS take the full-search path. Extending a
+// negated term ("!a" -> "!ab") widens the match set (entries containing "a"
+// but not "ab" begin to match), so the previous matches are not a valid
+// superset of the new ones. Checking the new query alone is sufficient: an
+// extension of a query that has an unescaped leading '!' on a term still
+// has that '!', so a query without negation can never extend one with it.
 //
 // Trade-offs worth knowing about:
 //  - Index tags: for a non-empty query the preview pushes a temporary
@@ -957,12 +1014,13 @@ void primeLivePreviewCaches() {
  * Reads from the per-invocation derived/lowercase caches
  * (primeLivePreviewCaches) instead of rebuilding them on every keystroke,
  * and narrows incrementally when possible: if @p query strictly extends
- * @c g_livePreview.lastQuery (and neither contains ';'), only the previous
- * frame's matches are re-tested via @c filterFilesIndicesSubset; otherwise
- * the whole list is searched. '&' (AND) queries are eligible for the
- * incremental path (see the "Incremental narrowing" note above). Because it
- * reads the previous query, the caller must update @c lastQuery only AFTER
- * this returns.
+ * @c g_livePreview.lastQuery (and neither contains ';', and @p query has no
+ * negated term), only the previous frame's matches are re-tested via
+ * @c filterFilesIndicesSubset; otherwise the whole list is searched. '&'
+ * (AND) queries are eligible for the incremental path (see the "Incremental
+ * narrowing" note above); negated ('!') queries are not, because extending
+ * a negated term widens the match set. Because it reads the previous query,
+ * the caller must update @c lastQuery only AFTER this returns.
  *
  * Side effects: updates @c lastMatches / @c hasLastMatches (cleared for an
  * empty query, set to this result otherwise).
@@ -976,10 +1034,13 @@ LivePreviewResult computeLivePreviewMatches(const std::string& query)
 {
     LivePreviewResult result;
 
+    // Parse once; reused below for the identity check and the negation gate.
+    const std::vector<QueryGroup> groups = buildQueryGroups(query);
+
     // An empty query, or one that parses to no terms (e.g. "\", ";", "&",
-    // ";;"), matches everything. Show the plain source list (identity),
+    // "!", ";;"), matches everything. Show the plain source list (identity),
     // not a "filtered" view with index tags.
-    if (query.empty() || buildQueryGroups(query).empty()) {
+    if (query.empty() || groups.empty()) {
         result.identity = true;
         g_livePreview.lastMatches.clear();
         g_livePreview.hasLastMatches = false;
@@ -999,8 +1060,11 @@ LivePreviewResult computeLivePreviewMatches(const std::string& query)
     // previous query ending in an unpaired backslash is excluded: its
     // trailing '\' was ignored by the parser, but the next character can
     // turn it into an escape and change the meaning of the term.
+    // Negation is excluded too: "!a" -> "!ab" WIDENS the match set, so the
+    // old matches would not be a superset of the new ones.
     const bool progressiveExtension =
         !g_livePreview.lastQuery.empty() &&
+        !groupsHaveNegation(groups) &&
         !hasDanglingBackslash(g_livePreview.lastQuery) &&
         query.size() > g_livePreview.lastQuery.size() &&
         g_livePreview.lastQuery.find(';') == std::string::npos &&
@@ -1080,7 +1144,7 @@ void liveFilterRedisplayHook() {
     const bool isFirstFrameOfThisCall = !g_livePreview.primed;
     g_livePreview.primed = true;
 
-    // An unpaired trailing backslash may escape the next '&', ';' or '\'.
+    // An unpaired trailing backslash may escape the next '&', ';', '!' or '\'.
     // Hold the list only while the user is typing forward onto it (pure
     // append to the last painted query). When arriving at a dangling
     // backslash any other way (backspace, paste, history recall), nothing
@@ -1321,8 +1385,8 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
  * current @p globalIsoFileList, so that the filtered view and each level's
  * stored indices stay consistent after the underlying list changes (e.g. a
  * background refresh). Each level applies its saved query (with the same
- * ';' OR / '&' AND / '\\' escape syntax as the commit path) to the results
- * of the previous level.
+ * ';' OR / '&' AND / '!' negation / '\\' escape syntax as the commit path)
+ * to the results of the previous level.
  *
  * @section filtering_logic Logic Flow:
  * 1.  **Initialization**: Starts with the full range of indices [0, N) over
