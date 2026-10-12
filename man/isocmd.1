@@ -75,9 +75,11 @@ updates live as you type (see \fBlive_filter_limit\fR), and Enter applies the fi
 tab(@);
 lb l.
 ;@OR: an entry matches if it satisfies any group
-&@AND: within a group, an entry must contain every term
+&@AND: within a group, an entry must satisfy every term
+!@NOT: at the start of a term, the entry must not contain it
 \e;@Literal ';'
 \e&@Literal '&'
+\e!@Literal '!'
 \e\e@Literal '\e'
 .TE
 .PP
@@ -87,9 +89,18 @@ AND binds tighter than OR, so \fBping&pong;metal&gear\fR matches entries contain
 Empty terms are ignored
 (\fBa&&b\fR is the same as \fBa&b\fR, and \fBa&\fR is the same as \fBa\fR). A backslash before any
 other character is treated as a normal character.
+.SS Negation
+A \fB!\fR at the start of a term negates it: the term is satisfied when the entry does \fInot\fR
+contain the text. \fB!a\fR matches entries without \fIa\fR, and \fBiso&!boot\fR matches entries that
+contain \fIiso\fR but not \fIboot\fR. Negation applies per term, so \fB!a;b\fR matches entries
+without \fIa\fR, or entries containing \fIb\fR.
+.br
+A \fB!\fR anywhere other than the start of a term is literal (\fBfoo!bar\fR searches for
+\fIfoo!bar\fR). To search for text that begins with \fB!\fR, escape it (\fB\e!foo\fR). A lone
+\fB!\fR with no text after it is an empty term and is ignored.
 .SS Case sensitivity
 Matching is "smart case" per term: a term with no uppercase letters is case-insensitive, and a term
-containing at least one uppercase letter is case-sensitive.
+containing at least one uppercase letter is case-sensitive. This applies to negated terms too.
 .SS What is matched
 With \fBfilenames_only\fR enabled, only filenames are searched. In the umount
 list, the mount-point names are searched (without its trailing \fB~hash\fR suffix) unless the full
