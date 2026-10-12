@@ -18,13 +18,25 @@ struct RefreshState;
  */
 
 /**
- * @brief Represents a single search token: the original text and, for
- * case-insensitive tokens, its lowercased form.
+ * @brief Represents a single search term within a query: its original text,
+ * its match-case mode, and whether it is negated.
+ *
+ * Matching is "smart case" per term. If @c original contains an uppercase
+ * letter, @c isCaseSensitive is true and the term is searched against the
+ * entry's original text. Otherwise the term is case-insensitive and its
+ * lowercased form (@c lower) is searched against the entry's lowercased text.
+ * @c lower is populated only for case-insensitive terms.
+ *
+ * A negated term (query syntax: a leading unescaped '!', e.g. "!boot") inverts
+ * the match: the term is satisfied when it does NOT occur in the entry.
+ * @c original and @c lower hold the term text without the '!' prefix, and
+ * smart-case applies to negated terms the same way.
  */
 struct QueryToken {
-    std::string original;
-    std::string lower;
-    bool isCaseSensitive = false;
+    std::string original;            ///< Term text as typed (escapes resolved, '!' prefix removed).
+    std::string lower;               ///< Lowercased @c original; set only when !isCaseSensitive.
+    bool isCaseSensitive = false;    ///< True if @c original contains an uppercase letter.
+    bool negated = false;            ///< True if the term must NOT occur in the entry.
 };
 
 /**
