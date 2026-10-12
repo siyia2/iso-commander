@@ -86,20 +86,12 @@ lb l.
 AND binds tighter than OR, so \fBping&pong;metal&gear\fR matches entries containing both
 \fIping\fR and \fIpong\fR, or both \fImetal\fR and \fIgear\fR.
 .br
+A term starting with \fB!\fR is negated: \fBiso&!boot\fR matches entries that contain
+\fIiso\fR but not \fIboot\fR. Negation applies per term, and a \fB!\fR anywhere else is literal.
+.br
 Empty terms are ignored
 (\fBa&&b\fR is the same as \fBa&b\fR, and \fBa&\fR is the same as \fBa\fR). A backslash before any
 other character is treated as a normal character.
-.SS Negation
-\fB!\fR at the start of a term negates it: the term is satisfied when the entry does \fInot\fR
-contain the text. \fB!a\fR matches entries without \fIa\fR, and \fBiso&!boot\fR matches entries that
-contain \fIiso\fR but not \fIboot\fR.
-.br
-Negation applies per term, so \fB!a;b\fR matches entries
-without \fIa\fR, or entries containing \fIb\fR. \fB!\fR anywhere other than the start of
-a term is literal (\fBfoo!bar\fR searches for \fIfoo!bar\fR).
-.br
-To search for text that begins with \fB!\fR, escape it (\fB\e!foo\fR). A lone
-\fB!\fR with no text after it is an empty term and is ignored.
 
 .SS Case sensitivity
 Matching is "smart case" per term: a term with no uppercase letters is case-insensitive, and a term
