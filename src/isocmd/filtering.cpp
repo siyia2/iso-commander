@@ -137,12 +137,11 @@ inline bool simdSearchExists(std::string_view text, std::string_view pattern)
 // ─── Query parsing ───────────────────────────────────────────────────────────
 
 /**
- * One OR-branch of a query: every term in the group must match (AND
- * semantics). A query is a list of such groups; an entry matches if ANY
- * group is fully satisfied (OR semantics).
- *
- * A term may be negated (see @c QueryToken::negated), in which case it is
- * satisfied when the term does NOT occur in the entry.
+ * One OR-branch of a query: every positive term in the group must match
+ * (AND semantics). A query is a list of such groups; an entry matches if ANY
+ * group's positive terms are all satisfied (OR semantics). Negated terms
+ * (see @c QueryToken::negated) are parsed into their group but are applied
+ * globally, to the whole query, not just that group (see @c matchesAnyGroup).
  */
 using QueryGroup = std::vector<QueryToken>;
 
@@ -174,12 +173,14 @@ static bool hasDanglingBackslash(const std::string& query) {
  * a literal '!', and "\\\\" to search for a literal backslash. A backslash
  * before any other character is preserved as part of the term.
  *
- * Negation: an unescaped '!' at the very START of a term negates that term,
- * so "a&!b" means "contains a AND does not contain b", and "!a;b" means
- * "(does not contain a) OR (contains b)". A '!' anywhere else in a term is
- * literal ("foo!bar" searches for "foo!bar"). Only the first '!' of a term
- * negates: "!!a" is the negation of the literal text "!a". A lone "!" (no
- * text after it) is an empty term and is dropped, like any other empty term.
+ * Negation: an unescaped '!' at the very START of a term negates that term.
+ * Negation is global: a negated term excludes entries containing it no
+ * matter which OR-group it was written in. "a;b&!t&!g" means
+ * "(a OR b) AND NOT t AND NOT g", and "!a;b" means "contains b and does not
+ * contain a". A '!' anywhere else in a term is literal ("foo!bar" searches
+ * for "foo!bar"). Only the first '!' of a term negates: "!!a" is the
+ * negation of the literal text "!a". A lone "!" (no text after it) is an
+ * empty term and is dropped, like any other empty term.
  *
  * Empty terms and empty groups are dropped: "a&&b" is "a&b", "a;;b" is
  * "a;b", and "a&" is "a".
@@ -291,10 +292,16 @@ static bool groupsHaveNegation(const std::vector<QueryGroup>& groups) {
 /**
  * @brief Tests one entry against a parsed query.
  *
- * Returns true if at least one group is satisfied (OR), where a group is
- * satisfied only when every one of its terms is satisfied (AND): a normal
- * term is satisfied when it occurs in the entry, a negated term when it does
- * NOT occur. Short-circuits at both levels.
+ * Negation is GLOBAL: every negated term, in any group, is an exclusion that
+ * applies to the whole query. An entry matches when
+ *  1. none of the negated terms occurs in it, AND
+ *  2. at least one group is satisfied by its positive (non-negated) terms
+ *     (OR across groups, AND within a group). Groups that contain only
+ *     negated terms are skipped. If the query has no positive term at all,
+ *     step 2 is skipped and the entry matches once step 1 passes.
+ *
+ * So "a;b&!t&!g" means "(a OR b) AND NOT t AND NOT g". Short-circuits at
+ * every level; the cheap exclusion pass runs first.
  *
  * @param groups    Parsed query (see @c buildQueryGroups); must be non-empty.
  * @param file      The entry text, original case.
@@ -305,19 +312,38 @@ static inline bool matchesAnyGroup(const std::vector<QueryGroup>& groups,
                                    const std::string& file,
                                    const std::string* fileLower)
 {
+    const auto termHit = [&](const QueryToken& qt) {
+        return qt.isCaseSensitive
+            ? simdSearchExists(file, qt.original)
+            : simdSearchExists(*fileLower, qt.lower);
+    };
+
+    // Pass 1: global exclusions. Also notes whether any positive term exists.
+    bool hasPositive = false;
     for (const auto& group : groups) {
+        for (const auto& qt : group) {
+            if (qt.negated) {
+                if (termHit(qt)) return false;
+            } else {
+                hasPositive = true;
+            }
+        }
+    }
+    if (!hasPositive) return true;   // exclusion-only query
+
+    // Pass 2: OR over groups, AND over each group's positive terms.
+    for (const auto& group : groups) {
+        bool groupHasPositive = false;
         bool allMatch = true;
         for (const auto& qt : group) {
-            const bool hit = qt.isCaseSensitive
-                ? simdSearchExists(file, qt.original)
-                : simdSearchExists(*fileLower, qt.lower);
-            // Positive term: fail when not found. Negated term: fail when found.
-            if (hit == qt.negated) {
+            if (qt.negated) continue;
+            groupHasPositive = true;
+            if (!termHit(qt)) {
                 allMatch = false;
                 break;
             }
         }
-        if (allMatch) return true;
+        if (groupHasPositive && allMatch) return true;
     }
     return false;
 }
