@@ -41,15 +41,6 @@
 #include "../stringListView.h"
 #include "../threadpool.h"
 
-// NOTE: filtering.h must declare QueryToken with a `negated` member:
-//
-//   struct QueryToken {
-//       std::string original;
-//       std::string lower;
-//       bool isCaseSensitive = false;
-//       bool negated = false;   // term must NOT occur in the entry
-//   };
-
 // Defined in printList.cpp. Forward-declared here (same as displayCode.cpp
 // does) so the live filter preview below can repaint the real list, not a
 // stand-in, on every keystroke. The list is passed as a non-owning
