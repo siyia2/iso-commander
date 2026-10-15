@@ -81,6 +81,8 @@ bool isValidDirectory(const std::string& path) {
  * Remaining paths are scanned in parallel via a static thread pool up to
  * @p maxDepth. Results are forwarded to @c saveAndReportResultsForDatabase,
  * which calls @c saveToDatabase and may mutate @p newISOFound.
+ * Invalid paths omitted from the search are also stripped from the history
+ * entry for the submitted input.                                                // NEW
  *
  * @details **Control flow:**
  * - **Exit conditions:** ESC input (@c "\\x1b", typically bound to the @c '<' key
@@ -100,8 +102,15 @@ bool isValidDirectory(const std::string& path) {
  * - **History management:** @c loadHistory(filterHistory) is called unconditionally
  *   each iteration. @c add_history is called for any non-empty input string before
  *   the whitespace-only check.
+ *   After parsing, if any token failed @c isValidDirectory, the entry just added  // NEW
+ *   is rewritten in place (via @c replace_history_entry) to contain only the      // NEW
+ *   valid tokens, trimmed but not normalized, re-joined with @c ';' (e.g. the     // NEW
+ *   input @c "/home/;/var/;asd" is stored as @c "/home/;/var/"). If no token      // NEW
+ *   was valid, the entry is removed (via @c remove_history). The entry is only    // NEW
+ *   touched if it still matches the submitted input.                              // NEW
  *   @c saveHistory(filterHistory) is called only when both @p validPaths and
- *   @p input are non-empty after a scan completes.
+ *   @p input are non-empty after a scan completes, so it persists the cleaned     // CHANGED
+ *   entry.                                                                        // NEW
  * - **RAII Keybinding Management:** A @c SearchReadlineGuard RAII object is
  *   constructed at the start of each loop iteration (after @c rearmSetup).
  *   It saves the current @c rl_attempted_completion_function on construction.
@@ -203,6 +212,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             };
 
             std::unordered_set<std::string> uniqueNormalizedPaths;
+            std::string cleanedInput;   // only the tokens that passed validation, as typed
 
             while (std::getline(iss, path, ';')) {
                 path = trimWhitespace(path);
@@ -211,9 +221,27 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                     continue;
                 }
 
+                if (!cleanedInput.empty()) cleanedInput += ';';
+                cleanedInput += path;
+
                 std::string normPath = normalizePath(path);
                 if (uniqueNormalizedPaths.insert(normPath).second) {
                     validPaths.push_back(normPath);
+                }
+            }
+
+            // strip omitted invalid paths from the history entry we just added
+            if (!invalidPaths.empty() && history_length > 0) {
+                const int idx = history_length - 1;                      // 0-based
+                HIST_ENTRY* last = history_get(history_base + idx);
+                if (last && last->line && input == last->line) {         // only touch the entry we just added
+                    HIST_ENTRY* old = cleanedInput.empty()
+                        ? remove_history(idx)                            // nothing valid -> drop entry entirely
+                        : replace_history_entry(idx, cleanedInput.c_str(), nullptr);
+                    if (old) {
+                        free(old->line);
+                        free(old);
+                    }
                 }
             }
 
@@ -902,6 +930,15 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  *   static @c unordered_map to derive the file extension, display name, and
  *   per-format boolean flags (@c modeMdf, @c modeNrg, @c modeChd, @c modeDaa)
  *   used by downstream functions.
+ * - **Path parsing:** The input is split on @c ';'. Empty and duplicate tokens
+ *   are skipped; each remaining token is validated with @c isValidDirectory.
+ *   Valid tokens are collected into @c directoryPaths for scanning, invalid
+ *   ones into @c invalidDirectoryPaths for reporting only.                      // NEW
+ * - **History handling:** Only the valid, deduplicated paths are saved to       // NEW
+ *   history, re-joined with @c ';' in their original order (e.g. the input      // NEW
+ *   @c "/home/;/var/;asd" is stored as @c "/home/;/var/"). Invalid paths        // NEW
+ *   omitted from the search are never persisted. If no valid directory          // NEW
+ *   was found, nothing is added to history.                                     // NEW
  * - **RAII Keybinding Management:** A @c SearchReadlineGuard is constructed at
  *   the top of each loop iteration (after @c initIterationState). It saves
  *   the current @c rl_attempted_completion_function on construction. Its
@@ -1011,10 +1048,13 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 
         std::istringstream ss(inputSearch);
         std::string path;
+        std::string cleanedInput;   // only valid paths, for history
         while (std::getline(ss, path, ';')) {
             if (!path.empty() && uniquePaths.insert(path).second) {
                 if (isValidDirectory(path)) {
                     directoryPaths.push_back(path);
+                    if (!cleanedInput.empty()) cleanedInput += ';';
+                    cleanedInput += path;
                 } else {
                     invalidDirectoryPaths.insert(dt.red + path);
                 }
@@ -1030,7 +1070,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 
         try {
             if (!directoryPaths.empty()) {
-                add_history(inputSearch.c_str());
+                add_history(cleanedInput.c_str());
                 saveHistory(filterHistory);
             }
         } catch (const std::exception& e) {
