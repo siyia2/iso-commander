@@ -363,10 +363,29 @@ void processInputForCpMvRm(const std::string& input,
 /**
  * @brief Handles bulk image-to-ISO conversions with threading and progress visualization.
  *
- * Each selected file is enqueued as an independent task directly into the static
- * thread pool rather than being pre-chunked. This keeps all available threads busy
- * regardless of whether the file count divides evenly across threads — the pool's
- * internal queue naturally balances load as threads free up.
+ * This function orchestrates the lifecycle of image conversions (mdf2iso, nrg2iso, chd2iso,
+ * daa2iso, ccd2iso) on selected image files, with multi-threaded execution and database
+ * synchronization.
+ *
+ * @section Workflow Lifecycle
+ * 1. **Input Parsing**: Tokenizes the user string to map selections to the master file list.
+ * 2. **Pre-Processing & Validation**:
+ *    - Determines the thread count as the smallest of the selected file count,
+ *      `CONV_THREAD_CAP`, and the static pool size (with a floor of 2).
+ * 3. **Progress Estimation**: Calculates the total byte size of the selected files via
+ *    `calculateTotalBytesForConversions`, and the task count (one per file).
+ * 4. **Execution**:
+ *    - Spawns a dedicated thread for the live progress bar.
+ *    - Enqueues at most `numThreads` workers into the static thread pool. Each worker
+ *      pulls the next file index from a shared atomic counter and calls `convertToISO`
+ *      until none remain. This caps concurrency at `CONV_THREAD_CAP` while keeping the
+ *      load balanced, regardless of whether the file count divides evenly across threads
+ *      or individual files vary widely in size.
+ * 5. **Post-Processing & Cleanup**:
+ *    - Disables signal handlers and joins the progress thread.
+ *    - **Database Sync**: If any conversions succeeded, a **synchronous** update is
+ *      triggered for the output paths so the database is fully indexed before
+ *      returning control to the user.
  *
  * @param input           Raw user input string (indices, ranges, or keywords).
  * @param fileList        Master list of image files used for index mapping.
@@ -375,7 +394,6 @@ void processInputForCpMvRm(const std::string& input,
  * @param modeChd         True if converting CHD images.
  * @param modeDaa         True if converting DAA/GBI images.
  * @param verbose         Toggle for detailed per-file progress output.
- * @param needsClrScrn    Set to true if the screen should be cleared on return.
  */
 void processInputForConversions(const std::string& input,
                                  std::vector<std::string>& fileList,
@@ -408,6 +426,9 @@ void processInputForConversions(const std::string& input,
     }
 
     ThreadPool& pool = getStaticThreadPool();
+    const size_t poolSize = pool.threadCount();
+    const size_t numThreads = std::max(size_t(2),
+        std::min({processedIndices.size(), GlobalConcurrency::CONV_THREAD_CAP, poolSize}));
 
     // Calculate total bytes across all selected files.
     size_t totalBytes = 0;
@@ -449,19 +470,27 @@ void processInputForConversions(const std::string& input,
         &completedTasks, &failedTasks, totalTasks,
         &isProcessingComplete, &verbose, operation);
 
-    // Enqueue one task per file — the pool queue balances load naturally.
-    std::vector<std::future<void>> futures;
-    futures.reserve(processedIndices.size());
+    // Snapshot indices so workers can pull them via an atomic counter.
+    const std::vector<int> indices(processedIndices.begin(), processedIndices.end());
+    std::atomic<size_t> nextIndex(0);
 
-    for (int idx : processedIndices) {
+    // Enqueue at most numThreads workers; each pulls files until none remain.
+    std::vector<std::future<void>> futures;
+    futures.reserve(numThreads);
+
+    for (size_t t = 0; t < numThreads; ++t) {
         futures.emplace_back(pool.enqueue(
-            [&fileList, idx, modeMdf, modeNrg, modeChd, modeDaa,
+            [&fileList, &indices, &nextIndex, modeMdf, modeNrg, modeChd, modeDaa,
              &completedBytes, &completedTasks, &failedTasks,
              &successfulOutputPaths, &outPathsMutex]() {
-                convertToISO({fileList[idx - 1]},
-                             modeMdf, modeNrg, modeChd, modeDaa,
-                             &completedBytes, &completedTasks, &failedTasks,
-                             &successfulOutputPaths, &outPathsMutex);
+                while (true) {
+                    const size_t i = nextIndex.fetch_add(1);
+                    if (i >= indices.size()) break;
+                    convertToISO({fileList[indices[i] - 1]},
+                                 modeMdf, modeNrg, modeChd, modeDaa,
+                                 &completedBytes, &completedTasks, &failedTasks,
+                                 &successfulOutputPaths, &outPathsMutex);
+                }
             }));
     }
 
