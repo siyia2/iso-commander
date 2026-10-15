@@ -211,6 +211,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
 
             while (std::getline(iss, path, ';')) {
                 path = trimWhitespace(path);
+                if (path.empty()) continue;
                 if (!isValidDirectory(path)) {
                     invalidPaths.insert(dt.red + path);
                     continue;
