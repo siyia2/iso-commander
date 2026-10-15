@@ -100,17 +100,12 @@ bool isValidDirectory(const std::string& path) {
  *   early-save path, and before the parallel scan block. This prevents spurious
  *   cancellation from a premature Ctrl+C before input is processed.
  * - **History management:** @c loadHistory(filterHistory) is called unconditionally
- *   each iteration. @c add_history is called for any non-empty input string before
- *   the whitespace-only check.
- *   After parsing, if any token failed @c isValidDirectory, the entry just added
- *   is rewritten in place (via @c replace_history_entry) to contain only the
- *   valid tokens, trimmed but not normalized, re-joined with @c ';' (e.g. the
- *   input @c "/home/;/var/;asd" is stored as @c "/home/;/var/"). If no token
- *   was valid, the entry is removed (via @c remove_history). The entry is only
- *   touched if it still matches the submitted input.
+ *   each iteration. After parsing, @c add_history is called with only the valid
+ *   tokens, trimmed but not normalized, re-joined with @c ';' (e.g. the input
+ *   @c "/home/;/var/;asd" is stored as @c "/home/;/var/"). If no token was valid,
+ *   nothing is added.
  *   @c saveHistory(filterHistory) is called only when both @p validPaths and
- *   @p input are non-empty after a scan completes, so it persists the cleaned
- *   entry.
+ *   @p input are non-empty after a scan completes.
  * - **RAII Keybinding Management:** A @c SearchReadlineGuard RAII object is
  *   constructed at the start of each loop iteration (after @c rearmSetup).
  *   It saves the current @c rl_attempted_completion_function on construction.
@@ -183,7 +178,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             }
 
             if (!input.empty()) {
-                add_history(input.c_str());
+                // REMOVED: add_history(input.c_str());  (now done after parsing)
                 std::cout << "\n";
             }
 
@@ -230,19 +225,9 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 }
             }
 
-            // strip omitted invalid paths from the history entry we just added
-            if (!invalidPaths.empty() && history_length > 0) {
-                const int idx = history_length - 1;                      // 0-based
-                HIST_ENTRY* last = history_get(history_base + idx);
-                if (last && last->line && input == last->line) {         // only touch the entry we just added
-                    HIST_ENTRY* old = cleanedInput.empty()
-                        ? remove_history(idx)                            // nothing valid -> drop entry entirely
-                        : replace_history_entry(idx, cleanedInput.c_str(), nullptr);
-                    if (old) {
-                        free(old->line);
-                        free(old);
-                    }
-                }
+            // save only the valid paths; nothing is added if none were valid
+            if (!cleanedInput.empty()) {
+                add_history(cleanedInput.c_str());
             }
 
             std::sort(validPaths.begin(), validPaths.end());
