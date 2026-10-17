@@ -1176,32 +1176,34 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
  * delegated to @ref writeWindowsIsoToDevice, which automatically handles multi-partitioning,
  * hybrid FAT32+NTFS tables, and cluster tuning.
  * - **Raw O_DIRECT Pipeline:** Non-Windows targets are imaged via raw unbuffered disk I/O.
- * Data transfers use two 16 MiB buffers allocated with @c posix_memalign, each rounded
- * down to a multiple of the device's effective sector size and aligned to it. That size is
- * derived by querying both the logical sector size (@c ioctl(BLKSSZGET)) and the physical
- * sector size (@c ioctl(BLKPBSZGET)) and taking the larger of the two. This ensures correct
- * @c O_DIRECT alignment on 512n, 512e, and 4Kn drives. @c BLKPBSZGET is treated as
- * best-effort and falls back to the logical size if the kernel or device does not support it.
- * @c POSIX_FADV_SEQUENTIAL is applied to the source descriptor before the write loop to
- * enable aggressive kernel read-ahead; @c POSIX_FADV_DONTNEED is applied after to release
- * the ISO from page cache once writing completes.
- * - **Double Buffering:** A dedicated reader thread fills one 16 MiB aligned buffer from the
- * ISO (including tail zero-padding) while the calling thread writes the other buffer to the
+ * Data transfers use two 4 MiB buffers allocated with @c posix_memalign (8 MiB per call),
+ * each rounded down to a multiple of the device's effective sector size and aligned to it.
+ * That size is derived by querying both the logical sector size (@c ioctl(BLKSSZGET)) and
+ * the physical sector size (@c ioctl(BLKPBSZGET)) and taking the larger of the two. This
+ * ensures correct @c O_DIRECT alignment on 512n, 512e, and 4Kn drives. @c BLKPBSZGET is
+ * treated as best-effort and falls back to the logical size if the kernel or device does
+ * not support it. @c POSIX_FADV_SEQUENTIAL is applied to the source descriptor before the
+ * write loop to enable aggressive kernel read-ahead; @c POSIX_FADV_DONTNEED is applied
+ * after to release the ISO from page cache once writing completes.
+ * - **Double Buffering:** A dedicated reader thread fills one aligned buffer from the ISO
+ * (including tail zero-padding) while the calling thread writes the other buffer to the
  * device. The two buffers circulate between an "empty" and a "full" queue, so the device
- * is never left idle while the next chunk is being read.
- * - **Chunked Device Writes:** Each 16 MiB buffer is written to the device in sector-aligned
- * pieces of at most 4 MiB. Buffer address, length, and device offset all remain aligned for
- * @c O_DIRECT. The smaller writes make the progress counter advance at fine granularity,
- * which keeps the speed readout accurate on slow USB drives (< 10 MB/s), and cancellation
- * is checked after every piece instead of every 16 MiB.
+ * is not left idle while the next chunk is being read. The reader can run at most one
+ * buffer ahead of the writer, which bounds memory use per call.
+ * - **Chunked Device Writes:** Each device write() is sector-aligned and capped at 4 MiB.
+ * Buffer address, length, and device offset all remain aligned for @c O_DIRECT. With the
+ * current 4 MiB buffers each buffer goes out as a single write; the cap keeps progress
+ * and cancellation granularity fine (important for slow USB drives, < 10 MB/s) if the
+ * buffer size is increased later.
  * - **Progress Monitoring:** A separate thread samples the written-byte counter every 500 ms,
  * publishes progress (capped at 99% until completion), and computes an exponentially smoothed
  * speed (heavier smoothing below 10 MB/s). The last known speed is held through stalls and
  * reset to 0 after 60 s without progress. The monitor sleeps on a condition variable, so it
  * wakes immediately on shutdown.
- * - **Tail-Block Padding:** Detects partial blocks at EOF or short reads, automatically
- * zero-padding the remaining buffer slice up to the strict sector layout boundary to prevent
- * kernel rejection errors (@c EINVAL).
+ * - **Tail-Block Padding:** Detects partial blocks at EOF, automatically zero-padding the
+ * remaining buffer slice up to the strict sector layout boundary to prevent kernel
+ * rejection errors (@c EINVAL). Short @c read() results mid-file are not treated as EOF;
+ * the reader keeps reading until the chunk is full or @c read() returns 0.
  * - **Asynchronous Cancellation Safety:** Evaluates @c GlobalState::g_operationCancelled
  * in both the reader and the writer. On user abort, it short-circuits execution, stops the
  * reader thread, and leaves the disk safely without triggering a cascading @c fsync block.
@@ -1296,19 +1298,22 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     // Pad file size up to sector boundary for O_DIRECT
     const uint64_t paddedSize = ((fileSize + sectorSize - 1) / sectorSize) * sectorSize;
 
-    // Two aligned buffers (16 MiB each, rounded down to sector boundary).
+    // Two aligned buffers (4 MiB each, rounded down to sector boundary).
     // These size the read-ahead / hand-off between reader and writer; they do NOT
     // dictate how large each device write() is (see writeChunk below).
-    constexpr size_t DESIRED_BUFFER = 16 * 1024 * 1024;
+    constexpr size_t DESIRED_BUFFER = 4 * 1024 * 1024;
     size_t bufferSize = (DESIRED_BUFFER / sectorSize) * sectorSize;
     if (bufferSize == 0) bufferSize = sectorSize;
 
-    // Device writes are issued in smaller sector-aligned pieces (4 MiB max) so the
-    // progress byte counter advances at fine granularity. With a single 16 MiB
-    // write(), a slow USB drive (< 10 MB/s) blocks for many seconds and the counter
-    // jumps in huge bursts, which makes the monitor's speed samples noisy and
-    // inaccurate. Must stay a multiple of sectorSize for O_DIRECT.
+    // Device writes are capped at 4 MiB and kept sector-aligned so the progress byte
+    // counter advances at fine granularity. With the current 4 MiB buffers each buffer
+    // is one write(); the cap matters if DESIRED_BUFFER is raised, because a single
+    // very large write() on a slow USB drive (< 10 MB/s) blocks for many seconds and
+    // makes the monitor's speed samples noisy. Must stay a multiple of sectorSize
+    // for O_DIRECT.
     constexpr size_t MAX_WRITE_CHUNK = 4 * 1024 * 1024;
+    static_assert(MAX_WRITE_CHUNK <= DESIRED_BUFFER,
+                  "write chunk larger than the buffer is pointless");
     const size_t writeChunk = std::max<size_t>((MAX_WRITE_CHUNK / sectorSize) * sectorSize,
                                                static_cast<size_t>(sectorSize));
 
@@ -1535,7 +1540,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 
         // ------------------------------------------------------------------ //
         // Writer (this thread): fullQ -> device in writeChunk pieces, then    //
-        // recycle the 16 MiB buffer                                           //
+        // recycle the buffer                                                  //
         // ------------------------------------------------------------------ //
         while (true) {
             Chunk c;
@@ -1556,7 +1561,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             // Write loop — handles partial writes and EINTR. Each write() is capped at
             // writeChunk (a multiple of sectorSize), so buffer address, length and
             // device offset all stay sector-aligned for O_DIRECT while progress is
-            // reported (and cancellation checked) every <= 4 MiB instead of every 16 MiB.
+            // reported (and cancellation checked) after every write of <= 4 MiB.
             size_t remainingToWrite = c.len;
             char*  writePtr         = c.buf;
             while (remainingToWrite > 0) {
