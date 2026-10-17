@@ -1493,9 +1493,10 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         readerThread = std::thread([&]() {
             uint64_t readTotal = 0;
 
-            auto pushSentinel = [&]() {
+            auto pushSentinel = [&](bool failed) {
                 {
                     std::lock_guard<std::mutex> lk(qMutex);
+                    if (failed) readFailed = true;
                     fullQ.push_back({nullptr, 0});
                 }
                 qCv.notify_all();
@@ -1533,9 +1534,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                 }
 
                 if (err) {
-                    std::lock_guard<std::mutex> lk(qMutex);
-                    readFailed = true;
-                    pushSentinel();
+                    pushSentinel(true);
                     return;
                 }
 
@@ -1543,9 +1542,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                 if (reachedEof) {
                     if (readTotal + got < fileSize) {
                         // The file on disk is shorter than fstat reported (truncated file)!
-                        std::lock_guard<std::mutex> lk(qMutex);
-                        readFailed = true;
-                        pushSentinel();
+                        pushSentinel(true);
                         return;
                     }
                 }
@@ -1568,7 +1565,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
             }
 
             // Normal end of stream (or cancellation): tell the writer there is no more data.
-            pushSentinel();
+            pushSentinel(false);
         });
 
         // ------------------------------------------------------------------ //
@@ -1602,6 +1599,11 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                 ssize_t written = write(dev_fd, writePtr, thisWrite);
                 if (written < 0) {
                     if (errno == EINTR) continue;
+                    ioFailed = true;
+                    break;
+                }
+
+                if (written == 0) {   // no progress; avoid infinite spin
                     ioFailed = true;
                     break;
                 }
