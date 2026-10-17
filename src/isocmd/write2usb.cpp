@@ -162,10 +162,6 @@ std::string getBestNtfsDriver() {
 // Wipefs replacement (libblkid)
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Wipefs replacement (libblkid)
-// ---------------------------------------------------------------------------
-
 /**
  * @brief Erase all filesystem/partition signatures on @p device.
  *
