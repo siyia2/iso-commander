@@ -1285,7 +1285,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     // Pad file size up to sector boundary for O_DIRECT
     const uint64_t paddedSize = ((fileSize + sectorSize - 1) / sectorSize) * sectorSize;
 
-    // Two aligned buffers (4 MiB each, rounded down to sector boundary)
+    // Two aligned buffers (16 MiB each, rounded down to sector boundary)
     constexpr size_t DESIRED_BUFFER = 16 * 1024 * 1024;
     size_t bufferSize = (DESIRED_BUFFER / sectorSize) * sectorSize;
     if (bufferSize == 0) bufferSize = sectorSize;
