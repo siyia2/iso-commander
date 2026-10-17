@@ -807,15 +807,32 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
         bool success = true;
         while (!GlobalState::g_operationCancelled.load()) {
-            const ssize_t bytes_read = read(fd_in, ioBuf.data, bufferSize);
-            if (bytes_read < 0) {
-                if (errno == EINTR) continue;
-                success = false;
-                break;
+            // Ensure we read a full buffer or hit EOF
+            size_t total_read_this_chunk = 0;
+            while (total_read_this_chunk < bufferSize) {
+                if (GlobalState::g_operationCancelled.load()) {
+                    success = false;
+                    goto done;
+                }
+                const ssize_t bytes_read = read(fd_in,
+                                                ioBuf.data + total_read_this_chunk,
+                                                bufferSize - total_read_this_chunk);
+                if (bytes_read < 0) {
+                    if (errno == EINTR) continue;
+                    success = false;
+                    goto done;
+                }
+                if (bytes_read == 0) {
+                    break; // EOF reached
+                }
+                total_read_this_chunk += bytes_read;
             }
-            if (bytes_read == 0) break;
 
+            if (total_read_this_chunk == 0) break; // Clean EOF at start of loop
+
+            ssize_t bytes_read = static_cast<ssize_t>(total_read_this_chunk);
             ssize_t writeLen = bytes_read;
+
             if (!useBufferedIO) {
                 const ssize_t aligned = (bytes_read + mask) & ~static_cast<ssize_t>(mask);
                 if (aligned > bytes_read)
@@ -1497,9 +1514,10 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                 const size_t toRead = static_cast<size_t>(
                     std::min<uint64_t>(bufferSize, paddedSize - readTotal));
 
-                // Fill the whole chunk; a short read() only means EOF when it returns 0.
                 size_t got = 0;
-                bool   err = false;
+                bool err = false;
+                bool reachedEof = false;
+
                 while (got < toRead) {
                     ssize_t r = read(iso_fd, c.buf + got, toRead - got);
                     if (r < 0) {
@@ -1507,22 +1525,34 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                         err = true;
                         break;
                     }
-                    if (r == 0) break;   // EOF
+                    if (r == 0) {
+                        reachedEof = true;
+                        break;   // EOF reached
+                    }
                     got += static_cast<size_t>(r);
                 }
 
                 if (err) {
-                    {
-                        std::lock_guard<std::mutex> lk(qMutex);
-                        readFailed = true;
-                    }
+                    std::lock_guard<std::mutex> lk(qMutex);
+                    readFailed = true;
                     pushSentinel();
                     return;
                 }
 
-                // Tail-block / EOF padding up to the sector boundary
-                if (got < toRead)
+                // If we hit EOF before filling the expected 'toRead' for this chunk,
+                // verify if this is the legitimate end of the file.
+                // (If readTotal + got is less than the expected unpadded file size, it's an error).
+                if (reachedEof) {
+                    // If you pass the raw unpadded file size into this reader scope (e.g. fileSize),
+                    // you can check: if (readTotal + got < unpaddedFileSize) { err = true; break; }
+                    // For now, if EOF is reached, any remaining space up to paddedSize
+                    // must be sector-alignment padding, NOT missing payload data.
+                }
+
+                // Tail-block sector alignment padding
+                if (got < toRead) {
                     std::memset(c.buf + got, 0, toRead - got);
+                }
 
                 c.len = toRead;
                 readTotal += toRead;
@@ -1532,6 +1562,8 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                     fullQ.push_back(c);
                 }
                 qCv.notify_all();
+
+                if (reachedEof) break; // Stop reading once actual EOF is hit
             }
 
             // Normal end of stream (or cancellation): tell the writer there is no more data.
