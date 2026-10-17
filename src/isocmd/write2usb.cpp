@@ -400,6 +400,18 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  * - **NTFS destination files** use buffered I/O with @c posix_fallocate pre-allocation,
  *   copied via a manual read/write loop.
  *
+ * Data integrity:
+ * - Short @c read() results mid-file are not treated as EOF. Each copy loop
+ *   accumulates until the requested buffer is full or @c read() returns 0,
+ *   so a partial read from a slow or interruptible source never truncates the
+ *   copied payload.
+ * - A zero-byte @c write() is treated as a hard failure rather than retried,
+ *   preventing an infinite spin if the destination stops making progress.
+ * - Per-file byte counts are validated against the size reported by the ISO
+ *   walk. A source that yields fewer bytes than expected (truncated, or
+ *   changed after classification) fails the operation instead of leaving a
+ *   zero-padded destination file behind.
+ *
  * Sector alignment:
  * - Both logical (@c BLKSSZGET) and physical (@c BLKPBSZGET) sector sizes are
  *   queried on each partition node. The larger of the two is used to govern
@@ -440,7 +452,8 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  * @param device        Target block device (e.g. @c /dev/sdb). Will be wiped.
  * @param progressIndex Index into the shared @c progressData array for live
  *                      progress, speed, and completion reporting.
- * @return @c true on success, @c false on any error or cancellation.
+ * @return @c true on success; @c false on any error, truncated source, or
+ *         user cancellation.
  */
 bool writeWindowsIsoToDevice(const std::string& isoPath,
                              const std::string& device,
@@ -806,6 +819,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         const size_t mask = static_cast<size_t>(sectorSize) - 1;
 
         bool success = true;
+        uint64_t bytesCopiedTotal = 0;   // real source bytes, padding excluded
         while (!GlobalState::g_operationCancelled.load()) {
             // Ensure we read a full buffer or hit EOF
             size_t total_read_this_chunk = 0;
@@ -855,31 +869,39 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                     success = false;
                     goto done;
                 }
+                if (written == 0) {   // no progress; avoid infinite spin
+                    success = false;
+                    goto done;
+                }
                 bytes_written += written;
 
-                // Report progress incrementally as each write() actually
-                // lands, rather than waiting for the whole (up to 4MiB)
-                // chunk to finish. This is what lets the monitor thread see
-                // real progress on slow devices instead of one big jump
-                // every several seconds. Cap at bytes_read so O_DIRECT
-                // alignment padding (writeLen > bytes_read) is never
-                // counted as real progress.
                 const uint64_t realBytesSoFar = static_cast<uint64_t>(
                     std::min<ssize_t>(bytes_written, bytes_read));
                 if (realBytesSoFar > reportedThisChunk) {
-                    totalBytesWrittenAccumulator.fetch_add(
-                        realBytesSoFar - reportedThisChunk);
+                    const uint64_t delta = realBytesSoFar - reportedThisChunk;
+                    totalBytesWrittenAccumulator.fetch_add(delta);
+                    bytesCopiedTotal += delta;
                     reportedThisChunk = realBytesSoFar;
                 }
             }
         }
 
     done:
+        // Detect a source shorter than fstat/ISO-walk reported. Check before
+        // ftruncate extends the file with zeros, which would mask the truncation.
+        if (success && !GlobalState::g_operationCancelled.load() &&
+            bytesCopiedTotal < fileSize) {
+            success = false;
+        }
+
         if (!useBufferedIO) {
             if (GlobalState::g_operationCancelled.load()) {
                 [[maybe_unused]] const int r = ftruncate(fd_out, 0);
-            } else if (ftruncate(fd_out, static_cast<off_t>(fileSize)) != 0) {
-                success = false;
+            } else if (success) {
+                if (ftruncate(fd_out, static_cast<off_t>(fileSize)) != 0) success = false;
+            }
+            if (!success) {
+                [[maybe_unused]] const int r = ftruncate(fd_out, 0);
             }
         }
 
