@@ -1176,19 +1176,29 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
  * delegated to @ref writeWindowsIsoToDevice, which automatically handles multi-partitioning,
  * hybrid FAT32+NTFS tables, and cluster tuning.
  * - **Raw O_DIRECT Pipeline:** Non-Windows targets are imaged via raw unbuffered disk I/O.
- * Data transfers utilize page-aligned memory buffers (@c posix_memalign) sized
- * to the device's effective sector boundary, derived by querying both logical sector size
- * (@c ioctl(BLKSSZGET)) and physical sector size (@c ioctl(BLKPBSZGET)) and taking the
- * larger of the two. This ensures correct @c O_DIRECT alignment on 512n, 512e, and 4Kn
- * drives. @c BLKPBSZGET is treated as best-effort and falls back to the logical size if
- * the kernel or device does not support it.
+ * Data transfers use two 16 MiB buffers allocated with @c posix_memalign, each rounded
+ * down to a multiple of the device's effective sector size and aligned to it. That size is
+ * derived by querying both the logical sector size (@c ioctl(BLKSSZGET)) and the physical
+ * sector size (@c ioctl(BLKPBSZGET)) and taking the larger of the two. This ensures correct
+ * @c O_DIRECT alignment on 512n, 512e, and 4Kn drives. @c BLKPBSZGET is treated as
+ * best-effort and falls back to the logical size if the kernel or device does not support it.
  * @c POSIX_FADV_SEQUENTIAL is applied to the source descriptor before the write loop to
  * enable aggressive kernel read-ahead; @c POSIX_FADV_DONTNEED is applied after to release
  * the ISO from page cache once writing completes.
- * - **Double Buffering:** A dedicated reader thread fills one aligned buffer from the ISO
- * (including tail zero-padding) while the calling thread writes the other buffer to the
+ * - **Double Buffering:** A dedicated reader thread fills one 16 MiB aligned buffer from the
+ * ISO (including tail zero-padding) while the calling thread writes the other buffer to the
  * device. The two buffers circulate between an "empty" and a "full" queue, so the device
  * is never left idle while the next chunk is being read.
+ * - **Chunked Device Writes:** Each 16 MiB buffer is written to the device in sector-aligned
+ * pieces of at most 4 MiB. Buffer address, length, and device offset all remain aligned for
+ * @c O_DIRECT. The smaller writes make the progress counter advance at fine granularity,
+ * which keeps the speed readout accurate on slow USB drives (< 10 MB/s), and cancellation
+ * is checked after every piece instead of every 16 MiB.
+ * - **Progress Monitoring:** A separate thread samples the written-byte counter every 500 ms,
+ * publishes progress (capped at 99% until completion), and computes an exponentially smoothed
+ * speed (heavier smoothing below 10 MB/s). The last known speed is held through stalls and
+ * reset to 0 after 60 s without progress. The monitor sleeps on a condition variable, so it
+ * wakes immediately on shutdown.
  * - **Tail-Block Padding:** Detects partial blocks at EOF or short reads, automatically
  * zero-padding the remaining buffer slice up to the strict sector layout boundary to prevent
  * kernel rejection errors (@c EINVAL).
@@ -1200,8 +1210,9 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
  * @param device Target destination block node path (e.g., @c /dev/sdb). WARNING: All existing
  * underlying data will be destructively overwritten.
  * @param progressIndex Unique thread tracking identifier mapped inside the global progress array.
- * @return @c true if the image data was transferred successfully, verified, and safely flushed;
- * @c false on physical I/O failure, validation collapse, or user cancellation.
+ * @return @c true if the image data was written in full and flushed to the device with
+ * @c fsync; @c false on I/O failure, validation failure, or user cancellation. The written
+ * data is not read back or verified against the ISO.
  *
  * @see isValidIso9660
  * @see isWindowsIsoInitialCheck
@@ -1285,10 +1296,21 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     // Pad file size up to sector boundary for O_DIRECT
     const uint64_t paddedSize = ((fileSize + sectorSize - 1) / sectorSize) * sectorSize;
 
-    // Two aligned buffers (16 MiB each, rounded down to sector boundary)
+    // Two aligned buffers (16 MiB each, rounded down to sector boundary).
+    // These size the read-ahead / hand-off between reader and writer; they do NOT
+    // dictate how large each device write() is (see writeChunk below).
     constexpr size_t DESIRED_BUFFER = 16 * 1024 * 1024;
     size_t bufferSize = (DESIRED_BUFFER / sectorSize) * sectorSize;
     if (bufferSize == 0) bufferSize = sectorSize;
+
+    // Device writes are issued in smaller sector-aligned pieces (4 MiB max) so the
+    // progress byte counter advances at fine granularity. With a single 16 MiB
+    // write(), a slow USB drive (< 10 MB/s) blocks for many seconds and the counter
+    // jumps in huge bursts, which makes the monitor's speed samples noisy and
+    // inaccurate. Must stay a multiple of sectorSize for O_DIRECT.
+    constexpr size_t MAX_WRITE_CHUNK = 4 * 1024 * 1024;
+    const size_t writeChunk = std::max<size_t>((MAX_WRITE_CHUNK / sectorSize) * sectorSize,
+                                               static_cast<size_t>(sectorSize));
 
     constexpr int NUM_BUFFERS = 2;
     std::unique_ptr<char, decltype(&free)> bufferGuards[NUM_BUFFERS] = {
@@ -1416,7 +1438,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                     // Only reset the baseline when bytes actually arrived — this keeps
                     // `elapsed` spanning back to the last real data point instead of an
                     // arbitrary polling tick, which was previously truncating the window
-                    // to ~1s and producing a spurious 4MB/s (bufferSize/interval) floor
+                    // to ~1s and producing a spurious floor (one write chunk per interval)
                     // on slow/bursty O_DIRECT writers.
                     lastWritten = currentWritten;
                     lastUpdate  = now;
@@ -1512,7 +1534,8 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         });
 
         // ------------------------------------------------------------------ //
-        // Writer (this thread): fullQ -> device, then recycle buffer          //
+        // Writer (this thread): fullQ -> device in writeChunk pieces, then    //
+        // recycle the 16 MiB buffer                                           //
         // ------------------------------------------------------------------ //
         while (true) {
             Chunk c;
@@ -1530,11 +1553,15 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                 break;
             }
 
-            // Write loop — handles partial writes and EINTR
+            // Write loop — handles partial writes and EINTR. Each write() is capped at
+            // writeChunk (a multiple of sectorSize), so buffer address, length and
+            // device offset all stay sector-aligned for O_DIRECT while progress is
+            // reported (and cancellation checked) every <= 4 MiB instead of every 16 MiB.
             size_t remainingToWrite = c.len;
             char*  writePtr         = c.buf;
             while (remainingToWrite > 0) {
-                ssize_t written = write(dev_fd, writePtr, remainingToWrite);
+                const size_t thisWrite = std::min(remainingToWrite, writeChunk);
+                ssize_t written = write(dev_fd, writePtr, thisWrite);
                 if (written < 0) {
                     if (errno == EINTR) continue;
                     ioFailed = true;
