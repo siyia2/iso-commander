@@ -6,15 +6,12 @@
 #include <chrono>
 #include <cctype>
 #include <cerrno>
-#include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
 #include <cstddef>
 #include <cstring>
-#include <deque>
 #include <filesystem>
 #include <memory>
-#include <mutex>
 #include <queue>
 #include <stdexcept>
 #include <string>
@@ -390,63 +387,67 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  *
  * Partitioning is chosen automatically by ISO type:
  * - **WindowsInstall** — GPT with a ~1 GiB FAT32 ESP (bootloader +
- *   @c sources/boot.wim) and an NTFS data partition for the install payload.
+ *    @c sources/boot.wim) and an NTFS data partition for the install payload.
  * - **FatOnly** (WinPE, Hiren's, rescue disks) — GPT with a single FAT32
- *   partition spanning the whole device.
+ *    partition spanning the whole device.
  *
  * I/O strategy per file:
  * - **FAT32 destination files** use unbuffered Direct I/O (@c O_DIRECT) to bypass the
- *   Linux page cache.
+ *    Linux page cache.
  * - **NTFS destination files** use buffered I/O with @c posix_fallocate pre-allocation,
- *   copied via a manual read/write loop.
+ *    copied via a manual read/write loop.
  *
  * Data integrity:
- * - Short @c read() results mid-file are not treated as EOF. Each copy loop
- *   accumulates until the requested buffer is full or @c read() returns 0,
- *   so a partial read from a slow or interruptible source never truncates the
- *   copied payload.
+ * - Short @c read() results mid-file are not treated as EOF: each copy loop
+ *    accumulates until the requested buffer is full or @c read() returns 0, so
+ *    a partial read from a slow or interruptible source never truncates the
+ *    copied payload.
  * - A zero-byte @c write() is treated as a hard failure rather than retried,
- *   preventing an infinite spin if the destination stops making progress.
+ *    preventing an infinite spin if the destination stops making progress.
  * - Per-file byte counts are validated against the size reported by the ISO
- *   walk. A source that yields fewer bytes than expected (truncated, or
- *   changed after classification) fails the operation instead of leaving a
- *   zero-padded destination file behind.
+ *    walk. A source that yields fewer bytes than expected (truncated, or
+ *    changed after classification) fails the operation instead of leaving a
+ *    zero-padded destination file behind.
+ *
+ * Concurrency:
+ * - Setup steps run per-device and concurrently across jobs. Transient partition
+ *    node access issues from kernel udev re-scans are handled via a retry loop.
  *
  * Sector alignment:
  * - Both logical (@c BLKSSZGET) and physical (@c BLKPBSZGET) sector sizes are
- *   queried on each partition node. The larger of the two is used to govern
- *   @c O_DIRECT buffer alignment and write padding, ensuring correct behaviour
- *   on 512n, 512e, and 4Kn drives. If either ioctl fails or returns a
- *   non-positive value, that size is treated as 512 bytes.
+ *    queried on each partition node. The larger of the two is used to govern
+ *    @c O_DIRECT buffer alignment and write padding, ensuring correct behaviour
+ *    on 512n, 512e, and 4Kn drives. If either ioctl fails or returns a
+ *    non-positive value, that size is treated as 512 bytes.
  *
  * Cancellation:
  * - Setup steps (ISO mount, wipe, partition, format, FAT/NTFS mount) treat a
- *   concurrent user cancellation as a clean abort rather than a failure: a
- *   step that errors out while @c g_operationCancelled is already set returns
- *   @c false without marking the operation as failed. Only genuine errors
- *   (cancellation not in effect) flip the failed flag.
+ *    concurrent user cancellation as a clean abort rather than a failure: a
+ *    step that errors out while @c g_operationCancelled is already set returns
+ *    @c false without marking the operation as failed. Only genuine errors
+ *    (cancellation not in effect) flip the failed flag.
  *
  * Telemetry:
  * - Progress, speed, and byte accounting are handled by a dedicated background
- *   thread, keeping timing logic and speed calculations out of the critical I/O path.
- *   Reported speed is held at its last known value for up to 300 seconds of
- *   stalled (zero-delta) writes before falling back to 0, since a single slow
- *   write on throttled USB media can legitimately span many polling ticks.
+ *    thread, keeping timing logic and speed calculations out of the critical I/O path.
+ *    Reported speed is held at its last known value for up to 300 seconds of
+ *    stalled (zero-delta) writes before falling back to 0, since a single slow
+ *    write on throttled USB media can legitimately span many polling ticks.
  *
  * Flush and unmount strategy:
  * - @c syncfs is called on each mounted filesystem fd before unmounting,
- *   flushing all dirty pages at the filesystem level explicitly. Unmounting is
- *   then delegated to @c safeUmount (via ScopedMount), which blocks until the
- *   kernel confirms all I/O is complete.
+ *    flushing all dirty pages at the filesystem level explicitly. Unmounting is
+ *    then delegated to @c safeUmount (via ScopedMount), which blocks until the
+ *    kernel confirms all I/O is complete.
  *
  * For WindowsInstall, NTFS content is written before the ESP so the bootloader
  * only lands after the data it references is already on disk.
  *
  * Cleanup strategy:
  * - All mount points and the I/O buffer are managed by RAII objects (ScopedMount,
- *   AlignedBuffer). The progress thread is managed by ThreadGuard. Every early
- *   return path is therefore cleanup-free: destructors fire in reverse declaration
- *   order automatically.
+ *    AlignedBuffer). The progress thread is managed by ThreadGuard. Every early
+ *    return path is therefore cleanup-free: destructors fire in reverse declaration
+ *    order automatically.
  *
  * @param isoPath       Path to the source ISO file.
  * @param device        Target block device (e.g. @c /dev/sdb). Will be wiped.
@@ -469,8 +470,24 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         return fail();
     };
 
+    // Helper to run mkfs commands with increased retries and a slight backoff
+    auto runMkfsWithRetry = [](const std::vector<std::string>& cmd, int maxRetries = 10) -> bool {
+        for (int attempt = 0; attempt < maxRetries; ++attempt) {
+            if (GlobalState::g_operationCancelled.load()) return false;
+
+            if (runCommand(cmd) == 0) {
+                return true;
+            }
+
+            // Progressive backoff: wait a bit longer on later attempts if udev is heavily congested
+            int delayMs = 200 + (attempt * 50); // e.g., 200ms, 250ms, 300ms... up to ~650ms
+            std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+        }
+        return false;
+    };
+
     // ------------------------------------------------------------------ //
-    // 0. Mount the ISO to inspect its layout                              //
+    // 0. Mount the ISO to inspect its layout                             //
     // ------------------------------------------------------------------ //
     char isoMntBuf[] = "/tmp/win_iso_XXXXXX";
     if (!mkdtemp(isoMntBuf)) return fail();
@@ -484,74 +501,91 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     const std::string isoMnt  = isoMntBuf;
     const IsoType     isoType = detectIsoType(isoMnt);
 
+    // Declared outside setup scope so they survive past it: sector-size
+    // queries, mounts, and the copy run concurrently across devices.
+    std::string fatPart;
+    std::string ntfsPart;
+    char fatMntBuf[]  = "/tmp/win_fat_XXXXXX";
+    char ntfsMntBuf[] = "/tmp/win_ntfs_XXXXXX";
+    std::string fatMnt;
+    std::string ntfsMnt;
+    int fatSectorSize  = 512;
+    int ntfsSectorSize = 512;
+
     // ------------------------------------------------------------------ //
-    // 1. Wipe + repartition                                               //
+    // Setup phase (per-device, fully concurrent):                        //
+    //                                                                    //
+    // open(O_EXCL) / wipe / parted / waitForDevice / derivePartition /   //
+    // mkfs run concurrently per device. Transient EBUSY/not-yet-ready    //
+    // conditions from udev re-scans are handled via runMkfsWithRetry.    //
     // ------------------------------------------------------------------ //
+    {
+        // Open once and hold the fd across both the wipe and the partition
+        // step. Both operations are then anchored to this exact device object
+        // via /proc/self/fd, closing the TOCTOU window where the /dev node
+        // name could be reused by a different disk between the two calls.
+        // O_EXCL additionally fails fast if something else already has the
+        // device open exclusively (e.g. it's mounted).
+        int devFd = open(device.c_str(), O_RDWR | O_EXCL);
+        if (devFd < 0) return failUnlessCancelled();
 
-    // Open once and hold the fd across both the wipe and the partition
-    // step. Both operations are then anchored to this exact device object
-    // via /proc/self/fd, closing the TOCTOU window where the /dev node
-    // name could be reused by a different disk between the two calls.
-    // O_EXCL additionally fails fast if something else already has the
-    // device open exclusively (e.g. it's mounted).
-    int devFd = open(device.c_str(), O_RDWR | O_EXCL);
-    if (devFd < 0) return failUnlessCancelled();
-
-    if (!wipeDeviceSignatures(devFd)) {
-        close(devFd);
-        return failUnlessCancelled();
-    }
-
-    // Route parted through the held fd rather than the raw path string —
-    // /proc/self/fd/N always resolves to the fd's current target, so this
-    // is guaranteed to be the same device wipeDeviceSignatures just wiped.
-    const std::string devFdPath = "/proc/self/fd/" + std::to_string(devFd);
-
-    int partResult = -1;
-    if (isoType == IsoType::WindowsInstall) {
-        partResult = runCommand({"parted", "-s", devFdPath,
-                                 "mklabel", "gpt",
-                                 "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
-                                 "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
-                                 "set", "1", "esp",  "on",
-                                 "set", "1", "boot", "on"});
-    } else {
-        partResult = runCommand({"parted", "-s", devFdPath,
-                                 "mklabel", "gpt",
-                                 "mkpart", "WINPE", "fat32", "1MiB", "100%",
-                                 "set", "1", "esp",  "on",
-                                 "set", "1", "boot", "on"});
-    }
-
-    close(devFd);  // Done with the pinned handle; partitions get their own nodes.
-
-    if (partResult != 0) return failUnlessCancelled();
-
-    if (!waitForDevice(device)) return failUnlessCancelled();
-
-    auto derivePartition = [&](int n) -> std::string {
-        std::string target = device + std::to_string(n);
-        return waitForDevice(target, 30) ? target : std::string{};
-    };
-
-    const std::string fatPart  = derivePartition(1);
-    const std::string ntfsPart = (isoType == IsoType::WindowsInstall)
-                                     ? derivePartition(2)
-                                     : std::string{};
-
-    if (fatPart.empty()) return failUnlessCancelled();
-    if (isoType == IsoType::WindowsInstall && ntfsPart.empty()) return failUnlessCancelled();
-
-    if (runCommand({"mkfs.fat", "-F", "32", "-n",
-                    (isoType == IsoType::WindowsInstall ? "WINBOOT" : "WINPE"),
-                    fatPart}) != 0) {
-        return failUnlessCancelled();
-    }
-
-    if (isoType == IsoType::WindowsInstall) {
-        if (runCommand({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA",
-                        ntfsPart}) != 0) {
+        if (!wipeDeviceSignatures(devFd)) {
+            close(devFd);
             return failUnlessCancelled();
+        }
+
+        // Route parted through the held fd rather than the raw path string —
+        // /proc/self/fd/N always resolves to the fd's current target, so this
+        // is guaranteed to be the same device wipeDeviceSignatures just wiped.
+        const std::string devFdPath = "/proc/self/fd/" + std::to_string(devFd);
+
+        int partResult = -1;
+        if (isoType == IsoType::WindowsInstall) {
+            partResult = runCommand({"parted", "-s", devFdPath,
+                                     "mklabel", "gpt",
+                                     "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
+                                     "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
+                                     "set", "1", "esp",  "on",
+                                     "set", "1", "boot", "on"});
+        } else {
+            partResult = runCommand({"parted", "-s", devFdPath,
+                                     "mklabel", "gpt",
+                                     "mkpart", "WINPE", "fat32", "1MiB", "100%",
+                                     "set", "1", "esp",  "on",
+                                     "set", "1", "boot", "on"});
+        }
+
+        close(devFd);  // Done with the pinned handle; partitions get their own nodes.
+
+        if (partResult != 0) return failUnlessCancelled();
+
+        if (!waitForDevice(device)) return failUnlessCancelled();
+
+        auto derivePartition = [&](int n) -> std::string {
+            std::string target = device + std::to_string(n);
+            return waitForDevice(target, 30) ? target : std::string{};
+        };
+
+        fatPart  = derivePartition(1);
+        ntfsPart = (isoType == IsoType::WindowsInstall)
+                    ? derivePartition(2)
+                    : std::string{};
+
+        if (fatPart.empty()) return failUnlessCancelled();
+        if (isoType == IsoType::WindowsInstall && ntfsPart.empty()) return failUnlessCancelled();
+
+        // Format with retry logic to handle transient udev/kernel locks safely
+        if (!runMkfsWithRetry({"mkfs.fat", "-F", "32", "-n",
+                               (isoType == IsoType::WindowsInstall ? "WINBOOT" : "WINPE"),
+                               fatPart})) {
+            return failUnlessCancelled();
+        }
+
+        if (isoType == IsoType::WindowsInstall) {
+            if (!runMkfsWithRetry({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA",
+                                   ntfsPart})) {
+                return failUnlessCancelled();
+            }
         }
     }
 
@@ -568,35 +602,26 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         return std::max(logicalSize, physicalSize);
     };
 
-    const int fatSectorSize  = getBestSectorSize(fatPart);
-    const int ntfsSectorSize = (isoType == IsoType::WindowsInstall)
-                                   ? getBestSectorSize(ntfsPart)
-                                   : 512;
+    fatSectorSize  = getBestSectorSize(fatPart);
+    ntfsSectorSize = (isoType == IsoType::WindowsInstall)
+                         ? getBestSectorSize(ntfsPart)
+                         : 512;
 
     if (GlobalState::g_operationCancelled.load()) return false;
 
     // ------------------------------------------------------------------ //
-    // 2. Mount FAT32 partition (and NTFS for Windows installs)            //
+    // 2. Mount FAT32 partition (and NTFS for Windows installs)           //
     // ------------------------------------------------------------------ //
-    char fatMntBuf[]  = "/tmp/win_fat_XXXXXX";
-    char ntfsMntBuf[] = "/tmp/win_ntfs_XXXXXX";
-
     if (!mkdtemp(fatMntBuf)) return fail();
-    ScopedMount fatScope(fatMntBuf);
+    fatMnt = fatMntBuf;
 
     // ntfsScope is armed only for WindowsInstall; an empty path is a no-op.
     if (isoType == IsoType::WindowsInstall) {
         if (!mkdtemp(ntfsMntBuf)) return fail();
+        ntfsMnt = ntfsMntBuf;
     }
-    ScopedMount ntfsScope(isoType == IsoType::WindowsInstall
-                              ? std::string(ntfsMntBuf)
-                              : std::string{});
-
-    const std::string fatMnt  = fatMntBuf;
-    const std::string ntfsMnt = ntfsMntBuf;
 
     if (libMount(fatPart.c_str(), fatMntBuf, "noatime") != 0) return failUnlessCancelled();
-    fatScope.setMounted();
 
     if (isoType == IsoType::WindowsInstall) {
         const std::string ntfsDriver = getBestNtfsDriver();
@@ -612,13 +637,20 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         mnt_free_context(ctx);
 
         if (rc != 0) return failUnlessCancelled();
-        ntfsScope.setMounted();
     }
 
     if (GlobalState::g_operationCancelled.load()) return false;
 
+    // ScopedMounts for the data partitions; destructors (safeUmount) fire
+    // at function exit, after step 8's syncfs. An empty ntfsMnt is a no-op.
+    ScopedMount fatScope(fatMnt);
+    fatScope.setMounted();
+
+    ScopedMount ntfsScope(ntfsMnt);
+    if (isoType == IsoType::WindowsInstall) ntfsScope.setMounted();
+
     // ------------------------------------------------------------------ //
-    // 3. Collect and classify ISO entries                                 //
+    // 3. Collect and classify ISO entries                                //
     // ------------------------------------------------------------------ //
     struct IsoEntry {
         fs::path src;
@@ -652,10 +684,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         for (const auto& entry : fs::recursive_directory_iterator(
                  isoMnt, fs::directory_options::skip_permission_denied)) {
 
-            // Reject symlinks outright — a malicious ISO (Rock Ridge/UDF) could
-            // embed a symlink pointing at an arbitrary host path (e.g. /etc/shadow).
-            // Following it here would read host files with this process's
-            // privileges and copy their contents onto the target device.
             if (fs::is_symlink(entry.symlink_status())) {
                 continue;
             }
@@ -683,8 +711,9 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             return false;
         }
     }
+
     // ------------------------------------------------------------------ //
-    // 4. Async progress monitoring thread                                 //
+    // 4. Async progress monitoring thread                                //
     // ------------------------------------------------------------------ //
     std::atomic<uint64_t> totalBytesWrittenAccumulator{0};
     std::atomic<bool>     monitoringActive{true};
@@ -696,15 +725,11 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         double   smoothedSpeed = 0.0;
         bool     haveEstimate  = false;
 
-        // Stall tracking
         auto     stallStart    = std::chrono::high_resolution_clock::now();
         bool     stalled       = false;
 
-        // Higher alpha = more reactive to phase changes (NTFS -> ESP), lower = smoother.
         constexpr double alpha = 0.3;
-        // Minimum time between speed updates to avoid distortion
         constexpr int MIN_UPDATE_INTERVAL_MS = 1000;
-        // Show 0 only after this many seconds of continuous stalling
         constexpr int STALL_TIMEOUT_SECONDS = 300;
 
         while (monitoringActive.load()) {
@@ -720,18 +745,15 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                 std::min(99.0, (static_cast<double>(currentWritten) / totalBytes) * 100.0)));
 
             const uint64_t deltaBytes = (currentWritten >= lastWritten)
-                                            ? (currentWritten - lastWritten)
-                                            : 0;
+                                        ? (currentWritten - lastWritten)
+                                        : 0;
 
-            // Only calculate speed if enough time has passed for meaningful measurement
             if (deltaBytes > 0 && ms >= MIN_UPDATE_INTERVAL_MS) {
-                // Progress detected - reset stall tracking
                 stalled = false;
 
                 const double instantSpeed = (static_cast<double>(deltaBytes) /
-                                                (1024.0 * 1024.0)) / (ms / 1000.0);
+                                             (1024.0 * 1024.0)) / (ms / 1000.0);
 
-                // Use adaptive smoothing: more reactive for slow drives
                 double smoothingFactor = (instantSpeed < 10.0) ? 0.6 : alpha;
 
                 smoothedSpeed = haveEstimate
@@ -740,43 +762,24 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                 haveEstimate = true;
                 progressData[progressIndex].speed.store(smoothedSpeed);
 
-                // Only update timestamps when we've actually measured something
                 lastWritten = currentWritten;
                 lastUpdate = now;
             } else if (deltaBytes == 0 && ms >= MIN_UPDATE_INTERVAL_MS) {
-                // Stall detected - track how long it's been.
-                // IMPORTANT: do NOT reset lastUpdate/lastWritten here. A long
-                // in-flight write (e.g. a throttled 4MiB chunk on a slow USB
-                // NTFS target) can span many 500ms polling ticks with
-                // deltaBytes == 0 the whole time. Resetting the baseline on
-                // every tick would make the eventual big delta land right
-                // after the last reset, understating elapsed time and
-                // artificially flooring the reported speed at roughly
-                // bufferSize / MIN_UPDATE_INTERVAL_MS (~4 MB/s). By leaving
-                // lastUpdate/lastWritten untouched, once real progress does
-                // land, ms reflects the true elapsed time since data last
-                // moved and the speed calculation above is accurate.
                 if (!stalled) {
                     stalled = true;
                     stallStart = now;
                 }
 
                 auto stallDuration = std::chrono::duration_cast<std::chrono::seconds>(
-                                        now - stallStart).count();
+                                            now - stallStart).count();
 
-                // Keep last known speed for STALL_TIMEOUT_SECONDS, then show 0
                 if (stallDuration >= STALL_TIMEOUT_SECONDS) {
                     progressData[progressIndex].speed.store(0.0);
                 }
-                // Else: keep the existing smoothedSpeed (don't change it)
             }
-            // If ms < MIN_UPDATE_INTERVAL_MS, we do nothing - keep old speed value
-            // and don't update timestamps to accumulate more measurement time
         }
     });
 
-    // ThreadGuard ensures the thread is always stopped and joined on any
-    // return path — success, failure, or cancellation.
     ThreadGuard threadGuard(progressMonitorThread, monitoringActive);
 
     // ------------------------------------------------------------------ //
@@ -801,8 +804,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                                 (dst.string().rfind(ntfsMnt, 0) == 0);
         const bool useBufferedIO = isNtfsDest;
 
-        // O_NOFOLLOW: refuse to open the source if it is (or races to become)
-        // a symlink, regardless of the earlier filesystem-walk check.
         const int fd_in = open(src.c_str(), O_RDONLY | O_NOFOLLOW);
         if (fd_in < 0) return false;
         posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
@@ -819,9 +820,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         const size_t mask = static_cast<size_t>(sectorSize) - 1;
 
         bool success = true;
-        uint64_t bytesCopiedTotal = 0;   // real source bytes, padding excluded
+        uint64_t bytesCopiedTotal = 0;
         while (!GlobalState::g_operationCancelled.load()) {
-            // Ensure we read a full buffer or hit EOF
             size_t total_read_this_chunk = 0;
             while (total_read_this_chunk < bufferSize) {
                 if (GlobalState::g_operationCancelled.load()) {
@@ -837,12 +837,12 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                     goto done;
                 }
                 if (bytes_read == 0) {
-                    break; // EOF reached
+                    break;
                 }
                 total_read_this_chunk += bytes_read;
             }
 
-            if (total_read_this_chunk == 0) break; // Clean EOF at start of loop
+            if (total_read_this_chunk == 0) break;
 
             ssize_t bytes_read = static_cast<ssize_t>(total_read_this_chunk);
             ssize_t writeLen = bytes_read;
@@ -855,7 +855,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             }
 
             ssize_t  bytes_written    = 0;
-            uint64_t reportedThisChunk = 0; // real (non-padding) bytes already credited
+            uint64_t reportedThisChunk = 0;
             while (bytes_written < writeLen) {
                 if (GlobalState::g_operationCancelled.load()) {
                     success = false;
@@ -869,7 +869,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                     success = false;
                     goto done;
                 }
-                if (written == 0) {   // no progress; avoid infinite spin
+                if (written == 0) {
                     success = false;
                     goto done;
                 }
@@ -887,8 +887,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         }
 
     done:
-        // Detect a source shorter than fstat/ISO-walk reported. Check before
-        // ftruncate extends the file with zeros, which would mask the truncation.
         if (success && !GlobalState::g_operationCancelled.load() &&
             bytesCopiedTotal < fileSize) {
             success = false;
@@ -918,8 +916,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ------------------------------------------------------------------ //
     // 7. Copy passes (NTFS payload first, ESP second)                    //
     // ------------------------------------------------------------------ //
-
-    // Returns false on failure or cancellation; RAII handles all cleanup.
     auto processEntries = [&](const std::vector<IsoEntry>& entries) -> bool {
         for (const auto& e : entries) {
             if (GlobalState::g_operationCancelled.load()) return false;
@@ -948,15 +944,9 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (!processEntries(ntfsEntries)) return false;
     if (!processEntries(espEntries))  return false;
 
-    // ThreadGuard destructor stops + joins the monitor thread here on any
-    // early return. On the success path it fires at end of scope below.
-
     // ------------------------------------------------------------------ //
     // 8. Flush filesystems before unmounting                             //
     // ------------------------------------------------------------------ //
-    // syncfs pushes all dirty pages at the filesystem level. safeUmount
-    // (called by ScopedMount destructors) then blocks until the kernel
-    // confirms all I/O has reached the device.
     if (!GlobalState::g_operationCancelled.load()) {
         if (isoType == IsoType::WindowsInstall) {
             const int ntfsFd = open(ntfsMnt.c_str(), O_RDONLY);
@@ -966,13 +956,10 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         if (fatFd >= 0) { syncfs(fatFd); close(fatFd); }
     }
 
-    threadGuard.stop();  // Sets monitoringActive=false and joins
-
-    // ScopedMount destructors for ntfsScope, fatScope, isoScope fire here
-    // in reverse declaration order: ntfs → fat → iso.
+    threadGuard.stop();
 
     // ------------------------------------------------------------------ //
-    // 9. Final progress accounting                                        //
+    // 9. Final progress accounting                                       //
     // ------------------------------------------------------------------ //
     const auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now() - startTime);
@@ -1215,45 +1202,28 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
  * delegated to @ref writeWindowsIsoToDevice, which automatically handles multi-partitioning,
  * hybrid FAT32+NTFS tables, and cluster tuning.
  * - **Raw O_DIRECT Pipeline:** Non-Windows targets are imaged via raw unbuffered disk I/O.
- * Data transfers use two 4 MiB buffers allocated with @c posix_memalign (8 MiB per call),
- * each rounded down to a multiple of the device's effective sector size and aligned to it.
- * That size is derived by querying both the logical sector size (@c ioctl(BLKSSZGET)) and
- * the physical sector size (@c ioctl(BLKPBSZGET)) and taking the larger of the two. This
- * ensures correct @c O_DIRECT alignment on 512n, 512e, and 4Kn drives. @c BLKPBSZGET is
- * treated as best-effort and falls back to the logical size if the kernel or device does
- * not support it. @c POSIX_FADV_SEQUENTIAL is applied to the source descriptor before the
- * write loop to enable aggressive kernel read-ahead; @c POSIX_FADV_DONTNEED is applied
- * after to release the ISO from page cache once writing completes.
- * - **Double Buffering:** A dedicated reader thread fills one aligned buffer from the ISO
- * (including tail zero-padding) while the calling thread writes the other buffer to the
- * device. The two buffers circulate between an "empty" and a "full" queue, so the device
- * is not left idle while the next chunk is being read. The reader can run at most one
- * buffer ahead of the writer, which bounds memory use per call.
- * - **Chunked Device Writes:** Each device write() is sector-aligned and capped at 4 MiB.
- * Buffer address, length, and device offset all remain aligned for @c O_DIRECT. With the
- * current 4 MiB buffers each buffer goes out as a single write; the cap keeps progress
- * and cancellation granularity fine (important for slow USB drives, < 10 MB/s) if the
- * buffer size is increased later.
- * - **Progress Monitoring:** A separate thread samples the written-byte counter every 500 ms,
- * publishes progress (capped at 99% until completion), and computes an exponentially smoothed
- * speed (heavier smoothing below 10 MB/s). The last known speed is held through stalls and
- * reset to 0 after 60 s without progress. The monitor sleeps on a condition variable, so it
- * wakes immediately on shutdown.
- * - **Tail-Block Padding:** Detects partial blocks at EOF, automatically zero-padding the
- * remaining buffer slice up to the strict sector layout boundary to prevent kernel
- * rejection errors (@c EINVAL). Short @c read() results mid-file are not treated as EOF;
- * the reader keeps reading until the chunk is full or @c read() returns 0.
+ * Data transfers utilize a dedicated page-aligned memory buffer (@c posix_memalign) sized
+ * to the device's effective sector boundary, derived by querying both logical sector size
+ * (@c ioctl(BLKSSZGET)) and physical sector size (@c ioctl(BLKPBSZGET)) and taking the
+ * larger of the two. This ensures correct @c O_DIRECT alignment on 512n, 512e, and 4Kn
+ * drives. @c BLKPBSZGET is treated as best-effort and falls back to the logical size if
+ * the kernel or device does not support it.
+ * @c POSIX_FADV_SEQUENTIAL is applied to the source descriptor before the write loop to
+ * enable aggressive kernel read-ahead; @c POSIX_FADV_DONTNEED is applied after to release
+ * the ISO from page cache once writing completes.
+ * - **Tail-Block Padding:** Detects partial blocks at EOF or short reads, automatically
+ * zero-padding the remaining buffer slice up to the strict sector layout boundary to prevent
+ * kernel rejection errors (@c EINVAL).
  * - **Asynchronous Cancellation Safety:** Evaluates @c GlobalState::g_operationCancelled
- * in both the reader and the writer. On user abort, it short-circuits execution, stops the
- * reader thread, and leaves the disk safely without triggering a cascading @c fsync block.
+ * at every inner loop pass. On user abort, it short-circuits execution and leaves the disk
+ * safely without triggering a cascading @c fsync block.
  *
  * @param isoPath Absolute path to the source ISO image file on the host.
  * @param device Target destination block node path (e.g., @c /dev/sdb). WARNING: All existing
  * underlying data will be destructively overwritten.
  * @param progressIndex Unique thread tracking identifier mapped inside the global progress array.
- * @return @c true if the image data was written in full and flushed to the device with
- * @c fsync; @c false on I/O failure, validation failure, or user cancellation. The written
- * data is not read back or verified against the ISO.
+ * @return @c true if the image data was transferred successfully, verified, and safely flushed;
+ * @c false on physical I/O failure, validation collapse, or user cancellation.
  *
  * @see isValidIso9660
  * @see isWindowsIsoInitialCheck
@@ -1337,302 +1307,139 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     // Pad file size up to sector boundary for O_DIRECT
     const uint64_t paddedSize = ((fileSize + sectorSize - 1) / sectorSize) * sectorSize;
 
-    // Two aligned buffers (4 MiB each, rounded down to sector boundary).
-    // These size the read-ahead / hand-off between reader and writer; they do NOT
-    // dictate how large each device write() is (see writeChunk below).
+    // Allocate aligned buffer (4 MiB, rounded down to sector boundary)
     constexpr size_t DESIRED_BUFFER = 4 * 1024 * 1024;
     size_t bufferSize = (DESIRED_BUFFER / sectorSize) * sectorSize;
     if (bufferSize == 0) bufferSize = sectorSize;
 
-    // Device writes are capped at 4 MiB and kept sector-aligned so the progress byte
-    // counter advances at fine granularity. With the current 4 MiB buffers each buffer
-    // is one write(); the cap matters if DESIRED_BUFFER is raised, because a single
-    // very large write() on a slow USB drive (< 10 MB/s) blocks for many seconds and
-    // makes the monitor's speed samples noisy. Must stay a multiple of sectorSize
-    // for O_DIRECT.
-    constexpr size_t MAX_WRITE_CHUNK = 4 * 1024 * 1024;
-    static_assert(MAX_WRITE_CHUNK <= DESIRED_BUFFER,
-                  "write chunk larger than the buffer is pointless");
-    const size_t writeChunk = std::max<size_t>((MAX_WRITE_CHUNK / sectorSize) * sectorSize,
-                                               static_cast<size_t>(sectorSize));
-
-    constexpr int NUM_BUFFERS = 2;
-    std::unique_ptr<char, decltype(&free)> bufferGuards[NUM_BUFFERS] = {
-        {nullptr, &free}, {nullptr, &free}
-    };
-    for (int i = 0; i < NUM_BUFFERS; ++i) {
-        char* p = nullptr;
-        if (posix_memalign(reinterpret_cast<void**>(&p), sectorSize, bufferSize) != 0) {
-            progressData[progressIndex].failed.store(true);
-            return false;
-        }
-        bufferGuards[i].reset(p);
+    char* alignedBuffer = nullptr;
+    if (posix_memalign(reinterpret_cast<void**>(&alignedBuffer), sectorSize, bufferSize) != 0) {
+        progressData[progressIndex].failed.store(true);
+        return false;
     }
-
-    // ------------------------------------------------------------------ //
-    // Double-buffer queues shared between reader thread and writer (this) //
-    // ------------------------------------------------------------------ //
-    struct Chunk {
-        char*  buf;
-        size_t len;   // 0 == end-of-stream sentinel
-    };
-
-    std::mutex              qMutex;
-    std::condition_variable qCv;
-    std::deque<Chunk>       emptyQ;
-    std::deque<Chunk>       fullQ;
-    bool                    stopReader = false;   // set by writer to tell reader to exit
-    bool                    readFailed = false;   // set by reader on read() error
-
-    for (int i = 0; i < NUM_BUFFERS; ++i)
-        emptyQ.push_back({bufferGuards[i].get(), 0});
+    std::unique_ptr<char, decltype(&free)> bufferGuard(alignedBuffer, &free);
 
     // ------------------------------------------------------------------ //
     // Asynchronous UI Status Thread Initialization                        //
     // ------------------------------------------------------------------ //
     std::atomic<uint64_t> directBytesWrittenAccumulator{0};
     std::atomic<bool> monitoringActive{true};
-    std::mutex              monMutex;
-    std::condition_variable monCv;
 
     auto startTime = std::chrono::high_resolution_clock::now();
 
-    std::thread progressMonitorThread;
-    std::thread readerThread;
+    std::thread progressMonitorThread([&, fileSize, progressIndex]() {
+        auto     lastUpdate    = std::chrono::high_resolution_clock::now();
+        uint64_t lastWritten   = 0;
+        double   smoothedSpeed = 0.0;
+        bool     haveEstimate  = false;
 
-    // Idempotent: stops and joins both helper threads.
-    auto shutdownThreads = [&]() {
-        {
-            std::lock_guard<std::mutex> lk(qMutex);
-            stopReader = true;
-        }
-        qCv.notify_all();
-        if (readerThread.joinable()) readerThread.join();
+        // Stall tracking
+        auto     stallStart    = std::chrono::high_resolution_clock::now();
+        bool     stalled       = false;
 
-        {
-            std::lock_guard<std::mutex> lk(monMutex);
-            monitoringActive.store(false);
+        constexpr double alpha = 0.3;
+        // Increase minimum time between updates for slow drives
+        constexpr int MIN_UPDATE_INTERVAL_MS = 1000;
+        // Show 0 only after this many seconds of continuous stalling
+        constexpr int STALL_TIMEOUT_SECONDS = 60;
+
+        while (monitoringActive.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+            auto now = std::chrono::high_resolution_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count();
+
+            uint64_t currentWritten = directBytesWrittenAccumulator.load();
+
+            // Always update progress even if no new data
+            progressData[progressIndex].bytesWritten.store(currentWritten);
+            progressData[progressIndex].progress.store(static_cast<int>(
+                std::min(99.0, (static_cast<double>(currentWritten) / fileSize) * 100.0)));
+
+            uint64_t deltaBytes = (currentWritten >= lastWritten) ? (currentWritten - lastWritten) : 0;
+
+            // Only calculate speed if we have enough data and enough time has passed
+            if (deltaBytes > 0 && elapsed >= MIN_UPDATE_INTERVAL_MS) {
+                // Progress detected - reset stall tracking
+                stalled = false;
+
+                double instantSpeed = (static_cast<double>(deltaBytes) / (1024.0 * 1024.0)) / (elapsed / 1000.0);
+
+                // For slow drives (< 10 MB/s), apply heavier smoothing to reduce
+                // display jitter from bursty O_DIRECT writes at low throughput
+                double smoothingFactor = (instantSpeed < 10.0) ? 0.2 : alpha;
+
+                smoothedSpeed = haveEstimate
+                    ? (smoothingFactor * instantSpeed + (1.0 - smoothingFactor) * smoothedSpeed)
+                    : instantSpeed;
+                haveEstimate = true;
+
+                // Update speed only when we have a valid measurement
+                progressData[progressIndex].speed.store(smoothedSpeed);
+
+                // Only reset the baseline when bytes actually arrived — this keeps
+                // `elapsed` spanning back to the last real data point instead of an
+                // arbitrary polling tick, which was previously truncating the window
+                // to ~1s and producing a spurious 4MB/s (bufferSize/interval) floor
+                // on slow/bursty O_DIRECT writers.
+                lastWritten = currentWritten;
+                lastUpdate  = now;
+            } else if (deltaBytes == 0 && elapsed >= MIN_UPDATE_INTERVAL_MS) {
+                // Stall detected - track how long it's been
+                if (!stalled) {
+                    stalled = true;
+                    stallStart = now;
+                }
+
+                auto stallDuration = std::chrono::duration_cast<std::chrono::seconds>(
+                                        now - stallStart).count();
+
+                // Keep last known speed for STALL_TIMEOUT_SECONDS, then show 0
+                if (stallDuration >= STALL_TIMEOUT_SECONDS) {
+                    progressData[progressIndex].speed.store(0.0);
+                }
+                // Else: keep the existing smoothedSpeed (don't change it)
+
+                // Deliberately do NOT touch lastWritten/lastUpdate here — let the
+                // elapsed window keep growing while a slow write is still in flight,
+                // so the eventual speed sample reflects the true transfer duration.
+            }
         }
-        monCv.notify_all();
-        if (progressMonitorThread.joinable()) progressMonitorThread.join();
-    };
+    });
 
     uint64_t localBytesWritten = 0;
-    bool     cancelled = false;
-    bool     ioFailed  = false;
 
     try {
-        progressMonitorThread = std::thread([&, fileSize, progressIndex]() {
-            auto     lastUpdate    = std::chrono::high_resolution_clock::now();
-            uint64_t lastWritten   = 0;
-            double   smoothedSpeed = 0.0;
-            bool     haveEstimate  = false;
+        while (localBytesWritten < paddedSize && !GlobalState::g_operationCancelled.load()) {
+            uint64_t remaining   = paddedSize - localBytesWritten;
+            size_t   bytesToRead = static_cast<size_t>(std::min<uint64_t>(bufferSize, remaining));
 
-            // Stall tracking
-            auto     stallStart    = std::chrono::high_resolution_clock::now();
-            bool     stalled       = false;
-
-            constexpr double alpha = 0.3;
-            // Increase minimum time between updates for slow drives
-            constexpr int MIN_UPDATE_INTERVAL_MS = 1000;
-            // Show 0 only after this many seconds of continuous stalling
-            constexpr int STALL_TIMEOUT_SECONDS = 60;
-
-            while (monitoringActive.load()) {
-                {
-                    // Interruptible 500 ms tick: wakes immediately on shutdown
-                    // instead of making the caller wait out a sleep.
-                    std::unique_lock<std::mutex> lk(monMutex);
-                    monCv.wait_for(lk, std::chrono::milliseconds(500),
-                                   [&] { return !monitoringActive.load(); });
-                }
-                if (!monitoringActive.load()) break;
-
-                auto now = std::chrono::high_resolution_clock::now();
-                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdate).count();
-
-                uint64_t currentWritten = directBytesWrittenAccumulator.load();
-
-                // Always update progress even if no new data
-                progressData[progressIndex].bytesWritten.store(currentWritten);
-                progressData[progressIndex].progress.store(static_cast<int>(
-                    std::min(99.0, (static_cast<double>(currentWritten) / fileSize) * 100.0)));
-
-                uint64_t deltaBytes = (currentWritten >= lastWritten) ? (currentWritten - lastWritten) : 0;
-
-                // Only calculate speed if we have enough data and enough time has passed
-                if (deltaBytes > 0 && elapsed >= MIN_UPDATE_INTERVAL_MS) {
-                    // Progress detected - reset stall tracking
-                    stalled = false;
-
-                    double instantSpeed = (static_cast<double>(deltaBytes) / (1024.0 * 1024.0)) / (elapsed / 1000.0);
-
-                    // For slow drives (< 10 MB/s), apply heavier smoothing to reduce
-                    // display jitter from bursty O_DIRECT writes at low throughput
-                    double smoothingFactor = (instantSpeed < 10.0) ? 0.2 : alpha;
-
-                    smoothedSpeed = haveEstimate
-                        ? (smoothingFactor * instantSpeed + (1.0 - smoothingFactor) * smoothedSpeed)
-                        : instantSpeed;
-                    haveEstimate = true;
-
-                    // Update speed only when we have a valid measurement
-                    progressData[progressIndex].speed.store(smoothedSpeed);
-
-                    // Only reset the baseline when bytes actually arrived — this keeps
-                    // `elapsed` spanning back to the last real data point instead of an
-                    // arbitrary polling tick, which was previously truncating the window
-                    // to ~1s and producing a spurious floor (one write chunk per interval)
-                    // on slow/bursty O_DIRECT writers.
-                    lastWritten = currentWritten;
-                    lastUpdate  = now;
-                } else if (deltaBytes == 0 && elapsed >= MIN_UPDATE_INTERVAL_MS) {
-                    // Stall detected - track how long it's been
-                    if (!stalled) {
-                        stalled = true;
-                        stallStart = now;
-                    }
-
-                    auto stallDuration = std::chrono::duration_cast<std::chrono::seconds>(
-                                            now - stallStart).count();
-
-                    // Keep last known speed for STALL_TIMEOUT_SECONDS, then show 0
-                    if (stallDuration >= STALL_TIMEOUT_SECONDS) {
-                        progressData[progressIndex].speed.store(0.0);
-                    }
-                    // Else: keep the existing smoothedSpeed (don't change it)
-
-                    // Deliberately do NOT touch lastWritten/lastUpdate here — let the
-                    // elapsed window keep growing while a slow write is still in flight,
-                    // so the eventual speed sample reflects the true transfer duration.
-                }
-            }
-        });
-
-        // ------------------------------------------------------------------ //
-        // Reader thread: ISO -> aligned buffer (+ zero padding) -> fullQ     //
-        // ------------------------------------------------------------------ //
-        readerThread = std::thread([&]() {
-            uint64_t readTotal = 0;
-
-            auto pushSentinel = [&](bool failed) {
-                {
-                    std::lock_guard<std::mutex> lk(qMutex);
-                    if (failed) readFailed = true;
-                    fullQ.push_back({nullptr, 0});
-                }
-                qCv.notify_all();
-            };
-
-            while (readTotal < paddedSize && !GlobalState::g_operationCancelled.load()) {
-                Chunk c;
-                {
-                    std::unique_lock<std::mutex> lk(qMutex);
-                    qCv.wait(lk, [&] { return stopReader || !emptyQ.empty(); });
-                    if (stopReader) return;
-                    c = emptyQ.front();
-                    emptyQ.pop_front();
-                }
-
-                const size_t toRead = static_cast<size_t>(
-                    std::min<uint64_t>(bufferSize, paddedSize - readTotal));
-
-                size_t got = 0;
-                bool err = false;
-                bool reachedEof = false;
-
-                while (got < toRead) {
-                    ssize_t r = read(iso_fd, c.buf + got, toRead - got);
-                    if (r < 0) {
-                        if (errno == EINTR) continue;
-                        err = true;
-                        break;
-                    }
-                    if (r == 0) {
-                        reachedEof = true;
-                        break;   // EOF reached
-                    }
-                    got += static_cast<size_t>(r);
-                }
-
-                if (err) {
-                    pushSentinel(true);
-                    return;
-                }
-
-                // CRITICAL CHECK: Did we hit EOF before reading the expected file size?
-                if (reachedEof) {
-                    if (readTotal + got < fileSize) {
-                        // The file on disk is shorter than fstat reported (truncated file)!
-                        pushSentinel(true);
-                        return;
-                    }
-                }
-
-                // Tail-block sector alignment padding (only valid if we hit true EOF at fileSize)
-                if (got < toRead) {
-                    std::memset(c.buf + got, 0, toRead - got);
-                }
-
-                c.len = toRead;
-                readTotal += toRead;
-
-                {
-                    std::lock_guard<std::mutex> lk(qMutex);
-                    fullQ.push_back(c);
-                }
-                qCv.notify_all();
-
-                if (reachedEof) break; // Stop reading once actual EOF is hit
+            ssize_t bytesRead = 0;
+            while (true) {
+                bytesRead = read(iso_fd, alignedBuffer, bytesToRead);
+                if (bytesRead >= 0) break;
+                if (errno == EINTR) continue;
+                throw std::runtime_error("Read error: " + std::string(strerror(errno)));
             }
 
-            // Normal end of stream (or cancellation): tell the writer there is no more data.
-            pushSentinel(false);
-        });
-
-        // ------------------------------------------------------------------ //
-        // Writer (this thread): fullQ -> device in writeChunk pieces, then    //
-        // recycle the buffer                                                  //
-        // ------------------------------------------------------------------ //
-        while (true) {
-            Chunk c;
-            {
-                std::unique_lock<std::mutex> lk(qMutex);
-                qCv.wait(lk, [&] { return !fullQ.empty(); });
-                c = fullQ.front();
-                fullQ.pop_front();
+            if (bytesRead == 0) {
+                std::memset(alignedBuffer, 0, bytesToRead);
+            } else if (static_cast<size_t>(bytesRead) < bytesToRead) {
+                std::memset(alignedBuffer + bytesRead, 0, bytesToRead - bytesRead);
             }
 
-            if (c.len == 0) break;   // sentinel: reader finished, failed, or was cancelled
-
-            if (GlobalState::g_operationCancelled.load()) {
-                cancelled = true;
-                break;
-            }
-
-            // Write loop — handles partial writes and EINTR. Each write() is capped at
-            // writeChunk (a multiple of sectorSize), so buffer address, length and
-            // device offset all stay sector-aligned for O_DIRECT while progress is
-            // reported (and cancellation checked) after every write of <= 4 MiB.
-            size_t remainingToWrite = c.len;
-            char*  writePtr         = c.buf;
+            // Write loop — handles partial writes and EINTR
+            size_t remainingToWrite = bytesToRead;
+            char* writePtr         = alignedBuffer;
             while (remainingToWrite > 0) {
-                const size_t thisWrite = std::min(remainingToWrite, writeChunk);
-                ssize_t written = write(dev_fd, writePtr, thisWrite);
+                ssize_t written = write(dev_fd, writePtr, remainingToWrite);
                 if (written < 0) {
                     if (errno == EINTR) continue;
-                    ioFailed = true;
-                    break;
-                }
-
-                if (written == 0) {   // no progress; avoid infinite spin
-                    ioFailed = true;
-                    break;
+                    throw std::runtime_error("Write error: " + std::string(strerror(errno)));
                 }
 
                 if (GlobalState::g_operationCancelled.load()) {
-                    cancelled = true;
-                    break;
+                    goto user_cancelled;
                 }
 
                 remainingToWrite -= static_cast<size_t>(written);
@@ -1643,49 +1450,37 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                     static_cast<uint64_t>(written),
                     fileSize - std::min(localBytesWritten, fileSize));
 
-                localBytesWritten += static_cast<uint64_t>(written);
+                localBytesWritten += static_cast<size_t>(written);
 
                 directBytesWrittenAccumulator.fetch_add(reportable);
             }
-
-            if (ioFailed || cancelled) break;
-
-            // Hand the buffer back so the reader can refill it while we write the other one.
-            {
-                std::lock_guard<std::mutex> lk(qMutex);
-                emptyQ.push_back({c.buf, 0});
-            }
-            qCv.notify_all();
         }
+    user_cancelled:;
     } catch (...) {
-        shutdownThreads();
+        monitoringActive.store(false);
+        if (progressMonitorThread.joinable()) progressMonitorThread.join();
+
         if (!GlobalState::g_operationCancelled.load()) {
             progressData[progressIndex].failed.store(true);
         }
         return false;
     }
 
-    // Safely terminate reader and UI update threads before triggering storage synchronization logic
-    shutdownThreads();
-
-    if (readFailed || ioFailed) {
-        if (!GlobalState::g_operationCancelled.load()) {
-            progressData[progressIndex].failed.store(true);
-        }
-        return false;
-    }
+    // Safely terminate UI update operations before triggering storage synchronization logic
+    monitoringActive.store(false);
+    if (progressMonitorThread.joinable()) progressMonitorThread.join();
 
     // Drop ISO from page cache — no point keeping it after writing.
     posix_fadvise(iso_fd, 0, 0, POSIX_FADV_DONTNEED);
 
-    if (!cancelled && !GlobalState::g_operationCancelled.load()) {
+    if (!GlobalState::g_operationCancelled.load()) {
         if (fsync(dev_fd) != 0) {
             progressData[progressIndex].failed.store(true);
             return false;
         }
     }
 
-    if (!cancelled && !GlobalState::g_operationCancelled.load() && localBytesWritten >= paddedSize) {
+    if (!GlobalState::g_operationCancelled.load() && localBytesWritten >= paddedSize) {
         auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - startTime);
         double seconds  = totalElapsed.count() / 1000.0;
