@@ -1488,7 +1488,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         });
 
         // ------------------------------------------------------------------ //
-        // Reader thread: ISO -> aligned buffer (+ zero padding) -> fullQ      //
+        // Reader thread: ISO -> aligned buffer (+ zero padding) -> fullQ     //
         // ------------------------------------------------------------------ //
         readerThread = std::thread([&]() {
             uint64_t readTotal = 0;
@@ -1539,17 +1539,18 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
                     return;
                 }
 
-                // If we hit EOF before filling the expected 'toRead' for this chunk,
-                // verify if this is the legitimate end of the file.
-                // (If readTotal + got is less than the expected unpadded file size, it's an error).
+                // CRITICAL CHECK: Did we hit EOF before reading the expected file size?
                 if (reachedEof) {
-                    // If you pass the raw unpadded file size into this reader scope (e.g. fileSize),
-                    // you can check: if (readTotal + got < unpaddedFileSize) { err = true; break; }
-                    // For now, if EOF is reached, any remaining space up to paddedSize
-                    // must be sector-alignment padding, NOT missing payload data.
+                    if (readTotal + got < fileSize) {
+                        // The file on disk is shorter than fstat reported (truncated file)!
+                        std::lock_guard<std::mutex> lk(qMutex);
+                        readFailed = true;
+                        pushSentinel();
+                        return;
+                    }
                 }
 
-                // Tail-block sector alignment padding
+                // Tail-block sector alignment padding (only valid if we hit true EOF at fileSize)
                 if (got < toRead) {
                     std::memset(c.buf + got, 0, toRead - got);
                 }
