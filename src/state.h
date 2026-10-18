@@ -62,6 +62,7 @@ namespace GlobalState {
     inline std::shared_ptr<RefreshState> g_pendingRefreshState{nullptr};
     inline std::atomic<bool> g_suppressPendingRefresh{false};
     inline std::atomic<bool> g_filteringIndicator{false};
+    inline std::atomic<bool> isAtMain{true};
     inline bool needSortingAfterflno      = false;
     inline size_t ITEMS_PER_PAGE          = 25;
     inline size_t LIVE_FILTER_LIMIT       = 10000;
