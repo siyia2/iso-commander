@@ -271,9 +271,11 @@ static std::vector<QueryGroup> buildQueryGroups(const std::string& query,
     }
 
     // The last OR-branch is still empty if nothing has been accumulated
-    // since the final ';' (checked before finishGroup() flushes it).
+    // since the final ';' (checked before finishGroup() flushes it). A
+    // pending '!' with no text yet counts as a started term, so "clon;!"
+    // is not an empty branch.
     if (trailingEmptyGroup)
-        *trailingEmptyGroup = sawOr && group.empty() && term.empty();
+        *trailingEmptyGroup = sawOr && group.empty() && term.empty() && !negate;
 
     finishGroup();
     return groups;
