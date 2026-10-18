@@ -303,10 +303,11 @@ void printMenu() {
  * - In all non-@c None cases, finishes by calling @c rl_on_new_line() and
  *   @c rl_redisplay() to repaint the user's prompt/input line beneath the
  *   new output without discarding what they've typed.
- * - **Staleness:** After consuming a MainMenu request, the hook verifies on the
- *   main thread that @c GlobalState::isAtMain is still set; otherwise the request
- *   is discarded. The check in the publishing thread is only an optimization,
- *   since it can go stale before this hook runs.
+ * - **Staleness:** After consuming a request, the hook verifies on the main
+ *   thread that the target screen is still active (@c GlobalState::isAtMain for
+ *   MainMenu, @c GlobalState::isAtISOList for IsoList); otherwise the request is
+ *   discarded. The checks in the publishing threads are only an optimization,
+ *   since they can go stale before this hook runs.
  *
  * @return Always 0, per the @c rl_event_hook / @c rl_hook_func_t contract.
  */
@@ -316,9 +317,10 @@ int checkPendingRefresh() {
     PendingRefreshKind kind = GlobalState::g_pendingRefreshKind.exchange(PendingRefreshKind::None);
     if (kind == PendingRefreshKind::None) return 0;
 
-    // Validate at consumption time: the publisher's isAtMain check can go stale
-    // before this hook runs (e.g. user pressed Enter on "1" in between).
-    if (kind == PendingRefreshKind::MainMenu && !GlobalState::isAtMain.load()) return 0;
+    // Validate at consumption time: the publisher's flag check can go stale
+    // before this hook runs (e.g. user left the screen in between).
+    if (kind == PendingRefreshKind::MainMenu && !GlobalState::isAtMain.load())    return 0;
+    if (kind == PendingRefreshKind::IsoList  && !GlobalState::isAtISOList.load()) return 0;
 
     if (kind == PendingRefreshKind::MainMenu) {
         clearScrollBuffer();

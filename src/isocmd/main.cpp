@@ -64,9 +64,9 @@ int main(int argc, char *argv[]) {
     /// @name Application State Flags
     /// Atomic booleans controlling concurrency and UI state between main thread and background workers.
     /// @{
-    std::atomic<bool> messageActive{false}, isAtISOList{false},
-                     stopMessage{false}, monitorThreadSpawned{false};
+    std::atomic<bool> messageActive{false}, stopMessage{false}, monitorThreadSpawned{false};
     std::atomic<bool>& isAtMain    = GlobalState::isAtMain;
+    std::atomic<bool>& isAtISOList = GlobalState::isAtISOList;
     /// @}
 
     // Generous reserve for future lists
