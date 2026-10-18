@@ -303,6 +303,10 @@ void printMenu() {
  * - In all non-@c None cases, finishes by calling @c rl_on_new_line() and
  *   @c rl_redisplay() to repaint the user's prompt/input line beneath the
  *   new output without discarding what they've typed.
+ * - **Staleness:** After consuming a MainMenu request, the hook verifies on the
+ *   main thread that @c GlobalState::isAtMain is still set; otherwise the request
+ *   is discarded. The check in the publishing thread is only an optimization,
+ *   since it can go stale before this hook runs.
  *
  * @return Always 0, per the @c rl_event_hook / @c rl_hook_func_t contract.
  */
@@ -311,6 +315,11 @@ int checkPendingRefresh() {
 
     PendingRefreshKind kind = GlobalState::g_pendingRefreshKind.exchange(PendingRefreshKind::None);
     if (kind == PendingRefreshKind::None) return 0;
+
+    // Validate at consumption time: the publisher's isAtMain check can go stale
+    // before this hook runs (e.g. user pressed Enter on "1" in between).
+    if (kind == PendingRefreshKind::MainMenu && !GlobalState::isAtMain.load()) return 0;
+
     if (kind == PendingRefreshKind::MainMenu) {
         clearScrollBuffer();
         print_ascii();

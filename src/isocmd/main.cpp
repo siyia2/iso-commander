@@ -64,8 +64,9 @@ int main(int argc, char *argv[]) {
     /// @name Application State Flags
     /// Atomic booleans controlling concurrency and UI state between main thread and background workers.
     /// @{
-    std::atomic<bool> messageActive{false}, isAtMain{true}, isAtISOList{false},
+    std::atomic<bool> messageActive{false}, isAtISOList{false},
                      stopMessage{false}, monitorThreadSpawned{false};
+    std::atomic<bool>& isAtMain    = GlobalState::isAtMain;
     /// @}
 
     // Generous reserve for future lists
@@ -163,6 +164,7 @@ int main(int argc, char *argv[]) {
         rl_bind_key('\t', prevent_readline_keybindings);
 
         GlobalState::g_operationCancelled.store(false);
+        GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::None);
         isAtMain.store(true);
         isAtISOList.store(false);
 
