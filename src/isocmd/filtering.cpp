@@ -192,14 +192,23 @@ static bool hasDanglingBackslash(const std::string& query) {
  * terms the same way.
  *
  * @param query The query string to parse.
+ * @param trailingEmptyGroup Optional out-parameter. Set to true when the
+ *        query contains an unescaped ';' AND its last OR-branch has no term
+ *        yet ("clon;", "clon;&", "clon;!"). The returned groups are
+ *        unaffected (the empty branch is still dropped); this only lets the
+ *        live preview tell "clon;" apart from "clon". Set to false
+ *        otherwise, including for "a;;b" and ";a", where the empty branch is
+ *        not last.
  * @return The groups in query order. Empty if the query contains no
  *         non-empty term (e.g. "", ";;", "&" or "!").
  */
-static std::vector<QueryGroup> buildQueryGroups(const std::string& query) {
+static std::vector<QueryGroup> buildQueryGroups(const std::string& query,
+                                                bool* trailingEmptyGroup = nullptr) {
     std::vector<QueryGroup> groups;
     QueryGroup group;
     std::string term;
     bool negate = false;   // the term currently being built started with an unescaped '!'
+    bool sawOr  = false;   // at least one unescaped ';' has been seen
     term.reserve(query.size());
 
     const auto finishTerm = [&]() {
@@ -250,6 +259,7 @@ static std::vector<QueryGroup> buildQueryGroups(const std::string& query) {
         } else if (c == '&') {
             finishTerm();
         } else if (c == ';') {
+            sawOr = true;
             finishGroup();
         } else if (c == '!' && term.empty() && !negate) {
             // Unescaped '!' at the start of a term: negate it. Any later '!'
@@ -260,9 +270,15 @@ static std::vector<QueryGroup> buildQueryGroups(const std::string& query) {
         }
     }
 
+    // The last OR-branch is still empty if nothing has been accumulated
+    // since the final ';' (checked before finishGroup() flushes it).
+    if (trailingEmptyGroup)
+        *trailingEmptyGroup = sawOr && group.empty() && term.empty();
+
     finishGroup();
     return groups;
 }
+
 /**
  * @brief True if any term in any group is case-insensitive, i.e. a
  * lowercased copy of each entry is needed to evaluate the query.
@@ -1039,25 +1055,32 @@ void primeLivePreviewCaches() {
  * a negated term widens the match set. Because it reads the previous query,
  * the caller must update @c lastQuery only AFTER this returns.
  *
+ * Identity (whole source list) is returned for an empty query, a query that
+ * parses to no terms, and a query whose last OR-branch is still empty
+ * ("clon;"): the new branch has no term yet, so it matches everything until
+ * the user types one. Enter is unaffected; the commit path never sees this.
+ *
  * Side effects: updates @c lastMatches / @c hasLastMatches (cleared for an
- * empty query, set to this result otherwise).
+ * identity result, set to this result otherwise).
  *
  * @param query The in-progress (uncommitted) query text from the readline
- * input buffer. An empty query yields an identity result (whole source list).
+ * input buffer.
  * @return The matching local indices plus their @c globalIsoFileList
- * translation, or an identity result for an empty query.
+ * translation, or an identity result (whole source list).
  */
 LivePreviewResult computeLivePreviewMatches(const std::string& query)
 {
     LivePreviewResult result;
 
     // Parse once; reused below for the identity check and the negation gate.
-    const std::vector<QueryGroup> groups = buildQueryGroups(query);
+    bool trailingEmptyGroup = false;
+    const std::vector<QueryGroup> groups = buildQueryGroups(query, &trailingEmptyGroup);
 
-    // An empty query, or one that parses to no terms (e.g. "\", ";", "&",
-    // "!", ";;"), matches everything. Show the plain source list (identity),
-    // not a "filtered" view with index tags.
-    if (query.empty() || groups.empty()) {
+    // An empty query, one that parses to no terms (e.g. "\", ";", "&", "!",
+    // ";;"), or one whose last OR-branch is still empty ("clon;") matches
+    // everything. Show the plain source list (identity), not a "filtered"
+    // view with index tags.
+    if (query.empty() || groups.empty() || trailingEmptyGroup) {
         result.identity = true;
         g_livePreview.lastMatches.clear();
         g_livePreview.hasLastMatches = false;
