@@ -67,9 +67,9 @@ extern "C" const char* __lsan_default_suppressions() {
  * @note ISO 9660 detection: Checks for descriptor type 0x01 and identifier "CD001"
  * at logical sector 16 (offset 32768, ECMA-119 §8.1).
  * @note UDF detection: Probes for Volume Recognition Sequence (VRS) identifiers
- * ("BEA01", "NSR02", "NSR03", "TEA01") at sectors 16-19.
- * - Checks sector sizes: 2048 (default), 512, and 4096 bytes.
- * - Identifier is read starting at byte 1 of each sector (byte 0 is type).
+ * ("BEA01", "NSR02", "NSR03", "TEA01") starting at offset 32768.
+ * - Scans up to 6 descriptors at strides of 2048 (default) and 4096 bytes.
+ * - Identifier is read starting at byte 1 of each descriptor (byte 0 is type).
  * - Anchor Volume Descriptor Pointer (AVDP) at sector 256 is not checked.
  * @note Requires a minimum file size of 34816 bytes (17 * 2048).
  *
@@ -117,25 +117,21 @@ static bool isValidIsoFile(const std::string& path, const struct stat& st) {
     }
 
     // --- 2. UDF Volume Recognition Sequence ---
-    // The VRS occupies sectors 16–19 (and optionally beyond) using 2048-byte sectors
-    // per ECMA-167 §7.2. Sector sizes 512 and 4096 are probed for non-standard images.
-    // 2048 is listed first as it is overwhelmingly the common case.
+    // Per ECMA-167 §2/3 (VRS), the sequence starts at byte 32768 and consists of
+    // consecutive 2048-byte descriptors. Media with 4096-byte blocks use a 4096-byte
+    // stride (stride = max(block size, 2048)); 512-byte media share the 2048 layout.
+    // Up to 6 descriptors are scanned at each stride, with 2048 tried first as it is
+    // overwhelmingly the common case. Scanning past the first four also tolerates
+    // bridge images that place extra descriptors (e.g. BOOT2, CDW02) ahead of BEA01.
     //
     // Sector 256 (UDF Anchor VDP) is intentionally excluded: the tokens below
-    // (BEA01, NSR0x, TEA01) are VRS identifiers and are not present at the anchor.
+    // (BEA01, NSR02/03, TEA01) are VRS identifiers and are not present at the anchor.
     if (!found) {
-        static constexpr int kUdfSectors[]  = {16, 17, 18, 19};
-        static constexpr int kSectorSizes[] = {2048, 512, 4096};
-
-        for (const int secSize : kSectorSizes) {
-            for (const int sector : kUdfSectors) {
-                // VRS structure identifier begins at byte 1 of each sector (byte 0 is type).
-                if (!readAt(static_cast<off_t>(sector) * secSize + 1, 5)) continue;
-                std::string_view sv(sig, 5);
-                if (sv == "BEA01" || sv == "NSR02" || sv == "NSR03" || sv == "TEA01") {
-                    found = true;
-                    break;
-                }
+        for (const off_t stride : {off_t{2048}, off_t{4096}}) {
+            for (int i = 0; i < 6 && !found; ++i) {
+                if (!readAt(32768 + i * stride + 1, 5)) break;
+                const std::string_view sv(sig, 5);
+                found = (sv == "BEA01" || sv == "NSR02" || sv == "NSR03" || sv == "TEA01");
             }
             if (found) break;
         }
