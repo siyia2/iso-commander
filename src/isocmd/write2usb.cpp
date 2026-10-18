@@ -1027,30 +1027,35 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 }
 
 /**
- * @brief Validates that a file descriptor refers to a valid ISO 9660 filesystem image.
+ * @brief Checks that a file descriptor refers to an ISO 9660 or UDF disc image.
  *
- * Reads the Primary Volume Descriptor at Sector 16 (byte offset 32768) using
- * positional I/O, leaving the file descriptor's offset cursor unmodified.
+ * Walks the Volume Recognition Sequence (sectors 16-23, 2048-byte spacing) with
+ * @c pread, so the descriptor's offset is untouched. Accepts an ISO 9660 PVD
+ * (type @c 0x01, "CD001"), which covers UDF-bridge images, or a UDF "NSR02"/"NSR03"
+ * descriptor, which covers pure-UDF images. "CD001" non-PVD entries, "BEA01" and
+ * "TEA01" are skipped; any other identifier rejects the image immediately.
  *
- * Checks performed:
- *   - Descriptor type byte (buffer[0]) must equal 0x01 (Primary Volume Descriptor).
- *   - Standard Identifier bytes 1–5 must equal "CD001" (ECMA-119 §8.1).
+ * @param fd Open, readable descriptor for the image. Not closed by this function.
+ * @return @c true if an accepted descriptor is found; @c false on a short read,
+ *         an unrecognized identifier, or no match within 8 sectors.
  *
- * @param fd  An open, readable file descriptor referencing the target image.
- * @return    @c true if Sector 16 contains a valid ISO 9660 Primary Volume Descriptor;
- *            @c false if the read fails, the descriptor type is wrong, or the
- *            identifier does not match.
+ * @note Acceptance does not imply the image is bootable. The name is historical;
+ *       @c isValidOpticalImage would describe it more accurately.
  */
 bool isValidIso9660(int fd) {
-    uint8_t buffer[2048];
-    if (pread(fd, buffer, sizeof(buffer), 32768) != 2048) return false;
+    // Volume Recognition Sequence starts at sector 16; walk a few descriptors.
+    for (int i = 0; i < 8; ++i) {
+        uint8_t d[7];
+        if (pread(fd, d, sizeof(d), 32768 + i * 2048) != sizeof(d)) return false;
 
-    // buffer[0]: Volume Descriptor Type — 0x01 = Primary Volume Descriptor (ECMA-119 §8.3).
-    // buffer[1..5]: Standard Identifier — must be "CD001" (ECMA-119 §8.1).
-    if (buffer[0] != 0x01) return false;
-
-    std::string_view id(reinterpret_cast<char*>(buffer + 1), 5);
-    return id == "CD001";
+        std::string_view id(reinterpret_cast<char*>(d + 1), 5);
+        if ((id == "CD001" && d[0] == 0x01) ||        // ISO 9660 PVD
+            id == "NSR02" || id == "NSR03")           // UDF
+            return true;
+        if (id != "CD001" && id != "BEA01" && id != "TEA01")
+            return false;                              // not a recognition sequence
+    }
+    return false;
 }
 
 /**
