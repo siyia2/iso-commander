@@ -1080,9 +1080,12 @@ LivePreviewResult computeLivePreviewMatches(const std::string& query)
 
     // An empty query, one that parses to no terms (e.g. "\", ";", "&", "!",
     // ";;"), or one whose last OR-branch is still empty ("clon;") matches
-    // everything. Show the plain source list (identity), not a "filtered"
-    // view with index tags.
-    if (query.empty() || groups.empty() || trailingEmptyGroup) {
+    // everything, so show the plain source list (identity), not a
+    // "filtered" view with index tags. Not when a negated term exists:
+    // negation is global, so its exclusion still applies ("!a;" shows the
+    // same list as "!a").
+    if (query.empty() || groups.empty() ||
+        (trailingEmptyGroup && !groupsHaveNegation(groups))) {
         result.identity = true;
         g_livePreview.lastMatches.clear();
         g_livePreview.hasLastMatches = false;
