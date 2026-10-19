@@ -675,6 +675,7 @@ int pgdn_handler(int, int) {
 }
 
 int toggleList_handler(int, int) {
+    stashTypedInput();
     rl_replace_line("~", 0);
     rl_done = 1;
     return 0;
@@ -709,18 +710,13 @@ int filter_handler(int, int) {
 }
 
 int toggleFlno_handler(int, int) {
+    stashTypedInput();
     rl_replace_line("*", 0);
     rl_done = 1;
     return 0;
 }
 
 /* --- Settings & State Handlers --- */
-
-int save_handler(int, int) {
-    rl_replace_line("s", 0);
-    rl_done = 1;
-    return 0;
-}
 
 int reset_handler(int, int) {
     rl_replace_line("r", 0);
