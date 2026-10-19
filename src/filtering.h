@@ -137,4 +137,12 @@ void syncFilteringStackForIso(
     bool& isFiltered
 );
 
+/**
+ * @brief Refreshes source indices for the current filtered results.
+ */
+void refreshFilteredSourceIndices(
+    const std::vector<std::string>& globalIsoFileList,
+    std::vector<FilteringState>& filteringStack,
+    const std::vector<std::string>& filteredFiles);
+
 #endif // FILTERING_H
