@@ -96,7 +96,7 @@ void printSection(const ThemeColors& tc, std::string_view head, const std::strin
 /**
  * @brief Displays an interactive help guide detailing how to select and filter items within lists.
  */
-void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool& isMount) {
+void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool& isMount, const bool& isFiltered) {
     clearScrollBuffer();
     const ThemeColors tc;
 
@@ -118,7 +118,7 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
     printSection(tc, "\n3. Special Keys:",
         "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysBlue) + "'~'" + std::string(UI::Palette::BoldReset) + "                : View Full/Compact\n" +
         (!isUnmount ?
-            "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysBlue) + "'*'" + std::string(UI::Palette::BoldReset) + "                : View FilenamesOnly (¬filtered)\n"
+            "    " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysBlue) + "'*'" + std::string(UI::Palette::BoldReset) + "               : View FilenamesOnly" + (isFiltered ? " (¬filtered)" : "") + "\n"
             : "") +
         "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysBlue) + "'/'" + std::string(UI::Palette::BoldReset) + "                : Filter (! = NOT, ; = OR, & = AND)\n" +
         (isAtISOListForHelp ?
