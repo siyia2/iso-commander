@@ -75,6 +75,9 @@ int my_rl_complete(int ignore, int invoking_key);
 // --- Restore Prompt After Completions ---
 void RestoreReadlineBuffer();
 
+//--- Arms a one-shot readline startup hook that restores stashed input ---
+void armPendingInputRestore();
+
 // --- Exit Handler ---
 int exit_handler(int, int);
 
