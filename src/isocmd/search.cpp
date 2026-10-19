@@ -127,6 +127,7 @@ bool isValidDirectory(const std::string& path) {
  *                      @c saveToDatabase is responsible for setting it.
  */
 void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool& newISOFound) {
+    PendingReadlineTextClearGuard pendingTextGuard;
 
     auto rearmSetup = [&]() {
         enable_ctrl_d();
@@ -161,7 +162,10 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             char* rawSearchQuery = readline(prompt.c_str());
             if (!rawSearchQuery) return;
 
+            armPendingInputRestore();
             std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+            rl_startup_hook = nullptr;
+
             std::string input = trimWhitespace(searchQuery.get());
 
             if (input == "\x1b") return;
@@ -944,6 +948,8 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  *                       @c selectForImageFiles for display coordination.
  */
 void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shared_ptr<RefreshState> state) {
+    PendingReadlineTextClearGuard pendingTextGuard;
+
     struct FileTypeConfig {
         std::string extension;
         std::string name;
@@ -1014,7 +1020,9 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         char* rawSearchQuery = readline(prompt.c_str());
         if (!rawSearchQuery) return;
 
+        armPendingInputRestore();
         std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+        rl_startup_hook = nullptr;
 
         const std::string inputSearch = trimWhitespace(searchQuery.get());
 
