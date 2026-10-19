@@ -469,7 +469,9 @@ void selectForIsoFiles(const std::string& operation,
             pt.primary + ", ? for help: " +
             pt.reset;
 
+        armPendingInputRestore();
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
+        rl_startup_hook = nullptr;
 
         if (!rawInput) break;
 
@@ -768,7 +770,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             pt.primary   + ", ? for help: " +
             pt.reset;
 
+        armPendingInputRestore();
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
+        rl_startup_hook = nullptr;
 
         if (!rawInput) break;
 

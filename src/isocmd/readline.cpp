@@ -619,19 +619,37 @@ void RestoreReadlineBuffer() {
     }
 }
 
+void armPendingInputRestore() {
+    if (RetainAndRestoreReadlineBuffer::g_rl_pending_text.empty()) return;
+    rl_startup_hook = []() -> int {
+        rl_insert_text(RetainAndRestoreReadlineBuffer::g_rl_pending_text.c_str());
+        rl_point = rl_end;
+        RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
+        rl_startup_hook = nullptr;   // one-shot
+        return 0;
+    };
+}
+
 //=============================================================================
 // Event Driven Key Section
 //=============================================================================
 
 /* --- Navigation & View Handlers --- */
 
+static void stashTypedInput() {
+    RetainAndRestoreReadlineBuffer::g_rl_pending_text.assign(
+        rl_line_buffer ? rl_line_buffer : "", rl_end);
+}
+
 int pgup_handler(int, int) {
+    stashTypedInput();
     rl_replace_line("PgUp", 0);
     rl_done = 1;
     return 0;
 }
 
 int pgdn_handler(int, int) {
+    stashTypedInput();
     rl_replace_line("PgDn", 0);
     rl_done = 1;
     return 0;
