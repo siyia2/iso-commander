@@ -31,7 +31,7 @@
 
 void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-               size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst = true);
+               size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst = true, bool showPendingIndices = true);
 
 /**
  * @brief Loads ISO files from the database and updates the display.
@@ -96,7 +96,7 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
 
         // Use either the recently refreshed filteredFiles or the global master list
         printList(isFiltered ? filteredFiles : GlobalState::globalIsoFileList, "ISO_FILES", listSubType,
-                  pendingIndices, hasPendingProcess, currentPage, state, true);
+                  pendingIndices, hasPendingProcess, currentPage, state, true, true);
 
         isEmpty = GlobalState::globalIsoFileList.empty();
     }
@@ -215,7 +215,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         filteredFiles.clear();
     }
 
-    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, currentPage, state, true);
+    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, currentPage, state, true, true);
     return true;
 }
 
@@ -286,5 +286,5 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
         need2Sort = false;
     }
 
-    printList(files, "IMAGE_FILES", "convert2iso", pendingIndices, hasPendingProcess, currentPage, state, true);
+    printList(files, "IMAGE_FILES", "convert2iso", pendingIndices, hasPendingProcess, currentPage, state, true, true);
 }

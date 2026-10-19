@@ -47,7 +47,7 @@
 // StringListView, so the preview never has to copy the matching strings.
 void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-               size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst = true);
+               size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst = true, bool showPendingIndices = true);
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -1258,7 +1258,9 @@ void liveFilterRedisplayHook() {
                   *g_livePreview.pendingIndices,
                   *g_livePreview.hasPendingProcess,
                   previewPage,
-                  g_livePreview.state);
+                  g_livePreview.state,
+                  true,
+                  false);
     }   // unpaginated restored, then stackGuard pops, before the readline redraw below
 
     // We just repainted the whole screen out from under readline; force it

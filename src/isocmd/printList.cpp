@@ -121,7 +121,7 @@ inline void appendNumPadded(std::string& out, std::size_t value, std::size_t wid
  */
 void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-               size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst) {
+               size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst, bool showPendingIndices) {
 
     // --- Flags & Config ---
     const bool isIsoMode      = (listType == "ISO_FILES");
@@ -278,7 +278,7 @@ void printList(const StringListView& items, const std::string& listType, const s
     }
 
     // --- Pending Processes ---
-    if (hasPendingProcess && !pendingIndices.empty()) {
+    if (showPendingIndices && hasPendingProcess && !pendingIndices.empty()) {
         output.append("\n");
         output.append(c.bracketBg).append("Pending Indices [")
               .append(c.procText).append("P")
