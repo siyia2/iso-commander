@@ -119,6 +119,8 @@ void syncCache(const std::string& filePath);
  * @param configPath The filesystem path to the @c .conf file used for synchronization.
  */
 void interactiveConfigEditor(const std::string& configPath) {
+    PendingReadlineTextClearGuard pendingTextGuard;
+
     struct SettingsGuard {
         ~SettingsGuard() { reset_custom_keybindingsForSettingsEditor(); }
     } guard;
@@ -160,8 +162,10 @@ void interactiveConfigEditor(const std::string& configPath) {
             tc.label,
             tc.reset
         );
-
+        armPendingInputRestore();
         std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
+        rl_startup_hook = nullptr;
+
         if (!rawInput) break;
 
         std::string input = trim(rawInput.get());
