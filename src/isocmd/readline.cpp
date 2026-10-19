@@ -710,6 +710,7 @@ int reset_handler(int, int) {
 /* --- Global Utility Handlers --- */
 
 int help_handler(int, int) {
+    stashTypedInput();
     rl_replace_line("?", 0);
     rl_done = 1;
     return 0;

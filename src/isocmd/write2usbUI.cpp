@@ -500,6 +500,7 @@ void displayErrors();
  *         ISOs exceeds the thread pool size.
  */
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos) {
+    PendingReadlineTextClearGuard pendingTextGuard;
     const WriteTheme wt = getWriteTheme();
 
     while (true) {
@@ -609,9 +610,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         std::string devicePrompt = devicePromptStream.str();
 
+        armPendingInputRestore();
         std::unique_ptr<char, decltype(&std::free)> deviceInput(
             readline(devicePrompt.c_str()), &std::free
         );
+        rl_startup_hook = nullptr;
+
 
         if (!deviceInput) {
             return {};  // termGuard destructor restores readline state
