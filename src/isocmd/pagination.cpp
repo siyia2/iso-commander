@@ -17,6 +17,7 @@
 
 // Project Headers
 #include "../display.h"
+#include "../filtering.h"
 #include "../inputHandling.h"
 #include "../sort.h"
 #include "../state.h"
@@ -24,7 +25,7 @@
 #include "../themes.h"
 #include "../verbose.h"
 
-void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool& isMount, const bool& isFiltered);
+void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool& isMount);
 
 /**
  * @file pagination.cpp
@@ -42,7 +43,8 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
  */
 bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage,
                                      bool& isFiltered, bool& needsClrScrn, const std::string& operation,
-                                     bool& need2Sort, std::atomic<bool>* isAtISOList) {
+                                     bool& need2Sort, std::atomic<bool>* isAtISOList,
+                                     std::vector<std::string>& filteredFiles) {
 
     const bool isMount      = (operation == "mount");
     const bool isUnmount    = (operation == "umount");
@@ -85,16 +87,26 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
     if (command == "?") {
         bool isAtISOListForHelp = isAtISOList ? isAtISOList->load() : false;
         if (isAtISOList) isAtISOList->store(false);
-        helpSelections(isAtISOListForHelp, isUnmount, isMount, isFiltered);
+        helpSelections(isAtISOListForHelp, isUnmount, isMount);
         GlobalState::g_filteringIndicator.store(false);
         needsClrScrn = true;
         return true;
     }
 
     if (command == "*") {
-        if (!isFiltered && !isUnmount) {
+        if (!isUnmount) {
             displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
             sortAfterFilenamesOnlyFlag();
+
+            if (isFiltered && !filteringStack.empty()) {
+                syncFilteringStackForIso(
+                    GlobalState::globalIsoFileList,
+                    filteringStack,
+                    filteredFiles,
+                    isFiltered
+                );
+            }
+
         }
         if (isConversion) need2Sort = true;
         needsClrScrn = true;

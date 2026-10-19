@@ -436,7 +436,7 @@ void selectForIsoFiles(const std::string& operation,
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
-        isFiltered ? (void)rl_bind_keyseq("*", rl_insert) : setup_custom_keybindingsForSelect();
+        setup_custom_keybindingsForSelect();
 
         // Unbind unused hotkeys for umount prompt
         if (isUnmount) {
@@ -533,7 +533,17 @@ void selectForIsoFiles(const std::string& operation,
         }
         bool need2Sort = false;
 
-        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, operation, need2Sort, &isAtISOList);
+        bool validCommand = processPaginationHelpAndDisplay(
+            inputString,
+            totalPages,
+            currentPage,
+            isFiltered,
+            needsClrScrn,
+            operation,
+            need2Sort,
+            &isAtISOList,
+            filteredFiles
+        );
 
         if (validCommand) continue;
 
@@ -753,7 +763,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
-        isFiltered ? (void)rl_bind_keyseq("*", rl_insert) : setup_custom_keybindingsForSelect();
+        setup_custom_keybindingsForSelect();
 
         // Unused in convert2iso prompts
         rl_bind_keyseq("R", rl_insert);
@@ -835,8 +845,16 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             : 0;
 
         bool validCommand = processPaginationHelpAndDisplay(
-            inputString, totalPages, currentPage, isFiltered,
-            needsClrScrn, operation, need2Sort, nullptr);
+            inputString,
+            totalPages,
+            currentPage,
+            isFiltered,
+            needsClrScrn,
+            operation,
+            need2Sort,
+            nullptr,
+            files
+        );
 
         if (validCommand) continue;
 
