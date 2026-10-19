@@ -61,6 +61,15 @@ namespace RetainAndRestoreReadlineBuffer {
     inline std::string g_rl_pending_text = "";
 }
 
+/**
+ * @brief Clears pending Readline text when the guard goes out of scope.
+ */
+struct PendingReadlineTextClearGuard {
+    ~PendingReadlineTextClearGuard() {
+        RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
+    }
+};
+
 /** Hook for reloading readline async style. */
 int checkPendingRefresh();
 
