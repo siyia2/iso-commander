@@ -99,15 +99,14 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
             sortAfterFilenamesOnlyFlag();
 
             if (isFiltered && !filteringStack.empty()) {
-                syncFilteringStackForIso(
+                refreshFilteredSourceIndices(
                     GlobalState::globalIsoFileList,
                     filteringStack,
-                    filteredFiles,
-                    isFiltered
+                    filteredFiles
                 );
             }
-
         }
+
         if (isConversion) need2Sort = true;
         needsClrScrn = true;
         return true;

@@ -1531,6 +1531,59 @@ void syncFilteringStackForIso(
     }
 }
 
+/**
+ * @brief Refreshes source indices for the currently filtered ISO files.
+ *
+ * Builds a mapping of ISO file paths to their current indices in
+ * @p globalIsoFileList, then updates the @c originalIndices of the last
+ * filtering state using the existing @p filteredFiles without reapplying
+ * any filter queries. If either input list is empty, the filtering stack
+ * is empty, or any filtered path cannot be mapped to a source index, the
+ * function returns without modifying the filtering stack.
+ *
+ * This keeps source indices synchronized after the global ISO list is
+ * reordered, such as when toggling filenames-only display mode, while
+ * preserving the current filtered results.
+ *
+ * @param globalIsoFileList The current global ISO file list.
+ * @param filteringStack    The stack of active filtering states; only the
+ *                          last state's source indices are updated.
+ * @param filteredFiles     The currently filtered ISO file paths.
+ */
+void refreshFilteredSourceIndices(
+    const std::vector<std::string>& globalIsoFileList,
+    std::vector<FilteringState>& filteringStack,
+    const std::vector<std::string>& filteredFiles)
+{
+    if (filteringStack.empty() || filteredFiles.empty()) {
+        return;
+    }
+
+    // Map each existing filtered path to its current global source index.
+    std::unordered_map<std::string, size_t> sourceIndices;
+    sourceIndices.reserve(globalIsoFileList.size());
+
+    for (size_t i = 0; i < globalIsoFileList.size(); ++i) {
+        sourceIndices.emplace(globalIsoFileList[i], i);
+    }
+
+    // Refresh the indices of the currently displayed filtered results.
+    std::vector<size_t> currentIndices;
+    currentIndices.reserve(filteredFiles.size());
+
+    for (const auto& path : filteredFiles) {
+        const auto it = sourceIndices.find(path);
+        if (it == sourceIndices.end()) {
+            return; // Don't overwrite the stack with incomplete mappings.
+        }
+
+        currentIndices.push_back(it->second);
+    }
+
+    // Update only the final filter state's indices.
+    filteringStack.back().originalIndices = std::move(currentIndices);
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
