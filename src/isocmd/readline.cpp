@@ -684,6 +684,7 @@ int toggleList_handler(int, int) {
 /* --- Action & Command Handlers --- */
 
 int proc_handler(int, int) {
+    stashTypedInput();
     rl_replace_line("P", 0);
     rl_done = 1;
     return 0;
