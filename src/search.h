@@ -42,7 +42,6 @@ public:
         clear_history();
         resetReadlinePagination();
         reset_custom_keybindingsForSearches();
-        RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
     }
 
     // Non-copyable, non-movable

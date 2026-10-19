@@ -39,7 +39,6 @@ public:
 
     ~ReadlineKeybindingGuard() {
         reset_custom_keybindingsForSelect();
-        RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
     }
 
     /**
