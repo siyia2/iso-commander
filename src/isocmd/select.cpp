@@ -151,35 +151,72 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
 /**
  * @brief Executes a batch operation by serializing and routing queued indices.
  *
- * Converts the @p pendingIndices vector into a space-delimited string and
- * dispatches it to @c processOperationForSelectedIsoFiles. This acts as the
- * "commit" phase for staged user selections.
+ * Sanitizes the tokens in @p pendingIndices, joins the valid ones into a
+ * space-delimited string and dispatches it to
+ * @c processOperationForSelectedIsoFiles. This acts as the "commit" phase for
+ * staged user selections.
  *
  * @details **Workflow:**
- * - **Command Guard:** Only executes if @p inputString exactly matches "P".
- * - **Serialization:** Concatenates all queued tokens into a single command-line
- *   compatible string.
+ * - **Command Guard:** Only executes if @p inputString exactly matches "P",
+ *   a queue exists and it is not empty.
+ * - **Token Sanitizing:** Each token must start with a digit. Only its valid
+ *   leading part is kept: digits, optionally followed by "-digits" groups
+ *   (e.g. "1", "1-5"). A '-' is accepted only when a digit follows it, and
+ *   everything after the first invalid character is dropped
+ *   (e.g. "1-test" becomes "1", "3abc" becomes "3"). Tokens that do not
+ *   start with a digit (e.g. "test", "-3", "-") are discarded entirely.
+ * - **Serialization:** Concatenates the sanitized tokens into a single
+ *   command-line compatible string, separated by single spaces.
  * - **Execution:** Routes the combined input through the standard operation
  *   logic (Mount, Unmount, Write, or CP/MV/RM).
  *
  * @param inputString      User command (must be "P" to trigger).
- * @param pendingIndices   The collection of staged index tokens.
+ * @param pendingIndices   The collection of staged index tokens. Not modified.
  * @param hasPendingProcess Flag indicating if a queue currently exists.
+ * @param isFiltered       Whether the file list is currently filtered.
+ * @param filteredFiles    The filtered file list.
+ * @param isoDirs          Directories holding the ISO files.
+ * @param operation        The operation to perform on the selected files.
+ * @param umountMvRmBreak  Flag forwarded to the operation logic.
+ * @param filterHistory    Filter history flag forwarded to the operation logic.
  * @return **true** if the "P" command was recognized and executed.
- * @return **false** if the queue was empty or the command was invalid.
+ * @return **false** if the queue was empty, no token survived sanitizing, or
+ *         the command was invalid.
  */
 bool handlePendingProcess(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
                           bool isFiltered, std::vector<std::string>& filteredFiles,
-						  std::vector<std::string>& isoDirs, const std::string& operation,
-						  bool& umountMvRmBreak, bool& filterHistory) {
+                          std::vector<std::string>& isoDirs, const std::string& operation,
+                          bool& umountMvRmBreak, bool& filterHistory) {
 
     if (hasPendingProcess && !pendingIndices.empty() && inputString == "P") {
-        std::string combinedIndices = "";
-        for (size_t i = 0; i < pendingIndices.size(); ++i) {
-            combinedIndices += pendingIndices[i];
-            if (i < pendingIndices.size() - 1) {
-                combinedIndices += " ";
+        std::string combinedIndices;
+
+        for (const std::string& token : pendingIndices) {
+            // Keep only the valid leading part of the token:
+            // digits, optionally followed by "-digits" groups (e.g. "1", "1-5").
+            // Everything after the first invalid character is dropped.
+            size_t i = 0;
+
+            // Must start with a digit
+            if (token.empty() || !std::isdigit(static_cast<unsigned char>(token[0]))) continue;
+
+            while (i < token.size() && std::isdigit(static_cast<unsigned char>(token[i]))) ++i;
+
+            // Accept '-' only when a digit follows it
+            while (i + 1 < token.size() && token[i] == '-' &&
+                   std::isdigit(static_cast<unsigned char>(token[i + 1]))) {
+                ++i; // skip '-'
+                while (i < token.size() && std::isdigit(static_cast<unsigned char>(token[i]))) ++i;
             }
+
+            if (!combinedIndices.empty()) {
+                combinedIndices += ' ';
+            }
+            combinedIndices += token.substr(0, i);
+        }
+
+        if (combinedIndices.empty()) {
+            return false; // nothing valid to process
         }
 
         processOperationForSelectedIsoFiles(combinedIndices, isFiltered, filteredFiles, isoDirs, operation, umountMvRmBreak, filterHistory);
@@ -801,12 +838,34 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         if (validCommand) continue;
 
         if (inputString == "P" && hasPendingProcess && !pendingIndices.empty()) {
-            std::string combinedIndices = "";
-            for (size_t i = 0; i < pendingIndices.size(); ++i) {
-                combinedIndices += pendingIndices[i];
-                if (i < pendingIndices.size() - 1) {
-                    combinedIndices += " ";
+            std::string combinedIndices;
+
+            for (const std::string& token : pendingIndices) {
+                // Keep only the valid leading part of the token:
+                // digits, optionally followed by "-digits" groups (e.g. "1", "1-5").
+                // Everything after the first invalid character is dropped.
+                if (token.empty() || !std::isdigit(static_cast<unsigned char>(token[0]))) continue;
+
+                size_t i = 0;
+                while (i < token.size() && std::isdigit(static_cast<unsigned char>(token[i]))) ++i;
+
+                // Accept '-' only when a digit follows it
+                while (i + 1 < token.size() && token[i] == '-' &&
+                       std::isdigit(static_cast<unsigned char>(token[i + 1]))) {
+                    ++i; // skip '-'
+                    while (i < token.size() && std::isdigit(static_cast<unsigned char>(token[i]))) ++i;
                 }
+
+                if (!combinedIndices.empty()) {
+                    combinedIndices += ' ';
+                }
+                combinedIndices += token.substr(0, i);
+            }
+
+            if (combinedIndices.empty()) {
+                // Nothing numeric to process
+                needsClrScrn = false;
+                continue;
             }
 
             processInputForConversions(combinedIndices, files,
