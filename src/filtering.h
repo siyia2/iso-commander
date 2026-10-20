@@ -8,6 +8,8 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 // Forward declaration of shared state (needed for live main-list rendering)
@@ -46,6 +48,7 @@ struct FilteringState {
     std::vector<size_t> originalIndices;
     std::string query;
     bool isFiltered;
+    bool namesOnly = false;
 };
 
 /**
@@ -128,14 +131,18 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
                                         const std::vector<std::string>* precomputedLower = nullptr);
 
 /**
- * @brief Synchronizes the filtered results by iteratively applying the filtering stack.
+ * @brief Refreshes the active filter after a list reload, keeping existing results.
+ *
+ * Entries already shown are kept if they still exist; only newly discovered ISOs
+ * are tested against every level, each with the text mode it was committed with.
+ * Clears the filter if nothing remains.
  */
-void syncFilteringStackForIso(
-    const std::vector<std::string>& globalIsoFileList,
+void refreshFilterKeepingResults(
+    const std::vector<std::string>& newGlobal,
+    const std::unordered_set<std::string>& oldPaths,
     std::vector<FilteringState>& filteringStack,
     std::vector<std::string>& filteredFiles,
-    bool& isFiltered
-);
+    bool& isFiltered);
 
 /**
  * @brief Refreshes source indices for the current filtered results.
