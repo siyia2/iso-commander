@@ -37,11 +37,15 @@ void printList(const StringListView& items, const std::string& listType, const s
  * @brief Loads ISO files from the database and updates the display.
  *
  * Synchronizes the global ISO list with the database when the dirty flag is set.
- * If a filter is active during a reload, it is re-applied to ensure the visible
- * results and original index mappings remain consistent with the new data.
+ * If a filter is active during a reload, the entries already shown are kept
+ * (if they still exist), and only newly discovered ISOs are tested against the
+ * filter stack, each level using the text mode (filenames-only or full path)
+ * it was committed with. Existing results are not re-evaluated. See
+ * @c refreshFilterKeepingResults.
  *
- * @note If a re-applied filter returns no results, the filter stack is cleared
- * and the view resets to the full list to prevent a blank UI.
+ * @note If no entries remain after the refresh (for example, every filtered
+ * ISO was removed from disk), the filter stack is cleared and the view resets
+ * to the full list to prevent a blank UI.
  *
  * @param filteredFiles      Reference to the vector of currently filtered files.
  * @param isFiltered         Boolean flag indicating if a filter is active.
@@ -71,8 +75,19 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
         std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
 
         if (needToReload) {
+            // Remember which paths existed before the reload, so the filter
+            // refresh can tell new ISOs from old ones. Only needed while a
+            // filter is active.
+            std::unordered_set<std::string> oldPaths;
+            if (isFiltered) {
+                oldPaths.reserve(GlobalState::globalIsoFileList.size());
+                oldPaths.insert(GlobalState::globalIsoFileList.begin(),
+                                GlobalState::globalIsoFileList.end());
+            }
+
             GlobalState::globalIsoFileList = std::move(freshList);
-            //  Only reset to originalPage if we are NOT actively filtered ---
+
+            // Only reset to originalPage if we are NOT actively filtered
             if (!isFiltered) {
                 currentPage = originalPage;
             }
@@ -80,7 +95,9 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
             hasPendingProcess = false;
             sortFilesCaseInsensitive(GlobalState::globalIsoFileList);
 
-            syncFilteringStackForIso(GlobalState::globalIsoFileList, filteringStack, filteredFiles, isFiltered);
+            // Keep what is already shown; test only newly found ISOs.
+            refreshFilterKeepingResults(GlobalState::globalIsoFileList, oldPaths,
+                                        filteringStack, filteredFiles, isFiltered);
         }
 
         if (GlobalState::needSortingAfterflno) {

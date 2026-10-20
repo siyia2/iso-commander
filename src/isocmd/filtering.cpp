@@ -16,6 +16,8 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -633,12 +635,12 @@ static std::vector<size_t> filterFilesIndicesSubset(
  * display list) into its corresponding globalIsoFileList index.
  *
  * filteringStack[lvl].originalIndices always stores fully-resolved global
- * indices at every level (see syncFilteringStackForIso, which builds each
- * level from currentIndices — itself already global from the prior
- * iteration). So resolving a local index only ever requires one lookup,
+ * indices at every level (applyFilterCore builds each level from the
+ * previous one's already-global indices). On an ISO list refresh only the
+ * top level is rewritten (see refreshFilterKeepingResults), and only the
+ * top level is ever read, so resolving a local index requires one lookup
  * against the top of the stack; it must not walk back through earlier
- * levels, whose entries are unrelated positions once idx no longer refers
- * to them.
+ * levels, whose stored indices may be stale.
  *
  * @param localIdx Index into the list currently being searched/displayed.
  * @return The corresponding index into globalIsoFileList.
@@ -758,6 +760,7 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
     FilteringState newState;
     newState.originalIndices.reserve(tempIndices.size());
     newState.query      = searchString;  // save query
+    newState.namesOnly  = useNameOnly;
     newState.isFiltered = true;
 
     for (size_t idx : tempIndices)
@@ -1426,161 +1429,158 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
 // ─── Filter stack sync ───────────────────────────────────────────────────
 
 /**
- * @brief Performs multi-stage filtering on the global ISO file list.
+ * @brief Refreshes the active filter after the global ISO list was reloaded,
+ * WITHOUT re-evaluating the entries that are already shown.
  *
- * Re-applies every level of @ref filteringStack, in order, against the
- * current @p globalIsoFileList, so that the filtered view and each level's
- * stored indices stay consistent after the underlying list changes (e.g. a
- * background refresh). Each level applies its saved query (with the same
- * ';' OR / '&' AND / '!' negation / '\\' escape syntax as the commit path)
- * to the results of the previous level.
+ * - Entries currently displayed (@p filteredFiles) are kept as they are, as
+ *   long as they still exist in @p newGlobal. They are never re-tested, so
+ *   toggling filenames-only between commits cannot change them.
+ * - Only paths that were NOT in the old list (@p oldPaths) are tested. Each
+ *   must satisfy every level of @p filteringStack, and each level is
+ *   evaluated against the text mode it was committed with
+ *   (@c FilteringState::namesOnly).
+ * - If nothing is left, the filter is cleared (same as the old "broken" case).
  *
- * @section filtering_logic Logic Flow:
- * 1.  **Initialization**: Starts with the full range of indices [0, N) over
- *     @p globalIsoFileList.
- * 2.  **Iterative filtering**: For each @ref FilteringState in the stack:
- *     - Builds the search strings for the surviving entries: basenames when
- *       @ref displayConfig::toggleNamesOnly is set, full paths otherwise.
- *     - Runs @ref filterFilesIndices with the level's saved query.
- *     - Maps the resulting local indices back to global file indices and
- *       stores them in the level's @c originalIndices.
- *     - Uses them as the working set for the next level.
- * 3.  **Break condition**: If any level yields zero matches, the stack is
- *     cleared, @p filteredFiles is emptied and @p isFiltered is set to false.
- * 4.  **Finalization**: Otherwise @p filteredFiles is rebuilt from the final
- *     set of surviving global indices.
+ * Only the top level's @c originalIndices is rewritten: resolveGlobalIndex()
+ * and printList()'s "[N]^" tags read only the top of the stack. Lower levels'
+ * stored indices go stale after a reload but are never read.
  *
- * @note Indices are moved between levels (not copied) to avoid extra
- * allocations. This is the same stack the commit path (applyFilterCore) and
- * printList()'s "[N]^" tags rely on; @ref resolveGlobalIndex depends on every
- * level storing fully-resolved global indices.
- *
- * @param globalIsoFileList The full, current ISO list to filter.
- * @param filteringStack   Filter levels to re-apply; updated in place.
- * @param filteredFiles    Output: the subset of @p globalIsoFileList that
- *                         satisfies all levels (cleared if the stack broke).
- * @param isFiltered       In/out: must be true on entry for any work to be
- *                         done; set to false if the stack broke.
- *
- * @pre `isFiltered` is true and `filteringStack` is not empty (otherwise the
- *      function returns immediately without changes).
+ * @param newGlobal        The freshly loaded, sorted global ISO list.
+ * @param oldPaths         Paths of the global list BEFORE the reload.
+ * @param filteringStack   Active filter levels; updated in place.
+ * @param filteredFiles    In/out: the displayed filtered list.
+ * @param isFiltered       In/out: set to false if nothing remains.
  */
-void syncFilteringStackForIso(
-    const std::vector<std::string>& globalIsoFileList,
+void refreshFilterKeepingResults(
+    const std::vector<std::string>& newGlobal,
+    const std::unordered_set<std::string>& oldPaths,
     std::vector<FilteringState>& filteringStack,
     std::vector<std::string>& filteredFiles,
     bool& isFiltered)
 {
-    if (!isFiltered || filteringStack.empty()) {
-        return;
+    if (!isFiltered || filteringStack.empty()) return;
+
+    const auto textFor = [](const std::string& p, bool namesOnly) -> std::string {
+        if (!namesOnly) return p;
+        const size_t s = p.find_last_of('/');
+        return s != std::string::npos ? p.substr(s + 1) : p;
+    };
+
+    // path -> index in the new global list
+    std::unordered_map<std::string, size_t> indexOf;
+    indexOf.reserve(newGlobal.size());
+    for (size_t i = 0; i < newGlobal.size(); ++i)
+        indexOf.emplace(newGlobal[i], i);
+
+    std::vector<size_t> result;
+    result.reserve(filteredFiles.size());
+
+    // 1) Existing results that still exist: kept untouched.
+    for (const auto& p : filteredFiles) {
+        const auto it = indexOf.find(p);
+        if (it != indexOf.end())
+            result.push_back(it->second);
     }
 
-    // Initialize currentIndices with all possible file indices [0, 1, ..., N-1]
-    std::vector<size_t> currentIndices(globalIsoFileList.size());
-    std::iota(currentIndices.begin(), currentIndices.end(), 0);
+    // 2) Newly discovered ISOs: must pass every level, each level using the
+    //    text mode it was committed with. One batched search per level.
+    std::vector<size_t> candidates;
+    for (size_t i = 0; i < newGlobal.size(); ++i)
+        if (!oldPaths.count(newGlobal[i]))
+            candidates.push_back(i);
 
-    bool broken = false;
+    for (const auto& lvl : filteringStack) {
+        if (candidates.empty()) break;
 
-    // Iterate through each filter in the stack
-    for (auto& state : filteringStack) {
-        std::vector<std::string> searchList;
-        searchList.reserve(currentIndices.size());
+        std::vector<std::string> texts;
+        texts.reserve(candidates.size());
+        for (size_t gi : candidates)
+            texts.push_back(textFor(newGlobal[gi], lvl.namesOnly));
 
-        // Prepare the strings to search (Full Path vs File Name only)
-        for (size_t idx : currentIndices) {
-            const std::string& path = globalIsoFileList[idx];
-            if (displayConfig::toggleNamesOnly) {
-                size_t lastSlash = path.find_last_of('/');
-                searchList.push_back(lastSlash != std::string::npos ? path.substr(lastSlash + 1) : path);
-            } else {
-                searchList.push_back(path);
-            }
-        }
+        const std::vector<size_t> hit = filterFilesIndices(texts, lvl.query);
 
-        // Apply the filter query to the current subset
-        auto localMatches = filterFilesIndices(searchList, state.query);
-
-        if (localMatches.empty()) {
-            broken = true;
-            break;
-        }
-
-        // Map local relative indices back to the global indices
-        std::vector<size_t> nextIndices;
-        nextIndices.reserve(localMatches.size());
-        for (size_t localIdx : localMatches) {
-            nextIndices.push_back(currentIndices[localIdx]);
-        }
-
-        // Update the stack state and the "active" working set for the next iteration
-        state.originalIndices = nextIndices;
-        currentIndices = std::move(nextIndices);
+        std::vector<size_t> next;
+        next.reserve(hit.size());
+        for (size_t h : hit)
+            next.push_back(candidates[h]);
+        candidates = std::move(next);
     }
 
-    // Finalize results
-    if (broken) {
+    result.insert(result.end(), candidates.begin(), candidates.end());
+
+    // Global list is sorted, so ascending index == display order.
+    std::sort(result.begin(), result.end());
+    result.erase(std::unique(result.begin(), result.end()), result.end());
+
+    if (result.empty()) {
         filteringStack.clear();
         filteredFiles.clear();
         isFiltered = false;
-    } else {
-        filteredFiles.clear();
-        filteredFiles.reserve(currentIndices.size());
-        for (size_t idx : currentIndices) {
-            filteredFiles.push_back(globalIsoFileList[idx]);
-        }
+        return;
     }
+
+    filteredFiles.clear();
+    filteredFiles.reserve(result.size());
+    for (size_t idx : result)
+        filteredFiles.push_back(newGlobal[idx]);
+
+    filteringStack.back().originalIndices = std::move(result);
 }
 
 /**
  * @brief Refreshes source indices for the currently filtered ISO files.
  *
- * Builds a mapping of ISO file paths to their current indices in
- * @p globalIsoFileList, then updates the @c originalIndices of the last
- * filtering state using the existing @p filteredFiles without reapplying
- * any filter queries. If either input list is empty, the filtering stack
- * is empty, or any filtered path cannot be mapped to a source index, the
- * function returns without modifying the filtering stack.
+ * Maps each path in @p filteredFiles to its position in that list, then
+ * scans @p globalIsoFileList once to find each path's current index there.
+ * The resulting indices replace @c originalIndices of the last filtering
+ * state, in the same order as @p filteredFiles. No filter queries are
+ * reapplied.
+ *
+ * The filtering stack is left unmodified if @p filteringStack or
+ * @p filteredFiles is empty, or if any filtered path is not found in
+ * @p globalIsoFileList (which includes an empty global list).
  *
  * This keeps source indices synchronized after the global ISO list is
  * reordered, such as when toggling filenames-only display mode, while
  * preserving the current filtered results.
  *
+ * @note Paths are assumed to be unique in both @p filteredFiles and
+ *       @p globalIsoFileList. Only the first occurrence of a path in the
+ *       global list is used.
+ *
  * @param globalIsoFileList The current global ISO file list.
  * @param filteringStack    The stack of active filtering states; only the
  *                          last state's source indices are updated.
- * @param filteredFiles     The currently filtered ISO file paths.
+ * @param filteredFiles     The currently filtered ISO file paths. Must
+ *                          outlive the call, since the lookup map holds
+ *                          views into it.
  */
 void refreshFilteredSourceIndices(
     const std::vector<std::string>& globalIsoFileList,
     std::vector<FilteringState>& filteringStack,
     const std::vector<std::string>& filteredFiles)
 {
-    if (filteringStack.empty() || filteredFiles.empty()) {
-        return;
-    }
+    if (filteringStack.empty() || filteredFiles.empty()) return;
 
-    // Map each existing filtered path to its current global source index.
-    std::unordered_map<std::string, size_t> sourceIndices;
-    sourceIndices.reserve(globalIsoFileList.size());
+    // Only the F filtered paths are stored; views avoid copying strings.
+    std::unordered_map<std::string_view, size_t> wanted;
+    wanted.reserve(filteredFiles.size());
+    for (size_t k = 0; k < filteredFiles.size(); ++k)
+        wanted.emplace(filteredFiles[k], k);
 
-    for (size_t i = 0; i < globalIsoFileList.size(); ++i) {
-        sourceIndices.emplace(globalIsoFileList[i], i);
-    }
+    std::vector<size_t> currentIndices(filteredFiles.size());
+    size_t found = 0;
 
-    // Refresh the indices of the currently displayed filtered results.
-    std::vector<size_t> currentIndices;
-    currentIndices.reserve(filteredFiles.size());
-
-    for (const auto& path : filteredFiles) {
-        const auto it = sourceIndices.find(path);
-        if (it == sourceIndices.end()) {
-            return; // Don't overwrite the stack with incomplete mappings.
+    for (size_t i = 0; i < globalIsoFileList.size() && found < wanted.size(); ++i) {
+        const auto it = wanted.find(globalIsoFileList[i]);
+        if (it != wanted.end()) {
+            currentIndices[it->second] = i;
+            ++found;
         }
-
-        currentIndices.push_back(it->second);
     }
 
-    // Update only the final filter state's indices.
+    if (found != wanted.size()) return;   // incomplete mapping, leave stack alone
+
     filteringStack.back().originalIndices = std::move(currentIndices);
 }
 
