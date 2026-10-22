@@ -6,8 +6,10 @@
 #include <cstddef>
 #include <filesystem>
 #include <iostream>
+#include <mutex>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 
@@ -25,6 +27,27 @@
 #include "../verbose.h"
 
 namespace fs = std::filesystem;
+
+// --- Function Declarations ---
+
+void convertToISO(const std::vector<std::string>& imageFiles,
+                  const bool& modeMdf,
+                  const bool& modeNrg,
+                  const bool& modeChd,
+                  const bool& modeDaa,
+                  std::atomic<size_t>* completedBytes,
+                  std::atomic<size_t>* completedTasks,
+                  std::atomic<size_t>* failedTasks,
+                  std::vector<std::string>* successfulOutputPaths,
+                  std::mutex* outPathsMutex);
+
+void displayProgressBarWithSize(std::atomic<size_t>* completedBytes,
+                                size_t totalBytes,
+                                std::atomic<size_t>* completedTasks,
+                                std::atomic<size_t>* failedTasks,
+                                size_t totalTasks,
+                                std::atomic<bool>* isComplete,
+                                bool* verbose, const std::string& operation);
 
 // ─── Palette helpers ─────────────────────────────────────────────────────────
 
@@ -118,26 +141,85 @@ static void scanDirectoryForISOs(const fs::path& dir,
     }
 }
 
+// ─── Image file discovery (for -c) ───────────────────────────────────────────
+
+enum class ImgKind { None, BinImg, Mdf, Nrg, Chd, Daa };
+
+/**
+ * @brief Map a file extension to the conversion backend that handles it.
+ *        BIN/IMG/CCD share the default backend (convertCcdToIso).
+ */
+static ImgKind classifyImage(const fs::path& p) {
+    std::string ext = p.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    if (ext == ".bin" || ext == ".img" || ext == ".ccd") return ImgKind::BinImg;
+    if (ext == ".mdf") return ImgKind::Mdf;
+    if (ext == ".nrg") return ImgKind::Nrg;
+    if (ext == ".chd") return ImgKind::Chd;
+    if (ext == ".daa" || ext == ".gbi") return ImgKind::Daa;
+    return ImgKind::None;
+}
+
+/**
+ * @brief Recursively scan @p dir for convertible disk images.
+ *        Same depth/symlink/error semantics as scanDirectoryForISOs().
+ */
+static void scanDirectoryForImages(const fs::path& dir,
+                                   int maxDepth,
+                                   int currentDepth,
+                                   std::unordered_set<std::string>& out,
+                                   bool& hasErrors,
+                                   bool silentMode) {
+    try {
+        for (const auto& entry : fs::directory_iterator(dir)) {
+            if (GlobalState::g_operationCancelled.load()) return;
+            if (entry.is_symlink()) continue;
+
+            if (entry.is_regular_file()) {
+                if (classifyImage(entry.path()) != ImgKind::None)
+                    out.insert(fs::canonical(entry.path()).string());
+            } else if (entry.is_directory() &&
+                       (maxDepth == -1 || currentDepth < maxDepth)) {
+                scanDirectoryForImages(entry.path(), maxDepth,
+                                       currentDepth + 1,
+                                       out, hasErrors, silentMode);
+            }
+        }
+    } catch (const fs::filesystem_error& e) {
+        warnMsg(silentMode,
+                std::string("Error scanning directory: ") + e.what(),
+                dir.string());
+        hasErrors = true;
+    }
+}
+
 // ─── Argument parsing ────────────────────────────────────────────────────────
 
 struct ParsedArgs {
-    std::string              action;      ///< Last positional arg: "mount" / "umount" / …
+    std::string              action;      ///< Last positional arg: "mount" / "umount" / … ("convert" with -c)
     std::vector<std::string> paths;
     bool                     silentMode = false;
+    bool                     convert    = false;   ///< -c: non-interactive conversion
     int                      maxDepth   = -1;
 };
 
 /**
  * @brief Parse argv into a ParsedArgs structure.
+ *
+ * With -c, every positional argument is a path and the action is "convert".
+ * Otherwise the last positional is the action (mount/umount/unmount).
+ *
  * @return false when no positional arguments were found (caller should abort).
  */
 static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
-	bool captureWarn = false;
+    bool captureWarn = false;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
 
         if (arg == "--silent") {
             out.silentMode = true;
+        } else if (arg == "-c") {
+            out.convert = true;
         } else if (arg.substr(0, 2) == "-d") {
             try {
                 out.maxDepth = std::stoi(arg.substr(2));
@@ -162,10 +244,16 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
         }
     }
 
-	if (captureWarn) {
-		std::cout << UI::Palette::Reset << "\n";
-		captureWarn = false;
-	}
+    if (captureWarn) {
+        std::cout << UI::Palette::Reset << "\n";
+        captureWarn = false;
+    }
+
+    if (out.convert) {            // -c: every positional is a path
+        out.action = "convert";
+        return true;
+    }
+
     if (out.paths.empty()) return false;
     out.action = out.paths.back();
     out.paths.pop_back();
@@ -400,13 +488,178 @@ static int handleUmount(const ParsedArgs& args) {
     return (failedTasks.load() == 0 && !hasErrors) ? 0 : 1;
 }
 
+// ─── Convert branch (-c) ─────────────────────────────────────────────────────
+
+/**
+ * @brief Image → ISO conversion with a byte-tracking progress bar.
+ *
+ * Accepts image files and/or directories (scanned per -dN). Files are batched
+ * by type because convertToISO() selects its backend from mode flags.
+ * Existing .iso outputs are skipped (counted as completed), so re-running is safe.
+ * Root is not required; getRealUserId() inside convertToISO handles ownership.
+ *
+ * Progress is shown with displayProgressBarWithSize() on a background thread
+ * (skipped with --silent). The bar ends with a "Display verbose output?" prompt;
+ * the detailed per-file messages and summary are printed only if the answer is "y".
+ *
+ * @return 0 if everything converted/skipped cleanly, 1 on any failure.
+ */
+static int handleConvert(const ParsedArgs& args) {
+    if (args.paths.empty()) {
+        errMsg("No files or directories given to convert.");
+        return 1;
+    }
+
+    std::unordered_set<std::string> images;
+    bool hasErrors = false;
+
+    for (const auto& rawPath : args.paths) {
+        if (GlobalState::g_operationCancelled.load()) {
+            verboseWarn(args.silentMode, "Operation cancelled by user.");
+            return 1;
+        }
+
+        fs::path path(rawPath);
+
+        try {
+            if (!fs::exists(path)) {
+                warnMsg(args.silentMode, "does not exist, skipping.", rawPath);
+                hasErrors = true;
+            } else if (fs::is_regular_file(path)) {
+                if (classifyImage(path) == ImgKind::None) {
+                    warnMsg(args.silentMode,
+                            "is not a supported image (bin/img/ccd/mdf/nrg/chd/daa/gbi), skipping.",
+                            rawPath);
+                    hasErrors = true;
+                } else {
+                    images.insert(fs::canonical(path).string());
+                }
+            } else if (fs::is_directory(path)) {
+                if (args.silentMode) disableInput();
+                std::string depthDesc = (args.maxDepth == 0)
+                    ? std::string("surface scan")
+                    : std::string("max depth: ") + (args.maxDepth < 0
+                                                     ? "unlimited"
+                                                     : std::to_string(args.maxDepth));
+                verboseInfo(args.silentMode,
+                            std::string("Scanning directory ")
+                            .append(path.string())
+                            .append(" (").append(depthDesc).append(")..."));
+
+                scanDirectoryForImages(path, args.maxDepth, 0,
+                                       images, hasErrors, args.silentMode);
+            } else {
+                warnMsg(args.silentMode,
+                        "is not a valid file or directory, skipping.", rawPath);
+                hasErrors = true;
+            }
+        } catch (const fs::filesystem_error& e) {
+            warnMsg(args.silentMode,
+                    std::string("Error processing path: ") + e.what(), rawPath);
+            hasErrors = true;
+        }
+    }
+
+    if (GlobalState::g_operationCancelled.load())
+        verboseWarn(args.silentMode, "Conversion cancelled by user.");
+
+    if (images.empty()) {
+        if (!GlobalState::g_operationCancelled.load())
+            verboseWarn(args.silentMode, "\nNo convertible image files found.");
+        return hasErrors ? 1 : 0;
+    }
+
+    // Bucket by backend (sorted for deterministic order).
+    std::vector<std::string> binImg, mdf, nrg, chd, daa;
+    for (const auto& f : images) {
+        switch (classifyImage(f)) {
+            case ImgKind::BinImg: binImg.push_back(f); break;
+            case ImgKind::Mdf:    mdf.push_back(f);    break;
+            case ImgKind::Nrg:    nrg.push_back(f);    break;
+            case ImgKind::Chd:    chd.push_back(f);    break;
+            case ImgKind::Daa:    daa.push_back(f);    break;
+            default: break;
+        }
+    }
+    for (auto* v : {&binImg, &mdf, &nrg, &chd, &daa})
+        std::sort(v->begin(), v->end());
+
+    verboseInfo(args.silentMode,
+                std::string("\nLocated ")
+                .append(std::to_string(images.size()))
+                .append(" image file")
+                .append(images.size() == 1 ? "" : "s")
+                .append("; Attempting to convert...\n"));
+
+    std::atomic<size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
+    std::atomic<bool>   isComplete{false};
+    std::vector<std::string> successfulOutputs;   // TODO: hand to database indexer if desired
+    std::mutex outMutex;
+    bool showVerbose = false;
+
+    // Total input bytes for the byte-tracking progress bar.
+    size_t totalBytes = 0;
+    for (const auto& f : images) {
+        std::error_code ec;
+        auto sz = fs::file_size(f, ec);
+        if (!ec) totalBytes += static_cast<size_t>(sz);
+    }
+    if (totalBytes == 0) totalBytes = 1;   // avoid divide-by-zero in the bar
+
+    // The bar runs on its own thread until isComplete is set; silent mode skips it.
+    // "conversion2iso" contains "2iso", which selects the convert bar layout.
+    std::thread barThread;
+    if (!args.silentMode) {
+        clearScrollBuffer();
+        barThread = std::thread(displayProgressBarWithSize,
+                                &completedBytes, totalBytes,
+                                &completedTasks, &failedTasks, images.size(),
+                                &isComplete, &showVerbose,
+                                std::string("conversion2iso"));
+    }
+
+    auto run = [&](const std::vector<std::string>& files,
+                   bool isMdf, bool isNrg, bool isChd, bool isDaa) {
+        if (files.empty() || GlobalState::g_operationCancelled.load()) return;
+        convertToISO(files, isMdf, isNrg, isChd, isDaa,
+                     &completedBytes, &completedTasks, &failedTasks,
+                     &successfulOutputs, &outMutex);
+    };
+
+    run(binImg, false, false, false, false);
+    run(mdf,    true,  false, false, false);
+    run(nrg,    false, true,  false, false);
+    run(chd,    false, false, true,  false);
+    run(daa,    false, false, false, true);
+
+    isComplete.store(true, std::memory_order_release);
+    if (barThread.joinable()) barThread.join();
+
+    // The bar already shows status; details only if the user answered "y".
+    if (!args.silentMode && showVerbose) {
+        clearScrollBuffer();
+        std::cout << "\n";
+        for (const auto& msg : verboseSets.operationCompleted) std::cout << msg << UI::Palette::BoldReset << "\n";
+        for (const auto& msg : verboseSets.operationSkipped)   std::cout << msg << UI::Palette::BoldReset << "\n";
+        for (const auto& msg : verboseSets.operationFailed)    std::cout << msg << UI::Palette::BoldReset <<"\n";
+        std::cout << "\nConversion summary:\n"
+                  << "  Successful: " << completedTasks.load() << "\n"
+                  << "  Failed:     " << failedTasks.load()
+                  << UI::Palette::Reset << "\n\n";
+    }
+
+    // Non-zero on any failure so scripts/cron can detect problems.
+    return (failedTasks.load() == 0 && !hasErrors &&
+            !GlobalState::g_operationCancelled.load()) ? 0 : 1;
+}
+
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
 /**
- * @brief Primary entry point for handling mount/umount CLI commands.
+ * @brief Primary entry point for handling mount/umount/convert CLI commands.
  *
- * Parses arguments via parseArgs(), then dispatches to handleMount() or
- * handleUmount().
+ * Parses arguments via parseArgs(), then dispatches to handleMount(),
+ * handleUmount() or (with -c) handleConvert().
  *
  * @param argc Argument count from main.
  * @param argv Argument vector from main.
@@ -426,6 +679,9 @@ int handleMountUmountCommands(int argc, char* argv[]) {
         errMsg("No action provided.");
         return 1;
     }
+
+    if (args.convert)
+        return handleConvert(args);
 
     if (args.action == "mount")
         return handleMount(args);
