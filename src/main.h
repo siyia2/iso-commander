@@ -82,6 +82,6 @@ void monitorAndClearMessage(
  * Entry point for non-interactive CLI usage.
  */
 
-int handleMountUmountCommands(int argc, char* argv[]);
+int handleMountUmountConvertCommands(int argc, char* argv[]);
 
 #endif // MAIN_H
