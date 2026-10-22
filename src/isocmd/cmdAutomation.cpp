@@ -780,7 +780,7 @@ static int handleConvert(const ParsedArgs& args) {
     if (images.empty()) {
         if (!GlobalState::g_operationCancelled.load())
             verboseWarn(args.silentMode,
-                        "\nNo convertible image files found.");
+                        "No convertible image files found.");
         return hasErrors ? 1 : 0;
     }
 
