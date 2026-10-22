@@ -219,9 +219,9 @@ struct ParsedArgs {
  *     isocmd <action> [flags...] [paths...]
  *
  * The action keyword ("mount", "umount"/"unmount", "c2iso", "w2usb")
- * must be the first non-flag argument.  Flags (--silent, -dN) may appear
- * only after the action keyword and before the first path — a flag
- * appearing before the action, or after any path, is an error.
+ * must be the first argument.  Flags (--silent, -dN) may appear only
+ * after the action keyword and before the first path.  A flag before the
+ * action, or a flag after any path, is an error.
  *
  * "umount" and "unmount" both map to action "umount"; "c2iso" sets
  * @c convert and action "convert"; "w2usb" sets @c writeUsb and action
@@ -260,7 +260,6 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
         }
     };
 
-    // Emit any deferred "-dN" warning before returning an error.
     auto flushDeferredWarn = [&]() {
         if (captureWarn) {
             std::cout << UI::Palette::Reset << "\n";
@@ -271,19 +270,37 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
 
-        if (isFlag(arg)) {
-            if (!actionSeen) {
+        // 1. Action keyword must come first.
+        if (!actionSeen) {
+            if (isFlag(arg)) {
                 flushDeferredWarn();
                 errMsg(std::string("Options must appear after the action "
-                                   "keyword (e.g. 'isocmd mount --silent "
-                                   "<paths...>'); got '")
-                       + arg + "' before any action keyword.");
+                                   "keyword; got '")
+                       + arg + "' before any action keyword. Use "
+                       "'isocmd <action> [flags...] [paths...]'.");
                 return false;
             }
+            if (!isActionKeyword(arg)) {
+                flushDeferredWarn();
+                errMsg(std::string("Action must be one of "
+                                   "mount, umount, unmount, c2iso, w2usb; "
+                                   "got '")
+                       + arg + "'. Use "
+                       "'isocmd <action> [flags...] [paths...]'.");
+                return false;
+            }
+            actionSeen = true;
+            applyAction(arg);
+            continue;
+        }
+
+        // 2. Flags are only allowed before the first path.
+        if (isFlag(arg)) {
             if (pathsStarted) {
                 flushDeferredWarn();
                 errMsg(std::string("Options must appear before paths; got '")
-                       + arg + "' after the first path.");
+                       + arg + "' after the first path. Use "
+                       "'isocmd <action> [flags...] [paths...]'.");
                 return false;
             }
 
@@ -314,19 +331,7 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
             continue;
         }
 
-        if (!actionSeen) {
-            if (!isActionKeyword(arg)) {
-                flushDeferredWarn();
-                errMsg(std::string("Action must be the first argument "
-                                   "(e.g. 'isocmd mount <paths...>'); got '")
-                       + arg + "' before any action keyword.");
-                return false;
-            }
-            actionSeen = true;
-            applyAction(arg);
-            continue;
-        }
-
+        // 3. Everything else is a path.
         pathsStarted = true;
         out.paths.push_back(arg);
     }
@@ -334,6 +339,7 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
     flushDeferredWarn();
 
     if (!actionSeen) {
+        errMsg("No action provided.");
         return false;
     }
     return true;
