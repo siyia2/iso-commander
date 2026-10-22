@@ -112,11 +112,13 @@ int main(int argc, char *argv[]) {
      * Attempts to acquire an exclusive advisory lock on /tmp/isocmd.lock.
      * If lock fails, displays a user-friendly error message and exits.
      */
+    const PrintListTheme c = getListColors();
+
     const char* lockFile = "/tmp/isocmd.lock";
     GlobalState::lockFileDescriptor = open(lockFile, O_CREAT | O_RDWR, 0666);
     struct flock fl = { F_WRLCK, SEEK_SET, 0, 0, 0 };
     if (fcntl(GlobalState::lockFileDescriptor, F_SETLK, &fl) == -1) {
-        std::cerr << UI::Palette::Red << "error: " << UI::Palette::Yellow
+        std::cerr << c.num << "error: " << c.indexA
                   << "failed to setup transaction (unable to lock database)\n  "
                   << UI::Palette::BoldReset << "if you're sure isocmd isn't already running, you can remove '/tmp/isocmd.lock'\n"
                   << UI::Palette::Reset;

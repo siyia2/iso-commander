@@ -72,8 +72,9 @@ static void verboseInfo(bool silentMode, const std::string& msg) {
  *        Gated by silentMode.
  */
 static void verboseWarn(bool silentMode, const std::string& msg) {
+    const PrintListTheme c = getListColors();
     if (silentMode) return;
-    std::cout << UI::Palette::Yellow << "\n" << msg << UI::Palette::Reset << "\n\n";
+    std::cout << c.num << "\n" << msg << UI::Palette::Reset << "\n\n";
 }
 
 /**
@@ -85,11 +86,12 @@ static void verboseWarn(bool silentMode, const std::string& msg) {
 static void warnMsg(bool silentMode,
                     std::string_view reason,
                     std::string_view path = "") {
+    const PrintListTheme c = getListColors();
     if (silentMode) return;
-    std::cerr << UI::Palette::Yellow << "\n" << "Warning: ";
+    std::cerr << c.num << "\n" << "Warning: ";
     if (!path.empty())
-        std::cerr << "'" << UI::Palette::Red << path
-                  << UI::Palette::Yellow << "' ";
+        std::cerr << "'" << c.indexA << path
+                  << c.num << "' ";
     std::cerr << reason << UI::Palette::Reset << "\n";
 }
 
@@ -98,7 +100,8 @@ static void warnMsg(bool silentMode,
  *        Always shown regardless of silentMode.
  */
 static void errMsg(std::string_view msg) {
-    std::cerr << UI::Palette::Red << "\n" << "Error: " << msg
+    const PrintListTheme c = getListColors();
+    std::cerr << c.indexA << "\n" << "Error: " << msg
               << UI::Palette::Reset << "\n\n";
 }
 
