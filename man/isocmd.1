@@ -12,10 +12,10 @@ Iso Commander (isocmd) is a single binary command-line utility for managing .iso
 Show program version.
 .TP
 .B \-\-silent
-Suppress informational messages, warnings and progress output. Critical errors will still be displayed.
+Suppress informational messages, warnings and progress output. Critical errors will still be displayed. With \fBw2usb\fR, this also omits the data-erasure warning.
 .TP
 .B \-d\fIN\fR
-Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 scans only the specified directory, without descending into subdirectories.
+Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 scans only the specified directory, without descending into subdirectories. Not used by \fBw2usb\fR, which does not scan directories.
 .TP
 .B mount
 Mount one or more ISO files or scan directories for ISO files and mount them (requires root).
@@ -24,7 +24,10 @@ Mount one or more ISO files or scan directories for ISO files and mount them (re
 Unmount specified ISO mount points. Without paths, or with \fBall\fR as the only path, scan /mnt/ISOs and attempt to unmount all contained mount points (requires root).
 .TP
 .B c2iso
-Convert supported images to ISO files without entering interactive mode. Accepts individual image files and directories to scan. Supported formats are BIN, IMG, CCD, MDF, NRG, DAA and GBI.
+Convert images to ISO files without entering interactive mode. Accepts individual image files and directories to scan. Supported formats are BIN, IMG, CCD, MDF, NRG, CHD, DAA and GBI.
+.TP
+.B w2usb
+Write ISO files to removable USB devices without entering interactive mode (requires root). Arguments beginning with \fB/dev/\fR are target devices; all others are ISO files. One ISO is written to every device; with several ISOs, each is written to the device at the same argument position, so the counts must match. All arguments are validated first, and if any check fails, no device is modified. \fBWARNING:\fR all data on the target devices is destroyed, and unlike in interactive mode, no confirmation prompt is shown.
 
 .SH EXAMPLES
 .TS
@@ -34,18 +37,24 @@ isocmd /path/to/file1.iso /path/to/file2.iso mount@Mount specific ISOs
 isocmd /path/to/dir mount@Mount all ISOs in a directory
 isocmd \-d2 /path/to/dir mount@Mount ISOs up to depth 2
 isocmd \-\-silent /path/to/file.iso mount@Mount an ISO with minimal output
+@
 isocmd /mnt/ISOs/mountedISO1 /mnt/ISOs/mountedISO2 umount@Unmount specific ISO mount points
 isocmd /mnt/ISOs/mountedISO1 umount@Unmount a specific ISO mount point
 isocmd umount@Unmount all ISO mount points under /mnt/ISOs
 isocmd all umount@Unmount all ISO mount points under /mnt/ISOs
 isocmd \-\-silent umount@Unmount all ISO mount points with minimal output
+@
 isocmd c2iso /path/to/image.bin@Convert a BIN image to ISO
 isocmd c2iso /path/to/image.mdf /path/to/image.nrg@Convert multiple images to ISO
 isocmd c2iso /path/to/image-dir@Convert supported images in a directory
 isocmd c2iso \-d2 /path/to/image-dir@Convert images up to depth 2
 isocmd c2iso \-\-silent /path/to/image-dir@Convert images with minimal output
+@
+isocmd w2usb file.iso /dev/sdc@Write one ISO to one USB device
+isocmd w2usb file.iso /dev/sdc /dev/sdd@Write one ISO to multiple USB devices
+isocmd w2usb file1.iso file2.iso /dev/sdc /dev/sdd@Write file1.iso to sdc and file2.iso to sdd
+isocmd w2usb \-\-silent file.iso /dev/sdc@Write an ISO with minimal output
 .TE
-
 
 .SH UI INTERACTIVE OPTIONS AND FEATURES
 .TP
