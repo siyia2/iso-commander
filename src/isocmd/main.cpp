@@ -89,8 +89,9 @@ int main(int argc, char *argv[]) {
     if (argc == 2 && (arg1 == "--version" || arg1 == "-v"))
         return printVersionNumber("7.8.1"), 0;
     if (argc >= 3 || (argc == 2 && (arg1 == "umount" || arg1 == "unmount" ||
-                                    arg1 == "mount"  || arg1 == "c2iso")))
-        return handleMountUmountConvertCommands(argc, argv);
+                                    arg1 == "mount"  || arg1 == "c2iso" ||
+                                    arg1 == "w2usb")))
+        return handleMountUmountConvertWriteCommands(argc, argv);
 
     setupReadlineToIgnoreCtrlC();
 

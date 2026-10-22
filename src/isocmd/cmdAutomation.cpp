@@ -27,6 +27,7 @@
 #include "../threadpool.h"
 #include "../umount.h"
 #include "../verbose.h"
+#include "../write2usbUI.h"
 
 namespace fs = std::filesystem;
 
@@ -202,18 +203,21 @@ static void scanDirectoryForImages(const fs::path& dir,
 // ─── Argument parsing ────────────────────────────────────────────────────────
 
 struct ParsedArgs {
-    std::string              action;      ///< Last positional arg: "mount" / "umount" / … ("convert" with c2iso)
+    std::string              action;      ///< Last positional arg: "mount" / "umount" / … ("convert" with c2iso, "writeUsb" with w2usb)
     std::vector<std::string> paths;
     bool                     silentMode = false;
     bool                     convert    = false;   ///< c2iso: non-interactive conversion
+    bool                     writeUsb   = false;   ///< w2usb: non-interactive ISO -> USB write
     int                      maxDepth   = -1;
 };
 
 /**
  * @brief Parse argv into a ParsedArgs structure.
  *
- * With c2iso, every positional argument is a path and the action is "convert".
- * Otherwise the last positional is the action (mount/umount/unmount).
+ * With c2iso or w2usb, every positional argument is kept in @c paths and the
+ * action is "convert" or "w2usb" respectively (w2usb later splits them into
+ * ISOs and /dev/ devices). Otherwise the last positional is the action
+ * (mount/umount/unmount).
  *
  * @return false when no positional arguments were found (caller should abort).
  */
@@ -226,6 +230,8 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
             out.silentMode = true;
         } else if (arg == "c2iso") {
             out.convert = true;
+        } else if (arg == "w2usb") {
+            out.writeUsb = true;
         } else if (arg.substr(0, 2) == "-d") {
             try {
                 out.maxDepth = std::stoi(arg.substr(2));
@@ -257,6 +263,11 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
 
     if (out.convert) {            // c2iso: every positional is a path
         out.action = "convert";
+        return true;
+    }
+
+    if (out.writeUsb) {           // w2usb: every positional is an ISO or a device
+        out.action = "w2usb";
         return true;
     }
 
@@ -878,20 +889,184 @@ static int handleConvert(const ParsedArgs& args) {
             !GlobalState::g_operationCancelled.load()) ? 0 : 1;
 }
 
+// ─── Write-to-USB branch (w2usb) ────────────────────────────────────────────
+
+/**
+ * @brief Non-interactive ISO -> USB writer.
+ *
+ * Arguments starting with /dev/ are target devices; all others are ISOs.
+ * One ISO is written to every device; otherwise ISO and device counts must
+ * match and are paired in argument order. All validation errors are reported
+ * before any device is touched.
+ *
+ * @return 0 if every write completed; 1 on validation failure, write
+ *         failure, or cancellation.
+ */
+static int handleWriteUsb(const ParsedArgs& args) {
+    if (geteuid() != 0) {
+        errMsg("Root privileges required for writing ISOs to USB devices.");
+        return 1;
+    }
+
+    std::vector<std::string> isoArgs, devArgs;
+    for (const auto& a : args.paths)
+        (a.rfind("/dev/", 0) == 0 ? devArgs : isoArgs).push_back(a);
+
+    if (isoArgs.empty()) { errMsg("No ISO files specified."); return 1; }
+    if (devArgs.empty()) { errMsg("No target devices specified."); return 1; }
+
+    if (isoArgs.size() != 1 && isoArgs.size() != devArgs.size()) {
+        errMsg("Got " + std::to_string(isoArgs.size()) + " ISOs and " +
+               std::to_string(devArgs.size()) +
+               " devices; use 1 ISO for all devices, or one device per ISO.");
+        return 1;
+    }
+
+    std::vector<std::string> errors;
+
+    // --- ISOs ---
+    std::vector<IsoInfo> isos;
+    for (const auto& raw : isoArgs) {
+        std::error_code ec;
+        fs::path p(raw);
+        if (!fs::is_regular_file(p, ec)) {
+            errors.push_back("'" + raw + "' is not a regular file");
+            continue;
+        }
+        std::string ext = p.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        if (ext != ".iso") {
+            errors.push_back("'" + raw + "' is not an ISO file");
+            continue;
+        }
+        const auto size = fs::file_size(p, ec);
+        if (ec || size == 0) {
+            errors.push_back("'" + raw + "' is empty or unreadable");
+            continue;
+        }
+        const fs::path canon = fs::canonical(p, ec);
+        const std::string full = ec ? p.string() : canon.string();
+        isos.push_back(IsoInfo{full, fs::path(full).filename().string(), size,
+                               formatFileSize(size), isos.size() + 1});
+    }
+
+    // --- Devices ---
+    std::vector<std::string> devices;
+    std::unordered_set<std::string> seen;
+    for (const auto& raw : devArgs) {
+        std::error_code ec;
+        // Resolve symlinks (e.g. /dev/disk/by-id/...) to the real /dev/sdX node.
+        const fs::path canon = fs::canonical(raw, ec);
+        const std::string dev = ec ? raw : canon.string();
+
+        if (!seen.insert(dev).second) {
+            errors.push_back("'" + raw + "' is listed more than once");
+            continue;
+        }
+        if (!isUsbDevice(dev)) {
+            errors.push_back("'" + raw + "' is not a removable USB flash device");
+            continue;
+        }
+        if (isDeviceMounted(dev)) {
+            errors.push_back("'" + raw + "' or its partitions are mounted");
+            continue;
+        }
+        if (getBlockDeviceSize(dev) == 0) {
+            errors.push_back("Failed to get size for '" + raw + "'");
+            continue;
+        }
+        devices.push_back(dev);
+    }
+
+    // Capacity checks only make sense once both lists parsed cleanly.
+    if (errors.empty()) {
+        for (size_t d = 0; d < devices.size(); ++d) {
+            const IsoInfo& iso = (isos.size() == 1) ? isos[0] : isos[d];
+            if (iso.size > getBlockDeviceSize(devices[d]))
+                errors.push_back("'" + iso.filename + "' (" + iso.sizeStr +
+                                 ") is too large for '" + devices[d] + "'");
+        }
+    }
+
+    if (!errors.empty()) {
+        std::cerr << UI::Palette::Red << "Error: " << UI::Palette::Yellow
+                  << "validation failed:" << UI::Palette::Reset << "\n";
+        for (const auto& e : errors)
+            std::cerr << UI::Palette::Yellow << "  • " << e
+                      << UI::Palette::Reset << "\n";
+        std::cerr << "\n";
+        return 1;
+    }
+
+    // --- Build pairs ---
+    std::vector<std::pair<IsoInfo, std::string>> pairs;
+    for (size_t d = 0; d < devices.size(); ++d)
+        pairs.emplace_back(isos.size() == 1 ? isos[0] : isos[d], devices[d]);
+
+    ThreadPool& pool = getStaticThreadPool();
+    if (pairs.size() > pool.threadCount()) {
+        errMsg("write2usb selection limit is " +
+               std::to_string(pool.threadCount()) + " (thread pool size).");
+        return 1;
+    }
+
+    if (!args.silentMode) {
+        std::cout << UI::Palette::Yellow << "WARNING: This will "
+                  << UI::Palette::Red << "*ERASE ALL DATA*"
+                  << UI::Palette::Yellow << " on " << pairs.size()
+                  << (pairs.size() == 1 ? " device" : " devices") << "."
+                  << UI::Palette::Reset << "\n";
+    }
+
+    // --- Execute ---
+    if (!args.silentMode) {
+        // Reuses the TUI's live progress display (progressData is set up inside).
+        performWriteOperation(pairs);
+    } else {
+        disableInput();
+        progressData.clear();
+        progressData.reserve(pairs.size());   // no reallocation while workers run
+        for (const auto& [iso, device] : pairs)
+            progressData.push_back(ProgressInfo{iso.filename, device, iso.sizeStr});
+
+        std::vector<std::future<void>> futures;
+        futures.reserve(pairs.size());
+        for (size_t i = 0; i < pairs.size(); ++i) {
+            futures.emplace_back(pool.enqueue([&pairs, i]() {
+                const bool ok = writeIsoToDevice(pairs[i].first.path,
+                                                 pairs[i].second, i);
+                if (ok) progressData[i].completed.store(true);
+                else if (!GlobalState::g_operationCancelled.load())
+                    progressData[i].failed.store(true);
+            }));
+        }
+        for (auto& f : futures) f.wait();
+    }
+
+    // After Ctrl+C, performWriteOperation hands futures to a background
+    // draining thread; it must be joined before returning from the CLI path.
+    g_drainingManager.joinAll();
+
+    size_t ok = 0;
+    for (const auto& p : progressData)
+        if (p.completed.load()) ++ok;
+
+    return (ok == pairs.size() && !GlobalState::g_operationCancelled.load()) ? 0 : 1;
+}
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
 /**
- * @brief Primary entry point for handling mount/umount/convert CLI commands.
+ * @brief Primary entry point for handling mount/umount/convert/write CLI commands.
  *
  * Parses arguments via parseArgs(), then dispatches to handleMount(),
- * handleUmount() or (with c2iso) handleConvert().
+ * handleUmount(), or (with c2iso / w2usb) handleConvert() / handleWriteUsb().
  *
  * @param argc Argument count from main.
  * @param argv Argument vector from main.
  * @return int 0 on success, 1 on error.
  */
-int handleMountUmountConvertCommands(int argc, char* argv[]) {
+int handleMountUmountConvertWriteCommands(int argc, char* argv[]) {
     setupSignalHandlerCancellations();
     GlobalState::g_operationCancelled.store(false);
 
@@ -908,6 +1083,9 @@ int handleMountUmountConvertCommands(int argc, char* argv[]) {
 
     if (args.convert)
         return handleConvert(args);
+
+    if (args.writeUsb)
+        return handleWriteUsb(args);
 
     if (args.action == "mount")
         return handleMount(args);
