@@ -231,9 +231,15 @@ struct ParsedArgs {
  * "w2usb".  Every positional that follows the action keyword is appended
  * to @c paths.
  *
+ * For w2usb, paths must be ordered: one or more ISO files first, then
+ * one or more device paths (/dev/...).  A /dev/ path before an ISO is
+ * fine (it's still a device), but an ISO after a /dev/ path is rejected
+ * with a diagnostic.
+ *
  * @return false on a missing/misplaced action keyword, a flag before the
- *         action, or a flag after the first path (a diagnostic has
- *         already been emitted); true on success.
+ *         action, a flag after the first path, or (w2usb only) an ISO
+ *         path after a device path (a diagnostic has already been
+ *         emitted); true on success.
  */
 static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
     bool captureWarn  = false;
@@ -247,6 +253,10 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
 
     auto isFlag = [](const std::string& a) {
         return a == "--silent" || a.rfind("-d", 0) == 0;
+    };
+
+    auto isDevPath = [](std::string_view p) {
+        return p.rfind("/dev/", 0) == 0;
     };
 
     auto applyAction = [&](const std::string& a) {
@@ -335,6 +345,19 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
         }
 
         // 3. Everything else is a path.
+        //
+        // For w2usb the paths must be ordered ISO files first, then
+        // device paths.  Once a /dev/ path has been seen, any subsequent
+        // non-/dev/ path is rejected.
+        if (out.writeUsb && pathsStarted &&
+            !isDevPath(arg) && isDevPath(out.paths.back())) {
+            flushDeferredWarn();
+            errMsg(std::string("w2usb: ISOs must precede devices; got '")
+                   + arg + "' after a device path. Use "
+                   "'isocmd w2usb <iso...> <device...>'.");
+            return false;
+        }
+
         pathsStarted = true;
         out.paths.push_back(arg);
     }
