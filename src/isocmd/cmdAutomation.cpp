@@ -41,6 +41,10 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                   std::vector<std::string>* successfulOutputPaths,
                   std::mutex* outPathsMutex);
 
+size_t calculateTotalBytesForConversions(const std::vector<std::string>& filesToProcess,
+                                         const bool modeMdf, const bool modeNrg,
+                                         const bool modeChd, const bool modeDaa);
+
 void displayProgressBarWithSize(std::atomic<size_t>* completedBytes,
                                 size_t totalBytes,
                                 std::atomic<size_t>* completedTasks,
@@ -597,30 +601,44 @@ static int handleConvert(const ParsedArgs& args) {
     std::mutex outMutex;
     bool showVerbose = false;
 
-    // Total input bytes for the byte-tracking progress bar.
+    // Total estimated output ISO bytes for the byte-tracking progress bar.
     size_t totalBytes = 0;
-    for (const auto& f : images) {
-        std::error_code ec;
-        auto sz = fs::file_size(f, ec);
-        if (!ec) totalBytes += static_cast<size_t>(sz);
-    }
-    if (totalBytes == 0) totalBytes = 1;   // avoid divide-by-zero in the bar
+
+    totalBytes += calculateTotalBytesForConversions(
+        binImg, false, false, false, false);
+    totalBytes += calculateTotalBytesForConversions(
+        mdf, true, false, false, false);
+    totalBytes += calculateTotalBytesForConversions(
+        nrg, false, true, false, false);
+    totalBytes += calculateTotalBytesForConversions(
+        chd, false, false, true, false);
+    totalBytes += calculateTotalBytesForConversions(
+        daa, false, false, false, true);
+
+    if (totalBytes == 0) totalBytes = 1;  // Avoid division by zero.
 
     // The bar runs on its own thread until isComplete is set; silent mode skips it.
-    // "conversion2iso" contains "2iso", which selects the convert bar layout.
+    // "convert2iso" contains "2iso", which selects the convert bar layout.
     std::thread barThread;
     if (!args.silentMode) {
         clearScrollBuffer();
+        std::cout << "\n" << color << " Processing "
+                  << (images.size() == 1 ? "task for " : "tasks for ")
+                  << UI::Palette::Orange << "convert2iso" << color << "... ("
+                  << UI::Palette::Red << "Ctrl+c"
+                  << color << ":cancel)\n";
+
         barThread = std::thread(displayProgressBarWithSize,
                                 &completedBytes, totalBytes,
                                 &completedTasks, &failedTasks, images.size(),
                                 &isComplete, &showVerbose,
-                                std::string("conversion2iso"));
+                                std::string("convert2iso"));
     }
 
     auto run = [&](const std::vector<std::string>& files,
                    bool isMdf, bool isNrg, bool isChd, bool isDaa) {
         if (files.empty() || GlobalState::g_operationCancelled.load()) return;
+
         convertToISO(files, isMdf, isNrg, isChd, isDaa,
                      &completedBytes, &completedTasks, &failedTasks,
                      &successfulOutputs, &outMutex);
