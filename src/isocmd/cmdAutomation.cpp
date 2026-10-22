@@ -214,26 +214,36 @@ struct ParsedArgs {
 /**
  * @brief Parse argv into a ParsedArgs structure.
  *
- * The action keyword ("mount", "umount"/"unmount", "c2iso", "w2usb") must
- * be the first positional argument.  Flags (--silent, -dN) may appear
- * before or after it.  "umount" and "unmount" both map to action "umount";
- * "c2iso" sets @c convert and action "convert"; "w2usb" sets @c writeUsb
- * and action "w2usb".  Every positional that follows the action keyword is
- * appended to @c paths.
+ * Grammar:
  *
- * The old trailing-action form (e.g. `isocmd /path mount`) is rejected
- * with an explanatory error.
+ *     isocmd <action> [flags...] [paths...]
  *
- * @return false on a missing or misplaced action keyword (a diagnostic
- *         has already been emitted); true on success.
+ * The action keyword ("mount", "umount"/"unmount", "c2iso", "w2usb")
+ * must be the first non-flag argument.  Flags (--silent, -dN) may appear
+ * only after the action keyword and before the first path — a flag
+ * appearing before the action, or after any path, is an error.
+ *
+ * "umount" and "unmount" both map to action "umount"; "c2iso" sets
+ * @c convert and action "convert"; "w2usb" sets @c writeUsb and action
+ * "w2usb".  Every positional that follows the action keyword is appended
+ * to @c paths.
+ *
+ * @return false on a missing/misplaced action keyword, a flag before the
+ *         action, or a flag after the first path (a diagnostic has
+ *         already been emitted); true on success.
  */
 static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
-    bool captureWarn = false;
-    bool actionSeen  = false;
+    bool captureWarn  = false;
+    bool actionSeen   = false;
+    bool pathsStarted = false;
 
     auto isActionKeyword = [](const std::string& a) {
         return a == "mount" || a == "umount" || a == "unmount" ||
                a == "c2iso" || a == "w2usb";
+    };
+
+    auto isFlag = [](const std::string& a) {
+        return a == "--silent" || a.rfind("-d", 0) == 0;
     };
 
     auto applyAction = [&](const std::string& a) {
@@ -250,53 +260,78 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
         }
     };
 
+    // Emit any deferred "-dN" warning before returning an error.
+    auto flushDeferredWarn = [&]() {
+        if (captureWarn) {
+            std::cout << UI::Palette::Reset << "\n";
+            captureWarn = false;
+        }
+    };
+
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
 
-        if (arg == "--silent") {
-            out.silentMode = true;
-
-        } else if (arg.substr(0, 2) == "-d") {
-            try {
-                out.maxDepth = std::stoi(arg.substr(2));
-                if (out.maxDepth < 0) {
-                    std::cerr << UI::Palette::Yellow
-                              << "Warning: Negative depth (" << out.maxDepth
-                              << ") means a full recursive scan."
-                              << UI::Palette::Reset << "\n";
-                    out.maxDepth = -1;
-                    captureWarn = true;
-                }
-            } catch (...) {
-                std::cerr << UI::Palette::Yellow
-                          << "Warning: Invalid depth '" << arg.substr(2)
-                          << "'. Using 0 (surface scan)."
-                          << UI::Palette::Reset << "\n";
-                out.maxDepth = 0;
-                captureWarn = true;
+        if (isFlag(arg)) {
+            if (!actionSeen) {
+                flushDeferredWarn();
+                errMsg(std::string("Options must appear after the action "
+                                   "keyword (e.g. 'isocmd mount --silent "
+                                   "<paths...>'); got '")
+                       + arg + "' before any action keyword.");
+                return false;
+            }
+            if (pathsStarted) {
+                flushDeferredWarn();
+                errMsg(std::string("Options must appear before paths; got '")
+                       + arg + "' after the first path.");
+                return false;
             }
 
-        } else if (!actionSeen && isActionKeyword(arg)) {
+            if (arg == "--silent") {
+                out.silentMode = true;
+            } else { // -dN
+                try {
+                    out.maxDepth = std::stoi(arg.substr(2));
+                    if (out.maxDepth < 0) {
+                        std::cerr << UI::Palette::Yellow
+                                  << "Warning: Negative depth ("
+                                  << out.maxDepth
+                                  << ") means a full recursive scan."
+                                  << UI::Palette::Reset << "\n";
+                        out.maxDepth = -1;
+                        captureWarn = true;
+                    }
+                } catch (...) {
+                    std::cerr << UI::Palette::Yellow
+                              << "Warning: Invalid depth '"
+                              << arg.substr(2)
+                              << "'. Using 0 (surface scan)."
+                              << UI::Palette::Reset << "\n";
+                    out.maxDepth = 0;
+                    captureWarn = true;
+                }
+            }
+            continue;
+        }
+
+        if (!actionSeen) {
+            if (!isActionKeyword(arg)) {
+                flushDeferredWarn();
+                errMsg(std::string("Action must be the first argument "
+                                   "(e.g. 'isocmd mount <paths...>'); got '")
+                       + arg + "' before any action keyword.");
+                return false;
+            }
             actionSeen = true;
             applyAction(arg);
-
-        } else if (!actionSeen) {
-            // First positional is not an action keyword — the old
-            // trailing-action form, which is no longer accepted.
-            if (captureWarn)
-                std::cout << UI::Palette::Reset << "\n";
-            errMsg(std::string("Action must be the first argument "
-                               "(e.g. 'isocmd mount <paths...>'); got '")
-                   + arg + "' before any action keyword.");
-            return false;
-
-        } else {
-            out.paths.push_back(arg);
+            continue;
         }
+
+        pathsStarted = true;
+        out.paths.push_back(arg);
     }
 
-    if (captureWarn)
-        std::cout << UI::Palette::Reset << "\n";
+    flushDeferredWarn();
 
     if (!actionSeen) {
         errMsg("No action provided.");
