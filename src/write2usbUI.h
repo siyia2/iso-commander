@@ -243,6 +243,22 @@ inline std::atomic<bool> g_drainingCancelled{false};
  */
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
 
+/**
+ * Returns true if the block device (e.g. /dev/sdb) is a removable USB flash drive.
+ */
+bool isUsbDevice(const std::string&);
+
+/**
+ * Returns true if the block device or any of its partitions is currently mounted.
+ */
+bool isDeviceMounted(const std::string&);
+
+/**
+ * Writes the given (ISO, device) pairs concurrently on the thread pool,
+ * with a live progress display and a final status summary.
+ */
+void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>&);
+
 // --- Filesystem & Formatting Utilities ---
 
 /**
