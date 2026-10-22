@@ -272,6 +272,8 @@ static int handleMount(const ParsedArgs& args) {
         return 1;
     }
 
+    bool noScanDir = true;
+
     std::unordered_set<std::string> isoFiles;
     bool hasErrors = false;
 
@@ -315,6 +317,7 @@ static int handleMount(const ParsedArgs& args) {
 
                 scanDirectoryForISOs(path, args.maxDepth, 0,
                                      isoFiles, hasErrors, args.silentMode);
+                noScanDir = false;
             } else {
                 warnMsg(args.silentMode,
                         "is not a valid file or directory, skipping.", rawPath);
@@ -333,7 +336,9 @@ static int handleMount(const ParsedArgs& args) {
 
     if (isoFiles.empty()) {
         if (!GlobalState::g_operationCancelled.load())
-            verboseWarn(args.silentMode, "\nNo ISO files found to mount.");
+            verboseWarn(args.silentMode, noScanDir
+                ? "\nNo ISO files to mount."
+                : "\nNo ISO files found to mount.");
         return hasErrors ? 1 : 0;
     }
 
@@ -370,6 +375,8 @@ static int handleUmount(const ParsedArgs& args) {
         return 1;
     }
 
+    bool scanDir = false;
+
     std::unordered_set<std::string> mountPoints;
     bool hasErrors = false;
 
@@ -390,10 +397,11 @@ static int handleUmount(const ParsedArgs& args) {
             }
         } catch (const fs::filesystem_error& e) {
             if (!args.silentMode) {
-                errMsg(std::string("Error scanning /mnt/ISOs: ") + e.what());
+               // errMsg(std::string("Error scanning /mnt/ISOs: ") + e.what());
             }
             hasErrors = true;
         }
+        scanDir = true;
     };
 
     // No paths supplied (or only "all") → scan all of /mnt/ISOs.
@@ -463,7 +471,7 @@ static int handleUmount(const ParsedArgs& args) {
     }
 
     verboseInfo(args.silentMode,
-                std::string("\nLocated ")
+                std::string(scanDir ? "\nLocated " : "Located ")
                 .append(std::to_string(mountPoints.size()))
                 .append(" mount point")
                 .append(mountPoints.size() == 1 ? "" : "s")
