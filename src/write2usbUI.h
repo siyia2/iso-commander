@@ -254,6 +254,11 @@ bool isUsbDevice(const std::string&);
 bool isDeviceMounted(const std::string&);
 
 /**
+ * Returns the drive's model name from sysfs, or "Unknown Drive" if unavailable.
+ */
+std::string getDriveName(const std::string&);
+
+/**
  * Writes the given (ISO, device) pairs concurrently on the thread pool,
  * with a live progress display and a final status summary.
  */
