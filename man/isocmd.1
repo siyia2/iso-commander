@@ -18,17 +18,12 @@ Suppress informational messages, warnings and progress output. Critical errors w
 Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 scans only the specified directory, without descending into subdirectories.
 .TP
 .B mount
-Mount one or more ISO files or scan directories for ISO files and mount them (requires root). Specify paths before the action.
+Mount one or more ISO files or scan directories for ISO files and mount them (requires root).
 .TP
-.B umount | unmount
-Unmount specified ISO mount points. Without paths, or with \fBall\fR as the only path, scan /mnt/ISOs and attempt to unmount all contained mount points (requires root). Specify paths before the action.
+.B umount/unmount \fRUnmount specified ISO mount points. Without paths, or with \fBall\fR as the only path, scan /mnt/ISOs and attempt to unmount all contained mount points (requires root).
 .TP
 .B c2iso
-Convert supported disk images to ISO files without entering interactive mode.
-Accepts individual image files and directories to scan.
-Supported formats are BIN, IMG, CCD, MDF, NRG, DAA and GBI.
-Use \fB\-d\fR to limit directory scanning depth.
-Root privileges are not required.
+Convert supported disk images to ISO files without entering interactive mode. Accepts individual image files and directories to scan. Supported formats are BIN, IMG, CCD, MDF, NRG, DAA and GBI.
 
 .SH EXAMPLES
 .TS
