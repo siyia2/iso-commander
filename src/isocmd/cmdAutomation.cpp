@@ -891,7 +891,7 @@ static int handleConvert(const ParsedArgs& args) {
  * @param argv Argument vector from main.
  * @return int 0 on success, 1 on error.
  */
-int handleMountUmountCommands(int argc, char* argv[]) {
+int handleMountUmountConvertCommands(int argc, char* argv[]) {
     setupSignalHandlerCancellations();
     GlobalState::g_operationCancelled.store(false);
 

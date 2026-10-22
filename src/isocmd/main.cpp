@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
         return printVersionNumber("7.8.1"), 0;
     if (argc >= 3 || (argc == 2 && (arg1 == "umount" || arg1 == "unmount" ||
                                     arg1 == "mount"  || arg1 == "c2iso")))
-        return handleMountUmountCommands(argc, argv);
+        return handleMountUmountConvertCommands(argc, argv);
 
     setupReadlineToIgnoreCtrlC();
 
