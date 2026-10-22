@@ -897,14 +897,39 @@ static int handleConvert(const ParsedArgs& args) {
  * Arguments starting with /dev/ are target devices; all others are ISOs.
  * One ISO is written to every device; otherwise ISO and device counts must
  * match and are paired in argument order. All validation errors are reported
- * before any device is touched.
+ * (using the same theme as the interactive write2usb UI) before any device
+ * is touched. With --silent, the live progress UI is skipped.
  *
  * @return 0 if every write completed; 1 on validation failure, write
  *         failure, or cancellation.
  */
 static int handleWriteUsb(const ParsedArgs& args) {
+    const WriteTheme wt = getWriteTheme();
+
+    // Prints a themed "Validation errors:" block, same layout as validateDevices().
+    auto reportErrors = [&](const std::vector<std::string>& errs) {
+        std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.rl_resetCol << wt.bold << "\n";
+        for (const auto& e : errs)
+            std::cerr << "  \u2022 " << e << wt.bold << "\n";
+        std::cerr << wt.rl_resetCol << "\n";
+    };
+
+    // Plain themed message (no path), e.g. "Root privileges are required".
+    auto plainErr = [&](const std::string& msg) {
+        return std::string(wt.errLabel) + msg + wt.rl_resetCol;
+    };
+
+    // "'<path>' <message>" with the same colours validateDevices() uses.
+    auto pathErr = [&](const std::string& path, const std::string& msg) {
+        std::string s;
+        s.append(wt.errPath).append("'").append(path).append("'")
+         .append(wt.rl_resetCol).append(wt.errLabel).append(msg)
+         .append(wt.rl_resetCol);
+        return s;
+    };
+
     if (geteuid() != 0) {
-        errMsg("Root privileges required for writing ISOs to USB devices.");
+        reportErrors({plainErr("Root privileges are required")});
         return 1;
     }
 
@@ -912,13 +937,19 @@ static int handleWriteUsb(const ParsedArgs& args) {
     for (const auto& a : args.paths)
         (a.rfind("/dev/", 0) == 0 ? devArgs : isoArgs).push_back(a);
 
-    if (isoArgs.empty()) { errMsg("No ISO files specified."); return 1; }
-    if (devArgs.empty()) { errMsg("No target devices specified."); return 1; }
+    if (isoArgs.empty()) {
+        reportErrors({plainErr("No ISO files specified")});
+        return 1;
+    }
+    if (devArgs.empty()) {
+        reportErrors({plainErr("No target devices specified")});
+        return 1;
+    }
 
     if (isoArgs.size() != 1 && isoArgs.size() != devArgs.size()) {
-        errMsg("Got " + std::to_string(isoArgs.size()) + " ISOs and " +
-               std::to_string(devArgs.size()) +
-               " devices; use 1 ISO for all devices, or one device per ISO.");
+        reportErrors({plainErr("Got " + std::to_string(isoArgs.size()) + " ISOs and " +
+                               std::to_string(devArgs.size()) +
+                               " devices; use 1 ISO for all devices, or one device per ISO")});
         return 1;
     }
 
@@ -930,18 +961,18 @@ static int handleWriteUsb(const ParsedArgs& args) {
         std::error_code ec;
         fs::path p(raw);
         if (!fs::is_regular_file(p, ec)) {
-            errors.push_back("'" + raw + "' is not a regular file");
+            errors.push_back(pathErr(raw, " is not a regular file"));
             continue;
         }
         std::string ext = p.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
         if (ext != ".iso") {
-            errors.push_back("'" + raw + "' is not an ISO file");
+            errors.push_back(pathErr(raw, " is not an ISO file"));
             continue;
         }
         const auto size = fs::file_size(p, ec);
         if (ec || size == 0) {
-            errors.push_back("'" + raw + "' is empty or unreadable");
+            errors.push_back(pathErr(raw, " is empty or unreadable"));
             continue;
         }
         const fs::path canon = fs::canonical(p, ec);
@@ -960,19 +991,23 @@ static int handleWriteUsb(const ParsedArgs& args) {
         const std::string dev = ec ? raw : canon.string();
 
         if (!seen.insert(dev).second) {
-            errors.push_back("'" + raw + "' is listed more than once");
+            errors.push_back(pathErr(raw, " is listed more than once"));
             continue;
         }
         if (!isUsbDevice(dev)) {
-            errors.push_back("'" + raw + "' is not a removable USB flash device");
+            errors.push_back(pathErr(raw, " is not a removable USB flash device"));
             continue;
         }
         if (isDeviceMounted(dev)) {
-            errors.push_back("'" + raw + "' or its partitions are mounted");
+            errors.push_back(pathErr(raw, " or its partitions are mounted"));
             continue;
         }
         if (getBlockDeviceSize(dev) == 0) {
-            errors.push_back("Failed to get size for '" + raw + "'");
+            std::string e;
+            e.append(wt.errLabel).append("Failed to get size for ")
+             .append(wt.errPath).append("'").append(raw).append("'")
+             .append(wt.rl_resetCol);
+            errors.push_back(std::move(e));
             continue;
         }
         devices.push_back(dev);
@@ -982,19 +1017,29 @@ static int handleWriteUsb(const ParsedArgs& args) {
     if (errors.empty()) {
         for (size_t d = 0; d < devices.size(); ++d) {
             const IsoInfo& iso = (isos.size() == 1) ? isos[0] : isos[d];
-            if (iso.size > getBlockDeviceSize(devices[d]))
-                errors.push_back("'" + iso.filename + "' (" + iso.sizeStr +
-                                 ") is too large for '" + devices[d] + "'");
+            const uint64_t deviceSize = getBlockDeviceSize(devices[d]);
+            if (iso.size > deviceSize) {
+                const std::string deviceSizeStr = formatFileSize(deviceSize);
+                const std::string driveName = getDriveName(devices[d]);
+                std::string e;
+                e.append(wt.warnLabel).append("'").append(wt.fileCol).append(iso.filename)
+                 .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
+                 .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol)
+                 .append(UI::Palette::DimGray).append(")")
+                 .append(wt.warnLabel).append("'").append(wt.errLabel).append(" is too large for ")
+                 .append(wt.errPath).append("'").append(devices[d]).append(color)
+                 .append(" <").append(driveName).append(">")
+                 .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
+                 .append(wt.sizeCol).append(deviceSizeStr).append(UI::Palette::DimGray)
+                 .append(")").append(wt.warnLabel).append("'")
+                 .append(wt.rl_resetCol);
+                errors.push_back(std::move(e));
+            }
         }
     }
 
     if (!errors.empty()) {
-        std::cerr << UI::Palette::Red << "Error: " << UI::Palette::Yellow
-                  << "validation failed:" << UI::Palette::Reset << "\n";
-        for (const auto& e : errors)
-            std::cerr << UI::Palette::Yellow << "  • " << e
-                      << UI::Palette::Reset << "\n";
-        std::cerr << "\n";
+        reportErrors(errors);
         return 1;
     }
 
@@ -1005,17 +1050,13 @@ static int handleWriteUsb(const ParsedArgs& args) {
 
     ThreadPool& pool = getStaticThreadPool();
     if (pairs.size() > pool.threadCount()) {
-        errMsg("write2usb selection limit is " +
-               std::to_string(pool.threadCount()) + " (thread pool size).");
+        std::cerr << "\n" << wt.colorFailure << "Error: "
+                  << UI::Palette::Yellow << "write2usb"
+                  << wt.colorFailure << " selection limit is "
+                  << wt.colorWarning << pool.threadCount()
+                  << wt.colorFailure << " (thread pool size)."
+                  << wt.rl_resetCol << "\n\n";
         return 1;
-    }
-
-    if (!args.silentMode) {
-        std::cout << UI::Palette::Yellow << "WARNING: This will "
-                  << UI::Palette::Red << "*ERASE ALL DATA*"
-                  << UI::Palette::Yellow << " on " << pairs.size()
-                  << (pairs.size() == 1 ? " device" : " devices") << "."
-                  << UI::Palette::Reset << "\n";
     }
 
     // --- Execute ---
