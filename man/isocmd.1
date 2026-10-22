@@ -33,16 +33,16 @@ Write ISO files to removable USB devices without entering interactive mode (requ
 .TS
 tab(@);
 lb l.
-isocmd /path/to/file1.iso /path/to/file2.iso mount@Mount specific ISOs
-isocmd /path/to/dir mount@Mount all ISOs in a directory
-isocmd \-d2 /path/to/dir mount@Mount ISOs up to depth 2
-isocmd \-\-silent /path/to/file.iso mount@Mount an ISO with minimal output
+isocmd mount /path/to/file1.iso /path/to/file2.iso@Mount specific ISOs
+isocmd mount /path/to/dir@Mount all ISOs in a directory
+isocmd mount \-d2 /path/to/dir@Mount ISOs up to depth 2
+isocmd mount \-\-silent /path/to/file.iso@Mount an ISO with minimal output
 @
-isocmd /mnt/ISOs/mountedISO1 /mnt/ISOs/mountedISO2 umount@Unmount specific ISO mount points
-isocmd /mnt/ISOs/mountedISO1 umount@Unmount a specific ISO mount point
+isocmd umount /mnt/ISOs/mountedISO1 /mnt/ISOs/mountedISO2@Unmount specific ISO mount points
+isocmd umount /mnt/ISOs/mountedISO1@Unmount a specific ISO mount point
 isocmd umount@Unmount all ISO mount points under /mnt/ISOs
-isocmd all umount@Unmount all ISO mount points under /mnt/ISOs
-isocmd \-\-silent umount@Unmount all ISO mount points with minimal output
+isocmd umount all@Unmount all ISO mount points under /mnt/ISOs
+isocmd umount \-\-silent@Unmount all ISO mount points with minimal output
 @
 isocmd c2iso /path/to/image.bin@Convert a BIN image to ISO
 isocmd c2iso /path/to/image.mdf /path/to/image.nrg@Convert multiple images to ISO
