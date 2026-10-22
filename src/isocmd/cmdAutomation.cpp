@@ -64,7 +64,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes,
  */
 static void verboseInfo(bool silentMode, const std::string& msg) {
     if (silentMode) return;
-    std::cout << UI::Palette::BoldReset << msg << "\n";
+    std::cout << UI::Palette::BoldReset << "\n" << msg << "\n";
 }
 
 /**
@@ -73,7 +73,7 @@ static void verboseInfo(bool silentMode, const std::string& msg) {
  */
 static void verboseWarn(bool silentMode, const std::string& msg) {
     if (silentMode) return;
-    std::cout << UI::Palette::Yellow << msg << UI::Palette::Reset << "\n\n";
+    std::cout << UI::Palette::Yellow << "\n" << msg << UI::Palette::Reset << "\n\n";
 }
 
 /**
@@ -86,7 +86,7 @@ static void warnMsg(bool silentMode,
                     std::string_view reason,
                     std::string_view path = "") {
     if (silentMode) return;
-    std::cerr << UI::Palette::Yellow << "Warning: ";
+    std::cerr << UI::Palette::Yellow << "\n" << "Warning: ";
     if (!path.empty())
         std::cerr << "'" << UI::Palette::Red << path
                   << UI::Palette::Yellow << "' ";
@@ -98,7 +98,7 @@ static void warnMsg(bool silentMode,
  *        Always shown regardless of silentMode.
  */
 static void errMsg(std::string_view msg) {
-    std::cerr << UI::Palette::Red << "Error: " << msg
+    std::cerr << UI::Palette::Red << "\n" << "Error: " << msg
               << UI::Palette::Reset << "\n\n";
 }
 
@@ -374,13 +374,13 @@ static int handleMount(const ParsedArgs& args) {
     if (isoFiles.empty()) {
         if (!GlobalState::g_operationCancelled.load())
             verboseWarn(args.silentMode, noScanDir
-                ? "\nNo ISO files to mount."
-                : "\nNo ISO files found to mount.");
+                ? "No ISO files to mount."
+                : "No ISO files found to mount.");
         return hasErrors ? 1 : 0;
     }
 
     verboseInfo(args.silentMode,
-                std::string("\nLocated ")
+                std::string("Located ")
                 .append(std::to_string(isoFiles.size()))
                 .append(" ISO file")
                 .append(isoFiles.size() == 1 ? "" : "s")
@@ -465,8 +465,6 @@ static int handleUmount(const ParsedArgs& args) {
         return 1;
     }
 
-    bool scanDir = false;
-
     std::unordered_set<std::string> mountPoints;
     bool hasErrors = false;
 
@@ -489,8 +487,6 @@ static int handleUmount(const ParsedArgs& args) {
         } catch (const fs::filesystem_error&) {
             hasErrors = true;
         }
-
-        scanDir = true;
     };
 
     const bool scanAllMnt = args.paths.empty() ||
@@ -554,12 +550,12 @@ static int handleUmount(const ParsedArgs& args) {
     if (mountPoints.empty()) {
         if (!GlobalState::g_operationCancelled.load())
             verboseWarn(args.silentMode,
-                        "\nNo ISO mount points found to unmount.");
+                        "No ISO mount points found to unmount.");
         return hasErrors ? 1 : 0;
     }
 
     verboseInfo(args.silentMode,
-                std::string(scanDir ? "\nLocated " : "Located ")
+                std::string("Located ")
                 .append(std::to_string(mountPoints.size()))
                 .append(" mount point")
                 .append(mountPoints.size() == 1 ? "" : "s")
@@ -648,7 +644,7 @@ static int handleUmount(const ParsedArgs& args) {
  */
 static int handleConvert(const ParsedArgs& args) {
     if (args.paths.empty()) {
-        verboseWarn(args.silentMode, "\nNo files to convert2iso.");
+        verboseWarn(args.silentMode, "No files to convert2iso.");
         return 1;
     }
 
@@ -738,7 +734,7 @@ static int handleConvert(const ParsedArgs& args) {
         std::sort(v->begin(), v->end());
 
     verboseInfo(args.silentMode,
-                std::string("\nLocated ")
+                std::string("Located ")
                 .append(std::to_string(images.size()))
                 .append(" image file")
                 .append(images.size() == 1 ? "" : "s")
@@ -1091,6 +1087,8 @@ static int handleWriteUsb(const ParsedArgs& args) {
     size_t ok = 0;
     for (const auto& p : progressData)
         if (p.completed.load()) ++ok;
+
+    std::cout << "\n";
 
     return (ok == pairs.size() && !GlobalState::g_operationCancelled.load()) ? 0 : 1;
 }
