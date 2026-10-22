@@ -637,7 +637,7 @@ static int handleUmount(const ParsedArgs& args) {
  */
 static int handleConvert(const ParsedArgs& args) {
     if (args.paths.empty()) {
-        errMsg("No files or directories given to convert.");
+        verboseWarn(args.silentMode, "\nNo files to convert2iso.");
         return 1;
     }
 
