@@ -1,4 +1,4 @@
-.TH ISOCMD 1 "October 2026" "Iso Commander 7.8.2" "Iso-Commander Manual"
+.TH ISOCMD 1 "October 2026" "Iso Commander 7.8.1" "Iso-Commander Manual"
 
 .SH NAME
 Iso Commander (isocmd) \- A single binary command-line utility for managing .iso files and converting image formats.
@@ -7,7 +7,7 @@ Iso Commander (isocmd) \- A single binary command-line utility for managing .iso
 Iso Commander (isocmd) is a single binary command-line utility for managing .iso files and converting various image formats to .iso using multi-threaded processing.
 
 .SH NON-INTERACTIVE COMMANDS
-.TP
+.TP 16
 .B \-v, \-\-version
 Show program version.
 .TP
@@ -20,10 +20,11 @@ Maximum recursion depth when scanning directories for ISO files or convertible i
 .B mount
 Mount one or more ISO files or scan directories for ISO files and mount them (requires root).
 .TP
-.B umount/unmount \fRUnmount specified ISO mount points. Without paths, or with \fBall\fR as the only path, scan /mnt/ISOs and attempt to unmount all contained mount points (requires root).
+.B umount/unmount
+Unmount specified ISO mount points. Without paths, or with \fBall\fR as the only path, scan /mnt/ISOs and attempt to unmount all contained mount points (requires root).
 .TP
 .B c2iso
-Convert supported disk images to ISO files without entering interactive mode. Accepts individual image files and directories to scan. Supported formats are BIN, IMG, CCD, MDF, NRG, DAA and GBI.
+Convert supported images to ISO files without entering interactive mode. Accepts individual image files and directories to scan. Supported formats are BIN, IMG, CCD, MDF, NRG, DAA and GBI.
 
 .SH EXAMPLES
 .TS
