@@ -203,8 +203,8 @@ static void scanDirectoryForImages(const fs::path& dir,
 // ─── Argument parsing ────────────────────────────────────────────────────────
 
 struct ParsedArgs {
-    std::string              action;      ///< Last positional arg: "mount" / "umount" / … ("convert" with c2iso, "writeUsb" with w2usb)
-    std::vector<std::string> paths;
+    std::string              action;      ///< Action keyword: "mount" / "umount" / "convert" (c2iso) / "w2usb"
+    std::vector<std::string> paths;       ///< Positional arguments that follow the action keyword
     bool                     silentMode = false;
     bool                     convert    = false;   ///< c2iso: non-interactive conversion
     bool                     writeUsb   = false;   ///< w2usb: non-interactive ISO -> USB write
@@ -214,24 +214,48 @@ struct ParsedArgs {
 /**
  * @brief Parse argv into a ParsedArgs structure.
  *
- * With c2iso or w2usb, every positional argument is kept in @c paths and the
- * action is "convert" or "w2usb" respectively (w2usb later splits them into
- * ISOs and /dev/ devices). Otherwise the last positional is the action
- * (mount/umount/unmount).
+ * The action keyword ("mount", "umount"/"unmount", "c2iso", "w2usb") must
+ * be the first positional argument.  Flags (--silent, -dN) may appear
+ * before or after it.  "umount" and "unmount" both map to action "umount";
+ * "c2iso" sets @c convert and action "convert"; "w2usb" sets @c writeUsb
+ * and action "w2usb".  Every positional that follows the action keyword is
+ * appended to @c paths.
  *
- * @return false when no positional arguments were found (caller should abort).
+ * The old trailing-action form (e.g. `isocmd /path mount`) is rejected
+ * with an explanatory error.
+ *
+ * @return false on a missing or misplaced action keyword (a diagnostic
+ *         has already been emitted); true on success.
  */
 static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
     bool captureWarn = false;
+    bool actionSeen  = false;
+
+    auto isActionKeyword = [](const std::string& a) {
+        return a == "mount" || a == "umount" || a == "unmount" ||
+               a == "c2iso" || a == "w2usb";
+    };
+
+    auto applyAction = [&](const std::string& a) {
+        if (a == "c2iso") {
+            out.convert = true;
+            out.action  = "convert";
+        } else if (a == "w2usb") {
+            out.writeUsb = true;
+            out.action   = "w2usb";
+        } else if (a == "mount") {
+            out.action   = "mount";
+        } else { // umount / unmount
+            out.action   = "umount";
+        }
+    };
+
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
 
         if (arg == "--silent") {
             out.silentMode = true;
-        } else if (arg == "c2iso") {
-            out.convert = true;
-        } else if (arg == "w2usb") {
-            out.writeUsb = true;
+
         } else if (arg.substr(0, 2) == "-d") {
             try {
                 out.maxDepth = std::stoi(arg.substr(2));
@@ -251,29 +275,33 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
                 out.maxDepth = 0;
                 captureWarn = true;
             }
+
+        } else if (!actionSeen && isActionKeyword(arg)) {
+            actionSeen = true;
+            applyAction(arg);
+
+        } else if (!actionSeen) {
+            // First positional is not an action keyword — the old
+            // trailing-action form, which is no longer accepted.
+            if (captureWarn)
+                std::cout << UI::Palette::Reset << "\n";
+            errMsg(std::string("Action must be the first argument "
+                               "(e.g. 'isocmd mount <paths...>'); got '")
+                   + arg + "' before any action keyword.");
+            return false;
+
         } else {
             out.paths.push_back(arg);
         }
     }
 
-    if (captureWarn) {
+    if (captureWarn)
         std::cout << UI::Palette::Reset << "\n";
-        captureWarn = false;
-    }
 
-    if (out.convert) {            // c2iso: every positional is a path
-        out.action = "convert";
-        return true;
+    if (!actionSeen) {
+        errMsg("No action provided.");
+        return false;
     }
-
-    if (out.writeUsb) {           // w2usb: every positional is an ISO or a device
-        out.action = "w2usb";
-        return true;
-    }
-
-    if (out.paths.empty()) return false;
-    out.action = out.paths.back();
-    out.paths.pop_back();
     return true;
 }
 
