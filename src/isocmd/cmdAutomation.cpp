@@ -19,10 +19,12 @@
 #include <unistd.h>
 
 // Project Headers
+#include "../concurrency.h"
 #include "../inputHandling.h"
 #include "../mount.h"
 #include "../state.h"
 #include "../themes.h"
+#include "../threadpool.h"
 #include "../umount.h"
 #include "../verbose.h"
 
@@ -266,6 +268,25 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
 
 // ─── Mount branch ────────────────────────────────────────────────────────────
 
+/**
+ * @brief Mounts ISO files supplied as command-line arguments.
+ *
+ * Validates the provided paths, recursively scans directories according
+ * to the configured maximum depth, and collects unique ISO files.
+ * Mounting is performed concurrently using the static thread pool,
+ * respecting GlobalConcurrency::MOUNT_THREAD_CAP and the pool size.
+ * Files are distributed across worker threads in separate batches.
+ *
+ * Displays the operation summary unless silent mode is enabled.
+ *
+ * @param args Parsed command-line arguments, including input paths,
+ *             maximum scan depth, and silent-mode settings.
+ *
+ * @return 0 if at least one ISO was mounted successfully;
+ *         1 if mounting failed to produce a successful result or
+ *         an earlier validation error occurred only insofar as
+ *         reflected by the existing return logic.
+ */
 static int handleMount(const ParsedArgs& args) {
     if (geteuid() != 0) {
         errMsg("Root privileges required for mounting ISOs.");
@@ -295,21 +316,26 @@ static int handleMount(const ParsedArgs& args) {
             if (fs::is_regular_file(path)) {
                 std::string ext = path.extension().string();
                 std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
                 if (ext != ".iso") {
                     warnMsg(args.silentMode,
                             "is not an ISO file, skipping.", rawPath);
                     hasErrors = true;
                     continue;
                 }
+
                 isoFiles.insert(fs::canonical(path).string());
 
             } else if (fs::is_directory(path)) {
                 disableInput();
+
                 std::string depthDesc = (args.maxDepth == 0)
                     ? std::string("surface scan")
-                    : std::string("max depth: ") + (args.maxDepth < 0
-                                                     ? "unlimited"
-                                                     : std::to_string(args.maxDepth));
+                    : std::string("max depth: ") +
+                      (args.maxDepth < 0
+                           ? "unlimited"
+                           : std::to_string(args.maxDepth));
+
                 verboseInfo(args.silentMode,
                             std::string("Scanning directory ")
                             .append(path.string())
@@ -318,6 +344,7 @@ static int handleMount(const ParsedArgs& args) {
                 scanDirectoryForISOs(path, args.maxDepth, 0,
                                      isoFiles, hasErrors, args.silentMode);
                 noScanDir = false;
+
             } else {
                 warnMsg(args.silentMode,
                         "is not a valid file or directory, skipping.", rawPath);
@@ -330,9 +357,8 @@ static int handleMount(const ParsedArgs& args) {
         }
     }
 
-    if (GlobalState::g_operationCancelled.load()) {
+    if (GlobalState::g_operationCancelled.load())
         verboseWarn(args.silentMode, "Mount operation cancelled by user.");
-    }
 
     if (isoFiles.empty()) {
         if (!GlobalState::g_operationCancelled.load())
@@ -351,13 +377,45 @@ static int handleMount(const ParsedArgs& args) {
 
     std::atomic<size_t> completedTasks{0}, failedTasks{0};
 
-    mountIsoFiles(std::vector<std::string>(isoFiles.begin(), isoFiles.end()),
-                  &completedTasks, &failedTasks, args.silentMode);
+    std::vector<std::string> files(isoFiles.begin(), isoFiles.end());
+
+    ThreadPool& pool = getStaticThreadPool();
+    const size_t poolSize = pool.threadCount();
+    const size_t numThreads = std::min({
+        files.size(),
+        GlobalConcurrency::MOUNT_THREAD_CAP,
+        poolSize
+    });
+
+    // Distribute files evenly across a bounded number of workers.
+    std::vector<std::vector<std::string>> chunks(numThreads);
+    for (size_t i = 0; i < files.size(); ++i)
+        chunks[i % numThreads].push_back(std::move(files[i]));
+
+    std::vector<std::future<void>> futures;
+    futures.reserve(numThreads);
+
+    for (auto& chunk : chunks) {
+        futures.emplace_back(pool.enqueue(
+            [chunk = std::move(chunk),
+             &completedTasks, &failedTasks,
+             silentMode = args.silentMode]() {
+                mountIsoFiles(chunk, &completedTasks, &failedTasks,
+                              silentMode);
+            }));
+    }
+
+    for (auto& future : futures)
+        future.wait();
 
     if (!args.silentMode) {
-        for (const auto& msg : verboseSets.operationCompleted)    std::cout << msg << "\n";
-        for (const auto& msg : verboseSets.operationSkipped) std::cout << msg << "\n";
-        for (const auto& msg : verboseSets.operationFailed)    std::cout << msg << "\n";
+        for (const auto& msg : verboseSets.operationCompleted)
+            std::cout << msg << "\n";
+        for (const auto& msg : verboseSets.operationSkipped)
+            std::cout << msg << "\n";
+        for (const auto& msg : verboseSets.operationFailed)
+            std::cout << msg << "\n";
+
         std::cout << "\nMount summary:\n"
                   << "  Successful: " << completedTasks.load() << "\n"
                   << "  Failed:     " << failedTasks.load()
@@ -369,6 +427,27 @@ static int handleMount(const ParsedArgs& args) {
 
 // ─── Umount branch ───────────────────────────────────────────────────────────
 
+/**
+ * @brief Unmounts ISO mount points supplied as command-line arguments.
+ *
+ * Collects mount points from the specified paths or scans /mnt/ISOs
+ * when no paths are provided or the "all" argument is specified.
+ * Validates mount-point locations and rejects paths outside the
+ * permitted /mnt/ISOs hierarchy.
+ *
+ * Unmounting is performed concurrently using the static thread pool,
+ * respecting GlobalConcurrency::UMOUNT_THREAD_CAP and the pool size.
+ * Mount points are distributed across worker threads in separate batches.
+ *
+ * Attempts to remove the parent /mnt/ISOs directory after all workers
+ * finish and displays the operation summary unless silent mode is enabled.
+ *
+ * @param args Parsed command-line arguments, including input paths
+ *             and silent-mode settings.
+ *
+ * @return 0 if no unmount failures or path-validation errors occurred;
+ *         1 if an unmount failed or a path-validation error occurred.
+ */
 static int handleUmount(const ParsedArgs& args) {
     if (geteuid() != 0) {
         errMsg("Root privileges required for unmounting ISOs.");
@@ -380,36 +459,35 @@ static int handleUmount(const ParsedArgs& args) {
     std::unordered_set<std::string> mountPoints;
     bool hasErrors = false;
 
-    // Collect every iso subdirectory under a given /mnt/ISOs path.
     auto collectFromMnt = [&](const fs::path& mntPath) {
         disableInput();
+
         verboseInfo(args.silentMode,
                     std::string("Scanning ")
                     .append(mntPath.string())
                     .append(" for ISO mount points (surface scan)..."));
+
         try {
             for (const auto& entry : fs::directory_iterator(mntPath)) {
-                if (GlobalState::g_operationCancelled.load()) return;
-                if (entry.is_directory()) {
-                    const std::string name = entry.path().filename().string();
+                if (GlobalState::g_operationCancelled.load())
+                    return;
+
+                if (entry.is_directory())
                     mountPoints.insert(fs::canonical(entry.path()).string());
-                }
             }
-        } catch (const fs::filesystem_error& e) {
-            if (!args.silentMode) {
-               // errMsg(std::string("Error scanning /mnt/ISOs: ") + e.what());
-            }
+        } catch (const fs::filesystem_error&) {
             hasErrors = true;
         }
+
         scanDir = true;
     };
 
-    // No paths supplied (or only "all") → scan all of /mnt/ISOs.
     const bool scanAllMnt = args.paths.empty() ||
-                            (args.paths.size() == 1 && args.paths[0] == "all");
+        (args.paths.size() == 1 && args.paths[0] == "all");
 
     if (scanAllMnt) {
         collectFromMnt("/mnt/ISOs");
+
         if (GlobalState::g_operationCancelled.load()) {
             verboseWarn(args.silentMode, "Operation cancelled by user.");
             return 1;
@@ -438,9 +516,8 @@ static int handleUmount(const ParsedArgs& args) {
                         hasErrors = true;
                     }
                 } else {
-                    // Accept bare names: "mydisc" → /mnt/ISOs/iso_mydisc
                     fs::path candidate = path.is_relative()
-                        ? fs::path("/mnt/ISOs") / (path.filename().string())
+                        ? fs::path("/mnt/ISOs") / path.filename()
                         : path;
 
                     if (fs::exists(candidate) && fs::is_directory(candidate)) {
@@ -460,13 +537,13 @@ static int handleUmount(const ParsedArgs& args) {
         }
     }
 
-    if (GlobalState::g_operationCancelled.load()) {
+    if (GlobalState::g_operationCancelled.load())
         verboseWarn(args.silentMode, "Umount operation cancelled by user.");
-    }
 
     if (mountPoints.empty()) {
         if (!GlobalState::g_operationCancelled.load())
-            verboseWarn(args.silentMode, "\nNo ISO mount points found to unmount.");
+            verboseWarn(args.silentMode,
+                        "\nNo ISO mount points found to unmount.");
         return hasErrors ? 1 : 0;
     }
 
@@ -479,18 +556,49 @@ static int handleUmount(const ParsedArgs& args) {
 
     std::atomic<size_t> completedTasks{0}, failedTasks{0};
 
-    unmountISO(std::vector<std::string>(mountPoints.begin(), mountPoints.end()),
-               &completedTasks, &failedTasks, args.silentMode);
+    std::vector<std::string> paths(mountPoints.begin(), mountPoints.end());
 
-    // Clean up the parent /mnt/ISOs directory if it's now empty after all processing is done.
+    ThreadPool& pool = getStaticThreadPool();
+    const size_t poolSize = pool.threadCount();
+    const size_t numThreads = std::min({
+        paths.size(),
+        GlobalConcurrency::UMOUNT_THREAD_CAP,
+        poolSize
+    });
+
+    // Distribute mount points evenly across a bounded number of workers.
+    std::vector<std::vector<std::string>> chunks(numThreads);
+    for (size_t i = 0; i < paths.size(); ++i)
+        chunks[i % numThreads].push_back(std::move(paths[i]));
+
+    std::vector<std::future<void>> futures;
+    futures.reserve(numThreads);
+
+    for (auto& chunk : chunks) {
+        futures.emplace_back(pool.enqueue(
+            [chunk = std::move(chunk),
+             &completedTasks, &failedTasks,
+             silentMode = args.silentMode]() {
+                unmountISO(chunk, &completedTasks, &failedTasks,
+                           silentMode);
+            }));
+    }
+
+    for (auto& future : futures)
+        future.wait();
+
+    // Clean up the parent directory after all unmount workers finish.
     {
         std::error_code ec;
         fs::remove("/mnt/ISOs", ec);
     }
 
     if (!args.silentMode) {
-        for (const auto& msg : verboseSets.operationCompleted)  std::cout << msg << "\n";
-        for (const auto& msg : verboseSets.operationFailed) std::cout << msg << "\n";
+        for (const auto& msg : verboseSets.operationCompleted)
+            std::cout << msg << "\n";
+        for (const auto& msg : verboseSets.operationFailed)
+            std::cout << msg << "\n";
+
         std::cout << "\nUnmount summary:\n"
                   << "  Successful: " << completedTasks.load() << "\n"
                   << "  Failed:     " << failedTasks.load()
@@ -503,18 +611,29 @@ static int handleUmount(const ParsedArgs& args) {
 // ─── Convert branch (-c) ─────────────────────────────────────────────────────
 
 /**
- * @brief Image → ISO conversion with a byte-tracking progress bar.
+ * @brief Converts supported disk images to ISO files.
  *
- * Accepts image files and/or directories (scanned per -dN). Files are batched
- * by type because convertToISO() selects its backend from mode flags.
- * Existing .iso outputs are skipped (counted as completed), so re-running is safe.
- * Root is not required; getRealUserId() inside convertToISO handles ownership.
+ * Validates the supplied file and directory paths, recursively scans
+ * directories according to the configured maximum depth, and collects
+ * unique supported images (BIN, IMG, CCD, MDF, NRG, CHD, DAA, and GBI).
+ * Files are grouped by conversion backend and sorted for deterministic
+ * task ordering.
  *
- * Progress is shown with displayProgressBarWithSize() on a background thread
- * (skipped with --silent). The bar ends with a "Display verbose output?" prompt;
- * the detailed per-file messages and summary are printed only if the answer is "y".
+ * Calculates the estimated total output size and tracks byte-level
+ * and task-level progress. Conversions are executed concurrently using
+ * the static thread pool, respecting GlobalConcurrency::CONV_THREAD_CAP
+ * and the pool size. Workers dynamically claim tasks from a shared
+ * atomic index and dispatch each file to its appropriate backend.
  *
- * @return 0 if everything converted/skipped cleanly, 1 on any failure.
+ * Tracks successful output paths and displays detailed operation
+ * results when requested through the progress interface.
+ *
+ * @param args Parsed command-line arguments, including input paths,
+ *             maximum scan depth, and silent-mode settings.
+ *
+ * @return 0 if all conversions completed or were skipped without errors;
+ *         1 if any conversion failed, path validation failed, or the
+ *         operation was cancelled.
  */
 static int handleConvert(const ParsedArgs& args) {
     if (args.paths.empty()) {
@@ -537,6 +656,7 @@ static int handleConvert(const ParsedArgs& args) {
             if (!fs::exists(path)) {
                 warnMsg(args.silentMode, "does not exist, skipping.", rawPath);
                 hasErrors = true;
+
             } else if (fs::is_regular_file(path)) {
                 if (classifyImage(path) == ImgKind::None) {
                     warnMsg(args.silentMode,
@@ -546,13 +666,18 @@ static int handleConvert(const ParsedArgs& args) {
                 } else {
                     images.insert(fs::canonical(path).string());
                 }
+
             } else if (fs::is_directory(path)) {
-                if (args.silentMode) disableInput();
+                if (args.silentMode)
+                    disableInput();
+
                 std::string depthDesc = (args.maxDepth == 0)
                     ? std::string("surface scan")
-                    : std::string("max depth: ") + (args.maxDepth < 0
-                                                     ? "unlimited"
-                                                     : std::to_string(args.maxDepth));
+                    : std::string("max depth: ") +
+                      (args.maxDepth < 0
+                           ? "unlimited"
+                           : std::to_string(args.maxDepth));
+
                 verboseInfo(args.silentMode,
                             std::string("Scanning directory ")
                             .append(path.string())
@@ -560,11 +685,13 @@ static int handleConvert(const ParsedArgs& args) {
 
                 scanDirectoryForImages(path, args.maxDepth, 0,
                                        images, hasErrors, args.silentMode);
+
             } else {
                 warnMsg(args.silentMode,
                         "is not a valid file or directory, skipping.", rawPath);
                 hasErrors = true;
             }
+
         } catch (const fs::filesystem_error& e) {
             warnMsg(args.silentMode,
                     std::string("Error processing path: ") + e.what(), rawPath);
@@ -577,12 +704,14 @@ static int handleConvert(const ParsedArgs& args) {
 
     if (images.empty()) {
         if (!GlobalState::g_operationCancelled.load())
-            verboseWarn(args.silentMode, "\nNo convertible image files found.");
+            verboseWarn(args.silentMode,
+                        "\nNo convertible image files found.");
         return hasErrors ? 1 : 0;
     }
 
-    // Bucket by backend (sorted for deterministic order).
+    // Bucket by backend and sort for deterministic processing order.
     std::vector<std::string> binImg, mdf, nrg, chd, daa;
+
     for (const auto& f : images) {
         switch (classifyImage(f)) {
             case ImgKind::BinImg: binImg.push_back(f); break;
@@ -593,6 +722,7 @@ static int handleConvert(const ParsedArgs& args) {
             default: break;
         }
     }
+
     for (auto* v : {&binImg, &mdf, &nrg, &chd, &daa})
         std::sort(v->begin(), v->end());
 
@@ -604,12 +734,13 @@ static int handleConvert(const ParsedArgs& args) {
                 .append("; Attempting to convert...\n"));
 
     std::atomic<size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
-    std::atomic<bool>   isComplete{false};
-    std::vector<std::string> successfulOutputs;   // TODO: hand to database indexer if desired
+    std::atomic<bool> isComplete{false};
+
+    std::vector<std::string> successfulOutputs;
     std::mutex outMutex;
     bool showVerbose = false;
 
-    // Total estimated output ISO bytes for the byte-tracking progress bar.
+    // Calculate the total estimated output bytes for the progress bar.
     size_t totalBytes = 0;
 
     totalBytes += calculateTotalBytesForConversions(
@@ -623,61 +754,130 @@ static int handleConvert(const ParsedArgs& args) {
     totalBytes += calculateTotalBytesForConversions(
         daa, false, false, false, true);
 
-    if (totalBytes == 0) totalBytes = 1;  // Avoid division by zero.
+    if (totalBytes == 0)
+        totalBytes = 1;
 
-    // The bar runs on its own thread until isComplete is set; silent mode skips it.
-    // "convert2iso" contains "2iso", which selects the convert bar layout.
+    // Start the progress bar unless output is silent.
     std::thread barThread;
+
     if (!args.silentMode) {
         clearScrollBuffer();
+
         std::cout << "\n" << color << " Processing "
                   << (images.size() == 1 ? "task for " : "tasks for ")
                   << UI::Palette::Orange << "convert2iso" << color << "... ("
                   << UI::Palette::Red << "Ctrl+c"
                   << color << ":cancel)\n";
 
-        barThread = std::thread(displayProgressBarWithSize,
-                                &completedBytes, totalBytes,
-                                &completedTasks, &failedTasks, images.size(),
-                                &isComplete, &showVerbose,
-                                std::string("convert2iso"));
+        barThread = std::thread(
+            displayProgressBarWithSize,
+            &completedBytes, totalBytes,
+            &completedTasks, &failedTasks, images.size(),
+            &isComplete, &showVerbose,
+            std::string("convert2iso"));
     }
 
-    auto run = [&](const std::vector<std::string>& files,
-                   bool isMdf, bool isNrg, bool isChd, bool isDaa) {
-        if (files.empty() || GlobalState::g_operationCancelled.load()) return;
-
-        convertToISO(files, isMdf, isNrg, isChd, isDaa,
-                     &completedBytes, &completedTasks, &failedTasks,
-                     &successfulOutputs, &outMutex);
+    // A task records its input path and the backend that must process it.
+    struct ConversionTask {
+        std::string path;
+        ImgKind kind;
     };
 
-    run(binImg, false, false, false, false);
-    run(mdf,    true,  false, false, false);
-    run(nrg,    false, true,  false, false);
-    run(chd,    false, false, true,  false);
-    run(daa,    false, false, false, true);
+    std::vector<ConversionTask> tasks;
+    tasks.reserve(images.size());
+
+    auto appendTasks = [&](const std::vector<std::string>& files,
+                            ImgKind kind) {
+        for (const auto& file : files)
+            tasks.push_back({file, kind});
+    };
+
+    appendTasks(binImg, ImgKind::BinImg);
+    appendTasks(mdf,    ImgKind::Mdf);
+    appendTasks(nrg,    ImgKind::Nrg);
+    appendTasks(chd,    ImgKind::Chd);
+    appendTasks(daa,    ImgKind::Daa);
+
+    // Bound worker count by task count, configured cap, and pool size.
+    ThreadPool& pool = getStaticThreadPool();
+    const size_t poolSize = pool.threadCount();
+
+    const size_t numThreads = std::min({
+        tasks.size(),
+        GlobalConcurrency::CONV_THREAD_CAP,
+        poolSize
+    });
+
+    std::atomic<size_t> nextTask{0};
+
+    std::vector<std::future<void>> futures;
+    futures.reserve(numThreads);
+
+    for (size_t t = 0; t < numThreads; ++t) {
+        futures.emplace_back(pool.enqueue(
+            [&tasks, &nextTask,
+             &completedBytes, &completedTasks, &failedTasks,
+             &successfulOutputs, &outMutex]() {
+
+                while (!GlobalState::g_operationCancelled.load()) {
+                    const size_t i = nextTask.fetch_add(1);
+
+                    if (i >= tasks.size())
+                        break;
+
+                    const auto& task = tasks[i];
+
+                    const bool isMdf = task.kind == ImgKind::Mdf;
+                    const bool isNrg = task.kind == ImgKind::Nrg;
+                    const bool isChd = task.kind == ImgKind::Chd;
+                    const bool isDaa = task.kind == ImgKind::Daa;
+
+                    convertToISO(
+                        {task.path},
+                        isMdf, isNrg, isChd, isDaa,
+                        &completedBytes,
+                        &completedTasks,
+                        &failedTasks,
+                        &successfulOutputs,
+                        &outMutex);
+                }
+            }));
+    }
+
+    for (auto& future : futures)
+        future.wait();
 
     isComplete.store(true, std::memory_order_release);
-    if (barThread.joinable()) barThread.join();
 
-    // The bar already shows status; details only if the user answered "y".
+    if (barThread.joinable())
+        barThread.join();
+
+    // Show detailed output only if requested through the progress prompt.
     if (!args.silentMode && showVerbose) {
         clearScrollBuffer();
         std::cout << "\n";
-        for (const auto& msg : verboseSets.operationCompleted) std::cout << msg << UI::Palette::BoldReset << "\n";
-        for (const auto& msg : verboseSets.operationSkipped)   std::cout << msg << UI::Palette::BoldReset << "\n";
-        for (const auto& msg : verboseSets.operationFailed)    std::cout << msg << UI::Palette::BoldReset <<"\n";
+
+        for (const auto& msg : verboseSets.operationCompleted)
+            std::cout << msg << UI::Palette::BoldReset << "\n";
+
+        for (const auto& msg : verboseSets.operationSkipped)
+            std::cout << msg << UI::Palette::BoldReset << "\n";
+
+        for (const auto& msg : verboseSets.operationFailed)
+            std::cout << msg << UI::Palette::BoldReset << "\n";
+
         std::cout << "\nConversion summary:\n"
                   << "  Successful: " << completedTasks.load() << "\n"
                   << "  Failed:     " << failedTasks.load()
                   << UI::Palette::Reset << "\n\n";
     }
 
-    // Non-zero on any failure so scripts/cron can detect problems.
-    return (failedTasks.load() == 0 && !hasErrors &&
+    // Non-zero on any failure so scripts can detect unsuccessful operations.
+    return (failedTasks.load() == 0 &&
+            !hasErrors &&
             !GlobalState::g_operationCancelled.load()) ? 0 : 1;
 }
+
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
