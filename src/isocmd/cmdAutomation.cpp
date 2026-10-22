@@ -334,7 +334,6 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
     flushDeferredWarn();
 
     if (!actionSeen) {
-        errMsg("No action provided.");
         return false;
     }
     return true;
@@ -1179,7 +1178,6 @@ int handleMountUmountConvertWriteCommands(int argc, char* argv[]) {
 
     ParsedArgs args;
     if (!parseArgs(argc, argv, args) || args.action.empty()) {
-        errMsg("No action provided.");
         return 1;
     }
 
