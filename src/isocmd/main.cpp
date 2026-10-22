@@ -54,7 +54,7 @@ void printVersionNumber(const std::string& version) {
  * The application supports the following command-line modes:
  * - `-v` / `--version` : Prints version information and exits.
  * - `mount` / `umount` / `unmount` : Delegates to mount/unmount command handler.
- * - `-c` : Non-interactive image → ISO conversion (e.g. `isocmd -c -d2 ~/Games`).
+ * - `c2iso` : Non-interactive image → ISO conversion (e.g. `isocmd c2iso -d2 ~/Games`).
  * - No arguments : Launches the interactive TUI (terminal user interface).
  *
  * @param argc Number of command-line arguments.
@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
     if (argc == 2 && (arg1 == "--version" || arg1 == "-v"))
         return printVersionNumber("7.8.1"), 0;
     if (argc >= 3 || (argc == 2 && (arg1 == "umount" || arg1 == "unmount" ||
-                                    arg1 == "mount"  || arg1 == "-c")))
+                                    arg1 == "mount"  || arg1 == "c2iso")))
         return handleMountUmountCommands(argc, argv);
 
     setupReadlineToIgnoreCtrlC();

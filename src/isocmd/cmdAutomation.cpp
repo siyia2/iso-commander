@@ -147,7 +147,7 @@ static void scanDirectoryForISOs(const fs::path& dir,
     }
 }
 
-// ─── Image file discovery (for -c) ───────────────────────────────────────────
+// ─── Image file discovery (for c2iso) ───────────────────────────────────────────
 
 enum class ImgKind { None, BinImg, Mdf, Nrg, Chd, Daa };
 
@@ -202,17 +202,17 @@ static void scanDirectoryForImages(const fs::path& dir,
 // ─── Argument parsing ────────────────────────────────────────────────────────
 
 struct ParsedArgs {
-    std::string              action;      ///< Last positional arg: "mount" / "umount" / … ("convert" with -c)
+    std::string              action;      ///< Last positional arg: "mount" / "umount" / … ("convert" with c2iso)
     std::vector<std::string> paths;
     bool                     silentMode = false;
-    bool                     convert    = false;   ///< -c: non-interactive conversion
+    bool                     convert    = false;   ///< c2iso: non-interactive conversion
     int                      maxDepth   = -1;
 };
 
 /**
  * @brief Parse argv into a ParsedArgs structure.
  *
- * With -c, every positional argument is a path and the action is "convert".
+ * With c2iso, every positional argument is a path and the action is "convert".
  * Otherwise the last positional is the action (mount/umount/unmount).
  *
  * @return false when no positional arguments were found (caller should abort).
@@ -224,7 +224,7 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
 
         if (arg == "--silent") {
             out.silentMode = true;
-        } else if (arg == "-c") {
+        } else if (arg == "c2iso") {
             out.convert = true;
         } else if (arg.substr(0, 2) == "-d") {
             try {
@@ -255,7 +255,7 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
         captureWarn = false;
     }
 
-    if (out.convert) {            // -c: every positional is a path
+    if (out.convert) {            // c2iso: every positional is a path
         out.action = "convert";
         return true;
     }
@@ -608,7 +608,7 @@ static int handleUmount(const ParsedArgs& args) {
     return (failedTasks.load() == 0 && !hasErrors) ? 0 : 1;
 }
 
-// ─── Convert branch (-c) ─────────────────────────────────────────────────────
+// ─── Convert branch (c2iso) ─────────────────────────────────────────────────────
 
 /**
  * @brief Converts supported disk images to ISO files.
@@ -885,7 +885,7 @@ static int handleConvert(const ParsedArgs& args) {
  * @brief Primary entry point for handling mount/umount/convert CLI commands.
  *
  * Parses arguments via parseArgs(), then dispatches to handleMount(),
- * handleUmount() or (with -c) handleConvert().
+ * handleUmount() or (with c2iso) handleConvert().
  *
  * @param argc Argument count from main.
  * @param argv Argument vector from main.
