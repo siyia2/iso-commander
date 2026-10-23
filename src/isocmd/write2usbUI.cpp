@@ -823,9 +823,14 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             const std::string& n = deviceNames[dev];
             if (n.size() <= MAX_NAME_LEN) return n;
 
+            // Cut at most MAX_NAME_LEN - 1 bytes, but back up so we never split a
+            // multi-byte UTF-8 sequence (continuation bytes look like 10xxxxxx).
+            size_t cut = MAX_NAME_LEN - 1;
+            while (cut > 0 && (static_cast<unsigned char>(n[cut]) & 0xC0) == 0x80) --cut;
+
             std::string out;
-            out.reserve(MAX_NAME_LEN + 3);          // 19 bytes + 3-byte "…"
-            out.append(n, 0, MAX_NAME_LEN - 1);
+            out.reserve(cut + 3);                   // kept bytes + 3-byte "…"
+            out.append(n, 0, cut);
             out.append("\u2026");
             return out;
         };
