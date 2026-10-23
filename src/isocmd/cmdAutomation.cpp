@@ -65,7 +65,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes,
  */
 static void verboseInfo(bool silentMode, const std::string& msg) {
     if (silentMode) return;
-    std::cout << UI::Palette::BoldReset << "\n" << msg << "\n";
+    std::cout << UI::Palette::BoldReset << "\n" << msg;
 }
 
 /**
@@ -75,7 +75,7 @@ static void verboseInfo(bool silentMode, const std::string& msg) {
 static void verboseWarn(bool silentMode, const std::string& msg) {
     const PrintListTheme c = getListColors();
     if (silentMode) return;
-    std::cout << c.num << "\n" << msg << UI::Palette::Reset << "\n\n";
+    std::cout << c.num << "\n\n" << msg << UI::Palette::Reset << "\n\n";
 }
 
 /**
@@ -93,7 +93,7 @@ static void warnMsg(bool silentMode,
     if (!path.empty())
         std::cerr << "'" << c.indexA << path
                   << c.num << "' ";
-    std::cerr << reason << UI::Palette::Reset << "\n";
+    std::cerr << reason << UI::Palette::Reset;
 }
 
 /**
