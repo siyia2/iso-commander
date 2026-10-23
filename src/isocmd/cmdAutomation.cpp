@@ -503,10 +503,9 @@ static int handleMount(const ParsedArgs& args) {
 
     if (!args.silentMode) {
         clearScrollBuffer();
-
         std::cout << "\n" << color << " Processing "
                   << (totalTasks == 1 ? "task for " : "tasks for ")
-                  << UI::Palette::Orange << "mount" << color << "... ("
+                  << UI::Palette::Green << "mount" << color << "... ("
                   << UI::Palette::Red << "Ctrl+c"
                   << color << ":cancel)\n";
 
@@ -747,10 +746,9 @@ static int handleUmount(const ParsedArgs& args) {
 
     if (!args.silentMode) {
         clearScrollBuffer();
-
         std::cout << "\n" << color << " Processing "
                   << (totalTasks == 1 ? "task for " : "tasks for ")
-                  << UI::Palette::Orange << "umount" << color << "... ("
+                  << UI::Palette::Yellow << "umount" << color << "... ("
                   << UI::Palette::Red << "Ctrl+c"
                   << color << ":cancel)\n";
 
@@ -997,7 +995,6 @@ static int handleConvert(const ParsedArgs& args) {
 
     if (!args.silentMode) {
         clearScrollBuffer();
-
         std::cout << "\n" << color << " Processing "
                   << (images.size() == 1 ? "task for " : "tasks for ")
                   << UI::Palette::Orange << "convert2iso" << color << "... ("
