@@ -397,119 +397,141 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  *
  * Mounting:
  * - The ISO is mounted @c ro,loop; FAT32 with @c noatime; NTFS through the
- *    driver chosen by @c getBestNtfsDriver, with @c noatime and mount helpers
- *    disabled.
+ *   driver chosen by @c getBestNtfsDriver, with @c noatime and mount helpers
+ *   disabled.
  *
  * Symlinks:
  * - Symlinks found in the ISO walk are silently skipped, not copied and not
- *    counted toward the byte total. This prevents a malicious ISO (Rock
- *    Ridge/UDF) from using a link to read arbitrary host files and write them
- *    to the device. Anything that exists in the ISO only as a symlink will
- *    be absent from the result.
+ *   counted toward the byte total. This prevents a malicious ISO (Rock
+ *   Ridge/UDF) from using a link to read arbitrary host files and write them
+ *   to the device. Anything that exists in the ISO only as a symlink will
+ *   be absent from the result.
  *
  * I/O strategy per file:
  * - **FAT32 destination files** use unbuffered Direct I/O (@c O_DIRECT) to
- *    bypass the Linux page cache. The final chunk is zero-padded up to the
- *    sector size for the write, then the file is @c ftruncate'd to its real
- *    size. Padding is never counted as progress.
+ *   bypass the Linux page cache. The final chunk is zero-padded to the
+ *   configured alignment before writing, then the file is @c ftruncate'd to
+ *   its actual source size. Padding is never counted as progress.
  * - **NTFS destination files** use buffered I/O with @c posix_fallocate
- *    pre-allocation (its result is ignored), copied via a manual read/write
- *    loop.
+ *   pre-allocation (its result is ignored), copied using a manual read/write
+ *   loop.
  * - Copy order is NTFS payload first, then ESP, so the bootloader only lands
- *    after the data it references is already on disk. (FatOnly has no NTFS
- *    pass.)
+ *   after the data it references is already on disk. (FatOnly has no NTFS
+ *   pass.)
  *
- * Data integrity:
+ * Data integrity and short I/O:
  * - Short @c read() results mid-file are not treated as EOF: each copy loop
- *    accumulates until the buffer is full or @c read() returns 0, so a partial
- *    read from a slow or interruptible source never truncates the payload.
- *    @c EINTR is retried on both reads and writes.
- * - A zero-byte @c write() is treated as a hard failure rather than retried,
- *    preventing an infinite spin if the destination stops making progress.
+ *   accumulates data until the buffer is full or @c read() returns 0.
+ *   @c EINTR is retried on reads and writes.
+ * - A zero-byte write is treated as a hard failure rather than retried,
+ *   preventing an infinite loop if the destination stops making progress.
+ * - Writes use @c pwrite() with explicit file offsets. The offset advances
+ *   only after the current chunk has been written completely, allowing a
+ *   chunk to be retried from its original offset without relying on the
+ *   descriptor's implicit file position.
+ * - On the @c O_DIRECT path, a positive write result that is not a multiple
+ *   of the configured sector-size alignment triggers bounded recovery.
+ *   The current chunk is restarted from its original aligned file offset
+ *   using the original buffer and full aligned write length. Up to eight
+ *   restart attempts are permitted per chunk. If recovery is exhausted,
+ *   the copy fails; buffered I/O is never used as a fallback.
+ * - Recovery retains a per-chunk high-water mark for progress accounting.
+ *   Rewriting a chunk therefore does not credit previously counted source
+ *   bytes again. Only actual source bytes are counted; alignment padding is
+ *   excluded.
  * - Per-file byte counts are checked against the size reported by the ISO
- *    walk. A source that yields fewer bytes than expected fails the whole
- *    operation. On the FAT32/O_DIRECT path the check runs before the final
- *    @c ftruncate, so a short source is never masked by zero extension. On
- *    the NTFS path the file has already been pre-allocated to full size, so
- *    a truncated source leaves a full-size, partially unwritten file behind;
- *    the operation still reports failure.
+ *   walk. A source that yields fewer bytes than expected fails the operation.
+ *   On the FAT32/@c O_DIRECT path, this check runs before the final
+ *   @c ftruncate, so a short source is not masked by zero extension. On the
+ *   NTFS path, the file has already been pre-allocated to its expected size,
+ *   so a truncated source can leave a full-size, partially unwritten file
+ *   behind; the operation still reports failure.
  * - Only too-short sources are detected. A source that grows after the ISO
- *    walk is not flagged: FAT32 files are cut back to the walked size by the
- *    final @c ftruncate, while NTFS files may end up larger than expected
- *    (and the progress counter may exceed the precomputed total).
+ *   walk is not flagged: FAT32 files are cut back to the walked size by the
+ *   final @c ftruncate, while NTFS files may end up larger than expected and
+ *   the progress counter may exceed the precomputed total.
  * - On failure or cancellation, FAT32 destination files are truncated to
- *    zero length. NTFS destination files are left as-is.
+ *   zero length. NTFS destination files are left as-is.
  *
  * Sector alignment:
  * - After formatting, each partition node is opened once and both logical
- *    (@c BLKSSZGET) and physical (@c BLKPBSZGET) sector sizes are queried. The
- *    larger of the two governs @c O_DIRECT padding for that partition. If the
- *    node cannot be opened, or an ioctl fails or returns a non-positive
- *    value, 512 bytes is used for that value. There is no retry on this open;
- *    a failure silently falls back to 512, which is unsafe on 4Kn drives.
- *    For FatOnly, the (unused) NTFS sector size is fixed at 512.
+ *   (@c BLKSSZGET) and physical (@c BLKPBSZGET) sector sizes are queried.
+ *   The larger of the two governs @c O_DIRECT padding and the alignment
+ *   checks in the copy loop. If the node cannot be opened, or an ioctl fails
+ *   or returns a non-positive value, 512 bytes is used for that value.
+ *   There is no retry on this open; a failure silently falls back to 512,
+ *   which may not satisfy the destination's direct-I/O requirements.
  * - The shared I/O buffer is 4 MiB rounded down to a multiple of the larger
- *    of the two partition sector sizes, and is allocated with that alignment.
+ *   of the two partition sector sizes and is allocated with that alignment.
+ * - Correct @c O_DIRECT operation requires the buffer address, file offsets,
+ *   and write lengths to satisfy the destination filesystem's actual
+ *   direct-I/O alignment requirements. The configured sector-size alignment
+ *   is an approximation of those requirements, not a universal guarantee.
+ *   Where supported, @c statx() with @c STATX_DIOALIGN can provide the
+ *   required memory and offset alignment values.
+ * - For FatOnly, the unused NTFS sector size is fixed at 512 bytes.
  *
  * Concurrency:
  * - Setup steps run per device and concurrently across jobs. Each call uses
- *    its own @c progressData slot, its own temp mount directories, and its
- *    own I/O buffer and monitor thread.
+ *   its own @c progressData slot, its own temporary mount directories, its
+ *   own I/O buffer, and its own monitor thread.
  *
  * Cancellation:
  * - Setup steps (ISO mount, wipe, partition, format, FAT/NTFS mount, ISO
- *    walk) treat a concurrent user cancellation as a clean abort: a step that
- *    errors out while @c g_operationCancelled is already set returns
- *    @c false without setting the failed flag. Only genuine errors flip it.
- *    Exception: failures of @c mkdtemp always set the failed flag, even if
- *    cancellation is already in effect.
+ *   walk) treat a concurrent user cancellation as a clean abort: a step that
+ *   errors out while @c g_operationCancelled is already set returns
+ *   @c false without setting the failed flag. Only genuine errors flip it.
+ *   Exception: failures of @c mkdtemp always set the failed flag, even if
+ *   cancellation is already in effect.
  * - Cancellation is also checked between files and inside the per-file read
- *    and write loops.
+ *   and write loops. A cancellation detected during copying aborts the
+ *   current operation; FAT32 destination files are truncated to zero length.
  *
  * Telemetry:
- * - Progress, speed, and byte accounting are handled by a dedicated background
- *    thread, keeping timing logic out of the critical I/O path. The thread
- *    polls every 500 ms; the copy loop credits bytes after every successful
- *    @c write(), not once per chunk.
+ * - Progress, speed, and byte accounting are handled by a dedicated
+ *   background thread, keeping timing logic out of the critical I/O path.
+ *   The thread polls every 500 ms. The copy loop credits newly reached
+ *   source-byte progress as writes advance, using a per-chunk high-water mark
+ *   so recovery retries do not double-count bytes.
  * - Speed is recalculated at most once per second, using an exponential
- *    moving average (alpha 0.3, or 0.6 while the instantaneous speed is below
- *    10 MB/s). During stalled (zero-delta) polling the last known speed is
- *    held for up to 300 seconds before dropping to 0, since a single slow
- *    write on throttled USB media can legitimately span many polling ticks.
- *    The baseline timestamp is deliberately not reset during a stall, so the
- *    first speed sample after a stall reflects the true elapsed time.
+ *   moving average (alpha 0.3, or 0.6 while the instantaneous speed is below
+ *   10 MB/s). During stalled (zero-delta) polling, the last known speed is
+ *   held for up to 300 seconds before dropping to 0, since a single slow
+ *   write on throttled USB media can legitimately span many polling ticks.
+ *   The baseline timestamp is deliberately not reset during a stall, so the
+ *   first speed sample after a stall reflects the true elapsed time.
  * - Reported progress is capped at 99% while copying. On success, speed is
- *    replaced by the overall average (total bytes over time since the monitor
- *    started, which excludes setup), progress is set to 100, and @c completed
- *    is set.
+ *   replaced by the overall average (total bytes over time since the monitor
+ *   started, which excludes setup), progress is set to 100, and @c completed
+ *   is set.
  *
  * Flush and unmount strategy:
  * - After all copies, and only if not cancelled, @c syncfs is called on the
- *    NTFS mount and then the FAT32 mount to flush dirty pages at the
- *    filesystem level. Its return value is not checked, so a flush error is
- *    not reported here.
- * - Unmounting is performed by @c safeUmount (via ScopedMount destructors),
- *    which blocks until the kernel confirms all I/O is complete. The
- *    ScopedMount objects live at function scope, so this happens when the
- *    function returns (in reverse declaration order: ntfs, fat, iso), i.e.
- *    AFTER the final progress accounting. @c completed is therefore set
- *    before the unmounts finish, and an unmount failure cannot change the
- *    return value. Callers that tell the user it is safe to remove the
- *    device should not rely on @c completed alone.
+ *   NTFS mount and then the FAT32 mount to flush dirty pages at the
+ *   filesystem level. Its return value is not checked, so a flush error is
+ *   not reported here.
+ * - Unmounting is performed by @c safeUmount (via @c ScopedMount
+ *   destructors), which blocks until the kernel confirms all I/O is
+ *   complete. The @c ScopedMount objects live at function scope, so this
+ *   happens when the function returns in reverse declaration order (NTFS,
+ *   FAT, ISO), i.e. after the final progress accounting. @c completed is
+ *   therefore set before the unmounts finish, and an unmount failure cannot
+ *   change the return value. Callers that tell the user it is safe to remove
+ *   the device should not rely on @c completed alone.
  *
  * Cleanup strategy:
  * - All mount points and the I/O buffer are managed by RAII objects
- *    (ScopedMount, AlignedBuffer). The progress thread is managed by
- *    ThreadGuard, which stops and joins it on every return path. Early
- *    returns need no manual cleanup.
+ *   (@c ScopedMount, @c AlignedBuffer). The progress thread is managed by
+ *   @c ThreadGuard, which stops and joins it on every return path. Early
+ *   returns need no manual cleanup.
  *
  * @param isoPath       Path to the source ISO file.
  * @param device        Target block device (e.g. @c /dev/sdb). Will be wiped.
  * @param progressIndex Index into the shared @c progressData array for live
  *                      progress, speed, and completion reporting.
  * @return @c true on success; @c false on any error, truncated source, or
- *         user cancellation. On a genuine error the slot's @c failed flag is
- *         set; on cancellation it is not.
+ *         user cancellation. On a genuine error the slot's @c failed flag
+ *         is set; on cancellation it is not.
  */
 bool writeWindowsIsoToDevice(const std::string& isoPath,
                              const std::string& device,
@@ -843,7 +865,10 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         if (!useBufferedIO) outFlags |= O_DIRECT;
 
         const int fd_out = open(dst.c_str(), outFlags, 0644);
-        if (fd_out < 0) { close(fd_in); return false; }
+        if (fd_out < 0) {
+            close(fd_in);
+            return false;
+        }
 
         if (useBufferedIO && fileSize > 0)
             posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
@@ -851,83 +876,137 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         const size_t mask = static_cast<size_t>(sectorSize) - 1;
 
         bool success = true;
-        uint64_t bytesCopiedTotal = 0;   // real source bytes, padding excluded
+        uint64_t bytesCopiedTotal = 0;
+        uint64_t fileOffset = 0;
+
+        constexpr int MAX_UNALIGNED_RETRIES = 8;
+
         while (!GlobalState::g_operationCancelled.load()) {
-            // Ensure we read a full buffer or hit EOF
+            // Ensure we read a full buffer or hit EOF.
             size_t total_read_this_chunk = 0;
+
             while (total_read_this_chunk < bufferSize) {
                 if (GlobalState::g_operationCancelled.load()) {
                     success = false;
                     goto done;
                 }
-                const ssize_t bytes_read = read(fd_in,
-                                                ioBuf.data + total_read_this_chunk,
-                                                bufferSize - total_read_this_chunk);
+
+                const ssize_t bytes_read = read(
+                    fd_in,
+                    ioBuf.data + total_read_this_chunk,
+                    bufferSize - total_read_this_chunk);
+
                 if (bytes_read < 0) {
                     if (errno == EINTR) continue;
                     success = false;
                     goto done;
                 }
-                if (bytes_read == 0) {
-                    break; // EOF reached
-                }
-                total_read_this_chunk += bytes_read;
+
+                if (bytes_read == 0)
+                    break;
+
+                total_read_this_chunk += static_cast<size_t>(bytes_read);
             }
 
-            if (total_read_this_chunk == 0) break; // Clean EOF at start of loop
+            if (total_read_this_chunk == 0)
+                break;
 
-            ssize_t bytes_read = static_cast<ssize_t>(total_read_this_chunk);
+            const ssize_t bytes_read =
+                static_cast<ssize_t>(total_read_this_chunk);
+
             ssize_t writeLen = bytes_read;
 
             if (!useBufferedIO) {
-                const ssize_t aligned = (bytes_read + mask) & ~static_cast<ssize_t>(mask);
-                if (aligned > bytes_read)
-                    memset(ioBuf.data + bytes_read, 0, aligned - bytes_read);
+                const ssize_t aligned =
+                    (bytes_read + static_cast<ssize_t>(mask)) &
+                    ~static_cast<ssize_t>(mask);
+
+                if (aligned > bytes_read) {
+                    memset(ioBuf.data + bytes_read, 0,
+                           static_cast<size_t>(aligned - bytes_read));
+                }
+
                 writeLen = aligned;
             }
 
-            ssize_t  bytes_written    = 0;
-            uint64_t reportedThisChunk = 0; // real (non-padding) bytes already credited
+            ssize_t bytes_written = 0;
+
+            // Preserve the highest logical source-byte prefix credited for
+            // this chunk, even if an unaligned short write forces a restart.
+            uint64_t creditedHighWater = 0;
+            int unalignedRetries = 0;
+
             while (bytes_written < writeLen) {
                 if (GlobalState::g_operationCancelled.load()) {
                     success = false;
                     goto done;
                 }
-                const ssize_t written = write(fd_out,
-                                              ioBuf.data + bytes_written,
-                                              writeLen  - bytes_written);
+
+                const off_t writeOffset =
+                    static_cast<off_t>(fileOffset) +
+                    static_cast<off_t>(bytes_written);
+
+                const ssize_t written = pwrite(
+                    fd_out,
+                    ioBuf.data + bytes_written,
+                    static_cast<size_t>(writeLen - bytes_written),
+                    writeOffset);
+
                 if (written < 0) {
                     if (errno == EINTR) continue;
                     success = false;
                     goto done;
                 }
-                if (written == 0) {   // no progress; avoid infinite spin
+
+                if (written == 0) {
+                    errno = EIO;
                     success = false;
                     goto done;
                 }
+
+                // A positive unaligned O_DIRECT short write may leave part
+                // of the destination inconsistent. Restart the whole chunk
+                // from its original aligned offset, with the original buffer.
+                if (!useBufferedIO &&
+                    (static_cast<size_t>(written) %
+                     static_cast<size_t>(sectorSize)) != 0) {
+
+                    if (++unalignedRetries > MAX_UNALIGNED_RETRIES) {
+                        errno = EIO;
+                        success = false;
+                        goto done;
+                    }
+
+                    // Do not reset creditedHighWater: already credited
+                    // source bytes must not be counted a second time.
+                    bytes_written = 0;
+                    continue;
+                }
+
                 bytes_written += written;
 
-                // Report progress incrementally as each write() actually
-                // lands, rather than waiting for the whole (up to 4MiB)
-                // chunk to finish. This is what lets the monitor thread see
-                // real progress on slow devices instead of one big jump
-                // every several seconds. Cap at bytes_read so O_DIRECT
-                // alignment padding (writeLen > bytes_read) is never
-                // counted as real progress.
-                const uint64_t realBytesSoFar = static_cast<uint64_t>(
-                    std::min<ssize_t>(bytes_written, bytes_read));
-                if (realBytesSoFar > reportedThisChunk) {
-                    const uint64_t delta = realBytesSoFar - reportedThisChunk;
+                const uint64_t realBytesSoFar =
+                    static_cast<uint64_t>(
+                        std::min<ssize_t>(bytes_written, bytes_read));
+
+                if (realBytesSoFar > creditedHighWater) {
+                    const uint64_t delta =
+                        realBytesSoFar - creditedHighWater;
+
                     totalBytesWrittenAccumulator.fetch_add(delta);
                     bytesCopiedTotal += delta;
-                    reportedThisChunk = realBytesSoFar;
+                    creditedHighWater = realBytesSoFar;
                 }
             }
+
+            // The next chunk starts after actual source bytes, not any
+            // padding added to the final O_DIRECT write.
+            fileOffset += static_cast<uint64_t>(bytes_read);
         }
 
     done:
         // Detect a source shorter than fstat/ISO-walk reported. Check before
-        // ftruncate extends the file with zeros, which would mask the truncation.
+        // ftruncate extends the file with zeros, which would mask truncation.
         if (success && !GlobalState::g_operationCancelled.load() &&
             bytesCopiedTotal < fileSize) {
             success = false;
@@ -937,8 +1016,10 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             if (GlobalState::g_operationCancelled.load()) {
                 [[maybe_unused]] const int r = ftruncate(fd_out, 0);
             } else if (success) {
-                if (ftruncate(fd_out, static_cast<off_t>(fileSize)) != 0) success = false;
+                if (ftruncate(fd_out, static_cast<off_t>(fileSize)) != 0)
+                    success = false;
             }
+
             if (!success) {
                 [[maybe_unused]] const int r = ftruncate(fd_out, 0);
             }
@@ -951,6 +1032,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
         close(fd_in);
         close(fd_out);
+
         return success && !GlobalState::g_operationCancelled.load();
     };
 
