@@ -884,7 +884,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
                 speedStr += " (avg)";
             }
 
-            std::cout << color << std::setw(12) << std::left << speedStr << "\n";
+            std::cout << color << speedStr << "\n";
         }
         std::cout << std::flush;
     };
