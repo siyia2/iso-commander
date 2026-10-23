@@ -874,9 +874,9 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
             std::cout << "\033[K"
                       << wt.fileCol << paddedFilename
-                      << color << " → " << wt.deviceCol << paddedDevice
-                      << color << " <" << name << ">" << namePad << " "
-                      << color << "["
+                      << color << " → " << wt.infoLabel << "<" << name << ">" << namePad
+                      << wt.deviceCol << " " << paddedDevice
+                      << color << " ["
                       << bar << wt.speedCol << empty
                       << color << "] ";
 
