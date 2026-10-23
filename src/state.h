@@ -64,6 +64,7 @@ namespace GlobalState {
     inline std::atomic<bool> g_filteringIndicator{false};
     inline std::atomic<bool> isAtMain{true};
     inline std::atomic<bool> isAtISOList{false};
+    inline std::atomic<bool> isNonInteractive{false};
     inline bool needSortingAfterflno      = false;
     inline size_t ITEMS_PER_PAGE          = 25;
     inline size_t LIVE_FILTER_LIMIT       = 10000;
