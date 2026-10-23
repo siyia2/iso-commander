@@ -1,4 +1,4 @@
-.TH ISOCMD 1 "October 2026" "Iso Commander 7.8.2" "Iso-Commander Manual"
+99;6u.TH ISOCMD 1 "October 2026" "Iso Commander 7.8.2" "Iso-Commander Manual"
 
 .SH NAME
 Iso Commander (isocmd) \- A single binary command-line utility for managing .iso files and converting image formats.
@@ -12,10 +12,10 @@ Iso Commander (isocmd) is a single binary command-line utility for managing .iso
 Show program version.
 .TP
 .B \-\-silent
-Suppress informational messages, warnings and progress output. Critical errors will still be displayed. With \fBw2usb\fR, this also omits the data-erasure warning.
+Suppress informational messages, warnings and progress output. Critical errors will still be displayed.
 .TP
 .B \-d\fIN\fR
-Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 scans only the specified directory, without descending into subdirectories. Not used by \fBw2usb\fR, which does not scan directories.
+Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 does a surface scan. Not used by \fBw2usb\fR, which does not scan directories.
 .TP
 .B mount
 Mount one or more ISO files or scan directories for ISO files and mount them (requires root).
@@ -24,10 +24,10 @@ Mount one or more ISO files or scan directories for ISO files and mount them (re
 Unmount specified ISO mount points. Without paths, or with \fBall\fR as the only path, scan /mnt/ISOs and attempt to unmount all contained mount points (requires root).
 .TP
 .B c2iso
-Convert images to ISO files without entering interactive mode. Accepts individual image files and directories to scan. Supported formats are BIN, IMG, CCD, MDF, NRG, CHD, DAA and GBI.
+Convert supported images to ISO files. Accepts individual image files and directories to scan. Supported formats are BIN, IMG, CCD, MDF, NRG, CHD, DAA and GBI.
 .TP
 .B w2usb
-Write ISO files to removable USB devices without entering interactive mode (requires root). Arguments beginning with \fB/dev/\fR are target devices; all others are ISO files. One ISO is written to every device; with several ISOs, each is written to the device at the same argument position, so the counts must match. All arguments are validated first, and if any check fails, no device is modified. \fBWARNING:\fR all data on the target devices is destroyed, and unlike in interactive mode, no confirmation prompt is shown.
+Write ISO files to removable USB devices (requires root). Arguments beginning with \fB/dev/\fR are target devices.
 
 .SH EXAMPLES
 .TS
