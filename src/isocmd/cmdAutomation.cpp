@@ -22,7 +22,6 @@
 #include "../concurrency.h"
 #include "../inputHandling.h"
 #include "../mount.h"
-#include "../umount.h"
 #include "../state.h"
 #include "../themes.h"
 #include "../threadpool.h"
@@ -395,10 +394,10 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
  * @param args Parsed command-line arguments, including input paths,
  *             maximum scan depth, and silent-mode settings.
  *
- * @return 0 if at least one ISO was mounted successfully;
- *         1 if no ISO was mounted successfully, root privileges were
- *         missing, the operation was cancelled, or an earlier
- *         validation error left nothing to mount.
+ * @return 0 if every ISO mounted successfully (or there was nothing to
+ *         mount and no path errors occurred);
+ *         1 if any mount failed, a path-validation error occurred,
+ *         root privileges were missing, or the operation was cancelled.
  */
 static int handleMount(const ParsedArgs& args) {
     if (geteuid() != 0) {
@@ -474,10 +473,11 @@ static int handleMount(const ParsedArgs& args) {
         verboseWarn(args.silentMode, "Mount operation cancelled by user.");
 
     if (isoFiles.empty()) {
-        if (!GlobalState::g_operationCancelled.load())
-            verboseWarn(args.silentMode, noScanDir
-                ? "No ISO files to mount."
-                : "No ISO files found to mount.");
+        if (GlobalState::g_operationCancelled.load())
+            return 1;
+        verboseWarn(args.silentMode, noScanDir
+            ? "No ISO files to mount."
+            : "No ISO files found to mount.");
         return hasErrors ? 1 : 0;
     }
 
@@ -594,7 +594,9 @@ static int handleMount(const ParsedArgs& args) {
                   << UI::Palette::Reset << "\n\n";
     }
 
-    return (completedTasks.load() > 0) ? 0 : 1;
+    return (failedTasks.load() == 0 &&
+            !hasErrors &&
+            !GlobalState::g_operationCancelled.load()) ? 0 : 1;
 }
 
 // ─── Umount branch ───────────────────────────────────────────────────────────
@@ -626,10 +628,10 @@ static int handleMount(const ParsedArgs& args) {
  * @param args Parsed command-line arguments, including input paths
  *             and silent-mode settings.
  *
- * @return 0 if no unmount failures or path-validation errors occurred;
+ * @return 0 if no unmount failures or path-validation errors occurred
+ *         (including when there was nothing to unmount);
  *         1 if an unmount failed, a path-validation error occurred,
- *         root privileges were missing, or the operation was cancelled
- *         before any mount point was found.
+ *         root privileges were missing, or the operation was cancelled.
  */
 static int handleUmount(const ParsedArgs& args) {
     if (geteuid() != 0) {
@@ -656,8 +658,9 @@ static int handleUmount(const ParsedArgs& args) {
                 if (entry.is_directory())
                     mountPoints.insert(fs::canonical(entry.path()).string());
             }
-        } catch (const fs::filesystem_error&) {
-            hasErrors = true;
+        } catch (const fs::filesystem_error& e) {
+            if (e.code() != std::errc::no_such_file_or_directory)
+                hasErrors = true;
         }
     };
 
@@ -720,9 +723,10 @@ static int handleUmount(const ParsedArgs& args) {
         verboseWarn(args.silentMode, "Umount operation cancelled by user.");
 
     if (mountPoints.empty()) {
-        if (!GlobalState::g_operationCancelled.load())
-            verboseWarn(args.silentMode,
-                        "No ISO mount points found to unmount.");
+        if (GlobalState::g_operationCancelled.load())
+            return 1;
+        verboseWarn(args.silentMode,
+                    "No ISO mount points found to unmount.");
         return hasErrors ? 1 : 0;
     }
 
@@ -842,7 +846,8 @@ static int handleUmount(const ParsedArgs& args) {
                   << UI::Palette::Reset << "\n\n";
     }
 
-    return (failedTasks.load() == 0 && !hasErrors) ? 0 : 1;
+    return (failedTasks.load() == 0 && !hasErrors &&
+            !GlobalState::g_operationCancelled.load()) ? 0 : 1;
 }
 
 // ─── Convert branch (c2iso) ─────────────────────────────────────────────────────
@@ -868,14 +873,16 @@ static int handleUmount(const ParsedArgs& args) {
  * @param args Parsed command-line arguments, including input paths,
  *             maximum scan depth, and silent-mode settings.
  *
- * @return 0 if all conversions completed or were skipped without errors;
+ * @return 0 if all conversions completed without errors (including when
+ *         no paths were given or no convertible images were found and no
+ *         path errors occurred);
  *         1 if any conversion failed, path validation failed, or the
  *         operation was cancelled.
  */
 static int handleConvert(const ParsedArgs& args) {
     if (args.paths.empty()) {
         verboseWarn(args.silentMode, "No files to convert2iso.");
-        return 1;
+        return 0;
     }
 
     std::unordered_set<std::string> images;
@@ -940,9 +947,10 @@ static int handleConvert(const ParsedArgs& args) {
         verboseWarn(args.silentMode, "Conversion cancelled by user.");
 
     if (images.empty()) {
-        if (!GlobalState::g_operationCancelled.load())
-            verboseWarn(args.silentMode,
-                        "No convertible image files found.");
+        if (GlobalState::g_operationCancelled.load())
+            return 1;
+        verboseWarn(args.silentMode,
+                    "No convertible image files found.");
         return hasErrors ? 1 : 0;
     }
 
