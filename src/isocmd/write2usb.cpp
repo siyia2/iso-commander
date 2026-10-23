@@ -372,187 +372,166 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
 // Windows writer
 // ---------------------------------------------------------------------------
 
-
 /**
- * @brief Write a Windows-family ISO image to a block device.
+ * @brief Write a Windows-family ISO image to a block device using a hybrid I/O model.
  *
- * Mounts the source ISO read-only, wipes and repartitions the target device,
- * formats the resulting partition(s), and copies the ISO contents file by
- * file to the appropriate filesystem(s).
+ * The ISO is loop-mounted read-only, the target device is wiped and
+ * repartitioned, and the ISO contents are copied file by file onto freshly
+ * formatted filesystems.
  *
- * @section winiso_layout Partition layout
- *
- * Partitioning is selected automatically according to @c detectIsoType:
- *
+ * Partitioning is chosen automatically by ISO type (see @c detectIsoType):
  * - **WindowsInstall** - GPT with two partitions:
- *   1. ESP: 1 MiB to 1025 MiB (1 GiB), FAT32, label @c WINBOOT. Contains
- *      the top-level @c efi/ and @c boot/ directories and
- *      @c sources/boot.wim, matched case-insensitively.
- *   2. DATA: 1025 MiB to the end of the device, NTFS, label @c WINDATA.
- *      Contains all remaining entries, including files in the ISO root.
+ *    1. ESP, 1 MiB to 1025 MiB (1 GiB), FAT32, label @c WINBOOT. Holds the
+ *       top-level @c efi/ and @c boot/ folders and @c sources/boot.wim
+ *       (matched case-insensitively).
+ *    2. DATA, 1025 MiB to end of device, NTFS, label @c WINDATA. Holds
+ *       everything else, including files in the ISO root.
+ * - **FatOnly** (WinPE, Hiren's, rescue disks) - GPT with a single FAT32
+ *    partition (label @c WINPE) spanning 1 MiB to the end of the device.
+ *    All files go to this partition.
  *
- * - **FatOnly** (WinPE, Hiren's, rescue disks) - GPT with one FAT32
- *   partition, label @c WINPE, spanning 1 MiB to the end of the device.
- *   All ISO entries are copied to this partition.
+ * Partition node names are derived as @c device + N (e.g. @c /dev/sdb1).
+ * Devices whose partition nodes need a @c p separator (@c /dev/nvme0n1,
+ * @c /dev/mmcblk0) are not supported. Each node is awaited with
+ * @c waitForDevice (30 s timeout) to ride out udev re-scan delays.
  *
- * Partition node names are derived by appending the partition number to
- * @p device (for example, @c /dev/sdb1). Devices requiring a @c p separator
- * before the partition number, such as @c /dev/nvme0n1 and @c /dev/mmcblk0,
- * are not supported by this naming scheme.
+ * Mounting:
+ * - The ISO is mounted @c ro,loop; FAT32 with @c noatime; NTFS through the
+ *   driver chosen by @c getBestNtfsDriver, with @c noatime and mount helpers
+ *   disabled.
  *
- * The device and partition nodes are awaited using @c waitForDevice.
- * Partition nodes are given a 30-second timeout to accommodate udev delays.
+ * Symlinks:
+ * - Symlinks found in the ISO walk are silently skipped, not copied and not
+ *   counted toward the byte total. This prevents a malicious ISO (Rock
+ *   Ridge/UDF) from using a link to read arbitrary host files and write them
+ *   to the device. Anything that exists in the ISO only as a symlink will
+ *   be absent from the result.
  *
- * @section winiso_mounting Mounting and entry classification
+ * I/O strategy per file:
+ * - **FAT32 destination files** use unbuffered Direct I/O (@c O_DIRECT) to
+ *   bypass the Linux page cache. The final chunk is zero-padded to the
+ *   configured alignment before writing, then the file is @c ftruncate'd to
+ *   its actual source size. Padding is never counted as progress.
+ * - **NTFS destination files** use buffered I/O with @c posix_fallocate
+ *   pre-allocation (its result is ignored), copied using a manual read/write
+ *   loop.
+ * - Copy order is NTFS payload first, then ESP, so the bootloader only lands
+ *   after the data it references is already on disk. (FatOnly has no NTFS
+ *   pass.)
  *
- * - The ISO is mounted read-only using @c ro,loop.
- * - FAT32 is mounted with @c noatime.
- * - NTFS is mounted using the driver selected by @c getBestNtfsDriver,
- *   with @c noatime and mount helpers disabled.
+ * Data integrity and short I/O:
+ * - Short @c read() results mid-file are not treated as EOF: each copy loop
+ *   accumulates data until the buffer is full or @c read() returns 0.
+ *   @c EINTR is retried on reads and writes.
+ * - A zero-byte write is treated as a hard failure rather than retried,
+ *   preventing an infinite loop if the destination stops making progress.
+ * - Writes use @c pwrite() with explicit file offsets. The offset advances
+ *   only after the current chunk has been written completely, allowing a
+ *   chunk to be retried from its original offset without relying on the
+ *   descriptor's implicit file position.
+ * - On the @c O_DIRECT path, a positive write result that is not a multiple
+ *   of the configured sector-size alignment triggers bounded recovery.
+ *   The current chunk is restarted from its original aligned file offset
+ *   using the original buffer and full aligned write length. Up to eight
+ *   restart attempts are permitted per chunk. If recovery is exhausted,
+ *   the copy fails; buffered I/O is never used as a fallback.
+ * - Recovery retains a per-chunk high-water mark for progress accounting.
+ *   Rewriting a chunk therefore does not credit previously counted source
+ *   bytes again. Only actual source bytes are counted; alignment padding is
+ *   excluded.
+ * - Per-file byte counts are checked against the size reported by the ISO
+ *   walk. A source that yields fewer bytes than expected fails the operation.
+ *   On the FAT32/@c O_DIRECT path, this check runs before the final
+ *   @c ftruncate, so a short source is not masked by zero extension. On the
+ *   NTFS path, the file has already been pre-allocated to its expected size,
+ *   so a truncated source can leave a full-size, partially unwritten file
+ *   behind; the operation still reports failure.
+ * - Only too-short sources are detected. A source that grows after the ISO
+ *   walk is not flagged: FAT32 files are cut back to the walked size by the
+ *   final @c ftruncate, while NTFS files may end up larger than expected and
+ *   the progress counter may exceed the precomputed total.
+ * - On failure or cancellation, FAT32 destination files are truncated to
+ *   zero length. NTFS destination files are left as-is.
  *
- * ISO entries are classified for the destination filesystem before copying.
- * For Windows installation ISOs, @c efi/, @c boot/, and
- * @c sources/boot.wim are assigned to the ESP; all other entries are
- * assigned to NTFS. For @c FatOnly images, every entry is assigned to FAT32.
+ * Sector alignment:
+ * - After formatting, each partition node is opened once and both logical
+ *   (@c BLKSSZGET) and physical (@c BLKPBSZGET) sector sizes are queried.
+ *   The larger of the two governs @c O_DIRECT padding and the alignment
+ *   checks in the copy loop. If the node cannot be opened, or an ioctl fails
+ *   or returns a non-positive value, 512 bytes is used for that value.
+ *   There is no retry on this open; a failure silently falls back to 512,
+ *   which may not satisfy the destination's direct-I/O requirements.
+ * - The shared I/O buffer is 4 MiB rounded down to a multiple of the larger
+ *   of the two partition sector sizes and is allocated with that alignment.
+ * - Correct @c O_DIRECT operation requires the buffer address, file offsets,
+ *   and write lengths to satisfy the destination filesystem's actual
+ *   direct-I/O alignment requirements. The configured sector-size alignment
+ *   is an approximation of those requirements, not a universal guarantee.
+ *   Where supported, @c statx() with @c STATX_DIOALIGN can provide the
+ *   required memory and offset alignment values.
+ * - For FatOnly, the unused NTFS sector size is fixed at 512 bytes.
  *
- * Symlinks encountered during the ISO directory walk are silently skipped.
- * This prevents ISO symlinks from directing the copy operation to arbitrary
- * host paths. Entries available only through symlinks are absent from the
- * destination.
+ * Concurrency:
+ * - Setup steps run per device and concurrently across jobs. Each call uses
+ *   its own @c progressData slot, its own temporary mount directories, its
+ *   own I/O buffer, and its own monitor thread.
  *
- * @section winiso_io Copy strategy and I/O error handling
+ * Cancellation:
+ * - Setup steps (ISO mount, wipe, partition, format, FAT/NTFS mount, ISO
+ *   walk) treat a concurrent user cancellation as a clean abort: a step that
+ *   errors out while @c g_operationCancelled is already set returns
+ *   @c false without setting the failed flag. Only genuine errors flip it.
+ *   Exception: failures of @c mkdtemp always set the failed flag, even if
+ *   cancellation is already in effect.
+ * - Cancellation is also checked between files and inside the per-file read
+ *   and write loops. A cancellation detected during copying aborts the
+ *   current operation; FAT32 destination files are truncated to zero length.
  *
- * Both FAT32 and NTFS destination files use buffered file I/O. Each file is
- * copied using @c read() and @c pwrite() with a reusable 4 MiB buffer.
- * The implementation does not use @c O_DIRECT and does not require
- * sector-aligned user buffers, offsets, or write lengths.
+ * Telemetry:
+ * - Progress, speed, and byte accounting are handled by a dedicated
+ *   background thread, keeping timing logic out of the critical I/O path.
+ *   The thread polls every 500 ms. The copy loop credits newly reached
+ *   source-byte progress as writes advance, using a per-chunk high-water mark
+ *   so recovery retries do not double-count bytes.
+ * - Speed is recalculated at most once per second, using an exponential
+ *   moving average (alpha 0.3, or 0.6 while the instantaneous speed is below
+ *   10 MB/s). During stalled (zero-delta) polling, the last known speed is
+ *   held for up to 300 seconds before dropping to 0, since a single slow
+ *   write on throttled USB media can legitimately span many polling ticks.
+ *   The baseline timestamp is deliberately not reset during a stall, so the
+ *   first speed sample after a stall reflects the true elapsed time.
+ * - Reported progress is capped at 99% while copying. On success, speed is
+ *   replaced by the overall average (total bytes over time since the monitor
+ *   started, which excludes setup), progress is set to 100, and @c completed
+ *   is set.
  *
- * - Reads accumulate data until the buffer is full or @c read() returns
- *   zero to indicate EOF. A short positive read is not treated as EOF.
- * - @c EINTR is retried on reads and writes.
- * - Writes use @c pwrite() with explicit file offsets and continue until
- *   the entire chunk has been written.
- * - A zero-byte write is treated as an I/O failure to prevent an infinite
- *   loop when the destination stops making progress.
- * - Other read or write errors fail the current file copy.
- * - Copy order is NTFS payload first, followed by the ESP. @c FatOnly
- *   images have no NTFS pass.
+ * Flush and unmount strategy:
+ * - After all copies, and only if not cancelled, @c syncfs is called on the
+ *   NTFS mount and then the FAT32 mount to flush dirty pages at the
+ *   filesystem level. Its return value is not checked, so a flush error is
+ *   not reported here.
+ * - Unmounting is performed by @c safeUmount (via @c ScopedMount
+ *   destructors), which blocks until the kernel confirms all I/O is
+ *   complete. The @c ScopedMount objects live at function scope, so this
+ *   happens when the function returns in reverse declaration order (NTFS,
+ *   FAT, ISO), i.e. after the final progress accounting. @c completed is
+ *   therefore set before the unmounts finish, and an unmount failure cannot
+ *   change the return value. Callers that tell the user it is safe to remove
+ *   the device should not rely on @c completed alone.
  *
- * The expected size of each regular file is captured during the ISO walk.
- * After copying, the implementation checks that the number of source bytes
- * copied is not smaller than the expected size. A source that yields fewer
- * bytes than expected causes the operation to fail, unless cancellation
- * has already been requested.
- *
- * This size check does not independently verify destination contents against
- * the source and does not detect every possible source modification. A source
- * that grows after the directory walk may cause the copied byte count to
- * exceed the precomputed total.
- *
- * On failure or cancellation, FAT32 destination files are truncated to zero
- * length on a best-effort basis. NTFS destination files are left as-is.
- * Errors from these cleanup truncation attempts are ignored.
- *
- * The source and destination file descriptors are closed after copying,
- * but errors returned by @c close() are not checked. Errors from
- * @c posix_fadvise() are also ignored.
- *
- * Buffered I/O avoids the alignment and final-chunk padding requirements
- * associated with @c O_DIRECT. It does not eliminate partial writes,
- * delayed writeback errors, or device and filesystem failures.
- *
- * @section winiso_progress Progress reporting and concurrency
- *
- * Each invocation uses its own progress slot, temporary mount directories,
- * I/O buffer, byte counter, and progress-monitor thread. Independent jobs can
- * therefore run concurrently, provided the caller supplies distinct progress
- * slots and target devices.
- *
- * A dedicated background thread polls progress every 500 ms. The copy loop
- * increments the shared byte counter after each successful @c pwrite().
- * Reported progress is capped at 99% while copying.
- *
- * Speed is recalculated no more frequently than once per second using an
- * exponential moving average. The smoothing factor is 0.3 normally and 0.6
- * when instantaneous speed is below 10 MiB/s.
- *
- * During a stall, the last measured speed is retained for up to 300 seconds
- * before the displayed speed is set to zero. The measurement baseline is
- * not reset during a stall, so the next speed sample accounts for the full
- * elapsed interval.
- *
- * At finalization, the displayed average speed is calculated using the
- * precomputed total source bytes and the elapsed time since the progress
- * monitor's start time. This elapsed time excludes setup and partitioning.
- * The calculation uses the expected total size, not the actual accumulated
- * number of bytes written.
- *
- * @section winiso_cancel Cancellation and failure handling
- *
- * Cancellation is checked at several setup checkpoints, during ISO entry
- * collection, between files, and inside the per-file read and write loops.
- * A cancellation detected during copying aborts the current operation.
- *
- * Setup steps that fail while @c GlobalState::g_operationCancelled is already
- * set return @c false without setting the failed flag through
- * @c failUnlessCancelled. Failures of @c mkdtemp use @c fail() directly
- * and therefore set the failed flag even if cancellation is already active.
- *
- * Genuine copy failures set the corresponding @c progressData slot's
- * @c failed flag through @c fail(). Cancellation paths normally return
- * @c false without setting that flag through the failure helper.
- *
- * The I/O buffer allocation failure sets the failed flag only if cancellation
- * is not active. An exception during ISO directory traversal is handled as a
- * failure unless cancellation is active. Exceptions from directory creation
- * during copying are not caught by @c processEntries.
- *
- * Directory creation uses @c fs::create_directories, but its return value
- * is not checked. A directory creation error that does not throw may
- * therefore go undetected until a subsequent file operation fails.
- *
- * Mount points are managed by @c ScopedMount. The progress-monitor thread
- * is managed by @c ThreadGuard, which stops and joins the thread when its
- * guard is destroyed, including on normal returns and early exits.
- *
- * @section winiso_flush Flush, unmount, and completion
- *
- * After all files have been copied, and only if cancellation has not been
- * requested at that checkpoint, @c syncfs is called on the NTFS mount for
- * Windows installation ISOs and then on the FAT32 mount.
- *
- * The return values of @c syncfs and the corresponding @c close() calls are
- * ignored. Failure to open a mount point for synchronization is also ignored.
- * Consequently, synchronization errors are not reported by this function.
- *
- * The progress-monitor thread is stopped and joined before final progress
- * accounting. The @c ScopedMount objects are local variables and are
- * destroyed only when the function returns, in reverse declaration order:
- * NTFS, FAT32, then the ISO. Thus, final progress is published before these
- * unmount attempts finish. Unmount failures cannot change the return value
- * or the already-published completion state.
- *
- * Finalization sets the displayed speed to the calculated average, sets
- * progress to 100%, sets @c completed to true, and returns @c true.
- * The current implementation does not perform a final cancellation check
- * immediately before publishing these values.
- *
- * Callers must not interpret @c completed alone as proof that synchronization
- * or unmounting succeeded, or that cancellation was not requested during
- * finalization.
+ * Cleanup strategy:
+ * - All mount points and the I/O buffer are managed by RAII objects
+ *   (@c ScopedMount, @c AlignedBuffer). The progress thread is managed by
+ *   @c ThreadGuard, which stops and joins it on every return path. Early
+ *   returns need no manual cleanup.
  *
  * @param isoPath       Path to the source ISO file.
- * @param device        Target block device (for example, @c /dev/sdb).
- *                      The device will be wiped and repartitioned.
- * @param progressIndex Index into the shared @c progressData array for
- *                      progress, speed, failure, and completion reporting.
- *
- * @return @c true when the function reaches its successful finalization path;
- *         @c false on a reported failure or cancellation. Genuine errors
- *         generally set the slot's @c failed flag, while cancellation paths
- *         normally return @c false without setting it through the failure
- *         helper. Some errors, including synchronization and unmount errors,
- *         are not propagated by the current implementation.
+ * @param device        Target block device (e.g. @c /dev/sdb). Will be wiped.
+ * @param progressIndex Index into the shared @c progressData array for live
+ *                      progress, speed, and completion reporting.
+ * @return @c true on success; @c false on any error, truncated source, or
+ *         user cancellation. On a genuine error the slot's @c failed flag
+ *         is set; on cancellation it is not.
  */
 bool writeWindowsIsoToDevice(const std::string& isoPath,
                              const std::string& device,
@@ -632,6 +611,24 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             return failUnlessCancelled();
         }
     }
+
+    // Sector size query — returns the larger of logical and physical sector
+    // sizes. Falls back to 512 if either ioctl fails or returns non-positive.
+    auto getBestSectorSize = [](const std::string& devNode) -> int {
+        int fd = open(devNode.c_str(), O_RDONLY);
+        if (fd < 0) return 512;
+        int logicalSize  = 512;
+        int physicalSize = 512;
+        if (ioctl(fd, BLKSSZGET,  &logicalSize)  < 0 || logicalSize  <= 0) logicalSize  = 512;
+        if (ioctl(fd, BLKPBSZGET, &physicalSize) < 0 || physicalSize <= 0) physicalSize = 512;
+        close(fd);
+        return std::max(logicalSize, physicalSize);
+    };
+
+    const int fatSectorSize  = getBestSectorSize(fatPart);
+    const int ntfsSectorSize = (isoType == IsoType::WindowsInstall)
+                                   ? getBestSectorSize(ntfsPart)
+                                   : 512;
 
     if (GlobalState::g_operationCancelled.load()) return false;
 
@@ -839,107 +836,183 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     ThreadGuard threadGuard(progressMonitorThread, monitoringActive);
 
     // ------------------------------------------------------------------ //
-    // 5. Buffered I/O buffer                                             //
+    // 5. Aligned I/O buffer                                              //
     // ------------------------------------------------------------------ //
-    constexpr size_t bufferSize = 4 * 1024 * 1024;
-    std::vector<char> ioBuf;
-    try {
-        ioBuf.resize(bufferSize);
-    } catch (...) {
+    constexpr size_t DESIRED_BUFFER  = 4 * 1024 * 1024;
+    const int        maxSectorSize   = std::max(fatSectorSize, ntfsSectorSize);
+    const size_t     bufferSize      = (DESIRED_BUFFER / maxSectorSize) * maxSectorSize;
+
+    AlignedBuffer ioBuf(bufferSize, maxSectorSize);
+    if (!ioBuf) {
         if (!GlobalState::g_operationCancelled.load()) return fail();
         return false;
     }
 
     // ------------------------------------------------------------------ //
-    // 6. Per-file copy using buffered I/O                                //
+    // 6. Per-file copy with hybrid I/O                                   //
     // ------------------------------------------------------------------ //
     auto copyWithProgress = [&](const fs::path& src, const fs::path& dst,
-                                uint64_t fileSize) -> bool {
+                                uint64_t fileSize, int sectorSize) -> bool {
         const bool isNtfsDest = (isoType == IsoType::WindowsInstall) &&
                                 (dst.string().rfind(ntfsMnt, 0) == 0);
+        const bool useBufferedIO = isNtfsDest;
 
         const int fd_in = open(src.c_str(), O_RDONLY);
         if (fd_in < 0) return false;
         posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
 
-        // Buffered I/O is used for both FAT32 and NTFS destinations.
-        const int fd_out = open(dst.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        int outFlags = O_WRONLY | O_CREAT | O_TRUNC;
+        if (!useBufferedIO) outFlags |= O_DIRECT;
+
+        const int fd_out = open(dst.c_str(), outFlags, 0644);
         if (fd_out < 0) {
             close(fd_in);
             return false;
         }
 
+        if (useBufferedIO && fileSize > 0)
+            posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
+
+        const size_t mask = static_cast<size_t>(sectorSize) - 1;
+
         bool success = true;
         uint64_t bytesCopiedTotal = 0;
         uint64_t fileOffset = 0;
 
-        while (!GlobalState::g_operationCancelled.load()) {
-            size_t bytesReadThisChunk = 0;
+        constexpr int MAX_UNALIGNED_RETRIES = 8;
 
-            // Accumulate reads until the buffer is full or EOF is reached.
-            while (bytesReadThisChunk < bufferSize) {
+        while (!GlobalState::g_operationCancelled.load()) {
+            // Ensure we read a full buffer or hit EOF.
+            size_t total_read_this_chunk = 0;
+
+            while (total_read_this_chunk < bufferSize) {
                 if (GlobalState::g_operationCancelled.load()) {
                     success = false;
                     goto done;
                 }
 
-                const ssize_t bytesRead = read(
+                const ssize_t bytes_read = read(
                     fd_in,
-                    ioBuf.data() + bytesReadThisChunk,
-                    bufferSize - bytesReadThisChunk);
+                    ioBuf.data + total_read_this_chunk,
+                    bufferSize - total_read_this_chunk);
 
-                if (bytesRead < 0) {
+                if (bytes_read < 0) {
                     if (errno == EINTR) continue;
                     success = false;
                     goto done;
                 }
-                if (bytesRead == 0) break;
 
-                bytesReadThisChunk += static_cast<size_t>(bytesRead);
+                if (bytes_read == 0)
+                    break;
+
+                total_read_this_chunk += static_cast<size_t>(bytes_read);
             }
 
-            if (bytesReadThisChunk == 0) break;
+            if (total_read_this_chunk == 0)
+                break;
 
-            size_t bytesWrittenThisChunk = 0;
-            while (bytesWrittenThisChunk < bytesReadThisChunk) {
+            const ssize_t bytes_read =
+                static_cast<ssize_t>(total_read_this_chunk);
+
+            ssize_t writeLen = bytes_read;
+
+            if (!useBufferedIO) {
+                const ssize_t aligned =
+                    (bytes_read + static_cast<ssize_t>(mask)) &
+                    ~static_cast<ssize_t>(mask);
+
+                if (aligned > bytes_read) {
+                    memset(ioBuf.data + bytes_read, 0,
+                           static_cast<size_t>(aligned - bytes_read));
+                }
+
+                writeLen = aligned;
+            }
+
+            ssize_t bytes_written = 0;
+
+            // Preserve the highest logical source-byte prefix credited for
+            // this chunk, even if an unaligned short write forces a restart.
+            uint64_t creditedHighWater = 0;
+            int unalignedRetries = 0;
+
+            while (bytes_written < writeLen) {
                 if (GlobalState::g_operationCancelled.load()) {
                     success = false;
                     goto done;
                 }
 
-                const ssize_t bytesWritten = pwrite(
-                    fd_out,
-                    ioBuf.data() + bytesWrittenThisChunk,
-                    bytesReadThisChunk - bytesWrittenThisChunk,
-                    static_cast<off_t>(fileOffset + bytesWrittenThisChunk));
+                const off_t writeOffset =
+                    static_cast<off_t>(fileOffset) +
+                    static_cast<off_t>(bytes_written);
 
-                if (bytesWritten < 0) {
+                const ssize_t written = pwrite(
+                    fd_out,
+                    ioBuf.data + bytes_written,
+                    static_cast<size_t>(writeLen - bytes_written),
+                    writeOffset);
+
+                if (written < 0) {
                     if (errno == EINTR) continue;
                     success = false;
                     goto done;
                 }
-                if (bytesWritten == 0) {
+
+                if (written == 0) {
                     errno = EIO;
                     success = false;
                     goto done;
                 }
 
-                bytesWrittenThisChunk += static_cast<size_t>(bytesWritten);
-                bytesCopiedTotal += static_cast<uint64_t>(bytesWritten);
-                totalBytesWrittenAccumulator.fetch_add(static_cast<uint64_t>(bytesWritten));
+                // A positive unaligned O_DIRECT short write may leave part
+                // of the destination inconsistent. Restart the whole chunk
+                // from its original aligned offset, with the original buffer.
+                if (!useBufferedIO &&
+                    (static_cast<size_t>(written) %
+                     static_cast<size_t>(sectorSize)) != 0) {
+
+                    if (++unalignedRetries > MAX_UNALIGNED_RETRIES) {
+                        errno = EIO;
+                        success = false;
+                        goto done;
+                    }
+
+                    // Do not reset creditedHighWater: already credited
+                    // source bytes must not be counted a second time.
+                    bytes_written = 0;
+                    continue;
+                }
+
+                bytes_written += written;
+
+                const uint64_t realBytesSoFar =
+                    static_cast<uint64_t>(
+                        std::min<ssize_t>(bytes_written, bytes_read));
+
+                if (realBytesSoFar > creditedHighWater) {
+                    const uint64_t delta =
+                        realBytesSoFar - creditedHighWater;
+
+                    totalBytesWrittenAccumulator.fetch_add(delta);
+                    bytesCopiedTotal += delta;
+                    creditedHighWater = realBytesSoFar;
+                }
             }
 
-            fileOffset += static_cast<uint64_t>(bytesReadThisChunk);
+            // The next chunk starts after actual source bytes, not any
+            // padding added to the final O_DIRECT write.
+            fileOffset += static_cast<uint64_t>(bytes_read);
         }
 
     done:
-        // Keep the original short-source check and destination cleanup rules.
+        // Detect a source shorter than fstat/ISO-walk reported. Check before
+        // ftruncate extends the file with zeros, which would mask truncation.
         if (success && !GlobalState::g_operationCancelled.load() &&
             bytesCopiedTotal < fileSize) {
             success = false;
         }
 
-        if (!isNtfsDest) {
+        if (!useBufferedIO) {
             if (GlobalState::g_operationCancelled.load()) {
                 [[maybe_unused]] const int r = ftruncate(fd_out, 0);
             } else if (success) {
@@ -977,7 +1050,11 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             } else {
                 fs::create_directories(e.dst.parent_path());
 
-                if (!copyWithProgress(e.src, e.dst, e.size)) {
+                const bool toNtfs = (isoType == IsoType::WindowsInstall) &&
+                                    (e.dst.string().rfind(ntfsMnt, 0) == 0);
+                const int sectorSize = toNtfs ? ntfsSectorSize : fatSectorSize;
+
+                if (!copyWithProgress(e.src, e.dst, e.size, sectorSize)) {
                     if (!GlobalState::g_operationCancelled.load()) {
                         return fail();
                     } else {
@@ -1018,9 +1095,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ------------------------------------------------------------------ //
     // 9. Final progress accounting                                        //
     // ------------------------------------------------------------------ //
-    if (GlobalState::g_operationCancelled.load()) {
-        return false;
-    }
     const auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now() - startTime);
     const double seconds  = totalElapsed.count() / 1000.0;
