@@ -372,6 +372,8 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
     return true;
 }
 
+// ─── Mount branch ───────────────────────────────────────────────────────────
+
 /**
  * @brief Mounts ISO files supplied as command-line arguments.
  *
@@ -536,10 +538,9 @@ static int handleMount(const ParsedArgs& args) {
              &completedBytes, &completedTasks, &failedTasks,
              silentMode = args.silentMode]() {
 
-                // No cancellation check here: after Ctrl+C the workers keep
-                // draining the queue, and mountIsoFiles() marks every
-                // remaining item as cancelled ("cxl") and counts it as failed.
-                while (true) {
+                // Stop claiming new items on Ctrl+C so the bar ends at once;
+                // unclaimed items are marked as cancelled after the bar.
+                while (!GlobalState::g_operationCancelled.load()) {
                     const size_t i = nextTask.fetch_add(1);
 
                     if (i >= files.size())
@@ -561,6 +562,16 @@ static int handleMount(const ParsedArgs& args) {
 
     if (barThread.joinable())
         barThread.join();
+
+    // After a cancel, mark the items no worker claimed as cancelled. This
+    // runs after the bar has finished so they don't inflate its progress.
+    if (GlobalState::g_operationCancelled.load()) {
+        const size_t first = std::min(nextTask.load(), files.size());
+        if (first < files.size())
+            mountIsoFiles(
+                std::vector<std::string>(files.begin() + first, files.end()),
+                &completedTasks, &failedTasks, args.silentMode);
+    }
 
     // Show detailed output only if requested through the progress prompt.
     if (!args.silentMode && showVerbose) {
@@ -771,10 +782,9 @@ static int handleUmount(const ParsedArgs& args) {
              &completedBytes, &completedTasks, &failedTasks,
              silentMode = args.silentMode]() {
 
-                // No cancellation check here: after Ctrl+C the workers keep
-                // draining the queue, and unmountISO() is expected to mark
-                // every remaining item as cancelled and count it as failed.
-                while (true) {
+                // Stop claiming new items on Ctrl+C so the bar ends at once;
+                // unclaimed items are marked as cancelled after the bar.
+                while (!GlobalState::g_operationCancelled.load()) {
                     const size_t i = nextTask.fetch_add(1);
 
                     if (i >= paths.size())
@@ -796,6 +806,16 @@ static int handleUmount(const ParsedArgs& args) {
 
     if (barThread.joinable())
         barThread.join();
+
+    // After a cancel, mark the mount points no worker claimed as cancelled.
+    // This runs after the bar has finished so they don't inflate its progress.
+    if (GlobalState::g_operationCancelled.load()) {
+        const size_t first = std::min(nextTask.load(), paths.size());
+        if (first < paths.size())
+            unmountISO(
+                std::vector<std::string>(paths.begin() + first, paths.end()),
+                &completedTasks, &failedTasks, args.silentMode);
+    }
 
     // Clean up the parent directory after all unmount workers finish.
     {
