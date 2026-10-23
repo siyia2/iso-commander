@@ -1318,8 +1318,9 @@ static int handleWriteUsb(const ParsedArgs& args) {
     size_t ok = 0;
     for (const auto& p : progressData)
         if (p.completed.load()) ++ok;
-
-    std::cout << "\n";
+    if (!args.silentMode) {
+        std::cout << "\n";
+    }
 
     return (ok == pairs.size() && !GlobalState::g_operationCancelled.load()) ? 0 : 1;
 }
