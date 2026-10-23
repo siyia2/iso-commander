@@ -887,7 +887,8 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             else if (GlobalState::g_operationCancelled.load())  std::cout << wt.colorWarning << "CXL  ";
             else {
                 std::string pctStr = std::to_string(pct) + "%";
-                std::cout << color << std::right << std::setw(4) << pctStr << " ";
+                pctStr.resize(5, ' ');
+                std::cout << color << pctStr;
             }
 
             const std::string& speedStr = speedStrs[i];
