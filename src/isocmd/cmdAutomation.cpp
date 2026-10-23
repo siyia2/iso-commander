@@ -1254,7 +1254,7 @@ static int handleWriteUsb(const ParsedArgs& args) {
                  .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol)
                  .append(UI::Palette::DimGray).append(")")
                  .append(wt.warnLabel).append("'").append(wt.errLabel).append(" is too large for ")
-                 .append(wt.errPath).append("'").append(devices[d]).append(color)
+                 .append(wt.errPath).append("'").append(devices[d]).append(wt.infoLabel)
                  .append(" <").append(driveName).append(">")
                  .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
                  .append(wt.sizeCol).append(deviceSizeStr).append(UI::Palette::DimGray)

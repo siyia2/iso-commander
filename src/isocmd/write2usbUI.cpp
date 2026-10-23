@@ -364,7 +364,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
                       .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
                       .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol).append(UI::Palette::DimGray)
                       .append(")").append(wt.warnLabel).append("'").append(wt.errLabel).append(" is too large for ")
-                      .append(wt.errPath).append("'").append(device).append(color)
+                      .append(wt.errPath).append("'").append(device).append(wt.infoLabel)
                       .append(" <").append(driveName).append(">")
                       .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
                       .append(wt.sizeCol).append(deviceSizeStr).append(UI::Palette::DimGray).append(")").append(wt.warnLabel).append("'")
@@ -583,7 +583,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                     devicePromptStream << "  " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
                 } else {
                     devicePromptStream << "  " << wt.deviceCol << dev.path
-                                      << color << " <" << dev.driveName
+                                      << wt.infoLabel << " <" << dev.driveName
                                       << ">" << UI::Palette::DimGray << " (" << wt.sizeCol << dev.sizeStr
                                       << UI::Palette::DimGray << ")"
                                       << ([&]() -> std::string {
@@ -672,7 +672,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             std::string driveName = getDriveName(device);
 
             std::cout << UI::Palette::DimGray << "  {" << wt.deviceCol << device
-                      << " " << color << "<" << driveName << ">" << UI::Palette::DimGray << " ("
+                      << " " << wt.infoLabel << "<" << driveName << ">" << UI::Palette::DimGray << " ("
                       << wt.sizeCol << deviceSizeStr
                       << UI::Palette::DimGray << ")} " << color << "←" << UI::Palette::DimGray << " {" << wt.fileCol
                       << iso.filename << UI::Palette::DimGray << " (" << wt.sizeCol
