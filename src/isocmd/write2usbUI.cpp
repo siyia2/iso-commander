@@ -720,7 +720,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  * @par Row Layout
  * Each row prints seamlessly side-by-side:
  * @code
- * filename → device [▇▇▇░░░░░░░] percentage speed
+ * filename → device <name> [▇▇▇░░░░░░░] percentage speed
  * @endcode
  *
  * @par Status Tokens
@@ -816,11 +816,32 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
 
     auto displayAllProgress = [&]() {
-        size_t maxFilenameLen = 0;
-        for (const auto& prog : progressData)
-            maxFilenameLen = std::max(maxFilenameLen, prog.filename.size());
-
+        constexpr size_t MAX_NAME_LEN = 20;
         constexpr int BAR_WIDTH = 10;
+
+        auto shortName = [&](const std::string& dev) {
+            const std::string& n = deviceNames[dev];
+            if (n.size() <= MAX_NAME_LEN) return n;
+            return n.substr(0, MAX_NAME_LEN - 1) + "…";
+        };
+
+        // Counts visible characters (UTF-8 code points) instead of bytes,
+        // so the "…" counts as 1 column rather than 3.
+        auto displayWidth = [](const std::string& s) {
+            size_t w = 0;
+            for (unsigned char c : s)
+                if ((c & 0xC0) != 0x80) ++w;
+            return w;
+        };
+
+        size_t maxFilenameLen = 0;
+        size_t maxDeviceLen   = 0;
+        size_t maxNameWidth   = 0;
+        for (const auto& prog : progressData) {
+            maxFilenameLen = std::max(maxFilenameLen, prog.filename.size());
+            maxDeviceLen   = std::max(maxDeviceLen,   prog.device.size());
+            maxNameWidth   = std::max(maxNameWidth,   displayWidth(shortName(prog.device)));
+        }
 
         for (size_t i = 0; i < progressData.size(); ++i) {
             const auto& prog = progressData[i];
@@ -828,17 +849,22 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             std::string paddedFilename = prog.filename;
             paddedFilename.resize(maxFilenameLen, ' ');
 
+            std::string paddedDevice = prog.device;
+            paddedDevice.resize(maxDeviceLen, ' ');
+
+            const std::string name = shortName(prog.device);
+            const std::string namePad(maxNameWidth - displayWidth(name), ' ');
+
             int pct = prog.progress.load();
             int filled = (pct * BAR_WIDTH) / 100;
             std::string bar, empty;
-
             for (int j = 0; j < filled;             ++j) bar   += "▇";
             for (int j = 0; j < BAR_WIDTH - filled; ++j) empty += "░";
 
             std::cout << "\033[K"
                       << wt.fileCol << paddedFilename
-                      << color << " → " << wt.deviceCol
-                      << std::setw(8) << std::left << prog.device << " "
+                      << color << " → " << wt.deviceCol << paddedDevice
+                      << color << " <" << name << ">" << namePad << " "
                       << color << "["
                       << bar << wt.speedCol << empty
                       << color << "] ";
@@ -858,7 +884,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
                 speedStr += " (avg)";
             }
 
-            std::cout << color << std::setw(16) << std::left << speedStr << "\n";
+            std::cout << color << std::setw(12) << std::left << speedStr << "\n";
         }
         std::cout << std::flush;
     };
