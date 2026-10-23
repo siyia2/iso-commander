@@ -837,10 +837,21 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
         size_t maxFilenameLen = 0;
         size_t maxDeviceLen   = 0;
         size_t maxNameWidth   = 0;
+        size_t maxSpeedWidth  = 0;
+
+        // Speed strings are formatted once per render so the column can be
+        // right-aligned to the widest value (the "(avg)" suffix is appended
+        // after the padded value and does not affect alignment).
+        std::vector<std::string> speedStrs;
+        speedStrs.reserve(progressData.size());
+
         for (const auto& prog : progressData) {
             maxFilenameLen = std::max(maxFilenameLen, prog.filename.size());
             maxDeviceLen   = std::max(maxDeviceLen,   prog.device.size());
             maxNameWidth   = std::max(maxNameWidth,   displayWidth(shortName(prog.device)));
+
+            speedStrs.push_back(formatSpeed(prog.speed));
+            maxSpeedWidth  = std::max(maxSpeedWidth,  displayWidth(speedStrs.back()));
         }
 
         for (size_t i = 0; i < progressData.size(); ++i) {
@@ -876,15 +887,15 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             else if (GlobalState::g_operationCancelled.load())  std::cout << wt.colorWarning << "CXL  ";
             else {
                 std::string pctStr = std::to_string(pct) + "%";
-                std::cout << color << std::setw(2) << pctStr << " ";
+                std::cout << color << std::right << std::setw(4) << pctStr << " ";
             }
 
-            std::string speedStr = formatSpeed(prog.speed);
-            if (isCompleted) {
-                speedStr += " (avg)";
-            }
+            const std::string& speedStr = speedStrs[i];
+            const std::string speedPad(maxSpeedWidth - displayWidth(speedStr), ' ');
 
-            std::cout << color << speedStr << "\n";
+            std::cout << color << speedPad << speedStr;
+            if (isCompleted) std::cout << " (avg)";
+            std::cout << "\n";
         }
         std::cout << std::flush;
     };
@@ -1022,7 +1033,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
               << wt.colorWarning << validPairs.size()
               << color << " | Time Elapsed: "
               << color << duration << "s"
-              << wt.colorStatus << "\n";
+              << wt.colorStatus << UI::Palette::Reset << "\n";
 
     // 4. Instantly hand focus and console command lines back to your user's shell prompt
     flushStdin();
