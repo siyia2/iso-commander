@@ -230,16 +230,20 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
             restoreInput(&oldt, oldf);
             reset_custom_keybindingsForSelect();
+            if (!GlobalState::isNonInteractive.load()) {
+                // --- Verbose Prompt (Readline safe) - Only runs if interactive ---
+                const std::string prompt = "\001" + std::string(color) + "\002" +
+                                           "Display verbose output? (y/n): " +
+                                           "\001" + std::string(pc.reset) + "\002";
 
-            // --- Verbose Prompt (Readline safe) ---
-            const std::string prompt = "\001" + std::string(color) + "\002" +
-                                       "Display verbose output? (y/n): " +
-                                       "\001" + std::string(pc.reset) + "\002";
-
-            std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
-            if (input.get()) {
-                std::string res = input.get();
-                *verbose = (res == "y" || res == "Y");
+                std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+                if (input.get()) {
+                    std::string res = input.get();
+                    *verbose = (res == "y" || res == "Y");
+                }
+            } else {
+                // Automatically sets verbose to true when running non-interactively
+                *verbose = true;
             }
 
             restoreReadline();

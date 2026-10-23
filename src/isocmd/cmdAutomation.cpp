@@ -1202,6 +1202,7 @@ static int handleWriteUsb(const ParsedArgs& args) {
 int handleMountUmountConvertWriteCommands(int argc, char* argv[]) {
     setupSignalHandlerCancellations();
     GlobalState::g_operationCancelled.store(false);
+    GlobalState::isNonInteractive.store(true);
 
     if (argc < 2) {
         errMsg("No arguments provided.");

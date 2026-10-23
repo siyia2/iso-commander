@@ -62,21 +62,7 @@ void printVersionNumber(const std::string& version) {
  * @returns 0 on successful execution, 1 on failure (e.g., lock acquisition failure).
  */
 int main(int argc, char *argv[]) {
-    /// @name Application State Flags
-    /// Atomic booleans controlling concurrency and UI state between main thread and background workers.
-    /// @{
-    std::atomic<bool> messageActive{false}, stopMessage{false}, monitorThreadSpawned{false};
-    std::atomic<bool>& isAtMain    = GlobalState::isAtMain;
-    std::atomic<bool>& isAtISOList = GlobalState::isAtISOList;
-    /// @}
 
-    // Generous reserve for future lists
-    GlobalState::globalIsoFileList.reserve(1000);
-    GlobalState::binImgFilesCache.reserve(1000);
-    GlobalState::mdfMdsFilesCache.reserve(1000);
-    GlobalState::nrgFilesCache.reserve(1000);
-    GlobalState::chdFilesCache.reserve(1000);
-    GlobalState::daaGbiFilesCache.reserve(1000);
     /**
      * @brief Single-instance lock mechanism
      * - `config` contains user-defined folder paths and settings
@@ -92,6 +78,24 @@ int main(int argc, char *argv[]) {
                                     arg1 == "mount"  || arg1 == "c2iso" ||
                                     arg1 == "w2usb")))
         return handleMountUmountConvertWriteCommands(argc, argv);
+
+    /// @name Application State Flags
+    /// Atomic booleans controlling concurrency and UI state between main thread and background workers.
+    /// @{
+    std::atomic<bool> messageActive{false}, stopMessage{false}, monitorThreadSpawned{false};
+    std::atomic<bool>& isAtMain    = GlobalState::isAtMain;
+    std::atomic<bool>& isAtISOList = GlobalState::isAtISOList;
+    /// @}
+
+    GlobalState::isNonInteractive.store(false);
+
+    // Generous reserve for future lists
+    GlobalState::globalIsoFileList.reserve(1000);
+    GlobalState::binImgFilesCache.reserve(1000);
+    GlobalState::mdfMdsFilesCache.reserve(1000);
+    GlobalState::nrgFilesCache.reserve(1000);
+    GlobalState::chdFilesCache.reserve(1000);
+    GlobalState::daaGbiFilesCache.reserve(1000);
 
     setupReadlineToIgnoreCtrlC();
 
