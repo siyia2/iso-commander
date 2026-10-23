@@ -819,10 +819,15 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
         constexpr size_t MAX_NAME_LEN = 20;
         constexpr int BAR_WIDTH = 10;
 
-        auto shortName = [&](const std::string& dev) {
+        auto shortName = [&](const std::string& dev) -> std::string {
             const std::string& n = deviceNames[dev];
             if (n.size() <= MAX_NAME_LEN) return n;
-            return n.substr(0, MAX_NAME_LEN - 1) + "…";
+
+            std::string out;
+            out.reserve(MAX_NAME_LEN + 3);          // 19 bytes + 3-byte "…"
+            out.append(n, 0, MAX_NAME_LEN - 1);
+            out.append("\u2026");
+            return out;
         };
 
         // Counts visible characters (UTF-8 code points) instead of bytes,
