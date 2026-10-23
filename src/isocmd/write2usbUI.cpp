@@ -528,7 +528,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         });
 
         std::ostringstream devicePromptStream;
-        devicePromptStream << "\n" << color << "Selected " << wt.headerCol << "ISO" << color << ":\n\n";
+        devicePromptStream << "\n" << color << "Selected " << wt.fileCol << "ISO" << color << ":\n\n";
 
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
             auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write2usb");
