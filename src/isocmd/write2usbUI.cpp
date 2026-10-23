@@ -894,7 +894,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             const std::string& speedStr = speedStrs[i];
             const std::string speedPad(maxSpeedWidth - displayWidth(speedStr), ' ');
 
-            std::cout << color << speedPad << speedStr;
+            std::cout << color << speedStr << speedPad;
             if (isCompleted) std::cout << " (avg)";
             std::cout << "\n";
         }
