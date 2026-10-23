@@ -500,6 +500,8 @@ static int handleMount(const ParsedArgs& args) {
 
     // Start the progress bar unless output is silent.
     std::thread barThread;
+    const std::string coloredProcess =
+            std::string(UI::Palette::Green) + "mount" + std::string(UI::Palette::BoldReset);
 
     if (!args.silentMode) {
         clearScrollBuffer();
@@ -514,7 +516,7 @@ static int handleMount(const ParsedArgs& args) {
             &completedBytes, totalTasks,
             &completedTasks, &failedTasks, totalTasks,
             &isComplete, &showVerbose,
-            std::string("mount"));
+            coloredProcess);
     }
 
     // Bound worker count by task count, configured cap, and pool size.
@@ -743,6 +745,8 @@ static int handleUmount(const ParsedArgs& args) {
 
     // Start the progress bar unless output is silent.
     std::thread barThread;
+    const std::string coloredProcess =
+            std::string(UI::Palette::Yellow) + "umount" + std::string(UI::Palette::BoldReset);
 
     if (!args.silentMode) {
         clearScrollBuffer();
@@ -757,7 +761,7 @@ static int handleUmount(const ParsedArgs& args) {
             &completedBytes, totalTasks,
             &completedTasks, &failedTasks, totalTasks,
             &isComplete, &showVerbose,
-            std::string("umount"));
+            coloredProcess);
     }
 
     // Bound worker count by task count, configured cap, and pool size.
@@ -992,6 +996,8 @@ static int handleConvert(const ParsedArgs& args) {
 
     // Start the progress bar unless output is silent.
     std::thread barThread;
+    const std::string coloredProcess =
+            std::string(UI::Palette::Orange) + "convert2iso" + std::string(UI::Palette::BoldReset);
 
     if (!args.silentMode) {
         clearScrollBuffer();
@@ -1006,7 +1012,7 @@ static int handleConvert(const ParsedArgs& args) {
             &completedBytes, totalBytes,
             &completedTasks, &failedTasks, images.size(),
             &isComplete, &showVerbose,
-            std::string("convert2iso"));
+            coloredProcess);
     }
 
     // A task records its input path and the backend that must process it.

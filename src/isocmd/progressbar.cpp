@@ -12,6 +12,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <thread>
 
 // C / System Headers
 #include <fcntl.h>
@@ -242,6 +243,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                     *verbose = (res == "y" || res == "Y");
                 }
             } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(300));
                 // Automatically sets verbose to true when running non-interactively
                 *verbose = true;
             }
