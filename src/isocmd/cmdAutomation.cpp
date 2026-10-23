@@ -22,6 +22,7 @@
 #include "../concurrency.h"
 #include "../inputHandling.h"
 #include "../mount.h"
+#include "../umount.h"
 #include "../state.h"
 #include "../themes.h"
 #include "../threadpool.h"
@@ -371,26 +372,31 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
     return true;
 }
 
-// ─── Mount branch ────────────────────────────────────────────────────────────
-
 /**
  * @brief Mounts ISO files supplied as command-line arguments.
  *
  * Validates the provided paths, recursively scans directories according
  * to the configured maximum depth, and collects unique ISO files.
+ * Files are sorted for deterministic task ordering.
+ *
  * Mounting is performed concurrently using the static thread pool,
  * respecting GlobalConcurrency::MOUNT_THREAD_CAP and the pool size.
- * Files are distributed across worker threads in separate batches.
+ * Workers dynamically claim tasks from a shared atomic index and mount
+ * one ISO at a time.
  *
- * Displays the operation summary unless silent mode is enabled.
+ * Progress is shown through the progress-bar interface unless silent
+ * mode is enabled. Mount operations have no byte-level progress, so the
+ * bar is task-based: the "total" and the "completed" counter are both
+ * expressed in number of ISO files. Detailed results and the operation
+ * summary are displayed only when requested through the progress prompt.
  *
  * @param args Parsed command-line arguments, including input paths,
  *             maximum scan depth, and silent-mode settings.
  *
  * @return 0 if at least one ISO was mounted successfully;
- *         1 if mounting failed to produce a successful result or
- *         an earlier validation error occurred only insofar as
- *         reflected by the existing return logic.
+ *         1 if no ISO was mounted successfully, root privileges were
+ *         missing, the operation was cancelled, or an earlier
+ *         validation error left nothing to mount.
  */
 static int handleMount(const ParsedArgs& args) {
     if (geteuid() != 0) {
@@ -480,46 +486,95 @@ static int handleMount(const ParsedArgs& args) {
                 .append(isoFiles.size() == 1 ? "" : "s")
                 .append("; Attempting to mount...\n"));
 
-    std::atomic<size_t> completedTasks{0}, failedTasks{0};
+    // completedBytes is task-based here: it advances by one per ISO.
+    std::atomic<size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
+    std::atomic<bool> isComplete{false};
+    bool showVerbose = false;
 
+    // Sort for deterministic processing order.
     std::vector<std::string> files(isoFiles.begin(), isoFiles.end());
+    std::sort(files.begin(), files.end());
+    const size_t totalTasks = files.size();
 
+    // Start the progress bar unless output is silent.
+    std::thread barThread;
+
+    if (!args.silentMode) {
+        clearScrollBuffer();
+
+        std::cout << "\n" << color << " Processing "
+                  << (totalTasks == 1 ? "task for " : "tasks for ")
+                  << UI::Palette::Orange << "mount" << color << "... ("
+                  << UI::Palette::Red << "Ctrl+c"
+                  << color << ":cancel)\n";
+
+        barThread = std::thread(
+            displayProgressBarWithSize,
+            &completedBytes, totalTasks,
+            &completedTasks, &failedTasks, totalTasks,
+            &isComplete, &showVerbose,
+            std::string("mount"));
+    }
+
+    // Bound worker count by task count, configured cap, and pool size.
     ThreadPool& pool = getStaticThreadPool();
     const size_t poolSize = pool.threadCount();
     const size_t numThreads = std::min({
-        files.size(),
+        totalTasks,
         GlobalConcurrency::MOUNT_THREAD_CAP,
         poolSize
     });
 
-    // Distribute files evenly across a bounded number of workers.
-    std::vector<std::vector<std::string>> chunks(numThreads);
-    for (size_t i = 0; i < files.size(); ++i)
-        chunks[i % numThreads].push_back(std::move(files[i]));
+    std::atomic<size_t> nextTask{0};
 
     std::vector<std::future<void>> futures;
     futures.reserve(numThreads);
 
-    for (auto& chunk : chunks) {
+    for (size_t t = 0; t < numThreads; ++t) {
         futures.emplace_back(pool.enqueue(
-            [chunk = std::move(chunk),
-             &completedTasks, &failedTasks,
+            [&files, &nextTask,
+             &completedBytes, &completedTasks, &failedTasks,
              silentMode = args.silentMode]() {
-                mountIsoFiles(chunk, &completedTasks, &failedTasks,
-                              silentMode);
+
+                // No cancellation check here: after Ctrl+C the workers keep
+                // draining the queue, and mountIsoFiles() marks every
+                // remaining item as cancelled ("cxl") and counts it as failed.
+                while (true) {
+                    const size_t i = nextTask.fetch_add(1);
+
+                    if (i >= files.size())
+                        break;
+
+                    mountIsoFiles(std::vector<std::string>{files[i]},
+                                  &completedTasks, &failedTasks,
+                                  silentMode);
+
+                    completedBytes.fetch_add(1);
+                }
             }));
     }
 
     for (auto& future : futures)
         future.wait();
 
-    if (!args.silentMode) {
+    isComplete.store(true, std::memory_order_release);
+
+    if (barThread.joinable())
+        barThread.join();
+
+    // Show detailed output only if requested through the progress prompt.
+    if (!args.silentMode && showVerbose) {
+        clearScrollBuffer();
+        std::cout << "\n";
+
         for (const auto& msg : verboseSets.operationCompleted)
-            std::cout << msg << "\n";
+            std::cout << msg << UI::Palette::BoldReset << "\n";
+
         for (const auto& msg : verboseSets.operationSkipped)
-            std::cout << msg << "\n";
+            std::cout << msg << UI::Palette::BoldReset << "\n";
+
         for (const auto& msg : verboseSets.operationFailed)
-            std::cout << msg << "\n";
+            std::cout << msg << UI::Palette::BoldReset << "\n";
 
         std::cout << "\nMount summary:\n"
                   << "  Successful: " << completedTasks.load() << "\n"
@@ -538,20 +593,31 @@ static int handleMount(const ParsedArgs& args) {
  * Collects mount points from the specified paths or scans /mnt/ISOs
  * when no paths are provided or the "all" argument is specified.
  * Validates mount-point locations and rejects paths outside the
- * permitted /mnt/ISOs hierarchy.
+ * permitted /mnt/ISOs hierarchy. Mount points are sorted for
+ * deterministic task ordering.
  *
  * Unmounting is performed concurrently using the static thread pool,
  * respecting GlobalConcurrency::UMOUNT_THREAD_CAP and the pool size.
- * Mount points are distributed across worker threads in separate batches.
+ * Workers dynamically claim tasks from a shared atomic index and
+ * unmount one mount point at a time.
+ *
+ * Progress is shown through the progress-bar interface unless silent
+ * mode is enabled. Unmount operations have no byte-level progress, so
+ * the bar is task-based: the "total" and the "completed" counter are
+ * both expressed in number of mount points. Detailed results and the
+ * operation summary are displayed only when requested through the
+ * progress prompt.
  *
  * Attempts to remove the parent /mnt/ISOs directory after all workers
- * finish and displays the operation summary unless silent mode is enabled.
+ * finish.
  *
  * @param args Parsed command-line arguments, including input paths
  *             and silent-mode settings.
  *
  * @return 0 if no unmount failures or path-validation errors occurred;
- *         1 if an unmount failed or a path-validation error occurred.
+ *         1 if an unmount failed, a path-validation error occurred,
+ *         root privileges were missing, or the operation was cancelled
+ *         before any mount point was found.
  */
 static int handleUmount(const ParsedArgs& args) {
     if (geteuid() != 0) {
@@ -655,38 +721,81 @@ static int handleUmount(const ParsedArgs& args) {
                 .append(mountPoints.size() == 1 ? "" : "s")
                 .append("; Attempting to unmount...\n"));
 
-    std::atomic<size_t> completedTasks{0}, failedTasks{0};
+    // completedBytes is task-based here: it advances by one per mount point.
+    std::atomic<size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
+    std::atomic<bool> isComplete{false};
+    bool showVerbose = false;
 
+    // Sort for deterministic processing order.
     std::vector<std::string> paths(mountPoints.begin(), mountPoints.end());
+    std::sort(paths.begin(), paths.end());
+    const size_t totalTasks = paths.size();
 
+    // Start the progress bar unless output is silent.
+    std::thread barThread;
+
+    if (!args.silentMode) {
+        clearScrollBuffer();
+
+        std::cout << "\n" << color << " Processing "
+                  << (totalTasks == 1 ? "task for " : "tasks for ")
+                  << UI::Palette::Orange << "umount" << color << "... ("
+                  << UI::Palette::Red << "Ctrl+c"
+                  << color << ":cancel)\n";
+
+        barThread = std::thread(
+            displayProgressBarWithSize,
+            &completedBytes, totalTasks,
+            &completedTasks, &failedTasks, totalTasks,
+            &isComplete, &showVerbose,
+            std::string("umount"));
+    }
+
+    // Bound worker count by task count, configured cap, and pool size.
     ThreadPool& pool = getStaticThreadPool();
     const size_t poolSize = pool.threadCount();
     const size_t numThreads = std::min({
-        paths.size(),
+        totalTasks,
         GlobalConcurrency::UMOUNT_THREAD_CAP,
         poolSize
     });
 
-    // Distribute mount points evenly across a bounded number of workers.
-    std::vector<std::vector<std::string>> chunks(numThreads);
-    for (size_t i = 0; i < paths.size(); ++i)
-        chunks[i % numThreads].push_back(std::move(paths[i]));
+    std::atomic<size_t> nextTask{0};
 
     std::vector<std::future<void>> futures;
     futures.reserve(numThreads);
 
-    for (auto& chunk : chunks) {
+    for (size_t t = 0; t < numThreads; ++t) {
         futures.emplace_back(pool.enqueue(
-            [chunk = std::move(chunk),
-             &completedTasks, &failedTasks,
+            [&paths, &nextTask,
+             &completedBytes, &completedTasks, &failedTasks,
              silentMode = args.silentMode]() {
-                unmountISO(chunk, &completedTasks, &failedTasks,
-                           silentMode);
+
+                // No cancellation check here: after Ctrl+C the workers keep
+                // draining the queue, and unmountISO() is expected to mark
+                // every remaining item as cancelled and count it as failed.
+                while (true) {
+                    const size_t i = nextTask.fetch_add(1);
+
+                    if (i >= paths.size())
+                        break;
+
+                    unmountISO(std::vector<std::string>{paths[i]},
+                               &completedTasks, &failedTasks,
+                               silentMode);
+
+                    completedBytes.fetch_add(1);
+                }
             }));
     }
 
     for (auto& future : futures)
         future.wait();
+
+    isComplete.store(true, std::memory_order_release);
+
+    if (barThread.joinable())
+        barThread.join();
 
     // Clean up the parent directory after all unmount workers finish.
     {
@@ -694,11 +803,16 @@ static int handleUmount(const ParsedArgs& args) {
         fs::remove("/mnt/ISOs", ec);
     }
 
-    if (!args.silentMode) {
+    // Show detailed output only if requested through the progress prompt.
+    if (!args.silentMode && showVerbose) {
+        clearScrollBuffer();
+        std::cout << "\n";
+
         for (const auto& msg : verboseSets.operationCompleted)
-            std::cout << msg << "\n";
+            std::cout << msg << UI::Palette::BoldReset << "\n";
+
         for (const auto& msg : verboseSets.operationFailed)
-            std::cout << msg << "\n";
+            std::cout << msg << UI::Palette::BoldReset << "\n";
 
         std::cout << "\nUnmount summary:\n"
                   << "  Successful: " << completedTasks.load() << "\n"
