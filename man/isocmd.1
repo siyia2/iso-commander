@@ -27,7 +27,7 @@ Unmount specified ISO mount points. Without paths, or with \fBall\fR as the only
 Convert supported images to ISO files. Accepts individual image files and directories to scan. Supported formats are BIN, IMG, CCD, MDF, NRG, CHD, DAA and GBI.
 .TP
 .B w2usb
-Write ISO files to removable USB flash devices (requires root). Arguments beginning with \fB/dev/\fR are target devices.
+Write ISO files to removable USB flash devices (requires root). Arguments beginning with \fB/dev/\fR are target devices. All w2usb arguments are validated before any device is touched.
 
 .SH EXAMPLES
 .TS
