@@ -1135,6 +1135,8 @@ static int handleConvert(const ParsedArgs& args) {
  * (using the same theme as the interactive write2usb UI) before any device
  * is touched. With --silent, the live progress UI is skipped.
  *
+ * @param progressData Reference to the operation-local progress data array used
+ *                      for live progress, speed, and completion reporting.
  * @return 0 if every write completed; 1 on validation failure, write
  *         failure, or cancellation.
  */

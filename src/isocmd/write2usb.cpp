@@ -529,6 +529,8 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  * @param device        Target block device (e.g. @c /dev/sdb). Will be wiped.
  * @param progressIndex Index into the shared @c progressData array for live
  *                      progress, speed, and completion reporting.
+ * @param progressData Reference to the operation-local progress data array used
+ *                      for live progress, speed, and completion reporting.
  * @return @c true on success; @c false on any error, truncated source, or
  *         user cancellation. On a genuine error the slot's @c failed flag
  *         is set; on cancellation it is not.
@@ -1378,6 +1380,8 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
  * @param device Target destination block node path (e.g., @c /dev/sdb). WARNING: All existing
  * underlying data will be destructively overwritten.
  * @param progressIndex Unique thread tracking identifier mapped inside the global progress array.
+ * @param progressData Reference to the operation-local progress data array used
+ * for live progress, speed, and completion reporting.
  * @return @c true if the image data was written in full and flushed to the device with
  * @c fsync; @c false on I/O failure, validation failure, or user cancellation. The written
  * data is not read back or verified against the ISO.
