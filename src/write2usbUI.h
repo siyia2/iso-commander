@@ -8,9 +8,7 @@
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
-#include <future>
 #include <mutex>
-#include <numeric>
 #include <string>
 #include <thread>
 #include <utility>
