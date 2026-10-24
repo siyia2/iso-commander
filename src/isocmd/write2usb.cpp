@@ -432,7 +432,7 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  * - On the @c O_DIRECT path, a positive write result that is not a multiple
  *   of the configured sector-size alignment triggers bounded recovery.
  *   The current chunk is restarted from its original aligned file offset
- *   using the original buffer and full aligned write length. Up to eight
+ *   using the original buffer and full aligned write length. Up to three
  *   restart attempts are permitted per chunk. If recovery is exhausted,
  *   the copy fails; buffered I/O is never used as a fallback.
  * - Recovery retains a per-chunk high-water mark for progress accounting.
@@ -880,7 +880,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         uint64_t bytesCopiedTotal = 0;
         uint64_t fileOffset = 0;
 
-        constexpr int MAX_UNALIGNED_RETRIES = 8;
+        constexpr int MAX_UNALIGNED_RETRIES = 3;
 
         while (!GlobalState::g_operationCancelled.load()) {
             // Ensure we read a full buffer or hit EOF.
