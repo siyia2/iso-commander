@@ -1006,500 +1006,511 @@ void drainManagerForWrite2UsbUI(
  *                     to build a sorted @ref ProgressInfo vector by
  *                     @ref prepareWriteData; the caller's vector is never modified.
  */
- void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
-     // One call builds the sorted per-task progress vector and establishes the
-     // ordering invariant (task i ↔ progress row i). No sorted-pair vector is
-     // materialised, so only one shared pointer travels through the tasks and drain.
-     auto progressDataPtr = prepareWriteData(validPairsIn);
-     auto& progressData   = *progressDataPtr;
-
-     std::atomic<size_t> completedTasks(0);
-     std::atomic<size_t> finishedTasks(0);   // success OR failure — drives "all done" detection
-     std::atomic<bool> isProcessingComplete(false);
-     const size_t totalTasks = progressData.size();
-
-     // Condition variable used to wake the display thread the instant a task
-     // completes, instead of waiting for its next 500ms poll tick. The
-     // completion check is folded into the wait predicate (evaluated while
-     // holding progressCvMutex) so there is no window between "check" and
-     // "block" where a notify_one() from a finishing task could be missed.
-     std::mutex progressCvMutex;
-     std::condition_variable progressCv;
-
-     ThreadPool& pool = getStaticThreadPool();
-
-     disableInput();
-     clearScrollBuffer();
-
-     const WriteTheme wt = getWriteTheme();
-
-     // Header text is a lambda so it can be reprinted after a full-screen wipe
-     // (terminal resize).
-     auto headerText = [&]() {
-         std::ostringstream h;
-         h << "\n" << color << "Processing "
-           << (totalTasks > 1 ? "tasks" : "task") << " for "
-           << UI::Palette::Yellow << "write2usb" << color
-           << "... (" << UI::Palette::Red << "Ctrl+c"
-           << color << ":cancel)\n\n";
-         return h.str();
-     };
-     std::cout << headerText();
-
-     auto startTime = std::chrono::high_resolution_clock::now();
-
-     std::unordered_map<std::string, std::string> deviceNames;
-     std::unordered_map<std::string, uint64_t> deviceSizes;
-     std::unordered_map<std::string, std::string> deviceSizeStrs;
-
-     for (const auto& prog : progressData) {
-         if (deviceNames.find(prog.device) == deviceNames.end()) {
-             deviceNames[prog.device] = getDriveName(prog.device);
-             deviceSizes[prog.device] = getBlockDeviceSize(prog.device);
-             deviceSizeStrs[prog.device] = formatFileSize(deviceSizes[prog.device]);
-         }
-     }
-
-     // Visible width (in columns) of every row printed by the previous frame. Used to
-     // work out how far to move the cursor back up, even if the terminal was resized
-     // (and therefore re-wrapped the old rows) in between.
-     std::vector<size_t> lastRowWidths;
-
-     // Terminal size at the time of the previous frame. A change in either
-     // dimension triggers a full wipe + repaint instead of a cursor-up redraw.
-     size_t lastCols = 0, lastRows = 0;
-     bool   hasDrawn = false;
-
-     auto displayAllProgress = [&]() {
-         constexpr size_t MAX_NAME_LEN = 20;
-         constexpr size_t MAX_FILE_LEN = 15;   // names up to this many columns (with ".iso") are never truncated
-         constexpr size_t STEM_KEEP = 10;      // stem columns kept when truncating, followed by "…" and ".iso" (10 + 1 + 4 = 15)
-         constexpr int BAR_WIDTH = 5;               // character cells
-         constexpr int BAR_STEPS = BAR_WIDTH * 2;   // each cell has 2 states (half / full) -> 10 steps, 10% each
-
-         // Set once per render, after the full (untruncated) row width is known.
-         // While false, shortFilename() returns names unchanged.
-         bool truncateNames = false;
-
-         // Current terminal size {cols, rows}; 80x24 if it cannot be determined
-         // (e.g. stdout is not a tty).
-         auto terminalSize = []() -> std::pair<size_t, size_t> {
-             struct winsize ws{};
-             if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0)
-                 return { ws.ws_col, ws.ws_row };
-             return { 80, 24 };
-         };
-
-         auto shortName = [&](const std::string& dev) -> std::string {
-             const std::string& n = deviceNames[dev];
-             if (n.size() <= MAX_NAME_LEN) return n;
-
-             // Cut at most MAX_NAME_LEN - 1 bytes, but back up so we never split a
-             // multi-byte UTF-8 sequence (continuation bytes look like 10xxxxxx).
-             size_t cut = MAX_NAME_LEN - 1;
-             while (cut > 0 && (static_cast<unsigned char>(n[cut]) & 0xC0) == 0x80) --cut;
-
-             std::string out;
-             out.reserve(cut + 3);                   // kept bytes + 3-byte "…"
-             out.append(n, 0, cut);
-             out.append("\u2026");
-             return out;
-         };
-
-         // Counts visible characters (UTF-8 code points) instead of bytes,
-         // so the "…" counts as 1 column rather than 3.
-         auto displayWidth = [](const std::string& s) {
-             size_t w = 0;
-             for (unsigned char c : s)
-                 if ((c & 0xC0) != 0x80) ++w;
-             return w;
-         };
-
-         // Right-pads an ASCII string to the given byte width. Used for device
-         // paths and other ASCII-only columns.
-         auto padRight = [](std::string s, size_t target) {
-             if (s.size() < target) s.append(target - s.size(), ' ');
-             return s;
-         };
-
-         // Visible width of a string that may contain ANSI CSI escape sequences
-         // (colors etc.): escape sequences count as 0 columns.
-         auto visibleWidth = [](const std::string& s) -> size_t {
-             size_t w = 0;
-             for (size_t i = 0; i < s.size(); ) {
-                 const unsigned char c = static_cast<unsigned char>(s[i]);
-                 if (c == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
-                     i += 2;
-                     while (i < s.size() && !(s[i] >= 0x40 && s[i] <= 0x7E)) ++i;
-                     if (i < s.size()) ++i;   // final byte of the sequence
-                     continue;
-                 }
-                 if ((c & 0xC0) != 0x80) ++w;
-                 ++i;
-             }
-             return w;
-         };
-
-         // Cuts a string that may contain ANSI escape sequences to at most maxCols
-         // visible columns. Escape sequences are passed through untouched and UTF-8
-         // code points are never split.
-         auto clipToWidth = [](const std::string& s, size_t maxCols) -> std::string {
-             std::string out;
-             out.reserve(s.size());
-             size_t w = 0;
-             for (size_t i = 0; i < s.size(); ) {
-                 if (static_cast<unsigned char>(s[i]) == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
-                     size_t j = i + 2;
-                     while (j < s.size() && !(s[j] >= 0x40 && s[j] <= 0x7E)) ++j;
-                     if (j < s.size()) ++j;
-                     out.append(s, i, j - i);
-                     i = j;
-                     continue;
-                 }
-                 size_t len = 1;
-                 while (i + len < s.size() &&
-                     (static_cast<unsigned char>(s[i + len]) & 0xC0) == 0x80) ++len;
-                 if (w >= maxCols) break;
-                 out.append(s, i, len);
-                 i += len;
-                 ++w;
-             }
-             return out;
-         };
-
-         // Truncates ISO filenames, but only when truncateNames is set (the terminal
-         // is too narrow for the full-width rows) AND the whole name (".iso" included)
-         // is longer than MAX_FILE_LEN columns. A truncated name shows exactly
-         // STEM_KEEP stem columns, then "…" (1 column), then the ".iso" extension, e.g.
-         // "archlinux-….iso", so a truncated name is always exactly 15 columns and the
-         // extension is always visible.
-         // Names of MAX_FILE_LEN columns or fewer are shown in full. Walks whole UTF-8
-         // code points so a multi-byte sequence is never split.
-         auto shortFilename = [&](const std::string& f) -> std::string {
-             if (!truncateNames) return f;   // terminal is wide enough: show the full name
-
-             // Split off a trailing ".iso" (case-insensitive), if present.
-             std::string ext;
-             std::string stem = f;
-             if (f.size() >= 4) {
-                 const std::string tail = f.substr(f.size() - 4);
-                 if (tail.size() == 4 && tail[0] == '.' &&
-                     std::tolower(static_cast<unsigned char>(tail[1])) == 'i' &&
-                     std::tolower(static_cast<unsigned char>(tail[2])) == 's' &&
-                     std::tolower(static_cast<unsigned char>(tail[3])) == 'o') {
-                     ext  = tail;
-                     stem = f.substr(0, f.size() - 4);
-                 }
-             }
-
-             if (displayWidth(f) <= MAX_FILE_LEN) return f;
-
-             std::string out;
-             size_t cols = 0;
-             for (size_t i = 0; i < stem.size() && cols < STEM_KEEP; ) {
-                 size_t len = 1;
-                 while (i + len < stem.size() &&
-                     (static_cast<unsigned char>(stem[i + len]) & 0xC0) == 0x80) ++len;
-                 out.append(stem, i, len);
-                 i += len;
-                 ++cols;
-             }
-             out.append("…");
-             out.append(ext);
-             return out;
-         };
-
-         size_t maxFilenameWidth     = 0;
-         size_t maxFullFilenameWidth = 0;   // widest name with no truncation applied
-         size_t maxDeviceLen         = 0;
-         size_t maxNameWidth         = 0;
-         size_t maxSpeedWidth        = 0;
-
-         // Speed strings are formatted once per render so the column can be
-         // right-aligned to the widest value (the "(avg)" suffix is appended
-         // after the padded value and does not affect alignment).
-         std::vector<std::string> speedStrs;
-         speedStrs.reserve(progressData.size());
-
-         for (const auto& prog : progressData) {
-             maxFullFilenameWidth = std::max(maxFullFilenameWidth, displayWidth(prog.filename));
-             maxDeviceLen         = std::max(maxDeviceLen,         prog.device.size());
-             maxNameWidth         = std::max(maxNameWidth,         displayWidth(shortName(prog.device)));
-
-             speedStrs.push_back(formatSpeed(prog.speed));
-             maxSpeedWidth        = std::max(maxSpeedWidth,        displayWidth(speedStrs.back()));
-         }
-
-         // Width of everything except the filename column:
-         //   " → " (3) + device + " <name>" (maxNameWidth + 3) + " [" (2) + bar (5)
-         //   + "] " (2) + status (5) + speed + " (avg)" (6, always counted as the
-         //   worst case so the truncation decision doesn't flip when tasks complete).
-         const size_t fixedWidth = 3 + maxDeviceLen + (maxNameWidth + 3) + 2 + BAR_WIDTH
-                                 + 2 + 5 + maxSpeedWidth + 6;
-
-         // Keep the last column free so a row can never trigger the terminal's
-         // auto-wrap, which would break the cursor-up redraw below.
-         const auto   termSize   = terminalSize();
-         const size_t cols       = termSize.first;
-         const size_t rows       = termSize.second;
-         const size_t usableCols = cols > 1 ? cols - 1 : 1;
-
-         // Truncate only if the widest full-width row would overflow the terminal.
-         truncateNames = (fixedWidth + maxFullFilenameWidth) > usableCols;
-
-         for (const auto& prog : progressData)
-             maxFilenameWidth = std::max(maxFilenameWidth, displayWidth(shortFilename(prog.filename)));
-
-         // The whole frame is built in one string and written once (less flicker).
-         std::string frame;
-         frame += "\033[?2026h";
-         const bool resized = hasDrawn && (cols != lastCols || rows != lastRows);
-         if (resized) {
-             // Don't trust cursor-up after a resize: the terminal may have reflowed
-             // or scrolled old content into scrollback, and cursor-up cannot move
-             // above the visible screen. Wipe everything and repaint from the top.
-             frame += "\033[H\033[2J\033[3J";   // home, clear screen, clear scrollback
-             frame += headerText();
-         } else {
-             // Same size as last frame: move up over the previous rows (accounting
-             // for any wrapping) and clear to the end of the screen. Relative
-             // movement is used instead of \033[s / \033[u because a saved absolute
-             // cursor position goes stale when the terminal re-wraps.
-             size_t up = 0;
-             for (size_t w : lastRowWidths)
-                 up += std::max<size_t>(1, (w + cols - 1) / cols);
-             if (up > 0) frame += "\033[" + std::to_string(up) + "A";
-             frame += "\r\033[J";
-         }
-         lastCols = cols;
-         lastRows = rows;
-         hasDrawn = true;
-         lastRowWidths.clear();
-         lastRowWidths.reserve(progressData.size());
-
-         for (size_t i = 0; i < progressData.size(); ++i) {
-             const auto& prog = progressData[i];
-
-             const std::string fname = shortFilename(prog.filename);
-             std::string paddedFilename = fname;
-             paddedFilename.append(maxFilenameWidth - displayWidth(fname), ' ');
-
-             const std::string paddedDevice = padRight(prog.device, maxDeviceLen);
-
-             const std::string name = shortName(prog.device);
-             const std::string namePad(maxNameWidth - displayWidth(name), ' ');
-
-             // Half-block bar: BAR_WIDTH cells, BAR_STEPS steps (10% each).
-             // Each cell is empty (░), half (▄) or full (▇). Both filled glyphs are
-             // bottom-aligned and stop short of the cell top, so bars on consecutive
-             // rows never touch.
-             int pct = std::clamp(prog.progress.load(), 0, 100);
-             int steps = (pct * BAR_STEPS) / 100;   // 0..BAR_STEPS
-             int full  = steps / 2;
-             bool half = (steps % 2) != 0;
-
-             std::string bar, empty;
-             for (int j = 0; j < full; ++j) bar += "▇";
-             if (half)                      bar += "▄";   // 4/8 height, bottom-aligned like ▇
-             for (int j = 0; j < BAR_WIDTH - full - (half ? 1 : 0); ++j) empty += "░";
-
-             std::ostringstream row;
-             row << wt.fileCol << paddedFilename
-                 << color << " → " << wt.deviceCol << paddedDevice
-                 << color << " " << wt.infoLabel << "<" << name << ">" << namePad
-                 << color << " ["
-                 << bar << wt.speedCol << empty
-                 << color << "] ";
-
-             bool isCompleted = prog.completed.load();
-
-             if (isCompleted)                                    row << wt.colorSuccess << "DONE ";
-             else if (prog.failed.load())                        row << wt.colorFailure << "FAIL ";
-             else if (GlobalState::g_operationCancelled.load())  row << wt.colorWarning << "CXL  ";
-             else {
-                 std::string pctStr = std::to_string(pct) + "%";
-                 pctStr.resize(5, ' ');
-                 row << color << pctStr;
-             }
-
-             const std::string& speedStr = speedStrs[i];
-             const std::string speedPad(maxSpeedWidth - displayWidth(speedStr), ' ');
-
-             row << color << speedStr << (isCompleted ? " (avg)" : speedPad);
-
-             // Last line of defense: if the terminal is too narrow even for the
-             // truncated row, cut the row instead of letting it wrap.
-             const std::string line = clipToWidth(row.str(), usableCols);
-             lastRowWidths.push_back(std::min(visibleWidth(line), usableCols));
-             frame += line;
-             frame += "\033[0m\n";
-         }
-         frame += "\033[?2026l";          // end synchronized update
-         std::cout << frame << std::flush;
-     };
-
-     // UI render thread: wakes immediately on a completion notification
-     // (predicate-based wait_for closes the check-then-block race) and
-     // otherwise falls back to a 500ms pulse, matching the original pacing
-     // when nothing new has happened.
-     bool isFirstUpdate = true;
-     auto displayProgress = [&]() {
-         while (!isProcessingComplete.load(std::memory_order_acquire) &&
-             !GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
-
-             // Check if all tasks are finished (succeeded or failed)
-             if (finishedTasks.load() == totalTasks) {
-                 // Force one final render and exit the display thread
-                 displayAllProgress();
-                 isProcessingComplete.store(true, std::memory_order_release);
-                 break;
-             }
-
-             if (!isFirstUpdate) {
-                 std::unique_lock<std::mutex> lock(progressCvMutex);
-                 progressCv.wait_for(lock, std::chrono::milliseconds(500), [&] {
-                     return isProcessingComplete.load(std::memory_order_acquire) ||
-                         GlobalState::g_operationCancelled.load(std::memory_order_acquire) ||
-                         finishedTasks.load() == totalTasks;
-                 });
-                 lock.unlock();
-
-                 // Double check flags right after waking to prevent stale prints on quick exit
-                 if (isProcessingComplete.load(std::memory_order_acquire) ||
-                     GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
-                     break;
-                 }
-             }
-             isFirstUpdate = false;
-
-             displayAllProgress();
-         }
-     };
-
-     std::vector<std::future<void>> futures;
-     for (size_t i = 0; i < totalTasks; ++i) {
-         // Only one shared pointer now: sourcePath and device live inside
-         // ProgressInfo, so the task needs nothing else from the caller's pairs.
-         futures.push_back(pool.enqueue([
-             progressDataPtr,
-             i,
-             &completedTasks,
-             &finishedTasks,
-             &progressCv,
-             &progressCvMutex
-         ]() {
-             auto& progress = (*progressDataPtr)[i];
-             const bool success = writeIsoToDevice(
-                 progress.sourcePath, progress.device, i, *progressDataPtr);
-
-             if (success) {
-                 progress.completed.store(true);
-                 completedTasks.fetch_add(1);
-             } else if (!GlobalState::g_operationCancelled.load()) {
-                 progress.failed.store(true);
-             }
-
-             finishedTasks.fetch_add(1);
-
-             // Wake the display thread immediately instead of waiting for
-             // its next 500ms poll tick. Acquiring/releasing the mutex here,
-             // *after* the state updates above and *before* notify_one,
-             // establishes the happens-before relationship the predicate-based
-             // wait_for on the other side relies on to never miss this wakeup.
-             {
-                 std::lock_guard<std::mutex> lock(progressCvMutex);
-             }
-             progressCv.notify_one();
-         }));
-     }
-
-     std::thread progressThread(displayProgress);
-
-     // Wait for all tasks to finish, woken instantly by each task's
-     // notify_one() rather than polling each future individually. Still
-     // time-boxed to a 500ms cycle (not an unbounded wait) because
-     // g_operationCancelled is set from a SIGINT handler, which cannot
-     // safely call notify_one() — so cancellation must also be picked up
-     // by periodic re-check, not solely by notification.
-     {
-         std::unique_lock<std::mutex> lock(progressCvMutex);
-         while (finishedTasks.load() != totalTasks &&
-             !GlobalState::g_operationCancelled.load()) {
-             progressCv.wait_for(lock, std::chrono::milliseconds(500), [&] {
-                 return finishedTasks.load() == totalTasks ||
-                     GlobalState::g_operationCancelled.load();
-             });
-         }
-     }
-
-     // 1. Instantly trip the display thread break condition flags
-     isProcessingComplete.store(true, std::memory_order_release);
-     progressCv.notify_one(); // wake progressThread immediately if it's mid-wait
-     signal(SIGINT, SIG_IGN);
-     if (progressThread.joinable()) {
-         progressThread.join();
-     }
-
-     // 2. Force one final static render pass to commit final output matrix states cleanly
-     displayAllProgress();
-
-     std::cout << "\033[s";
-     std::cout << "\033[2H\033[2K";
-
-     size_t failedTasksValue = 0;
-     for (const auto& prog : progressData) {
-         if (prog.failed.load()) {
-             failedTasksValue++;
-         }
-     }
-
-     size_t completedTasksValue = completedTasks.load();
-     std::string operation = std::string(UI::Palette::Yellow) + "write2usb" + wt.rl_resetCol;
-
-     // 3. Print operational results summaries directly
-     std::cout << "\r" << color << "Status: " << operation << color <<" → "
-             << (!GlobalState::g_operationCancelled.load()
-                 ? (failedTasksValue > 0
-                     ? (completedTasksValue > 0
-                         ? wt.colorWarning + "PARTIAL"
-                         : wt.colorFailure + "FAILED")
-                     : wt.colorSuccess + "COMPLETED")
-                 : wt.colorWarning + "INTERRUPTED")
-             << wt.rl_resetCol << std::endl;
-
-     std::cout << "\033[u";
-
-     auto endTime = std::chrono::high_resolution_clock::now();
-     auto duration = std::chrono::duration<double>(endTime - startTime).count();
-
-     std::cout << std::fixed << std::setprecision(1);
-     std::cout << "\n" << color << "Successful: "
-             << wt.colorSuccess << completedTasksValue
-             << color << "/"
-             << wt.colorWarning << progressData.size()
-             << color << " | Time Elapsed: "
-             << color << duration << "s"
-             << wt.colorStatus << UI::Palette::Reset << "\n";
-
-     // 4. Instantly hand focus and console command lines back to your user's shell prompt
-     flushStdin();
-     restoreInput();
-
-     // On cancellation the Drain manager for write2usb takes over
-     if (GlobalState::g_operationCancelled.load()) {
-         drainManagerForWrite2UsbUI(
-             std::move(futures),
-             progressData,
-             progressDataPtr);
-     } else {
-         // Normal fast block cleanup sequence path if everything finished successfully
-         for (auto& future : futures) {
-             if (future.valid()) {
-                 future.wait();
-             }
-         }
-     }
- }
+void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
+    // One call builds the sorted per-task progress vector and establishes the
+    // ordering invariant (task i ↔ progress row i). No sorted-pair vector is
+    // materialised, so only one shared pointer travels through the tasks and drain.
+    auto progressDataPtr = prepareWriteData(validPairsIn);
+    auto& progressData   = *progressDataPtr;
+
+    std::atomic<size_t> completedTasks(0);
+    std::atomic<size_t> finishedTasks(0);   // success OR failure — drives "all done" detection
+    std::atomic<bool> isProcessingComplete(false);
+    const size_t totalTasks = progressData.size();
+
+    // Condition variable used to wake the display thread the instant a task
+    // completes, instead of waiting for its next 500ms poll tick. The
+    // completion check is folded into the wait predicate (evaluated while
+    // holding progressCvMutex) so there is no window between "check" and
+    // "block" where a notify_one() from a finishing task could be missed.
+    std::mutex progressCvMutex;
+    std::condition_variable progressCv;
+
+    ThreadPool& pool = getStaticThreadPool();
+
+    disableInput();
+    clearScrollBuffer();
+
+    const WriteTheme wt = getWriteTheme();
+
+    // Header text is a lambda so it can be reprinted after a full-screen wipe
+    // (terminal resize).
+    auto headerText = [&]() {
+        std::ostringstream h;
+        h << "\n" << color << "Processing "
+        << (totalTasks > 1 ? "tasks" : "task") << " for "
+        << UI::Palette::Yellow << "write2usb" << color
+        << "... (" << UI::Palette::Red << "Ctrl+c"
+        << color << ":cancel)\n\n";
+        return h.str();
+    };
+    std::cout << headerText();
+
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+    std::unordered_map<std::string, std::string> deviceNames;
+    std::unordered_map<std::string, uint64_t> deviceSizes;
+    std::unordered_map<std::string, std::string> deviceSizeStrs;
+
+    for (const auto& prog : progressData) {
+        if (deviceNames.find(prog.device) == deviceNames.end()) {
+            deviceNames[prog.device] = getDriveName(prog.device);
+            deviceSizes[prog.device] = getBlockDeviceSize(prog.device);
+            deviceSizeStrs[prog.device] = formatFileSize(deviceSizes[prog.device]);
+        }
+    }
+
+    // ---- Per-operation constants: device and filename data never change ----
+    constexpr size_t MAX_NAME_LEN = 20;
+
+    // Counts visible characters (UTF-8 code points) instead of bytes,
+    // so the "…" counts as 1 column rather than 3.
+    auto displayWidth = [](const std::string& s) {
+        size_t w = 0;
+        for (unsigned char c : s)
+            if ((c & 0xC0) != 0x80) ++w;
+        return w;
+    };
+
+    // Shortens a drive name to at most MAX_NAME_LEN columns, backing up so we
+    // never split a multi-byte UTF-8 sequence (continuation bytes are 10xxxxxx).
+    auto makeShortName = [](const std::string& n) -> std::string {
+        if (n.size() <= MAX_NAME_LEN) return n;
+        size_t cut = MAX_NAME_LEN - 1;
+        while (cut > 0 && (static_cast<unsigned char>(n[cut]) & 0xC0) == 0x80) --cut;
+        std::string out;
+        out.reserve(cut + 3);                   // kept bytes + 3-byte "…"
+        out.append(n, 0, cut);
+        out.append("\u2026");
+        return out;
+    };
+
+    // Index i matches progressData[i].
+    std::vector<std::string> rowShortNames;
+    rowShortNames.reserve(progressData.size());
+    size_t maxDeviceLen         = 0;
+    size_t maxNameWidth         = 0;
+    size_t maxFullFilenameWidth = 0;   // widest name with no truncation applied
+    for (const auto& prog : progressData) {
+        rowShortNames.push_back(makeShortName(deviceNames[prog.device]));
+        maxDeviceLen         = std::max(maxDeviceLen,         prog.device.size());
+        maxNameWidth         = std::max(maxNameWidth,         displayWidth(rowShortNames.back()));
+        maxFullFilenameWidth = std::max(maxFullFilenameWidth, displayWidth(prog.filename));
+    }
+    // -------------------------------------------------------------------------
+
+    // Visible width (in columns) of every row printed by the previous frame. Used to
+    // work out how far to move the cursor back up, even if the terminal was resized
+    // (and therefore re-wrapped the old rows) in between.
+    std::vector<size_t> lastRowWidths;
+
+    // Terminal size at the time of the previous frame. A change in either
+    // dimension triggers a full wipe + repaint instead of a cursor-up redraw.
+    size_t lastCols = 0, lastRows = 0;
+    bool   hasDrawn = false;
+
+    auto displayAllProgress = [&]() {
+        constexpr size_t MAX_FILE_LEN = 15;   // names up to this many columns (with ".iso") are never truncated
+        constexpr size_t STEM_KEEP = 10;      // stem columns kept when truncating, followed by "…" and ".iso" (10 + 1 + 4 = 15)
+        constexpr int BAR_WIDTH = 5;               // character cells
+        constexpr int BAR_STEPS = BAR_WIDTH * 2;   // each cell has 2 states (half / full) -> 10 steps, 10% each
+
+        // Set once per render, after the full (untruncated) row width is known.
+        // While false, shortFilename() returns names unchanged.
+        bool truncateNames = false;
+
+        // Current terminal size {cols, rows}; 80x24 if it cannot be determined
+        // (e.g. stdout is not a tty).
+        auto terminalSize = []() -> std::pair<size_t, size_t> {
+            struct winsize ws{};
+            if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0)
+                return { ws.ws_col, ws.ws_row };
+            return { 80, 24 };
+        };
+
+        // Right-pads an ASCII string to the given byte width. Used for device
+        // paths and other ASCII-only columns.
+        auto padRight = [](std::string s, size_t target) {
+            if (s.size() < target) s.append(target - s.size(), ' ');
+            return s;
+        };
+
+        // Visible width of a string that may contain ANSI CSI escape sequences
+        // (colors etc.): escape sequences count as 0 columns.
+        auto visibleWidth = [](const std::string& s) -> size_t {
+            size_t w = 0;
+            for (size_t i = 0; i < s.size(); ) {
+                const unsigned char c = static_cast<unsigned char>(s[i]);
+                if (c == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
+                    i += 2;
+                    while (i < s.size() && !(s[i] >= 0x40 && s[i] <= 0x7E)) ++i;
+                    if (i < s.size()) ++i;   // final byte of the sequence
+                    continue;
+                }
+                if ((c & 0xC0) != 0x80) ++w;
+                ++i;
+            }
+            return w;
+        };
+
+        // Cuts a string that may contain ANSI escape sequences to at most maxCols
+        // visible columns. Escape sequences are passed through untouched and UTF-8
+        // code points are never split.
+        auto clipToWidth = [](const std::string& s, size_t maxCols) -> std::string {
+            std::string out;
+            out.reserve(s.size());
+            size_t w = 0;
+            for (size_t i = 0; i < s.size(); ) {
+                if (static_cast<unsigned char>(s[i]) == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
+                    size_t j = i + 2;
+                    while (j < s.size() && !(s[j] >= 0x40 && s[j] <= 0x7E)) ++j;
+                    if (j < s.size()) ++j;
+                    out.append(s, i, j - i);
+                    i = j;
+                    continue;
+                }
+                size_t len = 1;
+                while (i + len < s.size() &&
+                    (static_cast<unsigned char>(s[i + len]) & 0xC0) == 0x80) ++len;
+                if (w >= maxCols) break;
+                out.append(s, i, len);
+                i += len;
+                ++w;
+            }
+            return out;
+        };
+
+        // Truncates ISO filenames, but only when truncateNames is set (the terminal
+        // is too narrow for the full-width rows) AND the whole name (".iso" included)
+        // is longer than MAX_FILE_LEN columns. A truncated name shows exactly
+        // STEM_KEEP stem columns, then "…" (1 column), then the ".iso" extension, e.g.
+        // "archlinux-….iso", so a truncated name is always exactly 15 columns and the
+        // extension is always visible.
+        // Names of MAX_FILE_LEN columns or fewer are shown in full. Walks whole UTF-8
+        // code points so a multi-byte sequence is never split.
+        auto shortFilename = [&](const std::string& f) -> std::string {
+            if (!truncateNames) return f;   // terminal is wide enough: show the full name
+
+            // Split off a trailing ".iso" (case-insensitive), if present.
+            std::string ext;
+            std::string stem = f;
+            if (f.size() >= 4) {
+                const std::string tail = f.substr(f.size() - 4);
+                if (tail.size() == 4 && tail[0] == '.' &&
+                    std::tolower(static_cast<unsigned char>(tail[1])) == 'i' &&
+                    std::tolower(static_cast<unsigned char>(tail[2])) == 's' &&
+                    std::tolower(static_cast<unsigned char>(tail[3])) == 'o') {
+                    ext  = tail;
+                    stem = f.substr(0, f.size() - 4);
+                }
+            }
+
+            if (displayWidth(f) <= MAX_FILE_LEN) return f;
+
+            std::string out;
+            size_t cols = 0;
+            for (size_t i = 0; i < stem.size() && cols < STEM_KEEP; ) {
+                size_t len = 1;
+                while (i + len < stem.size() &&
+                    (static_cast<unsigned char>(stem[i + len]) & 0xC0) == 0x80) ++len;
+                out.append(stem, i, len);
+                i += len;
+                ++cols;
+            }
+            out.append("…");
+            out.append(ext);
+            return out;
+        };
+
+        size_t maxFilenameWidth = 0;
+        size_t maxSpeedWidth    = 0;
+
+        // Speed strings are formatted once per render so the column can be
+        // right-aligned to the widest value (the "(avg)" suffix is appended
+        // after the padded value and does not affect alignment).
+        std::vector<std::string> speedStrs;
+        speedStrs.reserve(progressData.size());
+
+        for (const auto& prog : progressData) {
+            speedStrs.push_back(formatSpeed(prog.speed));
+            maxSpeedWidth = std::max(maxSpeedWidth, displayWidth(speedStrs.back()));
+        }
+
+        // Width of everything except the filename column:
+        //   " → " (3) + device + " <name>" (maxNameWidth + 3) + " [" (2) + bar (5)
+        //   + "] " (2) + status (5) + speed + " (avg)" (6, always counted as the
+        //   worst case so the truncation decision doesn't flip when tasks complete).
+        const size_t fixedWidth = 3 + maxDeviceLen + (maxNameWidth + 3) + 2 + BAR_WIDTH
+                                + 2 + 5 + maxSpeedWidth + 6;
+
+        // Keep the last column free so a row can never trigger the terminal's
+        // auto-wrap, which would break the cursor-up redraw below.
+        const auto   termSize   = terminalSize();
+        const size_t cols       = termSize.first;
+        const size_t rows       = termSize.second;
+        const size_t usableCols = cols > 1 ? cols - 1 : 1;
+
+        // Truncate only if the widest full-width row would overflow the terminal.
+        truncateNames = (fixedWidth + maxFullFilenameWidth) > usableCols;
+
+        // Shortened filenames, computed once per frame (depends on truncateNames).
+        std::vector<std::string> shortFiles;
+        shortFiles.reserve(progressData.size());
+        for (const auto& prog : progressData) {
+            shortFiles.push_back(shortFilename(prog.filename));
+            maxFilenameWidth = std::max(maxFilenameWidth, displayWidth(shortFiles.back()));
+        }
+
+        // The whole frame is built in one string and written once (less flicker).
+        std::string frame;
+        frame += "\033[?2026h";
+        const bool resized = hasDrawn && (cols != lastCols || rows != lastRows);
+        if (resized) {
+            // Don't trust cursor-up after a resize: the terminal may have reflowed
+            // or scrolled old content into scrollback, and cursor-up cannot move
+            // above the visible screen. Wipe everything and repaint from the top.
+            frame += "\033[H\033[2J\033[3J";   // home, clear screen, clear scrollback
+            frame += headerText();
+        } else {
+            // Same size as last frame: move up over the previous rows (accounting
+            // for any wrapping) and clear to the end of the screen. Relative
+            // movement is used instead of \033[s / \033[u because a saved absolute
+            // cursor position goes stale when the terminal re-wraps.
+            size_t up = 0;
+            for (size_t w : lastRowWidths)
+                up += std::max<size_t>(1, (w + cols - 1) / cols);
+            if (up > 0) frame += "\033[" + std::to_string(up) + "A";
+            frame += "\r\033[J";
+        }
+        lastCols = cols;
+        lastRows = rows;
+        hasDrawn = true;
+        lastRowWidths.clear();
+        lastRowWidths.reserve(progressData.size());
+
+        for (size_t i = 0; i < progressData.size(); ++i) {
+            const auto& prog = progressData[i];
+
+            const std::string& fname = shortFiles[i];
+            std::string paddedFilename = fname;
+            paddedFilename.append(maxFilenameWidth - displayWidth(fname), ' ');
+
+            const std::string paddedDevice = padRight(prog.device, maxDeviceLen);
+
+            const std::string& name = rowShortNames[i];
+            const std::string namePad(maxNameWidth - displayWidth(name), ' ');
+
+            // Half-block bar: BAR_WIDTH cells, BAR_STEPS steps (10% each).
+            // Each cell is empty (░), half (▄) or full (▇). Both filled glyphs are
+            // bottom-aligned and stop short of the cell top, so bars on consecutive
+            // rows never touch.
+            int pct = std::clamp(prog.progress.load(), 0, 100);
+            int steps = (pct * BAR_STEPS) / 100;   // 0..BAR_STEPS
+            int full  = steps / 2;
+            bool half = (steps % 2) != 0;
+
+            std::string bar, empty;
+            for (int j = 0; j < full; ++j) bar += "▇";
+            if (half)                      bar += "▄";   // 4/8 height, bottom-aligned like ▇
+            for (int j = 0; j < BAR_WIDTH - full - (half ? 1 : 0); ++j) empty += "░";
+
+            std::ostringstream row;
+            row << wt.fileCol << paddedFilename
+                << color << " → " << wt.deviceCol << paddedDevice
+                << color << " " << wt.infoLabel << "<" << name << ">" << namePad
+                << color << " ["
+                << bar << wt.speedCol << empty
+                << color << "] ";
+
+            bool isCompleted = prog.completed.load();
+
+            if (isCompleted)                                    row << wt.colorSuccess << "DONE ";
+            else if (prog.failed.load())                        row << wt.colorFailure << "FAIL ";
+            else if (GlobalState::g_operationCancelled.load())  row << wt.colorWarning << "CXL  ";
+            else {
+                std::string pctStr = std::to_string(pct) + "%";
+                pctStr.resize(5, ' ');
+                row << color << pctStr;
+            }
+
+            const std::string& speedStr = speedStrs[i];
+            const std::string speedPad(maxSpeedWidth - displayWidth(speedStr), ' ');
+
+            row << color << speedStr << (isCompleted ? " (avg)" : speedPad);
+
+            // Last line of defense: if the terminal is too narrow even for the
+            // truncated row, cut the row instead of letting it wrap.
+            const std::string line = clipToWidth(row.str(), usableCols);
+            lastRowWidths.push_back(std::min(visibleWidth(line), usableCols));
+            frame += line;
+            frame += "\033[0m\n";
+        }
+        frame += "\033[?2026l";          // end synchronized update
+        std::cout << frame << std::flush;
+    };
+
+    // UI render thread: wakes immediately on a completion notification
+    // (predicate-based wait_for closes the check-then-block race) and
+    // otherwise falls back to a 500ms pulse, matching the original pacing
+    // when nothing new has happened.
+    bool isFirstUpdate = true;
+    auto displayProgress = [&]() {
+        while (!isProcessingComplete.load(std::memory_order_acquire) &&
+            !GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
+
+            // Check if all tasks are finished (succeeded or failed)
+            if (finishedTasks.load() == totalTasks) {
+                // Force one final render and exit the display thread
+                displayAllProgress();
+                isProcessingComplete.store(true, std::memory_order_release);
+                break;
+            }
+
+            if (!isFirstUpdate) {
+                std::unique_lock<std::mutex> lock(progressCvMutex);
+                progressCv.wait_for(lock, std::chrono::milliseconds(500), [&] {
+                    return isProcessingComplete.load(std::memory_order_acquire) ||
+                        GlobalState::g_operationCancelled.load(std::memory_order_acquire) ||
+                        finishedTasks.load() == totalTasks;
+                });
+                lock.unlock();
+
+                // Double check flags right after waking to prevent stale prints on quick exit
+                if (isProcessingComplete.load(std::memory_order_acquire) ||
+                    GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
+                    break;
+                }
+            }
+            isFirstUpdate = false;
+
+            displayAllProgress();
+        }
+    };
+
+    std::vector<std::future<void>> futures;
+    for (size_t i = 0; i < totalTasks; ++i) {
+        // Only one shared pointer now: sourcePath and device live inside
+        // ProgressInfo, so the task needs nothing else from the caller's pairs.
+        futures.push_back(pool.enqueue([
+            progressDataPtr,
+            i,
+            &completedTasks,
+            &finishedTasks,
+            &progressCv,
+            &progressCvMutex
+        ]() {
+            auto& progress = (*progressDataPtr)[i];
+            const bool success = writeIsoToDevice(
+                progress.sourcePath, progress.device, i, *progressDataPtr);
+
+            if (success) {
+                progress.completed.store(true);
+                completedTasks.fetch_add(1);
+            } else if (!GlobalState::g_operationCancelled.load()) {
+                progress.failed.store(true);
+            }
+
+            finishedTasks.fetch_add(1);
+
+            // Wake the display thread immediately instead of waiting for
+            // its next 500ms poll tick. Acquiring/releasing the mutex here,
+            // *after* the state updates above and *before* notify_one,
+            // establishes the happens-before relationship the predicate-based
+            // wait_for on the other side relies on to never miss this wakeup.
+            {
+                std::lock_guard<std::mutex> lock(progressCvMutex);
+            }
+            progressCv.notify_one();
+        }));
+    }
+
+    std::thread progressThread(displayProgress);
+
+    // Wait for all tasks to finish, woken instantly by each task's
+    // notify_one() rather than polling each future individually. Still
+    // time-boxed to a 500ms cycle (not an unbounded wait) because
+    // g_operationCancelled is set from a SIGINT handler, which cannot
+    // safely call notify_one() — so cancellation must also be picked up
+    // by periodic re-check, not solely by notification.
+    {
+        std::unique_lock<std::mutex> lock(progressCvMutex);
+        while (finishedTasks.load() != totalTasks &&
+            !GlobalState::g_operationCancelled.load()) {
+            progressCv.wait_for(lock, std::chrono::milliseconds(500), [&] {
+                return finishedTasks.load() == totalTasks ||
+                    GlobalState::g_operationCancelled.load();
+            });
+        }
+    }
+
+    // 1. Instantly trip the display thread break condition flags
+    isProcessingComplete.store(true, std::memory_order_release);
+    progressCv.notify_one(); // wake progressThread immediately if it's mid-wait
+    signal(SIGINT, SIG_IGN);
+    if (progressThread.joinable()) {
+        progressThread.join();
+    }
+
+    // 2. Force one final static render pass to commit final output matrix states cleanly
+    displayAllProgress();
+
+    std::cout << "\033[s";
+    std::cout << "\033[2H\033[2K";
+
+    size_t failedTasksValue = 0;
+    for (const auto& prog : progressData) {
+        if (prog.failed.load()) {
+            failedTasksValue++;
+        }
+    }
+
+    size_t completedTasksValue = completedTasks.load();
+    std::string operation = std::string(UI::Palette::Yellow) + "write2usb" + wt.rl_resetCol;
+
+    // 3. Print operational results summaries directly
+    std::cout << "\r" << color << "Status: " << operation << color <<" → "
+            << (!GlobalState::g_operationCancelled.load()
+                ? (failedTasksValue > 0
+                    ? (completedTasksValue > 0
+                        ? wt.colorWarning + "PARTIAL"
+                        : wt.colorFailure + "FAILED")
+                    : wt.colorSuccess + "COMPLETED")
+                : wt.colorWarning + "INTERRUPTED")
+            << wt.rl_resetCol << std::endl;
+
+    std::cout << "\033[u";
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration<double>(endTime - startTime).count();
+
+    std::cout << std::fixed << std::setprecision(1);
+    std::cout << "\n" << color << "Successful: "
+            << wt.colorSuccess << completedTasksValue
+            << color << "/"
+            << wt.colorWarning << progressData.size()
+            << color << " | Time Elapsed: "
+            << color << duration << "s"
+            << wt.colorStatus << UI::Palette::Reset << "\n";
+
+    // 4. Instantly hand focus and console command lines back to your user's shell prompt
+    flushStdin();
+    restoreInput();
+
+    // On cancellation the Drain manager for write2usb takes over
+    if (GlobalState::g_operationCancelled.load()) {
+        drainManagerForWrite2UsbUI(
+            std::move(futures),
+            progressData,
+            progressDataPtr);
+    } else {
+        // Normal fast block cleanup sequence path if everything finished successfully
+        for (auto& future : futures) {
+            if (future.valid()) {
+                future.wait();
+            }
+        }
+    }
+}
 
 /**
  * @brief Entry point for the write-to-USB workflow.
