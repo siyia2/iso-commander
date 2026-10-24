@@ -358,7 +358,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         curSize = queryTermSize();
         const bool resized = hasDrawn && !sameSize(curSize, lastSize);
 
-        std::string frame;
+        std::string frame = "\033[?2026h";   // begin synchronized update
         if (resized) {
             // Don't trust cursor-up after a resize: the terminal may have reflowed or
             // scrolled the old block into scrollback. Wipe (home, clear screen, clear
@@ -368,6 +368,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             frame += resizeHeaderText();
         }
         frame += renderProgressBar(false, false, false);
+        frame += "\033[?2026l";              // end synchronized update
         std::cout << frame << std::flush;
         lastSize = curSize;
         hasDrawn = true;

@@ -1252,6 +1252,7 @@ void drainManagerForWrite2UsbUI(
 
          // The whole frame is built in one string and written once (less flicker).
          std::string frame;
+         frame += "\033[?2026h";
          const bool resized = hasDrawn && (cols != lastCols || rows != lastRows);
          if (resized) {
              // Don't trust cursor-up after a resize: the terminal may have reflowed
@@ -1333,6 +1334,7 @@ void drainManagerForWrite2UsbUI(
              frame += line;
              frame += "\033[0m\n";
          }
+         frame += "\033[?2026l";          // end synchronized update
          std::cout << frame << std::flush;
      };
 
