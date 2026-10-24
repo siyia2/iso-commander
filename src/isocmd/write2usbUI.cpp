@@ -17,6 +17,7 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <sstream>
 #include <string>
 #include <system_error>
