@@ -30,6 +30,21 @@
 #include "../state.h"
 #include "../themes.h"
 
+/**
+ * @brief DEC private mode 2026 (synchronized output) control sequences.
+ *
+ * Wrapping a frame in kSyncBegin/kSyncEnd tells supporting terminals to hold
+ * rendering until the whole frame has arrived, then present it atomically,
+ * which removes flicker on redraws. Terminals without support ignore the
+ * sequences, so they are safe to emit unconditionally.
+ *
+ * @note The mode is a plain on/off flag, not a counter: nested begin/end pairs
+ *       do not stack, and the first end marker closes the block.
+ *
+ * - @c kUseSynchronizedOutput  Compile-time switch; set to false to disable all markers.
+ * - @c kSyncBegin              CSI ? 2026 h (begin synchronized update).
+ * - @c kSyncEnd                CSI ? 2026 l (end synchronized update).
+ */
 namespace {
 constexpr bool             kUseSynchronizedOutput = true;
 constexpr std::string_view kSyncBegin = "\033[?2026h";
