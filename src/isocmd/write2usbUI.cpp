@@ -1295,7 +1295,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             const std::string speedPad(maxSpeedWidth - displayWidth(speedStr), ' ');
 
             row << color << speedStr << speedPad;
-            if (isCompleted) row << " (avg)";
+            if (isCompleted) row << (speedPad.empty() ? " (avg)" : "(avg)");
 
             // Last line of defense: if the terminal is too narrow even for the
             // truncated row, cut the row instead of letting it wrap.
