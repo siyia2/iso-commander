@@ -30,6 +30,12 @@
 #include "../state.h"
 #include "../themes.h"
 
+namespace {
+constexpr bool             kUseSynchronizedOutput = true;
+constexpr std::string_view kSyncBegin = "\033[?2026h";
+constexpr std::string_view kSyncEnd   = "\033[?2026l";
+}
+
 /**
  * @file progress_bar.cpp
  * @brief Terminal progress bar implementation with input blocking and themed output.
@@ -110,12 +116,15 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     disableInputForProgressBar(&oldt, &oldf);
 
     // --- Configuration Logic ---
-    int processingBarWidth = 28;
-    int finalBarWidth = 28;
+    int processingBarWidth = 42;
+    int finalBarWidth = 30;
 
-    if (operation.find("2iso") != std::string::npos) {
-        processingBarWidth = !GlobalState::isNonInteractive.load() ? 29 : 33;
-        finalBarWidth = processingBarWidth;
+    // Adjust width based on operation name length to keep UI aligned
+    if (operation.find("mount") != std::string::npos || operation.find("umount") != std::string::npos) {
+        processingBarWidth = 46;
+    } else if (operation.find("2iso") != std::string::npos) {
+        processingBarWidth = 50;
+        finalBarWidth = 41;
     }
 
     // Narrowest bar we will shrink to before falling back to clipping lines.
@@ -340,6 +349,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         lastRenderedLines = static_cast<int>(lines.size());
         return out;
     };
+    // hide cursor
+    std::cout << "\033[?25l" << std::flush;
 
     // --- Main Update Loop ---
     bool enterPressed = false;
@@ -355,7 +366,11 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         curSize = queryTermSize();
         const bool resized = hasDrawn && !sameSize(curSize, lastSize);
 
-        std::string frame = "\033[?2026h";   // begin synchronized update
+        // Build the whole frame (redraw + cursor reposition) and send it as one
+        // synchronized update so the terminal presents it atomically.
+        std::string frame;
+        if (kUseSynchronizedOutput) frame.append(kSyncBegin);
+
         if (resized) {
             // Don't trust cursor-up after a resize: the terminal may have reflowed or
             // scrolled the old block into scrollback. Wipe (home, clear screen, clear
@@ -365,8 +380,6 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             frame += resizeHeaderText();
         }
         frame += renderProgressBar(false, false, false);
-        frame += "\033[?2026l";              // end synchronized update
-        std::cout << frame << std::flush;
         lastSize = curSize;
         hasDrawn = true;
 
@@ -374,8 +387,11 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         const bool done = isComplete->load(std::memory_order_acquire);
 
         if (bytesTrackingEnabled && !done && lastRenderedLines > 1) {
-            std::cout << "\033[" << (lastRenderedLines - 1) << "A";
+            frame += "\033[" + std::to_string(lastRenderedLines - 1) + "A";
         }
+
+        if (kUseSynchronizedOutput) frame.append(kSyncEnd);
+        std::cout << frame << std::flush;
 
         if (done) {
             signal(SIGINT, SIG_IGN);
@@ -385,33 +401,42 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             const TermSize nowSize = queryTermSize();
             const bool resizedAtEnd = !sameSize(nowSize, lastSize);
             curSize = nowSize;
-            if (resizedAtEnd) {
-                // Wipe, reprint the header, then step up onto the header line so the
-                // status report overwrites it, exactly as in the normal path.
-                std::cout << "\033[H\033[2J\033[3J" << resizeHeaderText() << "\033[1A";
-            } else {
-                std::cout << (bytesTrackingEnabled ? "\033[1J\033[3A" : "\033[1J\033[1A");
-            }
 
             const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
             const size_t failedTasksValue    = failedTasks->load(std::memory_order_acquire);
             const bool wasCancelled          = GlobalState::g_operationCancelled.load(std::memory_order_acquire);
             bool snapTo100 = (!wasCancelled && failedTasksValue == 0);
 
-            // --- Status Summary ---
-            std::cout << "\r\033[2K" << color << " Status: " << operation << color << " → ";
-            if (wasCancelled) {
-                std::cout << pc.warning << "INTERRUPTED";
-            } else if (failedTasksValue > 0) {
-                std::cout << (completedTasksValue > 0 ? pc.warning : pc.failure)
-                          << (completedTasksValue > 0 ? "PARTIAL" : "FAILED");
+            // Cleanup + status line + final bar as one synchronized update.
+            // The end marker is sent BEFORE the readline prompt so the prompt is never held back.
+            std::ostringstream fin;
+            if (kUseSynchronizedOutput) fin << kSyncBegin;
+
+            if (resizedAtEnd) {
+                // Wipe, reprint the header, then step up onto the header line so the
+                // status report overwrites it, exactly as in the normal path.
+                fin << "\033[H\033[2J\033[3J" << resizeHeaderText() << "\033[1A";
             } else {
-                std::cout << pc.success << "COMPLETED";
+                fin << (bytesTrackingEnabled ? "\033[1J\033[3A" : "\033[1J\033[1A");
             }
-            std::cout << pc.reset << '\n';
+
+            // --- Status Summary ---
+            fin << "\r\033[2K" << color << " Status: " << operation << color << " → ";
+            if (wasCancelled) {
+                fin << pc.warning << "INTERRUPTED";
+            } else if (failedTasksValue > 0) {
+                fin << (completedTasksValue > 0 ? pc.warning : pc.failure)
+                    << (completedTasksValue > 0 ? "PARTIAL" : "FAILED");
+            } else {
+                fin << pc.success << "COMPLETED";
+            }
+            fin << pc.reset << '\n';
 
             // Final bar state
-            std::cout << renderProgressBar(snapTo100, true, wasCancelled);
+            fin << renderProgressBar(snapTo100, true, wasCancelled);
+
+            if (kUseSynchronizedOutput) fin << kSyncEnd;
+            std::cout << fin.str() << std::flush;
 
             disableReadlineForConfirmation();
             enterPressed = true;
@@ -420,6 +445,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             reset_custom_keybindingsForSelect();
 
             if (!GlobalState::isNonInteractive.load()) {
+                //restore cursor
+                std::cout << "\033[?25h" << std::flush;
                 // --- Verbose Prompt (Readline safe) - Only runs if interactive ---
                 const std::string prompt = "\001" + std::string(color) + "\002" +
                                            "Display verbose output? (y/n): " +
@@ -434,6 +461,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                 disableInputForProgressBar(&oldt, &oldf);
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 restoreInput(&oldt, oldf);
+                //restore cursor
+                std::cout << "\033[?25h" << std::flush;
                 // Automatically sets verbose to true when running non-interactively
                 *verbose = true;
             }
