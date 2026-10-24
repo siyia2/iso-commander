@@ -8,6 +8,7 @@
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
+#include <future>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -261,6 +262,17 @@ std::string getDriveName(const std::string&);
  * with a live progress display and a final status summary.
  */
 void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>&);
+
+/**
+ * @brief Detach in-flight write tasks into a background drain thread after cancellation.
+ *
+ */
+void handleOutOfRangeBackgroundDrainingForWrite2Usb(
+    std::vector<std::future<void>> futures,
+    const std::vector<std::pair<IsoInfo, std::string>>& validPairs,
+    const std::vector<ProgressInfo>& progressData,
+    std::shared_ptr<std::vector<std::pair<IsoInfo, std::string>>> sortedPairsPtr,
+    std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr);
 
 // --- Filesystem & Formatting Utilities ---
 

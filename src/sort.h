@@ -5,7 +5,13 @@
 
 // C++ Standard Library Headers
 #include <string>
+#include <string_view>
 #include <vector>
+
+/**
+ * Compares two strings using case-insensitive natural ordering.
+ */
+int naturalCompare(std::string_view a, std::string_view b);
 
 /**
  * Performs an in-place, case-insensitive lexicographical sort on a vector of strings.
@@ -15,7 +21,7 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files);
 
 /**
  * Adjusts the global or local sorting state specifically for "filename-only" display modes.
- * This typically ensures that path prefixes do not interfere with the alphabetical 
+ * This typically ensures that path prefixes do not interfere with the alphabetical
  * ordering of the actual files.
  */
 void sortAfterFilenamesOnlyFlag();
