@@ -27,6 +27,7 @@
 #include <vector>
 
 // C / System Headers
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 // Third-Party Library Headers
@@ -706,7 +707,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 /**
  * @brief Enqueues ISO-to-device write tasks and drives a live progress display.
  *
- * For each validated (IsoInfo, device) pair:
+ * The input pairs are first copied and sorted alphabetically (case-insensitive) by
+ * ISO filename, with the device path as a tie-break when the same ISO targets several
+ * devices. Task index, @ref progressData index and display row all share this sorted
+ * order, so the live progress tracks always appear alphabetically by ISO name.
+ *
+ * For each validated (IsoInfo, device) pair, in sorted order:
  * - Initializes a @ref ProgressInfo entry in @ref progressData
  * - Caches device names, sizes, and formatted size strings
  * - Submits one @ref writeIsoToDevice call to the global @ref ThreadPool
@@ -717,11 +723,61 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  * save/restore (\033[s / \033[u). The main thread waits on the same condition
  * variable to detect overall completion, also waking instantly on task completion.
  *
+ * @par Ordering
+ * Rows are sorted alphabetically by ISO filename (ASCII case-insensitive, byte-wise),
+ * with the device path as a secondary key. The sort is stable and performed once on a
+ * local copy of the input, so the caller's vector is never modified. The pooled tasks
+ * share the sorted copy through a @c std::shared_ptr, which keeps it alive for any
+ * detached drain that outlives this function after cancellation.
+ *
+ * @par Filename Truncation
+ * ISO names are shown in full unless the widest row (full names, device, drive name,
+ * bar, status and speed columns) would not fit the current terminal width. Only then
+ * is every name longer than 15 columns (".iso" included) truncated: a truncated name
+ * keeps the first 10 stem columns, followed by "…" (U+2026, one column) and the
+ * untouched ".iso" extension, so it is always exactly 10 + 1 + 4 = 15 columns, e.g.
+ * "archlinux-2024.10.01-x86_64.iso" becomes "archlinux-….iso". The extension is
+ * therefore always visible. Names of 15 columns or fewer are always shown in full.
+ * Names without a ".iso" suffix are treated the same way, with the whole name as the
+ * stem.
+ * The decision is made once per render for all rows together, so either every long
+ * name is truncated or none is, and the columns stay aligned. The terminal width is
+ * re-queried on every render, so resizing the terminal takes effect on the next
+ * redraw (within 500 ms). If the width cannot be determined (stdout is not a tty),
+ * 80 columns is assumed. The width check reserves room for the " (avg)" suffix, so
+ * the decision does not flip when tasks complete.
+ * Truncation is UTF-8 safe (never splits a multi-byte sequence) and affects the
+ * display only; the real path passed to @ref writeIsoToDevice is untouched.
+ * Filename padding is computed from the displayed widths so columns stay aligned.
+ *
+ * @par Redraw and Terminal Resize
+ * Each frame is built as one string and written once. Rows are never allowed to wrap:
+ * the last terminal column is kept free and any row still too wide after truncation is
+ * clipped (ANSI-escape and UTF-8 aware). Instead of saving/restoring an absolute cursor
+ * position (which goes stale when a terminal re-wraps its content on resize), the
+ * previous frame's row widths are remembered; on the next frame the number of physical
+ * lines they now occupy at the current width is computed, the cursor moves up exactly
+ * that far, and the screen is cleared from there down before redrawing. This assumes
+ * the terminal re-wraps already-printed lines when resized, as most modern emulators do.
+ *
  * @par Row Layout
  * Each row prints seamlessly side-by-side:
  * @code
- * filename → device <name> [▇▇▇░░░░░░░] percentage speed
+ * filename → /dev/sdX <drive name> [▇▇▄░░] percentage speed
  * @endcode
+ * For example (with a terminal too narrow for the full name):
+ * @code
+ * archlinux-….iso → /dev/sdd <SanDisk 3.2> [▇▇▇▇▄] 92%   3.1 MB/s
+ * @endcode
+ * The device path and the drive name in angle brackets are each padded to the widest value
+ * across all rows, so the progress bars line up in a single column.
+ *
+ * @par Progress Bar
+ * The bar is 5 character cells wide but has 10 steps of 10% each: every cell can be
+ * empty (░), half filled (▄, 4/8 height) or full (▇, 7/8 height). Both filled glyphs are
+ * bottom-aligned and stop short of the cell top, so bars on consecutive rows never touch.
+ * The step count is floored from the percentage, so the bar advances one step each time
+ * progress reaches another multiple of 10%, and is completely full only at 100%.
  *
  * @par Status Tokens
  * - @b DONE — Task completed successfully (appends " (avg)" to final speed readout).
@@ -758,9 +814,34 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  *
  * Final execution metrics (elapsed duration and a successful/total count ratio) are printed below.
  *
- * @param validPairs Validated (IsoInfo, device) pairs targeted for writing.
+ * @param validPairsIn Validated (IsoInfo, device) pairs targeted for writing. Copied and
+ *                     sorted alphabetically by ISO filename before processing.
  */
-void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairs) {
+void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
+    // Sort once, up front, so task index i == progressData index i == display row.
+    // Case-insensitive alphabetical by ISO name; device path breaks ties.
+    auto sortedPairsPtr = std::make_shared<std::vector<std::pair<IsoInfo, std::string>>>(validPairsIn);
+    {
+        auto ciCompare = [](const std::string& a, const std::string& b) -> int {
+            const size_t n = std::min(a.size(), b.size());
+            for (size_t k = 0; k < n; ++k) {
+                const int ca = std::tolower(static_cast<unsigned char>(a[k]));
+                const int cb = std::tolower(static_cast<unsigned char>(b[k]));
+                if (ca != cb) return ca < cb ? -1 : 1;
+            }
+            if (a.size() == b.size()) return 0;
+            return a.size() < b.size() ? -1 : 1;
+        };
+
+        std::stable_sort(sortedPairsPtr->begin(), sortedPairsPtr->end(),
+            [&](const auto& a, const auto& b) {
+                const int c = ciCompare(a.first.filename, b.first.filename);
+                if (c != 0) return c < 0;
+                return a.second < b.second;
+            });
+    }
+    const auto& validPairs = *sortedPairsPtr;   // rest of the function uses this name
+
     progressData.clear();
     progressData.reserve(validPairs.size());
 
@@ -799,7 +880,6 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
               << UI::Palette::Yellow << "write2usb" << color
               << "... (" << UI::Palette::Red << "Ctrl+c"
               << color << ":cancel)\n\n";
-    std::cout << "\033[s";
 
     auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -815,9 +895,30 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
         }
     }
 
+    // Visible width (in columns) of every row printed by the previous frame. Used to
+    // work out how far to move the cursor back up, even if the terminal was resized
+    // (and therefore re-wrapped the old rows) in between.
+    std::vector<size_t> lastRowWidths;
+
     auto displayAllProgress = [&]() {
         constexpr size_t MAX_NAME_LEN = 20;
-        constexpr int BAR_WIDTH = 10;
+        constexpr size_t MAX_FILE_LEN = 15;   // names up to this many columns (with ".iso") are never truncated
+        constexpr size_t STEM_KEEP = 10;      // stem columns kept when truncating, followed by "…" and ".iso" (10 + 1 + 4 = 15)
+        constexpr int BAR_WIDTH = 5;               // character cells
+        constexpr int BAR_STEPS = BAR_WIDTH * 2;   // each cell has 2 states (half / full) -> 10 steps, 10% each
+
+        // Set once per render, after the full (untruncated) row width is known.
+        // While false, shortFilename() returns names unchanged.
+        bool truncateNames = false;
+
+        // Current terminal width in columns; 80 if it cannot be determined
+        // (e.g. stdout is not a tty).
+        auto terminalColumns = []() -> size_t {
+            struct winsize ws{};
+            if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0)
+                return ws.ws_col;
+            return 80;
+        };
 
         auto shortName = [&](const std::string& dev) -> std::string {
             const std::string& n = deviceNames[dev];
@@ -844,10 +945,98 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             return w;
         };
 
-        size_t maxFilenameLen = 0;
-        size_t maxDeviceLen   = 0;
-        size_t maxNameWidth   = 0;
-        size_t maxSpeedWidth  = 0;
+        // Visible width of a string that may contain ANSI CSI escape sequences
+        // (colors etc.): escape sequences count as 0 columns.
+        auto visibleWidth = [](const std::string& s) -> size_t {
+            size_t w = 0;
+            for (size_t i = 0; i < s.size(); ) {
+                const unsigned char c = static_cast<unsigned char>(s[i]);
+                if (c == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
+                    i += 2;
+                    while (i < s.size() && !(s[i] >= 0x40 && s[i] <= 0x7E)) ++i;
+                    if (i < s.size()) ++i;   // final byte of the sequence
+                    continue;
+                }
+                if ((c & 0xC0) != 0x80) ++w;
+                ++i;
+            }
+            return w;
+        };
+
+        // Cuts a string that may contain ANSI escape sequences to at most maxCols
+        // visible columns. Escape sequences are passed through untouched and UTF-8
+        // code points are never split.
+        auto clipToWidth = [](const std::string& s, size_t maxCols) -> std::string {
+            std::string out;
+            out.reserve(s.size());
+            size_t w = 0;
+            for (size_t i = 0; i < s.size(); ) {
+                if (static_cast<unsigned char>(s[i]) == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
+                    size_t j = i + 2;
+                    while (j < s.size() && !(s[j] >= 0x40 && s[j] <= 0x7E)) ++j;
+                    if (j < s.size()) ++j;
+                    out.append(s, i, j - i);
+                    i = j;
+                    continue;
+                }
+                size_t len = 1;
+                while (i + len < s.size() &&
+                       (static_cast<unsigned char>(s[i + len]) & 0xC0) == 0x80) ++len;
+                if (w >= maxCols) break;
+                out.append(s, i, len);
+                i += len;
+                ++w;
+            }
+            return out;
+        };
+
+        // Truncates ISO filenames, but only when truncateNames is set (the terminal
+        // is too narrow for the full-width rows) AND the whole name (".iso" included)
+        // is longer than MAX_FILE_LEN columns. A truncated name shows exactly
+        // STEM_KEEP stem columns, then "…" (1 column), then the ".iso" extension, e.g.
+        // "archlinux-….iso", so a truncated name is always exactly 15 columns and the
+        // extension is always visible.
+        // Names of MAX_FILE_LEN columns or fewer are shown in full. Walks whole UTF-8
+        // code points so a multi-byte sequence is never split.
+        auto shortFilename = [&](const std::string& f) -> std::string {
+            if (!truncateNames) return f;   // terminal is wide enough: show the full name
+
+            // Split off a trailing ".iso" (case-insensitive), if present.
+            std::string ext;
+            std::string stem = f;
+            if (f.size() >= 4) {
+                const std::string tail = f.substr(f.size() - 4);
+                if (tail.size() == 4 && tail[0] == '.' &&
+                    std::tolower(static_cast<unsigned char>(tail[1])) == 'i' &&
+                    std::tolower(static_cast<unsigned char>(tail[2])) == 's' &&
+                    std::tolower(static_cast<unsigned char>(tail[3])) == 'o') {
+                    ext  = tail;
+                    stem = f.substr(0, f.size() - 4);
+                }
+            }
+
+            if (displayWidth(f) <= MAX_FILE_LEN) return f;
+
+            std::string out;
+            size_t cols = 0;
+            for (size_t i = 0; i < stem.size() && cols < STEM_KEEP; ) {
+                size_t len = 1;
+                while (i + len < stem.size() &&
+                       (static_cast<unsigned char>(stem[i + len]) & 0xC0) == 0x80) ++len;
+                out.append(stem, i, len);
+                i += len;
+                ++cols;
+            }
+            out.append("…");
+            out.append(ext);
+            return out;
+        };
+
+        size_t maxFilenameWidth     = 0;
+        size_t maxFullFilenameWidth = 0;   // widest name with no truncation applied
+        size_t maxDeviceLen         = 0;
+        size_t maxNameWidth         = 0;
+        size_t maxSpeedWidth        = 0;
 
         // Speed strings are formatted once per render so the column can be
         // right-aligned to the widest value (the "(avg)" suffix is appended
@@ -856,19 +1045,56 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
         speedStrs.reserve(progressData.size());
 
         for (const auto& prog : progressData) {
-            maxFilenameLen = std::max(maxFilenameLen, prog.filename.size());
-            maxDeviceLen   = std::max(maxDeviceLen,   prog.device.size());
-            maxNameWidth   = std::max(maxNameWidth,   displayWidth(shortName(prog.device)));
+            maxFullFilenameWidth = std::max(maxFullFilenameWidth, displayWidth(prog.filename));
+            maxDeviceLen         = std::max(maxDeviceLen,         prog.device.size());
+            maxNameWidth         = std::max(maxNameWidth,         displayWidth(shortName(prog.device)));
 
             speedStrs.push_back(formatSpeed(prog.speed));
-            maxSpeedWidth  = std::max(maxSpeedWidth,  displayWidth(speedStrs.back()));
+            maxSpeedWidth        = std::max(maxSpeedWidth,        displayWidth(speedStrs.back()));
         }
+
+        // Width of everything except the filename column:
+        //   " → " (3) + device + " <name>" (maxNameWidth + 3) + " [" (2) + bar (5)
+        //   + "] " (2) + status (5) + speed + " (avg)" (6, always counted as the
+        //   worst case so the truncation decision doesn't flip when tasks complete).
+        const size_t fixedWidth = 3 + maxDeviceLen + (maxNameWidth + 3) + 2 + BAR_WIDTH
+                                + 2 + 5 + maxSpeedWidth + 6;
+
+        // Keep the last column free so a row can never trigger the terminal's
+        // auto-wrap, which would break the cursor-up redraw below.
+        const size_t cols       = terminalColumns();
+        const size_t usableCols = cols > 1 ? cols - 1 : 1;
+
+        // Truncate only if the widest full-width row would overflow the terminal.
+        truncateNames = (fixedWidth + maxFullFilenameWidth) > usableCols;
+
+        for (const auto& prog : progressData)
+            maxFilenameWidth = std::max(maxFilenameWidth, displayWidth(shortFilename(prog.filename)));
+
+        // The whole frame is built in one string and written once (less flicker).
+        // The previous frame was printed at some earlier width, and terminals re-wrap
+        // already-printed lines when resized, so a row that took one line may now
+        // take several. Work out how many physical lines the old rows occupy at the
+        // current width, move up exactly that far, and clear to the end of the screen.
+        // Relative movement is used instead of \033[s / \033[u because a saved
+        // absolute cursor position goes stale when the terminal re-wraps.
+        std::string frame;
+        {
+            size_t up = 0;
+            for (size_t w : lastRowWidths)
+                up += std::max<size_t>(1, (w + cols - 1) / cols);
+            if (up > 0) frame += "\033[" + std::to_string(up) + "A";
+            frame += "\r\033[J";
+        }
+        lastRowWidths.clear();
+        lastRowWidths.reserve(progressData.size());
 
         for (size_t i = 0; i < progressData.size(); ++i) {
             const auto& prog = progressData[i];
 
-            std::string paddedFilename = prog.filename;
-            paddedFilename.resize(maxFilenameLen, ' ');
+            const std::string fname = shortFilename(prog.filename);
+            std::string paddedFilename = fname;
+            paddedFilename.append(maxFilenameWidth - displayWidth(fname), ' ');
 
             std::string paddedDevice = prog.device;
             paddedDevice.resize(maxDeviceLen, ' ');
@@ -876,39 +1102,53 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             const std::string name = shortName(prog.device);
             const std::string namePad(maxNameWidth - displayWidth(name), ' ');
 
-            int pct = prog.progress.load();
-            int filled = (pct * BAR_WIDTH) / 100;
-            std::string bar, empty;
-            for (int j = 0; j < filled;             ++j) bar   += "▇";
-            for (int j = 0; j < BAR_WIDTH - filled; ++j) empty += "░";
+            // Half-block bar: BAR_WIDTH cells, BAR_STEPS steps (10% each).
+            // Each cell is empty (░), half (▄) or full (▇). Both filled glyphs are
+            // bottom-aligned and stop short of the cell top, so bars on consecutive
+            // rows never touch.
+            int pct = std::clamp(prog.progress.load(), 0, 100);
+            int steps = (pct * BAR_STEPS) / 100;   // 0..BAR_STEPS
+            int full  = steps / 2;
+            bool half = (steps % 2) != 0;
 
-            std::cout << "\033[K"
-                      << wt.fileCol << paddedFilename
-                      << color << " → " << wt.infoLabel << "<" << name << ">" << namePad
-                      << wt.deviceCol << " " << paddedDevice
-                      << color << " ["
-                      << bar << wt.speedCol << empty
-                      << color << "] ";
+            std::string bar, empty;
+            for (int j = 0; j < full; ++j) bar += "▇";
+            if (half)                      bar += "▄";   // 4/8 height, bottom-aligned like ▇
+            for (int j = 0; j < BAR_WIDTH - full - (half ? 1 : 0); ++j) empty += "░";
+
+            std::ostringstream row;
+            row << wt.fileCol << paddedFilename
+                << color << " → " << wt.deviceCol << paddedDevice
+                << color << " " << wt.infoLabel << "<" << name << ">" << namePad
+                << color << " ["
+                << bar << wt.speedCol << empty
+                << color << "] ";
 
             bool isCompleted = prog.completed.load();
 
-            if (isCompleted)                                    std::cout << wt.colorSuccess << "DONE ";
-            else if (prog.failed.load())                        std::cout << wt.colorFailure << "FAIL ";
-            else if (GlobalState::g_operationCancelled.load())  std::cout << wt.colorWarning << "CXL  ";
+            if (isCompleted)                                    row << wt.colorSuccess << "DONE ";
+            else if (prog.failed.load())                        row << wt.colorFailure << "FAIL ";
+            else if (GlobalState::g_operationCancelled.load())  row << wt.colorWarning << "CXL  ";
             else {
                 std::string pctStr = std::to_string(pct) + "%";
                 pctStr.resize(5, ' ');
-                std::cout << color << pctStr;
+                row << color << pctStr;
             }
 
             const std::string& speedStr = speedStrs[i];
             const std::string speedPad(maxSpeedWidth - displayWidth(speedStr), ' ');
 
-            std::cout << color << speedStr << speedPad;
-            if (isCompleted) std::cout << " (avg)";
-            std::cout << "\n";
+            row << color << speedStr << speedPad;
+            if (isCompleted) row << " (avg)";
+
+            // Last line of defense: if the terminal is too narrow even for the
+            // truncated row, cut the row instead of letting it wrap.
+            const std::string line = clipToWidth(row.str(), usableCols);
+            lastRowWidths.push_back(std::min(visibleWidth(line), usableCols));
+            frame += line;
+            frame += "\033[0m\n";
         }
-        std::cout << std::flush;
+        std::cout << frame << std::flush;
     };
 
     // UI render thread: wakes immediately on a completion notification
@@ -923,7 +1163,6 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             // Check if all tasks are finished (succeeded or failed)
             if (finishedTasks.load() == totalTasks) {
                 // Force one final render and exit the display thread
-                std::cout << "\033[u";
                 displayAllProgress();
                 isProcessingComplete.store(true, std::memory_order_release);
                 break;
@@ -946,15 +1185,16 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             }
             isFirstUpdate = false;
 
-            std::cout << "\033[u";
             displayAllProgress();
         }
     };
 
     std::vector<std::future<void>> futures;
     for (size_t i = 0; i < totalTasks; ++i) {
-        futures.push_back(pool.enqueue([validPairs, i, &completedTasks, &finishedTasks, &progressCv, &progressCvMutex]() {
-            const auto& [iso, device] = validPairs[i];
+        // sortedPairsPtr is shared (not copied per task) and stays alive for the
+        // detached drain thread after a cancellation.
+        futures.push_back(pool.enqueue([sortedPairsPtr, i, &completedTasks, &finishedTasks, &progressCv, &progressCvMutex]() {
+            const auto& [iso, device] = (*sortedPairsPtr)[i];
             bool success = writeIsoToDevice(iso.path, device, i);
 
             if (success) {
@@ -1005,7 +1245,6 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
 
     // 2. Force one final static render pass to commit final output matrix states cleanly
-    std::cout << "\033[u";
     displayAllProgress();
 
     std::cout << "\033[s";
