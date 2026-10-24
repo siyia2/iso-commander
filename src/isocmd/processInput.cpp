@@ -449,17 +449,17 @@ void processInputForConversions(const std::string& input,
         ? std::string(UI::Palette::BoldReset)
         : std::string(theme->muted);
 
-    std::string suffix = (totalTasks > 1 ? " conversions" : " conversion");
+    std::string suffix = (totalTasks > 1 ? " tasks" : " task");
     std::string operation;
-    if (modeMdf)      operation = std::string(UI::Palette::Orange) + "mdf2iso" + std::string(color) + suffix;
-    else if (modeNrg) operation = std::string(UI::Palette::Orange) + "nrg2iso" + std::string(color) + suffix;
-    else if (modeChd) operation = std::string(UI::Palette::Orange) + "chd2iso" + std::string(color) + suffix;
-    else if (modeDaa) operation = std::string(UI::Palette::Orange) + "daa2iso" + std::string(color) + suffix;
-    else              operation = std::string(UI::Palette::Orange) + "ccd2iso" + std::string(color) + suffix;
+    if (modeMdf)      operation = std::string(UI::Palette::Orange) + "mdf2iso" + std::string(color);
+    else if (modeNrg) operation = std::string(UI::Palette::Orange) + "nrg2iso" + std::string(color);
+    else if (modeChd) operation = std::string(UI::Palette::Orange) + "chd2iso" + std::string(color);
+    else if (modeDaa) operation = std::string(UI::Palette::Orange) + "daa2iso" + std::string(color);
+    else              operation = std::string(UI::Palette::Orange) + "ccd2iso" + std::string(color);
 
     clearScrollBuffer();
     std::ostringstream hdr;
-    hdr << "\n" << color << " Processing "
+    hdr << "\n" << color << " Processing " << suffix << " for "
         << operation << color << "... ("
         << UI::Palette::Red << "Ctrl+c"
         << color << ":cancel)\n";

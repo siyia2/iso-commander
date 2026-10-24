@@ -110,15 +110,16 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     disableInputForProgressBar(&oldt, &oldf);
 
     // --- Configuration Logic ---
-    int processingBarWidth = 42;
-    int finalBarWidth = 30;
+    int processingBarWidth = 25;
+    int finalBarWidth = 25;
 
     // Adjust width based on operation name length to keep UI aligned
     if (operation.find("mount") != std::string::npos || operation.find("umount") != std::string::npos) {
-        processingBarWidth = 46;
+        processingBarWidth = 28;
+        finalBarWidth = 28;
     } else if (operation.find("2iso") != std::string::npos) {
-        processingBarWidth = 50;
-        finalBarWidth = 41;
+        processingBarWidth = !GlobalState::isNonInteractive.load() ? 29 : 33;
+        finalBarWidth = processingBarWidth;
     }
 
     // Narrowest bar we will shrink to before falling back to clipping lines.
@@ -400,7 +401,6 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             const size_t failedTasksValue    = failedTasks->load(std::memory_order_acquire);
             const bool wasCancelled          = GlobalState::g_operationCancelled.load(std::memory_order_acquire);
             bool snapTo100 = (!wasCancelled && failedTasksValue == 0);
-
             // --- Status Summary ---
             std::cout << "\r\033[2K" << color << " Status: " << operation << color << " → ";
             if (wasCancelled) {

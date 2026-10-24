@@ -890,7 +890,7 @@ static int handleUmount(const ParsedArgs& args) {
  */
 static int handleConvert(const ParsedArgs& args) {
     if (args.paths.empty()) {
-        verboseWarn(args.silentMode, "No files to convert2iso.");
+        verboseWarn(args.silentMode, "No files to c2iso.");
         return 0;
     }
 
@@ -1020,7 +1020,7 @@ static int handleConvert(const ParsedArgs& args) {
         std::ostringstream hdr;
         hdr << "\n" << color << " Processing "
             << (images.size() == 1 ? "task for " : "tasks for ")
-            << UI::Palette::Orange << "convert2iso" << color << "... ("
+            << UI::Palette::Orange << "c2iso" << color << "... ("
             << UI::Palette::Red << "Ctrl+c"
             << color << ":cancel)\n";
         const std::string header = hdr.str();
