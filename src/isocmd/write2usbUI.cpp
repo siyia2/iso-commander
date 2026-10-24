@@ -39,6 +39,7 @@
 #include "../inputHandling.h"
 #include "../pausePrompt.h"
 #include "../readline.h"
+#include "../sort.h"
 #include "../state.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
@@ -794,16 +795,19 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  *    from any in-progress wait, and joined immediately.
  * -# Terminal properties, standard input buffers, and layout configurations are restored @b instantly.
  * -# Operating system control is returned to the user's shell prompt without visual lag.
- * -# @b Out-of-Band Draining: Active std::future objects are moved out of the local scope
- * into a detached thread execution closure. This allows OS page caches (e.g., buffered NTFS flushes)
- * to drain onto the hardware safely in the background, entirely avoiding stack-use-after-free crashes.
- * Each device is removed from the global dirty-device set as its own drain completes, allowing
- * the device selection screen to clear the @b [FLUSHING] indicator per-device as soon as it is safe.
+ * -# @b Out-of-Band Draining: Ownership of the still-running @c std::future objects is
+ *    transferred to @ref handleOutOfRangeBackgroundDrainingForWrite2Usb, which moves
+ *    them into a detached background thread. This allows OS page caches (e.g. buffered
+ *    NTFS flushes) to drain onto the hardware safely in the background, entirely
+ *    avoiding stack-use-after-free crashes. Each device is removed from the global
+ *    dirty-device set as its own drain completes, allowing the device selection screen
+ *    to clear the @b [FLUSHING] indicator per-device as soon as it is safe.
  *
  * @par Normal Completion
  * The main thread's condition-variable wait unblocks once every task has finished
  * (succeeded or failed), the UI rendering loop is closed natively, a final static
- * frame update is committed, and lingering thread handles are cleanly joined.
+ * frame update is committed, and lingering thread handles are cleanly joined. On this
+ * path the futures are simply joined inline; the out-of-band drain helper is not invoked.
  *
  * @par Summary Line
  * On execution exit, the primary cursor moves up to print an operational status overview:
@@ -819,28 +823,21 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  */
 void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
     // Sort once, up front, so task index i == progressData index i == display row.
-    // Case-insensitive alphabetical by ISO name; device path breaks ties.
-    auto sortedPairsPtr = std::make_shared<std::vector<std::pair<IsoInfo, std::string>>>(validPairsIn);
-    {
-        auto ciCompare = [](const std::string& a, const std::string& b) -> int {
-            const size_t n = std::min(a.size(), b.size());
-            for (size_t k = 0; k < n; ++k) {
-                const int ca = std::tolower(static_cast<unsigned char>(a[k]));
-                const int cb = std::tolower(static_cast<unsigned char>(b[k]));
-                if (ca != cb) return ca < cb ? -1 : 1;
-            }
-            if (a.size() == b.size()) return 0;
-            return a.size() < b.size() ? -1 : 1;
-        };
+    // Case-insensitive natural ordering by ISO name; device path breaks ties.
+    auto sortedPairsPtr =
+        std::make_shared<std::vector<std::pair<IsoInfo, std::string>>>(validPairsIn);
 
-        std::stable_sort(sortedPairsPtr->begin(), sortedPairsPtr->end(),
-            [&](const auto& a, const auto& b) {
-                const int c = ciCompare(a.first.filename, b.first.filename);
-                if (c != 0) return c < 0;
-                return a.second < b.second;
-            });
-    }
-    const auto& validPairs = *sortedPairsPtr;   // rest of the function uses this name
+    std::stable_sort(sortedPairsPtr->begin(), sortedPairsPtr->end(),
+        [](const auto& a, const auto& b) {
+            const int c = naturalCompare(a.first.filename, b.first.filename);
+
+            if (c != 0)
+                return c < 0;
+
+            return a.second < b.second;
+        });
+
+    const auto& validPairs = *sortedPairsPtr;  // Rest of the function uses this name.
 
     auto progressDataPtr =
         std::make_shared<std::vector<ProgressInfo>>();
@@ -1302,54 +1299,14 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     flushStdin();
     restoreInput();
 
-    // 5. OOR (Out-Of-Range) BACKGROUND DRAINING:
-    // If the process was canceled via Ctrl+C, move ONLY the active futures out of the
-    // local function context into a safe, detached background engine.
-    // This allows background hardware tasks to finish flushing cache data safely
-    // without copying or moving the non-copyable 'progressData' structure.
-    // Each device is erased from the dirty-device set as its own future completes,
-    // allowing the [FLUSHING] indicator to clear per-device as soon as draining finishes.
+    // On cacellation the Drain manager for write2usb takes over
     if (GlobalState::g_operationCancelled.load()) {
-        std::vector<std::string> drainDevices;
-        drainDevices.reserve(validPairs.size());
-
-        bool anyDraining = false;
-        {
-            std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-            for (size_t i = 0; i < validPairs.size(); ++i) {
-                const std::string& device = validPairs[i].second;
-                drainDevices.push_back(device);
-
-                // Only devices whose task was still actively running when
-                // cancellation hit need draining. Completed and failed tasks
-                // have already returned from writeIsoToDevice and are flush-clean.
-                if (!progressData[i].completed.load() && !progressData[i].failed.load()) {
-                    g_drainingDevices.insert(device);
-                    anyDraining = true;
-                }
-            }
-        }
-        g_drainingCancelled.store(anyDraining);
-
-        g_drainingManager.add(std::thread([
-            capturedFutures = std::move(futures),
-            devices = std::move(drainDevices),
+        handleOutOfRangeBackgroundDrainingForWrite2Usb(
+            std::move(futures),
+            validPairs,
+            progressData,
             sortedPairsPtr,
-            progressDataPtr
-        ]() mutable {
-            for (size_t i = 0; i < capturedFutures.size(); ++i) {
-                if (capturedFutures[i].valid()) {
-                    capturedFutures[i].wait();
-                }
-
-                std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-                g_drainingDevices.erase(devices[i]); // no-op if never inserted
-
-                if (g_drainingDevices.empty()) {
-                    g_drainingCancelled.store(false);
-                }
-            }
-        }));
+            progressDataPtr);
     } else {
         // Normal fast block cleanup sequence path if everything finished successfully
         for (auto& future : futures) {
@@ -1358,6 +1315,111 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             }
         }
     }
+}
+
+/**
+ * @brief Detach in-flight write tasks into a background drain thread after cancellation.
+ *
+ * Called at the tail of performWriteOperation() when the user has interrupted the
+ * operation via Ctrl+C (GlobalState::g_operationCancelled). Its job is to move the
+ * still-running futures out of the local function scope into a detached background
+ * thread, so that any hardware tasks still flushing cache data to a device can
+ * finish safely *after* control has been returned to the shell prompt.
+ *
+ * The detached thread waits on each future in turn and, as each one completes,
+ * erases its device from the global g_drainingDevices set. This lets the
+ * "[FLUSHING]" indicator in the UI clear per-device as soon as that device has
+ * finished draining, rather than waiting for all of them. When the set becomes
+ * empty, g_drainingCancelled is cleared so the indicator disappears entirely.
+ *
+ * Only devices whose tasks had not yet completed or failed at the moment of
+ * cancellation are added to g_drainingDevices — tasks that had already returned
+ * from writeIsoToDevice() are known to be flush-clean and are skipped.
+ *
+ * The non-copyable, non-movable progressData vector is deliberately *not* moved
+ * or captured by value; instead the shared_ptr aliases are captured so the
+ * per-operation data stays alive for as long as the detached thread needs it.
+ *
+ * @param futures        Pending per-task futures. Taken by value and moved into the
+ *                       detached thread, so the caller's vector is left empty after
+ *                       this call. Must not be used by the caller afterwards.
+ * @param validPairs     Device/ISO pairs for this operation, in the same index order
+ *                       as @p progressData. Used to enumerate device names for the
+ *                       draining set. Not captured by the detached thread.
+ * @param progressData   Per-task progress records, indexed identically to
+ *                       @p validPairs. Read only: .completed / .failed are inspected
+ *                       to decide which devices still need draining. Not captured by
+ *                       the detached thread (only the pointer is).
+ * @param sortedPairsPtr Shared ownership of the sorted pair list; captured by the
+ *                       detached thread to keep the operation data alive until the
+ *                       drain completes.
+ * @param progressDataPtr Shared ownership of the progress records; captured by the
+ *                       detached thread for the same reason.
+ *
+ * @note The caller must not touch @p futures after this returns — it has been
+ *       moved from. This is intentional: the whole point is to transfer ownership
+ *       of the pending work out of the local scope.
+ *
+ * @note Must only be called on the cancellation path. The non-cancelled path in
+ *       performWriteOperation waits on the futures inline instead, because nothing
+ *       needs to outlive the function in that case.
+ *
+ * @see g_drainingDevices, g_drainingCancelled, g_drainingManager
+ */
+void handleOutOfRangeBackgroundDrainingForWrite2Usb(
+    std::vector<std::future<void>> futures,
+    const std::vector<std::pair<IsoInfo, std::string>>& validPairs,
+    const std::vector<ProgressInfo>& progressData,
+    std::shared_ptr<std::vector<std::pair<IsoInfo, std::string>>> sortedPairsPtr,
+    std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr)
+{
+    // 5. OOR (Out-Of-Range) BACKGROUND DRAINING:
+    // If the process was canceled via Ctrl+C, move ONLY the active futures out of the
+    // local function context into a safe, detached background engine.
+    // This allows background hardware tasks to finish flushing cache data safely
+    // without copying or moving the non-copyable 'progressData' structure.
+    // Each device is erased from the dirty-device set as its own future completes,
+    // allowing the [FLUSHING] indicator to clear per-device as soon as draining finishes.
+    std::vector<std::string> drainDevices;
+    drainDevices.reserve(validPairs.size());
+
+    bool anyDraining = false;
+    {
+        std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+        for (size_t i = 0; i < validPairs.size(); ++i) {
+            const std::string& device = validPairs[i].second;
+            drainDevices.push_back(device);
+
+            // Only devices whose task was still actively running when
+            // cancellation hit need draining. Completed and failed tasks
+            // have already returned from writeIsoToDevice and are flush-clean.
+            if (!progressData[i].completed.load() && !progressData[i].failed.load()) {
+                g_drainingDevices.insert(device);
+                anyDraining = true;
+            }
+        }
+    }
+    g_drainingCancelled.store(anyDraining);
+
+    g_drainingManager.add(std::thread([
+        capturedFutures = std::move(futures),
+        devices = std::move(drainDevices),
+        sortedPairsPtr,
+        progressDataPtr
+    ]() mutable {
+        for (size_t i = 0; i < capturedFutures.size(); ++i) {
+            if (capturedFutures[i].valid()) {
+                capturedFutures[i].wait();
+            }
+
+            std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+            g_drainingDevices.erase(devices[i]); // no-op if never inserted
+
+            if (g_drainingDevices.empty()) {
+                g_drainingCancelled.store(false);
+            }
+        }
+    }));
 }
 
 /**
