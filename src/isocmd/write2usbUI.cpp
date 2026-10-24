@@ -808,7 +808,7 @@ prepareWriteData(const std::vector<std::pair<IsoInfo, std::string>>& validPairsI
  *
  * @see g_drainingDevices, g_drainingCancelled, g_drainingManager
  */
-void handleOutOfRangeBackgroundDrainingForWrite2Usb(
+void drainManagerForWrite2UsbUI(
     std::vector<std::future<void>> futures,
     const std::vector<ProgressInfo>& progressData,
     std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr)
@@ -1456,7 +1456,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     // On cancellation the Drain manager for write2usb takes over
     if (GlobalState::g_operationCancelled.load()) {
-        handleOutOfRangeBackgroundDrainingForWrite2Usb(
+        drainManagerForWrite2UsbUI(
             std::move(futures),
             progressData,
             progressDataPtr);
