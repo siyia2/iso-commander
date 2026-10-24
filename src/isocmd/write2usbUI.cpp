@@ -706,51 +706,61 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 }
 
 /**
- * @brief Stable-sorts validated (IsoInfo, device) pairs and builds the matching
- *        per-task ProgressInfo vector, in one pass.
+ * @brief Builds the per-task ProgressInfo vector from (IsoInfo, device) pairs,
+ *        in the order they would appear after a stable, case-insensitive sort
+ *        by ISO filename (device path as tie-break).
  *
- * Behaves exactly like the former sortPairsByFilename() followed by
- * buildProgressData(), but produces both results together:
+ * The caller's vector is never modified and is never copied. A vector of
+ * indices into @p validPairsIn is stable-sorted instead, and the pairs are
+ * then visited in that order; only the four fields ProgressInfo actually
+ * carries (filename, device, sizeStr, sourcePath) are copied, straight into
+ * the progress vector. No intermediate vector of (IsoInfo, std::string) pairs
+ * is materialised.
  *
- *  - @c pairs    — a freshly allocated, stable-sorted copy of @p validPairsIn.
- *                  Never touches the input. Primary key is IsoInfo::filename via
- *                  naturalCompare (case-insensitive, numeric-aware); tiebreak is
- *                  the device path under ordinary std::string ordering.
- *  - @c progress — one ProgressInfo per sorted pair, same order and size, so that
- *                  task index i, progressData[i] and display row i refer to the
- *                  same pair. Reserved to exactly the input size before filling,
- *                  so the backing storage never moves after construction.
+ * The progress vector is reserved to exactly @p validPairsIn.size() before
+ * filling, so its backing storage never reallocates after construction
+ * (ProgressInfo holds atomics and is therefore non-movable — the reserve is
+ * load-bearing, not just an optimisation).
  *
- * Both vectors are shared_ptr-owned because the same instances are captured by
- * every pooled write task and by the cancellation drain; the data must outlive
- * this call whenever a task or drain thread still needs it.
+ * The returned @c shared_ptr is captured by every pooled write task and by
+ * the cancellation drain, so the entries outlive this function whenever a
+ * task or drain thread still needs them.
+ *
+ * @par Ordering
+ * Primary key: @c IsoInfo::filename via @ref naturalCompare (case-insensitive,
+ * numeric-aware: "archlinux-9.iso" before "archlinux-10.iso"). Secondary key:
+ * the device path under ordinary @c std::string ordering. Equal
+ * (filename, device) keys keep their input order.
+ *
+ * @param validPairsIn Validated (IsoInfo, device) pairs targeted for writing.
+ *                     Not modified.
+ * @return A shared pointer to a new vector of ProgressInfo entries, one per
+ *         input pair, in stable sorted order.
+ *
+ * @see performWriteOperation
  */
-struct SortedWriteData {
-    std::shared_ptr<std::vector<std::pair<IsoInfo, std::string>>> pairs;
-    std::shared_ptr<std::vector<ProgressInfo>> progress;
-};
+static std::shared_ptr<std::vector<ProgressInfo>>
+prepareWriteData(const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
+    // Sort indices, not pairs: no IsoInfo copy, no device-string copy.
+    std::vector<size_t> order(validPairsIn.size());
+    std::iota(order.begin(), order.end(), size_t{0});   // requires <numeric>
 
-static SortedWriteData prepareWriteData(
-    const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn)
-{
-    auto pairsPtr =
-        std::make_shared<std::vector<std::pair<IsoInfo, std::string>>>(validPairsIn);
-
-    std::stable_sort(pairsPtr->begin(), pairsPtr->end(),
-        [](const auto& a, const auto& b) {
-            const int c = naturalCompare(a.first.filename, b.first.filename);
-            if (c != 0) return c < 0;
-            return a.second < b.second;
-        });
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        const int c = naturalCompare(validPairsIn[a].first.filename,
+                                     validPairsIn[b].first.filename);
+        if (c != 0) return c < 0;
+        return validPairsIn[a].second < validPairsIn[b].second;
+    });
 
     auto progressPtr = std::make_shared<std::vector<ProgressInfo>>();
     auto& progress   = *progressPtr;
-    progress.reserve(pairsPtr->size());   // no reallocation after this point
+    progress.reserve(validPairsIn.size());   // must not reallocate: atomics block it
 
-    for (const auto& [iso, device] : *pairsPtr)
-        progress.push_back(ProgressInfo{iso.filename, device, iso.sizeStr});
-
-    return {std::move(pairsPtr), std::move(progressPtr)};
+    for (size_t idx : order) {
+        const auto& [iso, device] = validPairsIn[idx];
+        progress.push_back(ProgressInfo{iso.filename, device, iso.sizeStr, iso.path});
+    }
+    return progressPtr;
 }
 
 /**
@@ -773,24 +783,20 @@ static SortedWriteData prepareWriteData(
  * from writeIsoToDevice() are known to be flush-clean and are skipped.
  *
  * The non-copyable, non-movable progressData vector is deliberately *not* moved
- * or captured by value; instead the shared_ptr aliases are captured so the
- * per-operation data stays alive for as long as the detached thread needs it.
+ * or captured by value; the shared_ptr is captured instead so the per-operation
+ * data stays alive for as long as the detached thread needs it. The device path
+ * for each pending future is read from progressData[i].device, so no separate
+ * pair vector is required.
  *
  * @param futures        Pending per-task futures. Taken by value and moved into the
  *                       detached thread, so the caller's vector is left empty after
  *                       this call. Must not be used by the caller afterwards.
- * @param validPairs     Device/ISO pairs for this operation, in the same index order
- *                       as @p progressData. Used to enumerate device names for the
- *                       draining set. Not captured by the detached thread.
- * @param progressData   Per-task progress records, indexed identically to
- *                       @p validPairs. Read only: .completed / .failed are inspected
- *                       to decide which devices still need draining. Not captured by
- *                       the detached thread (only the pointer is).
- * @param sortedPairsPtr Shared ownership of the sorted pair list; captured by the
+ * @param progressData   Per-task progress records. Read only: .completed / .failed
+ *                       are inspected to decide which devices still need draining,
+ *                       and .device is used to enumerate the draining set.
+ * @param progressDataPtr Shared ownership of the progress records; captured by the
  *                       detached thread to keep the operation data alive until the
  *                       drain completes.
- * @param progressDataPtr Shared ownership of the progress records; captured by the
- *                       detached thread for the same reason.
  *
  * @note The caller must not touch @p futures after this returns — it has been
  *       moved from. This is intentional: the whole point is to transfer ownership
@@ -804,9 +810,7 @@ static SortedWriteData prepareWriteData(
  */
 void handleOutOfRangeBackgroundDrainingForWrite2Usb(
     std::vector<std::future<void>> futures,
-    const std::vector<std::pair<IsoInfo, std::string>>& validPairs,
     const std::vector<ProgressInfo>& progressData,
-    std::shared_ptr<std::vector<std::pair<IsoInfo, std::string>>> sortedPairsPtr,
     std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr)
 {
     // 5. OOR (Out-Of-Range) BACKGROUND DRAINING:
@@ -817,13 +821,13 @@ void handleOutOfRangeBackgroundDrainingForWrite2Usb(
     // Each device is erased from the dirty-device set as its own future completes,
     // allowing the [FLUSHING] indicator to clear per-device as soon as draining finishes.
     std::vector<std::string> drainDevices;
-    drainDevices.reserve(validPairs.size());
+    drainDevices.reserve(progressData.size());
 
     bool anyDraining = false;
     {
         std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-        for (size_t i = 0; i < validPairs.size(); ++i) {
-            const std::string& device = validPairs[i].second;
+        for (size_t i = 0; i < progressData.size(); ++i) {
+            const std::string& device = progressData[i].device;
             drainDevices.push_back(device);
 
             // Only devices whose task was still actively running when
@@ -840,7 +844,6 @@ void handleOutOfRangeBackgroundDrainingForWrite2Usb(
     g_drainingManager.add(std::thread([
         capturedFutures = std::move(futures),
         devices = std::move(drainDevices),
-        sortedPairsPtr,
         progressDataPtr
     ]() mutable {
         for (size_t i = 0; i < capturedFutures.size(); ++i) {
@@ -861,42 +864,43 @@ void handleOutOfRangeBackgroundDrainingForWrite2Usb(
 /**
  * @brief Enqueues ISO-to-device write tasks and drives a live progress display.
  *
- * The input pairs are first copied and sorted alphabetically (case-insensitive) by
- * ISO filename via @ref prepareWriteData, with the device path as a tie-break when
- * the same ISO targets several devices. Task index, @ref progressData index and display
- * row all share this sorted order, so the live progress tracks always appear
- * alphabetically by ISO name.
+ * The input pairs are used to build a @ref ProgressInfo vector, sorted
+ * alphabetically (case-insensitive) by ISO filename via @ref prepareWriteData,
+ * with the device path as a tie-break when the same ISO targets several devices.
+ * Task index, @ref progressData index and display row all share this sorted
+ * order, so the live progress tracks always appear alphabetically by ISO name.
  *
  * For each validated (IsoInfo, device) pair, in sorted order:
- * - A @ref ProgressInfo entry is appended to @ref progressData by @ref
- *   prepareWriteData (reserved up front, one entry per task, same order as the
- *   sorted pairs)
+ * - A @ref ProgressInfo entry (filename, device, sizeStr, sourcePath) is
+ *   appended to @ref progressData by @ref prepareWriteData — reserved up front,
+ *   one entry per task, same order as the sort
  * - Device names, sizes, and formatted size strings are cached once per device
  * - One @ref writeIsoToDevice call per task is submitted to the global @ref ThreadPool
  *
  * A background thread redraws per-task status, waking immediately whenever a task
  * completes (via a condition variable notified from each pooled task) and otherwise
- * falling back to a 500 ms pulse if nothing new has happened, using ANSI cursor
- * save/restore (\033[s / \033[u). The main thread waits on the same condition
- * variable to detect overall completion, also waking instantly on task completion.
+ * falling back to a 500 ms pulse if nothing new has happened. The main thread waits
+ * on the same condition variable to detect overall completion, also waking instantly
+ * on task completion.
  *
  * @par Structure
  * The body is split into two phases so the invariants are named once and reused:
- * -# @ref prepareWriteData produces, in one pass, a @c std::shared_ptr to a
- *    stable-sorted copy of the input and a @c std::shared_ptr to a parallel vector
- *    of @ref ProgressInfo entries, one per sorted pair and in the same order (task
- *    index @c i matches both vectors and the display row). Both shared pointers are
- *    captured by every pooled task and by the cancellation drain, so the data
- *    outlives this function if needed.
+ * -# @ref prepareWriteData builds a @c std::shared_ptr to a stable-sorted vector
+ *    of @ref ProgressInfo entries, one per input pair, in sorted order (task
+ *    index @c i matches the display row). The sort is done on an index vector,
+ *    so neither the caller's pairs nor a copy of them is ever materialised. The
+ *    shared pointer is captured by every pooled task and by the cancellation
+ *    drain, so the data outlives this function if needed.
  * -# The remainder of the function wires up the thread pool, the render loop, the
  *    completion condition variable, and the final status/summary print.
  *
  * @par Ordering
  * Rows are sorted alphabetically by ISO filename (ASCII case-insensitive, byte-wise),
- * with the device path as a secondary key. The sort is stable and performed once on a
- * local copy of the input by @ref prepareWriteData, so the caller's vector is never
- * modified. The pooled tasks share the sorted copy through a @c std::shared_ptr, which
- * keeps it alive for any detached drain that outlives this function after cancellation.
+ * with the device path as a secondary key. The sort is stable and performed once by
+ * @ref prepareWriteData on a temporary index vector, so the caller's vector is never
+ * modified and no copy of it is ever taken. The pooled tasks share the progress
+ * vector through a @c std::shared_ptr, which keeps it alive for any detached drain
+ * that outlives this function after cancellation.
  *
  * @par Filename Truncation
  * ISO names are shown in full unless the widest row (full names, device, drive name,
@@ -965,8 +969,8 @@ void handleOutOfRangeBackgroundDrainingForWrite2Usb(
  * -# Terminal properties, standard input buffers, and layout configurations are restored @b instantly.
  * -# Operating system control is returned to the user's shell prompt without visual lag.
  * -# @b Out-of-Band Draining: Ownership of the still-running @c std::future objects,
- *    together with the shared sorted pair vector and progress vector, is transferred
- *    to @ref handleOutOfRangeBackgroundDrainingForWrite2Usb, which moves them into a
+ *    together with the shared progress vector, is transferred to
+ *    @ref handleOutOfRangeBackgroundDrainingForWrite2Usb, which moves them into a
  *    detached background thread. This allows OS page caches (e.g. buffered NTFS
  *    flushes) to drain onto the hardware safely in the background, entirely avoiding
  *    stack-use-after-free crashes. Each device is removed from the global
@@ -990,25 +994,21 @@ void handleOutOfRangeBackgroundDrainingForWrite2Usb(
  *
  * Final execution metrics (elapsed duration and a successful/total count ratio) are printed below.
  *
- * @param validPairsIn Validated (IsoInfo, device) pairs targeted for writing. Copied and
- *                     sorted alphabetically by ISO filename (via @ref prepareWriteData)
- *                     before processing; the caller's vector is left untouched.
+ * @param validPairsIn Validated (IsoInfo, device) pairs targeted for writing. Used
+ *                     to build a sorted @ref ProgressInfo vector by
+ *                     @ref prepareWriteData; the caller's vector is never modified.
  */
 void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
-    // One call produces both the stable-sorted pairs and the matching
-    // ProgressInfo vector; the ordering invariant (task i ↔ pair i ↔
-    // progress row i) is established by prepareWriteData().
-    auto writeData              = prepareWriteData(validPairsIn);
-    const auto& sortedPairsPtr  = writeData.pairs;
-    const auto& progressDataPtr = writeData.progress;
-
-    const auto& validPairs = *sortedPairsPtr;  // Rest of the function uses this name.
-    auto& progressData     = *progressDataPtr;
+    // One call builds the sorted per-task progress vector and establishes the
+    // ordering invariant (task i ↔ progress row i). No sorted-pair vector is
+    // materialised, so only one shared pointer travels through the tasks and drain.
+    auto progressDataPtr = prepareWriteData(validPairsIn);
+    auto& progressData   = *progressDataPtr;
 
     std::atomic<size_t> completedTasks(0);
     std::atomic<size_t> finishedTasks(0);   // success OR failure — drives "all done" detection
     std::atomic<bool> isProcessingComplete(false);
-    const size_t totalTasks = validPairs.size();
+    const size_t totalTasks = progressData.size();
 
     // Condition variable used to wake the display thread the instant a task
     // completes, instead of waiting for its next 500ms poll tick. The
@@ -1347,10 +1347,9 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     std::vector<std::future<void>> futures;
     for (size_t i = 0; i < totalTasks; ++i) {
-        // Both shared pointers keep their per-operation data alive,
-        // including while tasks are drained after cancellation.
+        // Only one shared pointer now: sourcePath and device live inside
+        // ProgressInfo, so the task needs nothing else from the caller's pairs.
         futures.push_back(pool.enqueue([
-            sortedPairsPtr,
             progressDataPtr,
             i,
             &completedTasks,
@@ -1358,11 +1357,9 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             &progressCv,
             &progressCvMutex
         ]() {
-            const auto& [iso, device] = (*sortedPairsPtr)[i];
-            const bool success = writeIsoToDevice(
-                iso.path, device, i, *progressDataPtr);
-
             auto& progress = (*progressDataPtr)[i];
+            const bool success = writeIsoToDevice(
+                progress.sourcePath, progress.device, i, *progressDataPtr);
 
             if (success) {
                 progress.completed.store(true);
@@ -1448,7 +1445,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     std::cout << "\n" << color << "Successful: "
             << wt.colorSuccess << completedTasksValue
             << color << "/"
-            << wt.colorWarning << validPairs.size()
+            << wt.colorWarning << progressData.size()
             << color << " | Time Elapsed: "
             << color << duration << "s"
             << wt.colorStatus << UI::Palette::Reset << "\n";
@@ -1461,9 +1458,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     if (GlobalState::g_operationCancelled.load()) {
         handleOutOfRangeBackgroundDrainingForWrite2Usb(
             std::move(futures),
-            validPairs,
             progressData,
-            sortedPairsPtr,
             progressDataPtr);
     } else {
         // Normal fast block cleanup sequence path if everything finished successfully

@@ -1306,7 +1306,7 @@ static int handleWriteUsb(const ParsedArgs& args) {
 
     for (const auto& [iso, device] : *pairsPtr) {
         progressDataPtr->push_back(
-            ProgressInfo{iso.filename, device, iso.sizeStr});
+            ProgressInfo{iso.filename, device, iso.sizeStr, iso.path});
     }
 
     if (!args.silentMode) {
