@@ -75,106 +75,59 @@ std::string getDriveName(const std::string& device) {
 }
 
 /**
- * @brief Determines whether a block device is a USB flash drive.
+ * @brief Determines whether a block device is a removable USB storage device.
  *
- * Uses three complementary heuristics in priority order:
- *  1. Canonical sysfs path contains "/usb"  (strongest — short-circuits).
- *  2. A uevent file in the device tree contains an exact USB bus identifier.
- *  3. USB-specific sysfs attributes (speed, version, manufacturer) exist.
+ * Resolves symlinks (e.g. /dev/disk/by-id/...), requires the sysfs
+ * "removable" attribute to read "1", then walks up the device's canonical
+ * sysfs path looking for a USB device node (identified by its "idVendor"
+ * file). Fails closed on any error.
  *
- * The removable sysfs attribute MUST read "1" for the call to return true.
- * If the attribute is unreadable the function returns false (fail-closed).
- *
- * @param devicePath Absolute path to the block device (must start with /dev/).
- * @return true if the device is identified as a removable USB flash device.
+ * @param devicePath Path to the block device (must start with /dev/).
+ * @return true if the device is a removable USB block device.
  */
-bool isUsbDevice(const std::string& devicePath) {
+bool isFlashDrive(const std::string& devicePath) {
+    namespace fs = std::filesystem;
     try {
-        // Basic path sanity check
-        if (devicePath.size() < 6 || devicePath.substr(0, 5) != "/dev/") {
+        if (devicePath.size() <= 5 || devicePath.rfind("/dev/", 0) != 0) {
             return false;
         }
 
-        const std::string deviceName = devicePath.substr(devicePath.find_last_of('/') + 1);
+        std::error_code ec;
 
-        // Reject empty names or names that look like partition nodes
-        if (deviceName.empty() ||
-            std::isdigit(static_cast<unsigned char>(deviceName.back()))) {
-            return false;
-        }
+        // Resolve symlinks so /dev/disk/by-id/usb-... maps to /dev/sdX.
+        const fs::path devNode = fs::canonical(devicePath, ec);
+        if (ec) return false;
 
-        const std::string sysPath = "/sys/block/" + deviceName;
-        if (!fs::exists(sysPath)) {
-            return false;
-        }
+        // Whole disks only: partitions (sda1) have no entry in /sys/block.
+        const std::string name = devNode.filename().string();
+        if (name.empty()) return false;
 
+        const fs::path sysPath = fs::path("/sys/block") / name;
+        if (!fs::exists(sysPath, ec) || ec) return false;
+
+        // The removable attribute must read "1" (fail-closed if unreadable).
         {
-            std::ifstream removableFile(sysPath + "/removable");
-            std::string removable;
-            if (!removableFile || !std::getline(removableFile, removable)) {
-                return false;   // can't confirm removable → reject
+            std::ifstream file(sysPath / "removable");
+            std::string value;
+            if (!file || !std::getline(file, value)) return false;
+            while (!value.empty() &&
+                   std::isspace(static_cast<unsigned char>(value.back()))) {
+                value.pop_back();
             }
-            // Trim possible trailing whitespace / newline
-            while (!removable.empty() && std::isspace(static_cast<unsigned char>(removable.back()))) {
-                removable.pop_back();
-            }
-            if (removable != "1") {
-                return false;
-            }
+            if (value != "1") return false;
         }
 
-        // --- Heuristic 1: canonical sysfs path contains "/usb" --------------
-        // This is the most reliable signal.  Short-circuit immediately so the
-        // weaker heuristics don't run unnecessarily.
-        {
-            std::error_code ec;
-            const std::string resolved = fs::canonical(sysPath, ec).string();
-            if (!ec && resolved.find("/usb") != std::string::npos) {
-                return true;
-            }
+        // Walk up the real sysfs path; a USB device node has an idVendor file.
+        const fs::path resolved = fs::canonical(sysPath, ec);
+        if (ec) return false;
+
+        for (fs::path p = resolved; p != p.root_path(); p = p.parent_path()) {
+            if (fs::exists(p / "idVendor", ec)) return true;
+            ec.clear();
         }
-
-        // --- Heuristic 2: uevent contains exact USB bus identifier ----------
-        //  Only match the key=value pairs that unambiguously indicate a USB storage bus.
-        {
-            const std::vector<std::string> ueventPaths = {
-                sysPath + "/device/uevent",
-                sysPath + "/uevent"
-            };
-
-            for (const auto& path : ueventPaths) {
-                std::ifstream uevent(path);
-                std::string line;
-                while (std::getline(uevent, line)) {
-                    if (line == "ID_BUS=usb" ||
-                        line.rfind("DRIVER=usb", 0) == 0) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        // --- Heuristic 3: USB-specific sysfs attributes exist ---------------
-        // Weakest signal — only reached when the two stronger ones both miss.
-        // "speed" and "version" live under the USB interface node; their
-        // presence is a reasonable (though not infallible) USB indicator.
-        {
-            const std::vector<std::string> usbIndicators = {
-                sysPath + "/device/speed",
-                sysPath + "/device/version",
-                sysPath + "/device/manufacturer"
-            };
-
-            for (const auto& path : usbIndicators) {
-                if (fs::exists(path)) {
-                    return true;
-                }
-            }
-        }
-
         return false;
 
-    } catch (const std::exception&) {
+    } catch (...) {
         return false;
     }
 }
@@ -184,7 +137,7 @@ bool isUsbDevice(const std::string& devicePath) {
  *
  * Skips loop devices, RAM disks, zram devices, and any entry whose name
  * ends with a digit (partition suffix). A device is included only when
- * its removable sysfs attribute reads "1" and isUsbDevice() confirms it
+ * its removable sysfs attribute reads "1" and isFlashDrive() confirms it
  * is USB-attached.
  *
  * @return Vector of absolute device paths such as /dev/sdb.
@@ -218,7 +171,7 @@ std::vector<std::string> getRemovableDevices() {
             const std::string devPath = "/dev/" + deviceName;
 
             // Also filter by USB
-            if (isUsbDevice(devPath)) {
+            if (isFlashDrive(devPath)) {
                 devices.push_back(devPath);
             }
         }
@@ -280,7 +233,7 @@ bool isDeviceMounted(const std::string& device) {
  * immediately with a "root privileges required" error (see below).
  *
  * Otherwise, each candidate pair is checked in order:
- * -# Device is a removable USB device (via @ref isUsbDevice).
+ * -# Device is a removable USB device (via @ref isFlashDrive).
  * -# Device is not currently mounted (via @ref isDeviceMounted).
  * -# Device has no pending kernel-level tasks (not present in @ref g_drainingDevices).
  * -# Device size can be determined; sets @p noPermissions flag to true on failure.
@@ -318,7 +271,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
             const std::string& device = devicePair.second;
             const auto& iso = selectedIsos[index - 1];
 
-            if (!isUsbDevice(device)) {
+            if (!isFlashDrive(device)) {
                 std::string errMsg;
                 errMsg.append(wt.errPath).append("'").append(device).append("'")
                       .append(wt.rl_resetCol).append(wt.errLabel).append(" is not a removable USB flash device")

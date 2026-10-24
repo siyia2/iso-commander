@@ -1244,7 +1244,7 @@ static int handleWriteUsb(const ParsedArgs& args) {
             errors.push_back(pathErr(raw, " is listed more than once"));
             continue;
         }
-        if (!isUsbDevice(dev)) {
+        if (!isFlashDrive(dev)) {
             errors.push_back(pathErr(raw, " is not a removable USB flash device"));
             continue;
         }
