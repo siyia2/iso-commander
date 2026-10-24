@@ -68,7 +68,8 @@ void displayProgressBarWithSize(
     size_t totalTasks,
     std::atomic<bool>* isComplete,
     bool* verbose,
-    const std::string& operation
+    const std::string& operation,
+    const std::string& header = ""
 );
 
 
