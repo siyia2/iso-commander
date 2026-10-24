@@ -1310,15 +1310,15 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     // Each device is erased from the dirty-device set as its own future completes,
     // allowing the [FLUSHING] indicator to clear per-device as soon as draining finishes.
     if (GlobalState::g_operationCancelled.load()) {
-        std::vector<std::string> deviceNames;
-        deviceNames.reserve(validPairs.size());
+        std::vector<std::string> drainDevices;
+        drainDevices.reserve(validPairs.size());
 
         bool anyDraining = false;
         {
             std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
             for (size_t i = 0; i < validPairs.size(); ++i) {
                 const std::string& device = validPairs[i].second;
-                deviceNames.push_back(device);
+                drainDevices.push_back(device);
 
                 // Only devices whose task was still actively running when
                 // cancellation hit need draining. Completed and failed tasks
@@ -1333,7 +1333,7 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
         g_drainingManager.add(std::thread([
             capturedFutures = std::move(futures),
-            devices = std::move(deviceNames),
+            devices = std::move(drainDevices),
             sortedPairsPtr,
             progressDataPtr
         ]() mutable {
