@@ -15,7 +15,7 @@ Show program version.
 Suppress informational messages, warnings and progress output. Critical errors will still be displayed.
 .TP
 .B \-d\fIN\fR
-Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 does a surface scan. Not used by \fBw2usb\fR, which does not scan directories.
+Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 does a surface scan. Unused by \fBw2usb\fR.
 .TP
 .B mount
 Mount one or more ISO files or scan directories for ISO files and mount them (requires root).
@@ -27,7 +27,9 @@ Unmount specified ISO mount points. Without paths, or with \fBall\fR as the only
 Convert supported images to ISO files. Accepts individual image files and directories to scan. Supported formats are BIN, IMG, CCD, MDF, NRG, CHD, DAA and GBI.
 .TP
 .B w2usb
-Write ISO files to removable USB flash devices (requires root). Arguments beginning with \fB/dev/\fR are target devices. All arguments are validated before any device is touched.
+Write ISO files to removable USB flash devices (requires root). Arguments beginning with \fB/dev/\fR are target devices.
+.br
+All arguments are validated before any device is touched. Only raw devices are accepted, not device partitions.
 
 .SH EXAMPLES
 .TS
