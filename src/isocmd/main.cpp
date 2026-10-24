@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
     const std::string arg1 = (argc >= 2) ? argv[1] : "";
 
     if (argc == 2 && (arg1 == "--version" || arg1 == "-v"))
-        return printVersionNumber("7.8.3"), 0;
+        return printVersionNumber("7.8.4"), 0;
     if (argc >= 3 || (argc == 2 && (arg1 == "umount" || arg1 == "unmount" ||
                                     arg1 == "mount"  || arg1 == "c2iso" ||
                                     arg1 == "w2usb")))
