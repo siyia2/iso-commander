@@ -323,10 +323,12 @@ int checkPendingRefresh() {
     if (kind == PendingRefreshKind::IsoList  && !GlobalState::isAtISOList.load()) return 0;
 
     if (kind == PendingRefreshKind::MainMenu) {
+        std::cout << "\033[?2026h";          // begin synchronized update
         clearScrollBuffer();
         print_ascii();
         printMenu();
         std::cout << "\n";
+        std::cout << "\033[?2026l" << std::flush;   // end: terminal presents the frame atomically
     } else if (kind == PendingRefreshKind::IsoList) {
         std::shared_ptr<RefreshState> state;
         {
