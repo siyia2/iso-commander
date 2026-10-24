@@ -88,8 +88,6 @@ struct ProgressInfo {
     ProgressInfo& operator=(const ProgressInfo&) = delete;
 };
 
-inline std::vector<ProgressInfo> progressData; ///< Shared progress state for all active write tasks.
-
 /**
  * @brief RAII guard for the readline/terminal state that needs to be set up
  *        at the start of every loop iteration and torn down on every exit
@@ -241,7 +239,7 @@ inline std::atomic<bool> g_drainingCancelled{false};
 /**
  * Performs the actual write2usb.
  */
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex, std::vector<ProgressInfo>& progressData);
 
 /**
  * Returns true if the block device (e.g. /dev/sdb) is a removable USB flash drive.
