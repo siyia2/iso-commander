@@ -54,7 +54,8 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes,
                                 std::atomic<size_t>* failedTasks,
                                 size_t totalTasks,
                                 std::atomic<bool>* isComplete,
-                                bool* verbose, const std::string& operation);
+                                bool* verbose, const std::string& operation,
+                                const std::string& header);
 
 // ─── Palette helpers ─────────────────────────────────────────────────────────
 
@@ -504,19 +505,23 @@ static int handleMount(const ParsedArgs& args) {
             std::string(UI::Palette::Green) + "mount" + std::string(UI::Palette::BoldReset);
 
     if (!args.silentMode) {
+        std::ostringstream hdr;
+        hdr << "\n" << color << " Processing "
+            << (totalTasks == 1 ? "task for " : "tasks for ")
+            << UI::Palette::Green << "mount" << color << "... ("
+            << UI::Palette::Red << "Ctrl+c"
+            << color << ":cancel)\n";
+        const std::string header = hdr.str();
+
         clearScrollBuffer();
-        std::cout << "\n" << color << " Processing "
-                  << (totalTasks == 1 ? "task for " : "tasks for ")
-                  << UI::Palette::Green << "mount" << color << "... ("
-                  << UI::Palette::Red << "Ctrl+c"
-                  << color << ":cancel)\n";
+        std::cout << header;
 
         barThread = std::thread(
             displayProgressBarWithSize,
             &completedBytes, totalTasks,
             &completedTasks, &failedTasks, totalTasks,
             &isComplete, &showVerbose,
-            coloredProcess);
+            coloredProcess, header);
     }
 
     // Bound worker count by task count, configured cap, and pool size.
@@ -753,19 +758,23 @@ static int handleUmount(const ParsedArgs& args) {
             std::string(UI::Palette::Yellow) + "umount" + std::string(UI::Palette::BoldReset);
 
     if (!args.silentMode) {
+        std::ostringstream hdr;
+        hdr << "\n" << color << " Processing "
+            << (totalTasks == 1 ? "task for " : "tasks for ")
+            << UI::Palette::Yellow << "umount" << color << "... ("
+            << UI::Palette::Red << "Ctrl+c"
+            << color << ":cancel)\n";
+        const std::string header = hdr.str();
+
         clearScrollBuffer();
-        std::cout << "\n" << color << " Processing "
-                  << (totalTasks == 1 ? "task for " : "tasks for ")
-                  << UI::Palette::Yellow << "umount" << color << "... ("
-                  << UI::Palette::Red << "Ctrl+c"
-                  << color << ":cancel)\n";
+        std::cout << header;
 
         barThread = std::thread(
             displayProgressBarWithSize,
             &completedBytes, totalTasks,
             &completedTasks, &failedTasks, totalTasks,
             &isComplete, &showVerbose,
-            coloredProcess);
+            coloredProcess, header);
     }
 
     // Bound worker count by task count, configured cap, and pool size.
@@ -1008,19 +1017,23 @@ static int handleConvert(const ParsedArgs& args) {
             std::string(UI::Palette::Orange) + "convert2iso" + std::string(UI::Palette::BoldReset);
 
     if (!args.silentMode) {
+        std::ostringstream hdr;
+        hdr << "\n" << color << " Processing "
+            << (images.size() == 1 ? "task for " : "tasks for ")
+            << UI::Palette::Orange << "convert2iso" << color << "... ("
+            << UI::Palette::Red << "Ctrl+c"
+            << color << ":cancel)\n";
+        const std::string header = hdr.str();
+
         clearScrollBuffer();
-        std::cout << "\n" << color << " Processing "
-                  << (images.size() == 1 ? "task for " : "tasks for ")
-                  << UI::Palette::Orange << "convert2iso" << color << "... ("
-                  << UI::Palette::Red << "Ctrl+c"
-                  << color << ":cancel)\n";
+        std::cout << header;
 
         barThread = std::thread(
             displayProgressBarWithSize,
             &completedBytes, totalBytes,
             &completedTasks, &failedTasks, images.size(),
             &isComplete, &showVerbose,
-            coloredProcess);
+            coloredProcess, header);
     }
 
     // A task records its input path and the backend that must process it.

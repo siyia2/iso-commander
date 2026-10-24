@@ -9,6 +9,7 @@
 #include <future>
 #include <iostream>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -77,12 +78,15 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     std::string operationColor = std::string(isUnmount ? UI::Palette::Yellow : UI::Palette::Green);
     std::string operationName = isUnmount ? "umount" : "mount";
 
-    std::cout << color << "\n Processing"
-              << (selectedIndices.size() > 1 ? " tasks" : " task")
-              << " for " << operationColor << operationName
-              << color << "... ("
-              << UI::Palette::Red << "Ctrl+c"
-              << color << ":cancel)\n";
+    std::ostringstream hdr;
+    hdr << color << "\n Processing"
+        << (selectedIndices.size() > 1 ? " tasks" : " task")
+        << " for " << operationColor << operationName
+        << color << "... ("
+        << UI::Palette::Red << "Ctrl+c"
+        << color << ":cancel)\n";
+    const std::string header = hdr.str();
+    std::cout << header;
 
     std::string coloredProcess = std::string(operationColor) + operationName + std::string(UI::Palette::BoldReset);
 
@@ -105,15 +109,10 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
 
     std::thread progressThread(
         displayProgressBarWithSize,
-        nullptr,
-        static_cast<size_t>(0),
-        &completedTasks,
-        &failedTasks,
-        selectedIndices.size(),
-        &isProcessingComplete,
-        &verbose,
-        std::string(coloredProcess)
-    );
+        nullptr, static_cast<size_t>(0),
+        &completedTasks, &failedTasks, selectedIndices.size(),
+        &isProcessingComplete, &verbose,
+        std::string(coloredProcess), header);
 
     for (const auto& idxChunk : indexChunks) {
 		futures.emplace_back(pool.enqueue([&]() {
@@ -301,11 +300,14 @@ void processInputForCpMvRm(const std::string& input,
 
     std::string colorMuted = isOrig ? std::string(UI::Palette::BoldReset) : std::string(theme->muted);
 
-    std::cout << "\n" << color << " Processing "
-              << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process
-              << color << "... ("
-              << UI::Palette::Red << "Ctrl+c"
-              << color << ":cancel)\n";
+    std::ostringstream hdr;
+    hdr << "\n" << color << " Processing "
+        << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process
+        << color << "... ("
+        << UI::Palette::Red << "Ctrl+c"
+        << color << ":cancel)\n";
+    const std::string header = hdr.str();
+    std::cout << header;
 
     std::string coloredProcess =
         isDelete ? std::string(UI::Palette::Red)    + process + std::string(UI::Palette::BoldReset) :
@@ -320,7 +322,8 @@ void processInputForCpMvRm(const std::string& input,
 
     std::thread progressThread(displayProgressBarWithSize, &completedBytes,
                                totalBytes, &completedTasks, &failedTasks,
-                               totalTasks, &isProcessingComplete, &verbose, std::string(coloredProcess));
+                               totalTasks, &isProcessingComplete, &verbose,
+                               std::string(coloredProcess), header);
 
     std::vector<std::future<void>> futures;
     futures.reserve(indexChunks.size());
@@ -455,10 +458,13 @@ void processInputForConversions(const std::string& input,
     else              operation = std::string(UI::Palette::Orange) + "ccd2iso" + std::string(color) + suffix;
 
     clearScrollBuffer();
-    std::cout << "\n" << color << " Processing "
-              << operation << color << "... ("
-              << UI::Palette::Red << "Ctrl+c"
-              << color << ":cancel)\n";
+    std::ostringstream hdr;
+    hdr << "\n" << color << " Processing "
+        << operation << color << "... ("
+        << UI::Palette::Red << "Ctrl+c"
+        << color << ":cancel)\n";
+    const std::string header = hdr.str();
+    std::cout << header;
 
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
@@ -468,7 +474,7 @@ void processInputForConversions(const std::string& input,
     std::thread progressThread(displayProgressBarWithSize,
         &completedBytes, totalBytes,
         &completedTasks, &failedTasks, totalTasks,
-        &isProcessingComplete, &verbose, operation);
+        &isProcessingComplete, &verbose, operation, header);
 
     // Snapshot indices so workers can pull them via an atomic counter.
     const std::vector<int> indices(processedIndices.begin(), processedIndices.end());
