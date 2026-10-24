@@ -842,8 +842,6 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
     const auto& validPairs = *sortedPairsPtr;   // rest of the function uses this name
 
-    GlobalState::g_operationCancelled.store(false);
-
     auto progressDataPtr =
         std::make_shared<std::vector<ProgressInfo>>();
 
