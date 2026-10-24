@@ -55,6 +55,7 @@ void printVersionNumber(const std::string& version) {
  * - `-v` / `--version` : Prints version information and exits.
  * - `mount` / `umount` / `unmount` : Delegates to mount/unmount command handler.
  * - `c2iso` : Non-interactive image → ISO conversion (e.g. `isocmd c2iso -d2 ~/Games`).
+ * - `w2iso` : Non-interactive ISO to USB writer (e.g. `isocmd w2iso file.iso /dev/sdd)
  * - No arguments : Launches the interactive TUI (terminal user interface).
  *
  * @param argc Number of command-line arguments.
@@ -179,6 +180,7 @@ int main(int argc, char *argv[]) {
         isAtMain.store(true);
         isAtISOList.store(false);
 
+        std::cout << "\033[?2026h";
         clearScrollBuffer();
         print_ascii();
 
@@ -209,6 +211,9 @@ int main(int argc, char *argv[]) {
         }
 
         printMenu();
+
+        std::cout << "\033[?2026l" << std::flush;
+
         clear_history();
 
         /// Read user input with theme-aware styling

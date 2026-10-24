@@ -97,6 +97,8 @@ void submenu1(std::atomic<bool>& isAtISOList,
         rl_bind_key('\t', prevent_readline_keybindings);
 
         isAtISOList.store(false);
+
+        std::cout << "\033[?2026h";
         clearScrollBuffer();
 
         std::cout << color << "+----------------------+\n"
@@ -114,6 +116,8 @@ void submenu1(std::atomic<bool>& isAtISOList,
                   << "+----------------------+\n"
                   << "| 6. Write             |\n"
                   << "+----------------------+" << "\n\n";
+
+        std::cout << "\033[?2026l" << std::flush;
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
         char* rawInput = readline(( std::string(pt.primary) +
@@ -190,6 +194,7 @@ void submenu2(std::shared_ptr<RefreshState> state) {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
 
+        std::cout << "\033[?2026h";
         clearScrollBuffer();
 
         std::cout << color << "+------------------------+  \n"
@@ -205,6 +210,8 @@ void submenu2(std::shared_ptr<RefreshState> state) {
                   << "+------------------------+\n"
                   << "| 5. NRG2ISO++           |\n"
                   << "+------------------------+" << "\n\n";
+
+        std::cout << "\033[?2026l" << std::flush;
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
         char* rawInput = readline(( std::string(pt.primary) +
