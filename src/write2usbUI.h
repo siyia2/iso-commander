@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <future>
 #include <mutex>
+#include <numeric>
 #include <string>
 #include <thread>
 #include <utility>
@@ -45,6 +46,7 @@ struct ProgressInfo {
     std::string filename;
     std::string device;
     std::string totalSize;
+    std::string sourcePath;
 
     std::atomic<bool> completed{false};
     std::atomic<bool> failed{false};
@@ -53,16 +55,19 @@ struct ProgressInfo {
     std::atomic<double> speed{0.0};
 
     // Constructor
-    ProgressInfo(std::string filename, std::string device, std::string totalSize)
+    ProgressInfo(std::string filename, std::string device, std::string totalSize,
+                 std::string sourcePath)
         : filename(std::move(filename)),
           device(std::move(device)),
-          totalSize(std::move(totalSize)) {}
+          totalSize(std::move(totalSize)),
+          sourcePath(std::move(sourcePath)) {}
 
     // Move Constructor
     ProgressInfo(ProgressInfo&& other) noexcept
         : filename(std::move(other.filename)),
           device(std::move(other.device)),
           totalSize(std::move(other.totalSize)),
+          sourcePath(std::move(other.sourcePath)),
           completed(other.completed.load()),
           failed(other.failed.load()),
           bytesWritten(other.bytesWritten.load()),
@@ -75,6 +80,7 @@ struct ProgressInfo {
             filename = std::move(other.filename);
             device = std::move(other.device);
             totalSize = std::move(other.totalSize);
+            sourcePath = std::move(other.sourcePath);
             completed.store(other.completed.load());
             failed.store(other.failed.load());
             bytesWritten.store(other.bytesWritten.load());
