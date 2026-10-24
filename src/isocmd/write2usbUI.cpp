@@ -865,24 +865,29 @@ void drainManagerForWrite2UsbUI(
 /**
  * @brief Enqueues ISO-to-device write tasks and drives a live progress display.
  *
- * The input pairs are used to build a @ref ProgressInfo vector, sorted
- * alphabetically (case-insensitive) by ISO filename via @ref prepareWriteData,
- * with the device path as a tie-break when the same ISO targets several devices.
+ * The input pairs are used to build a @ref ProgressInfo vector, sorted by ISO
+ * filename via @ref prepareWriteData (case-insensitive, numeric-aware), with the
+ * device path as a tie-break when the same ISO targets several devices.
  * Task index, @ref progressData index and display row all share this sorted
- * order, so the live progress tracks always appear alphabetically by ISO name.
+ * order, so the live progress tracks always appear in natural order by ISO name.
  *
  * For each validated (IsoInfo, device) pair, in sorted order:
  * - A @ref ProgressInfo entry (filename, device, sizeStr, sourcePath) is
  *   appended to @ref progressData by @ref prepareWriteData — reserved up front,
  *   one entry per task, same order as the sort
- * - Device names, sizes, and formatted size strings are cached once per device
+ * - Device names, sizes, and formatted size strings are cached once per device.
+ *   The shortened drive names and the device, drive-name and full-filename column
+ *   widths are then computed once per operation, because none of them can change
+ *   while the operation runs. Only the filename truncation and the speed column
+ *   width are recomputed per frame, since they depend on the current terminal
+ *   width and the live speeds.
  * - One @ref writeIsoToDevice call per task is submitted to the global @ref ThreadPool
  *
  * A background thread redraws per-task status, waking immediately whenever a task
- * completes (via a condition variable notified from each pooled task) and otherwise
- * falling back to a 500 ms pulse if nothing new has happened. The main thread waits
- * on the same condition variable to detect overall completion, also waking instantly
- * on task completion.
+ * completes (via a condition variable in the shared @c WriteSync state, notified
+ * from each pooled task) and otherwise falling back to a 500 ms pulse if nothing
+ * new has happened. The main thread waits on the same condition variable to detect
+ * overall completion, also waking instantly on task completion.
  *
  * @par Structure
  * The body is split into two phases so the invariants are named once and reused:
@@ -893,26 +898,32 @@ void drainManagerForWrite2UsbUI(
  *    shared pointer is captured by every pooled task and by the cancellation
  *    drain, so the data outlives this function if needed.
  * -# The remainder of the function wires up the thread pool, the render loop, the
- *    completion condition variable, and the final status/summary print.
+ *    completion condition variable, and the final status/summary print. The
+ *    completion counters, mutex and condition variable live in a @c WriteSync
+ *    object owned by a @c std::shared_ptr, which every pooled task captures by
+ *    value (like the progress vector). No task refers to this function's stack
+ *    for any of them, so they stay valid for tasks that outlive the function
+ *    after cancellation.
  *
  * @par Ordering
- * Rows are sorted alphabetically by ISO filename (ASCII case-insensitive, byte-wise),
- * with the device path as a secondary key. The sort is stable and performed once by
- * @ref prepareWriteData on a temporary index vector, so the caller's vector is never
- * modified and no copy of it is ever taken. The pooled tasks share the progress
- * vector through a @c std::shared_ptr, which keeps it alive for any detached drain
- * that outlives this function after cancellation.
+ * Rows are sorted by ISO filename using @c naturalCompare (case-insensitive,
+ * numeric-aware: "archlinux-9.iso" before "archlinux-10.iso"), with the device
+ * path under ordinary @c std::string ordering as the secondary key. The sort is
+ * stable and performed once by @ref prepareWriteData on a temporary index vector,
+ * so the caller's vector is never modified and no copy of it is ever taken. The
+ * pooled tasks share the progress vector through a @c std::shared_ptr, which keeps
+ * it alive for any detached drain that outlives this function after cancellation.
  *
  * @par Filename Truncation
  * ISO names are shown in full unless the widest row (full names, device, drive name,
  * bar, status and speed columns) would not fit the current terminal width. Only then
  * is every name longer than 15 columns (".iso" included) truncated: a truncated name
  * keeps the first 10 stem columns, followed by "…" (U+2026, one column) and the
- * untouched ".iso" extension, so it is always exactly 10 + 1 + 4 = 15 columns, e.g.
- * "archlinux-2024.10.01-x86_64.iso" becomes "archlinux-….iso". The extension is
- * therefore always visible. Names of 15 columns or fewer are always shown in full.
- * Names without a ".iso" suffix are treated the same way, with the whole name as the
- * stem.
+ * untouched ".iso" extension, so a truncated ".iso" name is exactly 10 + 1 + 4 = 15
+ * columns, e.g. "archlinux-2024.10.01-x86_64.iso" becomes "archlinux-….iso". The
+ * extension is therefore always visible. Names of 15 columns or fewer are always
+ * shown in full. Names without a ".iso" suffix are treated the same way, with the
+ * whole name as the stem, so they are cut to 10 stem columns plus "…" (11 columns).
  * The decision is made once per render for all rows together, so either every long
  * name is truncated or none is, and the columns stay aligned. The terminal width is
  * re-queried on every render, so resizing the terminal takes effect on the next
@@ -921,9 +932,12 @@ void drainManagerForWrite2UsbUI(
  * the decision does not flip when tasks complete.
  * Truncation is UTF-8 safe (never splits a multi-byte sequence) and affects the
  * display only; the real path passed to @ref writeIsoToDevice is untouched.
- * Filename padding is computed from the displayed widths so columns stay aligned;
- * ASCII-only columns (device path, drive name) are padded through the shared
- * @c padRight helper.
+ * Drive names are shortened separately, once per operation: a name longer than 20
+ * bytes is cut (again without splitting a multi-byte sequence) and ends in "…".
+ * Padding is computed from displayed widths so columns stay aligned: filenames and
+ * drive names are padded from their displayed (code point) width, since they may
+ * contain non-ASCII text, while the ASCII-only device path is padded through the
+ * shared @c padRight helper.
  *
  * @par Redraw and Terminal Resize
  * Each frame is built as one string and written once. Rows are never allowed to wrap:
@@ -978,10 +992,13 @@ void drainManagerForWrite2UsbUI(
  * -# Operating system control is returned to the user's shell prompt without visual lag.
  * -# @b Out-of-Band Draining: Ownership of the still-running @c std::future objects,
  *    together with the shared progress vector, is transferred to
- *    @ref handleOutOfRangeBackgroundDrainingForWrite2Usb, which moves them into a
- *    detached background thread. This allows OS page caches (e.g. buffered NTFS
- *    flushes) to drain onto the hardware safely in the background, entirely avoiding
- *    stack-use-after-free crashes. Each device is removed from the global
+ *    @ref drainManagerForWrite2UsbUI, which moves them into a detached background
+ *    thread. This allows OS page caches (e.g. buffered NTFS flushes) to drain onto
+ *    the hardware safely in the background, entirely avoiding stack-use-after-free
+ *    crashes. Tasks may still be running when this function returns, so everything
+ *    they touch afterwards (the progress vector and the @c WriteSync state) is owned
+ *    by @c shared_ptr copies captured in each task; nothing is captured by reference
+ *    from this function's locals. Each device is removed from the global
  *    dirty-device set as its own drain completes, allowing the device selection
  *    screen to clear the @b [FLUSHING] indicator per-device as soon as it is safe.
  *
@@ -992,9 +1009,10 @@ void drainManagerForWrite2UsbUI(
  * path the futures are simply joined inline; the out-of-band drain helper is not invoked.
  *
  * @par Summary Line
- * On execution exit, the primary cursor moves up to print an operational status overview
- * derived from a single load of the completion counter (the value is reused for both the
- * status decision and the final successful-count line):
+ * On execution exit, the primary cursor moves up to print an operational status overview.
+ * The successful count comes from a single load of the completion counter (the value is
+ * reused for both the status decision and the final successful-count line); the failed
+ * count is obtained by scanning the per-task @c failed flags in the progress vector:
  * - @b COMPLETED — All targeted block operations succeeded.
  * - @b PARTIAL   — At least one task succeeded and at least one task failed.
  * - @b FAILED    — Total failure across all enqueued storage block streams.
@@ -1013,18 +1031,15 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     auto progressDataPtr = prepareWriteData(validPairsIn);
     auto& progressData   = *progressDataPtr;
 
-    std::atomic<size_t> completedTasks(0);
-    std::atomic<size_t> finishedTasks(0);   // success OR failure — drives "all done" detection
     std::atomic<bool> isProcessingComplete(false);
     const size_t totalTasks = progressData.size();
 
-    // Condition variable used to wake the display thread the instant a task
-    // completes, instead of waiting for its next 500ms poll tick. The
-    // completion check is folded into the wait predicate (evaluated while
-    // holding progressCvMutex) so there is no window between "check" and
-    // "block" where a notify_one() from a finishing task could be missed.
-    std::mutex progressCvMutex;
-    std::condition_variable progressCv;
+
+    auto syncPtr = std::make_shared<WriteSync>();
+    auto& completedTasks  = syncPtr->completedTasks;
+    auto& finishedTasks   = syncPtr->finishedTasks;
+    auto& progressCvMutex = syncPtr->mutex;
+    auto& progressCv      = syncPtr->cv;
 
     ThreadPool& pool = getStaticThreadPool();
 
@@ -1389,38 +1404,24 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     std::vector<std::future<void>> futures;
     for (size_t i = 0; i < totalTasks; ++i) {
-        // Only one shared pointer now: sourcePath and device live inside
-        // ProgressInfo, so the task needs nothing else from the caller's pairs.
-        futures.push_back(pool.enqueue([
-            progressDataPtr,
-            i,
-            &completedTasks,
-            &finishedTasks,
-            &progressCv,
-            &progressCvMutex
-        ]() {
+        futures.push_back(pool.enqueue([progressDataPtr, syncPtr, i]() {
             auto& progress = (*progressDataPtr)[i];
             const bool success = writeIsoToDevice(
                 progress.sourcePath, progress.device, i, *progressDataPtr);
 
             if (success) {
                 progress.completed.store(true);
-                completedTasks.fetch_add(1);
+                syncPtr->completedTasks.fetch_add(1);
             } else if (!GlobalState::g_operationCancelled.load()) {
                 progress.failed.store(true);
             }
 
-            finishedTasks.fetch_add(1);
+            syncPtr->finishedTasks.fetch_add(1);
 
-            // Wake the display thread immediately instead of waiting for
-            // its next 500ms poll tick. Acquiring/releasing the mutex here,
-            // *after* the state updates above and *before* notify_one,
-            // establishes the happens-before relationship the predicate-based
-            // wait_for on the other side relies on to never miss this wakeup.
             {
-                std::lock_guard<std::mutex> lock(progressCvMutex);
+                std::lock_guard<std::mutex> lock(syncPtr->mutex);
             }
-            progressCv.notify_one();
+            syncPtr->cv.notify_one();
         }));
     }
 
