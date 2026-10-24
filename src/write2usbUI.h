@@ -94,6 +94,25 @@ struct ProgressInfo {
 };
 
 /**
+ * @brief Completion-tracking state shared between pooled write tasks and the UI.
+ *
+ * Holds the counters, mutex and condition variable that pooled write tasks
+ * update and that the display thread and the main thread wait on. It is owned
+ * through a @c std::shared_ptr that every task captures by value, so it stays
+ * alive for tasks that outlive @ref performWriteOperation after cancellation
+ * (a task must never reference these members from the function's stack).
+ *
+ * Neither copyable nor movable, because it contains atomics, a mutex and a
+ * condition variable.
+ */
+struct WriteSync {
+    std::atomic<size_t>     completedTasks{0};
+    std::atomic<size_t>     finishedTasks{0};   // success OR failure
+    std::mutex              mutex;
+    std::condition_variable cv;
+};
+
+/**
  * @brief RAII guard for the readline/terminal state that needs to be set up
  *        at the start of every loop iteration and torn down on every exit
  *        path (return, continue, or exception).
