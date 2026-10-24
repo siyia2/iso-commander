@@ -1061,6 +1061,8 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     };
     std::cout << headerText();
 
+    std::cout << "\033[?25l" << std::flush;
+
     auto startTime = std::chrono::high_resolution_clock::now();
 
     std::unordered_map<std::string, std::string> deviceNames;
@@ -1492,6 +1494,8 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             << color << " | Time Elapsed: "
             << color << duration << "s"
             << wt.colorStatus << UI::Palette::Reset << "\n";
+
+    std::cout << "\033[?25h" << std::flush;
 
     // 4. Instantly hand focus and console command lines back to your user's shell prompt
     flushStdin();
