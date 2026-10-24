@@ -842,10 +842,13 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     }
     const auto& validPairs = *sortedPairsPtr;   // rest of the function uses this name
 
-    progressData.clear();
-    progressData.reserve(validPairs.size());
-
     GlobalState::g_operationCancelled.store(false);
+
+    auto progressDataPtr =
+        std::make_shared<std::vector<ProgressInfo>>();
+
+    auto& progressData = *progressDataPtr;
+    progressData.reserve(validPairs.size());
 
     for (const auto& [iso, device] : validPairs) {
         progressData.push_back(ProgressInfo{
@@ -1191,18 +1194,30 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
     std::vector<std::future<void>> futures;
     for (size_t i = 0; i < totalTasks; ++i) {
-        // sortedPairsPtr is shared (not copied per task) and stays alive for the
-        // detached drain thread after a cancellation.
-        futures.push_back(pool.enqueue([sortedPairsPtr, i, &completedTasks, &finishedTasks, &progressCv, &progressCvMutex]() {
+        // Both shared pointers keep their per-operation data alive,
+        // including while tasks are drained after cancellation.
+        futures.push_back(pool.enqueue([
+            sortedPairsPtr,
+            progressDataPtr,
+            i,
+            &completedTasks,
+            &finishedTasks,
+            &progressCv,
+            &progressCvMutex
+        ]() {
             const auto& [iso, device] = (*sortedPairsPtr)[i];
-            bool success = writeIsoToDevice(iso.path, device, i);
+            const bool success = writeIsoToDevice(
+                iso.path, device, i, *progressDataPtr);
+
+            auto& progress = (*progressDataPtr)[i];
 
             if (success) {
-                progressData[i].completed.store(true);
+                progress.completed.store(true);
                 completedTasks.fetch_add(1);
             } else if (!GlobalState::g_operationCancelled.load()) {
-                progressData[i].failed.store(true);
+                progress.failed.store(true);
             }
+
             finishedTasks.fetch_add(1);
 
             // Wake the display thread immediately instead of waiting for
@@ -1320,7 +1335,9 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
 
         g_drainingManager.add(std::thread([
             capturedFutures = std::move(futures),
-            devices = std::move(deviceNames)
+            devices = std::move(deviceNames),
+            sortedPairsPtr,
+            progressDataPtr
         ]() mutable {
             for (size_t i = 0; i < capturedFutures.size(); ++i) {
                 if (capturedFutures[i].valid()) {

@@ -535,7 +535,8 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  */
 bool writeWindowsIsoToDevice(const std::string& isoPath,
                              const std::string& device,
-                             size_t             progressIndex)
+                             size_t             progressIndex,
+                             std::vector<ProgressInfo>& progressData)
 {
     auto fail = [&]() -> bool {
         progressData[progressIndex].failed.store(true);
@@ -1385,7 +1386,7 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
  * @see isWindowsIsoInitialCheck
  * @see writeWindowsIsoToDevice
  */
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex) {
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex, std::vector<ProgressInfo>& progressData) {
 
     // Open ISO once — shared by all validation and write paths
     int iso_fd = open(isoPath.c_str(), O_RDONLY);
@@ -1417,7 +1418,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 
     // Fast-path: Windows ISO routing (borrows iso_fd)
     if (isWindowsIsoInitialCheck(iso_fd, sb.st_size)) {
-        return writeWindowsIsoToDevice(isoPath, device, progressIndex);
+        return writeWindowsIsoToDevice(isoPath, device, progressIndex, progressData);
     }
 
     // Seek back to beginning for raw write path

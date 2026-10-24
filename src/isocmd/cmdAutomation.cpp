@@ -1295,42 +1295,67 @@ static int handleWriteUsb(const ParsedArgs& args) {
     }
 
     // --- Execute ---
-    if (!args.silentMode) {
-        // Reuses the TUI's live progress display (progressData is set up inside).
-        performWriteOperation(pairs);
-    } else {
-        disableInput();
-        progressData.clear();
-        progressData.reserve(pairs.size());   // no reallocation while workers run
-        for (const auto& [iso, device] : pairs)
-            progressData.push_back(ProgressInfo{iso.filename, device, iso.sizeStr});
+    auto pairsPtr =
+        std::make_shared<std::vector<std::pair<IsoInfo, std::string>>>(
+            std::move(pairs));
 
-        std::vector<std::future<void>> futures;
-        futures.reserve(pairs.size());
-        for (size_t i = 0; i < pairs.size(); ++i) {
-            futures.emplace_back(pool.enqueue([&pairs, i]() {
-                const bool ok = writeIsoToDevice(pairs[i].first.path,
-                                                 pairs[i].second, i);
-                if (ok) progressData[i].completed.store(true);
-                else if (!GlobalState::g_operationCancelled.load())
-                    progressData[i].failed.store(true);
-            }));
-        }
-        for (auto& f : futures) f.wait();
+    auto progressDataPtr = std::make_shared<std::vector<ProgressInfo>>();
+    progressDataPtr->reserve(pairsPtr->size());
+
+    for (const auto& [iso, device] : *pairsPtr) {
+        progressDataPtr->push_back(
+            ProgressInfo{iso.filename, device, iso.sizeStr});
     }
 
-    // After Ctrl+C, performWriteOperation hands futures to a background
-    // draining thread; it must be joined before returning from the CLI path.
+    if (!args.silentMode) {
+        // Pass the same operation-local progress data used by the CLI.
+        // Update performWriteOperation's declaration and definition to accept
+        // this shared pointer and use it instead of creating another vector.
+        performWriteOperation(*pairsPtr);
+    } else {
+        disableInput();
+
+        std::vector<std::future<void>> futures;
+        futures.reserve(pairsPtr->size());
+
+        for (size_t i = 0; i < pairsPtr->size(); ++i) {
+            futures.emplace_back(pool.enqueue(
+                [pairsPtr, progressDataPtr, i]() {
+                    const auto& [iso, device] = (*pairsPtr)[i];
+
+                    const bool success = writeIsoToDevice(
+                        iso.path, device, i, *progressDataPtr);
+
+                    auto& progress = (*progressDataPtr)[i];
+
+                    if (success) {
+                        progress.completed.store(true);
+                    } else if (!GlobalState::g_operationCancelled.load()) {
+                        progress.failed.store(true);
+                    }
+                }));
+        }
+
+        for (auto& future : futures) {
+            if (future.valid())
+                future.wait();
+        }
+    }
+
+    // Ensure any cancellation-related background work has finished.
     g_drainingManager.joinAll();
 
     size_t ok = 0;
-    for (const auto& p : progressData)
-        if (p.completed.load()) ++ok;
-    if (!args.silentMode) {
-        std::cout << "\n";
+    for (const auto& progress : *progressDataPtr) {
+        if (progress.completed.load())
+            ++ok;
     }
 
-    return (ok == pairs.size() && !GlobalState::g_operationCancelled.load()) ? 0 : 1;
+    if (!args.silentMode)
+        std::cout << "\n";
+
+    return (ok == pairsPtr->size() &&
+            !GlobalState::g_operationCancelled.load()) ? 0 : 1;
 }
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
