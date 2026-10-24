@@ -268,7 +268,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 /**
  * Returns true if the block device (e.g. /dev/sdb) is a removable USB flash drive.
  */
-bool isUsbDevice(const std::string&);
+bool isFlashDrive(const std::string&);
 
 /**
  * Returns true if the block device or any of its partitions is currently mounted.
