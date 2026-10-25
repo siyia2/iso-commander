@@ -281,10 +281,21 @@ bool isDeviceMounted(const std::string&);
 std::string getDriveName(const std::string&);
 
 /**
+ * @brief Live progress/result screen for a write2usb operation.
+ *
+ * Opaque handle returned by @ref performWriteOperation. It owns the keeper
+ * thread that keeps the screen laid out correctly on terminal resize, and it
+ * must stay alive until the caller has finished waiting for the user. The
+ * destructor stops and joins that thread. Defined in write2usbUI.cpp.
+ */
+class WriteScreen;
+
+/**
  * Writes the given (ISO, device) pairs concurrently on the thread pool,
  * with a live progress display and a final status summary.
  */
-void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>&);
+std::shared_ptr<WriteScreen> performWriteOperation(
+    const std::vector<std::pair<IsoInfo, std::string>>&);
 
 // --- Filesystem & Formatting Utilities ---
 
