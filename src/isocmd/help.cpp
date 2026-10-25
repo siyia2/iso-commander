@@ -124,7 +124,7 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
         (isAtISOListForHelp ?
             "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysBlue) + "'R'" + std::string(UI::Palette::BoldReset) + "                : Refresh ISO list from FolderPath history\n"
             : "") +
-        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysBlue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process|Clear pending items\n" +
+        "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysBlue) + "'P'|'C' " + std::string(UI::Palette::BoldReset) + "           : Process|Clear pending indices\n" +
         "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysBlue) + "'PgDn'|'PgUp'|'g#' " + std::string(UI::Palette::BoldReset) + ": Pagination Next|Previous|GoTo page"
     );
     printSection(tc, "\n4. Tips:",
