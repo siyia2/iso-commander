@@ -489,7 +489,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
             auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write2usb");
 
-            devicePromptStream << "  " << wt.indexCol << (i + 1) << ">" << wt.bold << " ";
+            devicePromptStream << " " << wt.indexCol << (i + 1) << ">" << wt.bold << " ";
 
             if (!displayConfig::toggleNamesOnly) {
                 devicePromptStream << wt.pathCol << isoDir << "/";
@@ -532,13 +532,13 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         });
 
         if (deviceInfos.empty()) {
-            devicePromptStream << "  " << wt.colorFailure << "No USB flash drives detected!" << wt.rl_resetCol << "\n";
+            devicePromptStream << " " << wt.colorFailure << "No USB flash drives detected!" << wt.rl_resetCol << "\n";
         } else {
             for (const auto& dev : deviceInfos) {
                 if (dev.error) {
-                    devicePromptStream << "  " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
+                    devicePromptStream << " " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
                 } else {
-                    devicePromptStream << "  " << wt.deviceCol << dev.path
+                    devicePromptStream << " " << wt.deviceCol << dev.path
                                       << wt.infoLabel << " <" << dev.driveName
                                       << ">" << UI::Palette::DimGray << " (" << wt.sizeCol << dev.sizeStr
                                       << UI::Palette::DimGray << ")"
@@ -627,7 +627,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             std::string deviceSizeStr = formatFileSize(deviceSize);
             std::string driveName = getDriveName(device);
 
-            std::cout << UI::Palette::DimGray << "  {" << wt.deviceCol << device
+            std::cout << UI::Palette::DimGray << " {" << wt.deviceCol << device
                       << " " << wt.infoLabel << "<" << driveName << ">" << UI::Palette::DimGray << " ("
                       << wt.sizeCol << deviceSizeStr
                       << UI::Palette::DimGray << ")} " << color << "←" << UI::Palette::DimGray << " {" << wt.fileCol
@@ -1180,21 +1180,24 @@ private:
             maxSpeedWidth = std::max(maxSpeedWidth, displayWidth(speedStrs.back()));
         }
 
-        // Width of everything except the filename column:
-        //   " → " (3) + device + " <name>" (maxNameWidth + 3) + " [" (2) + bar (5)
-        //   + "] " (2) + status (5) + speed + " (avg)" (6, always counted as the
-        //   worst case so the truncation decision doesn't flip when tasks complete).
-        const size_t fixedWidth = 3 + maxDeviceLen_ + (maxNameWidth_ + 3) + 2 + BAR_WIDTH
-                                + 2 + 5 + maxSpeedWidth + 6;
+        // Reserve room for " (avg)" only if some task is already showing it,
+        // so names are truncated only when a row is really wider than the terminal.
+        bool anyCompleted = false;
+        for (const auto& prog : progressData_)
+            if (prog.completed.load()) { anyCompleted = true; break; }
+        const size_t avgExtra = anyCompleted ? 6 : 0;
 
-        // Keep the last column free so a row can never trigger the terminal's
-        // auto-wrap, which would break the cursor-up redraw below.
+        //   " → " (3) + device + " <name>" (maxNameWidth + 3) + " [" (2) + bar (5)
+        //   + "] " (2) + status (5) + speed (+ " (avg)" once a task is done)
+        const size_t fixedWidth = 3 + maxDeviceLen_ + (maxNameWidth_ + 3) + 2 + BAR_WIDTH
+                                + 2 + 5 + maxSpeedWidth + avgExtra;
+
         const auto   termSize   = terminalSize();
         const size_t cols       = termSize.first;
         const size_t rows       = termSize.second;
         const size_t usableCols = cols > 1 ? cols - 1 : 1;
 
-        // Truncate only if the widest full-width row would overflow the terminal.
+        // Truncate only if the widest full-width row is longer than the terminal.
         const bool truncateNames = (fixedWidth + maxFullFilenameWidth_) > usableCols;
 
         // Shortened filenames, computed once per frame (depends on truncateNames).

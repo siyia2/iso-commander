@@ -156,7 +156,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                   .append("\001").append(dt.green).append("\002.iso")
                   .append("\001").append(dt.blue).append("\002 entries and import into ")
                   .append("\001").append(dt.green).append("\002local")
-                  .append("\001").append(dt.blue).append("\002 database, ? for help:\n")
+                  .append("\001").append(dt.blue).append("\002 DB, ? for help:\n")
                   .append("\001").append(dt.reset).append("\002");
 
             char* rawSearchQuery = readline(prompt.c_str());
