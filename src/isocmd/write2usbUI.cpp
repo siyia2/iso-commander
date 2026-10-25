@@ -1188,9 +1188,10 @@ private:
         const size_t avgExtra = anyCompleted ? 6 : 0;
 
         //   " → " (3) + device + " <name>" (maxNameWidth + 3) + " [" (2) + bar (5)
-        //   + "] " (2) + status (5) + speed (+ " (avg)" once a task is done)
+        //   + "] " (2) + status (5) + speed + " (avg)" (6, always counted as the
+        //   worst case so the truncation decision doesn't flip when tasks complete).
         const size_t fixedWidth = 3 + maxDeviceLen_ + (maxNameWidth_ + 3) + 2 + BAR_WIDTH
-                                + 2 + 5 + maxSpeedWidth + avgExtra;
+                                + 2 + 5 + maxSpeedWidth + 6;
 
         const auto   termSize   = terminalSize();
         const size_t cols       = termSize.first;
