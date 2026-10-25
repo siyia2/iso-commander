@@ -154,7 +154,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             prompt.append("\001").append(dt.green).append("\002FolderPaths")
                   .append("\001").append(dt.blue).append("\002 ↵ to scan for ")
                   .append("\001").append(dt.green).append("\002.iso")
-                  .append("\001").append(dt.blue).append("\002 entries and import them into the ")
+                  .append("\001").append(dt.blue).append("\002 entries and import into ")
                   .append("\001").append(dt.green).append("\002local")
                   .append("\001").append(dt.blue).append("\002 database, ? for help:\n")
                   .append("\001").append(dt.reset).append("\002");
