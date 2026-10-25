@@ -1180,11 +1180,17 @@ private:
             maxSpeedWidth = std::max(maxSpeedWidth, displayWidth(speedStrs.back()));
         }
 
+        // Reserve room for " (avg)" only if some task is already showing it,
+        // so names are truncated only when a row is really wider than the terminal.
+        bool anyCompleted = false;
+        for (const auto& prog : progressData_)
+            if (prog.completed.load()) { anyCompleted = true; break; }
+        const size_t avgExtra = anyCompleted ? 6 : 0;
+
         //   " → " (3) + device + " <name>" (maxNameWidth + 3) + " [" (2) + bar (5)
-        //   + "] " (2) + status (5) + speed + " (avg)" (6, always counted as the
-        //   worst case so the truncation decision doesn't flip when tasks complete).
+        //   + "] " (2) + status (5) + speed (+ " (avg)" once a task is done)
         const size_t fixedWidth = 3 + maxDeviceLen_ + (maxNameWidth_ + 3) + 2 + BAR_WIDTH
-                                + 2 + 5 + maxSpeedWidth + 6;
+                                + 2 + 5 + maxSpeedWidth + avgExtra;
 
         const auto   termSize   = terminalSize();
         const size_t cols       = termSize.first;
