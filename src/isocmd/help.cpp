@@ -128,8 +128,8 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
         "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysBlue) + "'PgDn'|'PgUp'|'g#' " + std::string(UI::Palette::BoldReset) + ": Pagination Next|Previous|GoTo page"
     );
     printSection(tc, "\n4. Tips:",
-        "   • Indexes correspond only to their generated list\n"
-        "   • Indexes^ refer to the original unfiltered list\n"
+        "   • Indices correspond only to their generated list\n"
+        "   • Indices^ refer to the original unfiltered list\n"
         "   • Filtering spans all pages and is incremental");
     pressEnterToReturn();
 }
