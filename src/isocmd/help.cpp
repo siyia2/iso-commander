@@ -157,7 +157,7 @@ void helpSettingsEditor() {
 /**
  * @brief Displays a help guide for directory-related prompts (Copy/Move and ISO convert2iso).
  */
-void helpSearches(bool isCpMv, bool import2ISO) {
+void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
     clearScrollBuffer();
     const ThemeColors tc;
 
@@ -178,10 +178,12 @@ void helpSearches(bool isCpMv, bool import2ISO) {
     printSection(tc, "\n2. Selecting FolderPaths (↵):", paths);
 
     if (isCpMv) {
-        // 3. Tips (Cp/Mv specific)
         printSection(tc, "\n3. Tips:",
-            "   • 'mv' same-device: instant (metadata update)\n"
-            "   • 'mv' mult-dest: uses cp+rm (slower)");
+                isCopy
+                    ? "   • 'cp' cannot copy a source file to itself\n"
+                      "   • 'cp' filename conflicts are queued sequentially"
+                    : "   • 'mv' same-device: instant (metadata update)\n"
+                      "   • 'mv' multi-destination: uses cp+rm (slower)");
     } else {
         // 3. Cleanup/Display (convert2iso / import2iso specific)
         std::string displayCmds =

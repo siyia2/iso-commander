@@ -205,7 +205,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
     }
 }
 
-void helpSearches(bool isCpMv, bool import2ISO);
+void helpSearches(bool isCpMv, bool import2ISO, bool isCopy);
 
 /**
  * @brief Prompts for a destination directory or routes to deletion confirmation.
@@ -314,7 +314,7 @@ bool& overwriteExisting) {
             if (userInput == "EOF_SIGNAL") { shouldContinue = false; break; }
             if (userInput == "?") {
                 bool import2ISO = false, isCpMv = true;
-                helpSearches(isCpMv, import2ISO);
+                helpSearches(isCpMv, import2ISO, isCopy);
                 userDestDir = "";
                 continue;
             }

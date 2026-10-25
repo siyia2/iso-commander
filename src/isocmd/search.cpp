@@ -172,7 +172,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
 
             if (input == "?") {
                 bool isCpMv = false, import2ISO = true;
-                helpSearches(isCpMv, import2ISO);
+                helpSearches(isCpMv, import2ISO, false);
                 continue;
             }
 
@@ -877,7 +877,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
     }
     if (input == "?") {
         bool isCpMv = false, import2ISO = false;
-        helpSearches(isCpMv, import2ISO);
+        helpSearches(isCpMv, import2ISO, false);
         return true;
     }
     if (input == "!clr") {
