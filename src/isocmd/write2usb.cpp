@@ -45,6 +45,8 @@
 
 namespace fs = std::filesystem;
 
+static std::mutex libmount_mutex;
+
 /**
  * @brief Runs an external command with stdout/stderr suppressed.
  *
@@ -559,7 +561,12 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ScopedMount always removes the dir; setMounted() arms the safeUmount.
     ScopedMount isoScope(isoMntBuf);
 
-    if (libMount(isoPath.c_str(), isoMntBuf, "ro,loop") != 0) return failUnlessCancelled();
+    {
+        std::lock_guard<std::mutex> lock(libmount_mutex);
+        if (libMount(isoPath.c_str(), isoMntBuf, "ro,loop") != 0) {
+            return failUnlessCancelled();
+        }
+    }
     isoScope.setMounted();
 
     const std::string isoMnt  = isoMntBuf;
