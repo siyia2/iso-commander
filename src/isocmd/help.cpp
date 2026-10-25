@@ -183,7 +183,8 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
                     ? "   • 'cp' cannot copy a source file to itself\n"
                       "   • 'cp' filename conflicts are queued sequentially"
                     : "   • 'mv' same-device: instant (metadata update)\n"
-                      "   • 'mv' multi-destination: uses cp+rm (slower)");
+                      "   • 'mv' multi-destination: uses cp+rm (slower)\n"
+                      "   • 'mv' filename conflicts are queued sequentially");
     } else {
         // 3. Cleanup/Display (convert2iso / import2iso specific)
         std::string displayCmds =
