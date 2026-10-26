@@ -319,8 +319,8 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
             if (arg == "--silent") {
                 out.silentMode = true;
             } else if (arg.rfind("-d", 0) == 0) {
-                // w2usb ignores -d options.
-                if (!out.writeUsb) {
+                // w2usb and umount/unmount ignore -d options.
+                if (!out.writeUsb && out.action != "umount") {
                     const std::string depthStr = arg.substr(2);
 
                     try {
@@ -333,7 +333,8 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
 
                         if (depth < 0) {
                             flushDeferredWarn();
-                            warnMsg(out.silentMode, "Negative depth; using unlimited depth.", "");
+                            warnMsg(out.silentMode,
+                                    "Negative depth; using unlimited depth.", "");
                             out.maxDepth = -1;
                         } else {
                             out.maxDepth = depth;
