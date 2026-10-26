@@ -8,29 +8,29 @@ Iso Commander (isocmd) is a single binary command-line utility for managing .iso
 
 .SH NON-INTERACTIVE COMMANDS
 .SS Version
-.TP
+.TP 16
 .B \-v, \-\-version
 Show program version.
 .SS Actions
-.TP
+.TP 16
 .B mount
 Mount one or more ISO files or scan directories for ISO files and mount them (requires root).
-.TP
+.TP 16
 .B umount/unmount
 Unmount specified ISO mount points. Without paths, or with \fBall\fR as the only path, scan /mnt/ISOs and attempt to unmount all contained mount points (requires root).
-.TP
+.TP 16
 .B c2iso
 Convert supported images to ISO files. Accepts individual image files and directories to scan. Supported formats are BIN, IMG, CCD, MDF, NRG, CHD, DAA and GBI.
-.TP
+.TP 16
 .B w2usb
 Write ISO files to removable USB flash devices (requires root). Arguments beginning with \fB/dev/\fR are target devices.
 .br
 All arguments are validated before any device is touched. Only raw devices are accepted, not device partitions.
 .SS Action Flags
-.TP
+.TP 16
 .B \-\-silent
 Suppress informational messages, warnings and progress output. Critical errors will still be displayed.
-.TP
+.TP 16
 .B \-d\fIN\fR
 Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 scans only the specified directories.
 .br
