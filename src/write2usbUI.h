@@ -9,6 +9,7 @@
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -363,8 +364,8 @@ void printValidationErrors(const UI::WriteTheme& wt, const std::vector<std::stri
  * @brief Runs the device-level checks, independent of which ISO is paired with it.
  *
  * Verifies that the device is a removable USB flash drive, is not mounted,
- * is not in the draining set (pending kernel-level tasks), and has a
- * determinable size.
+ * is not in the draining set (pending kernel-level tasks), has no write I/O
+ * still in flight (non-interactive mode only), and has a determinable size.
  *
  * @param wt     Active write theme.
  * @param device Path used for the checks (canonical /dev/sdX).
