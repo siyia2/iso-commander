@@ -1144,42 +1144,27 @@ static int handleConvert(const ParsedArgs& args) {
  *
  * Arguments starting with /dev/ are target devices; all others are ISOs.
  * One ISO is written to every device; otherwise ISO and device counts must
- * match and are paired in argument order. All validation errors are reported
- * (using the same theme as the interactive write2usb UI) before any device
- * is touched. With --silent, the live progress UI is skipped.
+ * match and are paired in argument order.
  *
- * @param progressData Reference to the operation-local progress data array used
- *                      for live progress, speed, and completion reporting.
+ * Every validation error is collected and reported (using the same theme as
+ * the interactive write2usb UI) before any device is touched. Per device,
+ * this includes the checks in @ref WriteValidation::checkDevice, among them
+ * rejecting a device that is still flushing data from an earlier write, and
+ * the ISO capacity check in @ref WriteValidation::checkCapacity.
+ *
+ * With --silent, the live progress UI is skipped.
+ *
+ * @param args Parsed command-line arguments (target devices, ISO paths and
+ *             the silent flag).
  * @return 0 if every write completed; 1 on validation failure, write
  *         failure, or cancellation.
  */
 static int handleWriteUsb(const ParsedArgs& args) {
+    using namespace WriteValidation;
     const WriteTheme wt = getWriteTheme();
 
-    // Prints a themed "Validation errors:" block, same layout as validateDevices().
-    auto reportErrors = [&](const std::vector<std::string>& errs) {
-        std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.rl_resetCol << wt.bold << "\n";
-        for (const auto& e : errs)
-            std::cerr << "  \u2022 " << e << wt.bold << "\n";
-        std::cerr << wt.rl_resetCol << "\n";
-    };
-
-    // Plain themed message (no path), e.g. "Root privileges are required".
-    auto plainErr = [&](const std::string& msg) {
-        return std::string(wt.errLabel) + msg + wt.rl_resetCol;
-    };
-
-    // "'<path>' <message>" with the same colours validateDevices() uses.
-    auto pathErr = [&](const std::string& path, const std::string& msg) {
-        std::string s;
-        s.append(wt.errPath).append("'").append(path).append("'")
-         .append(wt.rl_resetCol).append(wt.errLabel).append(msg)
-         .append(wt.rl_resetCol);
-        return s;
-    };
-
     if (geteuid() != 0) {
-        reportErrors({plainErr("Root privileges are required")});
+        printValidationErrors(wt, {plainErr(wt, "Root privileges are required")});
         return 1;
     }
 
@@ -1188,41 +1173,40 @@ static int handleWriteUsb(const ParsedArgs& args) {
         (a.rfind("/dev/", 0) == 0 ? devArgs : isoArgs).push_back(a);
 
     if (isoArgs.empty()) {
-        reportErrors({plainErr("No ISO files specified")});
+        printValidationErrors(wt, {plainErr(wt, "No ISO files specified")});
         return 1;
     }
     if (devArgs.empty()) {
-        reportErrors({plainErr("No target devices specified")});
+        printValidationErrors(wt, {plainErr(wt, "No target devices specified")});
         return 1;
     }
-
     if (isoArgs.size() != 1 && isoArgs.size() != devArgs.size()) {
-        reportErrors({plainErr("Got " + std::to_string(isoArgs.size()) + " ISOs and " +
-                               std::to_string(devArgs.size()) +
-                               " devices; use 1 ISO for all devices, or one device per ISO")});
+        printValidationErrors(wt, {plainErr(wt,
+            "Got " + std::to_string(isoArgs.size()) + " ISOs and " +
+            std::to_string(devArgs.size()) +
+            " devices; use 1 ISO for all devices, or one device per ISO")});
         return 1;
     }
 
     std::vector<std::string> errors;
 
-    // --- ISOs ---
     std::vector<IsoInfo> isos;
     for (const auto& raw : isoArgs) {
         std::error_code ec;
         fs::path p(raw);
         if (!fs::is_regular_file(p, ec)) {
-            errors.push_back(pathErr(raw, " is not a regular file"));
+            errors.push_back(pathErr(wt, raw, " is not a regular file"));
             continue;
         }
         std::string ext = p.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
         if (ext != ".iso") {
-            errors.push_back(pathErr(raw, " is not an ISO file"));
+            errors.push_back(pathErr(wt, raw, " is not an ISO file"));
             continue;
         }
         const auto size = fs::file_size(p, ec);
         if (ec || size == 0) {
-            errors.push_back(pathErr(raw, " is empty or unreadable"));
+            errors.push_back(pathErr(wt, raw, " is empty or unreadable"));
             continue;
         }
         const fs::path canon = fs::canonical(p, ec);
@@ -1231,69 +1215,40 @@ static int handleWriteUsb(const ParsedArgs& args) {
                                formatFileSize(size), isos.size() + 1});
     }
 
-    // --- Devices ---
     std::vector<std::string> devices;
+    std::vector<uint64_t> deviceSizes;
     std::unordered_set<std::string> seen;
     for (const auto& raw : devArgs) {
         std::error_code ec;
-        // Resolve symlinks (e.g. /dev/disk/by-id/...) to the real /dev/sdX node.
         const fs::path canon = fs::canonical(raw, ec);
         const std::string dev = ec ? raw : canon.string();
 
         if (!seen.insert(dev).second) {
-            errors.push_back(pathErr(raw, " is listed more than once"));
+            errors.push_back(pathErr(wt, raw, " is listed more than once"));
             continue;
         }
-        if (!isFlashDrive(dev)) {
-            errors.push_back(pathErr(raw, " is not a removable USB flash device"));
-            continue;
-        }
-        if (isDeviceMounted(dev)) {
-            errors.push_back(pathErr(raw, " or its partitions are mounted"));
-            continue;
-        }
-        if (getBlockDeviceSize(dev) == 0) {
-            std::string e;
-            e.append(wt.errLabel).append("Failed to get size for ")
-             .append(wt.errPath).append("'").append(raw).append("'")
-             .append(wt.rl_resetCol);
-            errors.push_back(std::move(e));
+        uint64_t size = 0;
+        if (auto err = checkDevice(wt, dev, raw, size)) {
+            errors.push_back(std::move(*err));
             continue;
         }
         devices.push_back(dev);
+        deviceSizes.push_back(size);
     }
 
-    // Capacity checks only make sense once both lists parsed cleanly.
     if (errors.empty()) {
         for (size_t d = 0; d < devices.size(); ++d) {
             const IsoInfo& iso = (isos.size() == 1) ? isos[0] : isos[d];
-            const uint64_t deviceSize = getBlockDeviceSize(devices[d]);
-            if (iso.size > deviceSize) {
-                const std::string deviceSizeStr = formatFileSize(deviceSize);
-                const std::string driveName = getDriveName(devices[d]);
-                std::string e;
-                e.append(wt.warnLabel).append("'").append(wt.fileCol).append(iso.filename)
-                 .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
-                 .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol)
-                 .append(UI::Palette::DimGray).append(")")
-                 .append(wt.warnLabel).append("'").append(wt.errLabel).append(" is too large for ")
-                 .append(wt.errPath).append("'").append(devices[d]).append(wt.infoLabel)
-                 .append(" <").append(driveName).append(">")
-                 .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
-                 .append(wt.sizeCol).append(deviceSizeStr).append(UI::Palette::DimGray)
-                 .append(")").append(wt.warnLabel).append("'")
-                 .append(wt.rl_resetCol);
-                errors.push_back(std::move(e));
-            }
+            if (auto err = checkCapacity(wt, iso, devices[d], deviceSizes[d]))
+                errors.push_back(std::move(*err));
         }
     }
 
     if (!errors.empty()) {
-        reportErrors(errors);
+        printValidationErrors(wt, errors);
         return 1;
     }
 
-    // --- Build pairs ---
     std::vector<std::pair<IsoInfo, std::string>> pairs;
     for (size_t d = 0; d < devices.size(); ++d)
         pairs.emplace_back(isos.size() == 1 ? isos[0] : isos[d], devices[d]);
@@ -1309,7 +1264,6 @@ static int handleWriteUsb(const ParsedArgs& args) {
         return 1;
     }
 
-    // --- Execute ---
     auto pairsPtr =
         std::make_shared<std::vector<std::pair<IsoInfo, std::string>>>(
             std::move(pairs));
@@ -1323,9 +1277,6 @@ static int handleWriteUsb(const ParsedArgs& args) {
     }
 
     if (!args.silentMode) {
-        // Pass the same operation-local progress data used by the CLI.
-        // Update performWriteOperation's declaration and definition to accept
-        // this shared pointer and use it instead of creating another vector.
         performWriteOperation(*pairsPtr);
     } else {
         disableInput();
@@ -1357,7 +1308,6 @@ static int handleWriteUsb(const ParsedArgs& args) {
         }
     }
 
-    // Ensure any cancellation-related background work has finished.
     g_drainingManager.joinAll();
 
     size_t ok = 0;
