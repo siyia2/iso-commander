@@ -285,7 +285,7 @@ void printValidationErrors(const WriteTheme& wt, const std::vector<std::string>&
  * @param device Whole-disk path (e.g. "/dev/sdb").
  * @return true if one or more write requests are still pending on the device.
  */
-bool isDeviceFlushing(const std::string& device) {
+bool isDeviceBusy(const std::string& device) {
     const std::string name = std::filesystem::path(device).filename().string();
     std::ifstream in("/sys/block/" + name + "/inflight");
     unsigned long reads = 0, writes = 0;
@@ -299,7 +299,7 @@ bool isDeviceFlushing(const std::string& device) {
  *
  * Checks, in order:
  * -# In non-interactive mode only, the device has no write I/O still in
- *    flight (@ref isDeviceFlushing). This catches flushing started by another
+ *    flight (@ref isDeviceBusy). This catches flushing started by another
  *    process, such as a previously cancelled write, which the in-process
  *    @ref g_drainingDevices set cannot see.
  * -# The device is a removable USB flash drive (@ref isFlashDrive).
@@ -330,8 +330,8 @@ std::optional<std::string> checkDevice(const WriteTheme& wt, const std::string& 
             return pathErr(wt, shown, " has pending kernel-level tasks");
     }
 
-    if (isDeviceFlushing(device) && GlobalState::isNonInteractive.load())
-        return pathErr(wt, shown, " is flushing data, try again shortly");
+    if (isDeviceBusy(device) && GlobalState::isNonInteractive.load())
+        return pathErr(wt, shown, " has pending kernel-level tasks");
 
     size = getBlockDeviceSize(device);
     if (size == 0) {
