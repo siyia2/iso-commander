@@ -361,16 +361,16 @@ std::optional<std::string> checkCapacity(const WriteTheme& wt, const IsoInfo& is
     const std::string deviceSizeStr = formatFileSize(deviceSize);
     const std::string driveName = getDriveName(device);
     std::string e;
-    e.append(wt.warnLabel).append("'").append(wt.fileCol).append(iso.filename)
+    e.append(UI::Palette::DimGray).append("{").append(wt.fileCol).append(iso.filename)
      .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
      .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol)
      .append(UI::Palette::DimGray).append(")")
-     .append(wt.warnLabel).append("'").append(wt.errLabel).append(" is too large for ")
-     .append(wt.errPath).append("'").append(device).append(wt.infoLabel)
+     .append(UI::Palette::DimGray).append("}").append(wt.errLabel).append(" > ")
+     .append(UI::Palette::DimGray).append("{").append(wt.warnLabel).append(device).append(wt.infoLabel)
      .append(" <").append(driveName).append(">")
      .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
      .append(wt.sizeCol).append(deviceSizeStr).append(UI::Palette::DimGray)
-     .append(")").append(wt.warnLabel).append("'")
+     .append(")").append(UI::Palette::DimGray).append("}")
      .append(wt.rl_resetCol);
     return e;
 }
