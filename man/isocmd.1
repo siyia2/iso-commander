@@ -1,4 +1,4 @@
-.TH ISOCMD 1 "October 2026" "Iso Commander 7.8.6" "Iso-Commander Manual"
+.TH ISOCMD 1 "October 2026" "Iso Commander 7.8.5" "Iso-Commander Manual"
 
 .SH NAME
 Iso Commander (isocmd) \- A single binary command-line utility for managing .iso files and converting image formats.
@@ -15,7 +15,9 @@ Show program version.
 Suppress informational messages, warnings and progress output. Critical errors will still be displayed.
 .TP
 .B \-d\fIN\fR
-Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 does a surface scan. Unused by \fBw2usb\fR.
+Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 scans only the specified directories.
+.br
+Ignored by \fBw2usb\fR, which does not scan directories, and by \fBumount/unmount\fR, which require surface scans only.
 .TP
 .B mount
 Mount one or more ISO files or scan directories for ISO files and mount them (requires root).
