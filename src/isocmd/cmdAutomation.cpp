@@ -232,6 +232,11 @@ struct ParsedArgs {
  * "w2usb".  Every positional that follows the action keyword is appended
  * to @c paths.
  *
+ * "-dN" is accepted syntactically (so it is not mistaken for a path) but
+ * its value is discarded: no depth is parsed, validated, or stored, and
+ * no diagnostic is emitted for it.  Only "--silent" is actually recorded
+ * (into @c silentMode).
+ *
  * For w2usb, paths must be ordered: one or more ISO files first, then
  * one or more device paths (/dev/...).  A /dev/ path before an ISO is
  * fine (it's still a device), but an ISO after a /dev/ path is rejected
@@ -320,28 +325,8 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
 
             if (arg == "--silent") {
                 out.silentMode = true;
-            } else { // -dN
-                try {
-                    out.maxDepth = std::stoi(arg.substr(2));
-                    if (out.maxDepth < 0) {
-                        std::cerr << UI::Palette::Yellow
-                                  << "Warning: Negative depth ("
-                                  << out.maxDepth
-                                  << ") means a full recursive scan."
-                                  << UI::Palette::Reset << "\n";
-                        out.maxDepth = -1;
-                        captureWarn = true;
-                    }
-                } catch (...) {
-                    std::cerr << UI::Palette::Yellow
-                              << "Warning: Invalid depth '"
-                              << arg.substr(2)
-                              << "'. Using 0 (surface scan)."
-                              << UI::Palette::Reset << "\n";
-                    out.maxDepth = 0;
-                    captureWarn = true;
-                }
             }
+            // -dN: deprecated — value is silently discarded.
             continue;
         }
 
