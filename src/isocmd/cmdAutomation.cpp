@@ -289,58 +289,48 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
 
-        // 1. Action keyword must come first.
+        // 1. The action keyword must come first.
         if (!actionSeen) {
             if (isFlag(arg)) {
                 flushDeferredWarn();
-                errMsg(std::string("Options must appear after the action "
-                                   "keyword; got '")
-                       + arg + "' before any action keyword. Use "
-                       "'isocmd <action> [flags...] [paths...]'.");
+                errMsg("Option '" + arg + "' must follow the action keyword.");
                 return false;
             }
+
             if (!isActionKeyword(arg)) {
                 flushDeferredWarn();
-                errMsg(std::string("Action must be one of "
-                                   "mount, umount, unmount, c2iso, w2usb; "
-                                   "got '")
-                       + arg + "'. Use "
-                       "'isocmd <action> [flags...] [paths...]'.");
+                errMsg("Unknown action: '" + arg + "'.");
                 return false;
             }
+
             actionSeen = true;
             applyAction(arg);
             continue;
         }
 
-        // 2. Flags are only allowed before the first path.
+        // 2. Flags must appear before the first path.
         if (isFlag(arg)) {
             if (pathsStarted) {
                 flushDeferredWarn();
-                errMsg(std::string("Options must appear before paths; got '")
-                       + arg + "' after the first path. Use "
-                       "'isocmd <action> [flags...] [paths...]'.");
+                errMsg("Option '" + arg + "' must precede all paths.");
                 return false;
             }
 
             if (arg == "--silent") {
                 out.silentMode = true;
             }
+
             // -dN: deprecated — value is silently discarded.
             continue;
         }
 
         // 3. Everything else is a path.
         //
-        // For w2usb the paths must be ordered ISO files first, then
-        // device paths.  Once a /dev/ path has been seen, any subsequent
-        // non-/dev/ path is rejected.
+        // For w2usb, ISO paths must precede device paths.
         if (out.writeUsb && pathsStarted &&
             !isDevPath(arg) && isDevPath(out.paths.back())) {
             flushDeferredWarn();
-            errMsg(std::string("w2usb: ISOs must precede devices; got '")
-                   + arg + "' after a device path. Use "
-                   "'isocmd w2usb <iso...> <device...>'.");
+            errMsg("w2usb: ISO paths must precede device paths.");
             return false;
         }
 
