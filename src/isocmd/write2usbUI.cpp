@@ -909,29 +909,42 @@ void drainManagerForWrite2UsbUI(
  * @brief Owns the live progress screen and keeps it correctly laid out.
  *
  * The screen has two phases:
- * - @b Running  — a keeper thread redraws the per-task rows (see
- *   @ref performWriteOperation for the row layout, truncation and bar rules).
- * - @b Finished — after @ref finish() the screen shows the final rows, the
- *   status line and the summary (and, once set with @ref setPrompt, the prompt).
- *   The keeper thread keeps running in this phase and repaints the whole result
- *   screen whenever the terminal size changes, so the screen re-truncates and
- *   re-wraps correctly even while the program is blocked waiting for input
- *   after the write operation has completed.
+ * - @b Running  — a keeper thread redraws the per-task rows.
+ * - @b Finished — after @ref finish() it shows the final rows, the status line,
+ *   the summary and, once set with @ref setPrompt, the prompt. The keeper keeps
+ *   running and repaints on terminal resize, so the screen stays correct while
+ *   the program waits for input.
  *
- * @par Single renderer
- * Every draw happens under one mutex (@c renderMutex_) and is performed either by
- * the keeper thread or by @ref finish(). There is no second drawing thread, so
- * frames can never interleave. The keeper wakes on a task-completion
- * notification (condition variable in the shared @c WriteSync state) or every
- * 100 ms, at which point it compares the terminal size with the size of the last
- * frame. While running it redraws on completion, on a size change, or when
- * 500 ms have passed since the last frame (live percentages and speeds). While
- * finished it redraws only on a size change.
+ * @par Rendering
+ * All drawing happens under one mutex (@c renderMutex_), from either the keeper
+ * thread or @ref finish(), so frames never interleave. The keeper wakes on a task
+ * completion (condition variable in the shared @c WriteSync state) or every
+ * 100 ms to compare the terminal size with the last frame. While running it
+ * redraws on completion, on a size change, or every 500 ms (live percentages and
+ * speeds). Once finished it redraws only on a size change.
  *
- * @par Result screen layout
- * The finished screen is always painted from scratch (home, clear screen, clear
- * scrollback), so it never depends on cursor-up arithmetic that a terminal
- * reflow would invalidate:
+ * @par Row layout
+ * @code
+ * filename → /dev/sdX <drive name> [▇▇▄░░] percentage speed
+ * @endcode
+ * Device path, drive name and speed are padded to the widest value across rows so
+ * the bars line up. The bar has 5 cells and 10 steps of 10% (empty ░, half ▄,
+ * full ▇), floored from the percentage, so it is full only at 100%. The status
+ * column shows the live percentage, or DONE (speed shown as " (avg)"), FAIL or
+ * CXL (cancelled).
+ *
+ * @par Filename truncation
+ * Names are shown in full unless the widest row exceeds the terminal width. Only
+ * then is every name longer than 15 columns cut to 10 stem columns, "…" and the
+ * ".iso" extension (e.g. "archlinux-….iso"). Drive names over 20 bytes are cut
+ * with "…". Truncation is UTF-8 safe and affects the display only.
+ *
+ * @par Redraw and result screen
+ * At an unchanged size, a frame moves the cursor up by the previous frame's
+ * physical line count and redraws. After a size change, and always for the result
+ * screen, the screen and scrollback are wiped and redrawn from the top. Rows are
+ * clipped to avoid wrapping, and each frame is written once inside a synchronized
+ * update. The result screen looks like this:
  * @code
  * (line 1: empty)
  * Status: write2usb → COMPLETED        (line 2)
@@ -943,9 +956,9 @@ void drainManagerForWrite2UsbUI(
  * @endcode
  *
  * @par Lifetime
- * The object holds @c shared_ptr copies of the progress vector and of the
- * @c WriteSync state, so it never refers to the stack of the function that
- * created it. The destructor stops and joins the keeper thread.
+ * Holds @c shared_ptr copies of the progress vector and the @c WriteSync state, so
+ * it never refers to the stack of the function that created it. The destructor
+ * stops and joins the keeper thread.
  */
 class WriteScreen {
 public:
@@ -1426,187 +1439,41 @@ private:
 };
 
 /**
- * @brief Enqueues ISO-to-device write tasks and drives a live progress display.
+ * @brief Runs the validated ISO-to-device writes on the thread pool with a live
+ *        progress screen.
  *
- * The input pairs are used to build a @ref ProgressInfo vector, sorted by ISO
- * filename via @ref prepareWriteData (case-insensitive, numeric-aware), with the
- * device path as a tie-break when the same ISO targets several devices.
- * Task index, @ref progressData index and display row all share this sorted
- * order, so the live progress tracks always appear in natural order by ISO name.
+ * Builds the per-task @ref ProgressInfo vector with @ref prepareWriteData
+ * (natural, case-insensitive sort by ISO filename, device path as tie-break), so
+ * task index and display row share the same order. Submits one
+ * @ref writeIsoToDevice call per pair to the global @ref ThreadPool, then waits on
+ * a condition variable shared with the @ref WriteScreen until every task has
+ * finished or the operation is cancelled. All drawing (row layout, filename
+ * truncation, resize handling, result screen) is done by the @ref WriteScreen.
  *
- * For each validated (IsoInfo, device) pair, in sorted order:
- * - A @ref ProgressInfo entry (filename, device, sizeStr, sourcePath) is
- *   appended to @ref progressData by @ref prepareWriteData — reserved up front,
- *   one entry per task, same order as the sort
- * - Drive names are looked up once per device. The shortened drive names and the
- *   device, drive-name and full-filename column widths are then computed once per
- *   operation (by @ref WriteScreen), because none of them can change while the
- *   operation runs. Only the filename truncation and the speed column width are
- *   recomputed per frame, since they depend on the current terminal width and the
- *   live speeds.
- * - One @ref writeIsoToDevice call per task is submitted to the global @ref ThreadPool
+ * @par Lifetime
+ * The progress vector and the @c WriteSync state are owned by @c shared_ptr copies
+ * captured by every task, the screen and the cancellation drain. Nothing refers to
+ * this function's stack, so tasks may safely outlive it after cancellation.
  *
- * All drawing is done by a @ref WriteScreen. Its keeper thread redraws per-task
- * status, waking immediately whenever a task completes (via a condition variable
- * in the shared @c WriteSync state, notified from each pooled task) and checking
- * the terminal size every 100 ms. The main thread waits on the same condition
- * variable to detect overall completion, also waking instantly on task completion.
+ * @par Normal completion
+ * Once every task has finished, the screen switches to its result layout and the
+ * futures are joined inline.
  *
- * @par Structure
- * The body is split into phases so the invariants are named once and reused:
- * -# @ref prepareWriteData builds a @c std::shared_ptr to a stable-sorted vector
- *    of @ref ProgressInfo entries, one per input pair, in sorted order (task
- *    index @c i matches the display row). The sort is done on an index vector,
- *    so neither the caller's pairs nor a copy of them is ever materialised. The
- *    shared pointer is captured by every pooled task, by the @ref WriteScreen and
- *    by the cancellation drain, so the data outlives this function if needed.
- * -# The remainder of the function creates the @ref WriteScreen, enqueues the
- *    tasks, waits for completion or cancellation, switches the screen to its
- *    result layout with @ref WriteScreen::finish, and returns the screen. The
- *    completion counters, mutex and condition variable live in a @c WriteSync
- *    object owned by a @c std::shared_ptr, which every pooled task and the screen
- *    capture by value (like the progress vector). Nothing refers to this
- *    function's stack, so everything stays valid for tasks that outlive the
- *    function after cancellation.
+ * @par Cancellation (Ctrl+C)
+ * The cancel flag is set from a signal handler, which cannot notify the condition
+ * variable, so the wait re-checks it at least every 500 ms. On cancellation the
+ * result screen is painted (rows marked CXL, status INTERRUPTED), terminal input
+ * state is restored, and the still-running futures are handed to
+ * @ref drainManagerForWrite2UsbUI. That keeps them alive in a background thread so
+ * OS page caches can finish flushing, and removes each device from
+ * @ref g_drainingDevices as its drain completes, which clears its [FLUSHING]
+ * indicator.
  *
- * @par Ordering
- * Rows are sorted by ISO filename using @c naturalCompare (case-insensitive,
- * numeric-aware: "archlinux-9.iso" before "archlinux-10.iso"), with the device
- * path under ordinary @c std::string ordering as the secondary key. The sort is
- * stable and performed once by @ref prepareWriteData on a temporary index vector,
- * so the caller's vector is never modified and no copy of it is ever taken. The
- * pooled tasks share the progress vector through a @c std::shared_ptr, which keeps
- * it alive for any detached drain that outlives this function after cancellation.
+ * @param validPairsIn Validated (IsoInfo, device) pairs to write. Not modified.
  *
- * @par Filename Truncation
- * ISO names are shown in full unless the widest row (full names, device, drive name,
- * bar, status and speed columns) would not fit the current terminal width. Only then
- * is every name longer than 15 columns (".iso" included) truncated: a truncated name
- * keeps the first 10 stem columns, followed by "…" (U+2026, one column) and the
- * untouched ".iso" extension, so a truncated ".iso" name is exactly 10 + 1 + 4 = 15
- * columns, e.g. "archlinux-2024.10.01-x86_64.iso" becomes "archlinux-….iso". The
- * extension is therefore always visible. Names of 15 columns or fewer are always
- * shown in full. Names without a ".iso" suffix are treated the same way, with the
- * whole name as the stem, so they are cut to 10 stem columns plus "…" (11 columns).
- * The decision is made once per render for all rows together, so either every long
- * name is truncated or none is, and the columns stay aligned. The terminal width is
- * re-queried on every render, and the keeper thread checks it every 100 ms, so a
- * resize takes effect within about 100 ms — during the write and also afterwards,
- * while the result screen is waiting for the user (see "Resize Handling"). If the
- * width cannot be determined (stdout is not a tty), 80 columns is assumed. The width
- * check reserves room for the " (avg)" suffix, so the decision does not flip when
- * tasks complete. Truncation is UTF-8 safe (never splits a multi-byte sequence) and
- * affects the display only; the real path passed to @ref writeIsoToDevice is
- * untouched. Drive names are shortened separately, once per operation: a name longer
- * than 20 bytes is cut (again without splitting a multi-byte sequence) and ends in
- * "…". Padding is computed from displayed widths so columns stay aligned: filenames
- * and drive names are padded from their displayed (code point) width, since they may
- * contain non-ASCII text, while the ASCII-only device path is padded through the
- * shared @c padRight helper.
- *
- * @par Resize Handling
- * No signal handler is involved. The @ref WriteScreen keeper thread compares the
- * terminal size with the size of the last frame every 100 ms (a cheap @c ioctl) and
- * additionally wakes on every task completion. It lives from the start of the
- * operation until the caller stops it, so it is still running while the caller
- * blocks in the "press Enter" prompt after this function has returned. While
- * running, a size change triggers a full repaint; once finished, a size change
- * repaints the whole result screen (rows, status, summary and prompt). The size is
- * the only trigger in the finished phase, so an idle result screen costs one
- * @c ioctl every 100 ms.
- *
- * @par Redraw
- * Each frame is built as one string and written once, wrapped in a synchronized
- * update. Rows are never allowed to wrap: the last terminal column is kept free and
- * any row still too wide after truncation is clipped (ANSI-escape and UTF-8 aware).
- * The terminal size (columns and rows) is remembered between frames. If it is
- * unchanged while running, the previous frame's row widths are used to compute how
- * many physical lines it occupies at the current width; the cursor moves up exactly
- * that far and the screen is cleared from there down before redrawing. Relative
- * movement is used instead of saving/restoring an absolute cursor position, which
- * goes stale when a terminal re-wraps its content. If either dimension has changed,
- * cursor-up is not trusted: the terminal may have reflowed or scrolled old rows into
- * scrollback, where cursor movement cannot reach, and a partial clear would leave
- * duplicated frames behind. Instead the screen and scrollback are wiped (home, clear
- * screen, clear scrollback), the header is reprinted, and the frame is drawn from
- * the top. The result screen is always painted this way. Header on lines 1-3, rows
- * from line 4. Frames are serialized by one mutex, so the keeper thread and
- * @ref WriteScreen::finish can never interleave output.
- *
- * @par Row Layout
- * Each row prints seamlessly side-by-side:
- * @code
- * filename → /dev/sdX <drive name> [▇▇▄░░] percentage speed
- * @endcode
- * For example (with a terminal too narrow for the full name):
- * @code
- * archlinux-….iso → /dev/sdd <SanDisk 3.2> [▇▇▇▇▄] 92%   3.1 MB/s
- * @endcode
- * The device path and the drive name in angle brackets are each padded to the widest value
- * across all rows, so the progress bars line up in a single column.
- *
- * @par Progress Bar
- * The bar is 5 character cells wide but has 10 steps of 10% each: every cell can be
- * empty (░), half filled (▄, 4/8 height) or full (▇, 7/8 height). Both filled glyphs are
- * bottom-aligned and stop short of the cell top, so bars on consecutive rows never touch.
- * The step count is floored from the percentage, so the bar advances one step each time
- * progress reaches another multiple of 10%, and is completely full only at 100%.
- *
- * @par Status Tokens
- * - @b DONE — Task completed successfully (appends " (avg)" to final speed readout).
- * - @b FAIL — Task encountered an error during execution.
- * - @b CXL  — Task execution or cleanup was interrupted by user cancellation.
- * - @b %    — Live percentage value representing active transfer progress.
- *
- * @par Cancellation (Ctrl+C / SIGINT)
- * When @ref GlobalState::g_operationCancelled is tripped:
- * -# The main thread's condition-variable wait re-checks
- *    @ref GlobalState::g_operationCancelled at least every 500 ms and breaks as
- *    soon as it observes the flag set (the flag is set from a signal handler, which
- *    cannot safely notify the condition variable).
- * -# SIGINT is ignored and @ref WriteScreen::finish paints the result screen
- *    (rows marked CXL, status INTERRUPTED). The keeper thread keeps running.
- * -# Terminal properties, standard input buffers, and layout configurations are restored @b instantly.
- * -# Operating system control is returned to the caller without visual lag.
- * -# @b Out-of-Band Draining: Ownership of the still-running @c std::future objects,
- *    together with the shared progress vector, is transferred to
- *    @ref drainManagerForWrite2UsbUI, which moves them into a detached background
- *    thread. This allows OS page caches (e.g. buffered NTFS flushes) to drain onto
- *    the hardware safely in the background, entirely avoiding stack-use-after-free
- *    crashes. Tasks may still be running when this function returns, so everything
- *    they touch afterwards (the progress vector and the @c WriteSync state) is owned
- *    by @c shared_ptr copies captured in each task; nothing is captured by reference
- *    from this function's locals. Each device is removed from the global
- *    dirty-device set as its own drain completes, allowing the device selection
- *    screen to clear the @b [FLUSHING] indicator per-device as soon as it is safe.
- *
- * @par Normal Completion
- * The main thread's condition-variable wait unblocks once every task has finished
- * (succeeded or failed), the screen is switched to its result layout, and the
- * futures are joined inline; the out-of-band drain helper is not invoked.
- *
- * @par Result Screen
- * On exit the screen shows a status overview on line 2 (the summary line below), the
- * final rows, and a summary line. The successful count comes from a single load of
- * the completion counter (reused for both the status decision and the final
- * successful-count line); the failed count is obtained by scanning the per-task
- * @c failed flags in the progress vector:
- * - @b COMPLETED — All targeted block operations succeeded.
- * - @b PARTIAL   — At least one task succeeded and at least one task failed.
- * - @b FAILED    — Total failure across all enqueued storage block streams.
- * - @b INTERRUPTED — Operation aborted by explicit user termination before total completion.
- *
- * Final execution metrics (elapsed duration and a successful/total count ratio) follow
- * the rows.
- *
- * @param validPairsIn Validated (IsoInfo, device) pairs targeted for writing. Used
- *                     to build a sorted @ref ProgressInfo vector by
- *                     @ref prepareWriteData; the caller's vector is never modified.
- *
- * @return The screen, still alive and still reflowing on resize. The caller keeps it
- *         while it waits for the user (after calling @ref WriteScreen::setPrompt
- *         with the prompt text) and then calls @ref WriteScreen::stop, or simply
- *         lets it go out of scope.
+ * @return The live @ref WriteScreen. The caller keeps it while waiting for the
+ *         user (after @ref WriteScreen::setPrompt), then calls
+ *         @ref WriteScreen::stop or lets it go out of scope.
  */
 std::shared_ptr<WriteScreen> performWriteOperation(
         const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
