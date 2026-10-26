@@ -233,9 +233,9 @@ struct ParsedArgs {
  * appended to @c paths.
  *
  * "--silent" sets @c silentMode. The "-dN" option sets @c maxDepth
- * for mount, umount/unmount, and c2iso. Negative depth values trigger
+ * for mount and c2iso. Negative depth values trigger
  * a warning and use unlimited depth; invalid depth values produce an
- * error. For w2usb, "-dN" options are ignored without parsing,
+ * error. For w2usb and umount/unmount "-dN" options are ignored without parsing,
  * validation, or diagnostics.
  *
  * For w2usb, ISO paths must precede device paths (/dev/...). Once a
