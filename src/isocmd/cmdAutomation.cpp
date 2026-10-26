@@ -223,29 +223,29 @@ struct ParsedArgs {
  *     isocmd <action> [flags...] [paths...]
  *
  * The action keyword ("mount", "umount"/"unmount", "c2iso", "w2usb")
- * must be the first argument.  Flags (--silent, -dN) may appear only
- * after the action keyword and before the first path.  A flag before the
+ * must be the first argument. Flags (--silent, -dN) may appear only
+ * after the action keyword and before the first path. A flag before the
  * action, or a flag after any path, is an error.
  *
  * "umount" and "unmount" both map to action "umount"; "c2iso" sets
  * @c convert and action "convert"; "w2usb" sets @c writeUsb and action
- * "w2usb".  Every positional that follows the action keyword is appended
- * to @c paths.
+ * "w2usb". Every positional argument following the action keyword is
+ * appended to @c paths.
  *
- * "-dN" is accepted syntactically (so it is not mistaken for a path) but
- * its value is discarded: no depth is parsed, validated, or stored, and
- * no diagnostic is emitted for it.  Only "--silent" is actually recorded
- * (into @c silentMode).
+ * "--silent" sets @c silentMode. The "-dN" option sets @c maxDepth
+ * for mount, umount/unmount, and c2iso. Negative depth values trigger
+ * a warning and use unlimited depth; invalid depth values produce an
+ * error. For w2usb, "-dN" options are ignored without parsing,
+ * validation, or diagnostics.
  *
- * For w2usb, paths must be ordered: one or more ISO files first, then
- * one or more device paths (/dev/...).  A /dev/ path before an ISO is
- * fine (it's still a device), but an ISO after a /dev/ path is rejected
+ * For w2usb, ISO paths must precede device paths (/dev/...). Once a
+ * device path is encountered, any subsequent non-device path is rejected
  * with a diagnostic.
  *
- * @return false on a missing/misplaced action keyword, a flag before the
- *         action, a flag after the first path, or (w2usb only) an ISO
- *         path after a device path (a diagnostic has already been
- *         emitted); true on success.
+ * @return false on a missing or misplaced action keyword, an invalid
+ *         depth value, a flag before the action, a flag after the first
+ *         path, or (w2usb only) an ISO path after a device path.
+ *         Returns true on success.
  */
 static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
     bool captureWarn  = false;
@@ -318,9 +318,34 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
 
             if (arg == "--silent") {
                 out.silentMode = true;
+            } else if (arg.rfind("-d", 0) == 0) {
+                // w2usb ignores -d options.
+                if (!out.writeUsb) {
+                    const std::string depthStr = arg.substr(2);
+
+                    try {
+                        size_t parsed = 0;
+                        const int depth = std::stoi(depthStr, &parsed);
+
+                        if (parsed != depthStr.size()) {
+                            throw std::invalid_argument("invalid depth");
+                        }
+
+                        if (depth < 0) {
+                            flushDeferredWarn();
+                            warnMsg(out.silentMode, "Negative depth; using unlimited depth.", "");
+                            out.maxDepth = -1;
+                        } else {
+                            out.maxDepth = depth;
+                        }
+                    } catch (const std::exception&) {
+                        flushDeferredWarn();
+                        errMsg("Invalid depth option: '" + arg + "'.");
+                        return false;
+                    }
+                }
             }
 
-            // -dN: deprecated — value is silently discarded.
             continue;
         }
 
