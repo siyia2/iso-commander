@@ -271,7 +271,7 @@ std::string pathErr(const WriteTheme& wt, const std::string& path, const std::st
 void printValidationErrors(const WriteTheme& wt, const std::vector<std::string>& errs) {
     std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.rl_resetCol << wt.bold << "\n";
     for (const auto& e : errs)
-        std::cerr << "  \u2022 " << e << wt.bold << "\n";
+        std::cerr << " \u2022 " << e << wt.bold << "\n";
     std::cerr << wt.rl_resetCol << "\n";
 }
 
