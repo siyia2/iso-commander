@@ -318,8 +318,6 @@ bool isDeviceFlushing(const std::string& device) {
 std::optional<std::string> checkDevice(const WriteTheme& wt, const std::string& device,
                                        const std::string& shown, uint64_t& size) {
 
-    if (isDeviceFlushing(device) && GlobalState::isNonInteractive.load())
-        return pathErr(wt, shown, " is flushing data, try again shortly");
     if (!isFlashDrive(device))
         return pathErr(wt, shown, " is not a removable USB flash device");
 
@@ -331,6 +329,9 @@ std::optional<std::string> checkDevice(const WriteTheme& wt, const std::string& 
         if (g_drainingDevices.count(device))
             return pathErr(wt, shown, " has pending kernel-level tasks");
     }
+
+    if (isDeviceFlushing(device) && GlobalState::isNonInteractive.load())
+        return pathErr(wt, shown, " is flushing data, try again shortly");
 
     size = getBlockDeviceSize(device);
     if (size == 0) {
