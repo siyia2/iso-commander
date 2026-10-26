@@ -369,11 +369,11 @@ std::optional<std::string> checkCapacity(const WriteTheme& wt, const IsoInfo& is
 
     std::string e;
     e.append(wt.errLabel).append("ISO exceeds target drive capacity:\n")
-     .append(wt.warnLabel).append(isoLabelPadded)
+     .append(wt.errLabel).append(isoLabelPadded)
      .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol)
      .append(UI::Palette::DimGray).append(" (").append(wt.fileCol).append(iso.filename)
      .append(UI::Palette::DimGray).append(")\n")
-     .append(wt.warnLabel).append(driveLabelPadded)
+     .append(wt.errLabel).append(driveLabelPadded)
      .append(wt.sizeCol).append(deviceSizeStr).append(wt.rl_resetCol)
      .append(UI::Palette::DimGray).append(" (").append(wt.warnLabel).append(device)
      .append(wt.infoLabel).append(" <").append(driveName).append(">")
