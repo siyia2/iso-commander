@@ -7,17 +7,11 @@ Iso Commander (isocmd) \- A single binary command-line utility for managing .iso
 Iso Commander (isocmd) is a single binary command-line utility for managing .iso files and converting various image formats to .iso using multi-threaded processing.
 
 .SH NON-INTERACTIVE COMMANDS
-.TP 16
+.SS Version
+.TP
 .B \-v, \-\-version
 Show program version.
-.TP
-.B \-\-silent
-Suppress informational messages, warnings and progress output. Critical errors will still be displayed.
-.TP
-.B \-d\fIN\fR
-Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 scans only the specified directories.
-.br
-Ignored by \fBw2usb\fR, which does not scan directories, and by \fBumount/unmount\fR, which require surface scans only.
+.SS Actions
 .TP
 .B mount
 Mount one or more ISO files or scan directories for ISO files and mount them (requires root).
@@ -32,6 +26,15 @@ Convert supported images to ISO files. Accepts individual image files and direct
 Write ISO files to removable USB flash devices (requires root). Arguments beginning with \fB/dev/\fR are target devices.
 .br
 All arguments are validated before any device is touched. Only raw devices are accepted, not device partitions.
+.SS Action Flags
+.TP
+.B \-\-silent
+Suppress informational messages, warnings and progress output. Critical errors will still be displayed.
+.TP
+.B \-d\fIN\fR
+Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 scans only the specified directories.
+.br
+Ignored by \fBw2usb\fR, which does not scan directories, and by \fBumount/unmount\fR, which only require surface scans.
 
 .SH EXAMPLES
 .TS
