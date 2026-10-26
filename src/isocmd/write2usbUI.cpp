@@ -298,14 +298,14 @@ bool isDeviceBusy(const std::string& device) {
  * @brief Runs the device-level checks, independent of which ISO is paired with it.
  *
  * Checks, in order:
- * -# In non-interactive mode only, the device has no write I/O still in
- *    flight (@ref isDeviceBusy). This catches flushing started by another
- *    process, such as a previously cancelled write, which the in-process
- *    @ref g_drainingDevices set cannot see.
  * -# The device is a removable USB flash drive (@ref isFlashDrive).
  * -# The device and its partitions are not mounted (@ref isDeviceMounted).
  * -# The device is not in @ref g_drainingDevices (pending kernel-level tasks
  *    tracked by the interactive UI).
+ * -# In non-interactive mode only, the device has no write I/O still in
+ *    flight (@ref isDeviceBusy). This catches flushing started by another
+ *    process, such as a previously cancelled write, which the in-process
+ *    @ref g_drainingDevices set cannot see.
  * -# The device size can be determined (@ref getBlockDeviceSize).
  *
  * @param wt     Active write theme.
@@ -317,7 +317,6 @@ bool isDeviceBusy(const std::string& device) {
  */
 std::optional<std::string> checkDevice(const WriteTheme& wt, const std::string& device,
                                        const std::string& shown, uint64_t& size) {
-
     if (!isFlashDrive(device))
         return pathErr(wt, shown, " is not a removable USB flash device");
 
@@ -330,7 +329,7 @@ std::optional<std::string> checkDevice(const WriteTheme& wt, const std::string& 
             return pathErr(wt, shown, " has pending kernel-level tasks");
     }
 
-    if (isDeviceBusy(device) && GlobalState::isNonInteractive.load())
+    if (GlobalState::isNonInteractive.load() && isDeviceBusy(device))
         return pathErr(wt, shown, " has pending kernel-level tasks");
 
     size = getBlockDeviceSize(device);
