@@ -364,8 +364,8 @@ std::optional<std::string> checkCapacity(const WriteTheme& wt, const IsoInfo& is
     const std::string driveName = getDriveName(device);
 
     // Format just the padding and arrow with a fixed width of 10 for the label
-    const auto isoLabelPadded   = std::format("    {:<10} = ", "ISO Size");
-    const auto driveLabelPadded = std::format("    {:<10} = ", "Drive Size");
+    const auto isoLabelPadded   = std::format("    {:<5} = ", "ISO");
+    const auto driveLabelPadded = std::format("    {:<5} = ", "Drive");
 
     std::string e;
     e.append(wt.errLabel).append("ISO exceeds target drive capacity:\n")
