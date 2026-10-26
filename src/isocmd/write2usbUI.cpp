@@ -274,7 +274,7 @@ void printValidationErrors(const WriteTheme& wt, const std::vector<std::string>&
     std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.rl_resetCol << wt.bold << "\n";
     for (const auto& e : errs)
         std::cerr << " \u2022 " << e << wt.bold << "\n";
-    std::cerr << wt.rl_resetCol << "\n";
+    std::cerr << wt.rl_resetCol;
 }
 
 /**
@@ -352,8 +352,8 @@ std::optional<std::string> checkDevice(const WriteTheme& wt, const std::string& 
  * @param iso        ISO to be written.
  * @param device     Device path, used for the message and to look up the drive name.
  * @param deviceSize Device capacity in bytes (as returned by @ref checkDevice).
- * @return A themed "is too large for" message including both sizes and the
- *         drive name, or std::nullopt if the ISO fits.
+ * @return A themed validation error message with aligned size details (including
+ *         filenames, device paths, and drive names), or std::nullopt if the ISO fits.
  */
 std::optional<std::string> checkCapacity(const WriteTheme& wt, const IsoInfo& iso,
                                          const std::string& device, uint64_t deviceSize) {
