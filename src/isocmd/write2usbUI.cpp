@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <future>
 #include <iomanip>
@@ -18,6 +19,7 @@
 #include <memory>
 #include <mutex>
 #include <numeric>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -360,18 +362,24 @@ std::optional<std::string> checkCapacity(const WriteTheme& wt, const IsoInfo& is
 
     const std::string deviceSizeStr = formatFileSize(deviceSize);
     const std::string driveName = getDriveName(device);
+
+    // Format just the padding and arrow with a fixed width of 10 for the label
+    const auto isoLabelPadded   = std::format("    {:<10} = ", "ISO Size");
+    const auto driveLabelPadded = std::format("    {:<10} = ", "Drive Size");
+
     std::string e;
-    e.append(UI::Palette::DimGray).append("{").append(wt.fileCol).append(iso.filename)
-     .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
+    e.append(wt.errLabel).append("ISO exceeds target drive capacity:\n")
+     .append(wt.warnLabel).append(isoLabelPadded)
      .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol)
+     .append(UI::Palette::DimGray).append(" (").append(wt.fileCol).append(iso.filename)
+     .append(UI::Palette::DimGray).append(")\n")
+     .append(wt.warnLabel).append(driveLabelPadded)
+     .append(wt.sizeCol).append(deviceSizeStr).append(wt.rl_resetCol)
+     .append(UI::Palette::DimGray).append(" (").append(wt.warnLabel).append(device)
+     .append(wt.infoLabel).append(" <").append(driveName).append(">")
      .append(UI::Palette::DimGray).append(")")
-     .append(UI::Palette::DimGray).append("}").append(wt.errLabel).append(" > ")
-     .append(UI::Palette::DimGray).append("{").append(wt.warnLabel).append(device).append(wt.infoLabel)
-     .append(" <").append(driveName).append(">")
-     .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
-     .append(wt.sizeCol).append(deviceSizeStr).append(UI::Palette::DimGray)
-     .append(")").append(UI::Palette::DimGray).append("}")
      .append(wt.rl_resetCol);
+
     return e;
 }
 
