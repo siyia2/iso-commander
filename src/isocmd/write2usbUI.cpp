@@ -704,40 +704,76 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
 // Resize watcher                                                             //
 // ------------------------------------------------------------------------- //
 
-// ------------------------------------------------------------------------- //
-// Resize watcher                                                             //
-// ------------------------------------------------------------------------- //
-
-// Repaints the warning block when the terminal width changes while readline
-// waits at the confirmation prompt. Same idea as WriteScreen's keeper thread.
-//
-// Reacts to width changes only. A height change is deliberately ignored: the
-// terminal's own reflow already repositions the block, and any attempt to
-// re-anchor it from a shrunk viewport would either clamp at row 1 (destroying
-// the safety header) or force a full wipe (destroying the ISO / device lists
-// above the block). If a width change can't be honoured without clamping
-// (up >= rows), repaint() skips it entirely rather than overwrite the screen.
+/**
+ * @brief Repaints the warning block when the terminal width changes.
+ *
+ * Runs as a background thread while readline waits at the confirmation
+ * prompt, mirroring the keeper-thread pattern used by @ref WriteScreen.
+ *
+ * @details Reacts to width changes only. A height change is deliberately
+ * ignored: the terminal's own reflow already repositions the block, and
+ * any attempt to re-anchor it from a shrunk viewport would either clamp
+ * at row 1 (destroying the safety header) or force a full wipe
+ * (destroying the ISO / device lists above the block).
+ *
+ * @par Skip guard
+ * If a width change cannot be honoured without clamping (`up >= rows`),
+ * @ref repaint skips it entirely rather than overwrite the screen. The
+ * block stays where the terminal reflowed it; nothing is destroyed.
+ *
+ * @note The watcher must be stopped (or destroyed) before the caller
+ * returns from @c readline, so nothing repaints after the user has
+ * answered. See @ref stop.
+ */
 class ConfirmResizeWatcher {
 public:
+    /**
+     * @brief Callback that prints the warning block at a given width.
+     *
+     * @param cols Terminal width in columns to lay the block out for.
+     * @return Visible width of every line printed, in order. @ref repaint
+     *         uses this to compute how many rows to move the cursor up on
+     *         the next redraw.
+     */
     using Painter = std::function<std::vector<size_t>(size_t cols)>;
 
+    /**
+     * @brief Starts the watcher thread.
+     *
+     * @param paint         Callback that (re)prints the warning block for a
+     *                      given width and returns its per-line widths.
+     * @param drawnCols     Terminal width the block was last drawn at. The
+     *                      watcher treats this as "no change" until it sees
+     *                      a different width.
+     * @param drawnWidths   Per-line visible widths of the block currently
+     *                      on screen, as returned by @p paint.
+     * @param promptText    The confirmation prompt as plain text (no ANSI
+     *                      escapes). Used to measure the prompt's visible
+     *                      width for the cursor-up count.
+     * @param visiblePrompt The confirmation prompt as it should be
+     *                      re-emitted after a redraw (may contain ANSI
+     *                      escapes). Must render the same characters as
+     *                      @p promptText.
+     */
     ConfirmResizeWatcher(Painter paint, size_t drawnCols,
                          std::vector<size_t> drawnWidths,
                          const std::string& promptText,
-                         std::string visiblePrompt)
-        : paint_(std::move(paint)),
-          prompt_(std::move(visiblePrompt)),
-          promptWidth_(utf8Width(promptText)),
-          lastCols_(drawnCols),
-          lineWidths_(std::move(drawnWidths)) {
-        thread_ = std::thread([this] { loop(); });
-    }
+                         std::string visiblePrompt);
 
+    /// Stops and joins the watcher thread. Safe to call more than once.
     ~ConfirmResizeWatcher() { stop(); }
 
     ConfirmResizeWatcher(const ConfirmResizeWatcher&)            = delete;
     ConfirmResizeWatcher& operator=(const ConfirmResizeWatcher&) = delete;
 
+    /**
+     * @brief Stops the watcher thread and waits for it to finish.
+     *
+     * Safe to call more than once. Because the thread holds @c m_ while
+     * repainting, this also blocks until any repaint already in progress
+     * has completed — so once @c stop returns, no further output will be
+     * written by the watcher.
+     */
     void stop() {
         if (!thread_.joinable()) return;
         { std::lock_guard<std::mutex> lk(m_); stop_ = true; }
@@ -746,6 +782,12 @@ public:
     }
 
 private:
+    /**
+     * @brief Poll loop: reacts to width changes, ignores height changes.
+     *
+     * Wakes every 100 ms (or immediately on @ref stop) and re-reads the
+     * terminal size. Only a change in width triggers a repaint.
+     */
     void loop() {
         constexpr auto kPoll = std::chrono::milliseconds(100);
         std::unique_lock<std::mutex> lk(m_);
@@ -765,13 +807,33 @@ private:
         }
     }
 
+    /**
+     * @brief Redraws the warning block and reprints the prompt.
+     *
+     * Computes how many physical rows the block currently occupies at
+     * @p cols, moves the cursor up over them, clears to end of screen,
+     * re-invokes @ref paint_ and reprints the prompt.
+     *
+     * @details Deliberately does not read @c rl_line_buffer or @c rl_end:
+     * both are readline globals mutated by the main thread on every
+     * keystroke, so reading them here would be a data race (UB, potential
+     * UAF on realloc). The visible cost is that a resize does not
+     * re-echo a half-typed answer; readline still holds the text in its
+     * own buffer, so Enter submits it correctly.
+     *
+     * @par Skip guard
+     * If moving up @p rows would clamp at row 1, the repaint is skipped
+     * entirely. Clamping would overwrite the "ERASE ALL DATA" warning
+     * from the top and, combined with the `\033[J` clear, drop the
+     * ISO / device lists out of view. Skipping leaves the terminal
+     * reflowed as-is — nothing is destroyed.
+     *
+     * @param cols Current terminal width in columns.
+     * @param rows Current terminal height in rows. Used only as the clamp
+     *             threshold for the skip guard; height changes by
+     *             themselves never reach this function.
+     */
     void repaint(size_t cols, size_t rows) {
-        // Deliberately not reading rl_line_buffer / rl_end here. They are
-        // readline globals mutated by the main thread on every keystroke;
-        // reading them from this thread is a data race (UB, potential UAF on
-        // realloc). The visible cost: a resize does not re-echo a half-typed
-        // answer. Readline still has the typed text in its own buffer, so
-        // Enter still submits it correctly.
         size_t up = 0;
         for (size_t w : lineWidths_)
             up += std::max<size_t>(1, (w + cols - 1) / cols);
