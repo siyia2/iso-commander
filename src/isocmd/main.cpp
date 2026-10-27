@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
     const std::string arg1 = (argc >= 2) ? argv[1] : "";
 
     if (argc == 2 && (arg1 == "--version" || arg1 == "-v"))
-        return printVersionNumber("7.9.0"), 0;
+        return printVersionNumber("7.8.9"), 0;
     if (argc >= 3 || (argc == 2 && (arg1 == "umount" || arg1 == "unmount" ||
                                     arg1 == "mount"  || arg1 == "c2iso" ||
                                     arg1 == "w2usb")))
@@ -124,7 +124,7 @@ int main(int argc, char *argv[]) {
     GlobalState::lockFileDescriptor = open(lockFile, O_CREAT | O_RDWR, 0666);
     struct flock fl = { F_WRLCK, SEEK_SET, 0, 0, 0 };
     if (fcntl(GlobalState::lockFileDescriptor, F_SETLK, &fl) == -1) {
-        std::cerr << c.num << "error: " << c.indexA
+        std::cerr << c.indexA << "error: " << c.num
                   << "failed to setup transaction (unable to lock database)\n  "
                   << UI::Palette::BoldReset << "if you're sure isocmd isn't already running, you can remove '/tmp/isocmd.lock'\n"
                   << UI::Palette::Reset;
