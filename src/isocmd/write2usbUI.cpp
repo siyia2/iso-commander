@@ -717,8 +717,15 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
  * @ref pending, @ref pendingCols, @ref pendingRows and @ref lastCols are
  * @c std::atomic because both threads touch them. Everything else is
  * main-thread-only: @ref paint and @ref promptWidth are written once in
- * the watcher's constructor (which runs on the main thread), and
- * @ref lineWidths is written only by the hook.
+ * @ref ConfirmResizeWatcher's constructor (which runs on the main thread),
+ * and @ref lineWidths is written only by @ref confirmResizeHook.
+ *
+ * @par Ownership
+ * Instances are owned by the caller — normally a single file-scope object
+ * (@ref g_confirmResize). The watcher and the hook both take it by
+ * reference, so a `ConfirmResizeWatcher` cannot exist without a state, and
+ * a hook cannot be installed without one. That makes the "one watcher at
+ * a time" contract explicit at the type level.
  */
 struct ResizeRepaintState {
     // Cross-thread signalling: written by watcher, consumed by hook.
@@ -733,7 +740,9 @@ struct ResizeRepaintState {
     size_t promptWidth = 0;
 };
 
-static ResizeRepaintState g_resizeRepaint;
+/// The one state used by the confirmation prompt (see @ref ResizeRepaintState
+/// for the "one watcher at a time" assumption).
+static ResizeRepaintState g_confirmResize;
 
 /**
  * @brief `rl_event_hook`: repaints the warning block on the main thread.
@@ -753,26 +762,27 @@ static ResizeRepaintState g_resizeRepaint;
  * `rl_line_buffer` / `rl_end` / `rl_point` are mutated by readline on the
  * same thread. Reading them from the watcher thread would be a data race.
  *
+ * @param s Shared state populated by @ref ConfirmResizeWatcher.
  * @return Always 0 (do not abort readline).
  */
-static int confirmResizeHook(void) {
-    if (!g_resizeRepaint.pending.load(std::memory_order_acquire))
+static int confirmResizeHook(ResizeRepaintState& s) {
+    if (!s.pending.load(std::memory_order_acquire))
         return 0;
 
-    const size_t cols = g_resizeRepaint.pendingCols.load(std::memory_order_relaxed);
-    const size_t rows = g_resizeRepaint.pendingRows.load(std::memory_order_relaxed);
-    g_resizeRepaint.pending.store(false, std::memory_order_release);
+    const size_t cols = s.pendingCols.load(std::memory_order_relaxed);
+    const size_t rows = s.pendingRows.load(std::memory_order_relaxed);
+    s.pending.store(false, std::memory_order_release);
 
     // Rows occupied by the warning block at the new width.
     size_t warningRows = 0;
-    for (size_t w : g_resizeRepaint.lineWidths)
+    for (size_t w : s.lineWidths)
         warningRows += std::max<size_t>(1, (w + cols - 1) / cols);
 
     // Cursor is somewhere in the prompt+buffer block, which sits directly
     // below the warning block. rl_point is the cursor offset inside the
     // buffer; adding promptWidth gives the column from start of prompt.
     // Integer division by cols gives the physical line the cursor is on.
-    const size_t cursorCols = g_resizeRepaint.promptWidth + rl_point;
+    const size_t cursorCols = s.promptWidth + rl_point;
     const size_t cursorLine = cursorCols / cols;
 
     const size_t up = warningRows + cursorLine;
@@ -787,7 +797,7 @@ static int confirmResizeHook(void) {
     std::cout << "\r\033[J";
 
     // Repaint the warning block at the new width.
-    g_resizeRepaint.lineWidths = g_resizeRepaint.paint(cols);
+    s.lineWidths = s.paint(cols);
 
     // Restore the prompt + the user's typed text. This is the whole point
     // of moving the repaint to the main thread: readline's globals are
@@ -804,10 +814,10 @@ static int confirmResizeHook(void) {
  * @brief Signals a main-thread repaint when the terminal width changes.
  *
  * Runs as a background thread while readline waits at the confirmation
- * prompt. Unlike the previous design, this watcher **never** touches the
- * terminal or readline directly: it only sets @ref ResizeRepaintState
- * ::pending, and the main thread's @ref confirmResizeHook does the
- * redraw **and** restores the user's typed input via @c rl_redisplay().
+ * prompt. This watcher **never** touches the terminal or readline
+ * directly: it only sets @ref ResizeRepaintState::pending, and the main
+ * thread's @ref confirmResizeHook does the redraw **and** restores the
+ * user's typed input via @c rl_redisplay().
  *
  * @details Reacts to width changes only. A height change is ignored: the
  * terminal's own reflow repositions the block, and the skip guard in the
@@ -827,8 +837,9 @@ public:
     using Painter = std::function<std::vector<size_t>(size_t cols)>;
 
     /**
-     * @brief Populates the shared repaint state and starts the thread.
+     * @brief Populates @p state and starts the watcher thread.
      *
+     * @param state       State shared with @ref confirmResizeHook.
      * @param paint       Callback that (re)prints the warning block for a
      *                    given width and returns its per-line widths.
      * @param drawnCols   Terminal width the block was last drawn at.
@@ -837,14 +848,15 @@ public:
      * @param promptText  The confirmation prompt as plain text (no ANSI
      *                    escapes). Used only to measure its visible width.
      */
-    ConfirmResizeWatcher(Painter paint, size_t drawnCols,
-                         std::vector<size_t> drawnWidths,
-                         const std::string& promptText) {
-        g_resizeRepaint.paint        = std::move(paint);
-        g_resizeRepaint.lineWidths   = std::move(drawnWidths);
-        g_resizeRepaint.promptWidth  = utf8Width(promptText);
-        g_resizeRepaint.lastCols.store(drawnCols, std::memory_order_relaxed);
-        g_resizeRepaint.pending.store(false, std::memory_order_relaxed);
+    ConfirmResizeWatcher(ResizeRepaintState& state, Painter paint,
+                         size_t drawnCols, std::vector<size_t> drawnWidths,
+                         const std::string& promptText)
+        : state_(state) {
+        state_.paint        = std::move(paint);
+        state_.lineWidths   = std::move(drawnWidths);
+        state_.promptWidth  = utf8Width(promptText);
+        state_.lastCols.store(drawnCols, std::memory_order_relaxed);
+        state_.pending.store(false, std::memory_order_relaxed);
 
         thread_ = std::thread([this] { loop(); });
     }
@@ -867,12 +879,19 @@ public:
         thread_.join();
     }
 
+    /**
+     * @brief The state the watcher writes to. Pass to @ref confirmResizeHook
+     *        when installing it as @c rl_event_hook (via the wrapper below).
+     */
+    ResizeRepaintState& state() { return state_; }
+
 private:
     /**
      * @brief Poll loop: signals the main thread on a width change.
      *
      * Wakes every 100 ms (or immediately on @ref stop). Only width
-     * changes set @c pending; height changes are ignored.
+     * changes set @ref ResizeRepaintState::pending; height changes are
+     * ignored.
      */
     void loop() {
         constexpr auto kPoll = std::chrono::milliseconds(100);
@@ -884,20 +903,37 @@ private:
             const auto size = terminalSize();
             const size_t cols = size.first;
             const size_t rows = size.second;
-            if (cols == g_resizeRepaint.lastCols.load(std::memory_order_relaxed))
+            if (cols == state_.lastCols.load(std::memory_order_relaxed))
                 continue;
-            g_resizeRepaint.lastCols.store(cols, std::memory_order_relaxed);
-            g_resizeRepaint.pendingCols.store(cols, std::memory_order_relaxed);
-            g_resizeRepaint.pendingRows.store(rows, std::memory_order_relaxed);
-            g_resizeRepaint.pending.store(true, std::memory_order_release);
+            state_.lastCols.store(cols, std::memory_order_relaxed);
+            state_.pendingCols.store(cols, std::memory_order_relaxed);
+            state_.pendingRows.store(rows, std::memory_order_relaxed);
+            state_.pending.store(true, std::memory_order_release);
         }
     }
 
+    ResizeRepaintState&     state_;
     std::mutex              m_;
     std::condition_variable cv_;
     bool                    stop_ = false;
     std::thread             thread_;
 };
+
+/**
+ * @brief `rl_event_hook` trampoline for a specific @ref ResizeRepaintState.
+ *
+ * @c rl_event_hook is a plain function pointer (`int (*)(void)`), so it
+ * cannot carry a state argument. This trampoline closes over
+ * @ref g_confirmResize — the only state a hook is ever installed for in
+ * this program. If a second modal prompt ever needs its own watcher, this
+ * is the one place that has to change (e.g. a `std::function`-based
+ * dispatcher).
+ *
+ * @return @ref confirmResizeHook's return value (always 0).
+ */
+static int confirmResizeHookTrampoline(void) {
+    return confirmResizeHook(g_confirmResize);
+}
 
 /**
  * @brief Interactive loop that collects and validates ISO-to-device mappings from the user.
@@ -1156,12 +1192,13 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
         {
             ConfirmationModeGuard confirmGuard;
-            ConfirmResizeWatcher watcher(printWarning, drawnCols, drawnWidths, promptText);
+            ConfirmResizeWatcher watcher(g_confirmResize, printWarning,
+                                         drawnCols, drawnWidths, promptText);
 
             // Install the repaint hook only for this readline() call, and
             // save any hook the surrounding context had set.
             auto* savedHook = rl_event_hook;
-            rl_event_hook = confirmResizeHook;
+            rl_event_hook = confirmResizeHookTrampoline;
             confirmation.reset(readline(confirmPrompt.c_str()));
             rl_event_hook = savedHook;
 
