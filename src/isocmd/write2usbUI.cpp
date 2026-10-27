@@ -969,6 +969,25 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         }
         // confirmGuard destructor has already re-applied the mappings-prompt
         // readline configuration here.
+        // Same text twice: readline needs the \001/\002 markers around escape
+        // sequences so it can measure the prompt, plain output must not have them.
+        // No leading "\n": the blank line is already printed by printWarning.
+        const std::string promptText    = "Proceed? (y/n): ";
+        const std::string confirmPrompt =
+            "\001" + std::string(color) + "\002" + promptText + wt.rl_resetCol;
+        const std::string visiblePrompt =
+            std::string(color) + promptText + wt.rl_resetCol;
+
+        std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
+        {
+            ConfirmationModeGuard confirmGuard;
+            ConfirmResizeWatcher  watcher(printWarning, drawnCols, drawnWidths,
+                                          promptText, visiblePrompt);
+            confirmation.reset(readline(confirmPrompt.c_str()));
+            watcher.stop();   // before the guard unwinds, so nothing repaints after Enter
+        }
+        // confirmGuard destructor has already re-applied the mappings-prompt
+        // readline configuration here.
 
         if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
             setupSignalHandlerCancellations();
