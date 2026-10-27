@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <random>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -305,8 +306,56 @@ bool isWindowsIso(const std::string& isoPath)
     return hasBootWim && hasBootMgr;
 }
 
-/** Runs a command up to `attempts` times; stops early on success or cancel.
- *  Returns 0 on success, -1 if cancelled, otherwise the last exit code. */
+/**
+ * @brief Sleeps for a randomized backoff interval, waking early on cancel.
+ *
+ * The delay is `baseMs` plus a uniformly random jitter of 0-100% of
+ * `baseMs`, so the result lies in [baseMs, 2 * baseMs]. Jitter keeps
+ * concurrent jobs that failed on the same shared resource (free loop
+ * device, busy udev) from retrying in lockstep and colliding again.
+ *
+ * The wait is split into 50 ms slices that poll the cancellation flag,
+ * so a cancel during the backoff is noticed within ~50 ms. On cancel the
+ * function returns early; callers detect the cancel at the top of their
+ * next loop iteration.
+ *
+ * Each thread has its own random generator, seeded from std::random_device,
+ * so concurrent jobs draw independent delays.
+ *
+ * @param baseMs Minimum delay in milliseconds (the jitter is added on top).
+ */
+static void sleepWithJitter(int baseMs)
+{
+    static thread_local std::mt19937 rng{std::random_device{}()};
+    const int total = baseMs + std::uniform_int_distribution<int>(0, baseMs)(rng);
+
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(total);
+    while (std::chrono::steady_clock::now() < end) {
+        if (GlobalState::g_operationCancelled.load()) return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+}
+
+/**
+ * @brief Runs an external command, retrying on failure.
+ *
+ * Retries absorb transient failures caused by other system activity
+ * (udev re-probing the disk, boot-time services holding the device),
+ * which typically clear within a second or two.
+ *
+ * Between attempts the delay grows linearly with the attempt number and
+ * is jittered (see sleepWithJitter): ~500-1000 ms after the first
+ * failure, ~1000-2000 ms after the second. Cancellation is checked before
+ * every attempt and during every backoff. The time each failed attempt
+ * itself takes is not included in these figures.
+ *
+ * @param args        Argument vector where args[0] is the executable name.
+ * @param attempts    Maximum number of attempts (default 3).
+ * @param baseDelayMs Base backoff in milliseconds, multiplied by the
+ *                    attempt number (default 500).
+ * @return 0 on success, -1 if cancelled, otherwise the exit code of the
+ *         last attempt.
+ */
 static int runCommandRetry(const std::vector<std::string>& args,
                            int attempts    = 3,
                            int baseDelayMs = 500)
@@ -319,13 +368,25 @@ static int runCommandRetry(const std::vector<std::string>& args,
         if (rc == 0) return 0;
 
         if (i + 1 < attempts)
-            std::this_thread::sleep_for(
-                std::chrono::milliseconds(baseDelayMs * (i + 1)));  // 500, 1000 ms
+            sleepWithJitter(baseDelayMs * (i + 1));   // ~500-1000, ~1000-2000 ms
     }
     return rc;
 }
 
-/** Same for libMount(): 3 attempts, 500 ms / 1000 ms backoff. */
+/**
+ * @brief libMount() with the same retry and jittered backoff as
+ *        runCommandRetry().
+ *
+ * Mainly guards the ISO loop mount against transient failures such as
+ * loop-device contention with other boot-time services or concurrent
+ * jobs. Parameters match libMount(), plus the retry settings.
+ *
+ * @param attempts    Maximum number of attempts (default 3).
+ * @param baseDelayMs Base backoff in milliseconds, multiplied by the
+ *                    attempt number (default 500).
+ * @return 0 on success, -1 if cancelled, otherwise the return code of
+ *         the last mount attempt.
+ */
 static int libMountRetry(const char* src, const char* target,
                          const char* options = nullptr,
                          const char* fstype  = nullptr,
@@ -340,8 +401,52 @@ static int libMountRetry(const char* src, const char* target,
         if (rc == 0) return 0;
 
         if (i + 1 < attempts)
-            std::this_thread::sleep_for(
-                std::chrono::milliseconds(baseDelayMs * (i + 1)));
+            sleepWithJitter(baseDelayMs * (i + 1));
+    }
+    return rc;
+}
+
+/**
+ * @brief Mounts an NTFS partition through a specific kernel driver, with
+ *        retry and jittered backoff.
+ *
+ * Builds a fresh libmnt_context on every attempt, so no state from a
+ * failed attempt carries over. Mount helpers are disabled so the VFS
+ * invokes the named kernel driver directly (see getBestNtfsDriver()).
+ *
+ * @param src         NTFS partition node (e.g. "/dev/sdb2").
+ * @param target      Existing mount point.
+ * @param fstype      Kernel driver token ("ntfs" or "ntfs3").
+ * @param attempts    Maximum number of attempts (default 3).
+ * @param baseDelayMs Base backoff in milliseconds (default 500).
+ * @return 0 on success, -1 if cancelled, otherwise the return code of
+ *         the last attempt.
+ */
+static int libMountNtfsRetry(const char* src, const char* target,
+                             const char* fstype,
+                             int attempts    = 3,
+                             int baseDelayMs = 500)
+{
+    int rc = -1;
+    for (int i = 0; i < attempts; ++i) {
+        if (GlobalState::g_operationCancelled.load()) return -1;
+
+        libmnt_context* ctx = mnt_new_context();
+        if (ctx) {
+            mnt_context_set_source(ctx, src);
+            mnt_context_set_target(ctx, target);
+            mnt_context_set_fstype(ctx, fstype);
+            mnt_context_append_options(ctx, "noatime");
+            mnt_context_disable_helpers(ctx, true);
+            rc = mnt_context_mount(ctx);
+            mnt_free_context(ctx);
+        } else {
+            rc = -1;
+        }
+        if (rc == 0) return 0;
+
+        if (i + 1 < attempts)
+            sleepWithJitter(baseDelayMs * (i + 1));
     }
     return rc;
 }
@@ -727,23 +832,15 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     const std::string fatMnt  = fatMntBuf;
     const std::string ntfsMnt = ntfsMntBuf;
 
-    if (libMount(fatPart.c_str(), fatMntBuf, "noatime") != 0) return failUnlessCancelled();
+    if (libMountRetry(fatPart.c_str(), fatMntBuf, "noatime") != 0) return failUnlessCancelled();
     fatScope.setMounted();
 
     if (isoType == IsoType::WindowsInstall) {
         const std::string ntfsDriver = getBestNtfsDriver();
         if (ntfsDriver.empty()) return failUnlessCancelled();
 
-        libmnt_context* ctx = mnt_new_context();
-        mnt_context_set_source(ctx, ntfsPart.c_str());
-        mnt_context_set_target(ctx, ntfsMntBuf);
-        mnt_context_set_fstype(ctx, ntfsDriver.c_str());
-        mnt_context_append_options(ctx, "noatime");
-        mnt_context_disable_helpers(ctx, true);
-        const int rc = mnt_context_mount(ctx);
-        mnt_free_context(ctx);
-
-        if (rc != 0) return failUnlessCancelled();
+        if (libMountNtfsRetry(ntfsPart.c_str(), ntfsMntBuf, ntfsDriver.c_str()) != 0)
+            return failUnlessCancelled();
         ntfsScope.setMounted();
     }
 
