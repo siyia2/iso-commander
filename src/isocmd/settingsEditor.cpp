@@ -127,9 +127,9 @@ void interactiveConfigEditor(const std::string& configPath) {
     syncCache(configPath);
 
     while (true) {
+        verboseSets.uniqueErrorTokenMessages.clear();
         std::cout << "\033[?2026h";
         clearScrollBuffer();
-        verboseSets.uniqueErrorTokenMessages.clear();
         auto tc = resolveOptionsTheme();
         std::cout << "\n" << tc.highlight << "=== Settings Editor ===\n\n" << tc.reset;
         std::cout << tc.warning << "Config File: " << tc.reset << configPath << "\n";
@@ -151,6 +151,7 @@ void interactiveConfigEditor(const std::string& configPath) {
         }
         std::cout << "\n" << tc.accent << "Actions: " << tc.warning << "1-" << (index-1)
                   << tc.reset << " ↵ Edit | " << tc.warning << "r" << tc.reset << " Reset\n";
+
         std::cout << "\033[?2026l" << std::flush;
 
         setup_custom_keybindingsForSettingsEditor();
