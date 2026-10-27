@@ -305,48 +305,46 @@ bool isWindowsIso(const std::string& isoPath)
     return hasBootWim && hasBootMgr;
 }
 
-/**
- * RAII advisory lock on a whole-disk node.
- *
- * systemd-udevd takes a shared flock on the whole disk while it processes
- * events for it, and defers its probe while someone else holds LOCK_EX.
- * Holding the lock across wipe -> parted -> mkfs keeps udev from
- * re-probing the disk in the middle of repartitioning.
- *
- * NOTE: deliberately no O_EXCL. That would make parted's and mkfs's own
- * exclusive opens fail with EBUSY. flock is advisory, so the children
- * (which never ask for it) are unaffected.
- */
-class DiskLock {
-public:
-    DiskLock() = default;
-    DiskLock(const DiskLock&) = delete;
-    DiskLock& operator=(const DiskLock&) = delete;
-    ~DiskLock() { release(); }
+/** Runs a command up to `attempts` times; stops early on success or cancel.
+ *  Returns 0 on success, -1 if cancelled, otherwise the last exit code. */
+static int runCommandRetry(const std::vector<std::string>& args,
+                           int attempts    = 3,
+                           int baseDelayMs = 500)
+{
+    int rc = -1;
+    for (int i = 0; i < attempts; ++i) {
+        if (GlobalState::g_operationCancelled.load()) return -1;
 
-    /** Returns true once LOCK_EX is held; false on error, timeout or cancel. */
-    bool acquire(const std::string& device, int timeoutSeconds = 30) {
-        fd_ = open(device.c_str(), O_RDONLY | O_CLOEXEC | O_NONBLOCK);
-        if (fd_ < 0) return false;
+        rc = runCommand(args);
+        if (rc == 0) return 0;
 
-        const auto start = std::chrono::steady_clock::now();
-        while (flock(fd_, LOCK_EX | LOCK_NB) != 0) {
-            if (errno != EWOULDBLOCK && errno != EINTR) { release(); return false; }
-            if (GlobalState::g_operationCancelled.load()) { release(); return false; }
-            if (std::chrono::steady_clock::now() - start >
-                std::chrono::seconds(timeoutSeconds)) { release(); return false; }
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
-        return true;
+        if (i + 1 < attempts)
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(baseDelayMs * (i + 1)));  // 500, 1000 ms
     }
+    return rc;
+}
 
-    void release() {
-        if (fd_ >= 0) { close(fd_); fd_ = -1; }   // closing drops the flock
+/** Same for libMount(): 3 attempts, 500 ms / 1000 ms backoff. */
+static int libMountRetry(const char* src, const char* target,
+                         const char* options = nullptr,
+                         const char* fstype  = nullptr,
+                         int attempts    = 3,
+                         int baseDelayMs = 500)
+{
+    int rc = -1;
+    for (int i = 0; i < attempts; ++i) {
+        if (GlobalState::g_operationCancelled.load()) return -1;
+
+        rc = libMount(src, target, options, fstype);
+        if (rc == 0) return 0;
+
+        if (i + 1 < attempts)
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(baseDelayMs * (i + 1)));
     }
-
-private:
-    int fd_ = -1;
-};
+    return rc;
+}
 
 // ---------------------------------------------------------------------------
 // Windows Family ISO type detection
@@ -634,7 +632,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ScopedMount always removes the dir; setMounted() arms the safeUmount.
     ScopedMount isoScope(isoMntBuf);
 
-    if (libMount(isoPath.c_str(), isoMntBuf, "ro,loop") != 0) return failUnlessCancelled();
+    if (libMountRetry(isoPath.c_str(), isoMntBuf, "ro,loop") != 0) return failUnlessCancelled();
     isoScope.setMounted();
 
     const std::string isoMnt  = isoMntBuf;
@@ -643,24 +641,22 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ------------------------------------------------------------------ //
     // 1. Wipe + repartition                                               //
     // ------------------------------------------------------------------ //
-    DiskLock diskLock;
-    if (!diskLock.acquire(device)) return failUnlessCancelled();
     if (!wipeDeviceSignatures(device)) return failUnlessCancelled();
 
     int partResult = -1;
     if (isoType == IsoType::WindowsInstall) {
-        partResult = runCommand({"parted", "-s", device,
-                                 "mklabel", "gpt",
-                                 "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
-                                 "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
-                                 "set", "1", "esp",  "on",
-                                 "set", "1", "boot", "on"});
+        partResult = runCommandRetry({"parted", "-s", device,
+                                      "mklabel", "gpt",
+                                      "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
+                                      "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
+                                      "set", "1", "esp",  "on",
+                                      "set", "1", "boot", "on"});
     } else {
-        partResult = runCommand({"parted", "-s", device,
-                                 "mklabel", "gpt",
-                                 "mkpart", "WINPE", "fat32", "1MiB", "100%",
-                                 "set", "1", "esp",  "on",
-                                 "set", "1", "boot", "on"});
+        partResult = runCommandRetry({"parted", "-s", device,
+                                      "mklabel", "gpt",
+                                      "mkpart", "WINPE", "fat32", "1MiB", "100%",
+                                      "set", "1", "esp",  "on",
+                                      "set", "1", "boot", "on"});
     }
     if (partResult != 0) return failUnlessCancelled();
 
@@ -679,15 +675,15 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (fatPart.empty()) return failUnlessCancelled();
     if (isoType == IsoType::WindowsInstall && ntfsPart.empty()) return failUnlessCancelled();
 
-    if (runCommand({"mkfs.fat", "-F", "32", "-n",
-                    (isoType == IsoType::WindowsInstall ? "WINBOOT" : "WINPE"),
-                    fatPart}) != 0) {
+    if (runCommandRetry({"mkfs.fat", "-F", "32", "-n",
+                         (isoType == IsoType::WindowsInstall ? "WINBOOT" : "WINPE"),
+                         fatPart}) != 0) {
         return failUnlessCancelled();
     }
 
     if (isoType == IsoType::WindowsInstall) {
-        if (runCommand({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA",
-                        ntfsPart}) != 0) {
+        if (runCommandRetry({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA",
+                             ntfsPart}) != 0) {
             return failUnlessCancelled();
         }
     }
