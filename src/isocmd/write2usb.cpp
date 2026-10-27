@@ -28,6 +28,7 @@
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <spawn.h>
+#include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -303,6 +304,49 @@ bool isWindowsIso(const std::string& isoPath)
     cleanup();
     return hasBootWim && hasBootMgr;
 }
+
+/**
+ * RAII advisory lock on a whole-disk node.
+ *
+ * systemd-udevd takes a shared flock on the whole disk while it processes
+ * events for it, and defers its probe while someone else holds LOCK_EX.
+ * Holding the lock across wipe -> parted -> mkfs keeps udev from
+ * re-probing the disk in the middle of repartitioning.
+ *
+ * NOTE: deliberately no O_EXCL. That would make parted's and mkfs's own
+ * exclusive opens fail with EBUSY. flock is advisory, so the children
+ * (which never ask for it) are unaffected.
+ */
+class DiskLock {
+public:
+    DiskLock() = default;
+    DiskLock(const DiskLock&) = delete;
+    DiskLock& operator=(const DiskLock&) = delete;
+    ~DiskLock() { release(); }
+
+    /** Returns true once LOCK_EX is held; false on error, timeout or cancel. */
+    bool acquire(const std::string& device, int timeoutSeconds = 30) {
+        fd_ = open(device.c_str(), O_RDONLY | O_CLOEXEC | O_NONBLOCK);
+        if (fd_ < 0) return false;
+
+        const auto start = std::chrono::steady_clock::now();
+        while (flock(fd_, LOCK_EX | LOCK_NB) != 0) {
+            if (errno != EWOULDBLOCK && errno != EINTR) { release(); return false; }
+            if (GlobalState::g_operationCancelled.load()) { release(); return false; }
+            if (std::chrono::steady_clock::now() - start >
+                std::chrono::seconds(timeoutSeconds)) { release(); return false; }
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        return true;
+    }
+
+    void release() {
+        if (fd_ >= 0) { close(fd_); fd_ = -1; }   // closing drops the flock
+    }
+
+private:
+    int fd_ = -1;
+};
 
 // ---------------------------------------------------------------------------
 // Windows Family ISO type detection
@@ -599,6 +643,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // ------------------------------------------------------------------ //
     // 1. Wipe + repartition                                               //
     // ------------------------------------------------------------------ //
+    DiskLock diskLock;
+    if (!diskLock.acquire(device)) return failUnlessCancelled();
     if (!wipeDeviceSignatures(device)) return failUnlessCancelled();
 
     int partResult = -1;
@@ -663,7 +709,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     const int ntfsSectorSize = (isoType == IsoType::WindowsInstall)
                                    ? getBestSectorSize(ntfsPart)
                                    : 512;
-
+    diskLock.release();
     if (GlobalState::g_operationCancelled.load()) return false;
 
     // ------------------------------------------------------------------ //
