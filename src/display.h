@@ -3,6 +3,10 @@
 #ifndef DISPLAY_H
 #define DISPLAY_H
 
+// C++ Standard Library Headers
+#include <iostream>
+#include <ostream>
+
 /**
  * @brief Canonical list of all supported configuration settings with validation.
  * @details Namespace containing global toggles that control the verbosity and
