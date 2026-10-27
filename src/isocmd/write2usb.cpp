@@ -412,15 +412,35 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  *   bypass the Linux page cache. The final chunk is zero-padded to the
  *   configured alignment before writing, then the file is @c ftruncate'd to
  *   its actual source size. Padding is never counted as progress.
- * - **NTFS destination files** use buffered I/O with @c posix_fallocate
- *   pre-allocation (its result is ignored), copied using a manual read/write
- *   loop.
+ * - **NTFS destination files** use buffered I/O, copied using a manual
+ *   read/write loop. Files of at least @c FALLOCATE_MIN_SIZE (1 MiB) are
+ *   pre-allocated with @c posix_fallocate (its result is ignored). Smaller
+ *   files are not pre-allocated, since per-file allocation overhead
+ *   dominates for the thousands of small files in a Windows image.
  * - Copy order is NTFS payload first, then ESP, so the bootloader only lands
  *   after the data it references is already on disk. (FatOnly has no NTFS
  *   pass.)
  *
+ * Double buffering:
+ * - Two aligned I/O buffers of the same size (4 MiB, see "Sector alignment")
+ *   are used as ping-pong slots. For a file larger than one buffer, a
+ *   short-lived reader thread fills one slot from the ISO while the calling
+ *   thread writes the other slot to the device, so ISO reads and device
+ *   writes overlap. The reader runs at most one slot ahead of the writer.
+ * - Files that fit in a single buffer are copied entirely on the calling
+ *   thread using the first buffer. Starting a thread per tiny file would
+ *   cost more than overlap could save, so there is no read/write overlap
+ *   across file boundaries.
+ * - The writer is the only thread that touches the destination file, file
+ *   offsets, and progress counters. The reader only reads from the ISO file
+ *   and publishes filled slots under a mutex.
+ * - On any writer failure or cancellation, the reader is told to stop and
+ *   is always joined before the file descriptors are closed. A read error or
+ *   cancellation in the reader fails the file after any already-published
+ *   slot has been written.
+ *
  * Data integrity and short I/O:
- * - Short @c read() results mid-file are not treated as EOF: each copy loop
+ * - Short @c read() results mid-file are not treated as EOF: each read loop
  *   accumulates data until the buffer is full or @c read() returns 0.
  *   @c EINTR is retried on reads and writes.
  * - A zero-byte write is treated as a hard failure rather than retried,
@@ -432,9 +452,9 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  * - On the @c O_DIRECT path, a positive write result that is not a multiple
  *   of the configured sector-size alignment triggers bounded recovery.
  *   The current chunk is restarted from its original aligned file offset
- *   using the original buffer and full aligned write length. Up to three
- *   restart attempts are permitted per chunk. If recovery is exhausted,
- *   the copy fails; buffered I/O is never used as a fallback.
+ *   using the chunk's original buffer and full aligned write length. Up to
+ *   three restart attempts are permitted per chunk. If recovery is
+ *   exhausted, the copy fails; buffered I/O is never used as a fallback.
  * - Recovery retains a per-chunk high-water mark for progress accounting.
  *   Rewriting a chunk therefore does not credit previously counted source
  *   bytes again. Only actual source bytes are counted; alignment padding is
@@ -443,9 +463,11 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  *   walk. A source that yields fewer bytes than expected fails the operation.
  *   On the FAT32/@c O_DIRECT path, this check runs before the final
  *   @c ftruncate, so a short source is not masked by zero extension. On the
- *   NTFS path, the file has already been pre-allocated to its expected size,
- *   so a truncated source can leave a full-size, partially unwritten file
- *   behind; the operation still reports failure.
+ *   NTFS path, files of at least @c FALLOCATE_MIN_SIZE have already been
+ *   pre-allocated to their expected size, so a truncated source can leave a
+ *   full-size, partially unwritten file behind; smaller NTFS files are not
+ *   pre-allocated and are simply left short. Either way the operation still
+ *   reports failure.
  * - Only too-short sources are detected. A source that grows after the ISO
  *   walk is not flagged: FAT32 files are cut back to the walked size by the
  *   final @c ftruncate, while NTFS files may end up larger than expected and
@@ -461,8 +483,9 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  *   or returns a non-positive value, 512 bytes is used for that value.
  *   There is no retry on this open; a failure silently falls back to 512,
  *   which may not satisfy the destination's direct-I/O requirements.
- * - The shared I/O buffer is 4 MiB rounded down to a multiple of the larger
- *   of the two partition sector sizes and is allocated with that alignment.
+ * - Each of the two I/O buffers is 4 MiB rounded down to a multiple of the
+ *   larger of the two partition sector sizes and is allocated with that
+ *   alignment (8 MiB total per job).
  * - Correct @c O_DIRECT operation requires the buffer address, file offsets,
  *   and write lengths to satisfy the destination filesystem's actual
  *   direct-I/O alignment requirements. The configured sector-size alignment
@@ -474,7 +497,8 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  * Concurrency:
  * - Setup steps run per device and concurrently across jobs. Each call uses
  *   its own @c progressData slot, its own temporary mount directories, its
- *   own I/O buffer, and its own monitor thread.
+ *   own pair of I/O buffers, its own monitor thread, and its own short-lived
+ *   reader threads for large files.
  *
  * Cancellation:
  * - Setup steps (ISO mount, wipe, partition, format, FAT/NTFS mount, ISO
@@ -506,6 +530,12 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  *   is set.
  *
  * Flush and unmount strategy:
+ * - Between the NTFS pass and the ESP pass (WindowsInstall only, and only if
+ *   not cancelled), @c syncfs is called on the NTFS mount so the buffered
+ *   NTFS backlog is on the device before the @c O_DIRECT ESP writes begin.
+ *   Otherwise background write-back of the NTFS data competes with the
+ *   direct ESP writes and slows the end of the copy. Its return value is
+ *   not checked.
  * - After all copies, and only if not cancelled, @c syncfs is called on the
  *   NTFS mount and then the FAT32 mount to flush dirty pages at the
  *   filesystem level. Its return value is not checked, so a flush error is
@@ -520,10 +550,11 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
  *   the device should not rely on @c completed alone.
  *
  * Cleanup strategy:
- * - All mount points and the I/O buffer are managed by RAII objects
+ * - All mount points and the I/O buffers are managed by RAII objects
  *   (@c ScopedMount, @c AlignedBuffer). The progress thread is managed by
- *   @c ThreadGuard, which stops and joins it on every return path. Early
- *   returns need no manual cleanup.
+ *   @c ThreadGuard, which stops and joins it on every return path. The
+ *   per-file reader thread is joined inside the copy routine on every path.
+ *   Early returns need no manual cleanup.
  *
  * @param isoPath       Path to the source ISO file.
  * @param device        Target block device (e.g. @c /dev/sdb). Will be wiped.
@@ -839,20 +870,29 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     ThreadGuard threadGuard(progressMonitorThread, monitoringActive);
 
     // ------------------------------------------------------------------ //
-    // 5. Aligned I/O buffer                                              //
+    // 5. Two aligned I/O buffers (double buffering)                      //
     // ------------------------------------------------------------------ //
     constexpr size_t DESIRED_BUFFER  = 4 * 1024 * 1024;
     const int        maxSectorSize   = std::max(fatSectorSize, ntfsSectorSize);
     const size_t     bufferSize      = (DESIRED_BUFFER / maxSectorSize) * maxSectorSize;
 
-    AlignedBuffer ioBuf(bufferSize, maxSectorSize);
-    if (!ioBuf) {
+    AlignedBuffer ioBufA(bufferSize, maxSectorSize);
+    AlignedBuffer ioBufB(bufferSize, maxSectorSize);
+    if (!ioBufA || !ioBufB) {
         if (!GlobalState::g_operationCancelled.load()) return fail();
         return false;
     }
 
+    using BufPtr = decltype(ioBufA.data);
+    BufPtr slotData[2] = { ioBufA.data, ioBufB.data };
+
+    // NTFS files smaller than this are not pre-allocated: per-file
+    // posix_fallocate overhead dominates for small files (and ntfs-3g may
+    // implement it by writing zeros).
+    constexpr uint64_t FALLOCATE_MIN_SIZE = 1 * 1024 * 1024;
+
     // ------------------------------------------------------------------ //
-    // 6. Per-file copy with hybrid I/O                                   //
+    // 6. Per-file copy with hybrid I/O and double buffering              //
     // ------------------------------------------------------------------ //
     auto copyWithProgress = [&](const fs::path& src, const fs::path& dst,
                                 uint64_t fileSize, int sectorSize) -> bool {
@@ -873,7 +913,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             return false;
         }
 
-        if (useBufferedIO && fileSize > 0)
+        if (useBufferedIO && fileSize >= FALLOCATE_MIN_SIZE)
             posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
 
         const size_t mask = static_cast<size_t>(sectorSize) - 1;
@@ -884,39 +924,28 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
         constexpr int MAX_UNALIGNED_RETRIES = 3;
 
-        while (!GlobalState::g_operationCancelled.load()) {
-            // Ensure we read a full buffer or hit EOF.
-            size_t total_read_this_chunk = 0;
+        // Fill `buf` with up to bufferSize bytes from the source. Short
+        // reads are accumulated; only EOF (read() == 0) ends a chunk early.
+        // Returns the byte count (0 = EOF), or -1 on error/cancellation.
+        auto fillBuffer = [&](BufPtr buf) -> ssize_t {
+            size_t total = 0;
+            while (total < bufferSize) {
+                if (GlobalState::g_operationCancelled.load()) return -1;
 
-            while (total_read_this_chunk < bufferSize) {
-                if (GlobalState::g_operationCancelled.load()) {
-                    success = false;
-                    goto done;
-                }
-
-                const ssize_t bytes_read = read(
-                    fd_in,
-                    ioBuf.data + total_read_this_chunk,
-                    bufferSize - total_read_this_chunk);
-
-                if (bytes_read < 0) {
+                const ssize_t n = read(fd_in, buf + total, bufferSize - total);
+                if (n < 0) {
                     if (errno == EINTR) continue;
-                    success = false;
-                    goto done;
+                    return -1;
                 }
-
-                if (bytes_read == 0)
-                    break;
-
-                total_read_this_chunk += static_cast<size_t>(bytes_read);
+                if (n == 0) break;
+                total += static_cast<size_t>(n);
             }
+            return static_cast<ssize_t>(total);
+        };
 
-            if (total_read_this_chunk == 0)
-                break;
-
-            const ssize_t bytes_read =
-                static_cast<ssize_t>(total_read_this_chunk);
-
+        // Write one chunk (`bytes_read` source bytes in `buf`) at
+        // fileOffset. Only ever called from this (the writing) thread.
+        auto writeChunk = [&](BufPtr buf, ssize_t bytes_read) -> bool {
             ssize_t writeLen = bytes_read;
 
             if (!useBufferedIO) {
@@ -925,7 +954,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                     ~static_cast<ssize_t>(mask);
 
                 if (aligned > bytes_read) {
-                    memset(ioBuf.data + bytes_read, 0,
+                    memset(buf + bytes_read, 0,
                            static_cast<size_t>(aligned - bytes_read));
                 }
 
@@ -940,10 +969,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             int unalignedRetries = 0;
 
             while (bytes_written < writeLen) {
-                if (GlobalState::g_operationCancelled.load()) {
-                    success = false;
-                    goto done;
-                }
+                if (GlobalState::g_operationCancelled.load()) return false;
 
                 const off_t writeOffset =
                     static_cast<off_t>(fileOffset) +
@@ -951,20 +977,18 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
                 const ssize_t written = pwrite(
                     fd_out,
-                    ioBuf.data + bytes_written,
+                    buf + bytes_written,
                     static_cast<size_t>(writeLen - bytes_written),
                     writeOffset);
 
                 if (written < 0) {
                     if (errno == EINTR) continue;
-                    success = false;
-                    goto done;
+                    return false;
                 }
 
                 if (written == 0) {
                     errno = EIO;
-                    success = false;
-                    goto done;
+                    return false;
                 }
 
                 // A positive unaligned O_DIRECT short write may leave part
@@ -976,8 +1000,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
                     if (++unalignedRetries > MAX_UNALIGNED_RETRIES) {
                         errno = EIO;
-                        success = false;
-                        goto done;
+                        return false;
                     }
 
                     // Do not reset creditedHighWater: already credited
@@ -1005,9 +1028,110 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
             // The next chunk starts after actual source bytes, not any
             // padding added to the final O_DIRECT write.
             fileOffset += static_cast<uint64_t>(bytes_read);
+            return true;
+        };
+
+        if (fileSize <= bufferSize) {
+            // ---- Small file: single buffer, calling thread only ------- //
+            while (true) {
+                const ssize_t n = fillBuffer(slotData[0]);
+                if (n < 0) { success = false; break; }
+                if (n == 0) break;
+                if (!writeChunk(slotData[0], n)) { success = false; break; }
+            }
+        } else {
+            // ---- Large file: reader thread + ping-pong slots ---------- //
+            struct Slot {
+                ssize_t bytes = 0;
+                bool    full  = false;
+            };
+            Slot slots[2];
+
+            std::mutex              mtx;
+            std::condition_variable cv;
+            bool readerDone = false;   // reader has exited (EOF, error or stop)
+            bool readFailed = false;   // reader hit an error or cancellation
+            bool stopReader = false;   // writer asks reader to exit
+
+            std::thread reader;
+            try {
+                reader = std::thread([&]() {
+                    for (size_t i = 0; ; ++i) {
+                        const size_t s = i & 1;
+
+                        {
+                            std::unique_lock<std::mutex> lk(mtx);
+                            cv.wait(lk, [&] { return !slots[s].full || stopReader; });
+                            if (stopReader) break;
+                        }
+
+                        const ssize_t n = fillBuffer(slotData[s]);
+
+                        bool finished = false;
+                        {
+                            std::lock_guard<std::mutex> lk(mtx);
+                            if (n < 0) {
+                                readFailed = true;
+                                finished   = true;
+                            } else if (n == 0) {
+                                finished = true;
+                            } else {
+                                slots[s].bytes = n;
+                                slots[s].full  = true;
+                            }
+                        }
+                        cv.notify_all();
+                        if (finished) break;
+                    }
+
+                    {
+                        std::lock_guard<std::mutex> lk(mtx);
+                        readerDone = true;
+                    }
+                    cv.notify_all();
+                });
+            } catch (...) {
+                success = false;
+            }
+
+            if (reader.joinable()) {
+                for (size_t i = 0; ; ++i) {
+                    const size_t s = i & 1;
+                    ssize_t n = 0;
+
+                    {
+                        std::unique_lock<std::mutex> lk(mtx);
+                        cv.wait(lk, [&] { return slots[s].full || readerDone; });
+                        // Slots are published in order, so if this one is not
+                        // full and the reader is done, there is no more data.
+                        if (!slots[s].full) break;
+                        n = slots[s].bytes;
+                    }
+
+                    if (!writeChunk(slotData[s], n)) {
+                        success = false;
+                        break;
+                    }
+
+                    {
+                        std::lock_guard<std::mutex> lk(mtx);
+                        slots[s].full = false;
+                    }
+                    cv.notify_all();
+                }
+
+                // Always stop and join the reader before closing the fds.
+                {
+                    std::lock_guard<std::mutex> lk(mtx);
+                    stopReader = true;
+                }
+                cv.notify_all();
+                reader.join();
+
+                if (readFailed) success = false;
+            }
         }
 
-    done:
         // Detect a source shorter than fstat/ISO-walk reported. Check before
         // ftruncate extends the file with zeros, which would mask truncation.
         if (success && !GlobalState::g_operationCancelled.load() &&
@@ -1070,6 +1194,21 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     };
 
     if (!processEntries(ntfsEntries)) return false;
+
+    // Drain the NTFS write-back backlog before the O_DIRECT ESP pass starts.
+    // Buffered NTFS writes only land in the page cache, so without this the
+    // kernel keeps flushing the NTFS data in the background while the ESP
+    // pass writes directly to a different region of the same device. Two
+    // competing write streams make cheap flash crawl near the end of the
+    // copy. The return value is not checked: a flush error here is not
+    // reported (same as the final syncfs), and the unmount still blocks
+    // until all I/O completes.
+    if (isoType == IsoType::WindowsInstall &&
+        !GlobalState::g_operationCancelled.load()) {
+        const int ntfsFd = open(ntfsMnt.c_str(), O_RDONLY);
+        if (ntfsFd >= 0) { syncfs(ntfsFd); close(ntfsFd); }
+    }
+
     if (!processEntries(espEntries))  return false;
 
     // ThreadGuard destructor stops + joins the monitor thread here on any
