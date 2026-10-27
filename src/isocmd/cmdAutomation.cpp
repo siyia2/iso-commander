@@ -582,15 +582,14 @@ static int handleMount(const ParsedArgs& args) {
 
     // Show detailed output only if requested through the progress prompt.
     if (!args.silentMode && showVerbose) {
+        SyncOutput sync;
         clearScrollBuffer();
         std::cout << "\n";
 
         for (const auto& msg : verboseSets.operationCompleted)
             std::cout << msg << UI::Palette::BoldReset << "\n";
-
         for (const auto& msg : verboseSets.operationSkipped)
             std::cout << msg << UI::Palette::BoldReset << "\n";
-
         for (const auto& msg : verboseSets.operationFailed)
             std::cout << msg << UI::Palette::BoldReset << "\n";
 
@@ -598,7 +597,7 @@ static int handleMount(const ParsedArgs& args) {
                   << "  Successful: " << completedTasks.load() << "\n"
                   << "  Failed:     " << failedTasks.load()
                   << UI::Palette::Reset << "\n\n";
-    }
+    }   // ?2026l + flush — one atomic frame
 
     return (failedTasks.load() == 0 &&
             !hasErrors &&
@@ -841,6 +840,7 @@ static int handleUmount(const ParsedArgs& args) {
 
     // Show detailed output only if requested through the progress prompt.
     if (!args.silentMode && showVerbose) {
+        SyncOutput sync;
         clearScrollBuffer();
         std::cout << "\n";
 
@@ -854,7 +854,7 @@ static int handleUmount(const ParsedArgs& args) {
                   << "  Successful: " << completedTasks.load() << "\n"
                   << "  Failed:     " << failedTasks.load()
                   << UI::Palette::Reset << "\n\n";
-    }
+    }   // ?2026l + flush
 
     return (failedTasks.load() == 0 && !hasErrors &&
             !GlobalState::g_operationCancelled.load()) ? 0 : 1;
@@ -1114,6 +1114,7 @@ static int handleConvert(const ParsedArgs& args) {
 
     // Show detailed output only if requested through the progress prompt.
     if (!args.silentMode && showVerbose) {
+        SyncOutput sync;
         clearScrollBuffer();
         std::cout << "\n";
 

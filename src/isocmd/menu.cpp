@@ -21,6 +21,7 @@
 #include "../select.h"
 #include "../state.h"
 #include "../themes.h"
+#include "../display.h"
 #include "../sharedRefreshState.h"
 
 /**
@@ -97,27 +98,26 @@ void submenu1(std::atomic<bool>& isAtISOList,
         rl_bind_key('\t', prevent_readline_keybindings);
 
         isAtISOList.store(false);
+        {
+            SyncOutput sync;
+            clearScrollBuffer();
 
-        std::cout << "\033[?2026h";
-        clearScrollBuffer();
-
-        std::cout << color << "+----------------------+\n"
-                  << "|      ManageISO        |\n"
-                  << "+----------------------+\n"
-                  << "| 1. Mount             |\n"
-                  << "+----------------------+\n"
-                  << "| 2. Unmount           |\n"
-                  << "+----------------------+\n"
-                  << "| 3. Delete            |\n"
-                  << "+----------------------+\n"
-                  << "| 4. Move              |\n"
-                  << "+----------------------+\n"
-                  << "| 5. Copy              |\n"
-                  << "+----------------------+\n"
-                  << "| 6. Write             |\n"
-                  << "+----------------------+" << "\n\n";
-
-        std::cout << "\033[?2026l" << std::flush;
+            std::cout << color << "+----------------------+\n"
+                      << "|      ManageISO        |\n"
+                      << "+----------------------+\n"
+                      << "| 1. Mount             |\n"
+                      << "+----------------------+\n"
+                      << "| 2. Unmount           |\n"
+                      << "+----------------------+\n"
+                      << "| 3. Delete            |\n"
+                      << "+----------------------+\n"
+                      << "| 4. Move              |\n"
+                      << "+----------------------+\n"
+                      << "| 5. Copy              |\n"
+                      << "+----------------------+\n"
+                      << "| 6. Write             |\n"
+                      << "+----------------------+" << "\n\n";
+        }
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
         char* rawInput = readline(( std::string(pt.primary) +
@@ -136,32 +136,26 @@ void submenu1(std::atomic<bool>& isAtISOList,
                 case '1':
                     clearScrollBuffer();
                     selectForIsoFiles("mount", isAtISOList, backgroundThreads, refreshState);
-                    clearScrollBuffer();
                     break;
                 case '2':
                     clearScrollBuffer();
                     selectForIsoFiles("umount", isAtISOList, backgroundThreads, refreshState);
-                    clearScrollBuffer();
                     break;
                 case '3':
                     clearScrollBuffer();
                     selectForIsoFiles("rm", isAtISOList, backgroundThreads, refreshState);
-                    clearScrollBuffer();
                     break;
                 case '4':
                     clearScrollBuffer();
                     selectForIsoFiles("mv", isAtISOList, backgroundThreads, refreshState);
-                    clearScrollBuffer();
                     break;
                 case '5':
                     clearScrollBuffer();
                     selectForIsoFiles("cp", isAtISOList, backgroundThreads, refreshState);
-                    clearScrollBuffer();
                     break;
                 case '6':
                     clearScrollBuffer();
                     selectForIsoFiles("write2usb", isAtISOList, backgroundThreads, refreshState);
-                    clearScrollBuffer();
                     break;
             }
         }
@@ -193,25 +187,24 @@ void submenu2(std::shared_ptr<RefreshState> state) {
     while (true) {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
+        {
+            SyncOutput sync;
+            clearScrollBuffer();
 
-        std::cout << "\033[?2026h";
-        clearScrollBuffer();
-
-        std::cout << color << "+------------------------+  \n"
-                  << "|      Convert2ISO        |\n"
-                  << "+------------------------+\n"
-                  << "| 1. CCD2ISO++           |\n"
-                  << "+------------------------+\n"
-                  << "| 2. CHD2ISO++           |\n"
-                  << "+------------------------+\n"
-                  << "| 3. DAA2ISO++           |\n"
-                  << "+------------------------+\n"
-                  << "| 4. MDF2ISO++           |\n"
-                  << "+------------------------+\n"
-                  << "| 5. NRG2ISO++           |\n"
-                  << "+------------------------+" << "\n\n";
-
-        std::cout << "\033[?2026l" << std::flush;
+            std::cout << color << "+------------------------+  \n"
+                      << "|      Convert2ISO        |\n"
+                      << "+------------------------+\n"
+                      << "| 1. CCD2ISO++           |\n"
+                      << "+------------------------+\n"
+                      << "| 2. CHD2ISO++           |\n"
+                      << "+------------------------+\n"
+                      << "| 3. DAA2ISO++           |\n"
+                      << "+------------------------+\n"
+                      << "| 4. MDF2ISO++           |\n"
+                      << "+------------------------+\n"
+                      << "| 5. NRG2ISO++           |\n"
+                      << "+------------------------+" << "\n\n";
+        }
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
         char* rawInput = readline(( std::string(pt.primary) +
@@ -231,27 +224,22 @@ void submenu2(std::shared_ptr<RefreshState> state) {
                 case '1':
                     operation = "bin";
                     promptSearchBinImgChdDaaMdfNrg(operation, state);
-                    clearScrollBuffer();
                     break;
                 case '2':
                     operation = "chd";
                     promptSearchBinImgChdDaaMdfNrg(operation, state);
-                    clearScrollBuffer();
                     break;
                 case '3':
                     operation = "daa";
                     promptSearchBinImgChdDaaMdfNrg(operation, state);
-                    clearScrollBuffer();
                     break;
                 case '4':
                     operation = "mdf";
                     promptSearchBinImgChdDaaMdfNrg(operation, state);
-                    clearScrollBuffer();
                     break;
                 case '5':
                     operation = "nrg";
                     promptSearchBinImgChdDaaMdfNrg(operation, state);
-                    clearScrollBuffer();
                     break;
             }
         }
@@ -330,12 +318,13 @@ int checkPendingRefresh() {
     if (kind == PendingRefreshKind::IsoList  && !GlobalState::isAtISOList.load()) return 0;
 
     if (kind == PendingRefreshKind::MainMenu) {
-        std::cout << "\033[?2026h";          // begin synchronized update
+        SyncOutput sync;
         clearScrollBuffer();
         print_ascii();
         printMenu();
-        std::cout << "\n";
-        std::cout << "\033[?2026l" << std::flush;   // end: terminal presents the frame atomically
+        std::cout << "\n" << std::flush;
+        rl_on_new_line();
+        rl_redisplay();
     } else if (kind == PendingRefreshKind::IsoList) {
         std::shared_ptr<RefreshState> state;
         {
@@ -343,14 +332,15 @@ int checkPendingRefresh() {
             state = GlobalState::g_pendingRefreshState;
         }
         if (state) {
+            SyncOutput sync;
             loadAndDisplayIso(state->filteredFiles, state->isFiltered, state->listSubtype,
                               state->umountMvRmBreak, state->pendingIndices, state->hasPendingProcess,
                               state->currentPage, state->originalPage, state);
-            std::cout << "\n";
+            std::cout << "\n" << std::flush;
+            rl_on_new_line();
+            rl_redisplay();
         }
     }
-    rl_on_new_line();
-    rl_redisplay();
     return 0;
 }
 
@@ -432,5 +422,5 @@ void clearMessageAfterTimeoutInMain(int timeoutTicks, std::atomic<bool>& isAtMai
  * - \033[H: Move cursor to home position
  */
 void clearScrollBuffer() {
-    std::cout << "\033[2J\033[3J\033[H\033[0m" << std::flush;
+    std::cout << "\033[2J\033[3J\033[H\033[0m";
 }

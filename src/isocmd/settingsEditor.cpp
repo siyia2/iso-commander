@@ -128,31 +128,32 @@ void interactiveConfigEditor(const std::string& configPath) {
 
     while (true) {
         verboseSets.uniqueErrorTokenMessages.clear();
-        std::cout << "\033[?2026h";
-        clearScrollBuffer();
         auto tc = resolveOptionsTheme();
-        std::cout << "\n" << tc.highlight << "=== Settings Editor ===\n\n" << tc.reset;
-        std::cout << tc.warning << "Config File: " << tc.reset << configPath << "\n";
+        {
+            SyncOutput sync;
+            clearScrollBuffer();
+            std::cout << "\n" << tc.highlight << "=== Settings Editor ===\n\n" << tc.reset;
+            std::cout << tc.warning << "Config File: " << tc.reset << configPath << "\n";
 
-        int index = 1;
-        for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
-            if (!entry.section.empty()) {
-                std::cout << tc.accent << "\n--- " << entry.section << " ---\n" << tc.reset;
+            int index = 1;
+            for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
+                if (!entry.section.empty()) {
+                    std::cout << tc.accent << "\n--- " << entry.section << " ---\n" << tc.reset;
+                }
+                std::string val = ConfigCaches::g_configCache.count(entry.key) ? ConfigCaches::g_configCache[entry.key] : entry.defaultValue;
+
+                std::string_view rowColor = (index == 1) ? UI::Palette::BoldReset :
+                                            ((index == 2) ? color : tc.data);
+
+                std::cout << tc.warning << std::right << std::setw(2) << index++ << ". " << tc.reset
+                          << tc.label << std::left << std::setw(32) << entry.key << tc.reset
+                          << "= " << tc.reset
+                          << rowColor << val << tc.reset << "\n";
             }
-            std::string val = ConfigCaches::g_configCache.count(entry.key) ? ConfigCaches::g_configCache[entry.key] : entry.defaultValue;
+            std::cout << "\n" << tc.accent << "Actions: " << tc.warning << "1-" << (index-1)
+                      << tc.reset << " ↵ Edit | " << tc.warning << "r" << tc.reset << " Reset\n";
 
-            std::string_view rowColor = (index == 1) ? UI::Palette::BoldReset :
-                                        ((index == 2) ? color : tc.data);
-
-            std::cout << tc.warning << std::right << std::setw(2) << index++ << ". " << tc.reset
-                      << tc.label << std::left << std::setw(32) << entry.key << tc.reset
-                      << "= " << tc.reset
-                      << rowColor << val << tc.reset << "\n";
         }
-        std::cout << "\n" << tc.accent << "Actions: " << tc.warning << "1-" << (index-1)
-                  << tc.reset << " ↵ Edit | " << tc.warning << "r" << tc.reset << " Reset\n";
-
-        std::cout << "\033[?2026l" << std::flush;
 
         setup_custom_keybindingsForSettingsEditor();
 
@@ -194,14 +195,15 @@ void interactiveConfigEditor(const std::string& configPath) {
                     for (const auto& e : CONFIG_ORDERED_DEFAULTS) {
                         ConfigCaches::g_configCache[e.key] = e.defaultValue;
                     }
-                    applyConfigEffects(ConfigCaches::g_configCache);
-                    tc = resolveOptionsTheme();
-                    std::cout << tc.label << "[+] Defaults applied.\n" << tc.reset;
-                    if (!confirm.empty() && std::tolower(confirm[0]) == 'y') {
-						if (flushCache(configPath)) {
-							tc = resolveOptionsTheme();
-							std::cout << tc.highlight << "\n[✔] Settings saved to disk.\n" << tc.reset;
-						}
+                        applyConfigEffects(ConfigCaches::g_configCache);
+                        tc = resolveOptionsTheme();
+                        {
+                            SyncOutput sync;
+                            std::cout << tc.label << "[+] Defaults applied.\n" << tc.reset;
+                            if (flushCache(configPath)) {
+                                tc = resolveOptionsTheme();
+                                std::cout << tc.highlight << "\n[✔] Settings saved to disk.\n" << tc.reset;
+                        }
 						pressEnterToContinue();
 					}
                 }

@@ -24,6 +24,7 @@
 // Project Headers
 #include "../threadpool.h"
 #include "../databaseOps.h"
+#include "../display.h"
 #include "../inputHandling.h"
 #include "../main.h"
 #include "../readline.h"
@@ -55,7 +56,7 @@ void printVersionNumber(const std::string& version) {
  * - `-v` / `--version` : Prints version information and exits.
  * - `mount` / `umount` / `unmount` : Delegates to mount/unmount command handler.
  * - `c2iso` : Non-interactive image → ISO conversion (e.g. `isocmd c2iso -d2 ~/Games`).
- * - `w2usb` : Non-interactive ISO to USB writer (e.g. `isocmd w2iso file.iso /dev/sdd)
+ * - `w2iso` : Non-interactive ISO to USB writer (e.g. `isocmd w2iso file.iso /dev/sdd)
  * - No arguments : Launches the interactive TUI (terminal user interface).
  *
  * @param argc Number of command-line arguments.
@@ -123,7 +124,7 @@ int main(int argc, char *argv[]) {
     GlobalState::lockFileDescriptor = open(lockFile, O_CREAT | O_RDWR, 0666);
     struct flock fl = { F_WRLCK, SEEK_SET, 0, 0, 0 };
     if (fcntl(GlobalState::lockFileDescriptor, F_SETLK, &fl) == -1) {
-        std::cerr << c.indexA << "error: " << c.num
+        std::cerr << c.num << "error: " << c.indexA
                   << "failed to setup transaction (unable to lock database)\n  "
                   << UI::Palette::BoldReset << "if you're sure isocmd isn't already running, you can remove '/tmp/isocmd.lock'\n"
                   << UI::Palette::Reset;
@@ -179,47 +180,49 @@ int main(int argc, char *argv[]) {
         GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::None);
         isAtMain.store(true);
         isAtISOList.store(false);
+        {
+            SyncOutput sync;
+            clearScrollBuffer();
+            print_ascii();
 
-        std::cout << "\033[?2026h";
-        clearScrollBuffer();
-        print_ascii();
+            /**
+             * @brief Status message display logic
+             * Shows appropriate background task status:
+             * 1. Auto-update running in background (with monitor thread)
+             * 2. No stored folder paths available for scanning (one-time message)
+             */
+            static bool messagePrinted = false;
 
-        /**
-         * @brief Status message display logic
-         * Shows appropriate background task status:
-         * 1. Auto-update running in background (with monitor thread)
-         * 2. No stored folder paths available for scanning (one-time message)
-         */
-        static bool messagePrinted = false;
-
-        if (search.load() && !isHistoryFileEmpty(GlobalState::historyFilePath) &&
-            importState && importState->isImportRunning.load()) {
-            std::cout << UI::Palette::Dim << "[Auto-Update: running in the background...]\n" << UI::Palette::Reset;
-            messageActive = true;
-            if (!monitorThreadSpawned.exchange(true))
-                backgroundThreads.emplace_back(monitorAndClearMessage,
+            if (search.load() && !isHistoryFileEmpty(GlobalState::historyFilePath) &&
+                importState && importState->isImportRunning.load()) {
+                std::cout << UI::Palette::Dim << "[Auto-Update: running in the background...]\n" << UI::Palette::Reset;
+                messageActive = true;
+                if (!monitorThreadSpawned.exchange(true))
+                    backgroundThreads.emplace_back(monitorAndClearMessage,
+                                                   importState, std::ref(messageActive),
+                                                   std::ref(stopMessage), std::ref(isAtMain));
+            } else if ((search.load() && !messagePrinted) &&
+                       (isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath))) {
+                std::cout << UI::Palette::Dim << "[Auto-Update: no stored FolderPaths to scan...]\n" << UI::Palette::Reset;
+                messagePrinted = true;
+                messageActive = true;
+                backgroundThreads.emplace_back(clearMessageAfterTimeoutInMain, 4, std::ref(isAtMain),
                                                importState, std::ref(messageActive),
-                                               std::ref(stopMessage), std::ref(isAtMain));
-        } else if ((search.load() && !messagePrinted) &&
-                   (isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath))) {
-            std::cout << UI::Palette::Dim << "[Auto-Update: no stored FolderPaths to scan...]\n" << UI::Palette::Reset;
-            messagePrinted = true;
-            messageActive = true;
-            backgroundThreads.emplace_back(clearMessageAfterTimeoutInMain, 4, std::ref(isAtMain),
-                                           importState, std::ref(messageActive),
-                                           std::ref(stopMessage));
+                                               std::ref(stopMessage));
+            }
+
+            printMenu();
+            std::cout << "\n";
         }
 
-        printMenu();
-
-        std::cout << "\033[?2026l" << std::flush;
 
         clear_history();
 
         /// Read user input with theme-aware styling
         const ReadlineAndPromptTheme pt = getPromptTheme();
-        char* rawInput = readline(("\n" + std::string(pt.primary) +
-                                   "Enter choice [1-5]: " + std::string(pt.reset)).c_str());
+        char* rawInput = readline((std::string(pt.primary) +
+                                   "Enter choice [1-5]: " +
+                                   std::string(pt.reset)).c_str());
         std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
         if (!input) break; ///< Handle EOF (Ctrl+D)
 
@@ -248,14 +251,12 @@ int main(int argc, char *argv[]) {
                     isAtISOList.store(false);
                     bool newISOFound = false;
                     refreshForDatabase(true, -1, false, newISOFound);
-                    clearScrollBuffer();
                     break;
                 }
                 case '4':
                     isAtMain.store(false);
                     isAtISOList.store(false);
                     interactiveConfigEditor(GlobalState::configPath);
-                    clearScrollBuffer();
                     break;
                 case '5':
                     exitProgram = true;

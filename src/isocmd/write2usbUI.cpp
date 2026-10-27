@@ -787,18 +787,54 @@ static ResizeRepaintState g_confirmResize;
  *
  * Called by readline from its idle input loop when no keystroke is
  * pending. If the watcher has flagged a width change, this:
- * -# moves the cursor up over the previous warning block **and** over any
- *    wrapped lines of the prompt + buffer (@c rl_point tells us exactly
- *    where the cursor is),
- * -# clears to end of screen,
- * -# repaints the warning block at the new width, and
- * -# calls @c rl_on_new_line() + @c rl_redisplay() so readline reprints
+ * -# validates the pending resize (a zero `cols` or `rows` — a detached
+ *    or transiently resized pty — is discarded so it cannot poison the
+ *    row arithmetic below and cannot wedge a subsequent resize),
+ * -# computes how far the cursor must travel to reach the top of the
+ *    warning block: the block's own wrapped height **plus** the wrapped
+ *    height of the prompt + typed buffer (@c rl_point tells us exactly
+ *    where the cursor is inside that buffer),
+ * -# if the cursor-up would clamp at row 1 (`up >= rows`), skips the
+ *    repaint entirely — the terminal keeps the reflowed layout, the
+ *    "ERASE ALL DATA" header stays visible, and the ISO / device lists
+ *    above the block are preserved — **without** emitting any terminal
+ *    escape (so no dangling `?2026h` is ever sent),
+ * -# otherwise, opens a DEC mode 2026 synchronized-output envelope,
+ *    moves the cursor up over the previous block + prompt, clears to
+ *    end of screen, repaints the warning block at the new width, and
+ *    calls @c rl_on_new_line() + @c rl_redisplay() so readline reprints
  *    the prompt and re-echoes whatever the user has typed, cursor
- *    position included.
+ *    position included, and
+ * -# closes the 2026 envelope, which commits the whole repaint as a
+ *    single atomic frame — the cursor moves, the clear, the new warning
+ *    block, and the redrawn prompt + input all present together. Without
+ *    this, a resize while the user is mid-type flashes through several
+ *    intermediate states as each `<<` write lands.
+ *
+ * The envelope is owned by an RAII guard (@ref SyncOutput) rather than
+ * two raw writes, so a throwing @c paint() callback — a @c std::function
+ * invocation that can legitimately raise @c bad_alloc or propagate a
+ * user exception — still emits the closing `?2026l`. Otherwise the
+ * terminal would sit in sync mode until its watchdog fired (~1 s on
+ * every implementation that supports 2026), turning a resize into a
+ * one-second freeze.
+ *
+ * A @c std::cout flush is issued *inside* the envelope, immediately
+ * before @c rl_redisplay(). With the default `sync_with_stdio(true)`
+ * this is redundant (both streams share the C `stdout` buffer and
+ * preserve ordering), but if anyone ever sets `sync_with_stdio(false)`
+ * for throughput, `std::cout` gets its own buffer and readline's writes
+ * could overtake ours on the fd — splitting the frame and reintroducing
+ * the flash. The flush makes the ordering explicit and is free.
  *
  * Restoring the typed input is possible here — and only here — because
  * `rl_line_buffer` / `rl_end` / `rl_point` are mutated by readline on the
  * same thread. Reading them from the watcher thread would be a data race.
+ *
+ * @note The envelope must close before this hook returns. Readline may
+ *       immediately re-enter its idle loop and block on input; a still-open
+ *       `?2026h` at that point would leave the terminal holding a
+ *       half-committed frame until the watchdog fires.
  *
  * @param s Shared state populated by @ref ConfirmResizeWatcher.
  * @return Always 0 (do not abort readline).
@@ -809,6 +845,14 @@ static int confirmResizeHook(ResizeRepaintState& s) {
 
     const size_t cols = s.pendingCols.load(std::memory_order_relaxed);
     const size_t rows = s.pendingRows.load(std::memory_order_relaxed);
+
+    // A detached or transiently resized pty can report a zero dimension.
+    // Consuming `pending` here (rather than after the guards) would be
+    // wrong: a later, valid resize must still be able to fire. Bail
+    // without clearing the flag so the next loop() iteration re-arms it.
+    // `cols == 0` in particular would divide-by-zero in the row math below.
+    if (cols == 0 || rows == 0) return 0;
+
     s.pending.store(false, std::memory_order_release);
 
     // Rows occupied by the warning block at the new width.
@@ -827,15 +871,26 @@ static int confirmResizeHook(ResizeRepaintState& s) {
 
     // Skip guard: if cursor-up would clamp at row 1, do nothing. Clamping
     // would overwrite the "ERASE ALL DATA" warning from the top and drop
-    // the ISO / device lists out of view.
+    // the ISO / device lists out of view. Crucially, nothing has been
+    // written to the terminal yet — a lone `?2026h` followed by an early
+    // return would leave sync mode open and force the watchdog to commit
+    // an empty frame.
     if (up >= rows) return 0;
 
-    std::cout << "\033[?2026h";
+    // One atomic frame: cursor movement + clear + warning block + prompt
+    // + typed input all present together at `?2026l`.
+    SyncOutput sync;
+
     if (up > 0) std::cout << "\033[" << up << "A";
     std::cout << "\r\033[J";
 
     // Repaint the warning block at the new width.
     s.lineWidths = s.paint(cols);
+
+    // Drain our buffer before readline writes to the same fd. Redundant
+    // under the default sync_with_stdio(true), load-bearing if anyone
+    // ever disables it.
+    std::cout.flush();
 
     // Restore the prompt + the user's typed text. This is the whole point
     // of moving the repaint to the main thread: readline's globals are
@@ -844,9 +899,8 @@ static int confirmResizeHook(ResizeRepaintState& s) {
     rl_on_new_line();
     rl_redisplay();
 
-    std::cout << "\033[?2026l" << std::flush;
     return 0;
-}
+}   // ~SyncOutput: `?2026l` + flush commits the frame
 
 /**
  * @brief Signals a main-thread repaint when the terminal width changes.
@@ -1169,7 +1223,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         }
 
         // Collect the per-pair data once; a resize only re-renders it.
-        // Collect the per-pair data once; a resize only re-renders it.
         struct WarnRow {
             std::string device, driveName, deviceSizeStr, filename, isoSizeStr;
         };
@@ -1225,8 +1278,11 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         };
 
         const size_t drawnCols = terminalSize().first;
-        const std::vector<size_t> drawnWidths = printWarning(drawnCols);
-        std::cout << std::flush;
+        std::vector<size_t> drawnWidths;
+        {
+            SyncOutput sync;                     // emits ?2026h
+            drawnWidths = printWarning(drawnCols);
+        }                                        // dtor: ?2026l + flush
 
         // Readline needs the \001/\002 markers around escape sequences so it
         // can measure the prompt; plain output must not have them.

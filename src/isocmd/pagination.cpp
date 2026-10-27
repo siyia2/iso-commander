@@ -156,36 +156,40 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
         size_t start = disablePagination ? 0 : (currentPage * GlobalState::ITEMS_PER_PAGE);
         size_t end = disablePagination ? totalEntries : std::min(start + GlobalState::ITEMS_PER_PAGE, totalEntries);
 
-        clearScrollBuffer();
-        displayErrors();
+    {
+            SyncOutput sync;
 
-        // 1. One newline above the list
-        std::cout << "\n";
+            clearScrollBuffer();
+            displayErrors();
 
-        // 2. Display Pagination Header (Only if enabled)
-        if (!disablePagination) {
-            std::cout << c.head << "Page "
-                      << c.accent << (currentPage + 1)
-                      << c.head << "/" << c.num << totalPages
-                      << c.head << " (Items ("
-                      << c.accent << (start + 1) << "-" << end
-                      << c.head << ")/" << c.num << totalEntries
-                      << c.head << ")"
-                      << UI::Palette::BoldReset << "\n\n";
-        }
+            // 1. One newline above the list
+            std::cout << "\n";
 
-        // 3. Print the entries directly to stdout
-        for (size_t i = start; i < end; ++i) {
-            std::cout << entries[i];
-        }
+            // 2. Display Pagination Header (Only if enabled)
+            if (!disablePagination) {
+                std::cout << c.head << "Page "
+                          << c.accent << (currentPage + 1)
+                          << c.head << "/" << c.num << totalPages
+                          << c.head << " (Items ("
+                          << c.accent << (start + 1) << "-" << end
+                          << c.head << ")/" << c.num << totalEntries
+                          << c.head << ")"
+                          << UI::Palette::BoldReset << "\n\n";
+            }
 
-        // 4. Display Pagination Footer (Only if enabled and more than 1 page)
-        if (!disablePagination && totalPages > 1) {
-            std::cout << "\n" << c.head;
-            if (currentPage > 0)               std::cout << "[PgUp] Prev | ";
-            if (currentPage < totalPages - 1)  std::cout << "[PgDn] Next | ";
-            std::cout << "[g#] ↵ GoTo" << UI::Palette::BoldReset << "\n";
-        }
+            // 3. Print the entries directly to stdout
+            for (size_t i = start; i < end; ++i) {
+                std::cout << entries[i];
+            }
+
+            // 4. Display Pagination Footer (Only if enabled and more than 1 page)
+            if (!disablePagination && totalPages > 1) {
+                std::cout << "\n" << c.head;
+                if (currentPage > 0)               std::cout << "[PgUp] Prev | ";
+                if (currentPage < totalPages - 1)  std::cout << "[PgDn] Next | ";
+                std::cout << "[g#] ↵ GoTo" << UI::Palette::BoldReset << "\n";
+            }
+        }   // ?2026l + flush — commits the whole page as one frame
 
         // 5. Construct the final prompt
         // If pagination is disabled, we remove the extra newline that typically
