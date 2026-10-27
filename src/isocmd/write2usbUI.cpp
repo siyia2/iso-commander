@@ -453,19 +453,37 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(
  * @brief Parses a semicolon-delimited mapping string into (index, device) pairs.
  *
  * Expected format: @c "1>/dev/sdb;2>/dev/sdc" where each token is
- * @c INDEX>DEVICE_PATH.  The function enforces:
+ * @c INDEX>DEVICE_PATH. Whitespace around the index and the device path is
+ * ignored (e.g. @c "1 > /dev/sdb"). The function enforces:
  *  - Valid @c INDEX>DEVICE format for each token.
  *  - Index within the range @c [1, selectedIsos.size()].
- *  - No device path used more than once.
+ *  - Device path starts with @c /dev/ and exists.
+ *  - No device used more than once, compared after symlink resolution
+ *    (e.g. @c /dev/sdb and its @c /dev/disk/by-id/usb-... alias count as
+ *    the same device).
  *  - Every ISO index in @p selectedIsos has at least one mapping.
  *
+ * @par Symlink resolution
+ * Each device path is resolved with @c std::filesystem::canonical(), so the
+ * returned paths are always the real device nodes (e.g. @c /dev/sdb), never
+ * the alias the user typed. Callers must use the returned path for every
+ * later check and for the write itself, so all of them refer to the same
+ * device. Messages that show a device afterwards will therefore display the
+ * resolved path.
+ *
  * Errors are appended to @p errors; the caller inspects this vector to decide
- * whether to re-prompt the user.
+ * whether to re-prompt the user. Error messages for a rejected token show the
+ * path as the user typed it, except for the duplicate-device error, which
+ * shows the resolved path.
+ *
+ * @note This function only checks that the path exists and is unique. It does
+ *       not check that the device is a removable USB drive, unmounted, or large
+ *       enough; that is done later by @ref validateDevices.
  *
  * @param pairString   Raw user input string containing semicolon-separated mappings.
  * @param selectedIsos Ordered ISO list; only its size() is used, to bound valid indices.
  * @param[out] errors  Vector that will be cleared and populated with human-readable error messages.
- * @return Vector of valid (1-based index, device path) pairs extracted from the input.
+ * @return Vector of valid (1-based index, canonical device path) pairs extracted from the input.
  */
 std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::string& pairString,
                                                                 const std::vector<std::string>& selectedIsos,
@@ -480,31 +498,51 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 
     errors.clear();
 
-    while (std::getline(pairStream, pair, ';')) {
-        pair.erase(pair.find_last_not_of(" \t\n\r\f\v") + 1);
-        pair.erase(0, pair.find_first_not_of(" \t\n\r\f\v"));
+    auto trim = [](std::string& s) {
+        s.erase(s.find_last_not_of(" \t\n\r\f\v") + 1);
+        s.erase(0, s.find_first_not_of(" \t\n\r\f\v"));
+    };
 
+    while (std::getline(pairStream, pair, ';')) {
+        trim(pair);
         if (pair.empty()) continue;
 
         size_t sepPos = pair.find('>');
         if (sepPos == std::string::npos) {
-            errors.push_back(wt.warnLabel + "Invalid pair format: '" + wt.errLabel + pair +  wt.warnLabel + "'");
+            errors.push_back(wt.warnLabel + "Invalid pair format: '" + wt.errLabel + pair + wt.warnLabel + "'");
             continue;
         }
 
         std::string indexStr = pair.substr(0, sepPos);
-        std::string device = pair.substr(sepPos + 1);
+        std::string device   = pair.substr(sepPos + 1);
+        trim(indexStr);
+        trim(device);
 
         try {
             size_t index = std::stoul(indexStr);
 
             if (index < 1 || index > selectedIsos.size()) {
-                errors.push_back(wt.warnLabel + "Invalid index '" +  wt.errLabel +  indexStr + wt.warnLabel + "'");
+                errors.push_back(wt.warnLabel + "Invalid index '" + wt.errLabel + indexStr + wt.warnLabel + "'");
                 continue;
             }
 
+            if (device.rfind("/dev/", 0) != 0) {
+                errors.push_back(wt.warnLabel + "Invalid device path: '" + wt.errLabel + device + wt.warnLabel + "'");
+                continue;
+            }
+
+            // Resolve symlinks (by-id, by-path, ...) to the real node. From here
+            // on only the canonical path is used.
+            std::error_code ec;
+            const fs::path canon = fs::canonical(device, ec);
+            if (ec) {
+                errors.push_back(wt.warnLabel + "Device not found: '" + wt.errLabel + device + wt.warnLabel + "'");
+                continue;
+            }
+            device = canon.string();
+
             if (usedDevices.count(device)) {
-                errors.push_back(wt.warnLabel + "Device '" + wt.errLabel + device +  wt.warnLabel + "' used multiple times");
+                errors.push_back(wt.warnLabel + "Device '" + wt.errLabel + device + wt.warnLabel + "' used multiple times");
                 continue;
             }
 
@@ -512,9 +550,9 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
             usedDevices.insert(device);
 
         } catch (...) {
-            errors.push_back(wt.warnLabel + "Invalid index: '" + wt.errLabel + indexStr +  wt.warnLabel + "'");
+            errors.push_back(wt.warnLabel + "Invalid index: '" + wt.errLabel + indexStr + wt.warnLabel + "'");
         }
-    }
+    }   // <-- end of while loop
 
     std::unordered_set<size_t> mappedIndices;
     for (const auto& [index, device] : deviceMap) {
