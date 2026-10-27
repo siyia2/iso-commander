@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <functional>
 #include <future>
 #include <iomanip>
 #include <iostream>
@@ -531,6 +532,167 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 void helpMappings();
 void displayErrors();
 
+// ------------------------------------------------------------------------- //
+// Helpers                                                                    //
+// ------------------------------------------------------------------------- //
+
+// ------------------------------------------------------------------------- //
+// Terminal / UTF-8 helpers (shared by WriteScreen and ConfirmResizeWatcher) //
+// ------------------------------------------------------------------------- //
+
+// Visible columns of a UTF-8 string (code points, so "…" counts as 1).
+static size_t utf8Width(const std::string& s) {
+    size_t w = 0;
+    for (unsigned char c : s)
+        if ((c & 0xC0) != 0x80) ++w;
+    return w;
+}
+
+// Current terminal size {cols, rows}; {80, 24} if it cannot be determined
+// (e.g. stdout is not a tty).
+static std::pair<size_t, size_t> terminalSize() {
+    struct winsize ws{};
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0)
+        return { ws.ws_col, ws.ws_row };
+    return { 80, 24 };
+}
+
+// Terminal width in columns; 80 if it cannot be determined (e.g. not a tty).
+static size_t terminalCols() {
+    return terminalSize().first;
+}
+
+// Shortens `name` to at most maxCols columns as "stem….iso". The ".iso"
+// extension (case-insensitive) always stays visible. Returns the name
+// unchanged if it already fits. Never splits a UTF-8 sequence.
+static std::string truncateIsoName(const std::string& name, size_t maxCols) {
+    if (utf8Width(name) <= maxCols) return name;
+
+    std::string ext;
+    std::string stem = name;
+    if (name.size() >= 4) {
+        const std::string tail = name.substr(name.size() - 4);
+        if (tail[0] == '.' &&
+            std::tolower(static_cast<unsigned char>(tail[1])) == 'i' &&
+            std::tolower(static_cast<unsigned char>(tail[2])) == 's' &&
+            std::tolower(static_cast<unsigned char>(tail[3])) == 'o') {
+            ext  = tail;
+            stem = name.substr(0, name.size() - 4);
+        }
+    }
+
+    constexpr size_t MIN_STEM = 4;                    // never shrink below this
+    const size_t overhead = 1 + utf8Width(ext);       // "…" + ".iso"
+    const size_t keep = std::max(MIN_STEM, maxCols > overhead ? maxCols - overhead : 0);
+
+    std::string out;
+    size_t cols = 0, i = 0;
+    while (i < stem.size() && cols < keep) {
+        size_t len = 1;
+        while (i + len < stem.size() &&
+               (static_cast<unsigned char>(stem[i + len]) & 0xC0) == 0x80) ++len;
+        out.append(stem, i, len);
+        i += len;
+        ++cols;
+    }
+    if (i >= stem.size()) return name;                // stem fit after all, nothing to cut
+
+    out += "\u2026";
+    out += ext;
+    return out;
+}
+
+// ------------------------------------------------------------------------- //
+// Resize watcher                                                             //
+// ------------------------------------------------------------------------- //
+
+// Repaints the warning block when the terminal width changes while readline
+// waits at the confirmation prompt. Same idea as WriteScreen's keeper thread.
+class ConfirmResizeWatcher {
+public:
+    // Prints the warning block for `cols` and returns the visible width of
+    // every line it printed (blank lines included, the prompt excluded).
+    using Painter = std::function<std::vector<size_t>(size_t cols)>;
+
+    // drawnCols / drawnWidths describe the block that is already on screen.
+    // promptText is the prompt without colors; visiblePrompt is the same text
+    // as plain output (no \001/\002 markers).
+    ConfirmResizeWatcher(Painter paint, size_t drawnCols,
+                         std::vector<size_t> drawnWidths,
+                         const std::string& promptText,
+                         std::string visiblePrompt)
+        : paint_(std::move(paint)),
+          prompt_(std::move(visiblePrompt)),
+          promptWidth_(utf8Width(promptText)),
+          lastCols_(drawnCols),
+          lineWidths_(std::move(drawnWidths)) {
+        thread_ = std::thread([this] { loop(); });
+    }
+
+    ~ConfirmResizeWatcher() { stop(); }
+
+    ConfirmResizeWatcher(const ConfirmResizeWatcher&)            = delete;
+    ConfirmResizeWatcher& operator=(const ConfirmResizeWatcher&) = delete;
+
+    // Stops and joins the thread. Safe to call more than once. Because the
+    // thread repaints while holding m_, this also waits for a repaint in
+    // progress, so nothing is drawn after stop() returns.
+    void stop() {
+        if (!thread_.joinable()) return;
+        { std::lock_guard<std::mutex> lk(m_); stop_ = true; }
+        cv_.notify_all();
+        thread_.join();
+    }
+
+private:
+    void loop() {
+        constexpr auto kPoll = std::chrono::milliseconds(100);
+        std::unique_lock<std::mutex> lk(m_);
+        while (!stop_) {
+            cv_.wait_for(lk, kPoll, [&] { return stop_; });
+            if (stop_) break;
+
+            const size_t cols = terminalCols();
+            if (cols == lastCols_) continue;   // only width affects truncation
+            lastCols_ = cols;
+            repaint(cols);
+        }
+    }
+
+    void repaint(size_t cols) {
+        // Whatever the user has typed so far (usually empty or a single y/n).
+        const std::string typed =
+            (rl_line_buffer && rl_end > 0) ? std::string(rl_line_buffer, rl_end)
+                                           : std::string{};
+
+        // Move back up to where the block started and repaint from there, so
+        // the lists above it and the scrollback stay untouched. The terminal
+        // has already re-wrapped the old lines for the new width, so count
+        // the rows at the NEW width.
+        size_t up = 0;
+        for (size_t w : lineWidths_)
+            up += std::max<size_t>(1, (w + cols - 1) / cols);
+        // The cursor sits on the last row of the prompt line.
+        up += (promptWidth_ + utf8Width(typed)) / cols;
+
+        std::cout << "\033[?2026h";
+        if (up > 0) std::cout << "\033[" << up << "A";
+        std::cout << "\r\033[J";                 // to column 0, clear to end of screen
+        lineWidths_ = paint_(cols);
+        std::cout << prompt_ << typed << "\033[?2026l" << std::flush;
+    }
+
+    Painter                 paint_;
+    const std::string       prompt_;
+    const size_t            promptWidth_;
+    size_t                  lastCols_;
+    std::vector<size_t>     lineWidths_;   // visible width of each printed line
+    std::mutex              m_;
+    std::condition_variable cv_;
+    bool                    stop_ = false;
+    std::thread             thread_;
+};
+
 /**
  * @brief Interactive loop that collects and validates ISO-to-device mappings from the user.
  *
@@ -542,6 +704,9 @@ void displayErrors();
  * Readline tab-completion is configured for both ISO indices and device paths.
  * A @c "?" input triggers the help screen.  After a valid mapping is entered,
  * the user is shown a destructive-write warning and must confirm with @c y/Y.
+ * ISO names in the warning are truncated to fit the terminal width, and the
+ * warning is repainted (with truncation recomputed) if the terminal is
+ * resized while the confirmation prompt is waiting.
  *
  * Detected devices are annotated with status indicators:
  * - @b [MOUNTED] — device or a partition is currently mounted; cannot be written to.
@@ -715,34 +880,78 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             continue;
         }
 
-        // Warning message with colors from theme
-        std::cout << "\n" << wt.colorWarning << "WARNING: This will "
-                  << UI::Palette::Red << "*ERASE ALL DATA*"
-                  << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
-
+        // Collect the per-pair data once; a resize only re-renders it.
+        struct WarnRow {
+            std::string device, driveName, deviceSizeStr, filename, isoSizeStr;
+        };
+        std::vector<WarnRow> warnRows;
+        warnRows.reserve(validPairs.size());
         for (const auto& [iso, device] : validPairs) {
-            uint64_t deviceSize = getBlockDeviceSize(device);
-            std::string deviceSizeStr = formatFileSize(deviceSize);
-            std::string driveName = getDriveName(device);
-
-            std::cout << UI::Palette::DimGray << " {" << wt.deviceCol << device
-                      << " " << wt.infoLabel << "<" << driveName << ">" << UI::Palette::DimGray << " ("
-                      << wt.sizeCol << deviceSizeStr
-                      << UI::Palette::DimGray << ")} " << color << "←" << UI::Palette::DimGray << " {" << wt.fileCol
-                      << iso.filename << UI::Palette::DimGray << " (" << wt.sizeCol
-                      << iso.sizeStr << UI::Palette::DimGray << ")}\n";
+            warnRows.push_back({ device,
+                                 getDriveName(device),
+                                 formatFileSize(getBlockDeviceSize(device)),
+                                 iso.filename,
+                                 iso.sizeStr });
         }
 
-        // Constructing the Readline prompt using theme colors
+        // Prints the whole warning block, truncating ISO names to fit `cols`.
+        // Returns the visible width of every line printed (blank lines
+        // included), so a redraw knows how many rows to move back up.
+        auto printWarning = [&](size_t cols) -> std::vector<size_t> {
+            const size_t usableCols = cols > 1 ? cols - 1 : 1;
+            std::vector<size_t> widths;
+
+            std::cout << "\n" << wt.colorWarning << "WARNING: This will "
+                      << UI::Palette::Red << "*ERASE ALL DATA*"
+                      << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
+            widths.push_back(0);                                                // blank line
+            widths.push_back(utf8Width("WARNING: This will *ERASE ALL DATA* on:"));
+            widths.push_back(0);                                                // blank line
+
+            for (const auto& r : warnRows) {
+                // Printed line: " {" dev " <" drive ">" " (" size ")} " "←" " {" name " (" size ")}"
+                // = 17 literal columns + the four variable fields + the filename.
+                const size_t fixedWidth = 17 + r.device.size() + utf8Width(r.driveName)
+                                        + utf8Width(r.deviceSizeStr) + utf8Width(r.isoSizeStr);
+                const size_t availForName = usableCols > fixedWidth ? usableCols - fixedWidth : 0;
+                const std::string shownName = truncateIsoName(r.filename, availForName);
+                widths.push_back(fixedWidth + utf8Width(shownName));
+
+                std::cout << UI::Palette::DimGray << " {" << wt.deviceCol << r.device
+                          << " " << wt.infoLabel << "<" << r.driveName << ">" << UI::Palette::DimGray << " ("
+                          << wt.sizeCol << r.deviceSizeStr
+                          << UI::Palette::DimGray << ")} " << color << "←" << UI::Palette::DimGray << " {" << wt.fileCol
+                          << shownName << UI::Palette::DimGray << " (" << wt.sizeCol
+                          << r.isoSizeStr << UI::Palette::DimGray << ")}\n";
+            }
+
+            // The blank line before the prompt is printed here, not as part of
+            // the readline prompt, so a redraw only has to re-show one line.
+            std::cout << "\n";
+            widths.push_back(0);                                                // blank line
+            return widths;
+        };
+
+        const size_t drawnCols = terminalCols();
+        const std::vector<size_t> drawnWidths = printWarning(drawnCols);
+        std::cout << std::flush;
+
+        // Same text twice: readline needs the \001/\002 markers around escape
+        // sequences so it can measure the prompt, plain output must not have them.
+        // No leading "\n": the blank line is already printed by printWarning.
+        const std::string promptText    = "Proceed? (y/n): ";
         const std::string confirmPrompt =
-            "\001" + std::string(color) + "\002" +
-            "\nProceed? (y/n): "
-            + wt.rl_resetCol;
+            "\001" + std::string(color) + "\002" + promptText + wt.rl_resetCol;
+        const std::string visiblePrompt =
+            std::string(color) + promptText + wt.rl_resetCol;
 
         std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
         {
             ConfirmationModeGuard confirmGuard;
+            ConfirmResizeWatcher  watcher(printWarning, drawnCols, drawnWidths,
+                                          promptText, visiblePrompt);
             confirmation.reset(readline(confirmPrompt.c_str()));
+            watcher.stop();   // before the guard unwinds, so nothing repaints after Enter
         }
         // confirmGuard destructor has already re-applied the mappings-prompt
         // readline configuration here.
@@ -756,6 +965,10 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         // "no" -> loop continues; termGuard destructor restores readline state
     }
 }
+
+// ------------------------------------------------------------------------- //
+// write2usbUI Block                                                        //
+// ------------------------------------------------------------------------- //
 
 /**
  * @brief Builds the per-task ProgressInfo vector from (IsoInfo, device) pairs,
@@ -936,16 +1149,18 @@ void drainManagerForWrite2UsbUI(
  * filename → /dev/sdX <drive name> [▇▇▄░░] percentage speed
  * @endcode
  * Device path, drive name and speed are padded to the widest value across rows so
- * the bars line up. The bar has 5 cells and 10 steps of 10% (empty ░, half ▄,
- * full ▇), floored from the percentage, so it is full only at 100%. The status
- * column shows the live percentage, or DONE (speed shown as " (avg)"), FAIL or
- * CXL (cancelled).
+ * the bars line up. Drive names are always shown in full. The bar has 5 cells and
+ * 10 steps of 10% (empty ░, half ▄, full ▇), floored from the percentage, so it is
+ * full only at 100%. The status column shows the live percentage, or DONE (speed
+ * shown as " (avg)"), FAIL or CXL (cancelled).
  *
  * @par Filename truncation
  * Names are shown in full unless the widest row exceeds the terminal width. Only
- * then is every name longer than 15 columns cut to 10 stem columns, "…" and the
- * ".iso" extension (e.g. "archlinux-….iso"). Drive names over 20 bytes are cut
- * with "…". Truncation is UTF-8 safe and affects the display only.
+ * then is each name shortened to the space the terminal actually leaves for the
+ * filename column (terminal width minus the rest of the row) as "stem….iso": the
+ * ".iso" extension is always kept, the stem never shrinks below 4 columns, and
+ * truncation is UTF-8 safe. On very narrow terminals the stem floor can make the
+ * row slightly wider than the budget; the per-row clip below then prevents wrap.
  *
  * @par Redraw and result screen
  * At an unchanged size, a frame moves the cursor up by the previous frame's
@@ -1038,7 +1253,7 @@ public:
         summaryText_ = sm.str();
 
         phase_ = Phase::Finished;
-        renderLocked();
+        renderLocked();   // wrapper overload: queries terminal, then dispatches
     }
 
     /// Text printed under the summary on every result-screen repaint. It must be
@@ -1061,46 +1276,14 @@ public:
 private:
     enum class Phase { Running, Finished };
 
-    static constexpr size_t MAX_NAME_LEN = 20;
-    static constexpr size_t MAX_FILE_LEN = 15;   // names up to this many columns (with ".iso") are never truncated
-    static constexpr size_t STEM_KEEP    = 10;   // stem columns kept when truncating, then "…" and ".iso" (10 + 1 + 4 = 15)
-    static constexpr int    BAR_WIDTH    = 5;    // character cells
-    static constexpr int    BAR_STEPS    = BAR_WIDTH * 2;   // each cell has 2 states (half / full) -> 10 steps, 10% each
-    static constexpr auto   kPulse = std::chrono::milliseconds(500);   // live-value refresh while running
-    static constexpr auto   kPoll  = std::chrono::milliseconds(100);   // resize polling interval
+    static constexpr int  BAR_WIDTH = 5;                    // character cells
+    static constexpr int  BAR_STEPS = BAR_WIDTH * 2;        // each cell has 2 states (half / full) -> 10 steps, 10% each
+    static constexpr auto kPulse = std::chrono::milliseconds(500);   // live-value refresh while running
+    static constexpr auto kPoll  = std::chrono::milliseconds(100);   // resize polling interval
 
-    // ---- helpers (formerly lambdas inside the render function) ---------------
-
-    // Counts visible characters (UTF-8 code points) instead of bytes,
-    // so the "…" counts as 1 column rather than 3.
-    static size_t displayWidth(const std::string& s) {
-        size_t w = 0;
-        for (unsigned char c : s)
-            if ((c & 0xC0) != 0x80) ++w;
-        return w;
-    }
-
-    // Shortens a drive name to at most MAX_NAME_LEN columns, backing up so we
-    // never split a multi-byte UTF-8 sequence (continuation bytes are 10xxxxxx).
-    static std::string makeShortName(const std::string& n) {
-        if (n.size() <= MAX_NAME_LEN) return n;
-        size_t cut = MAX_NAME_LEN - 1;
-        while (cut > 0 && (static_cast<unsigned char>(n[cut]) & 0xC0) == 0x80) --cut;
-        std::string out;
-        out.reserve(cut + 3);                   // kept bytes + 3-byte "…"
-        out.append(n, 0, cut);
-        out.append("\u2026");
-        return out;
-    }
-
-    // Current terminal size {cols, rows}; 80x24 if it cannot be determined
-    // (e.g. stdout is not a tty).
-    static std::pair<size_t, size_t> terminalSize() {
-        struct winsize ws{};
-        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0)
-            return { ws.ws_col, ws.ws_row };
-        return { 80, 24 };
-    }
+    // ---- helpers ------------------------------------------------------------
+    // utf8Width(), terminalSize() and truncateIsoName() live at file scope so
+    // the confirmation warning (via ConfirmResizeWatcher) can share them.
 
     // Right-pads an ASCII string to the given byte width. Used for device
     // paths and other ASCII-only columns.
@@ -1154,52 +1337,11 @@ private:
         return out;
     }
 
-    // Truncates ISO filenames, but only when `truncate` is set (the terminal is
-    // too narrow for the full-width rows) AND the whole name (".iso" included)
-    // is longer than MAX_FILE_LEN columns. A truncated name shows exactly
-    // STEM_KEEP stem columns, then "…" (1 column), then the ".iso" extension, e.g.
-    // "archlinux-….iso", so a truncated name is always exactly 15 columns and the
-    // extension is always visible. Names of MAX_FILE_LEN columns or fewer are
-    // shown in full. Walks whole UTF-8 code points so a multi-byte sequence is
-    // never split.
-    static std::string shortFilename(const std::string& f, bool truncate) {
-        if (!truncate) return f;   // terminal is wide enough: show the full name
+    // ---- per-operation constants -------------------------------------------
 
-        // Split off a trailing ".iso" (case-insensitive), if present.
-        std::string ext;
-        std::string stem = f;
-        if (f.size() >= 4) {
-            const std::string tail = f.substr(f.size() - 4);
-            if (tail.size() == 4 && tail[0] == '.' &&
-                std::tolower(static_cast<unsigned char>(tail[1])) == 'i' &&
-                std::tolower(static_cast<unsigned char>(tail[2])) == 's' &&
-                std::tolower(static_cast<unsigned char>(tail[3])) == 'o') {
-                ext  = tail;
-                stem = f.substr(0, f.size() - 4);
-            }
-        }
-
-        if (displayWidth(f) <= MAX_FILE_LEN) return f;
-
-        std::string out;
-        size_t cols = 0;
-        for (size_t i = 0; i < stem.size() && cols < STEM_KEEP; ) {
-            size_t len = 1;
-            while (i + len < stem.size() &&
-                (static_cast<unsigned char>(stem[i + len]) & 0xC0) == 0x80) ++len;
-            out.append(stem, i, len);
-            i += len;
-            ++cols;
-        }
-        out.append("…");
-        out.append(ext);
-        return out;
-    }
-
-    // ---- per-operation constants ---------------------------------------------
-
-    // Device names, shortened drive names and column widths cannot change while
-    // the operation runs, so they are computed once, before the keeper starts.
+    // Device names, full (untruncated) drive names and column widths cannot
+    // change while the operation runs, so they are computed once, before the
+    // keeper starts.
     void computeConstants() {
         std::unordered_map<std::string, std::string> deviceNames;
         for (const auto& prog : progressData_) {
@@ -1207,13 +1349,13 @@ private:
                 deviceNames[prog.device] = getDriveName(prog.device);
         }
 
-        // Index i matches progressData_[i].
+        // Index i matches progressData_[i]. Drive names are stored verbatim,
+        // never shortened.
         rowShortNames_.reserve(progressData_.size());
         for (const auto& prog : progressData_) {
-            rowShortNames_.push_back(makeShortName(deviceNames[prog.device]));
-            maxDeviceLen_         = std::max(maxDeviceLen_,         prog.device.size());
-            maxNameWidth_         = std::max(maxNameWidth_,         displayWidth(rowShortNames_.back()));
-            maxFullFilenameWidth_ = std::max(maxFullFilenameWidth_, displayWidth(prog.filename));
+            rowShortNames_.push_back(deviceNames[prog.device]);
+            maxDeviceLen_ = std::max(maxDeviceLen_, prog.device.size());
+            maxNameWidth_ = std::max(maxNameWidth_, utf8Width(rowShortNames_.back()));
         }
     }
 
@@ -1233,7 +1375,7 @@ private:
         return h.str();
     }
 
-    // ---- keeper thread ---------------------------------------------------------
+    // ---- keeper thread -----------------------------------------------------
 
     void keeperLoop() {
         using clock = std::chrono::steady_clock;
@@ -1244,8 +1386,11 @@ private:
             {
                 std::lock_guard<std::mutex> rl(renderMutex_);
 
+                // Query the terminal once per frame here and hand the result
+                // to renderLocked(); the renderer no longer re-queries it.
                 const auto   size        = terminalSize();
-                const bool   sizeChanged = hasDrawn_ && (size.first != lastCols_ || size.second != lastRows_);
+                const bool   sizeChanged = hasDrawn_ &&
+                                           (size.first != lastCols_ || size.second != lastRows_);
                 const size_t finishedNow = syncPtr_->finishedTasks.load();
                 const bool   completion  = (finishedNow != seenFinished);
                 seenFinished = finishedNow;   // updated in every phase so the wait below can't spin
@@ -1253,11 +1398,11 @@ private:
                 if (phase_ == Phase::Running) {
                     const bool pulse = (clock::now() - lastDraw) >= kPulse;
                     if (sizeChanged || completion || pulse) {
-                        renderLocked();
+                        renderLocked(size, sizeChanged);
                         lastDraw = clock::now();
                     }
                 } else if (sizeChanged) {
-                    renderLocked();   // result screen: repaint only when the size changed
+                    renderLocked(size, sizeChanged);   // result screen: repaint only when the size changed
                 }
             }
 
@@ -1271,11 +1416,26 @@ private:
         }
     }
 
-    // ---- rendering -------------------------------------------------------------
+    // ---- rendering ---------------------------------------------------------
 
-    // Builds the whole frame in one string and writes it once (less flicker).
+    // Convenience overload: queries the terminal size and derives the
+    // resize flag itself. Used by finish(), which renders once and does not
+    // already hold this information.
+    //
     // The caller must hold renderMutex_.
     void renderLocked() {
+        const auto size    = terminalSize();
+        const bool resized = hasDrawn_ &&
+                             (size.first != lastCols_ || size.second != lastRows_);
+        renderLocked(size, resized);
+    }
+
+    // Builds the whole frame in one string and writes it once (less flicker).
+    // Terminal size and the resize flag are passed in so the renderer and the
+    // keeper share exactly one source of truth for "did the size change?".
+    //
+    // The caller must hold renderMutex_.
+    void renderLocked(std::pair<size_t, size_t> termSize, bool resized) {
         const bool finished = (phase_ == Phase::Finished);
 
         size_t maxFilenameWidth = 0;
@@ -1288,7 +1448,7 @@ private:
         speedStrs.reserve(progressData_.size());
         for (const auto& prog : progressData_) {
             speedStrs.push_back(formatSpeed(prog.speed));
-            maxSpeedWidth = std::max(maxSpeedWidth, displayWidth(speedStrs.back()));
+            maxSpeedWidth = std::max(maxSpeedWidth, utf8Width(speedStrs.back()));
         }
 
         // Reserve room for " (avg)" only if some task is already showing it,
@@ -1300,28 +1460,32 @@ private:
 
         //   " → " (3) + device + " <name>" (maxNameWidth + 3) + " [" (2) + bar (5)
         //   + "] " (2) + status (5) + speed (+ " (avg)" once a task is done)
+        // This is the width of everything except the filename column.
         const size_t fixedWidth = 3 + maxDeviceLen_ + (maxNameWidth_ + 3) + 2 + BAR_WIDTH
                                 + 2 + 5 + maxSpeedWidth + avgExtra;
 
-        const auto   termSize   = terminalSize();
         const size_t cols       = termSize.first;
         const size_t rows       = termSize.second;
         const size_t usableCols = cols > 1 ? cols - 1 : 1;
 
-        // Truncate only if the widest full-width row is longer than the terminal.
-        const bool truncateNames = (fixedWidth + maxFullFilenameWidth_) > usableCols;
+        // Space the terminal leaves for the filename column. Filenames are
+        // truncated to this budget, so the cut adapts to the actual terminal
+        // size instead of a fixed width.
+        const size_t allowedFilenameWidth =
+            usableCols > fixedWidth ? usableCols - fixedWidth : 0;
 
-        // Shortened filenames, computed once per frame (depends on truncateNames).
+        // Shortened filenames, computed once per frame. truncateIsoName() returns
+        // the name unchanged when it already fits in allowedFilenameWidth, so no
+        // explicit "should I truncate?" flag is needed.
         std::vector<std::string> shortFiles;
         shortFiles.reserve(progressData_.size());
         for (const auto& prog : progressData_) {
-            shortFiles.push_back(shortFilename(prog.filename, truncateNames));
-            maxFilenameWidth = std::max(maxFilenameWidth, displayWidth(shortFiles.back()));
+            shortFiles.push_back(truncateIsoName(prog.filename, allowedFilenameWidth));
+            maxFilenameWidth = std::max(maxFilenameWidth, utf8Width(shortFiles.back()));
         }
 
         std::string frame;
         frame += "\033[?2026h";
-        const bool resized = hasDrawn_ && (cols != lastCols_ || rows != lastRows_);
         if (finished || resized) {
             // The result screen is always painted from scratch, and a resized
             // running screen is too: don't trust cursor-up after a resize, the
@@ -1351,12 +1515,12 @@ private:
 
             const std::string& fname = shortFiles[i];
             std::string paddedFilename = fname;
-            paddedFilename.append(maxFilenameWidth - displayWidth(fname), ' ');
+            paddedFilename.append(maxFilenameWidth - utf8Width(fname), ' ');
 
             const std::string paddedDevice = padRight(prog.device, maxDeviceLen_);
 
             const std::string& name = rowShortNames_[i];
-            const std::string namePad(maxNameWidth_ - displayWidth(name), ' ');
+            const std::string namePad(maxNameWidth_ - utf8Width(name), ' ');
 
             // Half-block bar: BAR_WIDTH cells, BAR_STEPS steps (10% each).
             // Each cell is empty (░), half (▄) or full (▇). Both filled glyphs are
@@ -1392,7 +1556,7 @@ private:
             }
 
             const std::string& speedStr = speedStrs[i];
-            const std::string speedPad(maxSpeedWidth - displayWidth(speedStr), ' ');
+            const std::string speedPad(maxSpeedWidth - utf8Width(speedStr), ' ');
 
             row << color << speedStr << (isCompleted ? " (avg)" : speedPad);
 
@@ -1413,7 +1577,7 @@ private:
         std::cout << frame << std::flush;
     }
 
-    // ---- state -----------------------------------------------------------------
+    // ---- state -------------------------------------------------------------
 
     std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr_;
     std::vector<ProgressInfo>&                 progressData_;
@@ -1422,10 +1586,10 @@ private:
     const std::chrono::steady_clock::time_point startTime_;
 
     // Written once in computeConstants() before the keeper thread starts.
+    // rowShortNames_ holds the full, never-truncated drive names.
     std::vector<std::string> rowShortNames_;
-    size_t maxDeviceLen_         = 0;
-    size_t maxNameWidth_         = 0;
-    size_t maxFullFilenameWidth_ = 0;   // widest name with no truncation applied
+    size_t maxDeviceLen_ = 0;
+    size_t maxNameWidth_ = 0;
 
     // Everything below is guarded by renderMutex_.
     std::mutex          renderMutex_;
@@ -1447,41 +1611,61 @@ private:
 };
 
 /**
- * @brief Runs the validated ISO-to-device writes on the thread pool with a live
- *        progress screen.
+ * @brief Executes validated ISO-to-device writes and manages their progress
+ *        screen and completion or cancellation handling.
  *
- * Builds the per-task @ref ProgressInfo vector with @ref prepareWriteData
- * (natural, case-insensitive sort by ISO filename, device path as tie-break), so
- * task index and display row share the same order. Submits one
- * @ref writeIsoToDevice call per pair to the global @ref ThreadPool, then waits on
- * a condition variable shared with the @ref WriteScreen until every task has
- * finished or the operation is cancelled. All drawing (row layout, filename
- * truncation, resize handling, result screen) is done by the @ref WriteScreen.
+ * Creates the per-task progress vector using @ref prepareWriteData, which
+ * establishes the task ordering by natural, case-insensitive ISO filename
+ * sort, with the device path as the tie-breaker. Task index and display-row
+ * index therefore remain aligned.
  *
- * @par Lifetime
- * The progress vector and the @c WriteSync state are owned by @c shared_ptr copies
- * captured by every task, the screen and the cancellation drain. Nothing refers to
- * this function's stack, so tasks may safely outlive it after cancellation.
+ * Submits one @ref writeIsoToDevice call per task to the global @ref ThreadPool.
+ * A shared @ref WriteSync state coordinates task completion notifications
+ * between the worker threads, the main thread and the @ref WriteScreen keeper.
+ * The screen handles row rendering, column alignment, filename truncation,
+ * terminal resizing and the final result layout.
  *
  * @par Normal completion
- * Once every task has finished, the screen switches to its result layout and the
- * futures are joined inline.
+ * Waits until all tasks have finished, then disables further SIGINT handling
+ * and paints the result screen. The returned screen remains alive so the
+ * caller can display a prompt and retain resize-triggered repainting.
+ * All valid futures are waited on before returning.
  *
  * @par Cancellation (Ctrl+C)
- * The cancel flag is set from a signal handler, which cannot notify the condition
- * variable, so the wait re-checks it at least every 500 ms. On cancellation the
- * result screen is painted (rows marked CXL, status INTERRUPTED), terminal input
- * state is restored, and the still-running futures are handed to
- * @ref drainManagerForWrite2UsbUI. That keeps them alive in a background thread so
- * OS page caches can finish flushing, and removes each device from
- * @ref g_drainingDevices as its drain completes, which clears its [FLUSHING]
+ * The cancellation flag is checked while waiting for task completion.
+ * Because the signal handler cannot safely notify the condition variable,
+ * the main thread rechecks cancellation at intervals of up to 500 ms while
+ * waiting.
+ *
+ * When cancellation is detected, the result screen is painted and terminal
+ * input state is restored. Any tasks still running are transferred to
+ * @ref drainManagerForWrite2UsbUI, which keeps their futures alive while they
+ * finish in the background. This allows outstanding writes and operating-system
+ * page-cache flushing to continue. The drain manager removes each device from
+ * @ref g_drainingDevices when its drain completes, clearing its [FLUSHING]
  * indicator.
  *
- * @param validPairsIn Validated (IsoInfo, device) pairs to write. Not modified.
+ * The result screen reflects task states at the time it is painted; tasks
+ * that continue running after cancellation may finish later. The successful
+ * count in the summary is the count recorded at that time.
  *
- * @return The live @ref WriteScreen. The caller keeps it while waiting for the
- *         user (after @ref WriteScreen::setPrompt), then calls
- *         @ref WriteScreen::stop or lets it go out of scope.
+ * @par Lifetime and ownership
+ * The progress vector and synchronization state are held by shared pointers
+ * captured by worker tasks and retained by the screen. Cancellation transfers
+ * the outstanding futures and the required shared state to the drain manager.
+ * This prevents those objects from being destroyed while background tasks
+ * still depend on them.
+ *
+ * The caller owns the returned @c shared_ptr<WriteScreen>. It should retain
+ * the screen while waiting for user input and call @ref WriteScreen::stop
+ * when resize-triggered repainting is no longer needed, or allow the screen
+ * to be destroyed when its shared ownership ends.
+ *
+ * @param validPairsIn Validated (IsoInfo, device) pairs to write. The input
+ *                     vector is not modified.
+ *
+ * @return A shared pointer to the live @ref WriteScreen, allowing the caller
+ *         to retain the result screen while waiting for user input.
  */
 std::shared_ptr<WriteScreen> performWriteOperation(
         const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
