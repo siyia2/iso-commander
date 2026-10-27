@@ -463,6 +463,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(
  * whether to re-prompt the user.
  *
  * @param pairString   Raw user input string containing semicolon-separated mappings.
+ * @param selectedIsos Ordered ISO list; only its size() is used, to bound valid indices.
  * @param[out] errors  Vector that will be cleared and populated with human-readable error messages.
  * @return Vector of valid (1-based index, device path) pairs extracted from the input.
  */
