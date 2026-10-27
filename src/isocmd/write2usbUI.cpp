@@ -1155,7 +1155,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         if (!errors.empty()) {
             std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
             for (const auto& err : errors) {
-                std::cerr << color << "  • " << err << "\n";
+                std::cerr << color << " • " << err << "\n";
             }
 
             pressEnterToTry();
