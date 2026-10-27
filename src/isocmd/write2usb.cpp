@@ -29,7 +29,6 @@
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <spawn.h>
-#include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
