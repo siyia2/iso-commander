@@ -31,8 +31,6 @@
 #include "../verbose.h"
 #include "../tokenize.h"
 
-namespace fs = std::filesystem;
-
 /**
  * DISK I/O & ERROR REPORTING
  */
