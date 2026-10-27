@@ -946,9 +946,17 @@ static int confirmResizeHookTrampoline(void) {
  * Readline tab-completion is configured for both ISO indices and device paths.
  * A @c "?" input triggers the help screen.  After a valid mapping is entered,
  * the user is shown a destructive-write warning and must confirm with @c y/Y.
- * ISO names in the warning are truncated to fit the terminal width, and the
- * warning is repainted (with truncation recomputed) if the terminal is
- * resized while the confirmation prompt is waiting.
+ *
+ * @par Warning block and resize
+ * ISO names in the warning are truncated to fit the current terminal width.
+ * While the confirmation prompt is waiting, a resize re-lays out the block
+ * (with truncation recomputed for the new width). The redraw runs on the
+ * main thread via @c rl_event_hook — the watcher thread only signals — so
+ * any half-typed answer survives the resize and the cursor stays where
+ * the user left it. If the block cannot be redrawn without clamping at
+ * row 1 (`up >= rows`), the redraw is skipped: the terminal keeps the
+ * reflowed layout, the safety header stays visible, and the ISO / device
+ * lists above the block are preserved.
  *
  * Detected devices are annotated with status indicators:
  * - @b [MOUNTED] — device or a partition is currently mounted; cannot be written to.
