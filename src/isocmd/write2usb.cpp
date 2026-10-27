@@ -705,7 +705,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     const int ntfsSectorSize = (isoType == IsoType::WindowsInstall)
                                    ? getBestSectorSize(ntfsPart)
                                    : 512;
-    diskLock.release();
     if (GlobalState::g_operationCancelled.load()) return false;
 
     // ------------------------------------------------------------------ //
