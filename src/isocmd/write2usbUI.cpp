@@ -704,6 +704,10 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
 // Resize watcher                                                             //
 // ------------------------------------------------------------------------- //
 
+// ------------------------------------------------------------------------- //
+// Resize watcher                                                             //
+// ------------------------------------------------------------------------- //
+
 /**
  * @brief Repaints the warning block when the terminal width changes.
  *
@@ -758,7 +762,14 @@ public:
     ConfirmResizeWatcher(Painter paint, size_t drawnCols,
                          std::vector<size_t> drawnWidths,
                          const std::string& promptText,
-                         std::string visiblePrompt);
+                         std::string visiblePrompt)
+        : paint_(std::move(paint)),
+          prompt_(std::move(visiblePrompt)),
+          promptWidth_(utf8Width(promptText)),
+          lastCols_(drawnCols),
+          lineWidths_(std::move(drawnWidths)) {
+        thread_ = std::thread([this] { loop(); });
+    }
 
     /// Stops and joins the watcher thread. Safe to call more than once.
     ~ConfirmResizeWatcher() { stop(); }
@@ -834,16 +845,23 @@ private:
      *             themselves never reach this function.
      */
     void repaint(size_t cols, size_t rows) {
+        // Deliberately not reading rl_line_buffer / rl_end here. They are
+        // readline globals mutated by the main thread on every keystroke;
+        // reading them from this thread is a data race (UB, potential UAF
+        // on realloc). The visible cost: a resize does not re-echo a
+        // half-typed answer. Readline still has the typed text in its own
+        // buffer, so Enter still submits it correctly.
         size_t up = 0;
         for (size_t w : lineWidths_)
             up += std::max<size_t>(1, (w + cols - 1) / cols);
         up += promptWidth_ / cols;
 
-        // Skip guard: if cursor-up would clamp at row 1, do nothing. Clamping
-        // would overwrite the "ERASE ALL DATA" warning from the top and,
-        // combined with the \033[J below, drop the ISO / device lists out of
-        // view. Skipping leaves the terminal reflowed as-is — nothing is
-        // destroyed, and the user can scroll back to see the full block.
+        // Skip guard: if cursor-up would clamp at row 1, do nothing.
+        // Clamping would overwrite the "ERASE ALL DATA" warning from the
+        // top and, combined with the \033[J below, drop the ISO / device
+        // lists out of view. Skipping leaves the terminal reflowed as-is —
+        // nothing is destroyed, and the user can scroll back to see the
+        // full block.
         if (up >= rows) return;
 
         std::cout << "\033[?2026h";
