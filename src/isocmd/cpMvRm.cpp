@@ -162,7 +162,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
         blue + "The selected " +
         green + "ISO" +
         blue + " will be " +
-        red + "*PERMANENTLY DELETED FROM DISK*" +
+        red + "*PERMANENTLY DELETED*" +
         blue + ". Proceed? (y/n): " +
         reset;
     bool isPageTurn = false;
