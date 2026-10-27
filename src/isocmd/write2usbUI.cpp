@@ -995,7 +995,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::sort(sortedIsos.begin(), sortedIsos.end(), [](const IsoInfo& a, const IsoInfo& b) {
             return a.size > b.size;
         });
-
+        std::cout << "\033[?2026h";
         std::ostringstream devicePromptStream;
         devicePromptStream << "\n" << color << "Selected " << wt.fileCol << "ISO" << color << ":\n\n";
 
@@ -1066,7 +1066,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 }
             }
         }
-
+        std::cout << "\033[?2026l" << std::flush;
         g_completerData.sortedIsos = &sortedIsos;
         g_completerData.usbDevices = &usbDevices;
         reset_custom_keybindingsForCpMvWrite2Usb();

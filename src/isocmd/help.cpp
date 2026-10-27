@@ -97,6 +97,7 @@ void printSection(const ThemeColors& tc, std::string_view head, const std::strin
  * @brief Displays an interactive help guide detailing how to select and filter items within lists.
  */
 void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool& isMount) {
+    std::cout << "\033[?2026h";
     clearScrollBuffer();
     const ThemeColors tc;
 
@@ -131,6 +132,7 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
         "   • Indices correspond only to their generated list\n"
         "   • Indices^ refer to the original unfiltered list\n"
         "   • Filtering spans all pages and is incremental");
+    std::cout << "\033[?2026l" << std::flush;
     pressEnterToReturn();
 }
 
@@ -138,6 +140,7 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
  * @brief Displays a help guide for the settings editor.
  */
 void helpSettingsEditor() {
+    std::cout << "\033[?2026h";
     clearScrollBuffer();
     const ThemeColors tc;
 
@@ -151,6 +154,7 @@ void helpSettingsEditor() {
         printSection(tc, "\n4. Tips:",
         "   • On reset defaults are auto-saved to disk\n"
         "   • Succesful edits are auto-saved to disk");
+    std::cout << "\033[?2026l" << std::flush;
     pressEnterToReturn();
 }
 
@@ -158,6 +162,7 @@ void helpSettingsEditor() {
  * @brief Displays a help guide for directory-related prompts (Copy/Move and ISO convert2iso).
  */
 void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
+    std::cout << "\033[?2026h";
     clearScrollBuffer();
     const ThemeColors tc;
 
@@ -210,6 +215,7 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
             "   • " + std::string(UI::Palette::BoldReset) + "Tab completion supports ! and * command prefixes\n"
             "   • " + std::string(UI::Palette::BoldReset) + "Invalid paths => non-existent FolderPaths");
     }
+    std::cout << "\033[?2026l" << std::flush;
     pressEnterToReturn();
 }
 
@@ -217,6 +223,7 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
  * @brief Displays a help guide for ISO-to-Device mappings.
  */
 void helpMappings() {
+    std::cout << "\033[?2026h";
     clearScrollBuffer();
     const ThemeColors tc;
 
@@ -234,6 +241,8 @@ void helpMappings() {
         "   • Press Enter to refresh USB Flash Devices\n"
         "   • Tab-complete INDEX>DEVICE pairs for faster assignment\n"
         "   • Only unmounted parent devices are eligible for write2usb");
+
+    std::cout << "\033[?2026l" << std::flush;
 
     pressEnterToReturn();
 }
