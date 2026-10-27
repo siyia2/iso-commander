@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <csignal>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -462,7 +463,6 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(
  * whether to re-prompt the user.
  *
  * @param pairString   Raw user input string containing semicolon-separated mappings.
- * @param selectedIsos Ordered list of ISO paths used to validate index bounds.
  * @param[out] errors  Vector that will be cleared and populated with human-readable error messages.
  * @return Vector of valid (1-based index, device path) pairs extracted from the input.
  */
@@ -558,9 +558,12 @@ static size_t terminalCols() {
     return terminalSize().first;
 }
 
-// Shortens `name` to at most maxCols columns as "stem….iso". The ".iso"
+// Shortens `name` to fit `maxCols` columns as "stem….iso". The ".iso"
 // extension (case-insensitive) always stays visible. Returns the name
 // unchanged if it already fits. Never splits a UTF-8 sequence.
+// The stem is floored at MIN_STEM = 4 columns, so on very narrow
+// terminals the result can exceed maxCols (up to 9 columns for ".iso",
+// 5 columns otherwise); callers should clip the full line afterwards.
 static std::string truncateIsoName(const std::string& name, size_t maxCols) {
     if (utf8Width(name) <= maxCols) return name;
 
@@ -707,7 +710,7 @@ private:
  * Detected devices are annotated with status indicators:
  * - @b [MOUNTED] — device or a partition is currently mounted; cannot be written to.
  * - @b [FLUSHING]   — device was part of a cancelled operation and is still draining
- *                  in the background; proceeding is possible but may race with cleanup.
+ *                  in the background; cannot be written to until draining finishes.
  *
  * @param selectedIsos ISOs chosen by the user for writing.
  * @return Validated (IsoInfo, device) pairs ready for @ref performWriteOperation,
