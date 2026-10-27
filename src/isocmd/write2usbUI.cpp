@@ -933,7 +933,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                     << shownName << UI::Palette::DimGray << " (" << wt.sizeCol
                     << r.isoSizeStr << UI::Palette::DimGray << ")}";
 
-                // Fix #2: clip so an over-long row (truncateIsoName's MIN_STEM floor
+                // clip so an over-long row (truncateIsoName's MIN_STEM floor
                 // on very narrow terminals) cannot wrap past usableCols, and record
                 // the actual on-screen width so repaint()'s up-count stays accurate.
                 const std::string clipped = clipToWidth(row.str(), usableCols);
