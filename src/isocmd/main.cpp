@@ -55,7 +55,7 @@ void printVersionNumber(const std::string& version) {
  * - `-v` / `--version` : Prints version information and exits.
  * - `mount` / `umount` / `unmount` : Delegates to mount/unmount command handler.
  * - `c2iso` : Non-interactive image → ISO conversion (e.g. `isocmd c2iso -d2 ~/Games`).
- * - `w2iso` : Non-interactive ISO to USB writer (e.g. `isocmd w2iso file.iso /dev/sdd)
+ * - `w2usb` : Non-interactive ISO to USB writer (e.g. `isocmd w2iso file.iso /dev/sdd)
  * - No arguments : Launches the interactive TUI (terminal user interface).
  *
  * @param argc Number of command-line arguments.
@@ -123,7 +123,7 @@ int main(int argc, char *argv[]) {
     GlobalState::lockFileDescriptor = open(lockFile, O_CREAT | O_RDWR, 0666);
     struct flock fl = { F_WRLCK, SEEK_SET, 0, 0, 0 };
     if (fcntl(GlobalState::lockFileDescriptor, F_SETLK, &fl) == -1) {
-        std::cerr << c.num << "error: " << c.indexA
+        std::cerr << c.indexA << "error: " << c.num
                   << "failed to setup transaction (unable to lock database)\n  "
                   << UI::Palette::BoldReset << "if you're sure isocmd isn't already running, you can remove '/tmp/isocmd.lock'\n"
                   << UI::Palette::Reset;
