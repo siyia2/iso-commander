@@ -704,6 +704,104 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
 // Resize watcher                                                             //
 // ------------------------------------------------------------------------- //
 
+// ------------------------------------------------------------------------- //
+// Resize watcher                                                             //
+// ------------------------------------------------------------------------- //
+
+// Repaints the warning block when the terminal width changes while readline
+// waits at the confirmation prompt. Same idea as WriteScreen's keeper thread.
+//
+// Reacts to width changes only. A height change is deliberately ignored: the
+// terminal's own reflow already repositions the block, and any attempt to
+// re-anchor it from a shrunk viewport would either clamp at row 1 (destroying
+// the safety header) or force a full wipe (destroying the ISO / device lists
+// above the block). If a width change can't be honoured without clamping
+// (up >= rows), repaint() skips it entirely rather than overwrite the screen.
+class ConfirmResizeWatcher {
+public:
+    using Painter = std::function<std::vector<size_t>(size_t cols)>;
+
+    ConfirmResizeWatcher(Painter paint, size_t drawnCols,
+                         std::vector<size_t> drawnWidths,
+                         const std::string& promptText,
+                         std::string visiblePrompt)
+        : paint_(std::move(paint)),
+          prompt_(std::move(visiblePrompt)),
+          promptWidth_(utf8Width(promptText)),
+          lastCols_(drawnCols),
+          lineWidths_(std::move(drawnWidths)) {
+        thread_ = std::thread([this] { loop(); });
+    }
+
+    ~ConfirmResizeWatcher() { stop(); }
+
+    ConfirmResizeWatcher(const ConfirmResizeWatcher&)            = delete;
+    ConfirmResizeWatcher& operator=(const ConfirmResizeWatcher&) = delete;
+
+    void stop() {
+        if (!thread_.joinable()) return;
+        { std::lock_guard<std::mutex> lk(m_); stop_ = true; }
+        cv_.notify_all();
+        thread_.join();
+    }
+
+private:
+    void loop() {
+        constexpr auto kPoll = std::chrono::milliseconds(100);
+        std::unique_lock<std::mutex> lk(m_);
+        while (!stop_) {
+            cv_.wait_for(lk, kPoll, [&] { return stop_; });
+            if (stop_) break;
+
+            // Width only — height changes are ignored so we never need to
+            // wipe. `rows` is still passed to repaint() as the clamp
+            // threshold for the skip guard.
+            const auto size = terminalSize();
+            const size_t cols = size.first;
+            const size_t rows = size.second;
+            if (cols == lastCols_) continue;
+            lastCols_ = cols;
+            repaint(cols, rows);
+        }
+    }
+
+    void repaint(size_t cols, size_t rows) {
+        // Deliberately not reading rl_line_buffer / rl_end here. They are
+        // readline globals mutated by the main thread on every keystroke;
+        // reading them from this thread is a data race (UB, potential UAF on
+        // realloc). The visible cost: a resize does not re-echo a half-typed
+        // answer. Readline still has the typed text in its own buffer, so
+        // Enter still submits it correctly.
+        size_t up = 0;
+        for (size_t w : lineWidths_)
+            up += std::max<size_t>(1, (w + cols - 1) / cols);
+        up += promptWidth_ / cols;
+
+        // Skip guard: if cursor-up would clamp at row 1, do nothing. Clamping
+        // would overwrite the "ERASE ALL DATA" warning from the top and,
+        // combined with the \033[J below, drop the ISO / device lists out of
+        // view. Skipping leaves the terminal reflowed as-is — nothing is
+        // destroyed, and the user can scroll back to see the full block.
+        if (up >= rows) return;
+
+        std::cout << "\033[?2026h";
+        if (up > 0) std::cout << "\033[" << up << "A";
+        std::cout << "\r\033[J";
+        lineWidths_ = paint_(cols);
+        std::cout << prompt_ << "\033[?2026l" << std::flush;
+    }
+
+    Painter                 paint_;
+    const std::string       prompt_;
+    const size_t            promptWidth_;
+    size_t                  lastCols_;
+    std::vector<size_t>     lineWidths_;
+    std::mutex              m_;
+    std::condition_variable cv_;
+    bool                    stop_ = false;
+    std::thread             thread_;
+};
+
 /**
  * @brief Interactive loop that collects and validates ISO-to-device mappings from the user.
  *
@@ -892,6 +990,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         }
 
         // Collect the per-pair data once; a resize only re-renders it.
+        // Collect the per-pair data once; a resize only re-renders it.
         struct WarnRow {
             std::string device, driveName, deviceSizeStr, filename, isoSizeStr;
         };
@@ -933,7 +1032,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                     << shownName << UI::Palette::DimGray << " (" << wt.sizeCol
                     << r.isoSizeStr << UI::Palette::DimGray << ")}";
 
-                // clip so an over-long row (truncateIsoName's MIN_STEM floor
+                // Clip so an over-long row (truncateIsoName's MIN_STEM floor
                 // on very narrow terminals) cannot wrap past usableCols, and record
                 // the actual on-screen width so repaint()'s up-count stays accurate.
                 const std::string clipped = clipToWidth(row.str(), usableCols);
@@ -950,25 +1049,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         const std::vector<size_t> drawnWidths = printWarning(drawnCols);
         std::cout << std::flush;
 
-        // Same text twice: readline needs the \001/\002 markers around escape
-        // sequences so it can measure the prompt, plain output must not have them.
-        // No leading "\n": the blank line is already printed by printWarning.
-        const std::string promptText    = "Proceed? (y/n): ";
-        const std::string confirmPrompt =
-            "\001" + std::string(color) + "\002" + promptText + wt.rl_resetCol;
-        const std::string visiblePrompt =
-            std::string(color) + promptText + wt.rl_resetCol;
-
-        std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
-        {
-            ConfirmationModeGuard confirmGuard;
-            ConfirmResizeWatcher  watcher(printWarning, drawnCols, drawnWidths,
-                                          promptText, visiblePrompt);
-            confirmation.reset(readline(confirmPrompt.c_str()));
-            watcher.stop();   // before the guard unwinds, so nothing repaints after Enter
-        }
-        // confirmGuard destructor has already re-applied the mappings-prompt
-        // readline configuration here.
         // Same text twice: readline needs the \001/\002 markers around escape
         // sequences so it can measure the prompt, plain output must not have them.
         // No leading "\n": the blank line is already printed by printWarning.
