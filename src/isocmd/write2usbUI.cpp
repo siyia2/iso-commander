@@ -537,7 +537,21 @@ void displayErrors();
 // Terminal / UTF-8 helpers (shared by WriteScreen and ConfirmResizeWatcher) //
 // ------------------------------------------------------------------------- //
 
-// Visible columns of a UTF-8 string (code points, so "…" counts as 1).
+/**
+ * @brief Visible columns of a UTF-8 string, counted by code point.
+ *
+ * Multi-byte UTF-8 sequences count as one column each, so a 3-byte
+ * codepoint such as "…" contributes 1. Continuation bytes (the 0x80..0xBF
+ * range, top two bits `10`) are skipped.
+ *
+ * @note This is a code-point count, not a Unicode display-width count:
+ * East-Asian wide characters (CJK, emoji, etc.) are counted as 1 column
+ * here even though terminals render them as 2. Correct for the ASCII and
+ * common Latin-1 filenames this file handles.
+ *
+ * @param s UTF-8 string, possibly containing multi-byte sequences.
+ * @return Number of visible columns @p s occupies.
+ */
 static size_t utf8Width(const std::string& s) {
     size_t w = 0;
     for (unsigned char c : s)
@@ -545,8 +559,81 @@ static size_t utf8Width(const std::string& s) {
     return w;
 }
 
-// Current terminal size {cols, rows}; {80, 24} if it cannot be determined
-// (e.g. stdout is not a tty).
+/**
+ * @brief Visible width of a string that may contain ANSI CSI escapes.
+ *
+ * Like @ref utf8Width, but skips ANSI CSI sequences (`ESC [` … final byte
+ * in 0x40..0x7E), which the terminal interprets rather than renders. The
+ * escapes themselves count as 0 columns; every other UTF-8 code point
+ * counts as 1.
+ *
+ * @param s String that may contain colour/formatting escapes.
+ * @return Number of visible columns @p s occupies when printed.
+ */
+static size_t visibleWidth(const std::string& s) {
+    size_t w = 0;
+    for (size_t i = 0; i < s.size(); ) {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        if (c == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
+            i += 2;
+            while (i < s.size() && !(s[i] >= 0x40 && s[i] <= 0x7E)) ++i;
+            if (i < s.size()) ++i;   // final byte of the sequence
+            continue;
+        }
+        if ((c & 0xC0) != 0x80) ++w;
+        ++i;
+    }
+    return w;
+}
+
+/**
+ * @brief Cuts a string to at most @p maxCols visible columns.
+ *
+ * ANSI CSI escape sequences are copied through untouched and do not count
+ * toward the budget, so colours that were opened before the cut remain
+ * effective past it (the caller is responsible for any reset it needs).
+ * UTF-8 multi-byte sequences are never split: an escape or code point that
+ * would cross the limit is dropped whole.
+ *
+ * @param s       Input string, possibly with ANSI escapes and UTF-8.
+ * @param maxCols Maximum number of visible columns to keep. 0 returns an
+ *                empty string; ANSI escapes appearing before the first
+ *                visible character are still emitted.
+ * @return The longest prefix of @p s whose visible width is ≤ @p maxCols.
+ */
+static std::string clipToWidth(const std::string& s, size_t maxCols) {
+    std::string out;
+    out.reserve(s.size());
+    size_t w = 0;
+    for (size_t i = 0; i < s.size(); ) {
+        if (static_cast<unsigned char>(s[i]) == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
+            size_t j = i + 2;
+            while (j < s.size() && !(s[j] >= 0x40 && s[j] <= 0x7E)) ++j;
+            if (j < s.size()) ++j;
+            out.append(s, i, j - i);
+            i = j;
+            continue;
+        }
+        size_t len = 1;
+        while (i + len < s.size() &&
+            (static_cast<unsigned char>(s[i + len]) & 0xC0) == 0x80) ++len;
+        if (w >= maxCols) break;
+        out.append(s, i, len);
+        i += len;
+        ++w;
+    }
+    return out;
+}
+
+/**
+ * @brief Current terminal size in columns and rows.
+ *
+ * Queries @c TIOCGWINSZ on stdout. Falls back to {80, 24} when stdout is
+ * not a tty, or when the ioctl fails or reports a zero dimension — the
+ * usual "sane default" for a non-interactive caller.
+ *
+ * @return @c {columns, rows}.
+ */
 static std::pair<size_t, size_t> terminalSize() {
     struct winsize ws{};
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0)
@@ -554,17 +641,28 @@ static std::pair<size_t, size_t> terminalSize() {
     return { 80, 24 };
 }
 
-// Terminal width in columns; 80 if it cannot be determined (e.g. not a tty).
-static size_t terminalCols() {
-    return terminalSize().first;
-}
-
-// Shortens `name` to fit `maxCols` columns as "stem….iso". The ".iso"
-// extension (case-insensitive) always stays visible. Returns the name
-// unchanged if it already fits. Never splits a UTF-8 sequence.
-// The stem is floored at MIN_STEM = 4 columns, so on very narrow
-// terminals the result can exceed maxCols (up to 9 columns for ".iso",
-// 5 columns otherwise); callers should clip the full line afterwards.
+/**
+ * @brief Shortens an ISO filename to fit a column budget, keeping ".iso".
+ *
+ * If @p name already fits in @p maxCols columns it is returned unchanged.
+ * Otherwise a trailing ".iso" extension (case-insensitive) is separated
+ * off, the stem is cut to @c maxCols − (width of "…" + ".iso") columns
+ * (floored at 4), and the result is reconstructed as @c "stem….iso".
+ * Truncation walks whole UTF-8 code points, so a multi-byte sequence is
+ * never split.
+ *
+ * @par Stem floor
+ * @c MIN_STEM is 4 columns, so on very narrow terminals the returned
+ * string can exceed @p maxCols by up to 5 columns (4 stem + 1 "…") when
+ * an extension is present, or by 1 column when it is not. Callers should
+ * clip the containing line with @ref clipToWidth to prevent wrap.
+ *
+ * @param name    Filename to shorten (may be empty, with or without a
+ *                ".iso" extension).
+ * @param maxCols Column budget the result should fit within; 0 forces the
+ *                stem floor and therefore returns @c "….iso" or @c "…".
+ * @return @p name unchanged if it fits, otherwise the shortened form.
+ */
 static std::string truncateIsoName(const std::string& name, size_t maxCols) {
     if (utf8Width(name) <= maxCols) return name;
 
@@ -605,93 +703,6 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
 // ------------------------------------------------------------------------- //
 // Resize watcher                                                             //
 // ------------------------------------------------------------------------- //
-
-// Repaints the warning block when the terminal width changes while readline
-// waits at the confirmation prompt. Same idea as WriteScreen's keeper thread.
-class ConfirmResizeWatcher {
-public:
-    // Prints the warning block for `cols` and returns the visible width of
-    // every line it printed (blank lines included, the prompt excluded).
-    using Painter = std::function<std::vector<size_t>(size_t cols)>;
-
-    // drawnCols / drawnWidths describe the block that is already on screen.
-    // promptText is the prompt without colors; visiblePrompt is the same text
-    // as plain output (no \001/\002 markers).
-    ConfirmResizeWatcher(Painter paint, size_t drawnCols,
-                         std::vector<size_t> drawnWidths,
-                         const std::string& promptText,
-                         std::string visiblePrompt)
-        : paint_(std::move(paint)),
-          prompt_(std::move(visiblePrompt)),
-          promptWidth_(utf8Width(promptText)),
-          lastCols_(drawnCols),
-          lineWidths_(std::move(drawnWidths)) {
-        thread_ = std::thread([this] { loop(); });
-    }
-
-    ~ConfirmResizeWatcher() { stop(); }
-
-    ConfirmResizeWatcher(const ConfirmResizeWatcher&)            = delete;
-    ConfirmResizeWatcher& operator=(const ConfirmResizeWatcher&) = delete;
-
-    // Stops and joins the thread. Safe to call more than once. Because the
-    // thread repaints while holding m_, this also waits for a repaint in
-    // progress, so nothing is drawn after stop() returns.
-    void stop() {
-        if (!thread_.joinable()) return;
-        { std::lock_guard<std::mutex> lk(m_); stop_ = true; }
-        cv_.notify_all();
-        thread_.join();
-    }
-
-private:
-    void loop() {
-        constexpr auto kPoll = std::chrono::milliseconds(100);
-        std::unique_lock<std::mutex> lk(m_);
-        while (!stop_) {
-            cv_.wait_for(lk, kPoll, [&] { return stop_; });
-            if (stop_) break;
-
-            const size_t cols = terminalCols();
-            if (cols == lastCols_) continue;   // only width affects truncation
-            lastCols_ = cols;
-            repaint(cols);
-        }
-    }
-
-    void repaint(size_t cols) {
-        // Whatever the user has typed so far (usually empty or a single y/n).
-        const std::string typed =
-            (rl_line_buffer && rl_end > 0) ? std::string(rl_line_buffer, rl_end)
-                                           : std::string{};
-
-        // Move back up to where the block started and repaint from there, so
-        // the lists above it and the scrollback stay untouched. The terminal
-        // has already re-wrapped the old lines for the new width, so count
-        // the rows at the NEW width.
-        size_t up = 0;
-        for (size_t w : lineWidths_)
-            up += std::max<size_t>(1, (w + cols - 1) / cols);
-        // The cursor sits on the last row of the prompt line.
-        up += (promptWidth_ + utf8Width(typed)) / cols;
-
-        std::cout << "\033[?2026h";
-        if (up > 0) std::cout << "\033[" << up << "A";
-        std::cout << "\r\033[J";                 // to column 0, clear to end of screen
-        lineWidths_ = paint_(cols);
-        std::cout << prompt_ << typed << "\033[?2026l" << std::flush;
-    }
-
-    Painter                 paint_;
-    const std::string       prompt_;
-    const size_t            promptWidth_;
-    size_t                  lastCols_;
-    std::vector<size_t>     lineWidths_;   // visible width of each printed line
-    std::mutex              m_;
-    std::condition_variable cv_;
-    bool                    stop_ = false;
-    std::thread             thread_;
-};
 
 /**
  * @brief Interactive loop that collects and validates ISO-to-device mappings from the user.
@@ -894,13 +905,13 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                                  iso.sizeStr });
         }
 
-        // Prints the whole warning block, truncating ISO names to fit `cols`.
-        // Returns the visible width of every line printed (blank lines
-        // included), so a redraw knows how many rows to move back up.
         auto printWarning = [&](size_t cols) -> std::vector<size_t> {
             const size_t usableCols = cols > 1 ? cols - 1 : 1;
             std::vector<size_t> widths;
 
+            // Header is allowed to wrap naturally: clipping "ERASE ALL DATA"
+            // would hide the safety message. repaint()'s up-count handles wrapping
+            // via (w + cols - 1) / cols.
             std::cout << "\n" << wt.colorWarning << "WARNING: This will "
                       << UI::Palette::Red << "*ERASE ALL DATA*"
                       << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
@@ -909,30 +920,33 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             widths.push_back(0);                                                // blank line
 
             for (const auto& r : warnRows) {
-                // Printed line: " {" dev " <" drive ">" " (" size ")} " "←" " {" name " (" size ")}"
-                // = 17 literal columns + the four variable fields + the filename.
                 const size_t fixedWidth = 17 + r.device.size() + utf8Width(r.driveName)
                                         + utf8Width(r.deviceSizeStr) + utf8Width(r.isoSizeStr);
                 const size_t availForName = usableCols > fixedWidth ? usableCols - fixedWidth : 0;
                 const std::string shownName = truncateIsoName(r.filename, availForName);
-                widths.push_back(fixedWidth + utf8Width(shownName));
 
-                std::cout << UI::Palette::DimGray << " {" << wt.deviceCol << r.device
-                          << " " << wt.infoLabel << "<" << r.driveName << ">" << UI::Palette::DimGray << " ("
-                          << wt.sizeCol << r.deviceSizeStr
-                          << UI::Palette::DimGray << ")} " << color << "←" << UI::Palette::DimGray << " {" << wt.fileCol
-                          << shownName << UI::Palette::DimGray << " (" << wt.sizeCol
-                          << r.isoSizeStr << UI::Palette::DimGray << ")}\n";
+                std::ostringstream row;
+                row << UI::Palette::DimGray << " {" << wt.deviceCol << r.device
+                    << " " << wt.infoLabel << "<" << r.driveName << ">" << UI::Palette::DimGray << " ("
+                    << wt.sizeCol << r.deviceSizeStr
+                    << UI::Palette::DimGray << ")} " << color << "←" << UI::Palette::DimGray << " {" << wt.fileCol
+                    << shownName << UI::Palette::DimGray << " (" << wt.sizeCol
+                    << r.isoSizeStr << UI::Palette::DimGray << ")}";
+
+                // Fix #2: clip so an over-long row (truncateIsoName's MIN_STEM floor
+                // on very narrow terminals) cannot wrap past usableCols, and record
+                // the actual on-screen width so repaint()'s up-count stays accurate.
+                const std::string clipped = clipToWidth(row.str(), usableCols);
+                std::cout << clipped << "\n";
+                widths.push_back(std::min(visibleWidth(clipped), usableCols));
             }
 
-            // The blank line before the prompt is printed here, not as part of
-            // the readline prompt, so a redraw only has to re-show one line.
             std::cout << "\n";
             widths.push_back(0);                                                // blank line
             return widths;
         };
 
-        const size_t drawnCols = terminalCols();
+        const size_t drawnCols = terminalSize().first;
         const std::vector<size_t> drawnWidths = printWarning(drawnCols);
         std::cout << std::flush;
 
@@ -1290,51 +1304,6 @@ private:
     static std::string padRight(std::string s, size_t target) {
         if (s.size() < target) s.append(target - s.size(), ' ');
         return s;
-    }
-
-    // Visible width of a string that may contain ANSI CSI escape sequences
-    // (colors etc.): escape sequences count as 0 columns.
-    static size_t visibleWidth(const std::string& s) {
-        size_t w = 0;
-        for (size_t i = 0; i < s.size(); ) {
-            const unsigned char c = static_cast<unsigned char>(s[i]);
-            if (c == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
-                i += 2;
-                while (i < s.size() && !(s[i] >= 0x40 && s[i] <= 0x7E)) ++i;
-                if (i < s.size()) ++i;   // final byte of the sequence
-                continue;
-            }
-            if ((c & 0xC0) != 0x80) ++w;
-            ++i;
-        }
-        return w;
-    }
-
-    // Cuts a string that may contain ANSI escape sequences to at most maxCols
-    // visible columns. Escape sequences are passed through untouched and UTF-8
-    // code points are never split.
-    static std::string clipToWidth(const std::string& s, size_t maxCols) {
-        std::string out;
-        out.reserve(s.size());
-        size_t w = 0;
-        for (size_t i = 0; i < s.size(); ) {
-            if (static_cast<unsigned char>(s[i]) == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
-                size_t j = i + 2;
-                while (j < s.size() && !(s[j] >= 0x40 && s[j] <= 0x7E)) ++j;
-                if (j < s.size()) ++j;
-                out.append(s, i, j - i);
-                i = j;
-                continue;
-            }
-            size_t len = 1;
-            while (i + len < s.size() &&
-                (static_cast<unsigned char>(s[i + len]) & 0xC0) == 0x80) ++len;
-            if (w >= maxCols) break;
-            out.append(s, i, len);
-            i += len;
-            ++w;
-        }
-        return out;
     }
 
     // ---- per-operation constants -------------------------------------------
