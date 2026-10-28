@@ -640,6 +640,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                                            "Display verbose output? (y/n): " +
                                            "\001" + std::string(pc.reset) + "\002";
 
+
                 std::function<int()> onResize = [&]() -> int {
                     const TermSize now = watcher.get();
                     if (sameSize(now, lastSize)) return 0;
@@ -647,27 +648,27 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                     curSize  = now;
                     lastSize = now;
 
-                    // Update Readline's terminal dimensions before redisplaying.
+                    // Update Readline's terminal dimensions before repainting.
                     rl_set_screen_size(
                         static_cast<int>(now.rows),
                         static_cast<int>(now.cols));
 
+                    // Repaint the final report from a known screen position.
                     std::string body;
                     if (kUseSynchronizedOutput)
                         body.append(kSyncBegin);
 
-                    // Rebuild the screen from a known cursor position.
                     body += "\033[H\033[2J\033[3J";
                     body += resizeHeaderText();
                     body += "\033[1A";
                     body += statusAndBar();
-
-                    // Leave the cursor below the final report, where the prompt belongs.
                     body += "\n\n";
 
                     std::cout << body << std::flush;
 
-                    // Tell Readline that the previous display layout is no longer valid.
+                    // Reset Readline's cached line and cursor-position state after
+                    // manually repainting the terminal.
+                    rl_reset_line_state();
                     rl_on_new_line();
                     rl_forced_update_display();
 
