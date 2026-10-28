@@ -633,64 +633,109 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
             reset_custom_keybindingsForSelect();
 
             if (!GlobalState::isNonInteractive.load()) {
-                //restore cursor
+                // Restore cursor
                 std::cout << "\033[?25h" << std::flush;
-                // --- Verbose Prompt (Readline safe) - Only runs if interactive ---
-                const std::string prompt = "\001" + std::string(color) + "\002" +
-                                           "Display verbose output? (y/n): " +
-                                           "\001" + std::string(pc.reset) + "\002";
 
+                // readline cannot reliably redisplay below this many columns.
+                constexpr int kMinSafeCols = 8;
 
-                std::function<int()> onResize = [&]() -> int {
-                    const TermSize now = watcher.get();
-                    if (sameSize(now, lastSize)) return 0;
+                // Prompt variants, widest to narrowest. Pick one that fits.
+                const std::string fullText  = "Display verbose output? (y/n): ";  // 31 cols
+                const std::string shortText = "Verbose? (y/n): ";                 // 16 cols
+                const std::string tinyText  = "y/n: ";                            //  5 cols
 
-                    curSize  = now;
-                    lastSize = now;
-
-                    // Update Readline's terminal dimensions before repainting.
-                    rl_set_screen_size(
-                        static_cast<int>(now.rows),
-                        static_cast<int>(now.cols));
-
-                    // Repaint the final report from a known screen position.
-                    std::string body;
-                    if (kUseSynchronizedOutput)
-                        body.append(kSyncBegin);
-
-                    body += "\033[H\033[2J\033[3J";
-                    body += resizeHeaderText();
-                    body += "\033[1A";
-                    body += statusAndBar();
-                    body += "\n\n";
-
-                    std::cout << body << std::flush;
-
-                    // Reset Readline's cached line and cursor-position state after
-                    // manually repainting the terminal.
-                    rl_reset_line_state();
-                    rl_on_new_line();
-                    rl_forced_update_display();
-
-                    if (kUseSynchronizedOutput)
-                        std::cout << kSyncEnd << std::flush;
-
-                    return 0;
+                auto makePrompt = [&](const std::string& text) -> std::string {
+                    return "\001" + std::string(color) + "\002" +
+                           text +
+                           "\001" + std::string(pc.reset) + "\002";
+                };
+                auto promptFor = [&](int cols) -> std::string {
+                    if (cols >= static_cast<int>(fullText.size())  + 2) return makePrompt(fullText);
+                    if (cols >= static_cast<int>(shortText.size()) + 2) return makePrompt(shortText);
+                    return makePrompt(tinyText);
                 };
 
-                g_progressResizeHook = &onResize;
-                auto* savedHook = rl_event_hook;
-                rl_event_hook = progressResizeHookTrampoline;
+                // Snapshot geometry before building the prompt.
+                const TermSize startSize = watcher.get();
+                lastSize = startSize;
+                curSize  = startSize;
 
-                std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+                std::string res;
 
-                rl_event_hook = savedHook;
-                g_progressResizeHook = nullptr;
+                if (startSize.cols < kMinSafeCols) {
+                    // -------- Narrow terminal: skip readline entirely --------
+                    std::cout << promptFor(startSize.cols) << std::flush;
+                    std::getline(std::cin, res);
+                } else {
+                    // -------- Normal readline path --------
+                    std::string prompt = promptFor(startSize.cols);
 
-                if (input.get()) {
-                    std::string res = input.get();
-                    *verbose = (res == "y" || res == "Y");
+                    std::function<int()> onResize = [&]() -> int {
+                        const TermSize now = watcher.get();
+                        if (sameSize(now, lastSize)) return 0;
+
+                        curSize  = now;
+                        lastSize = now;
+
+                        // Too narrow to repaint safely: wait for the terminal to grow.
+                        if (now.cols < kMinSafeCols) return 0;
+
+                        // Update readline's geometry before we repaint.
+                        rl_set_screen_size(static_cast<int>(now.rows),
+                                           static_cast<int>(now.cols));
+
+                        // If the current prompt no longer fits, swap in a shorter one so
+                        // readline never tries to wrap a prompt it can't account for.
+                        const std::string newPrompt = promptFor(now.cols);
+                        if (newPrompt != prompt) {
+                            prompt = newPrompt;
+                            rl_set_prompt(prompt.c_str());   // copies into readline's buffer
+                        }
+
+                        // Repaint the final report from a known screen position.
+                        std::string body;
+                        if (kUseSynchronizedOutput)
+                            body.append(kSyncBegin);
+
+                        body += "\033[H\033[2J\033[3J";
+                        body += resizeHeaderText();
+                        body += "\033[1A";
+                        body += statusAndBar();
+                        body += "\n\n";
+
+                        std::cout << body << std::flush;
+
+                        // Reset readline's cached line/cursor-position state after the
+                        // manual repaint so it redraws the (possibly new) prompt line.
+                        rl_on_new_line();
+                        rl_forced_update_display();
+
+                        if (kUseSynchronizedOutput)
+                            std::cout << kSyncEnd << std::flush;
+
+                        return 0;
+                    };
+
+                    g_progressResizeHook = &onResize;
+                    auto*    savedHook  = rl_event_hook;
+                    const int savedWinch = rl_catch_sigwinch;
+
+                    rl_event_hook     = progressResizeHookTrampoline;
+                    rl_catch_sigwinch = 0;   // our watcher is the sole authority
+
+                    std::unique_ptr<char, decltype(&std::free)> input(
+                        readline(prompt.c_str()), &std::free);
+
+                    rl_catch_sigwinch    = savedWinch;
+                    rl_event_hook        = savedHook;
+                    g_progressResizeHook = nullptr;
+
+                    if (input.get())
+                        res = input.get();
                 }
+
+                *verbose = (res == "y" || res == "Y");
+
             } else {
                 disableInputForProgressBar(&oldt, &oldf);
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
