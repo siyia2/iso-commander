@@ -4,15 +4,21 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <csignal>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <thread>
+#include <vector>
 
 // C / System Headers
 #include <fcntl.h>
@@ -50,6 +56,123 @@ constexpr bool             kUseSynchronizedOutput = true;
 constexpr std::string_view kSyncBegin = "\033[?2026h";
 constexpr std::string_view kSyncEnd   = "\033[?2026l";
 }
+
+namespace {
+
+/**
+ * @brief Background watcher that tracks the terminal size and wakes the render loop on a change.
+ *
+ * A watcher thread polls @c TIOCGWINSZ on stdout every @c kPoll. The size is kept as one packed
+ * @c std::atomic<uint64_t> (cols << 32 | rows), so readers never see a torn cols/rows pair.
+ *
+ * @par Hardening
+ * A query that fails or reports a zero dimension (detached or transiently resized pty) never
+ * overwrites the stored size, so a transient failure is not mistaken for a resize. Before the
+ * first success the size is 80x24 (e.g. stdout is not a tty).
+ *
+ * @par Wake-up
+ * When the stored size changes, the watcher writes one byte to a non-blocking self-pipe. The
+ * render loop polls the read end together with stdin, so a resize is repainted at once rather
+ * than on the next timeout. If the pipe cannot be created the wake fd is -1 (ignored by
+ * poll()) and the loop's own timeout still picks the change up.
+ *
+ * @par Threading
+ * The watcher thread only updates the atomic and writes to the pipe; it never touches the
+ * terminal output. All drawing stays on the caller's thread.
+ */
+class TerminalSizeWatcher {
+public:
+    struct Size { size_t cols; size_t rows; };
+
+    TerminalSizeWatcher() {
+        if (pipe2(wake_, O_NONBLOCK | O_CLOEXEC) != 0) wake_[0] = wake_[1] = -1;
+        update();                                    // real size before the first frame
+        thread_ = std::thread([this] { loop(); });
+    }
+
+    ~TerminalSizeWatcher() {
+        stop();
+        for (int fd : wake_) if (fd >= 0) close(fd);
+    }
+
+    TerminalSizeWatcher(const TerminalSizeWatcher&)            = delete;
+    TerminalSizeWatcher& operator=(const TerminalSizeWatcher&) = delete;
+
+    /// Last known good size (never 0x0, never torn).
+    Size get() const {
+        const uint64_t v = packed_.load(std::memory_order_relaxed);
+        return { static_cast<size_t>(v >> 32), static_cast<size_t>(v & 0xFFFFFFFFu) };
+    }
+
+    /// Queries the terminal synchronously on the calling thread and returns the result.
+    /// Use where the very latest size matters (e.g. just before the final report).
+    Size refresh() { update(); return get(); }
+
+    /// Read end of the self-pipe for poll(), or -1 if unavailable.
+    int wakeFd() const { return wake_[0]; }
+
+    /// Empties the self-pipe after poll() reported it readable.
+    void drainWake() const {
+        if (wake_[0] < 0) return;
+        char buf[64];
+        while (read(wake_[0], buf, sizeof buf) > 0) {}
+    }
+
+    /// Stops and joins the watcher thread. Safe to call more than once.
+    void stop() {
+        if (!thread_.joinable()) return;
+        { std::lock_guard<std::mutex> lk(m_); stop_ = true; }
+        cv_.notify_all();
+        thread_.join();
+    }
+
+private:
+    static constexpr auto kPoll = std::chrono::milliseconds(50);
+
+    /// Queries the terminal; stores and returns true only if a valid, different size was read.
+    bool update() {
+        struct winsize ws{};
+        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != 0 || ws.ws_col == 0 || ws.ws_row == 0)
+            return false;
+        const uint64_t v = (uint64_t{ws.ws_col} << 32) | uint64_t{ws.ws_row};
+        return packed_.exchange(v, std::memory_order_relaxed) != v;
+    }
+
+    void wake() const {
+        if (wake_[1] < 0) return;
+        const char b = 1;
+        // A full pipe (EAGAIN) already means "a wake-up is pending", so the result is ignored.
+        (void)!write(wake_[1], &b, 1);
+    }
+
+    void loop() {
+        std::unique_lock<std::mutex> lk(m_);
+        while (!stop_) {
+            cv_.wait_for(lk, kPoll, [&] { return stop_; });
+            if (stop_) break;
+            if (update()) wake();
+        }
+    }
+
+    std::atomic<uint64_t>   packed_{(uint64_t{80} << 32) | 24u};
+    int                     wake_[2] = {-1, -1};
+    std::mutex              m_;
+    std::condition_variable cv_;
+    bool                    stop_ = false;
+    std::thread             thread_;
+};
+
+/// Repaint callback used by the readline event hook while the verbose prompt waits.
+/// rl_event_hook is a plain function pointer and cannot carry state, so the active
+/// callback is reached through this pointer (set only around that one readline() call).
+std::function<int()>* g_progressResizeHook = nullptr;
+
+/// `rl_event_hook` trampoline: forwards to the active callback, if any.
+int progressResizeHookTrampoline() {
+    return g_progressResizeHook ? (*g_progressResizeHook)() : 0;
+}
+
+} // namespace
 
 /**
  * @file progress_bar.cpp
@@ -97,17 +220,30 @@ void restoreInput(struct termios *oldt, int oldf) {
  * jittering as the numbers grow. The bar never goes below 10 columns; if the terminal is
  * narrower than that allows, lines are clipped (ANSI-escape and UTF-8 aware) instead of
  * wrapping. The last column is always kept free so a line can never trigger auto-wrap.
- * If the terminal width cannot be determined (stdout is not a tty), 80x24 is assumed.
+ * If the terminal size cannot be determined (stdout is not a tty), 80x24 is assumed;
+ * if a later query fails transiently, the last known good size is kept so it is not
+ * mistaken for a resize.
  *
  * @par Terminal Resize
- * The size (columns and rows) is re-queried on every frame (every 100 ms), so no SIGWINCH
- * handler is needed. Redrawing relies on moving the cursor up over the previous frame, which
+ * A @ref TerminalSizeWatcher thread polls the size every 50 ms and wakes the render loop
+ * through a self-pipe when it changes, so no SIGWINCH handler is needed and a resize is
+ * repainted immediately. The loop also still renders every 100 ms for live values. The
+ * watcher only reports sizes; all drawing happens on the calling thread. Redrawing relies
+ * on moving the cursor up over the previous frame, which
  * cannot be trusted after a resize: the terminal may have reflowed the old lines or pushed
  * them into scrollback, where cursor movement cannot reach. When the size changes, the screen
  * and scrollback are wiped, the caller-supplied @p header ("Processing ... (Ctrl+c:cancel)") is
  * reprinted, and the block is redrawn below it, so the header line that the final "Status:"
  * report overwrites is preserved. The same check runs once more when the operation completes,
  * so a resize between the last frame and the final report is handled.
+ *
+ * @par Resize at the verbose prompt
+ * The watcher keeps running while the "Display verbose output?" prompt waits. An
+ * @c rl_event_hook (called by readline from its idle loop, on this thread) compares the
+ * watcher's size with the last painted one and, on a change, wipes the screen, repaints the
+ * final report (header, status, bar, with the elapsed time and counters frozen at completion) and then
+ * calls @c rl_on_new_line() + @c rl_redisplay() so the prompt and any half-typed answer are
+ * restored. The whole repaint is one synchronized update.
  *
  * @param completedBytes Atomic counter for bytes processed.
  * @param totalBytes Total bytes to process.
@@ -167,15 +303,13 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         totalBytesFormatted = formatSize(static_cast<double>(totalBytes));
 
     // --- Terminal geometry helpers ---
-    struct TermSize { size_t cols; size_t rows; };
+    using TermSize = TerminalSizeWatcher::Size;
 
-    // Current terminal size; 80x24 if it cannot be determined (e.g. stdout is not a tty).
-    auto queryTermSize = []() -> TermSize {
-        struct winsize ws{};
-        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0)
-            return TermSize{ ws.ws_col, ws.ws_row };
-        return TermSize{ 80, 24 };
-    };
+    // Tracks the terminal size on its own thread and wakes the loop below on a change.
+    // A failed query keeps the last good size, so a transient failure is never mistaken
+    // for a resize (which would wipe the screen and scrollback). Stopped explicitly once
+    // the final report is drawn, and by its destructor on any other exit.
+    TerminalSizeWatcher watcher;
 
     auto sameSize = [](const TermSize& a, const TermSize& b) {
         return a.cols == b.cols && a.rows == b.rows;
@@ -215,7 +349,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         return out;
     };
 
-    TermSize curSize  = queryTermSize();   // size used by the frame being rendered
+    TermSize curSize  = watcher.get();     // size used by the frame being rendered
     TermSize lastSize = curSize;           // size at the previous frame
     bool hasDrawn = false;
 
@@ -247,11 +381,26 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
     int lastRenderedLines = 1;
 
+    // Elapsed time frozen at completion (< 0 while running), so repainting the final
+    // report on a resize keeps showing the same time and average speed.
+    double frozenElapsedSeconds = -1.0;
+
+    // Counters frozen at completion, for the same reason. While countersFrozen is false
+    // the render reads the live atomics; once true it uses these snapshots, so a late
+    // task finishing after a Ctrl+C cannot change what a resize repaint shows.
+    bool   countersFrozen        = false;
+    size_t frozenCompletedTasks  = 0;
+    size_t frozenFailedTasks     = 0;
+    size_t frozenCompletedBytes  = 0;
+
     // --- High-Frequency Render Lambda ---
     auto renderProgressBar = [&](bool forceFull = false, bool useFinalLayout = false, bool cancelled = false) -> std::string {
-        const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
-        const size_t failedTasksValue    = failedTasks->load(std::memory_order_acquire);
-        const size_t completedBytesValue = bytesTrackingEnabled ? completedBytes->load(std::memory_order_acquire) : 0;
+        const size_t completedTasksValue = countersFrozen ? frozenCompletedTasks
+            : completedTasks->load(std::memory_order_acquire);
+        const size_t failedTasksValue    = countersFrozen ? frozenFailedTasks
+            : failedTasks->load(std::memory_order_acquire);
+        const size_t completedBytesValue = countersFrozen ? frozenCompletedBytes
+            : (bytesTrackingEnabled ? completedBytes->load(std::memory_order_acquire) : 0);
 
         double tasksProgress = cancelled
             ? static_cast<double>(completedTasksValue) / totalTasks
@@ -267,7 +416,9 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
         if (forceFull && !cancelled) overallProgress = 1.0;
 
         auto currentTime    = std::chrono::high_resolution_clock::now();
-        double elapsedSeconds = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() / 1000.0;
+        double elapsedSeconds = frozenElapsedSeconds >= 0.0
+            ? frozenElapsedSeconds
+            : std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() / 1000.0;
 
         if (bytesTrackingEnabled && completedBytesValue != lastCompletedBytes) {
             cachedCompletedBytesFormatted = formatSize(static_cast<double>(completedBytesValue));
@@ -369,16 +520,23 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
     // --- Main Update Loop ---
     bool enterPressed = false;
-    struct pollfd pfd{ STDIN_FILENO, POLLIN, 0 };
+    // stdin plus the watcher's wake pipe; a negative fd (pipe unavailable) is ignored by poll().
+    struct pollfd pfds[2] = {
+        { STDIN_FILENO,    POLLIN, 0 },
+        { watcher.wakeFd(), POLLIN, 0 },
+    };
 
     while (!enterPressed) {
-        if (poll(&pfd, 1, 100) > 0 && (pfd.revents & POLLIN)) {
-            char ch;
-            while (read(STDIN_FILENO, &ch, 1) > 0);
+        if (poll(pfds, 2, 100) > 0) {
+            if (pfds[0].revents & POLLIN) {
+                char ch;
+                while (read(STDIN_FILENO, &ch, 1) > 0);
+            }
+            if (pfds[1].revents & POLLIN) watcher.drainWake();
         }
 
-        // The size is re-queried every frame, so a resize is picked up within 100 ms.
-        curSize = queryTermSize();
+        // A resize wakes poll() immediately; the 100 ms timeout is the fallback.
+        curSize = watcher.get();
         const bool resized = hasDrawn && !sameSize(curSize, lastSize);
 
         // Build the whole frame (redraw + cursor reposition) and send it as one
@@ -413,12 +571,22 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
 
             // Clean up cursor position for final report. If the terminal was resized
             // since the last frame, the cursor position is unreliable: wipe instead.
-            const TermSize nowSize = queryTermSize();
+            // Synchronous query: the watcher may be up to one poll interval behind.
+            const TermSize nowSize = watcher.refresh();
             const bool resizedAtEnd = !sameSize(nowSize, lastSize);
-            curSize = nowSize;
+            curSize  = nowSize;
+            lastSize = nowSize;   // size of the final paint; the prompt hook compares against it
 
-            const size_t completedTasksValue = completedTasks->load(std::memory_order_acquire);
-            const size_t failedTasksValue    = failedTasks->load(std::memory_order_acquire);
+            // Freeze time and counters together, once, before the first final paint.
+            frozenElapsedSeconds = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::high_resolution_clock::now() - startTime).count() / 1000.0;
+            frozenCompletedTasks = completedTasks->load(std::memory_order_acquire);
+            frozenFailedTasks    = failedTasks->load(std::memory_order_acquire);
+            frozenCompletedBytes = bytesTrackingEnabled ? completedBytes->load(std::memory_order_acquire) : 0;
+            countersFrozen       = true;
+
+            const size_t completedTasksValue = frozenCompletedTasks;
+            const size_t failedTasksValue    = frozenFailedTasks;
             const bool wasCancelled          = GlobalState::g_operationCancelled.load(std::memory_order_acquire);
             bool snapTo100 = (!wasCancelled && failedTasksValue == 0);
 
@@ -435,24 +603,29 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                 fin << (bytesTrackingEnabled ? "\033[1J\033[3A" : "\033[1J\033[1A");
             }
 
-            // --- Status Summary ---
-            fin << "\r\033[2K" << color << " Status: " << operation << color << " → ";
-            if (wasCancelled) {
-                fin << pc.warning << "INTERRUPTED";
-            } else if (failedTasksValue > 0) {
-                fin << (completedTasksValue > 0 ? pc.warning : pc.failure)
-                    << (completedTasksValue > 0 ? "PARTIAL" : "FAILED");
-            } else {
-                fin << pc.success << "COMPLETED";
-            }
-            fin << pc.reset << '\n';
-
-            // Final bar state
-            fin << renderProgressBar(snapTo100, true, wasCancelled);
+            // Status line + final bar. A lambda so the verbose-prompt resize hook can
+            // repaint exactly the same text later.
+            auto statusAndBar = [&]() -> std::string {
+                std::ostringstream s;
+                s << "\r\033[2K" << color << " Status: " << operation << color << " → ";
+                if (wasCancelled) {
+                    s << pc.warning << "INTERRUPTED";
+                } else if (failedTasksValue > 0) {
+                    s << (completedTasksValue > 0 ? pc.warning : pc.failure)
+                      << (completedTasksValue > 0 ? "PARTIAL" : "FAILED");
+                } else {
+                    s << pc.success << "COMPLETED";
+                }
+                s << pc.reset << '\n';
+                s << renderProgressBar(snapTo100, true, wasCancelled);
+                return s.str();
+            };
+            fin << statusAndBar();
 
             if (kUseSynchronizedOutput) fin << kSyncEnd;
             std::cout << fin.str() << std::flush;
 
+            // The watcher keeps running: the verbose prompt below repaints on resize.
             disableReadlineForConfirmation();
             enterPressed = true;
             std::cout << "\n\n";
@@ -467,7 +640,45 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                                            "Display verbose output? (y/n): " +
                                            "\001" + std::string(pc.reset) + "\002";
 
+                // Repaint the final screen if the terminal is resized while the prompt
+                // waits. Runs on this thread from readline's idle loop, so readline's
+                // globals can be used safely; the watcher thread only supplies the size.
+                std::function<int()> onResize = [&]() -> int {
+                    const TermSize now = watcher.get();
+                    if (sameSize(now, lastSize)) return 0;
+                    curSize  = now;
+                    lastSize = now;
+
+                    // Keep readline's own wrapping in step with the layout painted here.
+                    rl_set_screen_size(static_cast<int>(now.rows), static_cast<int>(now.cols));
+
+                    // Wipe, reprint the header, step onto its last line, then the status
+                    // and bar; "\n\n" leaves the cursor where the prompt starts.
+                    std::string body;
+                    if (kUseSynchronizedOutput) body.append(kSyncBegin);
+                    body += "\033[H\033[2J\033[3J";
+                    body += resizeHeaderText();
+                    body += "\033[1A";
+                    body += statusAndBar();
+                    body += "\n\n";
+                    std::cout << body << std::flush;
+
+                    // Redraw the prompt and whatever the user has typed, inside the same
+                    // synchronized frame.
+                    rl_on_new_line();
+                    rl_redisplay();
+                    if (kUseSynchronizedOutput) std::cout << kSyncEnd << std::flush;
+                    return 0;
+                };
+                g_progressResizeHook = &onResize;
+                auto* savedHook = rl_event_hook;
+                rl_event_hook = progressResizeHookTrampoline;
+
                 std::unique_ptr<char, decltype(&std::free)> input(readline(prompt.c_str()), &std::free);
+
+                rl_event_hook = savedHook;
+                g_progressResizeHook = nullptr;
+
                 if (input.get()) {
                     std::string res = input.get();
                     *verbose = (res == "y" || res == "Y");
@@ -481,6 +692,9 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                 // Automatically sets verbose to true when running non-interactively
                 *verbose = true;
             }
+
+            // No more repaints once the prompt has been answered.
+            watcher.stop();
 
             restoreReadline();
         }
