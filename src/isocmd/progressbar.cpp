@@ -733,9 +733,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                     if (input.get())
                         res = input.get();
                 }
-
                 *verbose = (res == "y" || res == "Y");
-
             } else {
                 disableInputForProgressBar(&oldt, &oldf);
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
