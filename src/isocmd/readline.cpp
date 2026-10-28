@@ -691,6 +691,7 @@ int proc_handler(int, int) {
 }
 
 int clr_handler(int, int) {
+    stashTypedInput();
     rl_replace_line("clr", 0);
     rl_done = 1;
     return 0;

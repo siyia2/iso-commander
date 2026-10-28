@@ -274,8 +274,7 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
     if (operation.find("mount") != std::string::npos || operation.find("umount") != std::string::npos) {
         processingBarWidth = 46;
     } else if (operation.find("2iso") != std::string::npos) {
-        processingBarWidth = 50;
-        finalBarWidth = 41;
+        processingBarWidth = 48;
     }
 
     // Narrowest bar we will shrink to before falling back to clipping lines.

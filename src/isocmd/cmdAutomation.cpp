@@ -1015,7 +1015,7 @@ static int handleConvert(const ParsedArgs& args) {
     // Start the progress bar unless output is silent.
     std::thread barThread;
     const std::string coloredProcess =
-            std::string(UI::Palette::Orange) + "convert2iso" + std::string(UI::Palette::BoldReset);
+            std::string(UI::Palette::Orange) + "c2iso" + std::string(UI::Palette::BoldReset);
 
     if (!args.silentMode) {
         std::ostringstream hdr;
