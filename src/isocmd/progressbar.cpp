@@ -640,36 +640,43 @@ void displayProgressBarWithSize(std::atomic<size_t>* completedBytes, size_t tota
                                            "Display verbose output? (y/n): " +
                                            "\001" + std::string(pc.reset) + "\002";
 
-                // Repaint the final screen if the terminal is resized while the prompt
-                // waits. Runs on this thread from readline's idle loop, so readline's
-                // globals can be used safely; the watcher thread only supplies the size.
                 std::function<int()> onResize = [&]() -> int {
                     const TermSize now = watcher.get();
                     if (sameSize(now, lastSize)) return 0;
+
                     curSize  = now;
                     lastSize = now;
 
-                    // Keep readline's own wrapping in step with the layout painted here.
-                    rl_set_screen_size(static_cast<int>(now.rows), static_cast<int>(now.cols));
+                    // Update Readline's terminal dimensions before redisplaying.
+                    rl_set_screen_size(
+                        static_cast<int>(now.rows),
+                        static_cast<int>(now.cols));
 
-                    // Wipe, reprint the header, step onto its last line, then the status
-                    // and bar; "\n\n" leaves the cursor where the prompt starts.
                     std::string body;
-                    if (kUseSynchronizedOutput) body.append(kSyncBegin);
+                    if (kUseSynchronizedOutput)
+                        body.append(kSyncBegin);
+
+                    // Rebuild the screen from a known cursor position.
                     body += "\033[H\033[2J\033[3J";
                     body += resizeHeaderText();
                     body += "\033[1A";
                     body += statusAndBar();
+
+                    // Leave the cursor below the final report, where the prompt belongs.
                     body += "\n\n";
+
                     std::cout << body << std::flush;
 
-                    // Redraw the prompt and whatever the user has typed, inside the same
-                    // synchronized frame.
+                    // Tell Readline that the previous display layout is no longer valid.
                     rl_on_new_line();
-                    rl_redisplay();
-                    if (kUseSynchronizedOutput) std::cout << kSyncEnd << std::flush;
+                    rl_forced_update_display();
+
+                    if (kUseSynchronizedOutput)
+                        std::cout << kSyncEnd << std::flush;
+
                     return 0;
                 };
+
                 g_progressResizeHook = &onResize;
                 auto* savedHook = rl_event_hook;
                 rl_event_hook = progressResizeHookTrampoline;
