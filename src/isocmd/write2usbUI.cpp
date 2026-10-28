@@ -666,17 +666,31 @@ static std::string clipToWidth(const std::string& s, size_t maxCols) {
 /**
  * @brief Current terminal size in columns and rows.
  *
- * Queries @c TIOCGWINSZ on stdout. Falls back to {80, 24} when stdout is
- * not a tty, or when the ioctl fails or reports a zero dimension — the
- * usual "sane default" for a non-interactive caller.
+ * Queries @c TIOCGWINSZ on stdout. On success the size is remembered; if a
+ * later call fails or reports a zero dimension (detached or transiently
+ * resized pty), the last known good size is returned instead, so a transient
+ * failure is never mistaken for a resize. Before any success the result is
+ * {80, 24}, the usual "sane default" for a non-interactive caller.
+ *
+ * @par Threading
+ * Called from the resize watcher, the WriteScreen keeper and the main
+ * thread. The remembered size is one packed @c std::atomic<uint64_t>
+ * (cols << 32 | rows), so a reader never sees a torn cols/rows pair.
  *
  * @return @c {columns, rows}.
  */
 static std::pair<size_t, size_t> terminalSize() {
+    static std::atomic<uint64_t> lastGood{(uint64_t{80} << 32) | 24u};
+
     struct winsize ws{};
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0)
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0) {
+        lastGood.store((uint64_t{ws.ws_col} << 32) | uint64_t{ws.ws_row},
+                       std::memory_order_relaxed);
         return { ws.ws_col, ws.ws_row };
-    return { 80, 24 };
+    }
+
+    const uint64_t v = lastGood.load(std::memory_order_relaxed);
+    return { static_cast<size_t>(v >> 32), static_cast<size_t>(v & 0xFFFFFFFFu) };
 }
 
 /**
@@ -787,9 +801,13 @@ static ResizeRepaintState g_confirmResize;
  *
  * Called by readline from its idle input loop when no keystroke is
  * pending. If the watcher has flagged a width change, this:
- * -# validates the pending resize (a zero `cols` or `rows` — a detached
- *    or transiently resized pty — is discarded so it cannot poison the
- *    row arithmetic below and cannot wedge a subsequent resize),
+ * -# defensively discards a pending resize with a zero `cols` or `rows`
+ *    (@ref terminalSize never reports one, but the row arithmetic below
+ *    divides by `cols`, so the guard stays),
+ * -# tells readline the new screen size via @c rl_set_screen_size() so its
+ *    own line-wrapping agrees with the layout computed here, even if its
+ *    SIGWINCH handling is disabled or replaced, and even when the repaint
+ *    is skipped below,
  * -# computes how far the cursor must travel to reach the top of the
  *    warning block: the block's own wrapped height **plus** the wrapped
  *    height of the prompt + typed buffer (@c rl_point tells us exactly
@@ -806,35 +824,20 @@ static ResizeRepaintState g_confirmResize;
  *    the prompt and re-echoes whatever the user has typed, cursor
  *    position included, and
  * -# closes the 2026 envelope, which commits the whole repaint as a
- *    single atomic frame — the cursor moves, the clear, the new warning
- *    block, and the redrawn prompt + input all present together. Without
- *    this, a resize while the user is mid-type flashes through several
- *    intermediate states as each `<<` write lands.
+ *    single atomic frame.
  *
- * The envelope is owned by an RAII guard (@ref SyncOutput) rather than
- * two raw writes, so a throwing @c paint() callback — a @c std::function
- * invocation that can legitimately raise @c bad_alloc or propagate a
- * user exception — still emits the closing `?2026l`. Otherwise the
- * terminal would sit in sync mode until its watchdog fired (~1 s on
- * every implementation that supports 2026), turning a resize into a
- * one-second freeze.
+ * The envelope is owned by an RAII guard (@ref SyncOutput) so a throwing
+ * @c paint() callback still emits the closing `?2026l`.
  *
  * A @c std::cout flush is issued *inside* the envelope, immediately
- * before @c rl_redisplay(). With the default `sync_with_stdio(true)`
- * this is redundant (both streams share the C `stdout` buffer and
- * preserve ordering), but if anyone ever sets `sync_with_stdio(false)`
- * for throughput, `std::cout` gets its own buffer and readline's writes
- * could overtake ours on the fd — splitting the frame and reintroducing
- * the flash. The flush makes the ordering explicit and is free.
+ * before @c rl_redisplay(), so ordering against readline's writes stays
+ * explicit even if `sync_with_stdio(false)` is ever set.
  *
  * Restoring the typed input is possible here — and only here — because
  * `rl_line_buffer` / `rl_end` / `rl_point` are mutated by readline on the
- * same thread. Reading them from the watcher thread would be a data race.
+ * same thread.
  *
- * @note The envelope must close before this hook returns. Readline may
- *       immediately re-enter its idle loop and block on input; a still-open
- *       `?2026h` at that point would leave the terminal holding a
- *       half-committed frame until the watchdog fires.
+ * @note The envelope must close before this hook returns.
  *
  * @param s Shared state populated by @ref ConfirmResizeWatcher.
  * @return Always 0 (do not abort readline).
@@ -846,14 +849,17 @@ static int confirmResizeHook(ResizeRepaintState& s) {
     const size_t cols = s.pendingCols.load(std::memory_order_relaxed);
     const size_t rows = s.pendingRows.load(std::memory_order_relaxed);
 
-    // A detached or transiently resized pty can report a zero dimension.
-    // Consuming `pending` here (rather than after the guards) would be
-    // wrong: a later, valid resize must still be able to fire. Bail
-    // without clearing the flag so the next loop() iteration re-arms it.
-    // `cols == 0` in particular would divide-by-zero in the row math below.
+    // Defensive: terminalSize() never reports a zero dimension, but the row
+    // math below divides by `cols`. Leave `pending` set so a valid value
+    // can still be consumed on a later call.
     if (cols == 0 || rows == 0) return 0;
 
     s.pending.store(false, std::memory_order_release);
+
+    // Sync readline's cached screen size with the one this layout is based
+    // on. Done before the skip guard so readline stays consistent even when
+    // we decline to repaint.
+    rl_set_screen_size(static_cast<int>(rows), static_cast<int>(cols));
 
     // Rows occupied by the warning block at the new width.
     size_t warningRows = 0;
@@ -869,12 +875,8 @@ static int confirmResizeHook(ResizeRepaintState& s) {
 
     const size_t up = warningRows + cursorLine;
 
-    // Skip guard: if cursor-up would clamp at row 1, do nothing. Clamping
-    // would overwrite the "ERASE ALL DATA" warning from the top and drop
-    // the ISO / device lists out of view. Crucially, nothing has been
-    // written to the terminal yet — a lone `?2026h` followed by an early
-    // return would leave sync mode open and force the watchdog to commit
-    // an empty frame.
+    // Skip guard: if cursor-up would clamp at row 1, do nothing. Nothing has
+    // been written to the terminal yet, so no `?2026h` is left dangling.
     if (up >= rows) return 0;
 
     // One atomic frame: cursor movement + clear + warning block + prompt
@@ -887,15 +889,11 @@ static int confirmResizeHook(ResizeRepaintState& s) {
     // Repaint the warning block at the new width.
     s.lineWidths = s.paint(cols);
 
-    // Drain our buffer before readline writes to the same fd. Redundant
-    // under the default sync_with_stdio(true), load-bearing if anyone
-    // ever disables it.
+    // Drain our buffer before readline writes to the same fd.
     std::cout.flush();
 
-    // Restore the prompt + the user's typed text. This is the whole point
-    // of moving the repaint to the main thread: readline's globals are
-    // safe to touch here, and rl_redisplay puts the cursor back where it
-    // was inside the buffer.
+    // Restore the prompt + the user's typed text; rl_redisplay puts the
+    // cursor back where it was inside the buffer.
     rl_on_new_line();
     rl_redisplay();
 
