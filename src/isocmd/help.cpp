@@ -10,6 +10,7 @@
 // Project Headers
 #include "../inputHandling.h"
 #include "../display.h"
+#include "../listResizeWatcher.h"
 #include "../pausePrompt.h"
 #include "../themes.h"
 
@@ -42,9 +43,9 @@ namespace {
 
         switch (role) {
             case ColorRole::Accent:    return theme->accent;
-            case ColorRole::Highlight:   return theme->highlight;
+            case ColorRole::Highlight: return theme->highlight;
             case ColorRole::Primary:   return theme->primary;
-            case ColorRole::Muted: return theme->muted;
+            case ColorRole::Muted:     return theme->muted;
         }
         return originalColor; // unreachable, silences some compilers
     }
@@ -96,10 +97,16 @@ void printSection(const ThemeColors& tc, std::string_view head, const std::strin
 
 /**
  * @brief Displays an interactive help guide detailing how to select and filter items within lists.
+ *
+ * The body is wrapped in a `render` lambda so a resize while waiting at the
+ * "↵ to return..." prompt redraws the help text (not just the prompt). The
+ * lambda captures the arguments by reference because @p isAtISOListForHelp is
+ * a live reference the caller may update between invocations; each replay must
+ * observe the current value.
  */
 void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool& isMount) {
-    const ThemeColors tc;
-    {
+    auto render = [&] {
+        const ThemeColors tc;
         SyncOutput sync;
         clearScrollBuffer();
 
@@ -134,17 +141,19 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
             "   • Indices correspond only to their generated list\n"
             "   • Indices^ refer to the original unfiltered list\n"
             "   • Filtering spans all pages and is incremental");
-    }
-    pressEnterToReturn();
+    };
+
+    render();
+    ListResizeWatcher watcher(render);
+    pressEnterToReturnWithRepaint(render);
 }
 
 /**
  * @brief Displays a help guide for the settings editor.
  */
 void helpSettingsEditor() {
-    const ThemeColors tc;
-
-    {
+    auto render = [&] {
+        const ThemeColors tc;
         SyncOutput sync;
         clearScrollBuffer();
 
@@ -155,19 +164,22 @@ void helpSettingsEditor() {
         printSection(tc, "\n2. Selecting Edits (↵):", std::string(UI::Palette::BoldReset) +
             "   • Single/Multiple : " + std::string(tc.keysPurple) + "'1' or '1 5 6'\n" + std::string(UI::Palette::BoldReset) +
             "   • Range/Combine   : " + std::string(tc.keysPurple) + "'1-3' or '1-3 5 7-9'" + std::string(UI::Palette::BoldReset));
-            printSection(tc, "\n4. Tips:",
+        printSection(tc, "\n4. Tips:",
             "   • On reset defaults are auto-saved to disk\n"
             "   • Succesful edits are auto-saved to disk");
-    }
-    pressEnterToReturn();
+    };
+
+    render();
+    ListResizeWatcher watcher(render);
+    pressEnterToReturnWithRepaint(render);
 }
 
 /**
  * @brief Displays a help guide for directory-related prompts (Copy/Move and ISO convert2iso).
  */
 void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
-    const ThemeColors tc;
-    {
+    auto render = [&] {
+        const ThemeColors tc;
         SyncOutput sync;
         clearScrollBuffer();
 
@@ -220,16 +232,19 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
                 "   • " + std::string(UI::Palette::BoldReset) + "Tab completion supports ! and * command prefixes\n"
                 "   • " + std::string(UI::Palette::BoldReset) + "Invalid paths => non-existent FolderPaths");
         }
-    }
-    pressEnterToReturn();
+    };
+
+    render();
+    ListResizeWatcher watcher(render);
+    pressEnterToReturnWithRepaint(render);
 }
 
 /**
  * @brief Displays a help guide for ISO-to-Device mappings.
  */
 void helpMappings() {
-    const ThemeColors tc;
-    {
+    auto render = [&] {
+        const ThemeColors tc;
         SyncOutput sync;
         clearScrollBuffer();
 
@@ -247,6 +262,9 @@ void helpMappings() {
             "   • Press Enter to refresh USB Flash Devices\n"
             "   • Tab-complete INDEX>DEVICE pairs for faster assignment\n"
             "   • Only unmounted parent devices are eligible for write2usb");
-    }
-    pressEnterToReturn();
+    };
+
+    render();
+    ListResizeWatcher watcher(render);
+    pressEnterToReturnWithRepaint(render);
 }

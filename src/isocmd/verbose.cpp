@@ -36,6 +36,8 @@
 #include "../themes.h"
 #include "../verbose.h"
 
+#include <functional>    // std::function
+
 namespace {
     /** @brief Set to 1 by the SIGWINCH handler; checked on the main loop. */
     volatile std::sig_atomic_t g_winch = 0;
@@ -44,44 +46,42 @@ namespace {
     void handle_winch(int) { g_winch = 1; }
 
     /**
-     * @brief Prints a blank line then "<prompt>" and blocks until Enter, Esc or
-     * Ctrl+D.
+     * @brief Core implementation of the "press Enter to continue" prompt.
+     *
+     * Never called directly; use pressEnterTo() / pressEnterToWithRepaint()
+     * and their wrappers.
      *
      * The terminal is switched to raw mode (no canonical buffering, no echo) so
      * Enter, Esc and Ctrl+D are detected immediately and keystrokes never
      * advance the cursor.
      *
-     * The cursor stays immediately after the last character of @p prompt, even
-     * across resizes: the cursor is saved (DECSC) *on the prompt's own row*
-     * (after the leading blank line, not on it). On SIGWINCH the layout is
-     * rebuilt from a known anchor rather than patched in place: the cursor is
-     * restored (DECRC), moved up one row to the blank separator, erased from
-     * there to end-of-screen (which wipes both the separator and any prompt
-     * copy the terminal may have reflowed to an adjacent row), and the blank
-     * separator + prompt are reprinted with a fresh DECSC on the prompt's row.
-     *
-     * Rebuilding from the separator — rather than clearing only from the saved
-     * cell — makes the layout self-healing: a one-row DECRC error (a rare
-     * reflow artifact) moves the whole block down one row but re-establishes
-     * the "blank separator, prompt on saved row" invariant, so the next resize
-     * is stable instead of compounding the error. This is what prevents the
-     * rare duplicate prompt that accumulated over many resizes when the
-     * separator was erased in place.
+     * Resize handling is a full redraw, not an in-place patch. There is no
+     * escape-sequence-only way to locate the prompt after a resize on
+     * reflowing terminals: VTE-based ones (xfce4-terminal, gnome-terminal,
+     * tilix, …) reflow content but leave both the live cursor and any
+     * DECSC-saved cell at their old absolute coordinates, so neither is a
+     * usable anchor for the prompt's row. Patching in place therefore produces
+     * drift on some terminals and striped partial repaints on VTE. On resize
+     * the screen is cleared ("\033[H\033[2J"); if @p repaint is non-null, it is
+     * invoked to redraw the caller's content; then the blank separator and the
+     * prompt are reprinted. Without a callback the pre-prompt content is lost
+     * on resize, but the prompt is still redrawn cleanly — never striped,
+     * never duplicated, never drifting.
      *
      * Back-to-back SIGWINCH notifications are collapsed into a single repaint
-     * (non-blocking poll + flag clear) so two repaints cannot interleave on the
-     * same screen.
+     * (non-blocking poll + flag clear) so two repaints cannot interleave.
      *
      * The original termios state and the previous SIGWINCH disposition are
-     * restored before returning, and unread input (e.g. the tail of an arrow-key
-     * escape sequence) is flushed.
+     * restored before returning, and unread input (e.g. the tail of an
+     * arrow-key escape sequence) is flushed.
      *
-     * @param prompt Text to show after the leading newline (e.g.
-     *               "\u21B5 to continue...").
-     *
-     * @note Requires a POSIX terminal; intended for interactive use only.
+     * @param prompt  Text to show after the leading newline (e.g.
+     *                "\u21B5 to continue...").
+     * @param repaint Optional pointer to a callback that redraws everything
+     *                printed before the prompt. May be null.
      */
-    void pressEnterTo(const std::string& prompt) {
+    void pressEnterToImpl(const std::string& prompt,
+                          const std::function<void()>* repaint) {
         enable_ctrl_d();
 
         struct termios raw, saved;
@@ -92,7 +92,6 @@ namespace {
         raw.c_cc[VTIME] = 0;
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 
-        // Install SIGWINCH handler (keep the previous one).
         g_winch = 0;
         struct sigaction sa{}, old_sa{};
         sa.sa_handler = handle_winch;
@@ -100,52 +99,31 @@ namespace {
         sa.sa_flags = 0;                 // we want poll() to return EINTR
         sigaction(SIGWINCH, &sa, &old_sa);
 
-        // Prints the prompt text only (no leading '\n'); cursor ends right
-        // after the prompt.
-        auto drawPrompt = [&]() {
-            std::cout << color << prompt << UI::Palette::BoldReset;
+        auto drawLayout = [&]() {
+            if (repaint && *repaint) (*repaint)();
+            std::cout << "\n" << color << prompt << UI::Palette::BoldReset;
             std::cout.flush();
         };
 
-        // Leading blank separator, then save the cursor ON the prompt's row
-        // (not on the blank line). Saved cell and prompt text then share a row
-        // and reflow together, so DECRC lands on the prompt.
-        std::cout << "\n";
-        std::cout << "\0337";             // DECSC
-        drawPrompt();
+        drawLayout();
 
         bool done = false;
         while (!done) {
             if (g_winch) {
                 g_winch = 0;
 
-                // Collapse back-to-back resize notifications into one repaint:
-                // a second SIGWINCH delivered while we were between the flag
-                // check and here would otherwise trigger a second repaint that
-                // can interleave with this one and leave a stale prompt.
+                // Collapse back-to-back resize notifications into one repaint.
                 {
                     struct pollfd drain{ STDIN_FILENO, POLLIN, 0 };
                     poll(&drain, 1, 0);
                 }
                 g_winch = 0;
 
-                // Rebuild the layout from the blank separator above the saved
-                // prompt row, so the result is identical to the first draw:
-                //   \0338       → DECRC to the saved prompt row
-                //   \033[1A     → up to the blank separator (or, on a rare
-                //                 one-row-low DECRC, onto the actual prompt)
-                //   \r\033[0J   → erase separator .. end-of-screen (wipes any
-                //                 prompt copy the terminal reflowed here)
-                //   \n          → reprint the blank separator
-                //   \0337       → DECSC on the fresh prompt row
-                //   drawPrompt()→ reprint the prompt
-                std::cout << "\0338"
-                          << "\033[1A"
-                          << "\r"
-                          << "\033[0J"
-                          << "\n"
-                          << "\0337";
-                drawPrompt();
+                // Full redraw: the only scheme correct on terminals that do
+                // not reflow the live cursor (VTE, xterm without "reflow",
+                // alt-screen setups).
+                std::cout << "\033[H\033[2J";
+                drawLayout();
             }
 
             struct pollfd pfd{ STDIN_FILENO, POLLIN, 0 };
@@ -172,11 +150,25 @@ namespace {
     }
 } // namespace
 
+/* -------------------------- existing API (unchanged) ---------------------- */
+
+/**
+ * @brief Waits for Enter, Esc or Ctrl+D after showing "\n<prompt>".
+ *
+ * On resize the screen is cleared and just "\n<prompt>" is redrawn — the
+ * pre-prompt content is lost because no repaint callback was supplied. For
+ * callers that can redraw their content, use pressEnterToWithRepaint().
+ *
+ * @param prompt Text to show after the leading newline.
+ */
+void pressEnterTo(const std::string& prompt) {
+    pressEnterToImpl(prompt, nullptr);
+}
+
 /**
  * @brief Waits for Enter, Esc or Ctrl+D before allowing another attempt.
  *
- * Shows "\u21B5 to try again...". The cursor stays at the end of the prompt
- * across resizes; see pressEnterTo() for the terminal handling.
+ * Shows "\u21B5 to try again...".
  */
 void pressEnterToTry()      { pressEnterTo("\u21B5 to try again..."); }
 
@@ -184,18 +176,61 @@ void pressEnterToTry()      { pressEnterTo("\u21B5 to try again..."); }
  * @brief Waits for Enter, Esc or Ctrl+D before returning to the previous menu
  * or state.
  *
- * Shows "\u21B5 to return...". The cursor stays at the end of the prompt
- * across resizes; see pressEnterTo() for the terminal handling.
+ * Shows "\u21B5 to return...".
  */
 void pressEnterToReturn()   { pressEnterTo("\u21B5 to return..."); }
 
 /**
  * @brief Waits for Enter, Esc or Ctrl+D before continuing.
  *
- * Shows "\u21B5 to continue...". The cursor stays at the end of the prompt
- * across resizes; see pressEnterTo() for the terminal handling.
+ * Shows "\u21B5 to continue...".
  */
 void pressEnterToContinue() { pressEnterTo("\u21B5 to continue..."); }
+
+/* -------------------------- new API (repaint-aware) ----------------------- */
+
+/**
+ * @brief Like pressEnterTo(), but @p repaint is called to redraw the
+ *        caller's content on resize, so the screen is fully restored instead
+ *        of just the prompt.
+ *
+ * @param prompt  Text to show after the leading newline.
+ * @param repaint Callback that redraws everything printed before the prompt.
+ */
+void pressEnterToWithRepaint(const std::string& prompt,
+                             const std::function<void()>& repaint) {
+    pressEnterToImpl(prompt, &repaint);
+}
+
+/**
+ * @brief Repaint-aware variant of pressEnterToTry().
+ *
+ * Shows "\u21B5 to try again..." and redraws the caller's content on resize
+ * via @p repaint.
+ */
+void pressEnterToTryWithRepaint(const std::function<void()>& repaint) {
+    pressEnterToWithRepaint("\u21B5 to try again...", repaint);
+}
+
+/**
+ * @brief Repaint-aware variant of pressEnterToReturn().
+ *
+ * Shows "\u21B5 to return..." and redraws the caller's content on resize via
+ * @p repaint.
+ */
+void pressEnterToReturnWithRepaint(const std::function<void()>& repaint) {
+    pressEnterToWithRepaint("\u21B5 to return...", repaint);
+}
+
+/**
+ * @brief Repaint-aware variant of pressEnterToContinue().
+ *
+ * Shows "\u21B5 to continue..." and redraws the caller's content on resize via
+ * @p repaint.
+ */
+void pressEnterToContinueWithRepaint(const std::function<void()>& repaint) {
+    pressEnterToWithRepaint("\u21B5 to continue...", repaint);
+}
 
 /**
  * @brief Prints categorized operation results, sorted case-insensitively.
