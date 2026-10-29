@@ -1324,16 +1324,43 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
     if (livePreviewConfigured())
         primeLivePreviewCaches();
 
-    // Terminal-resize repaint for this prompt. While the live preview is
-    // running the screen shows the unpaginated preview of the current query,
-    // so repaint that. Otherwise (preview off: list above LIVE_FILTER_LIMIT,
-    // or not configured) the screen shows the normal list, so use the
-    // caller's repaint.
+    // Terminal-resize repaint for this prompt. Pick a callback matching what
+    // is on screen:
+    //  - live preview running -> repaint the unpaginated preview of the
+    //    current query;
+    //  - preview off (list above LIVE_FILTER_LIMIT or not configured) but the
+    //    printList wiring is available -> repaint the normal paginated list
+    //    straight from previewSource (see below);
+    //  - otherwise -> caller's ctx.repaintList fallback (draw only, no
+    //    readline interaction).
     const auto resizeRepaint = [&] {
-        if (liveMainListEnabled())
+        if (liveMainListEnabled()) {
             paintLivePreviewFrame(rl_line_buffer ? rl_line_buffer : "");
-        else if (ctx.repaintList)
+        } else if (ctx.pendingIndices && ctx.hasPendingProcess && ctx.state &&
+                   !ctx.listType.empty()) {
+            // Reproduce the normal (paginated) display the user is looking at.
+            // Use previewSource, NOT ctx.files: before a commit ctx.files
+            // (the caller's filteredFiles) may be empty/stale, while the
+            // actually displayed list is *ctx.sourceOverride.
+            size_t page = ctx.currentPage;
+            printList(StringListView(previewSource),
+                      ctx.listType,
+                      ctx.listSubType,
+                      *ctx.pendingIndices,
+                      *ctx.hasPendingProcess,
+                      page,
+                      ctx.state,
+                      /*clearFirst=*/true,
+                      /*showPendingIndices=*/true);
+        } else if (ctx.repaintList) {
+            // Fallback: caller-supplied repaint. It must draw only (no readline
+            // interaction). Restore the line with clear_undo=1.
+            const std::string savedLine(rl_line_buffer ? rl_line_buffer : "");
+            const int savedPoint = rl_point;
             ctx.repaintList();
+            rl_replace_line(savedLine.c_str(), 1);
+            rl_point = std::min(savedPoint, rl_end);
+        }
     };
 
     while (true) {
