@@ -5,6 +5,8 @@
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <cerrno>
+#include <csignal>
 #include <cstddef>
 #include <functional>
 #include <iomanip>
@@ -17,6 +19,7 @@
 
 // C / System Headers
 #include <termios.h>
+#include <poll.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -33,83 +36,127 @@
 #include "../themes.h"
 #include "../verbose.h"
 
-/**
- * @brief Waits for the user to press Enter, Esc or Ctrl+D before allowing another attempt.
- *
- * Switches the terminal to raw mode (no canonical buffering, no echo) so that
- * Enter, Esc and Ctrl+D are detected immediately without requiring a newline.
- * Restores the original terminal state before returning.
- */
-void pressEnterToTry() {
-    enable_ctrl_d();
-    struct termios raw, saved;
-    tcgetattr(STDIN_FILENO, &saved);
-    raw = saved;
-    raw.c_lflag &= ~(ICANON | ECHO);
-    raw.c_cc[VMIN] = 1;
-    raw.c_cc[VTIME] = 0;
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
-    std::cout << color << "\n↵ to try again..." << UI::Palette::BoldReset;
-    std::cout.flush();
-    char ch;
-    while (read(STDIN_FILENO, &ch, 1) > 0) {
-        if (ch == '\n' || ch == '\r' || ch == 4 || ch == 27) break;
+namespace {
+    /** @brief Set to 1 by the SIGWINCH handler; checked on the main loop. */
+    volatile std::sig_atomic_t g_winch = 0;
+
+    /** @brief SIGWINCH handler: just flags that the terminal was resized. */
+    void handle_winch(int) { g_winch = 1; }
+
+    /**
+     * @brief Prints "\n<prompt>" and blocks until Enter, Esc or Ctrl+D.
+     *
+     * The terminal is switched to raw mode (no canonical buffering, no echo)
+     * so that Enter, Esc and Ctrl+D are detected immediately without waiting
+     * for a newline, and so that keystrokes never advance the cursor.
+     *
+     * The cursor is kept immediately after the last character of @p prompt,
+     * including across window resizes. This is achieved by saving the cursor
+     * (DECSC) before printing, and on SIGWINCH restoring it (DECRC), erasing
+     * to the end of the screen (ED 0), re-saving, and redrawing. Modern
+     * terminals reflow saved cursor positions alongside the text, so the
+     * restored cell is the start of the prompt's visual block even after the
+     * line wrapped or unwrapped.
+     *
+     * The original termios state and the previous SIGWINCH disposition are
+     * restored before returning, and any unread bytes (e.g. the tail of an
+     * arrow-key escape sequence) are flushed from the input queue.
+     *
+     * @param prompt  Text to show after the leading newline (e.g.
+     *                "\u21B5 to continue...").
+     *
+     * @note Requires a POSIX terminal; intended for interactive use only.
+     */
+    void pressEnterTo(const std::string& prompt) {
+        enable_ctrl_d();
+
+        struct termios raw, saved;
+        tcgetattr(STDIN_FILENO, &saved);
+        raw = saved;
+        raw.c_lflag &= ~(ICANON | ECHO);
+        raw.c_cc[VMIN]  = 1;
+        raw.c_cc[VTIME] = 0;
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+
+        // Install SIGWINCH handler (keep the previous one).
+        g_winch = 0;
+        struct sigaction sa{}, old_sa{};
+        sa.sa_handler = handle_winch;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = 0;                 // we want poll() to return EINTR
+        sigaction(SIGWINCH, &sa, &old_sa);
+
+        auto draw = [&]() {
+            std::cout << "\n" << color << prompt << UI::Palette::BoldReset;
+            std::cout.flush();           // cursor ends right after prompt
+        };
+
+        std::cout << "\0337";             // DECSC: save cursor (before '\n')
+        draw();
+
+        bool done = false;
+        while (!done) {
+            if (g_winch) {
+                g_winch = 0;
+                std::cout << "\0338"      // DECRC: back to saved position
+                          << "\033[0J"    // ED:   erase cursor..end-of-screen
+                          << "\0337";     // DECSC: save the same spot again
+                draw();                   // reprint; cursor at end of prompt
+            }
+
+            struct pollfd pfd{ STDIN_FILENO, POLLIN, 0 };
+            int r = poll(&pfd, 1, 100);   // short timeout so we re-check flag
+            if (r < 0) {
+                if (errno == EINTR) continue;
+                break;
+            }
+            if (r == 0) continue;         // timeout: loop to re-check g_winch
+
+            char ch;
+            ssize_t n = read(STDIN_FILENO, &ch, 1);
+            if (n < 0) {
+                if (errno == EINTR) continue;
+                break;
+            }
+            if (n == 0) break;
+            if (ch == '\n' || ch == '\r' || ch == 4 || ch == 27) done = true;
+        }
+
+        tcflush(STDIN_FILENO, TCIFLUSH);
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved);
+        sigaction(SIGWINCH, &old_sa, nullptr);
     }
-    tcflush(STDIN_FILENO, TCIFLUSH);
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved);
-}
+} // namespace
 
 /**
- * @brief Waits for the user to press Enter, Esc or Ctrl+D before returning to a previous menu or state.
+ * @brief Waits for the user to press Enter, Esc or Ctrl+D before allowing
+ *        another attempt.
  *
- * Switches the terminal to raw mode (no canonical buffering, no echo) so that
- * Enter, Esc and Ctrl+D are detected immediately without requiring a newline.
- * Restores the original terminal state before returning.
+ * Displays "\u21B5 to try again..." and blocks until one of those keys is
+ * pressed. The cursor is kept at the end of the prompt, even across window
+ * resizes. See pressEnterTo() for details on the terminal handling.
  */
-void pressEnterToReturn() {
-    enable_ctrl_d();
-    struct termios raw, saved;
-    tcgetattr(STDIN_FILENO, &saved);
-    raw = saved;
-    raw.c_lflag &= ~(ICANON | ECHO);
-    raw.c_cc[VMIN] = 1;
-    raw.c_cc[VTIME] = 0;
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
-    std::cout << color << "\n↵ to return..." << UI::Palette::BoldReset;
-    std::cout.flush();
-    char ch;
-    while (read(STDIN_FILENO, &ch, 1) > 0) {
-        if (ch == '\n' || ch == '\r' || ch == 4 || ch == 27) break;
-    }
-    tcflush(STDIN_FILENO, TCIFLUSH);
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved);
-}
+void pressEnterToTry()      { pressEnterTo("\u21B5 to try again..."); }
 
 /**
- * @brief Waits for the user to press Enter, Esc or Ctrl+D before continuing program execution.
+ * @brief Waits for the user to press Enter, Esc or Ctrl+D before returning
+ *        to a previous menu or state.
  *
- * Switches the terminal to raw mode (no canonical buffering, no echo) so that
- * Enter, Esc and Ctrl+D are detected immediately without requiring a newline.
- * Restores the original terminal state before returning.
+ * Displays "\u21B5 to return..." and blocks until one of those keys is
+ * pressed. The cursor is kept at the end of the prompt, even across window
+ * resizes. See pressEnterTo() for details on the terminal handling.
  */
-void pressEnterToContinue() {
-    enable_ctrl_d();
-    struct termios raw, saved;
-    tcgetattr(STDIN_FILENO, &saved);
-    raw = saved;
-    raw.c_lflag &= ~(ICANON | ECHO);
-    raw.c_cc[VMIN] = 1;
-    raw.c_cc[VTIME] = 0;
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
-    std::cout << color << "\n↵ to continue..." << UI::Palette::BoldReset;
-    std::cout.flush();
-    char ch;
-    while (read(STDIN_FILENO, &ch, 1) > 0) {
-        if (ch == '\n' || ch == '\r' || ch == 4 || ch == 27) break;
-    }
-    tcflush(STDIN_FILENO, TCIFLUSH);
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved);
-}
+void pressEnterToReturn()   { pressEnterTo("\u21B5 to return..."); }
+
+/**
+ * @brief Waits for the user to press Enter, Esc or Ctrl+D before continuing
+ *        program execution.
+ *
+ * Displays "\u21B5 to continue..." and blocks until one of those keys is
+ * pressed. The cursor is kept at the end of the prompt, even across window
+ * resizes. See pressEnterTo() for details on the terminal handling.
+ */
+void pressEnterToContinue() { pressEnterTo("\u21B5 to continue..."); }
 
 /**
  * @brief Performs a high-visibility print of operation results categorized by sets.
