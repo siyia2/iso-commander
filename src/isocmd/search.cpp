@@ -755,9 +755,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
  *                             "nrg", "chd", "daa").
  * @param callback             Optional callback invoked for each discovered
  *                             file.
- * @param directoryPaths       (Unused) Reserved for future use.
- * @param invalidDirectoryPaths Set of paths that failed validation; left
- *                             populated for verboseImageSearchResults().
+ *
  * @param processedErrorsFind  Set of error messages encountered during
  *                             traversal; left populated for
  *                             verboseImageSearchResults().
