@@ -75,6 +75,13 @@ void verboseFind(
 
 /**
  * Summarizes the results of image file search operation.
+ *
+ * Prints the total number of files processed (@p totalFiles), the captured
+ * verboseFind() output (invalid paths, traversal errors, interruption
+ * message), the found/cached summary and the elapsed time.
+ *
+ * @param totalFiles Aggregate count of regular files processed by the scan,
+ *                   as filled in by findFiles().
  */
 void verboseImageSearchResults(
     const std::string& fileExtension,
@@ -86,7 +93,8 @@ void verboseImageSearchResults(
     const std::vector<std::string>& files,
     const std::chrono::high_resolution_clock::time_point& start_time,
     std::unordered_set<std::string>& processedErrorsFind,
-    std::vector<std::string>& directoryPaths
+    std::vector<std::string>& directoryPaths,
+    const std::atomic<size_t>& totalFiles
 );
 
 
