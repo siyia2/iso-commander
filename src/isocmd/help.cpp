@@ -27,10 +27,10 @@ namespace {
     };
 
     /**
-     * @brief Resolves a color for the current theme using string_view to avoid copies.
+     * @brief Resolves a color for the current theme.
      *
-     * When @p isOriginal is true, @p originalColor is returned as-is.
-     * Otherwise the themed color matching @p role is returned.
+     * When @p isOriginal is true (or @p theme is null), @p originalColor is
+     * returned as-is. Otherwise the themed color matching @p role is returned.
      */
     [[nodiscard]] inline std::string_view resolveColor(
         const MainTheme* theme,
@@ -47,7 +47,7 @@ namespace {
             case ColorRole::Primary:   return theme->primary;
             case ColorRole::Muted:     return theme->muted;
         }
-        return originalColor; // unreachable, silences some compilers
+        return originalColor; // unreachable
     }
 
     /**
@@ -78,14 +78,17 @@ namespace {
     };
 
 /**
- * @brief Helper to print a themed section header and its bulleted content.
+ * @brief Prints a themed section header followed by its body.
+ *
+ * The header is printed in the theme's section color and the body (if any)
+ * verbatim. An empty body still emits one blank line for spacing.
  */
 void printSection(const ThemeColors& tc, std::string_view head, const std::string& body) {
     std::cout << tc.head << head << UI::Palette::BoldReset << "\n";
     if (!body.empty()) {
         std::cout << body << std::endl;
     } else {
-        std::cout << std::endl; // Just one extra line for spacing if no body
+        std::cout << std::endl;
     }
 }
 
@@ -96,13 +99,19 @@ void printSection(const ThemeColors& tc, std::string_view head, const std::strin
 // ---------------------------------------------------------------------------
 
 /**
- * @brief Displays an interactive help guide detailing how to select and filter items within lists.
+ * @brief Displays an interactive help guide detailing how to select and
+ * filter items within lists.
  *
  * The body is wrapped in a `render` lambda so a resize while waiting at the
  * "↵ to return..." prompt redraws the help text (not just the prompt). The
- * lambda captures the arguments by reference because @p isAtISOListForHelp is
- * a live reference the caller may update between invocations; each replay must
+ * lambda captures by reference because @p isAtISOListForHelp is a live
+ * reference the caller may update between invocations; each replay must
  * observe the current value.
+ *
+ * @param isAtISOListForHelp Live reference; when true, the ISO-list-only
+ *                           'R' refresh entry is included.
+ * @param isUnmount          True when the help is shown from an unmount flow.
+ * @param isMount            True when the help is shown from a mount flow.
  */
 void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool& isMount) {
     auto render = [&] {
@@ -166,7 +175,7 @@ void helpSettingsEditor() {
             "   • Range/Combine   : " + std::string(tc.keysPurple) + "'1-3' or '1-3 5 7-9'" + std::string(UI::Palette::BoldReset));
         printSection(tc, "\n4. Tips:",
             "   • On reset defaults are auto-saved to disk\n"
-            "   • Succesful edits are auto-saved to disk");
+            "   • Successful edits are auto-saved to disk");
     };
 
     render();
@@ -175,7 +184,16 @@ void helpSettingsEditor() {
 }
 
 /**
- * @brief Displays a help guide for directory-related prompts (Copy/Move and ISO convert2iso).
+ * @brief Displays a help guide for directory-related prompts (Copy/Move and
+ * ISO import/convert flows).
+ *
+ * The content adapts to @p isCpMv (copy/move vs import/convert), to
+ * @p import2ISO (ISO import vs image-cache convert), and, for copy/move, to
+ * @p isCopy (tips and overwrite guidance differ between cp and mv).
+ *
+ * @param isCpMv     True for copy/move flows; false for import/convert.
+ * @param import2ISO True when the flow imports ISOs into the database.
+ * @param isCopy     True for copy (cp); ignored unless @p isCpMv is true.
  */
 void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
     auto render = [&] {
@@ -183,7 +201,6 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
         SyncOutput sync;
         clearScrollBuffer();
 
-        // 1. Hotkeys
         std::string keys =
         "   • Exit          : " + std::string(tc.keysYellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
         "   • Quick Return  : " + std::string(tc.keysYellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset);
@@ -192,7 +209,6 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
         keys += std::string(UI::Palette::BoldReset) + "   • Declutter     : " + std::string(tc.keysYellow) + "Ctrl+l";
         printSection(tc, "\n1. Hotkeys:", keys);
 
-        // 2. Selecting FolderPaths
         std::string paths =
             "   • Single/Multiple : '/dir/' or '/dir1/;/dir2/'\n";
         if (isCpMv)
@@ -208,7 +224,6 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
                           "   • 'mv' multi-destination: uses cp+rm (slower)\n"
                           "   • 'mv' filename conflicts are queued sequentially");
         } else {
-            // 3. Cleanup/Display (convert2iso / import2iso specific)
             std::string displayCmds =
                 "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysYellow) +
                 "'!clr'       " + std::string(UI::Palette::BoldReset) +
@@ -240,7 +255,7 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
 }
 
 /**
- * @brief Displays a help guide for ISO-to-Device mappings.
+ * @brief Displays a help guide for ISO-to-Device mappings (write2usb).
  */
 void helpMappings() {
     auto render = [&] {

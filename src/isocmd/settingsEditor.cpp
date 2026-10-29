@@ -33,7 +33,9 @@
 #include "../tokenize.h"
 
 /**
- * DISK I/O & ERROR REPORTING
+ * @brief Prints the standard "configuration file inaccessible" error.
+ *
+ * @param configPath Path of the configuration file to name in the message.
  */
 void printConfigError(const std::string& configPath) {
     auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
@@ -46,6 +48,7 @@ void printConfigError(const std::string& configPath) {
 /**
  * @brief Commits the in-memory configuration cache to disk.
  *
+ * @param configPath Path of the configuration file to write.
  * @return true on success; false on write failure (after printing the error).
  */
 bool flushCache(const std::string& configPath) {
@@ -57,22 +60,18 @@ bool flushCache(const std::string& configPath) {
 /**
  * @brief Applies the configuration cache to the global runtime state.
  *
- * Bridge between the raw string @c g_configCache and the functional variables
- * the app actually uses (UI toggles, thread limits, skinning).
- *
- * Updates in order: thread caps and history limits, list-display toggles
- * (full/compact, filenames-only), skin and theme (via @c getskin() to refresh
- * the color palette), the default input color, pagination, and the live-filter
- * limit. Numeric settings are parsed with a @c try and silently kept at their
- * previous value on parse failure.
+ * Bridges the raw string g_configCache to the functional variables the app
+ * actually uses (UI toggles, thread limits, skinning). Updates, in order:
+ * thread caps and history limits, list-display toggles (full/compact,
+ * filenames-only), skin and theme (via getskin() to refresh the color
+ * palette), the default input color, pagination, and the live-filter limit.
+ * Numeric settings that fail to parse keep their previous value.
  *
  * @param cache The key-value pairs to apply.
  */
 void applyConfigEffects(const std::map<std::string, std::string>& cache) {
-    // Thread caps and history
     applyThreadCapsAndHistoryLimits(cache);
 
-    // UI toggles
     if (cache.count("mount_list"))        displayConfig::toggleFullListMount = (cache.at("mount_list") == "full");
     if (cache.count("umount_list"))       displayConfig::toggleFullListUmount = (cache.at("umount_list") == "full");
     if (cache.count("cp_mv_rm_list"))     displayConfig::toggleFullListCpMvRm = (cache.at("cp_mv_rm_list") == "full");
@@ -80,11 +79,9 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache) {
     if (cache.count("convert2iso_lists")) displayConfig::toggleFullListConvert2iso = (cache.at("convert2iso_lists") == "full");
     if (cache.count("filenames_only"))    displayConfig::toggleNamesOnly = (cache.at("filenames_only") == "on");
 
-    // Appearance
     if (cache.count("skin")) { skin = cache.at("skin"); color = getskin(); }
     if (cache.count("theme")) { globalTheme = cache.at("theme"); }
 
-    // Default input color
     if (cache.count("base")) {
         UI::Palette::defaultColor = cache.at("base");
         UI::Palette::updateDefaultColors();
@@ -104,27 +101,27 @@ void syncCache(const std::string& filePath);
 /**
  * @brief Launches the interactive TUI for configuration management.
  *
- * Menu-driven environment for viewing current settings, editing them by index,
- * or resetting the whole configuration to defaults.
+ * Menu-driven environment for viewing current settings, editing them by
+ * index, or resetting the whole configuration to defaults.
  *
- * - **Sectioning:** Groups settings by the sections in
- *   @c CONFIG_ORDERED_DEFAULTS.
+ * - **Sectioning:** groups settings by the sections in
+ *   CONFIG_ORDERED_DEFAULTS.
  * - **Input handling:** GNU Readline; supports single indices and tokenized
  *   multi-edits.
- * - **Validation:** delegated to @c editSetting per key.
- * - **Persistence:** synchronized with @c g_configCache; a full reset triggers
- *   an immediate @c flushCache on confirmation.
- * - **Cleanup (RAII):** a local @c SettingsGuard restores terminal keybindings
+ * - **Validation:** delegated to editSetting per key.
+ * - **Persistence:** synchronized with g_configCache; a full reset triggers
+ *   an immediate flushCache on confirmation.
+ * - **Cleanup (RAII):** a local SettingsGuard restores terminal keybindings
  *   on every exit path.
- * - **Signals:** @c SIGINT is ignored during the session.
- * - **Resize repaint:** the screen is drawn by a lambda (@c drawSettings) that
- *   runs once per iteration and is also passed to @c readlineWithResize() for
+ * - **Signals:** SIGINT is ignored during the session.
+ * - **Resize repaint:** the screen is drawn by a lambda (drawSettings) that
+ *   runs once per iteration and is also passed to readlineWithResize() for
  *   both the main prompt and the reset confirmation prompt, so the screen
  *   repaints on terminal-width changes while a prompt waits. The lambda ends
- *   on the line after "Actions:", where each prompt's leading newline expects
- *   the cursor.
+ *   on the line after "Actions:", where each prompt's leading newline
+ *   expects the cursor.
  *
- * @param configPath Path to the @c .conf file used for synchronization.
+ * @param configPath Path to the .conf file used for synchronization.
  */
 void interactiveConfigEditor(const std::string& configPath) {
     PendingReadlineTextClearGuard pendingTextGuard;
@@ -140,10 +137,6 @@ void interactiveConfigEditor(const std::string& configPath) {
         verboseSets.uniqueErrorTokenMessages.clear();
         auto tc = resolveOptionsTheme();
 
-        // Draws the whole settings screen. Used for the normal draw and as the
-        // resize repaint (runs on the Readline thread; must not call readline()).
-        // `tc` is captured by reference, so a theme refresh in the reset branch
-        // is picked up by later repaints.
         auto drawSettings = [&] {
             SyncOutput sync;
             clearScrollBuffer();
@@ -203,8 +196,6 @@ void interactiveConfigEditor(const std::string& configPath) {
                 UI::Palette::BoldReset
             );
 
-            // The settings list is still on screen and the prompt starts with a
-            // newline, so the same repaint applies here.
             RlLine confirmInput = readlineWithResize(confirmPrompt, drawSettings);
 
             if (confirmInput) {
@@ -216,11 +207,6 @@ void interactiveConfigEditor(const std::string& configPath) {
                     applyConfigEffects(ConfigCaches::g_configCache);
                     tc = resolveOptionsTheme();
 
-                    // Status lines are drawn from a render lambda so a resize
-                    // during the wait repaints them, instead of clearing the
-                    // screen and leaving only the prompt. The side effects
-                    // (applyConfigEffects, flushCache) happen once, before the
-                    // wait — not inside the lambda.
                     bool saved = false;
                     {
                         SyncOutput sync;
@@ -258,9 +244,6 @@ void interactiveConfigEditor(const std::string& configPath) {
             for (const auto& err : verboseSets.uniqueErrorTokenMessages)
                 std::cout << err << "\n";
             if (!verboseSets.uniqueErrorTokenMessages.empty()) {
-                // Reprint the tokenization errors on resize. Captured by
-                // reference so if a later iteration clears the set, this
-                // lambda isn't used again — it lives only for this wait.
                 auto render = [&] {
                     SyncOutput sync;
                     clearScrollBuffer();
@@ -289,24 +272,24 @@ void interactiveConfigEditor(const std::string& configPath) {
  * Shows the current value, the description, and a value hint. Loops until
  * valid input is received, the change is skipped, or the session is aborted.
  *
- * - **Key discovery:** looks up the @c ConfigEntry for metadata and defaults.
+ * - **Key discovery:** looks up the ConfigEntry for metadata and defaults.
  * - **Dynamic UX:** context-aware hints for themes, skins, and numeric ranges.
- * - **Validation:** via the entry's @c validate lambda before acceptance.
- * - **Hot-reload:** updates @c g_configCache and immediately calls
- *   @c applyConfigEffects so changes take effect in the running session (e.g.
+ * - **Validation:** via the entry's validate lambda before acceptance.
+ * - **Hot-reload:** updates g_configCache and immediately calls
+ *   applyConfigEffects so changes take effect in the running session (e.g.
  *   instant theme switching).
- * - **Persistence:** via @c flushCache; on disk-write failure the user is told
+ * - **Persistence:** via flushCache; on disk-write failure the user is told
  *   the change is "memory-only".
- * - **State refresh:** @c sortAfterFilenamesOnlyFlag is called when the
+ * - **State refresh:** sortAfterFilenamesOnlyFlag is called when the
  *   filenames-only toggle changes.
- * - **Resize repaint:** the screen is drawn by a lambda (@c drawEdit) that is
- *   also passed to @c readlineWithResize(), so it repaints on terminal-width
+ * - **Resize repaint:** the screen is drawn by a lambda (drawEdit) that is
+ *   also passed to readlineWithResize(), so it repaints on terminal-width
  *   changes while the prompt waits. The lambda stops at the last hint line,
  *   one line short of the blank line before the prompt (this prompt has no
  *   leading newline): the normal path prints that blank line itself, and the
  *   resize watcher prints it after a repaint.
  *
- * @param configPath Path to the @c .conf file for persistence.
+ * @param configPath Path to the .conf file for persistence.
  * @param key        Configuration key to modify.
  * @return true if the setting was updated, matched the current value, or was
  *         skipped; false if the user aborted (Ctrl+D or Esc).
@@ -320,12 +303,8 @@ bool editSetting(const std::string& configPath, const std::string& key) {
     if (!entry) return true;
     reset_custom_keybindingsForSettingsEditor();
 
-    // Keep the current value outside the loop so we can compare changes.
     std::string current = ConfigCaches::g_configCache.count(key) ? ConfigCaches::g_configCache[key] : entry->defaultValue;
 
-    // Draws the edit screen up to the last hint line (NOT the blank line
-    // before the prompt). Used for the first draw and as the resize repaint;
-    // the blank line comes from the caller / the watcher.
     auto drawEdit = [&] {
         clearScrollBuffer();
         std::cout << "\n" << tc.highlight << "=== Edit Setting ===\n\n" << tc.reset;
@@ -336,7 +315,6 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         if (pos != std::string::npos) displayComment.replace(pos, 3, "\n             ");
         std::cout << "\nDescription: " << displayComment << tc.reset << "\n\n";
 
-        // --- Dynamic hint block ---
         std::cout << tc.label << "Valid values: " << tc.reset;
         if (key == "base") {
             std::cout << "charcoal, black, gray, silver, ash, white, steel\n";
@@ -387,16 +365,11 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 
         RlLine rawInput = readlineWithResize(prompt, drawEdit);
 
-        // Cancel (Ctrl+D or Esc).
         if (!rawInput || rawInput.get()[0] == 27) return false;
         std::string newVal = trim(rawInput.get());
         if (newVal.empty() || newVal == current) return true;
 
-        // Validation.
         if (entry->validate && !entry->validate(newVal)) {
-            // Failure message + wait. The message is fixed at this point;
-            // the repaint lambda only reprints it, so a resize shows the same
-            // invalid-value text, not a re-derived one.
             auto render = [&] {
                 SyncOutput sync;
                 clearScrollBuffer();
@@ -408,18 +381,13 @@ bool editSetting(const std::string& configPath, const std::string& key) {
             continue;
         }
 
-        // --- Success case ---
         ConfigCaches::g_configCache[key] = newVal;
         applyConfigEffects(ConfigCaches::g_configCache);
 
         bool saved = flushCache(configPath);
 
-        // Refresh the local theme context in case 'skin' or 'theme' changed.
         tc = resolveOptionsTheme();
 
-        // The status line is fixed once the save attempt has completed; the
-        // repaint lambda reprints it. flushCache and the theme refresh have
-        // already happened, so a resize cannot re-flush or re-resolve.
         auto render = [&] {
             SyncOutput sync;
             clearScrollBuffer();
@@ -435,8 +403,6 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         ListResizeWatcher watcher(render);
         pressEnterToContinueWithRepaint(render);
 
-        // Specific side-effect for the filenames display toggle. Runs once,
-        // after the wait — never inside the render lambda.
         if (key == "filenames_only") {
             sortAfterFilenamesOnlyFlag();
         }

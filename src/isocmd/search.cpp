@@ -49,16 +49,13 @@
 namespace fs = std::filesystem;
 
 /**
- * @file database_operations.cpp
  * @brief Database operations and file scanning for ISO and disc image files.
  *
- * Scanning directories for ISO files, managing the ISO database, handling RAM
- * caches for BIN/IMG/MDF/NRG files, and interactive file-selection UIs.
+ * Scans directories for ISO files, manages the ISO database, handles RAM
+ * caches for BIN/IMG/MDF/NRG files, and drives the interactive file-selection
+ * UIs.
  */
 
-//=============================================================================
-// General Section
-//=============================================================================
 /**
  * @brief Returns true if @p path exists and is a directory.
  */
@@ -66,73 +63,68 @@ bool isValidDirectory(const std::string& path) {
     return std::filesystem::is_directory(path);
 }
 
-//=============================================================================
-// ISO Section
-//=============================================================================
-
 /**
- * @brief Prompts for directory paths and imports discovered ISO files into the
- * local database.
+ * @brief Prompts for directory paths and imports discovered ISO files into
+ * the local database.
  *
- * Reads a semicolon-delimited list of directory paths, validates and trims each
- * path, deduplicates by normalized form, sorts, then eliminates subdirectories
- * of already-included paths (the prefix check requires the prior sort). Remaining
- * paths are scanned in parallel via the static thread pool up to @p maxDepth.
- * Results are forwarded to @c saveAndReportResultsForDatabase, which calls
- * @c saveToDatabase and may set @p newISOFound. Invalid paths omitted from the
- * search are stripped from the history entry for the submitted input.
+ * Reads a semicolon-delimited list of directory paths, validates and trims
+ * each path, deduplicates by normalized form, sorts, then eliminates
+ * subdirectories of already-included paths (the prefix check requires the
+ * prior sort). Remaining paths are scanned in parallel via the static thread
+ * pool up to @p maxDepth. Results are forwarded to
+ * saveAndReportResultsForDatabase(), which calls saveToDatabase() and may set
+ * @p newISOFound. Invalid paths omitted from the search are stripped from the
+ * history entry for the submitted input.
  *
- * @details **Control flow:**
- * - **Exit:** ESC input (@c "\\x1b", typically bound to the @c '<' key via
- *   @c setup_custom_keybindingsForSearches) or null return from readline
+ * @par Control flow
+ * - Exit: ESC input ("\x1b", typically bound to '<' via
+ *   setup_custom_keybindingsForSearches) or a null return from readline
  *   (Ctrl+D) — both return directly.
- * - **Continue:** '?' (help via @c helpSearches), switch commands
- *   (@c *stats, @c !clr, @c !clr_paths, @c !clr_filter via
- *   @c databaseSwitches), empty/whitespace-only input, empty @p validPaths
- *   with no invalid paths, and exceptions (prints error, waits for Enter,
- *   re-arms and retries).
- * - **Early save path:** If all paths are invalid (@c validPaths empty,
- *   @c invalidPaths non-empty), resets @c g_operationCancelled and calls
- *   @c saveAndReportResultsForDatabase without scanning.
- * - **Cancellation guarding:** @c g_operationCancelled is reset to @c false in
- *   three places: inside @c rearmSetup (top of every iteration), before the
- *   early-save path, and before the parallel scan block. This prevents spurious
- *   cancellation from a premature Ctrl+C before input is processed.
- * - **Task joining:** every scan task is always waited on, even after a
+ * - Continue: '?' (help via helpSearches), switch commands (*stats, !clr,
+ *   !clr_paths, !clr_filter via databaseSwitches), empty or whitespace-only
+ *   input, empty validPaths with no invalid paths, and exceptions (prints
+ *   error, waits for Enter, re-arms and retries).
+ * - Early save path: if all paths are invalid (validPaths empty,
+ *   invalidPaths non-empty), resets g_operationCancelled and calls
+ *   saveAndReportResultsForDatabase without scanning.
+ * - Cancellation guarding: g_operationCancelled is reset to false inside
+ *   rearmSetup (top of every iteration), before the early-save path, and
+ *   before the parallel scan block. This prevents a spurious cancellation
+ *   from a premature Ctrl+C before input is processed.
+ * - Task joining: every scan task is always waited on, even after a
  *   cancellation. The tasks capture references to locals of this iteration
- *   (@c allIsoFiles, @c uniqueErrorMessages, @c totalFiles, the mutexes);
- *   returning before they finish would leave them with dangling references.
- *   Tasks observe @c g_operationCancelled and exit quickly.
- * - **History:** @c loadHistory(filterHistory) is called unconditionally each
- *   iteration. After parsing, @c add_history is called with only the valid
- *   tokens, trimmed but not normalized, rejoined with @c ';' (e.g. the input
- *   @c "/home/;/var/;asd" is stored as @c "/home/;/var/"). If no token was
- *   valid, nothing is added. @c saveHistory(filterHistory) is called only when
- *   both @p validPaths and @p input are non-empty after a scan completes.
- * - **RAII keybinding management:** A @c SearchReadlineGuard is constructed at
- *   the start of each loop iteration (after @c rearmSetup). It saves the
- *   current @c rl_attempted_completion_function on construction; its destructor
- *   restores it, rebinds @c \\t to @c prevent_readline_keybindings, rebinds
- *   @c \\f to @c rl_insert, clears the history buffer, resets readline
- *   pagination, and calls @c reset_custom_keybindingsForSearches(). Cleanup
- *   runs on all loop-body exit paths — @c continue, @c return, and exceptions.
- *   The guard is recreated each iteration so its saved state always reflects
- *   the state just after @c rearmSetup runs.
- * - **Resize repaint:** The prompt carries its own header line, so
- *   @c readline() is wrapped by @c readlineWithResize() with a callback that
- *   clears the screen and re-prints the header (via
- *   @c promptHeaderForRepaint). The watcher adds the newline and Readline
- *   redraws the last prompt line and the typed input.
+ *   (allIsoFiles, uniqueErrorMessages, totalFiles, the mutexes); returning
+ *   before they finish would leave them with dangling references. Tasks
+ *   observe g_operationCancelled and exit quickly.
+ * - History: loadHistory(filterHistory) is called unconditionally each
+ *   iteration. After parsing, add_history is called with only the valid
+ *   tokens, trimmed but not normalized, rejoined with ';' (e.g. the input
+ *   "/home/;/var/;asd" is stored as "/home/;/var/"). If no token was valid,
+ *   nothing is added. saveHistory(filterHistory) is called only when both
+ *   validPaths and input are non-empty after a scan completes.
+ * - RAII keybinding management: a SearchReadlineGuard is constructed at the
+ *   start of each loop iteration (after rearmSetup). Its destructor restores
+ *   the saved rl_attempted_completion_function, rebinds '\t' to
+ *   prevent_readline_keybindings, rebinds '\f' to rl_insert, clears the
+ *   history buffer, resets readline pagination, and calls
+ *   reset_custom_keybindingsForSearches(). Cleanup runs on all loop-body
+ *   exit paths — continue, return, and exceptions. The guard is recreated
+ *   each iteration so its saved state always reflects the state just after
+ *   rearmSetup runs.
+ * - Resize repaint: the prompt carries its own header line, so readline() is
+ *   wrapped by readlineWithResize() with a callback that clears the screen
+ *   and re-prints the header (via promptHeaderForRepaint). The watcher adds
+ *   the newline and Readline redraws the last prompt line and the typed
+ *   input.
  *
- * @param promptFlag    Passed to @c traverse() to control scan behaviour.
+ * @param promptFlag    Passed to traverse() to control scan behaviour.
  * @param maxDepth      Maximum directory recursion depth (-1 for unlimited).
  * @param filterHistory If true, readline history is loaded at prompt time and
- *                      saved after a successful scan via @c loadHistory /
- *                      @c saveHistory.
- * @param newISOFound   Passed by reference into
- *                      @c saveAndReportResultsForDatabase, which forwards it to
- *                      @c saveToDatabase as a pointer; @c saveToDatabase is
- *                      responsible for setting it.
+ *                      saved after a successful scan via loadHistory /
+ *                      saveHistory.
+ * @param newISOFound   Passed by reference into saveAndReportResultsForDatabase,
+ *                      which forwards it to saveToDatabase as a pointer;
+ *                      saveToDatabase is responsible for setting it.
  */
 void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool& newISOFound) {
     PendingReadlineTextClearGuard pendingTextGuard;
@@ -167,9 +159,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                   .append("\001").append(dt.blue).append("\002 DB, ? for help:\n")
                   .append("\001").append(dt.reset).append("\002");
 
-            // Resize repaint: clear and re-print the prompt's header line (no
-            // trailing newline; the watcher supplies it, and Readline redraws
-            // the last prompt line and the typed input).
             const auto repaintPrompt = [&] {
                 SyncOutput sync;
                 clearScrollBuffer();
@@ -193,13 +182,10 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             }
 
             if (input == "*stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter") {
-                // databaseSwitches owns its own prompt now (displayDatabaseStatistics
-                // and clearHistory both handle resize themselves). Don't wrap.
                 databaseSwitches(input);
                 continue;
             }
 
-            // "?" and the switch commands were already handled above.
             if (!input.empty()) {
                 std::cout << "\n";
             }
@@ -235,7 +221,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 path = trimWhitespace(path);
                 if (path.empty()) continue;
                 if (!isValidDirectory(path)) {
-                    // Stored plain; the reporting code applies the color.
                     invalidPaths.insert(path);
                     continue;
                 }
@@ -249,7 +234,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 }
             }
 
-            // Save only the valid paths; nothing is added if none were valid.
             if (!cleanedInput.empty()) {
                 add_history(cleanedInput.c_str());
             }
@@ -269,7 +253,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 restoreInput();
                 resetReadlinePagination();
                 if (!invalidPaths.empty()) {
-                    // Prevent unintended cancellation from a premature Ctrl+C.
                     GlobalState::g_operationCancelled.store(false);
                     saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, newISOFound, start_time);
                 }
@@ -281,7 +264,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 std::vector<std::future<void>> futures;
                 std::mutex processMutex;
                 std::mutex traverseErrorMutex;
-                // Prevent unintended cancellation from a premature Ctrl+C.
                 GlobalState::g_operationCancelled.store(false);
 
                 for (const auto& validPath : validPaths) {
@@ -294,9 +276,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                     );
                 }
 
-                // Always join every task: they hold references to the locals
-                // above, which are destroyed when this block ends. On Ctrl+C
-                // the tasks see g_operationCancelled and return quickly.
                 for (auto& future : futures) {
                     future.wait();
                 }
@@ -320,9 +299,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
         } catch (const std::exception& e) {
             const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
-            // Error message + wait. The message is fixed at this point; the
-            // repaint lambda only reprints it, so a resize during the wait
-            // shows the same error, not a re-derived one.
             auto render = [&] {
                 SyncOutput sync;
                 clearScrollBuffer();
@@ -339,7 +315,8 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
  * @brief Recursively traverses a directory to find ISO files.
  *
  * Depth-first walk of the filesystem from @p path, collecting .iso files and
- * aggregating errors.
+ * aggregating errors. Results are batch-appended to the shared output under
+ * @p traverseFilesMutex.
  *
  * @param path               Starting directory.
  * @param isoFiles           Output vector for discovered ISO paths.
@@ -430,20 +407,14 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
     }
 }
 
-//=============================================================================
-// Image Section (BIN/IMG/CHD/DAA/GBI/MDF/NRG)
-//=============================================================================
-
 /**
  * @brief Prepares and optionally displays the contents of a disc-image RAM
  * cache.
  *
- * Copies the active cache (BIN/IMG, MDF, NRG, CHD, or DAA/GBI) into the output
- * vector when listing is enabled. If the cache is empty, prints a status message
- * and waits for user input.
- *
- * Also handles terminal state (signal ignoring, input control, scroll-buffer
- * clearing).
+ * Copies the active cache (BIN/IMG, MDF, NRG, CHD, or DAA/GBI) into the
+ * output vector when listing is enabled. If the cache is empty, prints a
+ * status message and waits for user input. Handles terminal state (signal
+ * ignoring, input control, scroll-buffer clearing).
  *
  * @param files             Output vector populated with cached file paths when
  *                          available.
@@ -486,9 +457,6 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
     }
 
     if (isEmpty && list) {
-        // Message + wait. The message is fixed at this point; the repaint
-        // lambda only reprints it. The side effects (files.clear(),
-        // clearScrollBuffer()) run once, after the wait.
         auto render = [&] {
             SyncOutput sync;
             clearScrollBuffer();
@@ -523,8 +491,8 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
 /**
  * @brief Clears the active disc-image cache and related transformation entries.
  *
- * Clears exactly one cache based on the selected mode (CHD, DAA/GBI, MDF, NRG,
- * or BIN/IMG by default). Also handles terminal/UI state (signal reset, input
+ * Clears exactly one cache based on the selected mode (CHD, DAA/GBI, MDF,
+ * NRG, or BIN/IMG by default). Handles terminal/UI state (signal reset, input
  * control) and prints a status message.
  *
  * @param modeMdf Select MDF cache mode (mutually exclusive).
@@ -569,10 +537,6 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
         if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::binImgFilesCache);
     }
 
-    // Draws the result message. The message decision was made above (once);
-    // the lambda only reprints it. Captured by value so a resize during the
-    // wait reprints the same message, not one re-derived from state that may
-    // have changed since.
     auto render = [&, cacheType, cacheIsEmpty] {
         SyncOutput sync;
         clearScrollBuffer();
@@ -607,7 +571,8 @@ void toLowerInPlace(std::string& str);
  * - CHD
  * - DAA/GBI
  *
- * Optional keyword-based exclusion is present but currently unused.
+ * A keyword-based exclusion pass is present but currently has an empty
+ * keyword set.
  *
  * @return true if @p entry matches the active mode filter, false otherwise.
  */
@@ -617,7 +582,6 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
     std::string extLower = ext;
     toLowerInPlace(extLower);
 
-    // Determine which extension(s) are allowed.
     if (blacklistDaa) {
         if (!(extLower == ".daa" || extLower == ".gbi")) {
             return false;
@@ -644,7 +608,6 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
         }
     }
 
-    // Optional keyword blacklisting (currently empty).
     std::unordered_set<std::string> blacklistKeywords = {};
 
     std::string filenameLowerNoExt = filenameLower;
@@ -663,18 +626,21 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
  * @brief Recursively scans one directory for disc-image files as part of a
  * parallel search.
  *
- * Walks the directory tree, filters by mode (BIN/IMG, MDF, NRG, CHD, or DAA/GBI),
- * applies cache checks and blacklist filtering, and invokes the callback for
- * newly discovered files. Supports cancellation, progress reporting, and error
- * aggregation for the parent search.
+ * Walks the directory tree, filters by mode (BIN/IMG, MDF, NRG, CHD, or
+ * DAA/GBI), applies cache checks and blacklist filtering, and invokes the
+ * callback for newly discovered files. Supports cancellation, progress
+ * reporting, and error aggregation for the parent search.
  *
- * - **Cache check:** the target cache is copied once into a hash set at the
- *   start of the task, so each candidate is an O(1) lookup instead of a linear
- *   scan. This is safe because @c findFiles only modifies the caches after
- *   every task has been joined.
- * - **Cancellation:** the flag is read here but never reset; @c findFiles
- *   resets it once before submitting the tasks. Resetting it per task would let
- *   late-starting tasks swallow a Ctrl+C.
+ * @par Cache check
+ * The target cache is copied once into a hash set at the start of the task,
+ * so each candidate is an O(1) lookup instead of a linear scan. This is safe
+ * because findFiles only modifies the caches after every task has been
+ * joined.
+ *
+ * @par Cancellation
+ * The flag is read here but never reset; findFiles resets it once before
+ * submitting the tasks. Resetting it per task would let late-starting tasks
+ * swallow a Ctrl+C.
  *
  * @param totalFiles Shared atomic counter of regular files seen, owned by the
  *                   caller and shared by every parallel task so the live
@@ -700,7 +666,6 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
         const bool blacklistChd = (mode == "chd");
         const bool blacklistDaa = (mode == "daa");
 
-        // One-time snapshot of the target cache for O(1) membership tests.
         std::unordered_set<std::string> cacheSet;
         {
             std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
@@ -717,7 +682,6 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
             if (GlobalState::g_operationCancelled.load()) {
                 std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
 
-                // Re-check under the lock to prevent races between threads.
                 if (!g_CancelledMessageAdded.exchange(true)) {
                     processedErrorsFind.clear();
 
@@ -760,14 +724,15 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
 }
 
 /**
- * @brief Discovers disc-image files across multiple directories using a thread
- * pool.
+ * @brief Discovers disc-image files across multiple directories using a
+ * thread pool.
  *
  * Normalizes input paths (trailing slash, redundant components), deduplicates
- * semantically identical paths, and filters out subdirectories already covered
- * by a parent path, so each tree is scanned exactly once. Submits the filtered
- * scan tasks to the shared static thread pool; each task walks its directory
- * recursively and returns discovered BIN/IMG/MDF/NRG/CHD/DAA/GBI files.
+ * semantically identical paths, and filters out subdirectories already
+ * covered by a parent path, so each tree is scanned exactly once. Submits the
+ * filtered scan tasks to the shared static thread pool; each task walks its
+ * directory recursively and returns discovered BIN/IMG/MDF/NRG/CHD/DAA/GBI
+ * files.
  *
  * Results are aggregated, deduplicated against the existing cache, and merged
  * into the appropriate RAM cache. Supports cancellation via the global
@@ -775,25 +740,27 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
  * function returns (they hold references to this function's parameters), even
  * after a cancellation.
  *
- * **Resize-relevant contract:** this function intentionally does NOT call
- * verboseFind(). The invalid-directory set and the processed-error set are
- * returned to the caller still populated, so verboseImageSearchResults() can
- * run verboseFind() once into a buffer and replay its output on resize.
- * Likewise @p totalFiles is left holding the final aggregate so
- * verboseImageSearchResults() can reprint "Total files processed" after it
- * clears the screen.
+ * @par Resize contract
+ * This function intentionally does NOT call verboseFind(). The
+ * invalid-directory set and the processed-error set are returned to the
+ * caller still populated, so verboseImageSearchResults() can run verboseFind()
+ * once into a buffer and replay its output on resize. Likewise @p totalFiles
+ * is left holding the final aggregate so verboseImageSearchResults() can
+ * reprint "Total files processed" after it clears the screen.
  *
  * @param inputPaths           Raw user-provided directory paths.
  * @param fileNames            Output set of discovered file paths.
  * @param currentCacheOld      Returns the cache size before new additions.
  * @param mode                 File type to search for ("bin"/"img", "mdf",
  *                             "nrg", "chd", "daa").
- * @param callback             Optional callback invoked for each discovered file.
+ * @param callback             Optional callback invoked for each discovered
+ *                             file.
  * @param directoryPaths       (Unused) Reserved for future use.
  * @param invalidDirectoryPaths Set of paths that failed validation; left
  *                             populated for verboseImageSearchResults().
- * @param processedErrorsFind  Set of error messages encountered during traversal;
- *                             left populated for verboseImageSearchResults().
+ * @param processedErrorsFind  Set of error messages encountered during
+ *                             traversal; left populated for
+ *                             verboseImageSearchResults().
  * @param totalFiles           Shared counter of regular files processed across
  *                             all tasks; incremented by processPaths(), read by
  *                             the caller afterwards.
@@ -803,8 +770,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
                                    std::unordered_set<std::string>& fileNames,
                                    int& currentCacheOld, const std::string& mode,
                                    const std::function<void(const std::string&, const std::string&)>& callback,
-                                   const std::vector<std::string>& directoryPaths,
-                                   std::unordered_set<std::string>& invalidDirectoryPaths,
                                    std::unordered_set<std::string>& processedErrorsFind,
                                    std::atomic<size_t>& totalFiles) {
     setupSignalHandlerCancellations();
@@ -833,7 +798,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
         return {};
     }
 
-    // ----- Normalization and deduplication -----
     auto normalizePath = [](const std::string& p) {
         std::string n = fs::path(p).lexically_normal().string();
         if (n.size() > 1 && n.back() == '/')
@@ -851,7 +815,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
         }
     }
 
-    // ----- Subpath filtering (O(n log n)) -----
     std::sort(normalizedPaths.begin(), normalizedPaths.end());
 
     std::vector<std::string> filteredPaths;
@@ -867,14 +830,12 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
         return *currentCache;
     }
 
-    // ----- Submit filtered paths to thread pool -----
     std::vector<std::future<std::unordered_set<std::string>>> threadFutures;
 
     {
         auto& pool = getStaticThreadPool();
 
         for (const auto& path : filteredPaths) {
-            // Explicitly isolate a string copy for this thread task.
             std::string pathCopy = path;
 
             threadFutures.push_back(pool.enqueue(
@@ -884,9 +845,6 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
                 }));
         }
 
-        // Join every task first: they hold references to this function's
-        // parameters, so none may still be running when we return. On Ctrl+C
-        // the tasks see g_operationCancelled and finish quickly.
         for (auto& future : threadFutures) {
             if (future.valid()) future.wait();
         }
@@ -899,19 +857,10 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
         }
     }
 
-    // Final aggregate for the live view. verboseImageSearchResults() reprints
-    // it after clearing the screen.
     {
         std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
         std::cout << "\r" << color << "Total files processed: " << totalFiles.load() << std::flush;
     }
-
-    // NOTE: verboseFind() is deliberately NOT called here. It clears
-    // invalidDirectoryPaths and processedErrorsFind, which would leave
-    // verboseImageSearchResults() with nothing to capture for its resize
-    // replay, and the verbose output would disappear on resize. The caller
-    // (promptSearchBinImgChdDaaMdfNrg -> verboseImageSearchResults) is the
-    // sole owner of that call now.
 
     std::unordered_set<std::string> currentCacheSet(currentCache->begin(), currentCache->end());
     std::vector<std::string> newFiles;
@@ -984,58 +933,59 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  * @brief Interactive search and caching controller for disc-image files.
  *
  * Terminal interface for scanning user-provided directories for BIN/IMG, MDF,
- * NRG, CHD, and DAA/GBI images. Supports multi-path input (semicolon-delimited),
- * directory validation with deduplication, readline history management, special
- * command dispatch, and verbose result reporting.
+ * NRG, CHD, and DAA/GBI images. Supports multi-path input
+ * (semicolon-delimited), directory validation with deduplication, readline
+ * history management, special command dispatch, and verbose result reporting.
  *
  * Discovered files are cached in memory and, if new files were found and the
- * operation was not cancelled, forwarded to @c selectForImageFiles for
+ * operation was not cancelled, forwarded to selectForImageFiles for
  * interactive selection and conversion.
  *
- * @details **Control flow:**
- * - **Exit:** ESC input (@c "\\x1b", typically bound to the @c '<' key via
- *   @c setup_custom_keybindingsForSearches) or null return from readline
+ * @par Control flow
+ * - Exit: ESC input ("\x1b", typically bound to '<' via
+ *   setup_custom_keybindingsForSearches) or a null return from readline
  *   (Ctrl+D) — both return directly.
- * - **Continue:** Empty/whitespace-only input, special commands handled by
- *   @c dispatchSpecialCommandForBinImgMdfNrgSearch, and scans that find no new
+ * - Continue: empty or whitespace-only input, special commands handled by
+ *   dispatchSpecialCommandForBinImgMdfNrgSearch, and scans that find no new
  *   files.
- * - **File-type dispatch:** @p fileTypeChoice is mapped via a static
- *   @c unordered_map to derive the file extension, display name, and per-format
- *   flags (@c modeMdf, @c modeNrg, @c modeChd, @c modeDaa) used downstream.
- * - **Path parsing:** Input is split on @c ';'. Empty and duplicate tokens are
- *   skipped; each remaining token is validated with @c isValidDirectory. Valid
- *   tokens go into @c directoryPaths for scanning; invalid ones (stored
- *   uncolored) into @c invalidDirectoryPaths for reporting only.
- * - **Progress counter:** each iteration owns a @c std::atomic<size_t>
- *   @c totalFiles that is passed to @c findFiles (shared by all scan tasks) and
- *   then to @c verboseImageSearchResults, so the final count can be reprinted
- *   after the results screen clears the terminal.
- * - **History:** Only valid, deduplicated paths are saved to history, rejoined
- *   with @c ';' in their original order (e.g. the input
- *   @c "/home/;/var/;asd" is stored as @c "/home/;/var/"). Invalid paths
- *   omitted from the search are never persisted. If no valid directory was
- *   found, nothing is added to history.
- * - **RAII keybinding management:** A @c SearchReadlineGuard is constructed at
- *   the top of each loop iteration (after @c initIterationState). It saves the
- *   current @c rl_attempted_completion_function on construction; its destructor
- *   restores it, rebinds @c \\t to @c prevent_readline_keybindings, rebinds
- *   @c \\f to @c rl_insert, clears readline history, resets readline pagination,
- *   and calls @c reset_custom_keybindingsForSearches(). The guard is destroyed
- *   at the end of each iteration (or on any exit path such as ESC/Ctrl+D or
- *   exception), so cleanup runs once per loop cycle.
- * - **Iteration state:** @c initIterationState is called at the top of each
+ * - File-type dispatch: @p fileTypeChoice is mapped via a static
+ *   unordered_map to derive the file extension, display name, and per-format
+ *   flags (modeMdf, modeNrg, modeChd, modeDaa) used downstream.
+ * - Path parsing: input is split on ';'. Empty and duplicate tokens are
+ *   skipped; each remaining token is validated with isValidDirectory. Valid
+ *   tokens go into directoryPaths for scanning; invalid ones (stored
+ *   uncolored) into invalidDirectoryPaths for reporting only.
+ * - Progress counter: each iteration owns a std::atomic<size_t> totalFiles
+ *   that is passed to findFiles (shared by all scan tasks) and then to
+ *   verboseImageSearchResults, so the final count can be reprinted after the
+ *   results screen clears the terminal.
+ * - History: only valid, deduplicated paths are saved to history, rejoined
+ *   with ';' in their original order (e.g. the input "/home/;/var/;asd" is
+ *   stored as "/home/;/var/"). Invalid paths omitted from the search are
+ *   never persisted. If no valid directory was found, nothing is added to
+ *   history.
+ * - RAII keybinding management: a SearchReadlineGuard is constructed at the
+ *   top of each loop iteration (after initIterationState). Its destructor
+ *   restores the saved rl_attempted_completion_function, rebinds '\t' to
+ *   prevent_readline_keybindings, rebinds '\f' to rl_insert, clears readline
+ *   history, resets readline pagination, and calls
+ *   reset_custom_keybindingsForSearches(). The guard is destroyed at the end
+ *   of each iteration (or on any exit path such as ESC/Ctrl+D or exception),
+ *   so cleanup runs once per loop cycle.
+ * - Iteration state: initIterationState is called at the top of each
  *   iteration to re-establish keybindings, signal handlers, pagination,
  *   completion function, and cancellation state before prompting.
- * - **Resize repaint:** The prompt carries its own header line, so
- *   @c readline() is wrapped by @c readlineWithResize() with a callback that
- *   clears the screen and re-prints the header (via
- *   @c promptHeaderForRepaint). The watcher adds the newline and Readline
- *   redraws the last prompt line and the typed input.
+ * - Resize repaint: the prompt carries its own header line, so readline() is
+ *   wrapped by readlineWithResize() with a callback that clears the screen
+ *   and re-prints the header (via promptHeaderForRepaint). The watcher adds
+ *   the newline and Readline redraws the last prompt line and the typed
+ *   input.
  *
- * @param fileTypeChoice The format category: "bin", "img", "mdf", "nrg", "chd",
- *                       or "daa". "bin" and "img" are treated identically.
- * @param state          Shared @c RefreshState forwarded to
- *                       @c selectForImageFiles for display coordination.
+ * @param fileTypeChoice The format category: "bin", "img", "mdf", "nrg",
+ *                       "chd", or "daa". "bin" and "img" are treated
+ *                       identically.
+ * @param state          Shared RefreshState forwarded to selectForImageFiles
+ *                       for display coordination.
  */
 void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shared_ptr<RefreshState> state) {
     PendingReadlineTextClearGuard pendingTextGuard;
@@ -1108,9 +1058,6 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
               .append("\001").append(dt.blue).append("\002, ? for help:\n\001")
               .append(dt.reset).append("\002");
 
-        // Resize repaint: clear and re-print the prompt's header line (no
-        // trailing newline; the watcher supplies it, and Readline redraws the
-        // last prompt line and the typed input).
         const auto repaintPrompt = [&] {
             SyncOutput sync;
             clearScrollBuffer();
@@ -1149,7 +1096,6 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
                     if (!cleanedInput.empty()) cleanedInput += ';';
                     cleanedInput += path;
                 } else {
-                    // Stored plain; the reporting code applies the color.
                     invalidDirectoryPaths.insert(path);
                 }
             }
@@ -1160,7 +1106,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 
         files = findFiles(directoryPaths, fileNames, currentCacheOld, fileType,
                           [&](const std::string&, const std::string&) { newFilesFound = true; },
-                          directoryPaths, invalidDirectoryPaths, processedErrorsFind, totalFiles);
+                          processedErrorsFind, totalFiles);
 
         try {
             if (!directoryPaths.empty()) {

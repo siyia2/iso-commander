@@ -52,8 +52,8 @@ namespace {
      * Never called directly; use pressEnterTo() / pressEnterToWithRepaint()
      * and their wrappers.
      *
-     * The terminal is switched to raw mode (no canonical buffering, no echo) so
-     * Enter, Esc and Ctrl+D are detected immediately and keystrokes never
+     * The terminal is switched to raw mode (no canonical buffering, no echo)
+     * so Enter, Esc and Ctrl+D are detected immediately and keystrokes never
      * advance the cursor.
      *
      * Resize handling is a full redraw, not an in-place patch. There is no
@@ -61,13 +61,13 @@ namespace {
      * reflowing terminals: VTE-based ones (xfce4-terminal, gnome-terminal,
      * tilix, …) reflow content but leave both the live cursor and any
      * DECSC-saved cell at their old absolute coordinates, so neither is a
-     * usable anchor for the prompt's row. Patching in place therefore produces
-     * drift on some terminals and striped partial repaints on VTE. On resize
-     * the screen is cleared ("\033[H\033[2J"); if @p repaint is non-null, it is
-     * invoked to redraw the caller's content; then the blank separator and the
-     * prompt are reprinted. Without a callback the pre-prompt content is lost
-     * on resize, but the prompt is still redrawn cleanly — never striped,
-     * never duplicated, never drifting.
+     * usable anchor for the prompt's row. Patching in place therefore
+     * produces drift on some terminals and striped partial repaints on VTE.
+     * On resize the screen is cleared ("\033[H\033[2J"); if @p repaint is
+     * non-null, it is invoked to redraw the caller's content; then the blank
+     * separator and the prompt are reprinted. Without a callback the
+     * pre-prompt content is lost on resize, but the prompt is still redrawn
+     * cleanly — never striped, never duplicated, never drifting.
      *
      * Back-to-back SIGWINCH notifications are collapsed into a single repaint
      * (non-blocking poll + flag clear) so two repaints cannot interleave.
@@ -113,27 +113,23 @@ namespace {
             if (g_winch) {
                 g_winch = 0;
 
-                // Collapse back-to-back resize notifications into one repaint.
                 {
                     struct pollfd drain{ STDIN_FILENO, POLLIN, 0 };
                     poll(&drain, 1, 0);
                 }
                 g_winch = 0;
 
-                // Full redraw: the only scheme correct on terminals that do
-                // not reflow the live cursor (VTE, xterm without "reflow",
-                // alt-screen setups).
                 std::cout << "\033[H\033[2J";
                 drawLayout();
             }
 
             struct pollfd pfd{ STDIN_FILENO, POLLIN, 0 };
-            int r = poll(&pfd, 1, 100);   // short timeout so we re-check flag
+            int r = poll(&pfd, 1, 100);
             if (r < 0) {
                 if (errno == EINTR) continue;
                 break;
             }
-            if (r == 0) continue;         // timeout: loop to re-check g_winch
+            if (r == 0) continue;
 
             char ch;
             ssize_t n = read(STDIN_FILENO, &ch, 1);
@@ -150,8 +146,6 @@ namespace {
         sigaction(SIGWINCH, &old_sa, nullptr);
     }
 } // namespace
-
-/* -------------------------- existing API (unchanged) ---------------------- */
 
 /**
  * @brief Waits for Enter, Esc or Ctrl+D after showing "\n<prompt>".
@@ -187,8 +181,6 @@ void pressEnterToReturn()   { pressEnterTo("\u21B5 to return..."); }
  * Shows "\u21B5 to continue...".
  */
 void pressEnterToContinue() { pressEnterTo("\u21B5 to continue..."); }
-
-/* -------------------------- new API (repaint-aware) ----------------------- */
 
 /**
  * @brief Like pressEnterTo(), but @p repaint is called to redraw the
@@ -233,8 +225,6 @@ void pressEnterToContinueWithRepaint(const std::function<void()>& repaint) {
     pressEnterToWithRepaint("\u21B5 to continue...", repaint);
 }
 
-/* -------------------------- no-resize continue (WriteScreen owner) -------- */
-
 /**
  * @brief Like pressEnterToContinue(), but installs no SIGWINCH handler and
  *        performs no repaint of its own.
@@ -277,26 +267,25 @@ void pressEnterToContinueNoResize() {
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved);
 }
 
-/* -------------------------- verbose output -------------------------------- */
-
 /**
  * @brief Prints categorized operation results, sorted case-insensitively.
  *
  * Manages terminal state and prints sorted batches of success, warning and
  * error messages.
  *
- * - **Signal safety:** ignores @c SIGINT and disables @c Ctrl+D so results are
+ * - **Signal safety:** ignores SIGINT and disables Ctrl+D so results are
  *   read before returning to the main menu.
- * - **No copies:** sorts and prints @c std::string_view views of the input sets.
- * - **Case-insensitive:** @c std::lexicographical_compare with @c std::tolower.
- * - **Stream routing:** error-type items go to @c std::cerr with colors from
- *   @c VerboseAndDatabaseTheme.
+ * - **No copies:** sorts and prints std::string_view views of the input sets.
+ * - **Case-insensitive:** std::lexicographical_compare with std::tolower.
+ * - **Stream routing:** error-type items go to std::cerr with colors from
+ *   VerboseAndDatabaseTheme.
  * - **Resize:** the whole print body is a render lambda handed to
  *   pressEnterToContinueWithRepaint(), so a resize during the wait repaints
  *   the results instead of clearing the screen and leaving only the prompt.
  *
  * @param primarySet   Main data set (e.g. successful unmounts or conversions).
- * @param secondarySet Supporting data (e.g. already unmounted or skipped items).
+ * @param secondarySet Supporting data (e.g. already unmounted or skipped
+ *                     items).
  * @param tertiarySet  Additional context (e.g. specific warning categories).
  * @param errorSet     Explicit failure strings.
  * @param printType    Layout mode: 0 (Umount), 1 (Basic Ops), 2 (Mount),
@@ -311,9 +300,6 @@ void verbosePrint(std::unordered_set<std::string>& primarySet,
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    // Rendering is pure (no mutation of the input sets), so the whole body is
-    // a render lambda. The sorted-view construction and stream writes are
-    // cheap enough to repeat per repaint.
     auto render = [&] {
         const VerboseAndDatabaseTheme vt = getVerboseTheme();
         SyncOutput sync;
@@ -393,21 +379,21 @@ void displayErrors() {
 /**
  * @brief Reports the results of an ISO file-selection operation.
  *
- * Examines @c verboseSets: prints a "no valid input" notice, or delegates to
- * @c verbosePrint when @p verbose is set.
+ * Examines verboseSets: prints a "no valid input" notice, or delegates to
+ * verbosePrint when @p verbose is set.
  *
- * - **"No valid input" check:** if @c uniqueErrorTokenMessages is non-empty and
- *   @c operationFailed, @c operationSkipped and @c operationCompleted are all
- *   empty, clears the scroll buffer, prints the notice, and waits for Enter.
+ * - **"No valid input" check:** if uniqueErrorTokenMessages is non-empty and
+ *   operationFailed, operationSkipped and operationCompleted are all empty,
+ *   clears the scroll buffer, prints the notice, and waits for Enter.
  * - **Verbose output:** if @p verbose is true, clears the scroll buffer and
- *   calls @c verbosePrint. Mount operations pass @c operationSkipped and use
- *   layout mode @c 2; all others pass an empty set and use mode @c 1.
- * - **History clear:** after a destructive operation (@c mv, @c rm, @c umount),
- *   if @p isFiltered and @p umountMvRmBreak are both true, Readline history is
+ *   calls verbosePrint. Mount operations pass operationSkipped and use layout
+ *   mode 2; all others pass an empty set and use mode 1.
+ * - **History clear:** after a destructive operation (mv, rm, umount), if
+ *   @p isFiltered and @p umountMvRmBreak are both true, Readline history is
  *   cleared so stale indices cannot be re-run.
  *
  * @param operation      Action string ("mount", "mv", "rm", "umount", ...);
- *                       drives the @c verbosePrint layout mode and the
+ *                       drives the verbosePrint layout mode and the
  *                       history-clear gate.
  * @param verbose        If true, triggers the detailed results screen.
  * @param isFiltered     Whether a search filter is active; gates the
@@ -428,8 +414,6 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
         verboseSets.operationSkipped.empty() &&
         verboseSets.operationCompleted.empty()) {
 
-        // Message + wait. The message is fixed at this point; the repaint
-        // lambda only reprints it. No side effects run inside it.
         auto render = [&] {
             SyncOutput sync;
             clearScrollBuffer();
@@ -460,7 +444,8 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
 }
 
 /**
- * @brief Counts entries in @p allIsoFiles that are not in @p globalIsoFileList.
+ * @brief Counts entries in @p allIsoFiles that are not in
+ * @p globalIsoFileList.
  *
  * @return Number of new entries.
  */
@@ -489,42 +474,42 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
  * Last stage of the database update pipeline. Computes elapsed time, logs
  * errors, persists the new list, and refreshes the UI cache.
  *
- * - **Signal guarding:** @c SIGINT is ignored and @c Ctrl+D disabled at entry;
+ * - **Signal guarding:** SIGINT is ignored and Ctrl+D disabled at entry;
  *   neither is restored before return.
  * - **Cache sync:** if @p newISOFound is true on entry, calls
- *   @c loadFromDatabase to reconcile @c globalIsoFileList with disk before any
+ *   loadFromDatabase to reconcile globalIsoFileList with disk before any
  *   output is produced.
- * - **Persistence:** calls @c saveToDatabase (passing @c &newISOFound, which
- *   may be mutated) unless @c GlobalState::g_operationCancelled is set.
- * - **User feedback:** prints elapsed time, then a color-coded outcome from one
- *   of five branches: Cancelled; save failed with files and delta; no valid
- *   paths; files present but no delta (save not attempted or failed); no ISOs
- *   found; or successful import with the delta count from
- *   @c countDifferentEntries.
+ * - **Persistence:** calls saveToDatabase (passing &newISOFound, which may be
+ *   mutated) unless GlobalState::g_operationCancelled is set.
+ * - **User feedback:** prints elapsed time, then a color-coded outcome from
+ *   one of five branches: Cancelled; save failed with files and delta; no
+ *   valid paths; files present but no delta (save not attempted or failed);
+ *   no ISOs found; or successful import with the delta count from
+ *   countDifferentEntries.
  * - **Total files processed:** the results screen clears the terminal, which
- *   wipes the live progress counter, so the final count is reprinted at the top
- *   whenever at least one valid path was scanned. When @p validPaths is empty
- *   nothing was scanned: the invalid-path block emits its own
+ *   wipes the live progress counter, so the final count is reprinted at the
+ *   top whenever at least one valid path was scanned. When @p validPaths is
+ *   empty nothing was scanned: the invalid-path block emits its own
  *   "Total files processed: 0" line instead.
  * - **Invalid path / error reporting:** printed before the save step. When
- *   @p totalFiles is zero and @p validPaths is empty, also emits a "Total files
- *   processed: 0" line before the invalid-path list. Invalid paths are stored
- *   uncolored; the red color is applied here.
+ *   @p totalFiles is zero and @p validPaths is empty, also emits a "Total
+ *   files processed: 0" line before the invalid-path list. Invalid paths are
+ *   stored uncolored; the red color is applied here.
  * - **Resize:** the one-shot side effects (load, save, elapsed time, delta
  *   count) run before the wait; only the printing is replayed by the render
  *   lambda handed to pressEnterToContinueWithRepaint().
  *
  * @param allIsoFiles         Discovered ISO paths to be saved.
- * @param totalFiles          Atomic count of files scanned; reprinted after the
- *                            screen clear, and gates the zero-case line.
+ * @param totalFiles          Atomic count of files scanned; reprinted after
+ *                            the screen clear, and gates the zero-case line.
  * @param validPaths          Base directories successfully traversed; empty
  *                            triggers the "Lack of valid paths" branch.
  * @param invalidPaths        Directories skipped due to permissions or
  *                            existence errors.
  * @param uniqueErrorMessages Deduplicated system-level I/O errors.
  * @param newISOFound         On entry, whether the scan produced delta changes
- *                            (gates the @c loadFromDatabase call). Passed by
- *                            pointer to @c saveToDatabase, which may modify it.
+ *                            (gates the loadFromDatabase call). Passed by
+ *                            pointer to saveToDatabase, which may modify it.
  * @param start_time          Timestamp of the refresh origin, used to compute
  *                            elapsed time.
  */
@@ -539,20 +524,15 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
 
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
-    // One-shot side effects: save and the branch decision run exactly once,
-    // before the wait. Only the printing is replayed by the render lambda.
     const bool saveSuccess = GlobalState::g_operationCancelled ? false : saveToDatabase(allIsoFiles, &newISOFound);
     const auto end_time = std::chrono::high_resolution_clock::now();
     const double total_elapsed = std::chrono::duration<double>(end_time - start_time).count();
 
-    // countDifferentEntries is one-shot, so the value is computed once here
-    // and captured by value. It's only needed in the final branch.
     const int deltaCount =
         (!allIsoFiles.empty() && saveSuccess && newISOFound)
             ? countDifferentEntries(allIsoFiles, GlobalState::globalIsoFileList)
             : 0;
 
-    // Final count, sampled once so every repaint shows the same number.
     const size_t totalProcessed = totalFiles.load();
 
     auto render = [&] {
@@ -560,9 +540,6 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
         clearScrollBuffer();
         std::cout << "\n";
 
-        // The live counter was wiped by clearScrollBuffer(); reprint it. With
-        // no valid paths nothing was scanned and printInvalidPaths below prints
-        // its own "Total files processed: 0", so skip it here.
         if (!validPaths.empty()) {
             std::cout << "\r" << color << "Total files processed: " << totalProcessed << "\n";
         }
@@ -615,25 +592,25 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
 /**
  * @brief Logs deduplicated filesystem errors and invalid search paths.
  *
- * Formats and displays issues found during a crawl (invalid paths, I/O errors),
- * then clears both input sets for the next search cycle.
+ * Formats and displays issues found during a crawl (invalid paths, I/O
+ * errors), then clears both input sets for the next search cycle.
  *
- * - **Signal suppression:** @c SIGINT is ignored and @c Ctrl+D disabled at
- *   entry; neither is restored before return.
- * - **"Total files processed: 0":** printed to @c std::cout only when
+ * - **Signal suppression:** SIGINT is ignored and Ctrl+D disabled at entry;
+ *   neither is restored before return.
+ * - **"Total files processed: 0":** printed to std::cout only when
  *   @p directoryPaths is empty and @p invalidDirectoryPaths is non-empty.
  * - **Invalid path output:** the header "Invalid paths omitted from search: "
- *   goes to @c std::cout; the path values and trailing "." go to @c std::cerr.
+ *   goes to std::cout; the path values and trailing "." go to std::cerr.
  *   Paths are stored uncolored; the red set by the header applies to them.
  * - **Error message output:** entries in @p processedErrorsFind go to
- *   @c std::cout, separated by newlines (no trailing newline after the last
+ *   std::cout, separated by newlines (no trailing newline after the last
  *   entry).
  * - **Cleanup:** both @p processedErrorsFind and @p invalidDirectoryPaths are
  *   cleared unconditionally before return.
  *
  * @param invalidDirectoryPaths Inaccessible or invalid paths; cleared on exit.
  * @param directoryPaths        Source directories from the crawl; only
- *                              @c .empty() is checked, to gate the
+ *                              .empty() is checked, to gate the
  *                              "Total files processed: 0" line.
  * @param processedErrorsFind   Deduplicated formatted error strings; cleared on
  *                              exit.
@@ -677,47 +654,47 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
  * @brief Renders a color-coded summary of image discovery results and cache
  * deltas.
  *
- * Captures @c end_time immediately on entry, then prints, in order:
+ * Captures end_time immediately on entry, then prints, in order:
  * -# the "Total files processed" line (only when at least one valid directory
- *    was scanned; with no valid directories @c verboseFind prints its own
+ *    was scanned; with no valid directories verboseFind prints its own
  *    "Total files processed: 0" line),
- * -# the captured @c verboseFind output (invalid paths omitted from search,
+ * -# the captured verboseFind output (invalid paths omitted from search,
  *    traversal errors, and the "search interrupted by user" message),
  * -# one of three result branches, each gated on
- *    @c !GlobalState::g_operationCancelled.load():
- *    - **Files found** (@c !fileNames.empty()): found vs @p currentCacheOld.
- *    - **No new files, cache non-empty** (@c !newFilesFound && !files.empty() &&
- *      !list): 0 found vs @c files.size() with an @c "ls ↵" hint.
- *    - **Cache empty** (@c files.empty() && !list): 0 found and 0 cached.
+ *    !GlobalState::g_operationCancelled.load():
+ *    - **Files found** (!fileNames.empty()): found vs @p currentCacheOld.
+ *    - **No new files, cache non-empty** (!newFilesFound && !files.empty() &&
+ *      !list): 0 found vs files.size() with an "ls ↵" hint.
+ *    - **Cache empty** (files.empty() && !list): 0 found and 0 cached.
  * -# the elapsed time.
  *
  * Steps 1, 2 and 4 are unconditional, so a cancelled search still shows the
  * counter, the interruption message and the elapsed time.
  *
- * **Resize:** @c verboseFind mutates its set arguments (clears them), so it
- * runs exactly once, before the wait, with its @c std::cout/@c std::cerr
- * writes redirected into an @c ostringstream. The captured text, the file
- * count and the elapsed time are replayed by the render lambda on resize.
+ * **Resize:** verboseFind mutates its set arguments (clears them), so it runs
+ * exactly once, before the wait, with its std::cout/std::cerr writes
+ * redirected into an ostringstream. The captured text, the file count and the
+ * elapsed time are replayed by the render lambda on resize.
  *
  * @param fileExtension         Target format label (e.g. ".bin/.img").
  * @param fileNames             Files discovered this run; not modified.
- * @param invalidDirectoryPaths Passed to @c verboseFind (cleared there).
+ * @param invalidDirectoryPaths Passed to verboseFind (cleared there).
  * @param newFilesFound         Gates the "no new files" branch; distinct from
  *                              @p fileNames being non-empty.
  * @param list                  Suppresses the second and third branches when
  *                              true; does not suppress the first.
  * @param currentCacheOld       Cache count before this search; shown with
  *                              @p fileNames.size() in the first branch.
- * @param files                 Current working cache; used for branch selection
- *                              and display.
+ * @param files                 Current working cache; used for branch
+ *                              selection and display.
  * @param start_time            Search start; elapsed is computed against
- *                              @c end_time captured at entry.
- * @param processedErrorsFind   Passed to @c verboseFind (cleared there).
- * @param directoryPaths        Passed to @c verboseFind for the
+ *                              end_time captured at entry.
+ * @param processedErrorsFind   Passed to verboseFind (cleared there).
+ * @param directoryPaths        Passed to verboseFind for the
  *                              "Total files processed: 0" gate check; also
  *                              decides whether the real count is printed here.
  * @param totalFiles            Aggregate number of regular files processed by
- *                              the scan, filled in by @c findFiles.
+ *                              the scan, filled in by findFiles.
  */
 void verboseImageSearchResults(const std::string& fileExtension,
                           std::unordered_set<std::string>& fileNames,
@@ -735,20 +712,10 @@ void verboseImageSearchResults(const std::string& fileExtension,
 
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
-    // verboseFind mutates invalidDirectoryPaths and processedErrorsFind and
-    // has no return value. To replay its output on resize without re-running
-    // it (which would have cleared the sets), run it once into a stringstream
-    // here and print that string in the render lambda.
-    //
-    // hadDirectories is sampled independently of verboseFind: when there were
-    // no valid directories, verboseFind itself prints
-    // "Total files processed: 0", so we must not print a second counter.
     const bool hadDirectories = !directoryPaths.empty();
 
     std::ostringstream verboseFindBuf;
     {
-        // Swap the streams into std::cout/std::cerr for the duration of
-        // verboseFind, then restore. verboseFind's writes go to the buffer.
         std::streambuf* oldOut = std::cout.rdbuf(verboseFindBuf.rdbuf());
         std::streambuf* oldErr = std::cerr.rdbuf(verboseFindBuf.rdbuf());
         verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
@@ -757,15 +724,10 @@ void verboseImageSearchResults(const std::string& fileExtension,
     }
     std::string verboseFindOutput = verboseFindBuf.str();
 
-    // verboseFind opens with "\n", then "\n\n" before its first section. After
-    // the counter line that gives TWO blank lines; drop one so there is a single
-    // blank line between the counter and the invalid paths / errors.
     if (hadDirectories && verboseFindOutput.rfind("\n\n\n", 0) == 0) {
         verboseFindOutput.erase(0, 1);
     }
 
-    // Beyond its opening "\n", did verboseFind print anything (invalid paths,
-    // errors, interruption message)? Decides the gap before the 0-found blocks.
     const bool hasFindContent = verboseFindOutput.size() > 1;
 
     const size_t totalProcessed = totalFiles.load();
@@ -778,17 +740,12 @@ void verboseImageSearchResults(const std::string& fileExtension,
         SyncOutput sync;
         clearScrollBuffer();
 
-        // 1. Total files processed (real count; the zero-directory case is
-        //    already part of verboseFindOutput).
         if (hadDirectories) {
             std::cout << "\n" << "\r" << color << "Total files processed: " << totalProcessed << vt.reset;
         }
 
-        // 2. Invalid paths omitted from search, traversal errors, and the
-        //    "search interrupted by user" message.
         std::cout << verboseFindOutput;
 
-        // 3a. Files were found.
         if (!fileNames.empty() && !GlobalState::g_operationCancelled.load()) {
             std::cout << (hasFindContent ? "\n\n" : "\n")
                       << vt.green << fileNames.size() << " "
@@ -799,7 +756,6 @@ void verboseImageSearchResults(const std::string& fileExtension,
                       << vt.yellow << "cached entries" << vt.reset << vt.bold << "\n\n";
         }
 
-        // 3b. No new files, but the cache is non-empty.
         if (!newFilesFound && !files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
             std::cout << (hasFindContent ? "\n\n" : "\n")
                       << vt.red << "0 "
@@ -812,7 +768,6 @@ void verboseImageSearchResults(const std::string& fileExtension,
                       << vt.yellow << "↵ to list" << vt.reset << vt.bold << "\n\n";
         }
 
-        // 3c. No files were found and the cache is empty.
         if (files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
             std::cout << (hasFindContent ? "\n\n" : "\n")
                       << vt.red << "0" << vt.orange << " {" << fileExtension << "} "
@@ -822,7 +777,6 @@ void verboseImageSearchResults(const std::string& fileExtension,
                       << vt.reset << vt.bold << "\n";
         }
 
-        // 4. Elapsed time.
         std::cout << color << "Time Elapsed: " << std::fixed << std::setprecision(1)
                   << total_elapsed_time << "s" << vt.bold << "\n";
     };

@@ -37,18 +37,32 @@
 namespace fs = std::filesystem;
 
 /**
- * @file operations.cpp
- * @brief High-level processing functions for mounting, file management (Cp/Mv/Rm), and format conversions.
+ * @brief High-level processing functions for mounting, file management
+ *        (Cp/Mv/Rm), and format conversions.
  */
 
 /**
- * @brief Orchestrates the mounting or unmounting of ISO files using a static thread pool and progress tracking.
+ * @brief Orchestrates the mounting or unmounting of ISO files using a static
+ *        thread pool and progress tracking.
  *
- * @param input Raw user input string (comma/space separated indices or "00" for all).
- * @param files The master list of available ISO file paths.
- * @param umountMvRmBreak [out] Boolean flag updated to control the caller's execution loop (e.g., on empty input or failed unmount).
- * @param verbose Toggle for detailed per-file progress output.
- * @param isUnmount Set to true for unmounting, false for mounting.
+ * Splits the selected indices into at most
+ * min(selection, per-operation cap, pool size) chunks (with a floor of 2
+ * threads, and a per-chunk cap of 100 indices), enqueues one worker per chunk
+ * on the shared static pool, and drives a live progress bar on a dedicated
+ * thread. Blocks until every worker finishes and the progress thread has been
+ * joined. On unmount, sets @p umountMvRmBreak to false if no task completed,
+ * so the caller's loop can react. Removes /mnt/ISOs after processing if it
+ * has become empty.
+ *
+ * @param input           Raw user input string (comma/space separated indices
+ *                        or "00" for all).
+ * @param files           The master list of available ISO file paths.
+ * @param umountMvRmBreak [out] Updated on empty input or failed unmount to
+ *                        control the caller's execution loop.
+ * @param verbose         Toggle for detailed per-file progress output; also
+ *                        receives the user's answer to the "Display verbose
+ *                        output?" prompt.
+ * @param isUnmount       Set to true for unmounting, false for mounting.
  */
 void processInputForMountOrUmount(const std::string& input, const std::vector<std::string>& files, bool& umountMvRmBreak, bool& verbose, bool isUnmount) {
     setupSignalHandlerCancellations();
@@ -137,7 +151,6 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
     signal(SIGINT, SIG_IGN);
     progressThread.join();
 
-    // Clean up the parent /mnt/ISOs directory if it's now empty after all processing is done.
     {
         std::error_code ec;
         fs::remove("/mnt/ISOs", ec);
@@ -145,11 +158,20 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
 }
 
 /**
- * @brief Groups file indices into chunks for parallel processing, preventing race conditions by grouping identical filenames.
- * * @param processedIndices Set of indices selected by the user.
- * @param isoFiles Master list of file paths.
- * @param numThreads Desired concurrency level.
- * @param isDelete Flag indicating if the operation is a deletion (avoids name-collision logic).
+ * @brief Groups file indices into chunks for parallel processing, preventing
+ *        race conditions by grouping identical filenames.
+ *
+ * When @p isDelete is false, indices whose files share a base filename are
+ * kept in the same chunk so concurrent workers cannot race on the same
+ * destination name (e.g. two copies into the same directory that would
+ * collide). Remaining unique-name indices are then spread evenly across the
+ * leftover threads. When @p isDelete is true, no such collision is possible,
+ * so indices are simply round-robined across @p numThreads chunks.
+ *
+ * @param processedIndices Set of indices selected by the user.
+ * @param isoFiles         Master list of file paths.
+ * @param numThreads       Desired concurrency level.
+ * @param isDelete         True for deletion (skips name-collision grouping).
  * @return A vector of chunks, where each chunk is a vector of indices.
  */
 std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered_set<int>& processedIndices, const std::vector<std::string>& isoFiles, unsigned int numThreads, bool isDelete)
@@ -199,36 +221,38 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
 }
 
 /**
- * @brief Handles bulk copy, move, or remove operations with threading and progress visualization.
+ * @brief Handles bulk copy, move, or remove operations with threading and
+ *        progress visualization.
  *
- * This function orchestrates the lifecycle of filesystem operations (cp, mv, rm) on selected
- * image files. It handles everything from user confirmation and destination selection to
+ * Orchestrates the lifecycle of filesystem operations (cp, mv, rm) on selected
+ * image files, from user confirmation and destination selection through
  * multi-threaded execution and database synchronization.
  *
- * @section Workflow Lifecycle
- * 1. **Input Parsing**: Tokenizes the user string to map selections to the master ISO list.
- * 2. **Pre-Processing & Validation**:
- * - Determines thread caps based on operation type (e.g., `RM_THREAD_CAP` vs `CPMV_THREAD_CAP`).
- * - Invokes `userDestDirCpMv` to handle UI interactions, such as selecting destination
- * folders or confirming permanent deletion.
- * 3. **Progress Estimation**: Calculates total byte size and task count. For copies/moves to
- * multiple destinations, these metrics are scaled accordingly to ensure the progress bar
- * reflects the true workload.
- * 4. **Execution**:
- * - Spawns a dedicated thread for the live progress bar.
- * - Distributes file chunks into a static thread pool for parallel execution via `handleIsoFileOperation`.
- * 5. **Post-Processing & Cleanup**:
- * - Disables signal handlers and joins the progress thread.
- * - **Database Sync**: If files were moved or copied, a **synchronous** update is triggered
- * for the affected directories. This ensures the database is fully indexed before
- * returning control to the user.
+ * @par Workflow
+ * 1. **Input parsing:** tokenizes the user string to map selections onto the
+ *    master ISO list.
+ * 2. **Pre-processing & validation:** determines the thread cap based on
+ *    operation type (RM_THREAD_CAP vs CPMV_THREAD_CAP) and calls
+ *    userDestDirCpMv() for destination selection or delete confirmation.
+ * 3. **Progress estimation:** computes total byte size and task count. For
+ *    copies/moves to multiple destinations both are scaled by the destination
+ *    count so the progress bar reflects the true workload.
+ * 4. **Execution:** spawns a dedicated thread for the live progress bar and
+ *    distributes file chunks into the static thread pool for parallel
+ *    execution via handleIsoFileOperation().
+ * 5. **Post-processing & cleanup:** disables signal handlers, joins the
+ *    progress thread, and — if any file was moved or copied — triggers a
+ *    synchronous database update for the affected output paths before
+ *    returning.
  *
- * @param input Raw user input string (indices, ranges, or keywords).
- * @param isoFiles Master list of files used for index mapping.
- * @param process Operation type string: "cp", "mv", or "rm".
- * @param[out] umountMvRmBreak Flag set to false if no tasks were successfully processed.
+ * @param input         Raw user input string (indices, ranges, or keywords).
+ * @param isoFiles      Master list of files used for index mapping.
+ * @param process       Operation type string: "cp", "mv", or "rm".
+ * @param[out] umountMvRmBreak Set to false if no tasks were successfully
+ *                    processed.
  * @param filterHistory Indicates if the current file list is a filtered view.
- * @param verbose Toggle for detailed per-file progress output.
+ * @param verbose       Toggle for detailed per-file progress output; also
+ *                      receives the user's answer to the verbose prompt.
  */
 void processInputForCpMvRm(const std::string& input,
 						   const std::vector<std::string>& isoFiles,
@@ -365,39 +389,40 @@ void processInputForCpMvRm(const std::string& input,
 }
 
 /**
- * @brief Handles bulk image-to-ISO conversions with threading and progress visualization.
+ * @brief Handles bulk image-to-ISO conversions with threading and progress
+ *        visualization.
  *
- * This function orchestrates the lifecycle of image conversions (mdf2iso, nrg2iso, chd2iso,
- * daa2iso, ccd2iso) on selected image files, with multi-threaded execution and database
- * synchronization.
+ * Orchestrates the lifecycle of image conversions (mdf2iso, nrg2iso, chd2iso,
+ * daa2iso, ccd2iso) on selected image files, with multi-threaded execution and
+ * database synchronization.
  *
- * @section Workflow Lifecycle
- * 1. **Input Parsing**: Tokenizes the user string to map selections to the master file list.
- * 2. **Pre-Processing & Validation**:
- *    - Determines the thread count as the smallest of the selected file count,
- *      `CONV_THREAD_CAP`, and the static pool size (with a floor of 2).
- * 3. **Progress Estimation**: Calculates the total byte size of the selected files via
- *    `calculateTotalBytesForConversions`, and the task count (one per file).
- * 4. **Execution**:
- *    - Spawns a dedicated thread for the live progress bar.
- *    - Enqueues at most `numThreads` workers into the static thread pool. Each worker
- *      pulls the next file index from a shared atomic counter and calls `convertToISO`
- *      until none remain. This caps concurrency at `CONV_THREAD_CAP` while keeping the
- *      load balanced, regardless of whether the file count divides evenly across threads
- *      or individual files vary widely in size.
- * 5. **Post-Processing & Cleanup**:
- *    - Disables signal handlers and joins the progress thread.
- *    - **Database Sync**: If any conversions succeeded, a **synchronous** update is
- *      triggered for the output paths so the database is fully indexed before
- *      returning control to the user.
+ * @par Workflow
+ * 1. **Input parsing:** tokenizes the user string to map selections onto the
+ *    master file list.
+ * 2. **Pre-processing & validation:** determines the thread count as the
+ *    smallest of the selected file count, CONV_THREAD_CAP, and the static
+ *    pool size (with a floor of 2).
+ * 3. **Progress estimation:** computes the total byte size of the selected
+ *    files via calculateTotalBytesForConversions() and the task count (one per
+ *    file).
+ * 4. **Execution:** spawns a dedicated thread for the live progress bar and
+ *    enqueues at most numThreads workers into the static thread pool. Each
+ *    worker pulls the next file index from a shared atomic counter and calls
+ *    convertToISO() until none remain. This caps concurrency at
+ *    CONV_THREAD_CAP while keeping load balanced, regardless of whether the
+ *    file count divides evenly or individual files vary widely in size.
+ * 5. **Post-processing & cleanup:** disables signal handlers, joins the
+ *    progress thread, and — if any conversion succeeded — triggers a
+ *    synchronous database update for the output paths before returning.
  *
- * @param input           Raw user input string (indices, ranges, or keywords).
- * @param fileList        Master list of image files used for index mapping.
- * @param modeMdf         True if converting MDF images.
- * @param modeNrg         True if converting NRG images.
- * @param modeChd         True if converting CHD images.
- * @param modeDaa         True if converting DAA/GBI images.
- * @param verbose         Toggle for detailed per-file progress output.
+ * @param input    Raw user input string (indices, ranges, or keywords).
+ * @param fileList Master list of image files used for index mapping.
+ * @param modeMdf  True if converting MDF images.
+ * @param modeNrg  True if converting NRG images.
+ * @param modeChd  True if converting CHD images.
+ * @param modeDaa  True if converting DAA/GBI images.
+ * @param verbose  Toggle for detailed per-file progress output; also receives
+ *                 the user's answer to the verbose prompt.
  */
 void processInputForConversions(const std::string& input,
                                  std::vector<std::string>& fileList,
@@ -422,8 +447,6 @@ void processInputForConversions(const std::string& input,
     } else return;
 
     if (processedIndices.empty()) {
-        // Message + wait. The message is fixed at this point; the repaint
-        // lambda only reprints it. No side effects run inside it.
         auto render = [&] {
             SyncOutput sync;
             clearScrollBuffer();
@@ -441,7 +464,6 @@ void processInputForConversions(const std::string& input,
     const size_t numThreads = std::max(size_t(2),
         std::min({processedIndices.size(), GlobalConcurrency::CONV_THREAD_CAP, poolSize}));
 
-    // Calculate total bytes across all selected files.
     size_t totalBytes = 0;
     {
         std::vector<std::string> filesToProcess;
@@ -484,11 +506,9 @@ void processInputForConversions(const std::string& input,
         &completedTasks, &failedTasks, totalTasks,
         &isProcessingComplete, &verbose, operation, header);
 
-    // Snapshot indices so workers can pull them via an atomic counter.
     const std::vector<int> indices(processedIndices.begin(), processedIndices.end());
     std::atomic<size_t> nextIndex(0);
 
-    // Enqueue at most numThreads workers; each pulls files until none remain.
     std::vector<std::future<void>> futures;
     futures.reserve(numThreads);
 
