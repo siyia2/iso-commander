@@ -44,18 +44,33 @@ namespace {
     void handle_winch(int) { g_winch = 1; }
 
     /**
-     * @brief Prints "\n<prompt>" and blocks until Enter, Esc or Ctrl+D.
+     * @brief Prints a blank line then "<prompt>" and blocks until Enter, Esc or
+     * Ctrl+D.
      *
      * The terminal is switched to raw mode (no canonical buffering, no echo) so
      * Enter, Esc and Ctrl+D are detected immediately and keystrokes never
      * advance the cursor.
      *
      * The cursor stays immediately after the last character of @p prompt, even
-     * across resizes: the cursor is saved (DECSC) before printing, and on
-     * SIGWINCH it is restored (DECRC), the screen erased to the end (ED 0),
-     * re-saved, and the prompt redrawn. Modern terminals reflow the saved cursor
-     * position along with the text, so the restored cell is the start of the
-     * prompt's visual block even after it wraps or unwraps.
+     * across resizes: the cursor is saved (DECSC) *on the prompt's own row*
+     * (after the leading blank line, not on it). On SIGWINCH the layout is
+     * rebuilt from a known anchor rather than patched in place: the cursor is
+     * restored (DECRC), moved up one row to the blank separator, erased from
+     * there to end-of-screen (which wipes both the separator and any prompt
+     * copy the terminal may have reflowed to an adjacent row), and the blank
+     * separator + prompt are reprinted with a fresh DECSC on the prompt's row.
+     *
+     * Rebuilding from the separator — rather than clearing only from the saved
+     * cell — makes the layout self-healing: a one-row DECRC error (a rare
+     * reflow artifact) moves the whole block down one row but re-establishes
+     * the "blank separator, prompt on saved row" invariant, so the next resize
+     * is stable instead of compounding the error. This is what prevents the
+     * rare duplicate prompt that accumulated over many resizes when the
+     * separator was erased in place.
+     *
+     * Back-to-back SIGWINCH notifications are collapsed into a single repaint
+     * (non-blocking poll + flag clear) so two repaints cannot interleave on the
+     * same screen.
      *
      * The original termios state and the previous SIGWINCH disposition are
      * restored before returning, and unread input (e.g. the tail of an arrow-key
@@ -85,22 +100,52 @@ namespace {
         sa.sa_flags = 0;                 // we want poll() to return EINTR
         sigaction(SIGWINCH, &sa, &old_sa);
 
-        auto draw = [&]() {
-            std::cout << "\n" << color << prompt << UI::Palette::BoldReset;
-            std::cout.flush();           // cursor ends right after prompt
+        // Prints the prompt text only (no leading '\n'); cursor ends right
+        // after the prompt.
+        auto drawPrompt = [&]() {
+            std::cout << color << prompt << UI::Palette::BoldReset;
+            std::cout.flush();
         };
 
-        std::cout << "\0337";             // DECSC: save cursor (before '\n')
-        draw();
+        // Leading blank separator, then save the cursor ON the prompt's row
+        // (not on the blank line). Saved cell and prompt text then share a row
+        // and reflow together, so DECRC lands on the prompt.
+        std::cout << "\n";
+        std::cout << "\0337";             // DECSC
+        drawPrompt();
 
         bool done = false;
         while (!done) {
             if (g_winch) {
                 g_winch = 0;
-                std::cout << "\0338"      // DECRC: back to saved position
-                          << "\033[0J"    // ED:   erase cursor..end-of-screen
-                          << "\0337";     // DECSC: save the same spot again
-                draw();                   // reprint; cursor at end of prompt
+
+                // Collapse back-to-back resize notifications into one repaint:
+                // a second SIGWINCH delivered while we were between the flag
+                // check and here would otherwise trigger a second repaint that
+                // can interleave with this one and leave a stale prompt.
+                {
+                    struct pollfd drain{ STDIN_FILENO, POLLIN, 0 };
+                    poll(&drain, 1, 0);
+                }
+                g_winch = 0;
+
+                // Rebuild the layout from the blank separator above the saved
+                // prompt row, so the result is identical to the first draw:
+                //   \0338       → DECRC to the saved prompt row
+                //   \033[1A     → up to the blank separator (or, on a rare
+                //                 one-row-low DECRC, onto the actual prompt)
+                //   \r\033[0J   → erase separator .. end-of-screen (wipes any
+                //                 prompt copy the terminal reflowed here)
+                //   \n          → reprint the blank separator
+                //   \0337       → DECSC on the fresh prompt row
+                //   drawPrompt()→ reprint the prompt
+                std::cout << "\0338"
+                          << "\033[1A"
+                          << "\r"
+                          << "\033[0J"
+                          << "\n"
+                          << "\0337";
+                drawPrompt();
             }
 
             struct pollfd pfd{ STDIN_FILENO, POLLIN, 0 };

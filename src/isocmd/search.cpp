@@ -192,7 +192,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 continue;
             }
 
-            if (!input.empty()) {
+            if (!input.empty() && (input != "*stats" || input != "?")) {
                 std::cout << "\n";
             }
 

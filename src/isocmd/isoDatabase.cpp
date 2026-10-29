@@ -40,7 +40,6 @@
 #include "../history.h"
 #include "../inputHandling.h"
 #include "../globalMutexes.h"
-#include "../listResizeWatcher.h"
 #include "../pausePrompt.h"
 #include "../sharedRefreshState.h"
 #include "../state.h"
@@ -612,91 +611,56 @@ void loadFromDatabase(std::vector<std::string>& outList) {
 void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
-
-    // Create any missing files once.  If this fails, render() will surface the
-    // error when it tries to read the same paths.
-    try {
-        for (const auto& path : {GlobalState::databaseFilePath,
-                                 GlobalState::historyFilePath,
-                                 GlobalState::filterHistoryFilePath}) {
-            if (!std::filesystem::exists(path)) {
-                std::ofstream createFile(path);
-            }
-        }
-    } catch (const std::filesystem::filesystem_error&) {
-        // Deferred to render().
-    }
-
-    // Everything that paints the screen lives here so it can be replayed by
-    // the resize hook.  Runs on the main thread (rl_event_hook).
-    auto render = [&] {
-        SyncOutput sync;
+    {
+            SyncOutput sync;
         clearScrollBuffer();
 
-        auto [label, accent, warning, error, reset, path, highlight, data, str] =
-            resolveDatabaseTheme();
-        (void)path;
-        (void)highlight;
+        auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveDatabaseTheme();
 
         try {
+            for (const auto& path : {GlobalState::databaseFilePath, GlobalState::historyFilePath, GlobalState::filterHistoryFilePath}) {
+                if (!std::filesystem::exists(path)) {
+                    std::ofstream createFile(path);
+                }
+            }
+
             std::cout << "\n" << accent << "=== ISO Database ===" << reset << "\n";
 
             std::uintmax_t fileSizeInBytes = std::filesystem::file_size(databaseFilePath);
-            double fileSizeInKB    = fileSizeInBytes / 1024.0;
-            double cachesizeInKb   = maxDatabaseSize  / 1024.0;
+            double fileSizeInKB = fileSizeInBytes / 1024.0;
+            double cachesizeInKb = maxDatabaseSize / 1024.0;
             double usagePercentage = (fileSizeInBytes * 100.0) / maxDatabaseSize;
 
             std::cout << "\n" << label << "Capacity: " << data << std::fixed << std::setprecision(0)
-                      << fileSizeInKB << "KB/" << cachesizeInKb << "KB ("
-                      << std::setprecision(1) << usagePercentage << "%)"
-                      << "\n" << label << "Entries: " << data
-                      << countNonEmptyLines(GlobalState::databaseFilePath)
-                      << "\n" << label << "Location: " << data << "'" << databaseFilePath << "'"
-                      << reset << "\n";
+                      << fileSizeInKB << "KB/" << cachesizeInKb << "KB (" << std::setprecision(1) << usagePercentage << "%)"
+                      << "\n" << label << "Entries: " << data << countNonEmptyLines(GlobalState::databaseFilePath)
+                      << "\n" << label << "Location: " << data << "'" << databaseFilePath << "'" << reset << "\n";
 
             std::cout << "\n" << accent << "=== History Database ===" << reset << "\n"
-                      << "\n" << label << "FolderPath Entries: " << data
-                      << countNonEmptyLines(GlobalState::historyFilePath) << "/"
-                      << GlobalState::MAX_HISTORY_LINES
-                      << "\n" << label << "Location: " << data << "'"
-                      << GlobalState::historyFilePath << "'"
-                      << "\n\n" << label << "FilterTerm Entries: " << data
-                      << countNonEmptyLines(GlobalState::filterHistoryFilePath) << "/"
-                      << GlobalState::MAX_HISTORY_PATTERN_LINES
-                      << "\n" << label << "Location: " << data << "'"
-                      << GlobalState::filterHistoryFilePath << "'" << std::endl;
+                      << "\n" << label << "FolderPath Entries: " << data << countNonEmptyLines(GlobalState::historyFilePath) << "/" << GlobalState::MAX_HISTORY_LINES
+                      << "\n" << label << "Location: " << data << "'" << GlobalState::historyFilePath << "'"
+                      << "\n\n" << label << "FilterTerm Entries: " << data << countNonEmptyLines(GlobalState::filterHistoryFilePath) << "/" << GlobalState::MAX_HISTORY_PATTERN_LINES
+                      << "\n" << label << "Location: " << data << "'" << GlobalState::filterHistoryFilePath << "'" << std::endl;
 
             std::cout << "\n" << accent << "=== Buffered Entries ===" << reset << "\n";
 
             std::cout << str << "\nSTR → RAM: " << data
-                      << (GlobalCaches::transformationCache.size()
-                        + GlobalCaches::cachedParsesForUmount.size()) << "\n";
+                      << (GlobalCaches::transformationCache.size() + GlobalCaches::cachedParsesForUmount.size()) << "\n";
 
-            std::cout << "\n" << label << "ISO → RAM: " << data
-                      << GlobalState::globalIsoFileList.size() << "\n";
+            std::cout << "\n" << label << "ISO → RAM: " << data << GlobalState::globalIsoFileList.size() << "\n";
 
-            std::cout << "\n" << warning << "BIN/IMG → RAM: " << data
-                      << GlobalState::binImgFilesCache.size() << "\n"
-                      << warning << "DAA/GBI → RAM: " << data
-                      << GlobalState::daaGbiFilesCache.size() << "\n"
-                      << warning << "CHD → RAM: " << data
-                      << GlobalState::chdFilesCache.size() << "\n"
-                      << warning << "MDF → RAM: " << data
-                      << GlobalState::mdfMdsFilesCache.size() << "\n"
-                      << warning << "NRG → RAM: " << data
-                      << GlobalState::nrgFilesCache.size() << "\n";
+            std::cout << "\n" << warning << "BIN/IMG → RAM: " << data << GlobalState::binImgFilesCache.size() << "\n"
+                      << warning << "DAA/GBI → RAM: " << data << GlobalState::daaGbiFilesCache.size() << "\n"
+                      << warning << "CHD → RAM: " << data << GlobalState::chdFilesCache.size() << "\n"
+                      << warning << "MDF → RAM: " << data << GlobalState::mdfMdsFilesCache.size() << "\n"
+                      << warning << "NRG → RAM: " << data << GlobalState::nrgFilesCache.size() << "\n";
+
         } catch (const std::filesystem::filesystem_error& e) {
             std::cerr << "\n" << error << "Error: Unable to access configuration file: "
                       << warning << "'" << GlobalState::configPath << "'"
                       << error << ".\n" << reset;
         }
-    };
-
-    render();
-
-    // Keep a resize watcher alive across the wait-for-Enter, then let its
-    // destructor uninstall the rl_event_hook.
-    ListResizeWatcher watcher(render);
+    }
     pressEnterToReturn();
 }
 
