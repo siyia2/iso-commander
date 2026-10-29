@@ -111,11 +111,25 @@ bool isValidDirectory(const std::string& path) {
  *   exit paths — continue, return, and exceptions. The guard is recreated
  *   each iteration so its saved state always reflects the state just after
  *   rearmSetup runs.
- * - Resize repaint: the prompt carries its own header line, so readline() is
- *   wrapped by readlineWithResize() with a callback that clears the screen
- *   and re-prints the header (via promptHeaderForRepaint). The watcher adds
- *   the newline and Readline redraws the last prompt line and the typed
- *   input.
+ * - Resize repaint (prompt): the prompt carries its own header line, so
+ *   readline() is wrapped by readlineWithResize() with a callback that clears
+ *   the screen and re-prints the header (via promptHeaderForRepaint). The
+ *   watcher adds the newline and Readline redraws the last prompt line and
+ *   the typed input.
+ * - Resize repaint (results screen): after the scan, the results block is
+ *   shown by saveAndReportResultsForDatabase, which owns its own resize
+ *   handling via pressEnterToContinueWithRepaint. This function supplies
+ *   repaintCallerPrompt — a callback that reprints the FolderPaths prompt
+ *   line — so that a resize while the user reads the results keeps the
+ *   question the user just answered visible above the block. The callback is
+ *   invoked inside saveAndReportResultsForDatabase's render, before the
+ *   block is printed. Both the early-save call site (all paths invalid) and
+ *   the post-scan call site pass it.
+ * - Resize repaint (exception screen): the catch block prints the error and
+ *   waits via pressEnterToContinueWithRepaint, which owns SIGWINCH. No
+ *   ListResizeWatcher is installed there; it would race the prompt's own
+ *   handler (and cannot fire during the raw read anyway), and a second
+ *   watcher would stack copies of the error block on each resize.
  *
  * @param promptFlag    Passed to traverse() to control scan behaviour.
  * @param maxDepth      Maximum directory recursion depth (-1 for unlimited).
@@ -165,6 +179,10 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 std::cout << promptHeaderForRepaint(prompt);
             };
 
+            const auto repaintCallerPrompt = [&] {
+                std::cout << promptHeaderForRepaint(prompt) << "\n";
+            };
+
             RlLine searchQuery = readlineWithResize(prompt, repaintPrompt);
             if (!searchQuery) return;
 
@@ -184,10 +202,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             if (input == "*stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter") {
                 databaseSwitches(input);
                 continue;
-            }
-
-            if (!input.empty()) {
-                std::cout << "\n";
             }
 
             if (input.find_first_not_of(" \t\n\r") == std::string::npos) {
@@ -254,7 +268,9 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 resetReadlinePagination();
                 if (!invalidPaths.empty()) {
                     GlobalState::g_operationCancelled.store(false);
-                    saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, newISOFound, start_time);
+                    saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths,
+                                                    uniqueErrorMessages, newISOFound, start_time,
+                                                    repaintCallerPrompt);
                 }
                 continue;
             }
@@ -294,7 +310,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             if (!validPaths.empty() && !input.empty()) {
                 saveHistory(filterHistory);
             }
-            saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, newISOFound, start_time);
+            saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, newISOFound, start_time, repaintCallerPrompt);
 
         } catch (const std::exception& e) {
             const VerboseAndDatabaseTheme dt = getDatabaseTheme();
@@ -305,8 +321,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 std::cerr << "\n" << dt.red << "Unable to access ISO database: "
                           << e.what() << dt.reset << std::endl;
             };
-            ListResizeWatcher watcher(render);
-            pressEnterToReturnWithRepaint(render);
+            pressEnterToContinueWithRepaint(render);
         }
     }
 }
@@ -466,7 +481,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
         };
 
         ListResizeWatcher watcher(render);
-        pressEnterToReturnWithRepaint(render);
+        pressEnterToContinueWithRepaint(render);
 
         files.clear();
 
@@ -554,7 +569,7 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
 
     render();
     ListResizeWatcher watcher(render);
-    pressEnterToReturnWithRepaint(render);
+    pressEnterToContinueWithRepaint(render);
 
     clearScrollBuffer();
 }
@@ -973,11 +988,19 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  * - Iteration state: initIterationState is called at the top of each
  *   iteration to re-establish keybindings, signal handlers, pagination,
  *   completion function, and cancellation state before prompting.
- * - Resize repaint: the prompt carries its own header line, so readline() is
- *   wrapped by readlineWithResize() with a callback that clears the screen
- *   and re-prints the header (via promptHeaderForRepaint). The watcher adds
- *   the newline and Readline redraws the last prompt line and the typed
- *   input.
+ * - Resize repaint (prompt): the prompt carries its own header line, so
+ *   readline() is wrapped by readlineWithResize() with a callback that clears
+ *   the screen and re-prints the header (via promptHeaderForRepaint). The
+ *   watcher adds the newline and Readline redraws the last prompt line and
+ *   the typed input.
+ * - Resize repaint (results screen): after the scan, the results block is
+ *   shown by verboseImageSearchResults, which owns its own resize handling
+ *   via pressEnterToContinueWithRepaint. This function supplies
+ *   repaintCallerPrompt — a callback that reprints the FolderPaths prompt
+ *   line — so that a resize while the user reads the results keeps the
+ *   question the user just answered visible above the block. The callback is
+ *   invoked inside verboseImageSearchResults's render, before the block is
+ *   printed.
  *
  * @param fileTypeChoice The format category: "bin", "img", "mdf", "nrg",
  *                       "chd", or "daa". "bin" and "img" are treated
@@ -1062,6 +1085,13 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
             std::cout << promptHeaderForRepaint(prompt);
         };
 
+        // Reprints the FolderPaths prompt line on a resize during the
+        // verboseImageSearchResults wait, so the question the user just
+        // answered stays visible above the results block.
+        const auto repaintCallerPrompt = [&] {
+            std::cout << promptHeaderForRepaint(prompt) << "\n";
+        };
+
         RlLine searchQuery = readlineWithResize(prompt, repaintPrompt);
         if (!searchQuery) return;
 
@@ -1086,7 +1116,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 
         std::istringstream ss(inputSearch);
         std::string path;
-        std::string cleanedInput;   // only valid paths, for history
+        std::string cleanedInput;
         while (std::getline(ss, path, ';')) {
             if (!path.empty() && uniquePaths.insert(path).second) {
                 if (isValidDirectory(path)) {
@@ -1118,7 +1148,8 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 
         verboseImageSearchResults(fileExtension, fileNames, invalidDirectoryPaths,
                              newFilesFound, list, currentCacheOld, files,
-                             start_time, processedErrorsFind, directoryPaths, totalFiles);
+                             start_time, processedErrorsFind, directoryPaths, totalFiles,
+                             repaintCallerPrompt);
 
         if (!newFilesFound) continue;
 

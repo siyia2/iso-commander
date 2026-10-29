@@ -63,11 +63,17 @@ namespace {
      * DECSC-saved cell at their old absolute coordinates, so neither is a
      * usable anchor for the prompt's row. Patching in place therefore
      * produces drift on some terminals and striped partial repaints on VTE.
-     * On resize the screen is cleared ("\033[H\033[2J"); if @p repaint is
-     * non-null, it is invoked to redraw the caller's content; then the blank
-     * separator and the prompt are reprinted. Without a callback the
-     * pre-prompt content is lost on resize, but the prompt is still redrawn
-     * cleanly — never striped, never duplicated, never drifting.
+     * On resize the screen is cleared with "\033[H\033[2J\033[3J": the
+     * "\033[2J" erases the visible screen, and the "\033[3J" erases the
+     * scrollback as well. Both are needed on VTE-based terminals, which
+     * push the cleared frame into scrollback on each resize; without
+     * "\033[3J" a user scrolling up sees a growing stack of past frames,
+     * looking like duplication even though the visible frame is correct.
+     * If @p repaint is non-null, it is invoked after the clear to redraw
+     * the caller's content; then the blank separator and the prompt are
+     * reprinted. Without a callback the pre-prompt content is lost on
+     * resize, but the prompt is still redrawn cleanly — never striped,
+     * never duplicated, never drifting.
      *
      * Back-to-back SIGWINCH notifications are collapsed into a single repaint
      * (non-blocking poll + flag clear) so two repaints cannot interleave.
@@ -97,7 +103,7 @@ namespace {
         struct sigaction sa{}, old_sa{};
         sa.sa_handler = handle_winch;
         sigemptyset(&sa.sa_mask);
-        sa.sa_flags = 0;                 // we want poll() to return EINTR
+        sa.sa_flags = 0;
         sigaction(SIGWINCH, &sa, &old_sa);
 
         auto drawLayout = [&]() {
@@ -119,7 +125,12 @@ namespace {
                 }
                 g_winch = 0;
 
-                std::cout << "\033[H\033[2J";
+                // \033[2J erases the visible screen; \033[3J erases scrollback.
+                // Without \033[3J, VTE-based terminals push the cleared frame
+                // into scrollback on each resize, and a user scrolling up sees
+                // a growing stack of past frames — looking like duplication
+                // even though the visible frame is correct.
+                std::cout << "\033[H\033[2J\033[3J";
                 drawLayout();
             }
 
@@ -145,7 +156,7 @@ namespace {
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved);
         sigaction(SIGWINCH, &old_sa, nullptr);
     }
-} // namespace
+}
 
 /**
  * @brief Waits for Enter, Esc or Ctrl+D after showing "\n<prompt>".
@@ -497,7 +508,17 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
  *   stored uncolored; the red color is applied here.
  * - **Resize:** the one-shot side effects (load, save, elapsed time, delta
  *   count) run before the wait; only the printing is replayed by the render
- *   lambda handed to pressEnterToReturnWithRepaint().
+ *   lambda handed to pressEnterToContinueWithRepaint(). The prompt owns
+ *   SIGWINCH: on each resize it clears the screen with
+ *   "\033[H\033[2J\033[3J" (the third parameter drops the scrollback the
+ *   previous frame was pushed into on VTE-based terminals), calls render,
+ *   then reprints the prompt line. No ListResizeWatcher is installed here —
+ *   it would race the prompt's own handler and cannot fire during
+ *   pressEnterToImpl's raw read anyway. If @p repaintCallerHeader is
+ *   non-empty, render calls it before printing the block, so the caller's
+ *   screen header (e.g. the "FolderPaths ..." prompt line the user just
+ *   answered) survives a resize; otherwise the block starts from a cleared
+ *   screen with no caller context.
  *
  * @param allIsoFiles         Discovered ISO paths to be saved.
  * @param totalFiles          Atomic count of files scanned; reprinted after
@@ -512,11 +533,17 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
  *                            pointer to saveToDatabase, which may modify it.
  * @param start_time          Timestamp of the refresh origin, used to compute
  *                            elapsed time.
+ * @param repaintCallerHeader Optional callback that reprints the caller's
+ *                            screen header (e.g. the FolderPaths prompt line)
+ *                            on a resize during the wait. When empty, the
+ *                            block starts from a cleared screen with no
+ *                            caller context.
  */
 void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles,
                                     std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths,
                                     std::unordered_set<std::string>& uniqueErrorMessages, bool& newISOFound,
-                                    const std::chrono::high_resolution_clock::time_point& start_time) {
+                                    const std::chrono::high_resolution_clock::time_point& start_time,
+                                    const std::function<void()>& repaintCallerHeader) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
@@ -538,6 +565,15 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
     auto render = [&] {
         SyncOutput sync;
         clearScrollBuffer();
+
+        // Reprint the caller's screen header (e.g. the FolderPaths prompt
+        // line) before the block, so a resize during the confirmation wait
+        // doesn't lose the question the user just answered. The callback is
+        // optional; when empty, the block starts from a cleared screen.
+        if (repaintCallerHeader) {
+            repaintCallerHeader();
+        }
+
         std::cout << "\n";
 
         if (!validPaths.empty()) {
@@ -585,8 +621,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
         }
     };
 
-    ListResizeWatcher watcher(render);
-    pressEnterToReturnWithRepaint(render);
+    pressEnterToContinueWithRepaint(render);
 }
 
 /**
@@ -674,7 +709,17 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
  * **Resize:** verboseFind mutates its set arguments (clears them), so it runs
  * exactly once, before the wait, with its std::cout/std::cerr writes
  * redirected into an ostringstream. The captured text, the file count and the
- * elapsed time are replayed by the render lambda on resize.
+ * elapsed time are replayed by the render lambda on resize. The prompt is
+ * drawn by pressEnterToContinueWithRepaint(render), which owns SIGWINCH:
+ * on each resize it clears the screen with "\033[H\033[2J\033[3J" (the third
+ * parameter also drops the scrollback the previous frame was pushed into on
+ * VTE-based terminals), calls render, then reprints the prompt line. No
+ * ListResizeWatcher is installed here — it would race the prompt's own
+ * handler and cannot fire during pressEnterToImpl's raw read anyway. If
+ * @p repaintCallerHeader is non-empty, render calls it before printing the
+ * block, so the caller's screen header (the "FolderPaths ..." prompt line
+ * the user just answered) survives a resize; otherwise the block starts
+ * from a cleared screen with no caller context.
  *
  * @param fileExtension         Target format label (e.g. ".bin/.img").
  * @param fileNames             Files discovered this run; not modified.
@@ -695,6 +740,11 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
  *                              decides whether the real count is printed here.
  * @param totalFiles            Aggregate number of regular files processed by
  *                              the scan, filled in by findFiles.
+ * @param repaintCallerHeader   Optional callback that reprints the caller's
+ *                              screen header (e.g. the FolderPaths prompt
+ *                              line) on a resize during the wait. When empty,
+ *                              the block starts from a cleared screen with no
+ *                              caller context.
  */
 void verboseImageSearchResults(const std::string& fileExtension,
                           std::unordered_set<std::string>& fileNames,
@@ -706,7 +756,8 @@ void verboseImageSearchResults(const std::string& fileExtension,
                           const std::chrono::high_resolution_clock::time_point& start_time,
                           std::unordered_set<std::string>& processedErrorsFind,
                           std::vector<std::string>& directoryPaths,
-                          const std::atomic<size_t>& totalFiles) {
+                          const std::atomic<size_t>& totalFiles,
+                          const std::function<void()>& repaintCallerHeader) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
@@ -739,6 +790,13 @@ void verboseImageSearchResults(const std::string& fileExtension,
     auto render = [&] {
         SyncOutput sync;
         clearScrollBuffer();
+
+        // Reprint the caller's screen header (the FolderPaths prompt line)
+        // before the block, so a resize during the confirmation wait doesn't
+        // lose the question the user just answered.
+        if (repaintCallerHeader) {
+            repaintCallerHeader();
+        }
 
         if (hadDirectories) {
             std::cout << "\n" << "\r" << color << "Total files processed: " << totalProcessed << vt.reset;
@@ -781,7 +839,6 @@ void verboseImageSearchResults(const std::string& fileExtension,
                   << total_elapsed_time << "s" << vt.bold << "\n";
     };
 
-    ListResizeWatcher watcher(render);
-    pressEnterToReturnWithRepaint(render);
+    pressEnterToContinueWithRepaint(render);
     clearScrollBuffer();
 }
