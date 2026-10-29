@@ -24,7 +24,9 @@
 // Project Headers
 #include "../threadpool.h"
 #include "../databaseOps.h"
+#include "../display.h"
 #include "../inputHandling.h"
+#include "../listResizeWatcher.h"
 #include "../main.h"
 #include "../readline.h"
 #include "../state.h"
@@ -54,19 +56,45 @@ void printVersionNumber(const std::string& version) {
  * The application supports the following command-line modes:
  * - `-v` / `--version` : Prints version information and exits.
  * - `mount` / `umount` / `unmount` : Delegates to mount/unmount command handler.
+ * - `c2iso` : Non-interactive image → ISO conversion (e.g. `isocmd c2iso -d2 ~/Games`).
+ * - `w2iso` : Non-interactive ISO to USB writer (e.g. `isocmd w2iso file.iso /dev/sdd)
  * - No arguments : Launches the interactive TUI (terminal user interface).
+ *
+ * The main menu prompt is wrapped in a @c ListResizeWatcher (via
+ * @c readlineWithResize), so the menu (banner, active status message, menu box)
+ * is repainted when the terminal width changes while the prompt waits.
  *
  * @param argc Number of command-line arguments.
  * @param argv Array of null-terminated argument strings.
  * @returns 0 on successful execution, 1 on failure (e.g., lock acquisition failure).
  */
 int main(int argc, char *argv[]) {
+
+    /**
+     * @brief Single-instance lock mechanism
+     * - `config` contains user-defined folder paths and settings
+     */
+    std::map<std::string, std::string> config = readUserConfigLists(GlobalState::configPath);
+
+    // --- Version & Utility Command Dispatch ---
+    const std::string arg1 = (argc >= 2) ? argv[1] : "";
+
+    if (argc == 2 && (arg1 == "--version" || arg1 == "-v"))
+        return printVersionNumber("7.9.2"), 0;
+    if (argc >= 3 || (argc == 2 && (arg1 == "umount" || arg1 == "unmount" ||
+                                    arg1 == "mount"  || arg1 == "c2iso" ||
+                                    arg1 == "w2usb")))
+        return handleMountUmountConvertWriteCommands(argc, argv);
+
     /// @name Application State Flags
     /// Atomic booleans controlling concurrency and UI state between main thread and background workers.
     /// @{
-    std::atomic<bool> messageActive{false}, isAtMain{true}, isAtISOList{false},
-                     stopMessage{false}, monitorThreadSpawned{false};
+    std::atomic<bool> messageActive{false}, stopMessage{false}, monitorThreadSpawned{false};
+    std::atomic<bool>& isAtMain    = GlobalState::isAtMain;
+    std::atomic<bool>& isAtISOList = GlobalState::isAtISOList;
     /// @}
+
+    GlobalState::isNonInteractive.store(false);
 
     // Generous reserve for future lists
     GlobalState::globalIsoFileList.reserve(1000);
@@ -75,17 +103,6 @@ int main(int argc, char *argv[]) {
     GlobalState::nrgFilesCache.reserve(1000);
     GlobalState::chdFilesCache.reserve(1000);
     GlobalState::daaGbiFilesCache.reserve(1000);
-    /**
-     * @brief Single-instance lock mechanism
-     * - `config` contains user-defined folder paths and settings
-     */
-    std::map<std::string, std::string> config = readUserConfigLists(GlobalState::configPath);
-
-    // --- Version & Utility Command Dispatch ---
-    if (argc == 2 && (std::string(argv[1]) == "--version" || std::string(argv[1]) == "-v"))
-        return printVersionNumber("7.5.0"), 0;
-    if (argc >= 3 || (argc == 2 && (std::string(argv[1]) == "umount" || std::string(argv[1]) == "unmount" || std::string(argv[1]) == "mount")))
-        return handleMountUmountCommands(argc, argv);
 
     setupReadlineToIgnoreCtrlC();
 
@@ -106,11 +123,13 @@ int main(int argc, char *argv[]) {
      * Attempts to acquire an exclusive advisory lock on /tmp/isocmd.lock.
      * If lock fails, displays a user-friendly error message and exits.
      */
+    const PrintListTheme c = getListColors();
+
     const char* lockFile = "/tmp/isocmd.lock";
     GlobalState::lockFileDescriptor = open(lockFile, O_CREAT | O_RDWR, 0666);
     struct flock fl = { F_WRLCK, SEEK_SET, 0, 0, 0 };
     if (fcntl(GlobalState::lockFileDescriptor, F_SETLK, &fl) == -1) {
-        std::cerr << UI::Palette::Red << "error: " << UI::Palette::Yellow
+        std::cerr << c.indexA << "error: " << c.num
                   << "failed to setup transaction (unable to lock database)\n  "
                   << UI::Palette::BoldReset << "if you're sure isocmd isn't already running, you can remove '/tmp/isocmd.lock'\n"
                   << UI::Palette::Reset;
@@ -147,6 +166,7 @@ int main(int argc, char *argv[]) {
         });
     }
     paginationSet(GlobalState::configPath);
+    liveFilteringSet(GlobalState::configPath);
 
     // Initialize readline refresh hook for pending UI refreshes
     rl_event_hook = checkPendingRefresh;
@@ -154,7 +174,7 @@ int main(int argc, char *argv[]) {
     /**
      * @brief Main interactive loop
      * Displays ASCII art header, status messages for background tasks,
-     * renders the menu, and processes user input (menu options 1-4).
+     * renders the menu, and processes user input (menu options 1-5).
      */
     while (!exitProgram) {
         /// Prevent default readline keybindings from interfering
@@ -162,23 +182,26 @@ int main(int argc, char *argv[]) {
         rl_bind_key('\t', prevent_readline_keybindings);
 
         GlobalState::g_operationCancelled.store(false);
+        GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::None);
         isAtMain.store(true);
         isAtISOList.store(false);
 
-        clearScrollBuffer();
-        print_ascii();
-
         /**
-         * @brief Status message display logic
-         * Shows appropriate background task status:
-         * 1. Auto-update running in background (with monitor thread)
+         * @brief Status message logic (runs once per iteration, NOT on resize repaints)
+         * Decides which background-task status to show, and starts the helper
+         * threads that clear it later:
+         * 1. Auto-update running in the background (with monitor thread)
          * 2. No stored folder paths available for scanning (one-time message)
+         * The chosen text is kept in statusLine; drawMain() only prints it.
          */
         static bool messagePrinted = false;
+        std::string statusLine;
 
         if (search.load() && !isHistoryFileEmpty(GlobalState::historyFilePath) &&
             importState && importState->isImportRunning.load()) {
-            std::cout << UI::Palette::Dim << "[Auto-Update: running in the background...]\n" << UI::Palette::Reset;
+            statusLine = std::string(UI::Palette::Dim) +
+                         "[Auto-Update: running in the background...]\n" +
+                         std::string(UI::Palette::Reset);
             messageActive = true;
             if (!monitorThreadSpawned.exchange(true))
                 backgroundThreads.emplace_back(monitorAndClearMessage,
@@ -186,7 +209,9 @@ int main(int argc, char *argv[]) {
                                                std::ref(stopMessage), std::ref(isAtMain));
         } else if ((search.load() && !messagePrinted) &&
                    (isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath))) {
-            std::cout << UI::Palette::Dim << "[Auto-Update: no stored FolderPaths to scan...]\n" << UI::Palette::Reset;
+            statusLine = std::string(UI::Palette::Dim) +
+                         "[Auto-Update: no stored FolderPaths to scan...]\n" +
+                         std::string(UI::Palette::Reset);
             messagePrinted = true;
             messageActive = true;
             backgroundThreads.emplace_back(clearMessageAfterTimeoutInMain, 4, std::ref(isAtMain),
@@ -194,14 +219,31 @@ int main(int argc, char *argv[]) {
                                            std::ref(stopMessage));
         }
 
-        printMenu();
+        // Draws the main menu screen: clear, banner, status line (only while the
+        // message is still active), menu. Ends right after the menu's last line;
+        // the blank line before the prompt comes from the caller / the resize
+        // watcher. Used for the normal draw and as the resize repaint (runs on the
+        // Readline thread; no side effects, must not call readline()).
+        auto drawMain = [&] {
+            SyncOutput sync;
+            clearScrollBuffer();
+            print_ascii();
+            if (!statusLine.empty() && messageActive.load())
+                std::cout << statusLine;
+            printMenu();
+        };
+
+        drawMain();
+        std::cout << "\n";   // blank line before the prompt
+
         clear_history();
 
         /// Read user input with theme-aware styling
         const ReadlineAndPromptTheme pt = getPromptTheme();
-        char* rawInput = readline(("\n" + std::string(pt.primary) +
-                                   "Enter choice [1-5]: " + std::string(pt.reset)).c_str());
-        std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
+        const std::string prompt = std::string(pt.primary) +
+                                   "Enter choice [1-5]: " +
+                                   std::string(pt.reset);
+        RlLine input = readlineWithResize(prompt, drawMain);
         if (!input) break; ///< Handle EOF (Ctrl+D)
 
         /**
@@ -229,14 +271,12 @@ int main(int argc, char *argv[]) {
                     isAtISOList.store(false);
                     bool newISOFound = false;
                     refreshForDatabase(true, -1, false, newISOFound);
-                    clearScrollBuffer();
                     break;
                 }
                 case '4':
                     isAtMain.store(false);
                     isAtISOList.store(false);
                     interactiveConfigEditor(GlobalState::configPath);
-                    clearScrollBuffer();
                     break;
                 case '5':
                     exitProgram = true;

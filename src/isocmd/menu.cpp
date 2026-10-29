@@ -17,6 +17,7 @@
 // Project Headers
 #include "../globalMutexes.h"
 #include "../inputHandling.h"
+#include "../listResizeWatcher.h"
 #include "../readline.h"
 #include "../select.h"
 #include "../state.h"
@@ -81,6 +82,11 @@ void selectForIsoFiles(const std::string& operation,
  *   the loop and returns to the caller.
  * - **Readline keybindings:** @c \\f and @c \\t are bound to no-ops at the top
  *   of each iteration to prevent terminal corruption during menu input.
+ * - **Resize Repaint:** The menu is drawn by a lambda (@c drawMenu) that is also
+ *   passed to @c readlineWithResize(), so it is repainted when the terminal width
+ *   changes while the prompt waits. The lambda stops one line short of the blank
+ *   line before the prompt (the prompt has no leading newline): the normal path
+ *   prints that blank line itself, and the resize watcher prints it after a repaint.
  *
  * @param isAtISOList       Set to @c false each iteration before the menu is drawn;
  *                          passed into @c selectForIsoFiles to track whether the
@@ -93,38 +99,45 @@ void selectForIsoFiles(const std::string& operation,
 void submenu1(std::atomic<bool>& isAtISOList,
     std::shared_ptr<RefreshState> refreshState,
     std::vector<std::thread>& backgroundThreads) {
+
+    // Draws the menu box, ending on the line after it (NOT the blank line before
+    // the prompt). Also used as the resize repaint; the blank line comes from
+    // the caller / the watcher.
+    auto drawMenu = [] {
+        SyncOutput sync;
+        clearScrollBuffer();
+
+        std::cout << color << "+----------------------+\n"
+                  << "|      ManageISO        |\n"
+                  << "+----------------------+\n"
+                  << "| 1. Mount             |\n"
+                  << "+----------------------+\n"
+                  << "| 2. Unmount           |\n"
+                  << "+----------------------+\n"
+                  << "| 3. Delete            |\n"
+                  << "+----------------------+\n"
+                  << "| 4. Move              |\n"
+                  << "+----------------------+\n"
+                  << "| 5. Copy              |\n"
+                  << "+----------------------+\n"
+                  << "| 6. Write             |\n"
+                  << "+----------------------+" << "\n";
+    };
+
     while (true) {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
 
         isAtISOList.store(false);
-        {
-            SyncOutput sync;
-            clearScrollBuffer();
-
-            std::cout << color << "+----------------------+\n"
-                      << "|      ManageISO        |\n"
-                      << "+----------------------+\n"
-                      << "| 1. Mount             |\n"
-                      << "+----------------------+\n"
-                      << "| 2. Unmount           |\n"
-                      << "+----------------------+\n"
-                      << "| 3. Delete            |\n"
-                      << "+----------------------+\n"
-                      << "| 4. Move              |\n"
-                      << "+----------------------+\n"
-                      << "| 5. Copy              |\n"
-                      << "+----------------------+\n"
-                      << "| 6. Write             |\n"
-                      << "+----------------------+" << "\n\n";
-        }
+        drawMenu();
+        std::cout << "\n";   // blank line before the prompt
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
-        char* rawInput = readline(( std::string(pt.primary) +
-                                    "Enter choice [1-6]: " +
-                                    std::string(pt.reset)).c_str());
+        const std::string prompt = std::string(pt.primary) +
+                                   "Enter choice [1-6]: " +
+                                   std::string(pt.reset);
 
-        std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
+        RlLine input = readlineWithResize(prompt, drawMenu);
 
         if (!input || input.get()[0] == 27) {
             break;
@@ -178,40 +191,51 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
  *   the loop and returns to the caller.
  * - **Readline keybindings:** @c \\f and @c \\t are bound to no-ops at the top
  *   of each iteration to prevent terminal corruption during menu input.
+ * - **Resize Repaint:** The menu is drawn by a lambda (@c drawMenu) that is also
+ *   passed to @c readlineWithResize(), so it is repainted when the terminal width
+ *   changes while the prompt waits. The lambda stops one line short of the blank
+ *   line before the prompt (the prompt has no leading newline): the normal path
+ *   prints that blank line itself, and the resize watcher prints it after a repaint.
  *
  * @param state   Shared @c RefreshState passed through to each
  *                @c promptSearchBinImgChdDaaMdfNrg call; not read directly
  *                by this function.
  */
 void submenu2(std::shared_ptr<RefreshState> state) {
+
+    // Same layout rule as submenu1: ends one line short of the blank line.
+    auto drawMenu = [] {
+        SyncOutput sync;
+        clearScrollBuffer();
+
+        std::cout << color << "+------------------------+  \n"
+                  << "|      Convert2ISO        |\n"
+                  << "+------------------------+\n"
+                  << "| 1. CCD2ISO++           |\n"
+                  << "+------------------------+\n"
+                  << "| 2. CHD2ISO++           |\n"
+                  << "+------------------------+\n"
+                  << "| 3. DAA2ISO++           |\n"
+                  << "+------------------------+\n"
+                  << "| 4. MDF2ISO++           |\n"
+                  << "+------------------------+\n"
+                  << "| 5. NRG2ISO++           |\n"
+                  << "+------------------------+" << "\n";
+    };
+
     while (true) {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
-        {
-            SyncOutput sync;
-            clearScrollBuffer();
 
-            std::cout << color << "+------------------------+  \n"
-                      << "|      Convert2ISO        |\n"
-                      << "+------------------------+\n"
-                      << "| 1. CCD2ISO++           |\n"
-                      << "+------------------------+\n"
-                      << "| 2. CHD2ISO++           |\n"
-                      << "+------------------------+\n"
-                      << "| 3. DAA2ISO++           |\n"
-                      << "+------------------------+\n"
-                      << "| 4. MDF2ISO++           |\n"
-                      << "+------------------------+\n"
-                      << "| 5. NRG2ISO++           |\n"
-                      << "+------------------------+" << "\n\n";
-        }
+        drawMenu();
+        std::cout << "\n";   // blank line before the prompt
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
-        char* rawInput = readline(( std::string(pt.primary) +
-                                    "Enter choice [1-5]: " +
-                                    std::string(pt.reset)).c_str());
+        const std::string prompt = std::string(pt.primary) +
+                                   "Enter choice [1-5]: " +
+                                   std::string(pt.reset);
 
-        std::unique_ptr<char[], decltype(&std::free)> input(rawInput, &std::free);
+        RlLine input = readlineWithResize(prompt, drawMenu);
 
         if (!input || input.get()[0] == 27) {
             break;
@@ -266,6 +290,23 @@ void printMenu() {
 }
 
 /**
+ * @brief Draws the main menu screen (clear, banner, menu).
+ *
+ * Ends right after the menu's last line, so the caller (or the resize watcher)
+ * supplies the blank line before the prompt. Shared by the main prompt's resize
+ * repaint (@c readlineWithResize) and @c checkPendingRefresh(). Must not call
+ * @c readline().
+ *
+ * Declare it in the header next to @c printMenu / @c print_ascii.
+ */
+void drawMainMenu() {
+    SyncOutput sync;
+    clearScrollBuffer();
+    print_ascii();
+    printMenu();
+}
+
+/**
  * @brief Readline event hook that performs deferred UI refreshes on the main thread.
  *
  * Readline is not thread-safe, so no background thread may call Readline
@@ -289,8 +330,8 @@ void printMenu() {
  *   left intact in @c GlobalState::g_pendingRefreshKind and is retried on a
  *   later poll once suppression is lifted — refreshes are deferred, not
  *   dropped.
- * - **MainMenu:** Clears the screen/scrollback and re-renders the ASCII
- *   banner and main menu.
+ * - **MainMenu:** Re-renders the main menu screen via @c drawMainMenu()
+ *   (clear screen/scrollback, ASCII banner, menu).
  * - **IsoList:** Copies @c GlobalState::g_pendingRefreshState under its
  *   dedicated mutex (the pointer handoff is not otherwise thread-safe), then
  *   re-renders the ISO list via @c loadAndDisplayIso using that state.
@@ -303,6 +344,8 @@ void printMenu() {
  *   MainMenu, @c GlobalState::isAtISOList for IsoList); otherwise the request is
  *   discarded. The checks in the publishing threads are only an optimization,
  *   since they can go stale before this hook runs.
+ * - **Chaining:** When a @c ListResizeWatcher is active, its hook calls this
+ *   function as the previously installed hook, so both keep working.
  *
  * @return Always 0, per the @c rl_event_hook / @c rl_hook_func_t contract.
  */
@@ -318,10 +361,7 @@ int checkPendingRefresh() {
     if (kind == PendingRefreshKind::IsoList  && !GlobalState::isAtISOList.load()) return 0;
 
     if (kind == PendingRefreshKind::MainMenu) {
-        SyncOutput sync;
-        clearScrollBuffer();
-        print_ascii();
-        printMenu();
+        drawMainMenu();
         std::cout << "\n" << std::flush;
         rl_on_new_line();
         rl_redisplay();
