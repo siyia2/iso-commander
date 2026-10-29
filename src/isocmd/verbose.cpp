@@ -46,24 +46,23 @@ namespace {
     /**
      * @brief Prints "\n<prompt>" and blocks until Enter, Esc or Ctrl+D.
      *
-     * The terminal is switched to raw mode (no canonical buffering, no echo)
-     * so that Enter, Esc and Ctrl+D are detected immediately without waiting
-     * for a newline, and so that keystrokes never advance the cursor.
+     * The terminal is switched to raw mode (no canonical buffering, no echo) so
+     * Enter, Esc and Ctrl+D are detected immediately and keystrokes never
+     * advance the cursor.
      *
-     * The cursor is kept immediately after the last character of @p prompt,
-     * including across window resizes. This is achieved by saving the cursor
-     * (DECSC) before printing, and on SIGWINCH restoring it (DECRC), erasing
-     * to the end of the screen (ED 0), re-saving, and redrawing. Modern
-     * terminals reflow saved cursor positions alongside the text, so the
-     * restored cell is the start of the prompt's visual block even after the
-     * line wrapped or unwrapped.
+     * The cursor stays immediately after the last character of @p prompt, even
+     * across resizes: the cursor is saved (DECSC) before printing, and on
+     * SIGWINCH it is restored (DECRC), the screen erased to the end (ED 0),
+     * re-saved, and the prompt redrawn. Modern terminals reflow the saved cursor
+     * position along with the text, so the restored cell is the start of the
+     * prompt's visual block even after it wraps or unwraps.
      *
      * The original termios state and the previous SIGWINCH disposition are
-     * restored before returning, and any unread bytes (e.g. the tail of an
-     * arrow-key escape sequence) are flushed from the input queue.
+     * restored before returning, and unread input (e.g. the tail of an arrow-key
+     * escape sequence) is flushed.
      *
-     * @param prompt  Text to show after the leading newline (e.g.
-     *                "\u21B5 to continue...").
+     * @param prompt Text to show after the leading newline (e.g.
+     *               "\u21B5 to continue...").
      *
      * @note Requires a POSIX terminal; intended for interactive use only.
      */
@@ -129,56 +128,49 @@ namespace {
 } // namespace
 
 /**
- * @brief Waits for the user to press Enter, Esc or Ctrl+D before allowing
- *        another attempt.
+ * @brief Waits for Enter, Esc or Ctrl+D before allowing another attempt.
  *
- * Displays "\u21B5 to try again..." and blocks until one of those keys is
- * pressed. The cursor is kept at the end of the prompt, even across window
- * resizes. See pressEnterTo() for details on the terminal handling.
+ * Shows "\u21B5 to try again...". The cursor stays at the end of the prompt
+ * across resizes; see pressEnterTo() for the terminal handling.
  */
 void pressEnterToTry()      { pressEnterTo("\u21B5 to try again..."); }
 
 /**
- * @brief Waits for the user to press Enter, Esc or Ctrl+D before returning
- *        to a previous menu or state.
+ * @brief Waits for Enter, Esc or Ctrl+D before returning to the previous menu
+ * or state.
  *
- * Displays "\u21B5 to return..." and blocks until one of those keys is
- * pressed. The cursor is kept at the end of the prompt, even across window
- * resizes. See pressEnterTo() for details on the terminal handling.
+ * Shows "\u21B5 to return...". The cursor stays at the end of the prompt
+ * across resizes; see pressEnterTo() for the terminal handling.
  */
 void pressEnterToReturn()   { pressEnterTo("\u21B5 to return..."); }
 
 /**
- * @brief Waits for the user to press Enter, Esc or Ctrl+D before continuing
- *        program execution.
+ * @brief Waits for Enter, Esc or Ctrl+D before continuing.
  *
- * Displays "\u21B5 to continue..." and blocks until one of those keys is
- * pressed. The cursor is kept at the end of the prompt, even across window
- * resizes. See pressEnterTo() for details on the terminal handling.
+ * Shows "\u21B5 to continue...". The cursor stays at the end of the prompt
+ * across resizes; see pressEnterTo() for the terminal handling.
  */
 void pressEnterToContinue() { pressEnterTo("\u21B5 to continue..."); }
 
 /**
- * @brief Performs a high-visibility print of operation results categorized by sets.
+ * @brief Prints categorized operation results, sorted case-insensitively.
  *
- * Orchestrates a specialized results screen by managing terminal state and
- * displaying sorted batches of success, warning, and error messages.
+ * Manages terminal state and prints sorted batches of success, warning and
+ * error messages.
  *
- * @details **Implementation Highlights:**
- * - **Signal Safety:** Ignores @c SIGINT and @c Ctrl+D to ensure results are
+ * - **Signal safety:** ignores @c SIGINT and disables @c Ctrl+D so results are
  *   read before returning to the main menu.
- * - **Memory Efficiency:** Uses @c std::string_view to sort and print data
- *   without additional heap allocations or string copying.
- * - **Case-Insensitive Logic:** Implements @c std::lexicographical_compare with
- *   @c std::tolower to provide a user-friendly sorted order.
- * - **Stream Routing:** Directs error-type items to @c std::cerr with
- *   color-coding from @c VerboseAndDatabaseTheme.
+ * - **No copies:** sorts and prints @c std::string_view views of the input sets.
+ * - **Case-insensitive:** @c std::lexicographical_compare with @c std::tolower.
+ * - **Stream routing:** error-type items go to @c std::cerr with colors from
+ *   @c VerboseAndDatabaseTheme.
  *
- * @param primarySet   Main data set (e.g., successful unmounts or conversions).
- * @param secondarySet Supporting data (e.g., already unmounted or skipped items).
- * @param tertiarySet  Additional context (e.g., specific warning categories).
- * @param errorSet     Set of explicit failure strings.
- * @param printType    Layout mode: 0 (Umount), 1 (Basic Ops), 2 (Mount), 3 (Conversion).
+ * @param primarySet   Main data set (e.g. successful unmounts or conversions).
+ * @param secondarySet Supporting data (e.g. already unmounted or skipped items).
+ * @param tertiarySet  Additional context (e.g. specific warning categories).
+ * @param errorSet     Explicit failure strings.
+ * @param printType    Layout mode: 0 (Umount), 1 (Basic Ops), 2 (Mount),
+ *                     3 (Conversion).
  */
 void verbosePrint(std::unordered_set<std::string>& primarySet,
             std::unordered_set<std::string>& secondarySet,
@@ -247,7 +239,9 @@ void verbosePrint(std::unordered_set<std::string>& primarySet,
 }
 
 /**
- * @brief Displays a collection of unique error messages generated during tokenization.
+ * @brief Prints and clears any unique error messages from tokenization.
+ *
+ * Used to surface verbose input errors produced by dry-runs (cp/mv/rm).
  */
 void displayErrors() {
     if (!verboseSets.uniqueErrorTokenMessages.empty()) {
@@ -255,39 +249,34 @@ void displayErrors() {
         for (const auto& err : verboseSets.uniqueErrorTokenMessages) {
             std::cout << err << "\n";
         }
-        // Needed to clear verbose input errors from dry-runs in cp/mv/rm
         verboseSets.uniqueErrorTokenMessages.clear();
     }
 }
 
 /**
- * @brief Processes and displays the results of an ISO file selection operation.
+ * @brief Reports the results of an ISO file-selection operation.
  *
- * Evaluates @c verboseSets to determine whether the operation produced valid
- * output, then either prints an error notice or delegates to @c verbosePrint.
+ * Examines @c verboseSets: prints a "no valid input" notice, or delegates to
+ * @c verbosePrint when @p verbose is set.
  *
- * @details **Logic flow:**
- * - **"No valid input" check:** If @c uniqueErrorTokenMessages is non-empty while
- *   @c operationFailed, @c operationSkipped, and @c operationCompleted are all
- *   empty, clears the scroll buffer, prints an error notice, and waits for the
- *   user to press Enter. Note: the condition checks @c operationFailed twice
- *   (likely a latent bug — @c operationSkipped is the intended second check).
- * - **Verbose output:** If @p verbose is true, clears the scroll buffer and calls
- *   @c verbosePrint. For mount operations, passes @c operationSkipped through and
- *   selects layout mode @c 2; for all other operations, passes an empty set and
- *   selects layout mode @c 1.
- * - **History clear:** After a destructive operation (@c mv, @c rm, or @c umount),
- *   if @p isFiltered and @p umountMvRmBreak are both true, clears Readline history
- *   to prevent re-running commands against indices that no longer exist.
+ * - **"No valid input" check:** if @c uniqueErrorTokenMessages is non-empty and
+ *   @c operationFailed, @c operationSkipped and @c operationCompleted are all
+ *   empty, clears the scroll buffer, prints the notice, and waits for Enter.
+ * - **Verbose output:** if @p verbose is true, clears the scroll buffer and
+ *   calls @c verbosePrint. Mount operations pass @c operationSkipped and use
+ *   layout mode @c 2; all others pass an empty set and use mode @c 1.
+ * - **History clear:** after a destructive operation (@c mv, @c rm, @c umount),
+ *   if @p isFiltered and @p umountMvRmBreak are both true, Readline history is
+ *   cleared so stale indices cannot be re-run.
  *
- * @param operation      The current action string ("mount", "mv", "rm", "umount", etc.);
- *                       used to derive the @c verbosePrint layout mode and to gate
- *                       the history-clear path.
- * @param verbose        If true, triggers the detailed results screen via @c verbosePrint.
- * @param isFiltered     Indicates whether a search filter is currently active; gates
- *                       the history-clear path alongside @p umountMvRmBreak.
- * @param umountMvRmBreak When true (set by the caller after a destructive operation
- *                        completes), triggers the history clear on the next results pass.
+ * @param operation      Action string ("mount", "mv", "rm", "umount", ...);
+ *                       drives the @c verbosePrint layout mode and the
+ *                       history-clear gate.
+ * @param verbose        If true, triggers the detailed results screen.
+ * @param isFiltered     Whether a search filter is active; gates the
+ *                       history-clear path with @p umountMvRmBreak.
+ * @param umountMvRmBreak True after a destructive operation; triggers the
+ *                        history clear on the next results pass.
  */
 void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
                                  bool& isFiltered, bool& umountMvRmBreak) {
@@ -297,9 +286,10 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
 
     if (operation == "mount") isMount = true;
 
-    if (!verboseSets.uniqueErrorTokenMessages.empty() && verboseSets.operationFailed.empty() &&
-         verboseSets.operationFailed.empty() && verboseSets.operationSkipped.empty() &&
-         verboseSets.operationCompleted.empty()) {
+    if (!verboseSets.uniqueErrorTokenMessages.empty() &&
+        verboseSets.operationFailed.empty() &&
+        verboseSets.operationSkipped.empty() &&
+        verboseSets.operationCompleted.empty()) {
 
         clearScrollBuffer();
 
@@ -328,8 +318,9 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
 }
 
 /**
- * @brief Identifies items present in the current search that do not exist in the cached list.
- * @return Integer count of new/different entries found.
+ * @brief Counts entries in @p allIsoFiles that are not in @p globalIsoFileList.
+ *
+ * @return Number of new entries.
  */
 int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std::vector<std::string>& globalIsoFileList) {
     std::unordered_set<std::string_view> globalSet;
@@ -350,39 +341,41 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
 }
 
 /**
- * @brief Finalizes the ISO database refresh by reporting results and syncing global state.
+ * @brief Finalizes an ISO database refresh: reports results and syncs global
+ * state.
  *
- * Acts as the terminal stage of the database update pipeline. It calculates performance
- * metrics, logs errors, persists the new list to disk, and refreshes the UI cache.
+ * Last stage of the database update pipeline. Computes elapsed time, logs
+ * errors, persists the new list, and refreshes the UI cache.
  *
- * @details **Workflow & Safety:**
- * - **Signal Guarding:** Suppresses @c SIGINT and disables @c Ctrl+D at function entry
- *   for the remainder of the call; neither is restored before return.
- * - **Cache Sync:** If @p newISOFound is true on entry, calls @c loadFromDatabase to
- *   reconcile the in-memory @c globalIsoFileList with the saved disk state before
- *   any output is produced.
- * - **Persistence:** Calls @c saveToDatabase (passing @c &newISOFound, which it may
- *   mutate) unless @c GlobalState::g_operationCancelled is set.
- * - **User Feedback:** Prints elapsed time, then a color-coded outcome from one of
- *   five branches: Cancelled; save failed with files and delta; no valid paths;
- *   files present but no delta (save not attempted or failed); no ISOs found;
- *   or successful import with delta count from @c countDifferentEntries.
- * - **Invalid path / error reporting:** Prints invalid paths and error messages before
- *   the save step. When @p totalFiles is zero and @p validPaths is empty, also emits
- *   a "Total files processed: 0" line before the invalid-path list.
+ * - **Signal guarding:** @c SIGINT is ignored and @c Ctrl+D disabled at entry;
+ *   neither is restored before return.
+ * - **Cache sync:** if @p newISOFound is true on entry, calls
+ *   @c loadFromDatabase to reconcile @c globalIsoFileList with disk before any
+ *   output is produced.
+ * - **Persistence:** calls @c saveToDatabase (passing @c &newISOFound, which
+ *   may be mutated) unless @c GlobalState::g_operationCancelled is set.
+ * - **User feedback:** prints elapsed time, then a color-coded outcome from one
+ *   of five branches: Cancelled; save failed with files and delta; no valid
+ *   paths; files present but no delta (save not attempted or failed); no ISOs
+ *   found; or successful import with the delta count from
+ *   @c countDifferentEntries.
+ * - **Invalid path / error reporting:** printed before the save step. When
+ *   @p totalFiles is zero and @p validPaths is empty, also emits a "Total files
+ *   processed: 0" line before the invalid-path list.
  *
- * @param allIsoFiles         Full list of discovered ISO paths to be saved.
- * @param totalFiles          Atomic count of total files scanned; gates the
- *                            "Total files processed: 0" diagnostic line.
- * @param validPaths          Base directories successfully traversed; an empty set
- *                            triggers the "Lack of valid paths" failure branch.
- * @param invalidPaths        Directories skipped due to permissions or existence errors.
- * @param uniqueErrorMessages Deduplicated log of system-level I/O errors.
- * @param newISOFound         On entry: whether the scan produced delta changes, gating
- *                            the @c loadFromDatabase call. Passed by pointer to
- *                            @c saveToDatabase, which may modify it.
- * @param start_time          Timestamp of the refresh operation's origin, used to
- *                            compute total elapsed time.
+ * @param allIsoFiles         Discovered ISO paths to be saved.
+ * @param totalFiles          Atomic count of files scanned; gates the
+ *                            "Total files processed: 0" line.
+ * @param validPaths          Base directories successfully traversed; empty
+ *                            triggers the "Lack of valid paths" branch.
+ * @param invalidPaths        Directories skipped due to permissions or
+ *                            existence errors.
+ * @param uniqueErrorMessages Deduplicated system-level I/O errors.
+ * @param newISOFound         On entry, whether the scan produced delta changes
+ *                            (gates the @c loadFromDatabase call). Passed by
+ *                            pointer to @c saveToDatabase, which may modify it.
+ * @param start_time          Timestamp of the refresh origin, used to compute
+ *                            elapsed time.
  */
 void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles,
                                     std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths,
@@ -445,28 +438,29 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
 }
 
 /**
- * @brief Logs deduplicated filesystem errors and invalid search paths to the terminal.
+ * @brief Logs deduplicated filesystem errors and invalid search paths.
  *
- * Formats and displays issues encountered during a crawl (invalid paths, I/O errors),
- * then clears both input sets to prepare for the next search cycle.
+ * Formats and displays issues found during a crawl (invalid paths, I/O errors),
+ * then clears both input sets for the next search cycle.
  *
- * @details
- * - **Signal suppression:** Calls @c signal(SIGINT, SIG_IGN) and @c disable_ctrl_d()
- *   at entry; neither is restored before return.
- * - **"Total files processed: 0":** Printed to @c std::cout only when
+ * - **Signal suppression:** @c SIGINT is ignored and @c Ctrl+D disabled at
+ *   entry; neither is restored before return.
+ * - **"Total files processed: 0":** printed to @c std::cout only when
  *   @p directoryPaths is empty and @p invalidDirectoryPaths is non-empty.
- * - **Invalid path output:** The header @c "Invalid paths omitted from search: " goes
- *   to @c std::cout; the path values and trailing @c '.' go to @c std::cerr.
- * - **Error message output:** Entries in @p processedErrorsFind are printed to
- *   @c std::cout, separated by newlines between entries (no trailing newline after
- *   the last entry).
- * - **Cleanup:** Both @p processedErrorsFind and @p invalidDirectoryPaths are cleared
- *   unconditionally before return.
+ * - **Invalid path output:** the header "Invalid paths omitted from search: "
+ *   goes to @c std::cout; the path values and trailing "." go to @c std::cerr.
+ * - **Error message output:** entries in @p processedErrorsFind go to
+ *   @c std::cout, separated by newlines (no trailing newline after the last
+ *   entry).
+ * - **Cleanup:** both @p processedErrorsFind and @p invalidDirectoryPaths are
+ *   cleared unconditionally before return.
  *
- * @param invalidDirectoryPaths Paths that were inaccessible or invalid; cleared on exit.
- * @param directoryPaths        Source directories from the crawl; only @c .empty() is
- *                              checked, to gate the "Total files processed: 0" line.
- * @param processedErrorsFind   Deduplicated formatted error strings; cleared on exit.
+ * @param invalidDirectoryPaths Inaccessible or invalid paths; cleared on exit.
+ * @param directoryPaths        Source directories from the crawl; only
+ *                              @c .empty() is checked, to gate the
+ *                              "Total files processed: 0" line.
+ * @param processedErrorsFind   Deduplicated formatted error strings; cleared on
+ *                              exit.
  */
 void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const std::vector<std::string>& directoryPaths, std::unordered_set<std::string>& processedErrorsFind) {
     signal(SIGINT, SIG_IGN);
@@ -488,14 +482,14 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
 
     if (!processedErrorsFind.empty()) {
         std::cout << "\n\n";
-        auto it = processedErrorsFind.begin(); // Iterator to the first element
-		while (it != processedErrorsFind.end()) {
-			std::cout << *it; // Dereference the iterator to get the element
-			++it; // Move to the next element
-			if (it != processedErrorsFind.end()) {
-				std::cout << "\n"; // Print newline only if it's not the last element
-			}
-		}
+        auto it = processedErrorsFind.begin();
+        while (it != processedErrorsFind.end()) {
+            std::cout << *it;
+            ++it;
+            if (it != processedErrorsFind.end()) {
+                std::cout << "\n";
+            }
+        }
     }
 
     processedErrorsFind.clear();
@@ -503,45 +497,41 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
 }
 
 /**
- * @brief Renders a color-coded summary of image discovery results and cache deltas.
+ * @brief Renders a color-coded summary of image discovery results and cache
+ * deltas.
  *
  * Captures @c end_time immediately on entry, then selects one of three display
- * branches based on search outcome. Elapsed time and @c pressEnterToContinue are
- * always printed unconditionally at the end, regardless of which branch fired or
- * whether the operation was cancelled.
+ * branches based on outcome. Elapsed time and @c pressEnterToContinue always
+ * run at the end, regardless of branch or cancellation.
  *
- * @details **Display branches** (all gated on
- * @c !GlobalState::g_operationCancelled.load()):
- * - **Files found** (@c !fileNames.empty()): prints found count vs @p currentCacheOld.
- *   Does NOT call @c verboseFind. Not gated on @p list.
+ * Branches (all gated on @c !GlobalState::g_operationCancelled.load()):
+ * - **Files found** (@c !fileNames.empty()): prints found vs
+ *   @p currentCacheOld. Does not call @c verboseFind. Not gated on @p list.
  * - **No new files, cache non-empty** (@c !newFilesFound && !files.empty() && !list):
- *   calls @c verboseFind, then prints 0 found vs @c files.size() with an @c "ls ↵"
- *   hint.
- * - **Cache empty** (@c files.empty() && !list): calls @c verboseFind, then prints
- *   0 found and 0 cached.
+ *   calls @c verboseFind, then prints 0 found vs @c files.size() with an
+ *   @c "ls ↵" hint.
+ * - **Cache empty** (@c files.empty() && !list): calls @c verboseFind, then
+ *   prints 0 found and 0 cached.
  *
- * If @c g_operationCancelled is set, all three branches are skipped; only elapsed
- * time and the Enter prompt are shown.
+ * If @c g_operationCancelled is set, all three branches are skipped; only
+ * elapsed time and the Enter prompt are shown.
  *
- * After @c pressEnterToContinue, @c clearScrollBuffer() is called.
- *
- * @param fileExtension         Target format label used in output (e.g., ".bin/.img").
- * @param fileNames             Files discovered in the current run; @c .size() and
- *                              @c .empty() are used; not modified here.
+ * @param fileExtension         Target format label (e.g. ".bin/.img").
+ * @param fileNames             Files discovered this run; not modified.
  * @param invalidDirectoryPaths Passed to @c verboseFind (cleared there).
  * @param newFilesFound         Gates the "no new files" branch; distinct from
  *                              @p fileNames being non-empty.
- * @param list                  Suppresses the second and third branches when true;
- *                              does not suppress the first branch.
- * @param currentCacheOld       Cache entry count before this search; displayed
- *                              alongside @p fileNames.size() in the first branch.
- * @param files                 Current working cache; @c .size() and @c .empty()
- *                              used for branch selection and display.
- * @param start_time            Search start timestamp; elapsed time is computed
- *                              against @c end_time captured at function entry.
+ * @param list                  Suppresses the second and third branches when
+ *                              true; does not suppress the first.
+ * @param currentCacheOld       Cache count before this search; shown with
+ *                              @p fileNames.size() in the first branch.
+ * @param files                 Current working cache; used for branch selection
+ *                              and display.
+ * @param start_time            Search start; elapsed is computed against
+ *                              @c end_time captured at entry.
  * @param processedErrorsFind   Passed to @c verboseFind (cleared there).
- * @param directoryPaths        Passed to @c verboseFind for the "Total files
- *                              processed: 0" gate check.
+ * @param directoryPaths        Passed to @c verboseFind for the
+ *                              "Total files processed: 0" gate check.
  */
 void verboseImageSearchResults(const std::string& fileExtension,
                           std::unordered_set<std::string>& fileNames,
@@ -562,7 +552,7 @@ void verboseImageSearchResults(const std::string& fileExtension,
     {
         SyncOutput sync;
 
-        // Case: Files were found
+        // Files were found.
         if (!fileNames.empty() && !GlobalState::g_operationCancelled.load()) {
             std::cout << "\n\n"
                       << vt.green << fileNames.size() << " "
@@ -573,7 +563,7 @@ void verboseImageSearchResults(const std::string& fileExtension,
                       << vt.yellow << "cached entries" << vt.reset << vt.bold << "\n\n";
         }
 
-        // Case: No new files were found, but files exist in cache
+        // No new files, but the cache is non-empty.
         if (!newFilesFound && !files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
             verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
             std::cout << "\n\n"
@@ -587,7 +577,7 @@ void verboseImageSearchResults(const std::string& fileExtension,
                       << vt.yellow << "↵ to list" << vt.reset << vt.bold << "\n\n";
         }
 
-        // Case: No files were found
+        // No files were found.
         if (files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
             verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
             std::cout << "\n\n"

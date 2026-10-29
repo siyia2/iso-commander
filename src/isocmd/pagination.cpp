@@ -19,6 +19,7 @@
 #include "../display.h"
 #include "../filtering.h"
 #include "../inputHandling.h"
+#include "../listResizeWatcher.h"
 #include "../sort.h"
 #include "../state.h"
 #include "../stringManipulation.h"
@@ -29,17 +30,19 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
 
 /**
  * @file pagination.cpp
- * @brief Logic for terminal pagination, navigation commands, and display toggles.
+ * @brief Terminal pagination, navigation commands, and display toggles.
  */
 
 /**
- * @brief Processes standard navigation and help commands for the main application loop.
+ * @brief Processes standard navigation and help commands for the main
+ * application loop.
  *
- * Handles 'PgDn' (next page), 'PgUp' (prev page), 'g<num>' (go to page), '//' (no-op guard),
- * '?' (help), '*' (filename-only toggle), and '~' (full path toggle).
+ * Handles 'PgDn' (next page), 'PgUp' (prev page), 'g<num>' (go to page),
+ * '//' (no-op guard), '?' (help), '*' (filename-only toggle), and '~'
+ * (full-path toggle).
  *
- * @return true if a command was handled (caller should usually continue the loop).
- * @return false if the command was not recognized.
+ * @return true if the command was handled (caller should usually continue the
+ *         loop); false if it was not recognized.
  */
 bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage,
                                      bool& isFiltered, bool& needsClrScrn, const std::string& operation,
@@ -126,15 +129,21 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 }
 
 /**
- * @brief A self-contained loop for displaying and navigating paginated entries during
- * secondary prompts (like confirming files for Copy/Move).
+ * @brief Paginated display loop used by secondary prompts (e.g. confirming
+ * files for Copy/Move).
  *
- * @param entries            The pre-formatted strings to display.
+ * Draws the current page, reads a line, and handles in-loop navigation
+ * ('PgDn' / 'PgUp' / 'g<num>'); anything else is returned to the caller.
+ *
+ * @param entries            Pre-formatted strings to display.
  * @param promptPrefix       Text prepended to the prompt string.
  * @param promptSuffix       Text appended to the prompt string.
- * @param setupEnvironmentFn Callback to refresh environment (e.g., re-printing static headers).
- * @param isPageTurn         Set to true if the last input was a pagination command, false otherwise.
- * @param currentPage        Current page index (0-based). Persists across calls to avoid reset on re-entry.
+ * @param setupEnvironmentFn Callback to refresh the environment (e.g. re-print
+ *                           static headers).
+ * @param isPageTurn         Set to true when the last input was a pagination
+ *                           command, false otherwise.
+ * @param currentPage        Current page index (0-based). Persists across calls
+ *                           to avoid resetting on re-entry.
  * @return The user's non-navigation input string, or "EOF_SIGNAL" on Ctrl+D.
  */
 std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
@@ -150,53 +159,68 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
     size_t totalEntries = entries.size();
     size_t totalPages = disablePagination ? 1 : ((totalEntries + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE);
 
+    // Draws the current page: clear, list, pagination header/footer. Ends right
+    // after the list/footer; the prompt (or the resize watcher) supplies the
+    // blank line. Reads currentPage by reference, so it always shows the page
+    // being displayed. Has no side effects, so it is also the resize repaint
+    // (runs on the Readline thread; must not call readline()).
+    auto drawPage = [&](bool withErrors) {
+        const size_t start = disablePagination ? 0 : (currentPage * GlobalState::ITEMS_PER_PAGE);
+        const size_t end = disablePagination ? totalEntries : std::min(start + GlobalState::ITEMS_PER_PAGE, totalEntries);
+
+        SyncOutput sync;
+
+        clearScrollBuffer();
+        if (withErrors) displayErrors();
+
+        // 1. One newline above the list
+        std::cout << "\n";
+
+        // 2. Pagination header (only if enabled)
+        if (!disablePagination) {
+            std::cout << c.head << "Page "
+                      << c.accent << (currentPage + 1)
+                      << c.head << "/" << c.num << totalPages
+                      << c.head << " (Items ("
+                      << c.accent << (start + 1) << "-" << end
+                      << c.head << ")/" << c.num << totalEntries
+                      << c.head << ")"
+                      << UI::Palette::BoldReset << "\n\n";
+        }
+
+        // 3. Entries, directly to stdout
+        for (size_t i = start; i < end; ++i) {
+            std::cout << entries[i];
+        }
+
+        // 4. Pagination footer (only if enabled and more than one page)
+        if (!disablePagination && totalPages > 1) {
+            std::cout << "\n" << c.head;
+            if (currentPage > 0)               std::cout << "[PgUp] Prev | ";
+            if (currentPage < totalPages - 1)  std::cout << "[PgDn] Next | ";
+            std::cout << "[g#] ↵ GoTo" << UI::Palette::BoldReset << "\n";
+        }
+    };   // last output + flush — commits the whole page as one frame
+
     while (true) {
         if (setupEnvironmentFn) setupEnvironmentFn();
 
-        size_t start = disablePagination ? 0 : (currentPage * GlobalState::ITEMS_PER_PAGE);
-        size_t end = disablePagination ? totalEntries : std::min(start + GlobalState::ITEMS_PER_PAGE, totalEntries);
+        drawPage(true);
 
-    {
-            SyncOutput sync;
+        // 5. Build the final prompt
+        const std::string finalPrompt = promptPrefix + promptSuffix;
 
-            clearScrollBuffer();
-            displayErrors();
+        // Resize repaint: the page, then any header line(s) the prompt carries
+        // before its last '\n' (empty for the delete prompt). The watcher then
+        // prints the newline and Readline redraws the last prompt line and the
+        // typed input. The page is not advanced and setupEnvironmentFn is not
+        // re-run.
+        const auto repaint = [&] {
+            drawPage(false);
+            std::cout << promptHeaderForRepaint(finalPrompt);
+        };
 
-            // 1. One newline above the list
-            std::cout << "\n";
-
-            // 2. Display Pagination Header (Only if enabled)
-            if (!disablePagination) {
-                std::cout << c.head << "Page "
-                          << c.accent << (currentPage + 1)
-                          << c.head << "/" << c.num << totalPages
-                          << c.head << " (Items ("
-                          << c.accent << (start + 1) << "-" << end
-                          << c.head << ")/" << c.num << totalEntries
-                          << c.head << ")"
-                          << UI::Palette::BoldReset << "\n\n";
-            }
-
-            // 3. Print the entries directly to stdout
-            for (size_t i = start; i < end; ++i) {
-                std::cout << entries[i];
-            }
-
-            // 4. Display Pagination Footer (Only if enabled and more than 1 page)
-            if (!disablePagination && totalPages > 1) {
-                std::cout << "\n" << c.head;
-                if (currentPage > 0)               std::cout << "[PgUp] Prev | ";
-                if (currentPage < totalPages - 1)  std::cout << "[PgDn] Next | ";
-                std::cout << "[g#] ↵ GoTo" << UI::Palette::BoldReset << "\n";
-            }
-        }   // ?2026l + flush — commits the whole page as one frame
-
-        // 5. Construct the final prompt
-        // If pagination is disabled, we remove the extra newline that typically
-        // sits above the prompt to tighten the layout.
-        std::string finalPrompt = promptPrefix + promptSuffix;
-
-        std::unique_ptr<char, decltype(&std::free)> input(readline(finalPrompt.c_str()), &std::free);
+        RlLine input = readlineWithResize(finalPrompt, repaint);
 
         if (!input.get()) return "EOF_SIGNAL";
 
@@ -206,7 +230,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
             bool isNavigation = false;
 
             if (userInput.size() >= 2 && userInput[0] == 'g' && std::isdigit(userInput[1])) {
-				isNavigation = true;
+                isNavigation = true;
                 try {
                     size_t requestedPage = std::stoul(userInput.substr(1));
                     if (requestedPage >= 1 && requestedPage <= totalPages) {
@@ -217,7 +241,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                 } catch (...) {}
             }
             else if (userInput == "PgDn") {
-				isNavigation = true;
+                isNavigation = true;
                 if (currentPage < totalPages - 1) {
                     currentPage++;
                     isPageTurn = true;
@@ -225,7 +249,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                 }
             }
             else if (userInput == "PgUp") {
-				isNavigation = true;
+                isNavigation = true;
                 if (currentPage > 0) {
                     currentPage--;
                     isPageTurn = true;

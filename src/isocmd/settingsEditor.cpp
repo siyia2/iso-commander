@@ -44,7 +44,9 @@ void printConfigError(const std::string& configPath) {
 }
 
 /**
- * @brief Commits the current in-memory configuration cache to disk.
+ * @brief Commits the in-memory configuration cache to disk.
+ *
+ * @return true on success; false on write failure (after printing the error).
  */
 bool flushCache(const std::string& configPath) {
     if (writeConfig(configPath, ConfigCaches::g_configCache)) return true;
@@ -53,25 +55,24 @@ bool flushCache(const std::string& configPath) {
 }
 
 /**
- * @brief Synchronizes global runtime variables with values from the configuration cache.
+ * @brief Applies the configuration cache to the global runtime state.
  *
- * This function acts as the bridge between the raw string-based @c g_configCache
- * and the actual functional variables used by the application (UI toggles,
- * thread limits, and skinning).
+ * Bridge between the raw string @c g_configCache and the functional variables
+ * the app actually uses (UI toggles, thread limits, skinning).
  *
- * @details The function performs the following updates:
- * - **Threading & History:** Forwards the cache to @c applyThreadCapsAndHistoryLimits.
- * - **UI State:** Sets @c displayConfig flags for list modes (full/compact) and filename visibility.
- * - **Visuals:** Updates the global @c skin and @c globalTheme; triggers @c getskin() to refresh color palettes.
- * - **Pagination:** Safely parses and updates @c ITEMS_PER_PAGE.
+ * Updates in order: thread caps and history limits, list-display toggles
+ * (full/compact, filenames-only), skin and theme (via @c getskin() to refresh
+ * the color palette), the default input color, pagination, and the live-filter
+ * limit. Numeric settings are parsed with a @c try and silently kept at their
+ * previous value on parse failure.
  *
- * @param cache A map containing the key-value pairs to be applied to the system state.
+ * @param cache The key-value pairs to apply.
  */
 void applyConfigEffects(const std::map<std::string, std::string>& cache) {
     // Thread caps and history
     applyThreadCapsAndHistoryLimits(cache);
 
-    // UI Toggles
+    // UI toggles
     if (cache.count("mount_list"))        displayConfig::toggleFullListMount = (cache.at("mount_list") == "full");
     if (cache.count("umount_list"))       displayConfig::toggleFullListUmount = (cache.at("umount_list") == "full");
     if (cache.count("cp_mv_rm_list"))     displayConfig::toggleFullListCpMvRm = (cache.at("cp_mv_rm_list") == "full");
@@ -83,12 +84,11 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache) {
     if (cache.count("skin")) { skin = cache.at("skin"); color = getskin(); }
     if (cache.count("theme")) { globalTheme = cache.at("theme"); }
 
-    // --- Update Default input Color ---
+    // Default input color
     if (cache.count("base")) {
         UI::Palette::defaultColor = cache.at("base");
         UI::Palette::updateDefaultColors();
     }
-    // --------------------------------------
 
     if (cache.count("pagination")) {
         try { GlobalState::ITEMS_PER_PAGE = std::stoul(cache.at("pagination")); } catch (...) {}
@@ -102,25 +102,29 @@ void helpSettingsEditor();
 void syncCache(const std::string& filePath);
 
 /**
- * @brief Launches the interactive Terminal User Interface (TUI) for configuration management.
+ * @brief Launches the interactive TUI for configuration management.
  *
- * Provides a structured, menu-driven environment where users can view current settings,
- * modify them by index, or reset the entire configuration to defaults.
+ * Menu-driven environment for viewing current settings, editing them by index,
+ * or resetting the whole configuration to defaults.
  *
- * @details **Workflow features:**
- * - **Sectioning:** Groups settings visually based on the sections defined in @c CONFIG_ORDERED_DEFAULTS.
- * - **Input Handling:** Utilizes GNU Readline for robust command input, supporting both single indices and tokenized multi-edits.
- * - **Validation:** Delegates to @c editSetting for per-key value validation and atomic updates.
- * - **Persistence:** Synchronizes with @c g_configCache. Note that a full reset triggers an immediate @c flushCache to disk upon confirmation.
- * - **Cleanup (RAII):** Employs a local @c SettingsGuard to ensure terminal keybindings are restored even if the loop breaks unexpectedly.
- * - **Signal Handling:** Temporarily ignores @c SIGINT to prevent accidental session termination during configuration.
- * - **Resize Repaint:** The settings screen is drawn by a lambda (@c drawSettings) that is
- *   called once per iteration and also passed to @c readlineWithResize() for both the main
- *   prompt and the reset confirmation prompt, so the screen is repainted when the terminal
- *   width changes while a prompt waits. The lambda ends on the line after "Actions:", which
- *   is where each prompt's leading newline expects the cursor.
+ * - **Sectioning:** Groups settings by the sections in
+ *   @c CONFIG_ORDERED_DEFAULTS.
+ * - **Input handling:** GNU Readline; supports single indices and tokenized
+ *   multi-edits.
+ * - **Validation:** delegated to @c editSetting per key.
+ * - **Persistence:** synchronized with @c g_configCache; a full reset triggers
+ *   an immediate @c flushCache on confirmation.
+ * - **Cleanup (RAII):** a local @c SettingsGuard restores terminal keybindings
+ *   on every exit path.
+ * - **Signals:** @c SIGINT is ignored during the session.
+ * - **Resize repaint:** the screen is drawn by a lambda (@c drawSettings) that
+ *   runs once per iteration and is also passed to @c readlineWithResize() for
+ *   both the main prompt and the reset confirmation prompt, so the screen
+ *   repaints on terminal-width changes while a prompt waits. The lambda ends
+ *   on the line after "Actions:", where each prompt's leading newline expects
+ *   the cursor.
  *
- * @param configPath The filesystem path to the @c .conf file used for synchronization.
+ * @param configPath Path to the @c .conf file used for synchronization.
  */
 void interactiveConfigEditor(const std::string& configPath) {
     PendingReadlineTextClearGuard pendingTextGuard;
@@ -249,31 +253,32 @@ void interactiveConfigEditor(const std::string& configPath) {
 }
 
 /**
- * @brief Provides an interactive CLI interface to modify a specific configuration setting.
+ * @brief Interactive CLI for modifying a single configuration setting.
  *
- * Displays current values, descriptions, and dynamic input hints. The function
- * loops until valid input is received, the change is skipped, or the session is aborted.
+ * Shows the current value, the description, and a value hint. Loops until
+ * valid input is received, the change is skipped, or the session is aborted.
  *
- * @details **Workflow features:**
- * - **Key Discovery:** Locates the @c ConfigEntry definition for metadata and default values.
- * - **Dynamic UX:** Displays context-aware hints for themes, skins, and numeric ranges.
- * - **Validation:** Enforces integrity via the entry's @c validate lambda before acceptance.
- * - **Hot-Reloading:** Updates @c g_configCache and immediately triggers @c applyConfigEffects
- *   to reflect changes in the running session (e.g., instant theme switching).
- * - **Persistence:** Attempts to persist changes via @c flushCache. If disk I/O fails,
- *   the user is notified that the change is "memory-only."
- * - **State Refresh:** Triggers @c sortAfterFilenamesOnlyFlag if the filenames display
- *   toggle is modified to ensure UI consistency.
- * - **Resize Repaint:** The screen is drawn by a lambda (@c drawEdit) that is also passed
- *   to @c readlineWithResize(), so it is repainted when the terminal width changes while
- *   the prompt waits. The lambda stops at the last hint line, one line short of the blank
- *   line before the prompt (this prompt has no leading newline): the normal path prints
- *   that blank line itself, and the resize watcher prints it after a repaint.
+ * - **Key discovery:** looks up the @c ConfigEntry for metadata and defaults.
+ * - **Dynamic UX:** context-aware hints for themes, skins, and numeric ranges.
+ * - **Validation:** via the entry's @c validate lambda before acceptance.
+ * - **Hot-reload:** updates @c g_configCache and immediately calls
+ *   @c applyConfigEffects so changes take effect in the running session (e.g.
+ *   instant theme switching).
+ * - **Persistence:** via @c flushCache; on disk-write failure the user is told
+ *   the change is "memory-only".
+ * - **State refresh:** @c sortAfterFilenamesOnlyFlag is called when the
+ *   filenames-only toggle changes.
+ * - **Resize repaint:** the screen is drawn by a lambda (@c drawEdit) that is
+ *   also passed to @c readlineWithResize(), so it repaints on terminal-width
+ *   changes while the prompt waits. The lambda stops at the last hint line,
+ *   one line short of the blank line before the prompt (this prompt has no
+ *   leading newline): the normal path prints that blank line itself, and the
+ *   resize watcher prints it after a repaint.
  *
  * @param configPath Path to the @c .conf file for persistence.
- * @param key The unique configuration key to be modified.
- * @return true if the setting was updated, matched the current value, or was skipped.
- * @return false if the user aborted the prompt (e.g., via Ctrl+D or Esc).
+ * @param key        Configuration key to modify.
+ * @return true if the setting was updated, matched the current value, or was
+ *         skipped; false if the user aborted (Ctrl+D or Esc).
  */
 bool editSetting(const std::string& configPath, const std::string& key) {
     auto tc = resolveOptionsTheme();
@@ -284,12 +289,12 @@ bool editSetting(const std::string& configPath, const std::string& key) {
     if (!entry) return true;
     reset_custom_keybindingsForSettingsEditor();
 
-    // Move current value outside the loop so we can compare changes
+    // Keep the current value outside the loop so we can compare changes.
     std::string current = ConfigCaches::g_configCache.count(key) ? ConfigCaches::g_configCache[key] : entry->defaultValue;
 
-    // Draws the edit screen up to the last hint line (NOT the blank line before
-    // the prompt). Used for the first draw and as the resize repaint; the blank
-    // line comes from the caller / the watcher.
+    // Draws the edit screen up to the last hint line (NOT the blank line
+    // before the prompt). Used for the first draw and as the resize repaint;
+    // the blank line comes from the caller / the watcher.
     auto drawEdit = [&] {
         clearScrollBuffer();
         std::cout << "\n" << tc.highlight << "=== Edit Setting ===\n\n" << tc.reset;
@@ -300,7 +305,7 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         if (pos != std::string::npos) displayComment.replace(pos, 3, "\n             ");
         std::cout << "\nDescription: " << displayComment << tc.reset << "\n\n";
 
-        // --- Dynamic Hint Block ---
+        // --- Dynamic hint block ---
         std::cout << tc.label << "Valid values: " << tc.reset;
         if (key == "base") {
             std::cout << "charcoal, black, gray, silver, ash, white, steel\n";
@@ -351,26 +356,25 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 
         RlLine rawInput = readlineWithResize(prompt, drawEdit);
 
-        // Handle Cancel (Ctrl+D/Esc)
+        // Cancel (Ctrl+D or Esc).
         if (!rawInput || rawInput.get()[0] == 27) return false;
         std::string newVal = trim(rawInput.get());
         if (newVal.empty() || newVal == current) return true;
 
-        // Validation Check
+        // Validation.
         if (entry->validate && !entry->validate(newVal)) {
             std::cout << "\n" << tc.error << "Invalid value: " << tc.warning << "'" << newVal << "'" << tc.reset << "\n";
             pressEnterToTry();
             continue;
         }
 
-        // --- Success Case ---
+        // --- Success case ---
         ConfigCaches::g_configCache[key] = newVal;
         applyConfigEffects(ConfigCaches::g_configCache);
 
-        // Use the standardized helper to write to disk and handle errors
         bool saved = flushCache(configPath);
 
-        // Refresh the local theme context in case 'skin' or 'theme' was changed
+        // Refresh the local theme context in case 'skin' or 'theme' changed.
         tc = resolveOptionsTheme();
 
         if (saved) {
@@ -382,7 +386,7 @@ bool editSetting(const std::string& configPath, const std::string& key) {
                       << tc.reset << "\n";
         }
 
-        // Specific side-effect for filename display toggle
+        // Specific side-effect for the filenames display toggle.
         if (key == "filenames_only") {
             sortAfterFilenamesOnlyFlag();
         }
