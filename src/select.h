@@ -29,7 +29,14 @@ struct RefreshState;
 // ======================================================================
 
 /**
- * @brief RAII guard that resets custom readline keybindings on scope exit.
+ * @brief Installs the select-mode readline keybindings on construction and
+ *        resets them on destruction.
+ *
+ * The destructor also clears @c RetainAndRestoreReadlineBuffer::g_rl_pending_text,
+ * so a pending prompt-text restore from a previous session cannot leak into
+ * the caller. Call @ref restore after any sub-mode that replaces the selection
+ * keybindings (e.g. the filter flow via @c runSharedFilterFlow) so the select
+ * prompt keeps its own bindings.
  */
 class ReadlineKeybindingGuard {
 public:
@@ -42,12 +49,7 @@ public:
         RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
     }
 
-    /**
-     * Re-establish custom keybindings after they were overridden by
-     * a sub-mode (e.g., filter flow). Call this after returning from
-     * runSharedFilterFlow or any function that replaces the selection
-     * keybindings.
-     */
+    /// Re-establish custom keybindings after a sub-mode overrode them.
     void restore() {
         setup_custom_keybindingsForSelect();
     }
@@ -58,15 +60,19 @@ public:
 };
 
 /**
- * @brief RAII guard for atomic boolean flag that restores on destruction.
+ * @brief Sets an @c std::atomic<bool> to @p activeValue on construction and
+ *        restores the previous value on destruction (unless released).
  *
- * Sets the flag to @p activeValue on construction and restores it to
- * !activeValue on destruction (unless release() is called).
+ * The previous value is captured at construction time, so nested guards and
+ * pre-existing values round-trip correctly; the flag is not simply flipped.
+ * Call @ref release to leave the flag at @p activeValue.
  */
 class AtomicFlagGuard {
 public:
     explicit AtomicFlagGuard(std::atomic<bool>& flag, bool activeValue = true)
-        : flag_(flag), restoreValue_(!activeValue), released_(false) {
+        : flag_(flag),
+          restoreValue_(flag.load(std::memory_order_acquire)),
+          released_(false) {
         flag_.store(activeValue, std::memory_order_release);
     }
 
@@ -76,7 +82,7 @@ public:
         }
     }
 
-    /** Release ownership — the flag will not be restored on destruction. */
+    /// Leave the flag at @p activeValue on destruction instead of restoring.
     void release() { released_ = true; }
 
     AtomicFlagGuard(const AtomicFlagGuard&) = delete;
@@ -89,11 +95,18 @@ private:
 };
 
 /**
- * @brief RAII guard for controlling the "at ISO list" state.
+ * @brief Restores @c isAtISOList to its pre-scope value on destruction
+ *        (unless the operation is an unmount) and always clears the global
+ *        filtering indicator.
  *
- * Ensures isAtISOList is restored to the desired value even on exception
- * or early return paths. Also guarantees the global filtering indicator
- * is cleared when the guard goes out of scope.
+ * The unmount exemption is per-instance and re-evaluated at destruction
+ * time via @p isUnmountCheck, so a long-lived guard can observe a change in
+ * whether the current operation is an unmount.
+ *
+ * The filtering indicator (@c GlobalState::g_filteringIndicator) is cleared
+ * unconditionally, regardless of whether the flag above was restored, so a
+ * failed filter cannot leave the "locked during sync" banner stuck on
+ * screen after the guard goes out of scope.
  */
 class IsoListStateGuard {
 public:
@@ -104,13 +117,10 @@ public:
           isUnmountCheck_(isUnmountCheck) {}
 
     ~IsoListStateGuard() {
-        // Restore to appropriate state based on operation type
         if (!isUnmountCheck_()) {
             isAtISOList_.store(wasAtList_, std::memory_order_release);
         }
 
-        // Always ensure the filtering indicator is cleared, regardless
-        // of exception or early-return paths.
         GlobalState::g_filteringIndicator.store(false, std::memory_order_release);
     }
 
@@ -125,9 +135,7 @@ private:
 
 // --- Data Loading & List Display ---
 
-/**
- * Loads and displays the standard ISO list from the database/cache.
- */
+/// Loads and displays the ISO list from the database / cache.
 bool loadAndDisplayIso(
     std::vector<std::string> &filteredFiles,
     bool &isFiltered,
@@ -140,9 +148,7 @@ bool loadAndDisplayIso(
     std::shared_ptr<RefreshState> state
 );
 
-/**
- * Specialized loader for currently mounted ISOs.
- */
+/// Loads and displays currently mounted ISOs.
 bool loadAndDisplayMountedISOs(
     std::vector<std::string> &isoDirs,
     std::vector<std::string> &filteredFiles,
@@ -155,9 +161,8 @@ bool loadAndDisplayMountedISOs(
     std::shared_ptr<RefreshState> state
 );
 
-/**
- * Loads and displays non-ISO image files (MDF, NRG, etc.) for conversion.
- */
+/// Loads and displays non-ISO image files (MDF, NRG, CHD, DAA/GBI, BIN/IMG)
+/// for conversion.
 void loadAndDisplayImageFiles(
     std::vector<std::string> &files,
     const std::string &fileType,
@@ -173,9 +178,7 @@ void loadAndDisplayImageFiles(
 
 // --- Input Processing & Action Handlers ---
 
-/**
- * Processes user selection for Mount or Unmount operations.
- */
+/// Processes a user selection for Mount or Unmount.
 void processInputForMountOrUmount(
     const std::string &input,
     const std::vector<std::string> &files,
@@ -184,9 +187,7 @@ void processInputForMountOrUmount(
     bool isUnmount
 );
 
-/**
- * Processes user selection for Copy, Move, or Remove operations.
- */
+/// Processes a user selection for Copy, Move, or Remove.
 void processInputForCpMvRm(
     const std::string &input,
     const std::vector<std::string> &isoFiles,
@@ -196,9 +197,7 @@ void processInputForCpMvRm(
     bool &verbose
 );
 
-/**
- * Processes user selection for converting images to ISO.
- */
+/// Processes a user selection for converting images to ISO.
 void processInputForConversions(
     const std::string &input,
     std::vector<std::string> &fileList,
@@ -209,9 +208,7 @@ void processInputForConversions(
     bool &verbose
 );
 
-/**
- * Handles specialized logic for writing an ISO to a USB device.
- */
+/// Handles the write-to-USB flow for a user selection.
 void writeToUsb(
     const std::string &input,
     const std::vector<std::string> &isoFiles
@@ -220,12 +217,10 @@ void writeToUsb(
 
 // --- Filtering & Pagination ---
 
-/**
- * Manages pagination state and help text display.
- */
+/// Handles pagination keys, help ('?'), and display toggles ('*', '~').
 bool processPaginationHelpAndDisplay(
     const std::string& inputString,
-    size_t& totalPages, // Match the actual definition exactly.
+    size_t& totalPages,
     size_t& currentPage,
     bool& isFiltered,
     bool& needsClrScrn,
@@ -235,46 +230,27 @@ bool processPaginationHelpAndDisplay(
     std::vector<std::string>& filteredFiles
 );
 
-/**
- * Generic string filtering for the ISO list.
- */
-bool handleFilteringForISO(
-    const std::string &inputString,
-    std::vector<std::string> &filteredFiles,
-    bool &isFiltered,
-    bool &needsClrScrn,
-    bool &filterHistory,
-    const std::string &operation,
-    const std::string &operationColor,
-    const std::vector<std::string> &isoDirs,
-    bool isUnmount,
-    size_t &currentPage,
-    std::shared_ptr<RefreshState> state = nullptr
-);
+/// Filter entry point for the ISO list (mount / unmount / cp / mv / rm /
+/// write2usb operations).
+bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles,
+    bool& isFiltered, bool& needsClrScrn, bool& filterHistory,
+    const std::string& operation, const std::string& operationColor,
+    const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage,
+    std::shared_ptr<RefreshState> state,
+    std::function<void()> repaintList = nullptr);
 
-/**
- * Filtering specifically for the conversion list.
- */
-void handleFilteringConvert2ISO(
-    const std::string &mainInputString,
-    std::vector<std::string> &files,
-    const std::string &operation,
-    bool &isFiltered,
-    bool &needsClrScrn,
-    bool &filterHistory,
-    bool &need2Sort,
-    size_t &currentPage,
-    std::vector<std::string> &pendingIndices,
-    bool &hasPendingProcess,
-    std::shared_ptr<RefreshState> state = nullptr
-);
+/// Filter entry point for the convert-to-ISO image list.
+void handleFilteringConvert2ISO(const std::string& inputString, std::vector<std::string>& files,
+    const std::string& operation, bool& isFiltered, bool& needsClrScrn,
+    bool& filterHistory, bool& need2Sort, size_t& currentPage,
+    std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
+    std::shared_ptr<RefreshState> state,
+    std::function<void()> repaintList = nullptr);
 
 
 // --- Utility & Cleanup ---
 
-/**
- * Finalizes and displays the results of a selection session.
- */
+/// Displays the results of a selection session.
 void handleSelectIsoFilesResults(
     const std::string &operation,
     bool &verbose,
