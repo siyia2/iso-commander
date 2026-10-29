@@ -8,15 +8,20 @@
 #include <condition_variable>
 #include <csignal>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <fstream>
+#include <functional>
 #include <future>
 #include <iomanip>
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <numeric>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -27,6 +32,7 @@
 #include <vector>
 
 // C / System Headers
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 // Third-Party Library Headers
@@ -36,8 +42,10 @@
 // Project Headers
 #include "../display.h"
 #include "../inputHandling.h"
+#include "../listResizeWatcher.h"
 #include "../pausePrompt.h"
 #include "../readline.h"
+#include "../sort.h"
 #include "../state.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
@@ -72,106 +80,59 @@ std::string getDriveName(const std::string& device) {
 }
 
 /**
- * @brief Determines whether a block device is a USB flash drive.
+ * @brief Determines whether a block device is a removable USB storage device.
  *
- * Uses three complementary heuristics in priority order:
- *  1. Canonical sysfs path contains "/usb"  (strongest — short-circuits).
- *  2. A uevent file in the device tree contains an exact USB bus identifier.
- *  3. USB-specific sysfs attributes (speed, version, manufacturer) exist.
+ * Resolves symlinks (e.g. /dev/disk/by-id/...), requires the sysfs
+ * "removable" attribute to read "1", then walks up the device's canonical
+ * sysfs path looking for a USB device node (identified by its "idVendor"
+ * file). Fails closed on any error.
  *
- * The removable sysfs attribute MUST read "1" for the call to return true.
- * If the attribute is unreadable the function returns false (fail-closed).
- *
- * @param devicePath Absolute path to the block device (must start with /dev/).
- * @return true if the device is identified as a removable USB flash device.
+ * @param devicePath Path to the block device (must start with /dev/).
+ * @return true if the device is a removable USB block device.
  */
-bool isUsbDevice(const std::string& devicePath) {
+bool isFlashDrive(const std::string& devicePath) {
+    namespace fs = std::filesystem;
     try {
-        // Basic path sanity check
-        if (devicePath.size() < 6 || devicePath.substr(0, 5) != "/dev/") {
+        if (devicePath.size() <= 5 || devicePath.rfind("/dev/", 0) != 0) {
             return false;
         }
 
-        const std::string deviceName = devicePath.substr(devicePath.find_last_of('/') + 1);
+        std::error_code ec;
 
-        // Reject empty names or names that look like partition nodes
-        if (deviceName.empty() ||
-            std::isdigit(static_cast<unsigned char>(deviceName.back()))) {
-            return false;
-        }
+        // Resolve symlinks so /dev/disk/by-id/usb-... maps to /dev/sdX.
+        const fs::path devNode = fs::canonical(devicePath, ec);
+        if (ec) return false;
 
-        const std::string sysPath = "/sys/block/" + deviceName;
-        if (!fs::exists(sysPath)) {
-            return false;
-        }
+        // Whole disks only: partitions (sda1) have no entry in /sys/block.
+        const std::string name = devNode.filename().string();
+        if (name.empty()) return false;
 
+        const fs::path sysPath = fs::path("/sys/block") / name;
+        if (!fs::exists(sysPath, ec) || ec) return false;
+
+        // The removable attribute must read "1" (fail-closed if unreadable).
         {
-            std::ifstream removableFile(sysPath + "/removable");
-            std::string removable;
-            if (!removableFile || !std::getline(removableFile, removable)) {
-                return false;   // can't confirm removable → reject
+            std::ifstream file(sysPath / "removable");
+            std::string value;
+            if (!file || !std::getline(file, value)) return false;
+            while (!value.empty() &&
+                   std::isspace(static_cast<unsigned char>(value.back()))) {
+                value.pop_back();
             }
-            // Trim possible trailing whitespace / newline
-            while (!removable.empty() && std::isspace(static_cast<unsigned char>(removable.back()))) {
-                removable.pop_back();
-            }
-            if (removable != "1") {
-                return false;
-            }
+            if (value != "1") return false;
         }
 
-        // --- Heuristic 1: canonical sysfs path contains "/usb" --------------
-        // This is the most reliable signal.  Short-circuit immediately so the
-        // weaker heuristics don't run unnecessarily.
-        {
-            std::error_code ec;
-            const std::string resolved = fs::canonical(sysPath, ec).string();
-            if (!ec && resolved.find("/usb") != std::string::npos) {
-                return true;
-            }
+        // Walk up the real sysfs path; a USB device node has an idVendor file.
+        const fs::path resolved = fs::canonical(sysPath, ec);
+        if (ec) return false;
+
+        for (fs::path p = resolved; p != p.root_path(); p = p.parent_path()) {
+            if (fs::exists(p / "idVendor", ec)) return true;
+            ec.clear();
         }
-
-        // --- Heuristic 2: uevent contains exact USB bus identifier ----------
-        //  Only match the key=value pairs that unambiguously indicate a USB storage bus.
-        {
-            const std::vector<std::string> ueventPaths = {
-                sysPath + "/device/uevent",
-                sysPath + "/uevent"
-            };
-
-            for (const auto& path : ueventPaths) {
-                std::ifstream uevent(path);
-                std::string line;
-                while (std::getline(uevent, line)) {
-                    if (line == "ID_BUS=usb" ||
-                        line.rfind("DRIVER=usb", 0) == 0) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        // --- Heuristic 3: USB-specific sysfs attributes exist ---------------
-        // Weakest signal — only reached when the two stronger ones both miss.
-        // "speed" and "version" live under the USB interface node; their
-        // presence is a reasonable (though not infallible) USB indicator.
-        {
-            const std::vector<std::string> usbIndicators = {
-                sysPath + "/device/speed",
-                sysPath + "/device/version",
-                sysPath + "/device/manufacturer"
-            };
-
-            for (const auto& path : usbIndicators) {
-                if (fs::exists(path)) {
-                    return true;
-                }
-            }
-        }
-
         return false;
 
-    } catch (const std::exception&) {
+    } catch (...) {
         return false;
     }
 }
@@ -181,7 +142,7 @@ bool isUsbDevice(const std::string& devicePath) {
  *
  * Skips loop devices, RAM disks, zram devices, and any entry whose name
  * ends with a digit (partition suffix). A device is included only when
- * its removable sysfs attribute reads "1" and isUsbDevice() confirms it
+ * its removable sysfs attribute reads "1" and isFlashDrive() confirms it
  * is USB-attached.
  *
  * @return Vector of absolute device paths such as /dev/sdb.
@@ -215,7 +176,7 @@ std::vector<std::string> getRemovableDevices() {
             const std::string devPath = "/dev/" + deviceName;
 
             // Also filter by USB
-            if (isUsbDevice(devPath)) {
+            if (isFlashDrive(devPath)) {
                 devices.push_back(devPath);
             }
         }
@@ -270,119 +231,215 @@ bool isDeviceMounted(const std::string& device) {
     return false;
 }
 
+namespace WriteValidation {
+
+/**
+ * @brief Builds a themed error message that has no associated path.
+ *
+ * @param wt  Active write theme supplying the label and reset colours.
+ * @param msg Message text (e.g. "Root privileges are required").
+ * @return The message prefixed with the error label colour and terminated
+ *         with a colour reset.
+ */
+std::string plainErr(const WriteTheme& wt, const std::string& msg) {
+    return std::string(wt.errLabel) + msg + wt.rl_resetCol;
+}
+
+/**
+ * @brief Builds a themed error message of the form "'<path>' <message>".
+ *
+ * The path is rendered in the theme's path colour and the message in the
+ * error label colour.
+ *
+ * @param wt   Active write theme.
+ * @param path Path to display, quoted, at the start of the message.
+ * @param msg  Message text; include a leading space (e.g. " is not an ISO file").
+ * @return The fully coloured message string.
+ */
+std::string pathErr(const WriteTheme& wt, const std::string& path, const std::string& msg) {
+    std::string s;
+    s.append(wt.errPath).append("'").append(path).append("'")
+     .append(wt.rl_resetCol).append(wt.errLabel).append(msg)
+     .append(wt.rl_resetCol);
+    return s;
+}
+
+/**
+ * @brief Prints a themed "Validation errors:" block to stderr.
+ *
+ * Each entry is printed as an indented bullet. Entries are expected to be
+ * already themed (see @ref plainErr and @ref pathErr).
+ *
+ * @param wt   Active write theme.
+ * @param errs Pre-formatted error messages to print.
+ */
+void printValidationErrors(const WriteTheme& wt, const std::vector<std::string>& errs) {
+    std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.rl_resetCol << wt.bold << "\n";
+    for (const auto& e : errs)
+        std::cerr << " \u2022 " << e << wt.bold << "\n";
+    std::cerr << wt.rl_resetCol << (GlobalState::isNonInteractive ? "\n" : "");
+}
+
+/**
+ * @brief Reports whether a block device still has write I/O in flight.
+ *
+ * Reads the kernel's per-device in-flight counters from
+ * /sys/block/<name>/inflight, so it also sees flushing started by another
+ * process. Returns false if the counters cannot be read.
+ *
+ * @param device Whole-disk path (e.g. "/dev/sdb").
+ * @return true if one or more write requests are still pending on the device.
+ */
+bool isDeviceBusy(const std::string& device) {
+    const std::string name = std::filesystem::path(device).filename().string();
+    std::ifstream in("/sys/block/" + name + "/inflight");
+    unsigned long reads = 0, writes = 0;
+    if (!(in >> reads >> writes))
+        return false;
+    return writes > 0;
+}
+
+/**
+ * @brief Runs the device-level checks, independent of which ISO is paired with it.
+ *
+ * Checks, in order:
+ * -# The device is a removable USB flash drive (@ref isFlashDrive).
+ * -# The device and its partitions are not mounted (@ref isDeviceMounted).
+ * -# The device is not in @ref g_drainingDevices (pending kernel-level tasks
+ *    tracked by the interactive UI).
+ * -# In non-interactive mode only, the device has no write I/O still in
+ *    flight (@ref isDeviceBusy). This catches flushing started by another
+ *    process, such as a previously cancelled write, which the in-process
+ *    @ref g_drainingDevices set cannot see.
+ * -# The device size can be determined (@ref getBlockDeviceSize).
+ *
+ * @param wt     Active write theme.
+ * @param device Path used for the checks (canonical /dev/sdX).
+ * @param shown  Path displayed in error messages (what the user typed).
+ * @param[out] size Device size in bytes; only valid when no error is returned.
+ * @return An error message for the first failed check, or std::nullopt if
+ *         the device is ready for writing.
+ */
+std::optional<std::string> checkDevice(const WriteTheme& wt, const std::string& device,
+                                       const std::string& shown, uint64_t& size) {
+    if (!isFlashDrive(device))
+        return pathErr(wt, shown, " is not a removable USB flash device");
+
+    if (isDeviceMounted(device))
+        return pathErr(wt, shown, " or its partitions are mounted");
+
+    {
+        std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+        if (g_drainingDevices.count(device))
+            return pathErr(wt, shown, " has pending kernel-level tasks");
+    }
+
+    if (GlobalState::isNonInteractive.load() && isDeviceBusy(device))
+        return pathErr(wt, shown, " has pending kernel-level tasks");
+
+    size = getBlockDeviceSize(device);
+    if (size == 0) {
+        std::string e;
+        e.append(wt.errLabel).append("Failed to get size for ")
+         .append(wt.errPath).append("'").append(shown).append("'")
+         .append(wt.rl_resetCol);
+        return e;
+    }
+    return std::nullopt;
+}
+
+/**
+ * @brief Checks that an ISO fits on a device.
+ *
+ * @param wt         Active write theme.
+ * @param iso        ISO to be written.
+ * @param device     Device path, used for the message and to look up the drive name.
+ * @param deviceSize Device capacity in bytes (as returned by @ref checkDevice).
+ * @return A themed validation error message with aligned size details (including
+ *         filenames, device paths, and drive names), or std::nullopt if the ISO fits.
+ */
+std::optional<std::string> checkCapacity(const WriteTheme& wt, const IsoInfo& iso,
+                                         const std::string& device, uint64_t deviceSize) {
+    if (iso.size <= deviceSize)
+        return std::nullopt;
+
+    const std::string deviceSizeStr = formatFileSize(deviceSize);
+    const std::string driveName = getDriveName(device);
+
+    // Format just the padding and arrow with a fixed width of 10 for the label
+    const auto isoLabelPadded   = std::format("    {:<5} = ", "ISO");
+    const auto driveLabelPadded = std::format("    {:<5} = ", "Drive");
+
+    std::string e;
+    e.append(wt.errLabel).append("ISO exceeds target drive capacity:\n")
+     .append(wt.errLabel).append(isoLabelPadded)
+     .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol)
+     .append(UI::Palette::DimGray).append(" (").append(wt.fileCol).append(iso.filename)
+     .append(UI::Palette::DimGray).append(")\n")
+     .append(wt.errLabel).append(driveLabelPadded)
+     .append(wt.sizeCol).append(deviceSizeStr).append(wt.rl_resetCol)
+     .append(UI::Palette::DimGray).append(" (").append(wt.warnLabel).append(device)
+     .append(wt.infoLabel).append(" <").append(driveName).append(">")
+     .append(UI::Palette::DimGray).append(")")
+     .append(wt.rl_resetCol);
+
+    return e;
+}
+
+} // namespace WriteValidation
+
 /**
  * @brief Validates a set of ISO-to-device mappings and returns only the viable pairs.
  *
- * If @p noPermissions is already set to true on entry, validation is aborted
- * immediately with a "root privileges required" error (see below).
+ * If @p noPermissions is true on entry, validation is skipped and a
+ * "Root privileges are required" error is reported. Otherwise each pair is
+ * checked with @ref WriteValidation::checkDevice and then
+ * @ref WriteValidation::checkCapacity.
  *
- * Otherwise, each candidate pair is checked in order:
- * -# Device is a removable USB device (via @ref isUsbDevice).
- * -# Device is not currently mounted (via @ref isDeviceMounted).
- * -# Device has no pending kernel-level tasks (not present in @ref g_drainingDevices).
- * -# Device size can be determined; sets @p noPermissions flag to true on failure.
- * -# ISO capacity check (ISO size <= device size).
+ * @note If any error occurs, all errors are printed, SIGINT and Ctrl-D are
+ * disabled, the user is prompted to retry, and an empty vector is returned,
+ * even if some pairs were valid. Valid pairs are returned only when every
+ * pair passes all checks.
  *
- * @note If any validation error occurs (including the early privilege check),
- * all errors are printed, signal handlers are temporarily adjusted, and
- * an empty vector is returned to trigger a retry -- even if some pairs
- * would otherwise have been valid. Valid pairs are only returned when
- * *every* candidate passes all checks.
- *
- * @param deviceMap      Pairs of (1-based ISO index, device path) to validate.
- * @param selectedIsos   Ordered list of ISOs corresponding to the indices.
- * @param[in,out] noPermissions On entry, if true, aborts validation
- * immediately with a privilege error. This flag is also used to determine
- * the type of user prompt upon failure.
- *
- * @return A vector of valid (IsoInfo, device) pairs, or an empty vector if
- * validation failed for any pair (or for the early privilege check).
+ * @param deviceMap     Pairs of (1-based ISO index, device path) to validate.
+ * @param selectedIsos  Ordered list of ISOs corresponding to the indices.
+ * @param[in,out] noPermissions On entry, true aborts validation with a
+ *        privilege error. It is reset to false after the error is shown,
+ *        and selects which prompt is displayed.
+ * @return The valid (IsoInfo, device) pairs, or an empty vector if any
+ *         validation failed.
  */
-std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<std::pair<size_t, std::string>>& deviceMap,
-                                                            const std::vector<IsoInfo>& selectedIsos, bool& noPermissions) {
+std::vector<std::pair<IsoInfo, std::string>> validateDevices(
+        const std::vector<std::pair<size_t, std::string>>& deviceMap,
+        const std::vector<IsoInfo>& selectedIsos, bool& noPermissions) {
 
+    using namespace WriteValidation;
     const WriteTheme wt = getWriteTheme();
 
     std::vector<std::string> validationErrors;
     std::vector<std::pair<IsoInfo, std::string>> validPairs;
 
-    // Early exit check: If no permissions, add the error and skip the loop
     if (noPermissions) {
-        validationErrors.push_back(std::string(wt.errLabel) + "Root privileges are required" + wt.rl_resetCol);
+        validationErrors.push_back(plainErr(wt, "Root privileges are required"));
     } else {
-        for (const auto& devicePair : deviceMap) {
-            size_t index = devicePair.first;
-            const std::string& device = devicePair.second;
+        for (const auto& [index, device] : deviceMap) {
             const auto& iso = selectedIsos[index - 1];
 
-            if (!isUsbDevice(device)) {
-                std::string errMsg;
-                errMsg.append(wt.errPath).append("'").append(device).append("'")
-                      .append(wt.rl_resetCol).append(wt.errLabel).append(" is not a removable USB flash device")
-                      .append(wt.rl_resetCol);
-                validationErrors.push_back(std::move(errMsg));
+            uint64_t deviceSize = 0;
+            if (auto err = checkDevice(wt, device, device, deviceSize)) {
+                validationErrors.push_back(std::move(*err));
                 continue;
             }
-
-            if (isDeviceMounted(device)) {
-                std::string errMsg;
-                errMsg.append(wt.errPath).append("'").append(device).append("'")
-                      .append(wt.rl_resetCol).append(wt.errLabel).append(" or its partitions are mounted")
-                      .append(wt.rl_resetCol);
-                validationErrors.push_back(std::move(errMsg));
+            if (auto err = checkCapacity(wt, iso, device, deviceSize)) {
+                validationErrors.push_back(std::move(*err));
                 continue;
             }
-
-            {
-                std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-                if (g_drainingDevices.count(device)) {
-                    std::string errMsg;
-                    errMsg.append(wt.errPath).append("'").append(device).append("'")
-                          .append(wt.rl_resetCol).append(wt.errLabel)
-                          .append(" has pending kernel-level tasks")
-                          .append(wt.rl_resetCol);
-                    validationErrors.push_back(std::move(errMsg));
-                    continue;
-                }
-            }
-
-            uint64_t deviceSize = getBlockDeviceSize(device);
-            if (deviceSize == 0) {
-                std::string errMsg;
-                errMsg.append(wt.errLabel).append("Failed to get size for ")
-                      .append(wt.errPath).append("'").append(device).append("'")
-                      .append(wt.rl_resetCol);
-                validationErrors.push_back(std::move(errMsg));
-                continue;
-            }
-
-            if (iso.size > deviceSize) {
-                std::string deviceSizeStr = formatFileSize(deviceSize);
-                std::string driveName = getDriveName(device);
-                std::string errMsg;
-                errMsg.append(wt.warnLabel).append("'").append(wt.fileCol).append(iso.filename)
-                      .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
-                      .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol).append(UI::Palette::DimGray)
-                      .append(")").append(wt.warnLabel).append("'").append(wt.errLabel).append(" is too large for ")
-                      .append(wt.errPath).append("'").append(device).append(color)
-                      .append(" <").append(driveName).append(">")
-                      .append(wt.rl_resetCol).append(UI::Palette::DimGray).append(" (")
-                      .append(wt.sizeCol).append(deviceSizeStr).append(UI::Palette::DimGray).append(")").append(wt.warnLabel).append("'")
-                      .append(wt.rl_resetCol);
-                validationErrors.push_back(std::move(errMsg));
-                continue;
-            }
-
             validPairs.emplace_back(iso, device);
         }
     }
 
-    // Unified error reporting block
     if (!validationErrors.empty()) {
-        std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.rl_resetCol << wt.bold << "\n";
-        for (const auto& err : validationErrors) {
-            std::cerr << "  \u2022 " << err << wt.bold << "\n";
-        }
+        printValidationErrors(wt, validationErrors);
 
         signal(SIGINT, SIG_IGN);
         disable_ctrl_d();
@@ -397,19 +454,37 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(const std::vector<s
  * @brief Parses a semicolon-delimited mapping string into (index, device) pairs.
  *
  * Expected format: @c "1>/dev/sdb;2>/dev/sdc" where each token is
- * @c INDEX>DEVICE_PATH.  The function enforces:
+ * @c INDEX>DEVICE_PATH. Whitespace around the index and the device path is
+ * ignored (e.g. @c "1 > /dev/sdb"). The function enforces:
  *  - Valid @c INDEX>DEVICE format for each token.
  *  - Index within the range @c [1, selectedIsos.size()].
- *  - No device path used more than once.
+ *  - Device path starts with @c /dev/ and exists.
+ *  - No device used more than once, compared after symlink resolution
+ *    (e.g. @c /dev/sdb and its @c /dev/disk/by-id/usb-... alias count as
+ *    the same device).
  *  - Every ISO index in @p selectedIsos has at least one mapping.
  *
+ * @par Symlink resolution
+ * Each device path is resolved with @c std::filesystem::canonical(), so the
+ * returned paths are always the real device nodes (e.g. @c /dev/sdb), never
+ * the alias the user typed. Callers must use the returned path for every
+ * later check and for the write itself, so all of them refer to the same
+ * device. Messages that show a device afterwards will therefore display the
+ * resolved path.
+ *
  * Errors are appended to @p errors; the caller inspects this vector to decide
- * whether to re-prompt the user.
+ * whether to re-prompt the user. Error messages for a rejected token show the
+ * path as the user typed it, except for the duplicate-device error, which
+ * shows the resolved path.
+ *
+ * @note This function only checks that the path exists and is unique. It does
+ *       not check that the device is a removable USB drive, unmounted, or large
+ *       enough; that is done later by @ref validateDevices.
  *
  * @param pairString   Raw user input string containing semicolon-separated mappings.
- * @param selectedIsos Ordered list of ISO paths used to validate index bounds.
+ * @param selectedIsos Ordered ISO list; only its size() is used, to bound valid indices.
  * @param[out] errors  Vector that will be cleared and populated with human-readable error messages.
- * @return Vector of valid (1-based index, device path) pairs extracted from the input.
+ * @return Vector of valid (1-based index, canonical device path) pairs extracted from the input.
  */
 std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::string& pairString,
                                                                 const std::vector<std::string>& selectedIsos,
@@ -424,31 +499,51 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 
     errors.clear();
 
-    while (std::getline(pairStream, pair, ';')) {
-        pair.erase(pair.find_last_not_of(" \t\n\r\f\v") + 1);
-        pair.erase(0, pair.find_first_not_of(" \t\n\r\f\v"));
+    auto trim = [](std::string& s) {
+        s.erase(s.find_last_not_of(" \t\n\r\f\v") + 1);
+        s.erase(0, s.find_first_not_of(" \t\n\r\f\v"));
+    };
 
+    while (std::getline(pairStream, pair, ';')) {
+        trim(pair);
         if (pair.empty()) continue;
 
         size_t sepPos = pair.find('>');
         if (sepPos == std::string::npos) {
-            errors.push_back(wt.warnLabel + "Invalid pair format: '" + wt.errLabel + pair +  wt.warnLabel + "'");
+            errors.push_back(wt.warnLabel + "Invalid pair format: '" + wt.errLabel + pair + wt.warnLabel + "'");
             continue;
         }
 
         std::string indexStr = pair.substr(0, sepPos);
-        std::string device = pair.substr(sepPos + 1);
+        std::string device   = pair.substr(sepPos + 1);
+        trim(indexStr);
+        trim(device);
 
         try {
             size_t index = std::stoul(indexStr);
 
             if (index < 1 || index > selectedIsos.size()) {
-                errors.push_back(wt.warnLabel + "Invalid index '" +  wt.errLabel +  indexStr + wt.warnLabel + "'");
+                errors.push_back(wt.warnLabel + "Invalid index '" + wt.errLabel + indexStr + wt.warnLabel + "'");
                 continue;
             }
 
+            if (device.rfind("/dev/", 0) != 0) {
+                errors.push_back(wt.warnLabel + "Invalid device path: '" + wt.errLabel + device + wt.warnLabel + "'");
+                continue;
+            }
+
+            // Resolve symlinks (by-id, by-path, ...) to the real node. From here
+            // on only the canonical path is used.
+            std::error_code ec;
+            const fs::path canon = fs::canonical(device, ec);
+            if (ec) {
+                errors.push_back(wt.warnLabel + "Device not found: '" + wt.errLabel + device + wt.warnLabel + "'");
+                continue;
+            }
+            device = canon.string();
+
             if (usedDevices.count(device)) {
-                errors.push_back(wt.warnLabel + "Device '" + wt.errLabel + device +  wt.warnLabel + "' used multiple times");
+                errors.push_back(wt.warnLabel + "Device '" + wt.errLabel + device + wt.warnLabel + "' used multiple times");
                 continue;
             }
 
@@ -456,9 +551,9 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
             usedDevices.insert(device);
 
         } catch (...) {
-            errors.push_back(wt.warnLabel + "Invalid index: '" + wt.errLabel + indexStr +  wt.warnLabel + "'");
+            errors.push_back(wt.warnLabel + "Invalid index: '" + wt.errLabel + indexStr + wt.warnLabel + "'");
         }
-    }
+    }   // <-- end of while loop
 
     std::unordered_set<size_t> mappedIndices;
     for (const auto& [index, device] : deviceMap) {
@@ -477,6 +572,460 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 void helpMappings();
 void displayErrors();
 
+// ------------------------------------------------------------------------- //
+// Terminal / UTF-8 helpers (shared by WriteScreen and ConfirmResizeWatcher) //
+// ------------------------------------------------------------------------- //
+
+/**
+ * @brief Visible columns of a UTF-8 string, counted by code point.
+ *
+ * Multi-byte UTF-8 sequences count as one column each, so a 3-byte
+ * codepoint such as "…" contributes 1. Continuation bytes (the 0x80..0xBF
+ * range, top two bits `10`) are skipped.
+ *
+ * @note This is a code-point count, not a Unicode display-width count:
+ * East-Asian wide characters (CJK, emoji, etc.) are counted as 1 column
+ * here even though terminals render them as 2. Correct for the ASCII and
+ * common Latin-1 filenames this file handles.
+ *
+ * @param s UTF-8 string, possibly containing multi-byte sequences.
+ * @return Number of visible columns @p s occupies.
+ */
+static size_t utf8Width(const std::string& s) {
+    size_t w = 0;
+    for (unsigned char c : s)
+        if ((c & 0xC0) != 0x80) ++w;
+    return w;
+}
+
+/**
+ * @brief Visible width of a string that may contain ANSI CSI escapes.
+ *
+ * Like @ref utf8Width, but skips ANSI CSI sequences (`ESC [` … final byte
+ * in 0x40..0x7E), which the terminal interprets rather than renders. The
+ * escapes themselves count as 0 columns; every other UTF-8 code point
+ * counts as 1.
+ *
+ * @param s String that may contain colour/formatting escapes.
+ * @return Number of visible columns @p s occupies when printed.
+ */
+static size_t visibleWidth(const std::string& s) {
+    size_t w = 0;
+    for (size_t i = 0; i < s.size(); ) {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        if (c == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
+            i += 2;
+            while (i < s.size() && !(s[i] >= 0x40 && s[i] <= 0x7E)) ++i;
+            if (i < s.size()) ++i;   // final byte of the sequence
+            continue;
+        }
+        if ((c & 0xC0) != 0x80) ++w;
+        ++i;
+    }
+    return w;
+}
+
+/**
+ * @brief Cuts a string to at most @p maxCols visible columns.
+ *
+ * ANSI CSI escape sequences are copied through untouched and do not count
+ * toward the budget, so colours that were opened before the cut remain
+ * effective past it (the caller is responsible for any reset it needs).
+ * UTF-8 multi-byte sequences are never split: an escape or code point that
+ * would cross the limit is dropped whole.
+ *
+ * @param s       Input string, possibly with ANSI escapes and UTF-8.
+ * @param maxCols Maximum number of visible columns to keep. 0 returns an
+ *                empty string; ANSI escapes appearing before the first
+ *                visible character are still emitted.
+ * @return The longest prefix of @p s whose visible width is ≤ @p maxCols.
+ */
+static std::string clipToWidth(const std::string& s, size_t maxCols) {
+    std::string out;
+    out.reserve(s.size());
+    size_t w = 0;
+    for (size_t i = 0; i < s.size(); ) {
+        if (static_cast<unsigned char>(s[i]) == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
+            size_t j = i + 2;
+            while (j < s.size() && !(s[j] >= 0x40 && s[j] <= 0x7E)) ++j;
+            if (j < s.size()) ++j;
+            out.append(s, i, j - i);
+            i = j;
+            continue;
+        }
+        size_t len = 1;
+        while (i + len < s.size() &&
+            (static_cast<unsigned char>(s[i + len]) & 0xC0) == 0x80) ++len;
+        if (w >= maxCols) break;
+        out.append(s, i, len);
+        i += len;
+        ++w;
+    }
+    return out;
+}
+
+/**
+ * @brief Current terminal size in columns and rows.
+ *
+ * Queries @c TIOCGWINSZ on stdout. On success the size is remembered; if a
+ * later call fails or reports a zero dimension (detached or transiently
+ * resized pty), the last known good size is returned instead, so a transient
+ * failure is never mistaken for a resize. Before any success the result is
+ * {80, 24}, the usual "sane default" for a non-interactive caller.
+ *
+ * @par Threading
+ * Called from the resize watcher, the WriteScreen keeper and the main
+ * thread. The remembered size is one packed @c std::atomic<uint64_t>
+ * (cols << 32 | rows), so a reader never sees a torn cols/rows pair.
+ *
+ * @return @c {columns, rows}.
+ */
+static std::pair<size_t, size_t> terminalSize() {
+    static std::atomic<uint64_t> lastGood{(uint64_t{80} << 32) | 24u};
+
+    struct winsize ws{};
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0) {
+        lastGood.store((uint64_t{ws.ws_col} << 32) | uint64_t{ws.ws_row},
+                       std::memory_order_relaxed);
+        return { ws.ws_col, ws.ws_row };
+    }
+
+    const uint64_t v = lastGood.load(std::memory_order_relaxed);
+    return { static_cast<size_t>(v >> 32), static_cast<size_t>(v & 0xFFFFFFFFu) };
+}
+
+/**
+ * @brief Shortens an ISO filename to fit a column budget, keeping ".iso".
+ *
+ * If @p name already fits in @p maxCols columns it is returned unchanged.
+ * Otherwise a trailing ".iso" extension (case-insensitive) is separated
+ * off, the stem is cut to @c maxCols − (width of "…" + ".iso") columns
+ * (floored at 4), and the result is reconstructed as @c "stem….iso".
+ * Truncation walks whole UTF-8 code points, so a multi-byte sequence is
+ * never split.
+ *
+ * @par Stem floor
+ * @c MIN_STEM is 4 columns, so on very narrow terminals the returned
+ * string can exceed @p maxCols by up to 5 columns (4 stem + 1 "…") when
+ * an extension is present, or by 1 column when it is not. Callers should
+ * clip the containing line with @ref clipToWidth to prevent wrap.
+ *
+ * @param name    Filename to shorten (may be empty, with or without a
+ *                ".iso" extension).
+ * @param maxCols Column budget the result should fit within; 0 forces the
+ *                stem floor and therefore returns @c "….iso" or @c "…".
+ * @return @p name unchanged if it fits, otherwise the shortened form.
+ */
+static std::string truncateIsoName(const std::string& name, size_t maxCols) {
+    if (utf8Width(name) <= maxCols) return name;
+
+    std::string ext;
+    std::string stem = name;
+    if (name.size() >= 4) {
+        const std::string tail = name.substr(name.size() - 4);
+        if (tail[0] == '.' &&
+            std::tolower(static_cast<unsigned char>(tail[1])) == 'i' &&
+            std::tolower(static_cast<unsigned char>(tail[2])) == 's' &&
+            std::tolower(static_cast<unsigned char>(tail[3])) == 'o') {
+            ext  = tail;
+            stem = name.substr(0, name.size() - 4);
+        }
+    }
+
+    constexpr size_t MIN_STEM = 4;                    // never shrink below this
+    const size_t overhead = 1 + utf8Width(ext);       // "…" + ".iso"
+    const size_t keep = std::max(MIN_STEM, maxCols > overhead ? maxCols - overhead : 0);
+
+    std::string out;
+    size_t cols = 0, i = 0;
+    while (i < stem.size() && cols < keep) {
+        size_t len = 1;
+        while (i + len < stem.size() &&
+               (static_cast<unsigned char>(stem[i + len]) & 0xC0) == 0x80) ++len;
+        out.append(stem, i, len);
+        i += len;
+        ++cols;
+    }
+    if (i >= stem.size()) return name;                // stem fit after all, nothing to cut
+
+    out += "\u2026";
+    out += ext;
+    return out;
+}
+
+// ------------------------------------------------------------------------- //
+// Resize watcher (main-thread repaint via rl_event_hook)                     //
+// ------------------------------------------------------------------------- //
+
+/**
+ * @brief Shared state between the resize watcher (background) and the
+ *        repaint hook (main thread).
+ *
+ * The watcher thread only sets @ref pending (plus the new size); the
+ * repaint hook on the main thread does all terminal I/O and readline
+ * access, which is the only place where @c rl_line_buffer / @c rl_end
+ * can be read without a data race.
+ *
+ * @par Threading
+ * @ref pending, @ref pendingCols, @ref pendingRows and @ref lastCols are
+ * @c std::atomic because both threads touch them. Everything else is
+ * main-thread-only: @ref paint and @ref promptWidth are written once in
+ * @ref ConfirmResizeWatcher's constructor (which runs on the main thread),
+ * and @ref lineWidths is written only by @ref confirmResizeHook.
+ *
+ * @par Ownership
+ * Instances are owned by the caller — normally a single file-scope object
+ * (@ref g_confirmResize). The watcher and the hook both take it by
+ * reference, so a `ConfirmResizeWatcher` cannot exist without a state, and
+ * a hook cannot be installed without one. That makes the "one watcher at
+ * a time" contract explicit at the type level.
+ */
+struct ResizeRepaintState {
+    // Cross-thread signalling: written by watcher, consumed by hook.
+    std::atomic<bool>   pending{false};
+    std::atomic<size_t> pendingCols{0};
+    std::atomic<size_t> pendingRows{0};
+    std::atomic<size_t> lastCols{0};
+
+    // Main-thread-only.
+    std::function<std::vector<size_t>(size_t)> paint;
+    std::vector<size_t> lineWidths;
+    size_t promptWidth = 0;
+};
+
+/// The one state used by the confirmation prompt (see @ref ResizeRepaintState
+/// for the "one watcher at a time" assumption).
+static ResizeRepaintState g_confirmResize;
+
+/**
+ * @brief `rl_event_hook`: repaints the warning block on the main thread.
+ *
+ * Called by readline from its idle input loop when no keystroke is
+ * pending. If the watcher has flagged a width change, this:
+ * -# defensively discards a pending resize with a zero `cols` or `rows`
+ *    (@ref terminalSize never reports one, but the row arithmetic below
+ *    divides by `cols`, so the guard stays),
+ * -# tells readline the new screen size via @c rl_set_screen_size() so its
+ *    own line-wrapping agrees with the layout computed here, even if its
+ *    SIGWINCH handling is disabled or replaced, and even when the repaint
+ *    is skipped below,
+ * -# computes how far the cursor must travel to reach the top of the
+ *    warning block: the block's own wrapped height **plus** the wrapped
+ *    height of the prompt + typed buffer (@c rl_point tells us exactly
+ *    where the cursor is inside that buffer),
+ * -# if the cursor-up would clamp at row 1 (`up >= rows`), skips the
+ *    repaint entirely — the terminal keeps the reflowed layout, the
+ *    "ERASE ALL DATA" header stays visible, and the ISO / device lists
+ *    above the block are preserved — **without** emitting any terminal
+ *    escape (so no dangling `?2026h` is ever sent),
+ * -# otherwise, opens a DEC mode 2026 synchronized-output envelope,
+ *    moves the cursor up over the previous block + prompt, clears to
+ *    end of screen, repaints the warning block at the new width, and
+ *    calls @c rl_on_new_line() + @c rl_redisplay() so readline reprints
+ *    the prompt and re-echoes whatever the user has typed, cursor
+ *    position included, and
+ * -# closes the 2026 envelope, which commits the whole repaint as a
+ *    single atomic frame.
+ *
+ * The envelope is owned by an RAII guard (@ref SyncOutput) so a throwing
+ * @c paint() callback still emits the closing `?2026l`.
+ *
+ * A @c std::cout flush is issued *inside* the envelope, immediately
+ * before @c rl_redisplay(), so ordering against readline's writes stays
+ * explicit even if `sync_with_stdio(false)` is ever set.
+ *
+ * Restoring the typed input is possible here — and only here — because
+ * `rl_line_buffer` / `rl_end` / `rl_point` are mutated by readline on the
+ * same thread.
+ *
+ * @note The envelope must close before this hook returns.
+ *
+ * @param s Shared state populated by @ref ConfirmResizeWatcher.
+ * @return Always 0 (do not abort readline).
+ */
+static int confirmResizeHook(ResizeRepaintState& s) {
+    if (!s.pending.load(std::memory_order_acquire))
+        return 0;
+
+    const size_t cols = s.pendingCols.load(std::memory_order_relaxed);
+    const size_t rows = s.pendingRows.load(std::memory_order_relaxed);
+
+    // Defensive: terminalSize() never reports a zero dimension, but the row
+    // math below divides by `cols`. Leave `pending` set so a valid value
+    // can still be consumed on a later call.
+    if (cols == 0 || rows == 0) return 0;
+
+    s.pending.store(false, std::memory_order_release);
+
+    // Sync readline's cached screen size with the one this layout is based
+    // on. Done before the skip guard so readline stays consistent even when
+    // we decline to repaint.
+    rl_set_screen_size(static_cast<int>(rows), static_cast<int>(cols));
+
+    // Rows occupied by the warning block at the new width.
+    size_t warningRows = 0;
+    for (size_t w : s.lineWidths)
+        warningRows += std::max<size_t>(1, (w + cols - 1) / cols);
+
+    // Cursor is somewhere in the prompt+buffer block, which sits directly
+    // below the warning block. rl_point is the cursor offset inside the
+    // buffer; adding promptWidth gives the column from start of prompt.
+    // Integer division by cols gives the physical line the cursor is on.
+    const size_t cursorCols = s.promptWidth + rl_point;
+    const size_t cursorLine = cursorCols / cols;
+
+    const size_t up = warningRows + cursorLine;
+
+    // Skip guard: if cursor-up would clamp at row 1, do nothing. Nothing has
+    // been written to the terminal yet, so no `?2026h` is left dangling.
+    if (up >= rows) return 0;
+
+    // One atomic frame: cursor movement + clear + warning block + prompt
+    // + typed input all present together at `?2026l`.
+    SyncOutput sync;
+
+    if (up > 0) std::cout << "\033[" << up << "A";
+    std::cout << "\r\033[J";
+
+    // Repaint the warning block at the new width.
+    s.lineWidths = s.paint(cols);
+
+    // Drain our buffer before readline writes to the same fd.
+    std::cout.flush();
+
+    // Restore the prompt + the user's typed text; rl_redisplay puts the
+    // cursor back where it was inside the buffer.
+    rl_on_new_line();
+    rl_redisplay();
+
+    return 0;
+}   // ~SyncOutput: `?2026l` + flush commits the frame
+
+/**
+ * @brief Signals a main-thread repaint when the terminal width changes.
+ *
+ * Runs as a background thread while readline waits at the confirmation
+ * prompt. This watcher **never** touches the terminal or readline
+ * directly: it only sets @ref ResizeRepaintState::pending, and the main
+ * thread's @ref confirmResizeHook does the redraw **and** restores the
+ * user's typed input via @c rl_redisplay().
+ *
+ * @details Reacts to width changes only. A height change is ignored: the
+ * terminal's own reflow repositions the block, and the skip guard in the
+ * hook handles the case where the block no longer fits.
+ *
+ * @note Must be stopped before @c readline returns (see @ref stop) so no
+ * repaint can fire after the prompt has been answered.
+ */
+class ConfirmResizeWatcher {
+public:
+    /**
+     * @brief Callback that prints the warning block at a given width.
+     *
+     * @param cols Terminal width in columns to lay the block out for.
+     * @return Visible width of every line printed, in order.
+     */
+    using Painter = std::function<std::vector<size_t>(size_t cols)>;
+
+    /**
+     * @brief Populates @p state and starts the watcher thread.
+     *
+     * @param state       State shared with @ref confirmResizeHook.
+     * @param paint       Callback that (re)prints the warning block for a
+     *                    given width and returns its per-line widths.
+     * @param drawnCols   Terminal width the block was last drawn at.
+     * @param drawnWidths Per-line visible widths of the block currently on
+     *                    screen, as returned by @p paint.
+     * @param promptText  The confirmation prompt as plain text (no ANSI
+     *                    escapes). Used only to measure its visible width.
+     */
+    ConfirmResizeWatcher(ResizeRepaintState& state, Painter paint,
+                         size_t drawnCols, std::vector<size_t> drawnWidths,
+                         const std::string& promptText)
+        : state_(state) {
+        state_.paint        = std::move(paint);
+        state_.lineWidths   = std::move(drawnWidths);
+        state_.promptWidth  = utf8Width(promptText);
+        state_.lastCols.store(drawnCols, std::memory_order_relaxed);
+        state_.pending.store(false, std::memory_order_relaxed);
+
+        thread_ = std::thread([this] { loop(); });
+    }
+
+    /// Stops and joins the watcher thread. Safe to call more than once.
+    ~ConfirmResizeWatcher() { stop(); }
+
+    ConfirmResizeWatcher(const ConfirmResizeWatcher&)            = delete;
+    ConfirmResizeWatcher& operator=(const ConfirmResizeWatcher&) = delete;
+
+    /**
+     * @brief Stops the watcher thread and waits for it to finish.
+     *
+     * Safe to call more than once.
+     */
+    void stop() {
+        if (!thread_.joinable()) return;
+        { std::lock_guard<std::mutex> lk(m_); stop_ = true; }
+        cv_.notify_all();
+        thread_.join();
+    }
+
+    /**
+     * @brief The state the watcher writes to. Pass to @ref confirmResizeHook
+     *        when installing it as @c rl_event_hook (via the wrapper below).
+     */
+    ResizeRepaintState& state() { return state_; }
+
+private:
+    /**
+     * @brief Poll loop: signals the main thread on a width change.
+     *
+     * Wakes every 100 ms (or immediately on @ref stop). Only width
+     * changes set @ref ResizeRepaintState::pending; height changes are
+     * ignored.
+     */
+    void loop() {
+        constexpr auto kPoll = std::chrono::milliseconds(100);
+        std::unique_lock<std::mutex> lk(m_);
+        while (!stop_) {
+            cv_.wait_for(lk, kPoll, [&] { return stop_; });
+            if (stop_) break;
+
+            const auto size = terminalSize();
+            const size_t cols = size.first;
+            const size_t rows = size.second;
+            if (cols == state_.lastCols.load(std::memory_order_relaxed))
+                continue;
+            state_.lastCols.store(cols, std::memory_order_relaxed);
+            state_.pendingCols.store(cols, std::memory_order_relaxed);
+            state_.pendingRows.store(rows, std::memory_order_relaxed);
+            state_.pending.store(true, std::memory_order_release);
+        }
+    }
+
+    ResizeRepaintState&     state_;
+    std::mutex              m_;
+    std::condition_variable cv_;
+    bool                    stop_ = false;
+    std::thread             thread_;
+};
+
+/**
+ * @brief `rl_event_hook` trampoline for a specific @ref ResizeRepaintState.
+ *
+ * @c rl_event_hook is a plain function pointer (`int (*)(void)`), so it
+ * cannot carry a state argument. This trampoline closes over
+ * @ref g_confirmResize — the only state a hook is ever installed for in
+ * this program. If a second modal prompt ever needs its own watcher, this
+ * is the one place that has to change (e.g. a `std::function`-based
+ * dispatcher).
+ *
+ * @return @ref confirmResizeHook's return value (always 0).
+ */
+static int confirmResizeHookTrampoline(void) {
+    return confirmResizeHook(g_confirmResize);
+}
+
 /**
  * @brief Interactive loop that collects and validates ISO-to-device mappings from the user.
  *
@@ -489,10 +1038,30 @@ void displayErrors();
  * A @c "?" input triggers the help screen.  After a valid mapping is entered,
  * the user is shown a destructive-write warning and must confirm with @c y/Y.
  *
+ * @par Warning block and resize
+ * ISO names in the warning are truncated to fit the current terminal width.
+ * While the confirmation prompt is waiting, a resize re-lays out the block
+ * (with truncation recomputed for the new width). The redraw runs on the
+ * main thread via @c rl_event_hook — the watcher thread only signals — so
+ * any half-typed answer survives the resize and the cursor stays where
+ * the user left it. If the block cannot be redrawn without clamping at
+ * row 1 (`up >= rows`), the redraw is skipped: the terminal keeps the
+ * reflowed layout, the safety header stays visible, and the ISO / device
+ * lists above the block are preserved.
+ *
+ * @par Device prompt and resize
+ * The ISO/device screen is embedded in the mappings prompt itself, so
+ * @c readline() is wrapped by @c readlineWithResize(): on a width change the
+ * screen is cleared and the prompt's header text re-printed (see
+ * @c promptHeaderForRepaint), then Readline redraws the last prompt line and
+ * the typed input. The list is not rebuilt, and error messages from
+ * @c displayErrors() are not repeated. This watcher is stopped before the
+ * confirmation prompt starts, which uses its own @c ConfirmResizeWatcher.
+ *
  * Detected devices are annotated with status indicators:
  * - @b [MOUNTED] — device or a partition is currently mounted; cannot be written to.
  * - @b [FLUSHING]   — device was part of a cancelled operation and is still draining
- *                  in the background; proceeding is possible but may race with cleanup.
+ *                  in the background; cannot be written to until draining finishes.
  *
  * @param selectedIsos ISOs chosen by the user for writing.
  * @return Validated (IsoInfo, device) pairs ready for @ref performWriteOperation,
@@ -500,6 +1069,7 @@ void displayErrors();
  *         ISOs exceeds the thread pool size.
  */
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos) {
+    PendingReadlineTextClearGuard pendingTextGuard;
     const WriteTheme wt = getWriteTheme();
 
     while (true) {
@@ -507,11 +1077,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         ThreadPool& pool = getStaticThreadPool();
         if (selectedIsos.size() > pool.threadCount()) {
-            std::cout << "\n" << wt.colorFailure << "ISO selections for "
+            std::cout << "\n"
+                      << wt.colorFailure << "Error: "
                       << UI::Palette::Yellow << "write2usb"
-                      << wt.colorFailure << " cannot exceed the current global thread pool size of "
+                      << wt.colorFailure << " selection limit" << wt.colorFailure << " is "
                       << wt.colorWarning << pool.threadCount()
-                      << wt.colorFailure << "!"
+                      << wt.colorFailure << " (thread pool size)."
                       << wt.speedCol << "\n";
 
             pressEnterToTry();
@@ -526,12 +1097,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         });
 
         std::ostringstream devicePromptStream;
-        devicePromptStream << "\n" << color << "Selected " << wt.headerCol << "ISO" << color << ":\n\n";
+        devicePromptStream << "\n" << color << "Selected " << wt.fileCol << "ISO" << color << ":\n\n";
 
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
             auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write2usb");
 
-            devicePromptStream << "  " << wt.indexCol << (i + 1) << ">" << wt.bold << " ";
+            devicePromptStream << " " << wt.indexCol << (i + 1) << ">" << wt.bold << " ";
 
             if (!displayConfig::toggleNamesOnly) {
                 devicePromptStream << wt.pathCol << isoDir << "/";
@@ -574,14 +1145,14 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         });
 
         if (deviceInfos.empty()) {
-            devicePromptStream << "  " << wt.colorFailure << "No USB flash drives detected!" << wt.rl_resetCol << "\n";
+            devicePromptStream << " " << wt.colorFailure << "No USB flash drives detected!" << wt.rl_resetCol << "\n";
         } else {
             for (const auto& dev : deviceInfos) {
                 if (dev.error) {
-                    devicePromptStream << "  " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
+                    devicePromptStream << " " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
                 } else {
-                    devicePromptStream << "  " << wt.deviceCol << dev.path
-                                      << color << " <" << dev.driveName
+                    devicePromptStream << " " << wt.deviceCol << dev.path
+                                      << wt.infoLabel << " <" << dev.driveName
                                       << ">" << UI::Palette::DimGray << " (" << wt.sizeCol << dev.sizeStr
                                       << UI::Palette::DimGray << ")"
                                       << ([&]() -> std::string {
@@ -600,17 +1171,27 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         g_completerData.usbDevices = &usbDevices;
         reset_custom_keybindingsForCpMvWrite2Usb();
 
-        devicePromptStream << "\n" << wt.rl_labelCol << "Mappings"
-                          << wt.rl_primaryCol << " ↵ as "
-                          << wt.rl_highlightCol << "INDEX>DEVICE"
+        devicePromptStream << "\n" << UI::Palette::RL_idxGreen << "IDX>DEVICE"
+                          << wt.rl_primaryCol << " ↵ for "
+                          << UI::Palette::RL_Yellow << "write2usb"
                           << wt.rl_primaryCol << ", ? for help: "
                           << wt.rl_resetCol;
 
         std::string devicePrompt = devicePromptStream.str();
 
-        std::unique_ptr<char, decltype(&std::free)> deviceInput(
-            readline(devicePrompt.c_str()), &std::free
-        );
+        // Resize repaint: clear and re-print the prompt's embedded screen
+        // (selected ISOs + device list). No side effects: the lists were
+        // captured in devicePrompt, so no devices are re-queried.
+        const auto repaintDevices = [&] {
+            SyncOutput sync;
+            clearScrollBuffer();
+            std::cout << promptHeaderForRepaint(devicePrompt);
+        };
+
+        armPendingInputRestore();
+        RlLine deviceInput = readlineWithResize(devicePrompt, repaintDevices);
+        rl_startup_hook = nullptr;
+
 
         if (!deviceInput) {
             return {};  // termGuard destructor restores readline state
@@ -643,7 +1224,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         if (!errors.empty()) {
             std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
             for (const auto& err : errors) {
-                std::cerr << color << "  • " << err << "\n";
+                std::cerr << color << " • " << err << "\n";
             }
 
             pressEnterToTry();
@@ -656,34 +1237,89 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             continue;
         }
 
-        // Warning message with colors from theme
-        std::cout << "\n" << wt.colorWarning << "WARNING: This will "
-                  << UI::Palette::Red << "*ERASE ALL DATA*"
-                  << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
-
+        // Collect the per-pair data once; a resize only re-renders it.
+        struct WarnRow {
+            std::string device, driveName, deviceSizeStr, filename, isoSizeStr;
+        };
+        std::vector<WarnRow> warnRows;
+        warnRows.reserve(validPairs.size());
         for (const auto& [iso, device] : validPairs) {
-            uint64_t deviceSize = getBlockDeviceSize(device);
-            std::string deviceSizeStr = formatFileSize(deviceSize);
-            std::string driveName = getDriveName(device);
-
-            std::cout << UI::Palette::DimGray << "  {" << wt.deviceCol << device
-                      << " " << color << "<" << driveName << ">" << UI::Palette::DimGray << " ("
-                      << wt.sizeCol << deviceSizeStr
-                      << UI::Palette::DimGray << ")} " << color << "←" << UI::Palette::DimGray << " {" << wt.fileCol
-                      << iso.filename << UI::Palette::DimGray << " (" << wt.sizeCol
-                      << iso.sizeStr << UI::Palette::DimGray << ")}\n";
+            warnRows.push_back({ device,
+                                 getDriveName(device),
+                                 formatFileSize(getBlockDeviceSize(device)),
+                                 iso.filename,
+                                 iso.sizeStr });
         }
 
-        // Constructing the Readline prompt using theme colors
+        auto printWarning = [&](size_t cols) -> std::vector<size_t> {
+            const size_t usableCols = cols > 1 ? cols - 1 : 1;
+            std::vector<size_t> widths;
+
+            // Header is allowed to wrap naturally: clipping "ERASE ALL DATA"
+            // would hide the safety message. repaint()'s up-count handles wrapping
+            // via (w + cols - 1) / cols.
+            std::cout << "\n" << wt.colorWarning << "WARNING: This will "
+                      << UI::Palette::Red << "*ERASE ALL DATA*"
+                      << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
+            widths.push_back(0);                                                // blank line
+            widths.push_back(utf8Width("WARNING: This will *ERASE ALL DATA* on:"));
+            widths.push_back(0);                                                // blank line
+
+            for (const auto& r : warnRows) {
+                const size_t fixedWidth = 17 + r.device.size() + utf8Width(r.driveName)
+                                        + utf8Width(r.deviceSizeStr) + utf8Width(r.isoSizeStr);
+                const size_t availForName = usableCols > fixedWidth ? usableCols - fixedWidth : 0;
+                const std::string shownName = truncateIsoName(r.filename, availForName);
+
+                std::ostringstream row;
+                row << UI::Palette::DimGray << " {" << wt.deviceCol << r.device
+                    << " " << wt.infoLabel << "<" << r.driveName << ">" << UI::Palette::DimGray << " ("
+                    << wt.sizeCol << r.deviceSizeStr
+                    << UI::Palette::DimGray << ")} " << color << "←" << UI::Palette::DimGray << " {" << wt.fileCol
+                    << shownName << UI::Palette::DimGray << " (" << wt.sizeCol
+                    << r.isoSizeStr << UI::Palette::DimGray << ")}";
+
+                // Clip so an over-long row (truncateIsoName's MIN_STEM floor
+                // on very narrow terminals) cannot wrap past usableCols, and record
+                // the actual on-screen width so repaint()'s up-count stays accurate.
+                const std::string clipped = clipToWidth(row.str(), usableCols);
+                std::cout << clipped << "\n";
+                widths.push_back(std::min(visibleWidth(clipped), usableCols));
+            }
+
+            std::cout << "\n";
+            widths.push_back(0);                                                // blank line
+            return widths;
+        };
+
+        const size_t drawnCols = terminalSize().first;
+        std::vector<size_t> drawnWidths;
+        {
+            SyncOutput sync;                     // emits ?2026h
+            drawnWidths = printWarning(drawnCols);
+        }                                        // dtor: ?2026l + flush
+
+        // Readline needs the \001/\002 markers around escape sequences so it
+        // can measure the prompt; plain output must not have them.
+        // No leading "\n": the blank line is already printed by printWarning.
+        const std::string promptText = "Proceed? (y/n): ";
         const std::string confirmPrompt =
-            "\001" + std::string(color) + "\002" +
-            "\nProceed? (y/n): "
-            + wt.rl_resetCol;
+            "\001" + std::string(color) + "\002" + promptText + wt.rl_resetCol;
 
         std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
         {
             ConfirmationModeGuard confirmGuard;
+            ConfirmResizeWatcher watcher(g_confirmResize, printWarning,
+                                         drawnCols, drawnWidths, promptText);
+
+            // Install the repaint hook only for this readline() call, and
+            // save any hook the surrounding context had set.
+            auto* savedHook = rl_event_hook;
+            rl_event_hook = confirmResizeHookTrampoline;
             confirmation.reset(readline(confirmPrompt.c_str()));
+            rl_event_hook = savedHook;
+
+            watcher.stop();   // no repaint can fire after this returns
         }
         // confirmGuard destructor has already re-applied the mappings-prompt
         // readline configuration here.
@@ -698,236 +1334,725 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
     }
 }
 
+// ------------------------------------------------------------------------- //
+// write2usbUI Block                                                        //
+// ------------------------------------------------------------------------- //
+
 /**
- * @brief Enqueues ISO-to-device write tasks and drives a live progress display.
+ * @brief Builds the per-task ProgressInfo vector from (IsoInfo, device) pairs,
+ *        in the order they would appear after a stable, case-insensitive sort
+ *        by ISO filename (device path as tie-break).
  *
- * For each validated (IsoInfo, device) pair:
- * - Initializes a @ref ProgressInfo entry in @ref progressData
- * - Caches device names, sizes, and formatted size strings
- * - Submits one @ref writeIsoToDevice call to the global @ref ThreadPool
+ * The caller's vector is never modified and is never copied. A vector of
+ * indices into @p validPairsIn is stable-sorted instead, and the pairs are
+ * then visited in that order; only the four fields ProgressInfo actually
+ * carries (filename, device, sizeStr, sourcePath) are copied, straight into
+ * the progress vector. No intermediate vector of (IsoInfo, std::string) pairs
+ * is materialised.
  *
- * A background thread redraws per-task status, waking immediately whenever a task
- * completes (via a condition variable notified from each pooled task) and otherwise
- * falling back to a 500 ms pulse if nothing new has happened, using ANSI cursor
- * save/restore (\033[s / \033[u). The main thread waits on the same condition
- * variable to detect overall completion, also waking instantly on task completion.
+ * The progress vector is reserved to exactly @p validPairsIn.size() before
+ * filling, so its backing storage never reallocates after construction
+ * (ProgressInfo holds atomics and is therefore non-movable — the reserve is
+ * load-bearing, not just an optimisation).
  *
- * @par Row Layout
- * Each row prints seamlessly side-by-side:
+ * The returned @c shared_ptr is captured by every pooled write task and by
+ * the cancellation drain, so the entries outlive this function whenever a
+ * task or drain thread still needs them.
+ *
+ * @par Ordering
+ * Primary key: @c IsoInfo::filename via @ref naturalCompare (case-insensitive,
+ * numeric-aware: "archlinux-9.iso" before "archlinux-10.iso"). Secondary key:
+ * the device path under ordinary @c std::string ordering. Equal
+ * (filename, device) keys keep their input order.
+ *
+ * @param validPairsIn Validated (IsoInfo, device) pairs targeted for writing.
+ *                     Not modified.
+ * @return A shared pointer to a new vector of ProgressInfo entries, one per
+ *         input pair, in stable sorted order.
+ *
+ * @see performWriteOperation
+ */
+static std::shared_ptr<std::vector<ProgressInfo>>
+prepareWriteData(const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
+    // Sort indices, not pairs: no IsoInfo copy, no device-string copy.
+    std::vector<size_t> order(validPairsIn.size());
+    std::iota(order.begin(), order.end(), size_t{0});   // requires <numeric>
+
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        const int c = naturalCompare(validPairsIn[a].first.filename,
+                                     validPairsIn[b].first.filename);
+        if (c != 0) return c < 0;
+        return validPairsIn[a].second < validPairsIn[b].second;
+    });
+
+    auto progressPtr = std::make_shared<std::vector<ProgressInfo>>();
+    auto& progress   = *progressPtr;
+    progress.reserve(validPairsIn.size());   // must not reallocate: atomics block it
+
+    for (size_t idx : order) {
+        const auto& [iso, device] = validPairsIn[idx];
+        progress.push_back(ProgressInfo{iso.filename, device, iso.sizeStr, iso.path});
+    }
+    return progressPtr;
+}
+
+/**
+ * @brief Detach each in-flight write task into its own background drain thread after cancellation.
+ *
+ * Called at the tail of performWriteOperation() when the user has interrupted the
+ * operation via Ctrl+C (GlobalState::g_operationCancelled). Its job is to move the
+ * still-running futures out of the local function scope into detached background
+ * threads, so that any hardware tasks still flushing cache data to a device can
+ * finish safely *after* control has been returned to the shell prompt.
+ *
+ * One detached thread is spawned per pending future. Each thread waits on its own
+ * future and, as soon as it completes, erases that device from the global
+ * g_drainingDevices set. Because every pending device has an independent waiter,
+ * a device's "[FLUSHING]" indicator clears the moment *its* task finishes,
+ * regardless of how long the other devices take — a slow device cannot hold
+ * another device's indicator lit. When the last thread empties the set,
+ * g_drainingCancelled is cleared so the indicator disappears entirely.
+ *
+ * Only devices whose tasks had not yet completed or failed at the moment of
+ * cancellation are added to g_drainingDevices — tasks that had already returned
+ * from writeIsoToDevice() are known to be flush-clean and are skipped.
+ *
+ * The non-copyable, non-movable progressData vector is deliberately *not* moved
+ * or captured by value; the shared_ptr is captured instead so the per-operation
+ * data stays alive for as long as the detached threads need it. The device path
+ * for each pending future is read from progressData[i].device, so no separate
+ * pair vector is required.
+ *
+ * @param futures        Pending per-task futures. Taken by value; each element is
+ *                       moved into its own detached thread, so the caller's vector
+ *                       is left empty after this call. Must not be used by the
+ *                       caller afterwards.
+ * @param progressData   Per-task progress records. Read only: .completed / .failed
+ *                       are inspected to decide which devices still need draining,
+ *                       and .device is used to enumerate the draining set.
+ * @param progressDataPtr Shared ownership of the progress records; captured by each
+ *                       detached thread to keep the operation data alive until that
+ *                       device's drain completes.
+ *
+ * @note The caller must not touch @p futures after this returns — it has been
+ *       moved from. This is intentional: the whole point is to transfer ownership
+ *       of the pending work out of the local scope.
+ *
+ * @note @p futures and @p progressData must have the same size: drainDevices[i] is
+ *       paired with futures[i], and each spawned thread indexes both. A mismatch is
+ *       an out-of-bounds read.
+ *
+ * @note This may spawn multiple threads (one per pending future) for a single call.
+ *       g_drainingManager must be able to accept more than one thread per operation.
+ *
+ * @note Must only be called on the cancellation path. The non-cancelled path in
+ *       performWriteOperation waits on the futures inline instead, because nothing
+ *       needs to outlive the function in that case.
+ *
+ * @see g_drainingDevices, g_drainingCancelled, g_drainingManager
+ */
+void drainManagerForWrite2UsbUI(
+    std::vector<std::future<void>> futures,
+    const std::vector<ProgressInfo>& progressData,
+    std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr)
+{
+    // 5. OOR (Out-Of-Range) BACKGROUND DRAINING:
+    // If the process was canceled via Ctrl+C, move ONLY the active futures out of the
+    // local function context into safe, detached background engines.
+    // This allows background hardware tasks to finish flushing cache data safely
+    // without copying or moving the non-copyable 'progressData' structure.
+    // One thread is spawned per pending future so each device's [FLUSHING] clears
+    // independently as soon as that device's task finishes — a slow device cannot
+    // hold another device's indicator lit.
+    std::vector<std::string> drainDevices;
+    drainDevices.reserve(progressData.size());
+
+    bool anyDraining = false;
+    {
+        std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+        for (size_t i = 0; i < progressData.size(); ++i) {
+            const std::string& device = progressData[i].device;
+            drainDevices.push_back(device);
+
+            if (!progressData[i].completed.load() && !progressData[i].failed.load()) {
+                g_drainingDevices.insert(device);
+                anyDraining = true;
+            }
+        }
+    }
+    g_drainingCancelled.store(anyDraining);
+
+    for (size_t i = 0; i < futures.size(); ++i) {
+        g_drainingManager.add(std::thread([
+            f = std::move(futures[i]),
+            dev = drainDevices[i],
+            progressDataPtr
+        ]() mutable {
+            // Keep the per-operation progress data alive for any async task
+            // that still holds references into it.
+            (void)progressDataPtr;
+
+            if (f.valid()) {
+                f.wait();
+            }
+
+            std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+            g_drainingDevices.erase(dev); // no-op if never inserted
+
+            if (g_drainingDevices.empty()) {
+                g_drainingCancelled.store(false);
+            }
+        }));
+    }
+}
+
+/**
+ * @brief Owns the live progress screen and keeps it correctly laid out.
+ *
+ * The screen has two phases:
+ * - @b Running  — a keeper thread redraws the per-task rows.
+ * - @b Finished — after @ref finish() it shows the final rows, the status line,
+ *   the summary and, once set with @ref setPrompt, the prompt. The keeper keeps
+ *   running and repaints on terminal resize, so the screen stays correct while
+ *   the program waits for input.
+ *
+ * @par Rendering
+ * All drawing happens under one mutex (@c renderMutex_), from either the keeper
+ * thread or @ref finish(), so frames never interleave. The keeper wakes on a task
+ * completion (condition variable in the shared @c WriteSync state) or every
+ * 100 ms to compare the terminal size with the last frame. While running it
+ * redraws on completion, on a size change, or every 500 ms (live percentages and
+ * speeds). Once finished it redraws only on a size change.
+ *
+ * @par Row layout
  * @code
- * filename → device [▇▇▇░░░░░░░] percentage speed
+ * filename → /dev/sdX <drive name> [▇▇▄░░] percentage speed
+ * @endcode
+ * Device path, drive name and speed are padded to the widest value across rows so
+ * the bars line up. Drive names are always shown in full. The bar has 5 cells and
+ * 10 steps of 10% (empty ░, half ▄, full ▇), floored from the percentage, so it is
+ * full only at 100%. The status column shows the live percentage, or DONE (speed
+ * shown as " (avg)"), FAIL or CXL (cancelled).
+ *
+ * @par Filename truncation
+ * Names are shown in full unless the widest row exceeds the terminal width. Only
+ * then is each name shortened to the space the terminal actually leaves for the
+ * filename column (terminal width minus the rest of the row) as "stem….iso": the
+ * ".iso" extension is always kept, the stem never shrinks below 4 columns, and
+ * truncation is UTF-8 safe. On very narrow terminals the stem floor can make the
+ * row slightly wider than the budget; the per-row clip below then prevents wrap.
+ *
+ * @par Redraw and result screen
+ * At an unchanged size, a frame moves the cursor up by the previous frame's
+ * physical line count and redraws. After a size change, and always for the result
+ * screen, the screen and scrollback are wiped and redrawn from the top. Rows are
+ * clipped to avoid wrapping, and each frame is written once inside a synchronized
+ * update. The result screen looks like this:
+ * @code
+ * (line 1: empty)
+ * Status: write2usb → COMPLETED        (line 2)
+ * (line 3: empty)
+ * <rows...>                            (from line 4)
+ * (empty)
+ * Successful: n/m | Time Elapsed: x.xs
+ * <prompt, if set>
  * @endcode
  *
- * @par Status Tokens
- * - @b DONE — Task completed successfully (appends " (avg)" to final speed readout).
- * - @b FAIL — Task encountered an error during execution.
- * - @b CXL  — Task execution or cleanup was interrupted by user cancellation.
- * - @b %    — Live percentage value representing active transfer progress.
- *
- * @par Cancellation (Ctrl+C / SIGINT)
- * When @ref GlobalState::g_operationCancelled is tripped:
- * -# The main thread's condition-variable wait (shared with the display thread)
- *    re-checks @ref GlobalState::g_operationCancelled at least every 500 ms and
- *    breaks as soon as it observes the flag set.
- * -# The live UI render thread is flagged, notified via condition variable to wake
- *    from any in-progress wait, and joined immediately.
- * -# Terminal properties, standard input buffers, and layout configurations are restored @b instantly.
- * -# Operating system control is returned to the user's shell prompt without visual lag.
- * -# @b Out-of-Band Draining: Active std::future objects are moved out of the local scope
- * into a detached thread execution closure. This allows OS page caches (e.g., buffered NTFS flushes)
- * to drain onto the hardware safely in the background, entirely avoiding stack-use-after-free crashes.
- * Each device is removed from the global dirty-device set as its own drain completes, allowing
- * the device selection screen to clear the @b [FLUSHING] indicator per-device as soon as it is safe.
- *
- * @par Normal Completion
- * The main thread's condition-variable wait unblocks once every task has finished
- * (succeeded or failed), the UI rendering loop is closed natively, a final static
- * frame update is committed, and lingering thread handles are cleanly joined.
- *
- * @par Summary Line
- * On execution exit, the primary cursor moves up to print an operational status overview:
- * - @b COMPLETED — All targeted block operations succeeded.
- * - @b PARTIAL   — At least one task succeeded and at least one task failed.
- * - @b FAILED    — Total failure across all enqueued storage block streams.
- * - @b INTERRUPTED — Operation aborted by explicit user termination before total completion.
- *
- * Final execution metrics (elapsed duration and a successful/total count ratio) are printed below.
- *
- * @param validPairs Validated (IsoInfo, device) pairs targeted for writing.
+ * @par Lifetime
+ * Holds @c shared_ptr copies of the progress vector and the @c WriteSync state, so
+ * it never refers to the stack of the function that created it. The destructor
+ * stops and joins the keeper thread.
  */
-void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& validPairs) {
-    progressData.clear();
-    progressData.reserve(validPairs.size());
+class WriteScreen {
+public:
+    WriteScreen(std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr,
+                std::shared_ptr<WriteSync> syncPtr,
+                WriteTheme theme)
+        : progressDataPtr_(std::move(progressDataPtr)),
+          progressData_(*progressDataPtr_),
+          syncPtr_(std::move(syncPtr)),
+          wt_(std::move(theme)),
+          startTime_(std::chrono::steady_clock::now()) {}
 
-    GlobalState::g_operationCancelled.store(false);
+    ~WriteScreen() { stop(); }
 
-    for (const auto& [iso, device] : validPairs) {
-        progressData.push_back(ProgressInfo{
-            iso.filename,
-            device,
-            iso.sizeStr
-        });
+    WriteScreen(const WriteScreen&)            = delete;
+    WriteScreen& operator=(const WriteScreen&) = delete;
+
+    /// Prints the header, hides the cursor, computes the per-operation column
+    /// data and starts the keeper thread.
+    void start() {
+        {
+            std::lock_guard<std::mutex> rl(renderMutex_);
+            std::cout << headerText(false) << "\033[?25l" << std::flush;
+        }
+        computeConstants();
+        thread_ = std::thread([this] { keeperLoop(); });
     }
 
-    std::atomic<size_t> completedTasks(0);
-    std::atomic<size_t> finishedTasks(0);   // success OR failure — drives "all done" detection
-    std::atomic<bool> isProcessingComplete(false);
-    const size_t totalTasks = validPairs.size();
+    /// Switches to the result screen and paints it. Call once, after the wait
+    /// for completion / cancellation. The keeper keeps running afterwards.
+    void finish() {
+        std::lock_guard<std::mutex> rl(renderMutex_);
 
-    // Condition variable used to wake the display thread the instant a task
-    // completes, instead of waiting for its next 500ms poll tick. The
-    // completion check is folded into the wait predicate (evaluated while
-    // holding progressCvMutex) so there is no window between "check" and
-    // "block" where a notify_one() from a finishing task could be missed.
-    std::mutex progressCvMutex;
-    std::condition_variable progressCv;
+        size_t failed = 0;
+        for (const auto& prog : progressData_)
+            if (prog.failed.load()) ++failed;
+
+        const size_t completed = syncPtr_->completedTasks.load();
+        const bool   cancelled = GlobalState::g_operationCancelled.load();
+
+        const std::string operation =
+            std::string(UI::Palette::Yellow) + "write2usb" + wt_.rl_resetCol;
+
+        const std::string word =
+            !cancelled
+                ? (failed > 0
+                    ? (completed > 0
+                        ? wt_.colorWarning + "PARTIAL"
+                        : wt_.colorFailure + "FAILED")
+                    : wt_.colorSuccess + "COMPLETED")
+                : wt_.colorWarning + "INTERRUPTED";
+
+        std::ostringstream st;
+        st << color << "Status: " << operation << color << " → " << word << wt_.rl_resetCol;
+        statusLine_ = st.str();
+
+        const double secs = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - startTime_).count();
+
+        std::ostringstream sm;
+        sm << std::fixed << std::setprecision(1);
+        sm << "\n" << color << "Successful: "
+           << wt_.colorSuccess << completed
+           << color << "/"
+           << wt_.colorWarning << progressData_.size()
+           << color << " | Time Elapsed: "
+           << color << secs << "s"
+           << wt_.colorStatus << UI::Palette::Reset << "\n";
+        summaryText_ = sm.str();
+
+        phase_ = Phase::Finished;
+        renderLocked();   // wrapper overload: queries terminal, then dispatches
+    }
+
+    /// Text printed under the summary on every result-screen repaint. It must be
+    /// the same text the program prints for its "press Enter" prompt, so a
+    /// repaint can put the prompt back after wiping the screen.
+    void setPrompt(std::string prompt) {
+        std::lock_guard<std::mutex> rl(renderMutex_);
+        promptText_ = std::move(prompt);
+    }
+
+    /// Stops and joins the keeper thread. Safe to call more than once.
+    void stop() {
+        if (!thread_.joinable()) return;
+        stop_.store(true, std::memory_order_release);
+        { std::lock_guard<std::mutex> lk(syncPtr_->mutex); }   // close check-then-block race
+        syncPtr_->cv.notify_all();
+        thread_.join();
+    }
+
+private:
+    enum class Phase { Running, Finished };
+
+    static constexpr int  BAR_WIDTH = 5;                    // character cells
+    static constexpr int  BAR_STEPS = BAR_WIDTH * 2;        // each cell has 2 states (half / full) -> 10 steps, 10% each
+    static constexpr auto kPulse = std::chrono::milliseconds(500);   // live-value refresh while running
+    static constexpr auto kPoll  = std::chrono::milliseconds(100);   // resize polling interval
+
+    // ---- helpers ------------------------------------------------------------
+    // utf8Width(), terminalSize() and truncateIsoName() live at file scope so
+    // the confirmation warning (via ConfirmResizeWatcher) can share them.
+
+    // Right-pads an ASCII string to the given byte width. Used for device
+    // paths and other ASCII-only columns.
+    static std::string padRight(std::string s, size_t target) {
+        if (s.size() < target) s.append(target - s.size(), ' ');
+        return s;
+    }
+
+    // ---- per-operation constants -------------------------------------------
+
+    // Device names, full (untruncated) drive names and column widths cannot
+    // change while the operation runs, so they are computed once, before the
+    // keeper starts.
+    void computeConstants() {
+        std::unordered_map<std::string, std::string> deviceNames;
+        for (const auto& prog : progressData_) {
+            if (deviceNames.find(prog.device) == deviceNames.end())
+                deviceNames[prog.device] = getDriveName(prog.device);
+        }
+
+        // Index i matches progressData_[i]. Drive names are stored verbatim,
+        // never shortened.
+        rowShortNames_.reserve(progressData_.size());
+        for (const auto& prog : progressData_) {
+            rowShortNames_.push_back(deviceNames[prog.device]);
+            maxDeviceLen_ = std::max(maxDeviceLen_, prog.device.size());
+            maxNameWidth_ = std::max(maxNameWidth_, utf8Width(rowShortNames_.back()));
+        }
+    }
+
+    // Header text: reprinted after every full-screen wipe. While running it is the
+    // "Processing..." banner; once finished, line 2 holds the status line instead.
+    std::string headerText(bool finished) const {
+        std::ostringstream h;
+        if (!finished) {
+            h << "\n" << color << "Processing "
+              << (progressData_.size() > 1 ? "tasks" : "task") << " for "
+              << UI::Palette::Yellow << "write2usb" << color
+              << "... (" << UI::Palette::Red << "Ctrl+c"
+              << color << ":cancel)\n\n";
+        } else {
+            h << "\n" << statusLine_ << "\n\n";
+        }
+        return h.str();
+    }
+
+    // ---- keeper thread -----------------------------------------------------
+
+    void keeperLoop() {
+        using clock = std::chrono::steady_clock;
+        clock::time_point lastDraw{};                       // epoch: first pass draws at once
+        size_t seenFinished = static_cast<size_t>(-1);      // differs from any real count: first pass draws
+
+        while (!stop_.load(std::memory_order_acquire)) {
+            {
+                std::lock_guard<std::mutex> rl(renderMutex_);
+
+                // Query the terminal once per frame here and hand the result
+                // to renderLocked(); the renderer no longer re-queries it.
+                const auto   size        = terminalSize();
+                const bool   sizeChanged = hasDrawn_ &&
+                                           (size.first != lastCols_ || size.second != lastRows_);
+                const size_t finishedNow = syncPtr_->finishedTasks.load();
+                const bool   completion  = (finishedNow != seenFinished);
+                seenFinished = finishedNow;   // updated in every phase so the wait below can't spin
+
+                if (phase_ == Phase::Running) {
+                    const bool pulse = (clock::now() - lastDraw) >= kPulse;
+                    if (sizeChanged || completion || pulse) {
+                        renderLocked(size, sizeChanged);
+                        lastDraw = clock::now();
+                    }
+                } else if (sizeChanged) {
+                    renderLocked(size, sizeChanged);   // result screen: repaint only when the size changed
+                }
+            }
+
+            // Wake at once on a task completion (or stop); otherwise re-check the
+            // terminal size after kPoll.
+            std::unique_lock<std::mutex> lk(syncPtr_->mutex);
+            syncPtr_->cv.wait_for(lk, kPoll, [&] {
+                return stop_.load(std::memory_order_acquire) ||
+                       syncPtr_->finishedTasks.load() != seenFinished;
+            });
+        }
+    }
+
+    // ---- rendering ---------------------------------------------------------
+
+    // Convenience overload: queries the terminal size and derives the
+    // resize flag itself. Used by finish(), which renders once and does not
+    // already hold this information.
+    //
+    // The caller must hold renderMutex_.
+    void renderLocked() {
+        const auto size    = terminalSize();
+        const bool resized = hasDrawn_ &&
+                             (size.first != lastCols_ || size.second != lastRows_);
+        renderLocked(size, resized);
+    }
+
+    // Builds the whole frame in one string and writes it once (less flicker).
+    // Terminal size and the resize flag are passed in so the renderer and the
+    // keeper share exactly one source of truth for "did the size change?".
+    //
+    // The caller must hold renderMutex_.
+    void renderLocked(std::pair<size_t, size_t> termSize, bool resized) {
+        const bool finished = (phase_ == Phase::Finished);
+
+        size_t maxFilenameWidth = 0;
+        size_t maxSpeedWidth    = 0;
+
+        // Speed strings are formatted once per render so the column can be
+        // right-aligned to the widest value (the "(avg)" suffix is appended
+        // after the padded value and does not affect alignment).
+        std::vector<std::string> speedStrs;
+        speedStrs.reserve(progressData_.size());
+        for (const auto& prog : progressData_) {
+            speedStrs.push_back(formatSpeed(prog.speed));
+            maxSpeedWidth = std::max(maxSpeedWidth, utf8Width(speedStrs.back()));
+        }
+
+        // Reserve room for " (avg)" only if some task is already showing it,
+        // so names are truncated only when a row is really wider than the terminal.
+        bool anyCompleted = false;
+        for (const auto& prog : progressData_)
+            if (prog.completed.load()) { anyCompleted = true; break; }
+        const size_t avgExtra = anyCompleted ? 6 : 0;
+
+        //   " → " (3) + device + " <name>" (maxNameWidth + 3) + " [" (2) + bar (5)
+        //   + "] " (2) + status (5) + speed (+ " (avg)" once a task is done)
+        // This is the width of everything except the filename column.
+        const size_t fixedWidth = 3 + maxDeviceLen_ + (maxNameWidth_ + 3) + 2 + BAR_WIDTH
+                                + 2 + 5 + maxSpeedWidth + avgExtra;
+
+        const size_t cols       = termSize.first;
+        const size_t rows       = termSize.second;
+        const size_t usableCols = cols > 1 ? cols - 1 : 1;
+
+        // Space the terminal leaves for the filename column. Filenames are
+        // truncated to this budget, so the cut adapts to the actual terminal
+        // size instead of a fixed width.
+        const size_t allowedFilenameWidth =
+            usableCols > fixedWidth ? usableCols - fixedWidth : 0;
+
+        // Shortened filenames, computed once per frame. truncateIsoName() returns
+        // the name unchanged when it already fits in allowedFilenameWidth, so no
+        // explicit "should I truncate?" flag is needed.
+        std::vector<std::string> shortFiles;
+        shortFiles.reserve(progressData_.size());
+        for (const auto& prog : progressData_) {
+            shortFiles.push_back(truncateIsoName(prog.filename, allowedFilenameWidth));
+            maxFilenameWidth = std::max(maxFilenameWidth, utf8Width(shortFiles.back()));
+        }
+
+        std::string frame;
+        frame += "\033[?2026h";
+        if (finished || resized) {
+            // The result screen is always painted from scratch, and a resized
+            // running screen is too: don't trust cursor-up after a resize, the
+            // terminal may have reflowed or scrolled old content into scrollback,
+            // and cursor-up cannot move above the visible screen.
+            frame += "\033[H\033[2J\033[3J";   // home, clear screen, clear scrollback
+            frame += headerText(finished);
+        } else {
+            // Same size as last frame: move up over the previous rows (accounting
+            // for any wrapping) and clear to the end of the screen. Relative
+            // movement is used instead of \033[s / \033[u because a saved absolute
+            // cursor position goes stale when the terminal re-wraps.
+            size_t up = 0;
+            for (size_t w : lastRowWidths_)
+                up += std::max<size_t>(1, (w + cols - 1) / cols);
+            if (up > 0) frame += "\033[" + std::to_string(up) + "A";
+            frame += "\r\033[J";
+        }
+        lastCols_ = cols;
+        lastRows_ = rows;
+        hasDrawn_ = true;
+        lastRowWidths_.clear();
+        lastRowWidths_.reserve(progressData_.size());
+
+        for (size_t i = 0; i < progressData_.size(); ++i) {
+            const auto& prog = progressData_[i];
+
+            const std::string& fname = shortFiles[i];
+            std::string paddedFilename = fname;
+            paddedFilename.append(maxFilenameWidth - utf8Width(fname), ' ');
+
+            const std::string paddedDevice = padRight(prog.device, maxDeviceLen_);
+
+            const std::string& name = rowShortNames_[i];
+            const std::string namePad(maxNameWidth_ - utf8Width(name), ' ');
+
+            // Half-block bar: BAR_WIDTH cells, BAR_STEPS steps (10% each).
+            // Each cell is empty (░), half (▄) or full (▇). Both filled glyphs are
+            // bottom-aligned and stop short of the cell top, so bars on consecutive
+            // rows never touch.
+            int pct = std::clamp(prog.progress.load(), 0, 100);
+            int steps = (pct * BAR_STEPS) / 100;   // 0..BAR_STEPS
+            int full  = steps / 2;
+            bool half = (steps % 2) != 0;
+
+            std::string bar, empty;
+            for (int j = 0; j < full; ++j) bar += "▇";
+            if (half)                      bar += "▄";   // 4/8 height, bottom-aligned like ▇
+            for (int j = 0; j < BAR_WIDTH - full - (half ? 1 : 0); ++j) empty += "░";
+
+            std::ostringstream row;
+            row << wt_.fileCol << paddedFilename
+                << color << " → " << wt_.deviceCol << paddedDevice
+                << color << " " << wt_.infoLabel << "<" << name << ">" << namePad
+                << color << " ["
+                << bar << wt_.speedCol << empty
+                << color << "] ";
+
+            bool isCompleted = prog.completed.load();
+
+            if (isCompleted)                                    row << wt_.colorSuccess << "DONE ";
+            else if (prog.failed.load())                        row << wt_.colorFailure << "FAIL ";
+            else if (GlobalState::g_operationCancelled.load())  row << wt_.colorWarning << "CXL  ";
+            else {
+                std::string pctStr = std::to_string(pct) + "%";
+                pctStr.resize(5, ' ');
+                row << color << pctStr;
+            }
+
+            const std::string& speedStr = speedStrs[i];
+            const std::string speedPad(maxSpeedWidth - utf8Width(speedStr), ' ');
+
+            row << color << speedStr << (isCompleted ? " (avg)" : speedPad);
+
+            // Last line of defense: if the terminal is too narrow even for the
+            // truncated row, cut the row instead of letting it wrap.
+            const std::string line = clipToWidth(row.str(), usableCols);
+            lastRowWidths_.push_back(std::min(visibleWidth(line), usableCols));
+            frame += line;
+            frame += "\033[0m\n";
+        }
+
+        if (finished) {
+            frame += summaryText_;
+            frame += promptText_;
+            frame += "\033[?25h";            // show the cursor again
+        }
+        frame += "\033[?2026l";              // end synchronized update
+        std::cout << frame << std::flush;
+    }
+
+    // ---- state -------------------------------------------------------------
+
+    std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr_;
+    std::vector<ProgressInfo>&                 progressData_;
+    std::shared_ptr<WriteSync>                 syncPtr_;
+    const WriteTheme                           wt_;
+    const std::chrono::steady_clock::time_point startTime_;
+
+    // Written once in computeConstants() before the keeper thread starts.
+    // rowShortNames_ holds the full, never-truncated drive names.
+    std::vector<std::string> rowShortNames_;
+    size_t maxDeviceLen_ = 0;
+    size_t maxNameWidth_ = 0;
+
+    // Everything below is guarded by renderMutex_.
+    std::mutex          renderMutex_;
+    Phase               phase_ = Phase::Running;
+    std::string         statusLine_;
+    std::string         summaryText_;
+    std::string         promptText_;
+    // Visible width (in columns) of every row printed by the previous frame. Used to
+    // work out how far to move the cursor back up, even if the terminal was resized
+    // (and therefore re-wrapped the old rows) in between.
+    std::vector<size_t> lastRowWidths_;
+    // Terminal size at the time of the previous frame. A change in either
+    // dimension triggers a full wipe + repaint instead of a cursor-up redraw.
+    size_t              lastCols_ = 0, lastRows_ = 0;
+    bool                hasDrawn_ = false;
+
+    std::atomic<bool>   stop_{false};
+    std::thread         thread_;
+};
+
+/**
+ * @brief Executes validated ISO-to-device writes and manages their progress
+ *        screen and completion or cancellation handling.
+ *
+ * Creates the per-task progress vector using @ref prepareWriteData, which
+ * establishes the task ordering by natural, case-insensitive ISO filename
+ * sort, with the device path as the tie-breaker. Task index and display-row
+ * index therefore remain aligned.
+ *
+ * Submits one @ref writeIsoToDevice call per task to the global @ref ThreadPool.
+ * A shared @ref WriteSync state coordinates task completion notifications
+ * between the worker threads, the main thread and the @ref WriteScreen keeper.
+ * The screen handles row rendering, column alignment, filename truncation,
+ * terminal resizing and the final result layout.
+ *
+ * @par Normal completion
+ * Waits until all tasks have finished, then disables further SIGINT handling
+ * and paints the result screen. The returned screen remains alive so the
+ * caller can display a prompt and retain resize-triggered repainting.
+ * All valid futures are waited on before returning.
+ *
+ * @par Cancellation (Ctrl+C)
+ * The cancellation flag is checked while waiting for task completion.
+ * Because the signal handler cannot safely notify the condition variable,
+ * the main thread rechecks cancellation at intervals of up to 500 ms while
+ * waiting.
+ *
+ * When cancellation is detected, the result screen is painted and terminal
+ * input state is restored. Any tasks still running are transferred to
+ * @ref drainManagerForWrite2UsbUI, which keeps their futures alive while they
+ * finish in the background. This allows outstanding writes and operating-system
+ * page-cache flushing to continue. The drain manager removes each device from
+ * @ref g_drainingDevices when its drain completes, clearing its [FLUSHING]
+ * indicator.
+ *
+ * The result screen reflects task states at the time it is painted; tasks
+ * that continue running after cancellation may finish later. The successful
+ * count in the summary is the count recorded at that time.
+ *
+ * @par Lifetime and ownership
+ * The progress vector and synchronization state are held by shared pointers
+ * captured by worker tasks and retained by the screen. Cancellation transfers
+ * the outstanding futures and the required shared state to the drain manager.
+ * This prevents those objects from being destroyed while background tasks
+ * still depend on them.
+ *
+ * The caller owns the returned @c shared_ptr<WriteScreen>. It should retain
+ * the screen while waiting for user input and call @ref WriteScreen::stop
+ * when resize-triggered repainting is no longer needed, or allow the screen
+ * to be destroyed when its shared ownership ends.
+ *
+ * @param validPairsIn Validated (IsoInfo, device) pairs to write. The input
+ *                     vector is not modified.
+ *
+ * @return A shared pointer to the live @ref WriteScreen, allowing the caller
+ *         to retain the result screen while waiting for user input.
+ */
+std::shared_ptr<WriteScreen> performWriteOperation(
+        const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
+    // One call builds the sorted per-task progress vector and establishes the
+    // ordering invariant (task i ↔ progress row i). No sorted-pair vector is
+    // materialised, so only one shared pointer travels through the tasks and drain.
+    auto progressDataPtr = prepareWriteData(validPairsIn);
+    auto& progressData   = *progressDataPtr;
+
+    const size_t totalTasks = progressData.size();
+
+    auto syncPtr = std::make_shared<WriteSync>();
+    auto& finishedTasks   = syncPtr->finishedTasks;
+    auto& progressCvMutex = syncPtr->mutex;
+    auto& progressCv      = syncPtr->cv;
 
     ThreadPool& pool = getStaticThreadPool();
 
     disableInput();
     clearScrollBuffer();
 
-    const WriteTheme wt = getWriteTheme();
-
-    std::cout << "\n" << color << "Processing "
-              << (totalTasks > 1 ? "tasks" : "task") << " for "
-              << UI::Palette::Yellow << "write2usb" << color
-              << "... (" << UI::Palette::Red << "Ctrl+c"
-              << color << ":cancel)\n\n";
-    std::cout << "\033[s";
-
-    auto startTime = std::chrono::high_resolution_clock::now();
-
-    std::unordered_map<std::string, std::string> deviceNames;
-    std::unordered_map<std::string, uint64_t> deviceSizes;
-    std::unordered_map<std::string, std::string> deviceSizeStrs;
-
-    for (const auto& prog : progressData) {
-        if (deviceNames.find(prog.device) == deviceNames.end()) {
-            deviceNames[prog.device] = getDriveName(prog.device);
-            deviceSizes[prog.device] = getBlockDeviceSize(prog.device);
-            deviceSizeStrs[prog.device] = formatFileSize(deviceSizes[prog.device]);
-        }
-    }
-
-    auto displayAllProgress = [&]() {
-        size_t maxFilenameLen = 0;
-        for (const auto& prog : progressData)
-            maxFilenameLen = std::max(maxFilenameLen, prog.filename.size());
-
-        constexpr int BAR_WIDTH = 10;
-
-        for (size_t i = 0; i < progressData.size(); ++i) {
-            const auto& prog = progressData[i];
-
-            std::string paddedFilename = prog.filename;
-            paddedFilename.resize(maxFilenameLen, ' ');
-
-            int pct = prog.progress.load();
-            int filled = (pct * BAR_WIDTH) / 100;
-            std::string bar, empty;
-
-            for (int j = 0; j < filled;             ++j) bar   += "▇";
-            for (int j = 0; j < BAR_WIDTH - filled; ++j) empty += "░";
-
-            std::cout << "\033[K"
-                      << wt.fileCol << paddedFilename
-                      << color << " → " << wt.deviceCol
-                      << std::setw(8) << std::left << prog.device << " "
-                      << color << "["
-                      << bar << wt.speedCol << empty
-                      << color << "] ";
-
-            bool isCompleted = prog.completed.load();
-
-            if (isCompleted)                                    std::cout << wt.colorSuccess << "DONE ";
-            else if (prog.failed.load())                        std::cout << wt.colorFailure << "FAIL ";
-            else if (GlobalState::g_operationCancelled.load())  std::cout << wt.colorWarning << "CXL  ";
-            else {
-                std::string pctStr = std::to_string(pct) + "%";
-                std::cout << color << std::setw(2) << pctStr << " ";
-            }
-
-            std::string speedStr = formatSpeed(prog.speed);
-            if (isCompleted) {
-                speedStr += " (avg)";
-            }
-
-            std::cout << color << std::setw(16) << std::left << speedStr << "\n";
-        }
-        std::cout << std::flush;
-    };
-
-    // UI render thread: wakes immediately on a completion notification
-    // (predicate-based wait_for closes the check-then-block race) and
-    // otherwise falls back to a 500ms pulse, matching the original pacing
-    // when nothing new has happened.
-    bool isFirstUpdate = true;
-    auto displayProgress = [&]() {
-        while (!isProcessingComplete.load(std::memory_order_acquire) &&
-               !GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
-
-            // Check if all tasks are finished (succeeded or failed)
-            if (finishedTasks.load() == totalTasks) {
-                // Force one final render and exit the display thread
-                std::cout << "\033[u";
-                displayAllProgress();
-                isProcessingComplete.store(true, std::memory_order_release);
-                break;
-            }
-
-            if (!isFirstUpdate) {
-                std::unique_lock<std::mutex> lock(progressCvMutex);
-                progressCv.wait_for(lock, std::chrono::milliseconds(500), [&] {
-                    return isProcessingComplete.load(std::memory_order_acquire) ||
-                           GlobalState::g_operationCancelled.load(std::memory_order_acquire) ||
-                           finishedTasks.load() == totalTasks;
-                });
-                lock.unlock();
-
-                // Double check flags right after waking to prevent stale prints on quick exit
-                if (isProcessingComplete.load(std::memory_order_acquire) ||
-                    GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
-                    break;
-                }
-            }
-            isFirstUpdate = false;
-
-            std::cout << "\033[u";
-            displayAllProgress();
-        }
-    };
+    // The screen prints the header, hides the cursor and starts its keeper thread.
+    auto screen = std::make_shared<WriteScreen>(progressDataPtr, syncPtr, getWriteTheme());
+    screen->start();
 
     std::vector<std::future<void>> futures;
     for (size_t i = 0; i < totalTasks; ++i) {
-        futures.push_back(pool.enqueue([validPairs, i, &completedTasks, &finishedTasks, &progressCv, &progressCvMutex]() {
-            const auto& [iso, device] = validPairs[i];
-            bool success = writeIsoToDevice(iso.path, device, i);
+        futures.push_back(pool.enqueue([progressDataPtr, syncPtr, i]() {
+            auto& progress = (*progressDataPtr)[i];
+            const bool success = writeIsoToDevice(
+                progress.sourcePath, progress.device, i, *progressDataPtr);
 
             if (success) {
-                progressData[i].completed.store(true);
-                completedTasks.fetch_add(1);
+                progress.completed.store(true);
+                syncPtr->completedTasks.fetch_add(1);
             } else if (!GlobalState::g_operationCancelled.load()) {
-                progressData[i].failed.store(true);
+                progress.failed.store(true);
             }
-            finishedTasks.fetch_add(1);
 
-            // Wake the display thread immediately instead of waiting for
-            // its next 500ms poll tick. Acquiring/releasing the mutex here,
-            // *after* the state updates above and *before* notify_one,
-            // establishes the happens-before relationship the predicate-based
-            // wait_for on the other side relies on to never miss this wakeup.
+            syncPtr->finishedTasks.fetch_add(1);
+
             {
-                std::lock_guard<std::mutex> lock(progressCvMutex);
+                std::lock_guard<std::mutex> lock(syncPtr->mutex);
             }
-            progressCv.notify_one();
+            // notify_all: the screen's keeper thread and the main thread wait on
+            // this same condition variable, and notify_one could wake the wrong one.
+            syncPtr->cv.notify_all();
         }));
     }
 
-    std::thread progressThread(displayProgress);
-
     // Wait for all tasks to finish, woken instantly by each task's
-    // notify_one() rather than polling each future individually. Still
+    // notify_all() rather than polling each future individually. Still
     // time-boxed to a 500ms cycle (not an unbounded wait) because
     // g_operationCancelled is set from a SIGINT handler, which cannot
     // safely call notify_one() — so cancellation must also be picked up
@@ -935,114 +2060,30 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
     {
         std::unique_lock<std::mutex> lock(progressCvMutex);
         while (finishedTasks.load() != totalTasks &&
-               !GlobalState::g_operationCancelled.load()) {
+            !GlobalState::g_operationCancelled.load()) {
             progressCv.wait_for(lock, std::chrono::milliseconds(500), [&] {
                 return finishedTasks.load() == totalTasks ||
-                       GlobalState::g_operationCancelled.load();
+                    GlobalState::g_operationCancelled.load();
             });
         }
     }
 
-    // 1. Instantly trip the display thread break condition flags
-    isProcessingComplete.store(true, std::memory_order_release);
-    progressCv.notify_one(); // wake progressThread immediately if it's mid-wait
     signal(SIGINT, SIG_IGN);
-    if (progressThread.joinable()) {
-        progressThread.join();
-    }
 
-    // 2. Force one final static render pass to commit final output matrix states cleanly
-    std::cout << "\033[u";
-    displayAllProgress();
+    // Paint the result screen (rows, status, summary). The keeper thread stays
+    // alive so the screen keeps reflowing on resize after this function returns.
+    screen->finish();
 
-    std::cout << "\033[s";
-    std::cout << "\033[2H\033[2K";
-
-    size_t failedTasksValue = 0;
-    for (const auto& prog : progressData) {
-        if (prog.failed.load()) {
-            failedTasksValue++;
-        }
-    }
-
-    size_t completedTasksValue = completedTasks.load();
-    std::string operation = std::string(UI::Palette::Yellow) + "write2usb" + wt.rl_resetCol;
-
-    // 3. Print operational results summaries directly
-    std::cout << "\r" << color << "Status: " << operation << color <<" → "
-              << (!GlobalState::g_operationCancelled.load()
-                  ? (failedTasksValue > 0
-                     ? (completedTasksValue > 0
-                        ? wt.colorWarning + "PARTIAL"
-                        : wt.colorFailure + "FAILED")
-                     : wt.colorSuccess + "COMPLETED")
-                  : wt.colorWarning + "INTERRUPTED")
-              << wt.rl_resetCol << std::endl;
-
-    std::cout << "\033[u";
-
-    auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration<double>(endTime - startTime).count();
-
-    std::cout << std::fixed << std::setprecision(1);
-    std::cout << "\n" << color << "Successful: "
-              << wt.colorSuccess << completedTasks.load()
-              << color << "/"
-              << wt.colorWarning << validPairs.size()
-              << color << " | Time Elapsed: "
-              << color << duration << "s"
-              << wt.colorStatus << "\n";
-
-    // 4. Instantly hand focus and console command lines back to your user's shell prompt
+    // Instantly hand focus and console command lines back to the caller
     flushStdin();
     restoreInput();
 
-    // 5. OOR (Out-Of-Range) BACKGROUND DRAINING:
-    // If the process was canceled via Ctrl+C, move ONLY the active futures out of the
-    // local function context into a safe, detached background engine.
-    // This allows background hardware tasks to finish flushing cache data safely
-    // without copying or moving the non-copyable 'progressData' structure.
-    // Each device is erased from the dirty-device set as its own future completes,
-    // allowing the [FLUSHING] indicator to clear per-device as soon as draining finishes.
+    // On cancellation the Drain manager for write2usb takes over
     if (GlobalState::g_operationCancelled.load()) {
-        std::vector<std::string> deviceNames;
-        deviceNames.reserve(validPairs.size());
-
-        bool anyDraining = false;
-        {
-            std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-            for (size_t i = 0; i < validPairs.size(); ++i) {
-                const std::string& device = validPairs[i].second;
-                deviceNames.push_back(device);
-
-                // Only devices whose task was still actively running when
-                // cancellation hit need draining. Completed and failed tasks
-                // have already returned from writeIsoToDevice and are flush-clean.
-                if (!progressData[i].completed.load() && !progressData[i].failed.load()) {
-                    g_drainingDevices.insert(device);
-                    anyDraining = true;
-                }
-            }
-        }
-        g_drainingCancelled.store(anyDraining);
-
-        g_drainingManager.add(std::thread([
-            capturedFutures = std::move(futures),
-            devices = std::move(deviceNames)
-        ]() mutable {
-            for (size_t i = 0; i < capturedFutures.size(); ++i) {
-                if (capturedFutures[i].valid()) {
-                    capturedFutures[i].wait();
-                }
-
-                std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-                g_drainingDevices.erase(devices[i]); // no-op if never inserted
-
-                if (g_drainingDevices.empty()) {
-                    g_drainingCancelled.store(false);
-                }
-            }
-        }));
+        drainManagerForWrite2UsbUI(
+            std::move(futures),
+            progressData,
+            progressDataPtr);
     } else {
         // Normal fast block cleanup sequence path if everything finished successfully
         for (auto& future : futures) {
@@ -1051,6 +2092,8 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
             }
         }
     }
+
+    return screen;
 }
 
 /**
@@ -1061,7 +2104,11 @@ void performWriteOperation(const std::vector<std::pair<IsoInfo, std::string>>& v
  * 2. Resolves filesystem metadata (size, name) for each selected ISO,
  *    skipping any files that are inaccessible or no longer present.
  * 3. Prompts the user for target device mappings via @ref collectDeviceMappings.
- * 4. Executes the flashing process via @ref performWriteOperation.
+ * 4. Executes the flashing process via @ref performWriteOperation, which returns
+ *    the live @ref WriteScreen.
+ * 5. Keeps that screen alive while waiting for the user to press Enter, so the
+ *    result screen still re-truncates and re-wraps when the terminal is resized,
+ *    then stops it.
  *
  * @param input    Raw selection string from the main menu (e.g. "1 3-5").
  * @param isoFiles Full ordered list of available ISO paths.
@@ -1103,11 +2150,19 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
         return;
     }
 
-    performWriteOperation(validPairs);
+    // The screen keeps its keeper thread running after the write finishes.
+    auto screen = performWriteOperation(validPairs);
 
     // Cleanup and wait for user acknowledgment
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
+    // A resize repaint wipes the screen, so the screen
+    // reprints this text to put the prompt back under the summary.
+    screen->setPrompt(std::string(color) + "\n↵ to continue...");
+
+
     pressEnterToContinue();
+
+    screen->stop();   // no more repaints once the user moves on
 }
