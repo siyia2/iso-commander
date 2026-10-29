@@ -12,6 +12,7 @@
 #include <iomanip>
 #include <iostream>
 #include <iterator>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -31,12 +32,12 @@
 #include "../databaseOps.h"
 #include "../display.h"
 #include "../inputHandling.h"
+#include "../listResizeWatcher.h"
+#include "../pausePrompt.h"
 #include "../readline.h"
 #include "../state.h"
 #include "../themes.h"
 #include "../verbose.h"
-
-#include <functional>    // std::function
 
 namespace {
     /** @brief Set to 1 by the SIGWINCH handler; checked on the main loop. */
@@ -232,6 +233,52 @@ void pressEnterToContinueWithRepaint(const std::function<void()>& repaint) {
     pressEnterToWithRepaint("\u21B5 to continue...", repaint);
 }
 
+/* -------------------------- no-resize continue (WriteScreen owner) -------- */
+
+/**
+ * @brief Like pressEnterToContinue(), but installs no SIGWINCH handler and
+ *        performs no repaint of its own.
+ *
+ * For use where another component already owns the resize repaint — in
+ * particular writeToUsb, where the WriteScreen keeper thread polls the
+ * terminal size and redraws the summary plus the prompt text it was given via
+ * WriteScreen::setPrompt. Installing the raw prompt's own SIGWINCH handler
+ * there would produce two repainters racing on the same screen (stripes, a
+ * wiped summary, or a duplicated prompt).
+ */
+void pressEnterToContinueNoResize() {
+    enable_ctrl_d();
+
+    struct termios raw, saved;
+    tcgetattr(STDIN_FILENO, &saved);
+    raw = saved;
+    raw.c_lflag &= ~(ICANON | ECHO);
+    raw.c_cc[VMIN]  = 1;
+    raw.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+
+    std::cout << "\n" << color << "\u21B5 to continue..." << UI::Palette::BoldReset;
+    std::cout.flush();
+
+    bool done = false;
+    while (!done) {
+        struct pollfd pfd{ STDIN_FILENO, POLLIN, 0 };
+        int r = poll(&pfd, 1, 100);
+        if (r < 0) { if (errno == EINTR) continue; break; }
+        if (r == 0) continue;
+        char ch;
+        ssize_t n = read(STDIN_FILENO, &ch, 1);
+        if (n < 0) { if (errno == EINTR) continue; break; }
+        if (n == 0) break;
+        if (ch == '\n' || ch == '\r' || ch == 4 || ch == 27) done = true;
+    }
+
+    tcflush(STDIN_FILENO, TCIFLUSH);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved);
+}
+
+/* -------------------------- verbose output -------------------------------- */
+
 /**
  * @brief Prints categorized operation results, sorted case-insensitively.
  *
@@ -244,6 +291,9 @@ void pressEnterToContinueWithRepaint(const std::function<void()>& repaint) {
  * - **Case-insensitive:** @c std::lexicographical_compare with @c std::tolower.
  * - **Stream routing:** error-type items go to @c std::cerr with colors from
  *   @c VerboseAndDatabaseTheme.
+ * - **Resize:** the whole print body is a render lambda handed to
+ *   pressEnterToContinueWithRepaint(), so a resize during the wait repaints
+ *   the results instead of clearing the screen and leaving only the prompt.
  *
  * @param primarySet   Main data set (e.g. successful unmounts or conversions).
  * @param secondarySet Supporting data (e.g. already unmounted or skipped items).
@@ -260,62 +310,69 @@ void verbosePrint(std::unordered_set<std::string>& primarySet,
 
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
-    clearScrollBuffer();
 
-    const VerboseAndDatabaseTheme vt = getVerboseTheme();
+    // Rendering is pure (no mutation of the input sets), so the whole body is
+    // a render lambda. The sorted-view construction and stream writes are
+    // cheap enough to repeat per repaint.
+    auto render = [&] {
+        const VerboseAndDatabaseTheme vt = getVerboseTheme();
+        SyncOutput sync;
+        clearScrollBuffer();
 
-    auto printSortedSet = [&](std::unordered_set<std::string>& set, bool isError = false) {
-        if (set.empty()) return;
+        auto printSortedSet = [&](std::unordered_set<std::string>& set, bool isError = false) {
+            if (set.empty()) return;
 
-        std::vector<std::string_view> views;
-        views.reserve(set.size());
-        for (const auto& s : set)
-            views.emplace_back(s);
+            std::vector<std::string_view> views;
+            views.reserve(set.size());
+            for (const auto& s : set)
+                views.emplace_back(s);
 
-        std::sort(views.begin(), views.end(), [](std::string_view a, std::string_view b) {
-            return std::lexicographical_compare(
-                a.begin(), a.end(), b.begin(), b.end(),
-                [](char x, char y) {
-                    return std::tolower((unsigned char)x) < std::tolower((unsigned char)y);
-                }
-            );
-        });
+            std::sort(views.begin(), views.end(), [](std::string_view a, std::string_view b) {
+                return std::lexicographical_compare(
+                    a.begin(), a.end(), b.begin(), b.end(),
+                    [](char x, char y) {
+                        return std::tolower((unsigned char)x) < std::tolower((unsigned char)y);
+                    }
+                );
+            });
 
-        std::cout << "\n";
-        for (std::string_view item : views) {
-            if (isError)
-                std::cerr << vt.red << item << vt.reset << "\n";
-            else
-                std::cout << item << "\n";
+            std::cout << "\n";
+            for (std::string_view item : views) {
+                if (isError)
+                    std::cerr << vt.red << item << vt.reset << "\n";
+                else
+                    std::cout << item << "\n";
+            }
+        };
+
+        switch (printType) {
+            case 0:
+                printSortedSet(primarySet);
+                printSortedSet(secondarySet);
+                printSortedSet(errorSet, true);
+                break;
+            case 1:
+                printSortedSet(primarySet);
+                printSortedSet(secondarySet);
+                printSortedSet(errorSet);
+                break;
+            case 2:
+                printSortedSet(primarySet);
+                printSortedSet(tertiarySet, true);
+                printSortedSet(secondarySet, true);
+                printSortedSet(errorSet, true);
+                break;
+            case 3:
+                printSortedSet(secondarySet);
+                printSortedSet(tertiarySet);
+                printSortedSet(errorSet);
+                printSortedSet(primarySet);
+                break;
         }
     };
 
-    switch (printType) {
-        case 0:
-            printSortedSet(primarySet);
-            printSortedSet(secondarySet);
-            printSortedSet(errorSet, true);
-            break;
-        case 1:
-            printSortedSet(primarySet);
-            printSortedSet(secondarySet);
-            printSortedSet(errorSet);
-            break;
-        case 2:
-            printSortedSet(primarySet);
-            printSortedSet(tertiarySet, true);
-            printSortedSet(secondarySet, true);
-            printSortedSet(errorSet, true);
-            break;
-        case 3:
-            printSortedSet(secondarySet);
-            printSortedSet(tertiarySet);
-            printSortedSet(errorSet);
-            printSortedSet(primarySet);
-            break;
-    }
-
-    pressEnterToContinue();
+    ListResizeWatcher watcher(render);
+    pressEnterToContinueWithRepaint(render);
 }
 
 /**
@@ -371,13 +428,18 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
         verboseSets.operationSkipped.empty() &&
         verboseSets.operationCompleted.empty()) {
 
-        clearScrollBuffer();
+        // Message + wait. The message is fixed at this point; the repaint
+        // lambda only reprints it. No side effects run inside it.
+        auto render = [&] {
+            SyncOutput sync;
+            clearScrollBuffer();
+            std::cout << "\n" << (c.red)
+                      << "No valid input provided."
+                      << UI::Palette::BoldReset << "\n";
+        };
 
-        std::cout << "\n" << (c.red)
-                  << "No valid input provided."
-                  << UI::Palette::BoldReset << "\n";
-
-        pressEnterToReturn();
+        ListResizeWatcher watcher(render);
+        pressEnterToReturnWithRepaint(render);
     }
     else if (verbose) {
         clearScrollBuffer();
@@ -442,6 +504,9 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
  * - **Invalid path / error reporting:** printed before the save step. When
  *   @p totalFiles is zero and @p validPaths is empty, also emits a "Total files
  *   processed: 0" line before the invalid-path list.
+ * - **Resize:** the one-shot side effects (load, save, elapsed time, delta
+ *   count) run before the wait; only the printing is replayed by the render
+ *   lambda handed to pressEnterToContinueWithRepaint().
  *
  * @param allIsoFiles         Discovered ISO paths to be saved.
  * @param totalFiles          Atomic count of files scanned; gates the
@@ -468,53 +533,67 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
 
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
-    auto printInvalidPaths = [&]() {
-        if (invalidPaths.empty()) return;
-        if (totalFiles == 0 && validPaths.empty()) {
-            std::cout << "\r" << color << "Total files processed: 0\n" << std::flush;
-        }
-        std::cout << "\n" << color << "Invalid paths omitted from search: " << vt.red;
-        for (auto it = invalidPaths.begin(); it != invalidPaths.end();) {
-            std::cout << "'" << *it << "'" << (++it != invalidPaths.end() ? " " : "");
-        }
-        std::cout << color << ".\n";
-    };
-
-    auto printErrorMessages = [&]() {
-        if (uniqueErrorMessages.empty()) return;
-        for (const auto& error : uniqueErrorMessages) std::cout << error;
-        std::cout << "\n";
-    };
-
-    if ((!uniqueErrorMessages.empty() || !invalidPaths.empty())) {
-        printInvalidPaths();
-        printErrorMessages();
-    }
-
+    // One-shot side effects: save and the branch decision run exactly once,
+    // before the wait. Only the printing is replayed by the render lambda.
     const bool saveSuccess = GlobalState::g_operationCancelled ? false : saveToDatabase(allIsoFiles, &newISOFound);
     const auto end_time = std::chrono::high_resolution_clock::now();
-
     const double total_elapsed = std::chrono::duration<double>(end_time - start_time).count();
-    std::cout << color << "\nTime Elapsed: " << std::fixed << std::setprecision(1)
-              << total_elapsed << "s\n";
 
-    if (GlobalState::g_operationCancelled) {
-        std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "Cancelled" << vt.green << "]" << vt.bold << "\n";
-    } else if (!allIsoFiles.empty() && newISOFound && !saveSuccess) {
-        std::cout << "\n" << vt.red << "Database Refresh failed: [" << vt.yellow << "Unable to access the database file" << vt.red << "]" << vt.bold << "\n";
-    } else if (validPaths.empty()) {
-        std::cout << "\n" << vt.red << "Database refresh failed: [" << vt.yellow << "Lack of valid paths" << vt.red << "]" << vt.bold << "\n";
-    } else if (!allIsoFiles.empty() && !newISOFound && !saveSuccess) {
-        std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No new ISO found" << vt.green << "]" << vt.bold << "\n";
-    } else if (allIsoFiles.empty()) {
-        std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No ISO found" << vt.green << "]" << vt.bold << "\n";
-    } else if (!allIsoFiles.empty() && saveSuccess && newISOFound) {
-        int result = countDifferentEntries(allIsoFiles, GlobalState::globalIsoFileList);
-        std::cout << "\n" << vt.green << "Database Refresh: [" << vt.magenta << result << " ISO imported" << vt.green << "]" << vt.bold << "\n";
-    }
+    // countDifferentEntries is one-shot, so the value is computed once here
+    // and captured by value. It's only needed in the final branch.
+    const int deltaCount =
+        (!allIsoFiles.empty() && saveSuccess && newISOFound)
+            ? countDifferentEntries(allIsoFiles, GlobalState::globalIsoFileList)
+            : 0;
 
-    pressEnterToContinue();
-    return;
+    auto render = [&] {
+        SyncOutput sync;
+        clearScrollBuffer();
+        std::cout << "\n";
+
+        auto printInvalidPaths = [&]() {
+            if (invalidPaths.empty()) return;
+            if (totalFiles == 0 && validPaths.empty()) {
+                std::cout << "\r" << color << "Total files processed: 0\n" << std::flush;
+            }
+            std::cout << "\n" << color << "Invalid paths omitted from search: " << vt.red;
+            for (auto it = invalidPaths.begin(); it != invalidPaths.end();) {
+                std::cout << "'" << *it << "'" << (++it != invalidPaths.end() ? " " : "");
+            }
+            std::cout << color << ".\n";
+        };
+
+        auto printErrorMessages = [&]() {
+            if (uniqueErrorMessages.empty()) return;
+            for (const auto& error : uniqueErrorMessages) std::cout << error;
+            std::cout << "\n";
+        };
+
+        if ((!uniqueErrorMessages.empty() || !invalidPaths.empty())) {
+            printInvalidPaths();
+            printErrorMessages();
+        }
+
+        std::cout << color << "\nTime Elapsed: " << std::fixed << std::setprecision(1)
+                  << total_elapsed << "s\n";
+
+        if (GlobalState::g_operationCancelled) {
+            std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "Cancelled" << vt.green << "]" << vt.bold << "\n";
+        } else if (!allIsoFiles.empty() && newISOFound && !saveSuccess) {
+            std::cout << "\n" << vt.red << "Database Refresh failed: [" << vt.yellow << "Unable to access the database file" << vt.red << "]" << vt.bold << "\n";
+        } else if (validPaths.empty()) {
+            std::cout << "\n" << vt.red << "Database refresh failed: [" << vt.yellow << "Lack of valid paths" << vt.red << "]" << vt.bold << "\n";
+        } else if (!allIsoFiles.empty() && !newISOFound && !saveSuccess) {
+            std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No new ISO found" << vt.green << "]" << vt.bold << "\n";
+        } else if (allIsoFiles.empty()) {
+            std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No ISO found" << vt.green << "]" << vt.bold << "\n";
+        } else if (!allIsoFiles.empty() && saveSuccess && newISOFound) {
+            std::cout << "\n" << vt.green << "Database Refresh: [" << vt.magenta << deltaCount << " ISO imported" << vt.green << "]" << vt.bold << "\n";
+        }
+    };
+
+    ListResizeWatcher watcher(render);
+    pressEnterToContinueWithRepaint(render);
 }
 
 /**
@@ -547,6 +626,7 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
     disable_ctrl_d();
 
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
+    std::cout << "\n";
 
     if (directoryPaths.empty() && !invalidDirectoryPaths.empty()) {
         std::cout << "\r" << color << "Total files processed: 0" << std::flush;
@@ -596,6 +676,12 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
  * If @c g_operationCancelled is set, all three branches are skipped; only
  * elapsed time and the Enter prompt are shown.
  *
+ * **Resize:** @c verboseFind mutates its set arguments (clears them), so it
+ * runs exactly once, before the wait, with its @c std::cout/@c std::cerr
+ * writes redirected into an @c ostringstream. The captured text is replayed
+ * by the render lambda on resize, alongside the elapsed time and the other
+ * branch output, which are captured by value.
+ *
  * @param fileExtension         Target format label (e.g. ".bin/.img").
  * @param fileNames             Files discovered this run; not modified.
  * @param invalidDirectoryPaths Passed to @c verboseFind (cleared there).
@@ -628,9 +714,29 @@ void verboseImageSearchResults(const std::string& fileExtension,
 
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
-    auto end_time = std::chrono::high_resolution_clock::now();
+    // verboseFind mutates invalidDirectoryPaths and processedErrorsFind and
+    // has no return value. To replay its output on resize without re-running
+    // it (which would have cleared the sets), run it once into a stringstream
+    // here and print that string in the render lambda.
+    std::ostringstream verboseFindBuf;
     {
+        // Swap the streams into std::cout/std::cerr for the duration of
+        // verboseFind, then restore. verboseFind's writes go to the buffer.
+        std::streambuf* oldOut = std::cout.rdbuf(verboseFindBuf.rdbuf());
+        std::streambuf* oldErr = std::cerr.rdbuf(verboseFindBuf.rdbuf());
+        verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
+        std::cout.rdbuf(oldOut);
+        std::cerr.rdbuf(oldErr);
+    }
+    const std::string verboseFindOutput = verboseFindBuf.str();
+
+    const auto end_time = std::chrono::high_resolution_clock::now();
+    const double total_elapsed_time =
+        std::chrono::duration<double>(end_time - start_time).count();
+
+    auto render = [&] {
         SyncOutput sync;
+        clearScrollBuffer();
 
         // Files were found.
         if (!fileNames.empty() && !GlobalState::g_operationCancelled.load()) {
@@ -645,7 +751,7 @@ void verboseImageSearchResults(const std::string& fileExtension,
 
         // No new files, but the cache is non-empty.
         if (!newFilesFound && !files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
-            verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
+            std::cout << verboseFindOutput;
             std::cout << "\n\n"
                       << vt.red << "0 "
                       << vt.orange << "{" << fileExtension << "} "
@@ -659,7 +765,7 @@ void verboseImageSearchResults(const std::string& fileExtension,
 
         // No files were found.
         if (files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
-            verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
+            std::cout << verboseFindOutput;
             std::cout << "\n\n"
                       << vt.red << "0" << vt.orange << " {" << fileExtension << "} "
                       << vt.red << "files found\n"
@@ -668,12 +774,11 @@ void verboseImageSearchResults(const std::string& fileExtension,
                       << vt.reset << vt.bold << "\n";
         }
 
-        auto total_elapsed_time =
-            std::chrono::duration<double>(end_time - start_time).count();
         std::cout << color << "Time Elapsed: " << std::fixed << std::setprecision(1)
                   << total_elapsed_time << "s" << vt.bold << "\n";
-    }
+    };
 
-    pressEnterToContinue();
+    ListResizeWatcher watcher(render);
+    pressEnterToContinueWithRepaint(render);
     clearScrollBuffer();
 }
