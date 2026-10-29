@@ -55,12 +55,11 @@ namespace {
 /**
  * @brief Removes non-existent ISO paths from the database and in-memory cache.
  *
- * Reads the database file under a shared lock, then checks each path for
- * existence in parallel via a thread pool. If any paths are missing, writes
- * the surviving entries to a temporary file in the same directory as the
- * database and atomically renames it into place — ensuring readers always
- * see either the complete old file or the complete new one, never a partial
- * write. Updates the in-memory list only if at least one path was removed.
+ * Reads the database file under a shared lock, checks each path for existence
+ * in parallel via the thread pool, and atomically rewrites the database with
+ * surviving entries if any paths were removed. Readers always see either the
+ * complete old file or the complete new one. Updates the in-memory list only
+ * if at least one path was removed.
  *
  * @param globalIsoFileList  Reference to the in-memory list of ISO files to update.
  */
@@ -102,7 +101,6 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         free(linePtr);
         fclose(file);
 
-        // Release the read lock and close the original fd — we're done reading
         fdGuard.release();
         flock(fd, LOCK_UN);
         close(fd);
@@ -150,7 +148,6 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
         }
         anyRemoved = true;
 
-        // Build output before touching any file
         std::string buf;
         buf.reserve(totalBufferSize);
         for (const auto& path : retained) {
@@ -158,8 +155,6 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
             buf += '\n';
         }
 
-        // Write to a temp file in the same directory as the database,
-        // then atomically rename into place
         std::string tmpPath = (std::filesystem::path(GlobalState::databaseFilePath).parent_path() / "iso_commander_database_saved_XXXXXX").string();
         int tmpFd = mkstemp(tmpPath.data());
         if (tmpFd == -1) return;
@@ -188,7 +183,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
 }
 
 /**
- * @brief Counts non-empty lines in a file for statistics display
+ * @brief Counts non-empty lines in a file.
  *
  * @param filePath Path to the file to analyze
  * @return Number of non-empty lines, or -1 if file cannot be opened
@@ -213,7 +208,7 @@ int countNonEmptyLines(const std::string& filePath) {
 }
 
 /**
- * @brief Gets the user's home directory path
+ * @brief Gets the user's home directory path.
  *
  * @return Home directory path string, or empty string if not found
  */
@@ -230,9 +225,8 @@ std::string getHomeDirectory() {
  *
  * Deduplicates incoming paths against the existing cache and against each other,
  * appends new entries, and trims to maxDatabaseSize if needed. Writes the new
- * database contents to a temporary file in the same directory as the database,
- * then atomically renames it into place — ensuring readers always see either the
- * complete old file or the complete new one, never a partial write.
+ * database contents to a temporary file and atomically renames it into place,
+ * so readers always see either the complete old file or the complete new one.
  *
  * @param discoveredISO  Const reference to vector of ISO file paths to add.
  * @param newISOFound    Set to true if at least one new entry was added,
@@ -338,8 +332,8 @@ bool saveToDatabase(const std::vector<std::string>& discoveredISO, bool* newISOF
  * @brief Passes successfully operated ISO file paths to the database.
  *
  * Accepts a semicolon-separated list of destination paths produced by a
- * completed copy or move operation. Each non-empty path is collected and
- * forwarded to saveToDatabase() in a single batch call.
+ * completed copy or move operation and forwards them to saveToDatabase()
+ * in a single batch call.
  *
  * @param filePathsStr  Semicolon-delimited string of destination ISO paths.
  *
@@ -361,10 +355,10 @@ void updateDatabaseAfterOperations(const std::string& filePathsStr) {
 }
 
 /**
- * @brief Reduces hierarchical paths by grouping related directories
+ * @brief Reduces hierarchical paths by grouping related directories.
  *
- * This function groups paths by their first 3 directory levels and reduces
- * redundant parent paths to optimize directory traversal.
+ * Groups paths by their first 3 directory levels and collapses redundant
+ * parent paths to optimize directory traversal.
  *
  * @param paths Vector of semicolon-delimited path strings
  * @return Vector of reduced/optimized path strings
@@ -450,10 +444,10 @@ bool isValidDirectory(const std::string& path);
  * under printMutex before importCV is notified, ensuring printList cannot
  * observe a stale sync indicator after the signal.
  *
- * @param state        Shared state holding isImportRunning, stopImport,
- *                     importCV/mutex for completion signaling, workerCV/mutex
- *                     and activeWorkers for per-group synchronization,
- *                     and printMutex for sync indicator consistency.
+ * @param state  Shared state holding isImportRunning, stopImport,
+ *               importCV/mutex for completion signaling, workerCV/mutex
+ *               and activeWorkers for per-group synchronization,
+ *               and printMutex for sync indicator consistency.
  */
 void backgroundDatabaseImport(std::shared_ptr<RefreshState> state) {
 
@@ -553,7 +547,7 @@ void backgroundDatabaseImport(std::shared_ptr<RefreshState> state) {
 }
 
 /**
- * @brief Loads ISO database from file into memory
+ * @brief Loads the ISO database from file into memory.
  *
  * @param outList Reference to vector that will receive the loaded ISO paths
  */
@@ -606,6 +600,10 @@ void loadFromDatabase(std::vector<std::string>& outList) {
  * by RAM-buffered entry counts for ISO, STR, BIN/IMG, DAA/GBI, CHD, MDF,
  * and NRG caches sourced from GlobalCaches and GlobalState.
  *
+ * The screen content is generated by a `render` lambda so it can be replayed
+ * by the resize watcher and by the "press Enter" prompt, keeping the display
+ * consistent across SIGWINCH events.
+ *
  * @param databaseFilePath Path to the ISO database file.
  * @param maxDatabaseSize  Maximum allowed database size in bytes.
  */
@@ -613,8 +611,6 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    // Everything that paints the screen lives in `render` so it can be replayed
-    // by the resize watcher and by the "press Enter" prompt.
     auto render = [&] {
         SyncOutput sync;
         clearScrollBuffer();
@@ -670,13 +666,8 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
 
     render();
 
-    // Keep a resize watcher alive across the wait-for-Enter, then let its
-    // destructor uninstall the rl_event_hook.
     ListResizeWatcher watcher(render);
 
-    // Hand the same repaint to the prompt so a resize during the wait redraws
-    // the stats (not just a cleared screen) — this is the correct, drift-free,
-    // stripe-free behavior on VTE-based terminals.
     pressEnterToReturnWithRepaint(render);
 }
 
@@ -684,9 +675,9 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
  * @brief Handles database management commands.
  *
  * Dispatches on inputSearch:
- *   *stats      — calls displayDatabaseStatistics()
- *   !clr        — truncates the ISO database file and clears
- *                 transformationCache and globalIsoFileList
+ *   *stats                   — calls displayDatabaseStatistics()
+ *   !clr                     — truncates the ISO database file and clears
+ *                              transformationCache and globalIsoFileList
  *   !clr_paths / !clr_filter — delegates to clearHistory()
  *
  * @param inputSearch Command string to process.
@@ -698,17 +689,10 @@ void databaseSwitches(std::string& inputSearch) {
     auto db = resolveDatabaseTheme();
 
     if (inputSearch == "*stats") {
-        // displayDatabaseStatistics handles its own resize repaint; do not
-        // wrap it in another watcher or the stats will be rendered twice per
-        // SIGWINCH.
         displayDatabaseStatistics(GlobalState::databaseFilePath, GlobalState::maxDatabaseSize);
     } else if (inputSearch == "!clr") {
         std::ofstream ofs(GlobalState::databaseFilePath, std::ofstream::out | std::ofstream::trunc);
         if (!ofs) {
-            // Failure message + wait. The message is fixed at this point; the
-            // repaint lambda only reprints it, so a resize shows the same
-            // error text, not a different one derived from state that may
-            // have changed during the wait.
             auto render = [&] {
                 SyncOutput sync;
                 clearScrollBuffer();
@@ -733,13 +717,9 @@ void databaseSwitches(std::string& inputSearch) {
             ListResizeWatcher watcher(render);
             pressEnterToContinueWithRepaint(render);
 
-            // Post-wait side effect stays outside the lambda so it runs
-            // exactly once, after Enter/Esc/Ctrl+D — not on every repaint.
             std::vector<std::string>().swap(GlobalState::globalIsoFileList);
         }
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
-        // clearHistory owns its own prompt (and, once fixed, its own resize
-        // repaint). Nothing to do here beyond calling it.
         clearHistory(inputSearch);
     }
     return;
