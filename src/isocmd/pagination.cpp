@@ -17,14 +17,16 @@
 
 // Project Headers
 #include "../display.h"
+#include "../filtering.h"
 #include "../inputHandling.h"
+#include "../listResizeWatcher.h"
 #include "../sort.h"
 #include "../state.h"
 #include "../stringManipulation.h"
 #include "../themes.h"
 #include "../verbose.h"
 
-void helpSelections(bool& isAtISOListForHelp);
+void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool& isMount);
 
 /**
  * @file pagination.cpp
@@ -42,7 +44,8 @@ void helpSelections(bool& isAtISOListForHelp);
  */
 bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage,
                                      bool& isFiltered, bool& needsClrScrn, const std::string& operation,
-                                     bool& need2Sort, std::atomic<bool>* isAtISOList) {
+                                     bool& need2Sort, std::atomic<bool>* isAtISOList,
+                                     std::vector<std::string>& filteredFiles) {
 
     const bool isMount      = (operation == "mount");
     const bool isUnmount    = (operation == "umount");
@@ -85,16 +88,26 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
     if (command == "?") {
         bool isAtISOListForHelp = isAtISOList ? isAtISOList->load() : false;
         if (isAtISOList) isAtISOList->store(false);
-        helpSelections(isAtISOListForHelp);
+        helpSelections(isAtISOListForHelp, isUnmount, isMount);
+        GlobalState::g_filteringIndicator.store(false);
         needsClrScrn = true;
         return true;
     }
 
     if (command == "*") {
-        if (!isFiltered && !isUnmount) {
+        if (!isUnmount) {
             displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
             sortAfterFilenamesOnlyFlag();
+
+            if (isFiltered && !filteringStack.empty()) {
+                refreshFilteredSourceIndices(
+                    GlobalState::globalIsoFileList,
+                    filteringStack,
+                    filteredFiles
+                );
+            }
         }
+
         if (isConversion) need2Sort = true;
         needsClrScrn = true;
         return true;
@@ -138,14 +151,19 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
     size_t totalEntries = entries.size();
     size_t totalPages = disablePagination ? 1 : ((totalEntries + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE);
 
-    while (true) {
-        if (setupEnvironmentFn) setupEnvironmentFn();
+    // Draws the current page: clear, list, pagination header/footer. Ends right
+    // after the list/footer; the prompt (or the resize watcher) supplies the
+    // blank line. Reads currentPage by reference, so it always shows the page
+    // being displayed. Has no side effects, so it is also the resize repaint
+    // (runs on the Readline thread; must not call readline()).
+    auto drawPage = [&](bool withErrors) {
+        const size_t start = disablePagination ? 0 : (currentPage * GlobalState::ITEMS_PER_PAGE);
+        const size_t end = disablePagination ? totalEntries : std::min(start + GlobalState::ITEMS_PER_PAGE, totalEntries);
 
-        size_t start = disablePagination ? 0 : (currentPage * GlobalState::ITEMS_PER_PAGE);
-        size_t end = disablePagination ? totalEntries : std::min(start + GlobalState::ITEMS_PER_PAGE, totalEntries);
+        SyncOutput sync;
 
         clearScrollBuffer();
-        displayErrors();
+        if (withErrors) displayErrors();
 
         // 1. One newline above the list
         std::cout << "\n";
@@ -174,13 +192,27 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
             if (currentPage < totalPages - 1)  std::cout << "[PgDn] Next | ";
             std::cout << "[g#] ↵ GoTo" << UI::Palette::BoldReset << "\n";
         }
+    };   // ?2026l + flush — commits the whole page as one frame
+
+    while (true) {
+        if (setupEnvironmentFn) setupEnvironmentFn();
+
+        drawPage(true);
 
         // 5. Construct the final prompt
-        // If pagination is disabled, we remove the extra newline that typically
-        // sits above the prompt to tighten the layout.
-        std::string finalPrompt = promptPrefix + promptSuffix;
+        const std::string finalPrompt = promptPrefix + promptSuffix;
 
-        std::unique_ptr<char, decltype(&std::free)> input(readline(finalPrompt.c_str()), &std::free);
+        // Resize repaint: the page, then any header line(s) the prompt carries
+        // before its last '\n' (empty for the delete prompt). The watcher then
+        // prints the newline and Readline redraws the last prompt line and the
+        // typed input. The page is not advanced and setupEnvironmentFn is not
+        // re-run.
+        const auto repaint = [&] {
+            drawPage(false);
+            std::cout << promptHeaderForRepaint(finalPrompt);
+        };
+
+        RlLine input = readlineWithResize(finalPrompt, repaint);
 
         if (!input.get()) return "EOF_SIGNAL";
 
@@ -190,7 +222,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
             bool isNavigation = false;
 
             if (userInput.size() >= 2 && userInput[0] == 'g' && std::isdigit(userInput[1])) {
-				isNavigation = true;
+                isNavigation = true;
                 try {
                     size_t requestedPage = std::stoul(userInput.substr(1));
                     if (requestedPage >= 1 && requestedPage <= totalPages) {
@@ -201,7 +233,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                 } catch (...) {}
             }
             else if (userInput == "PgDn") {
-				isNavigation = true;
+                isNavigation = true;
                 if (currentPage < totalPages - 1) {
                     currentPage++;
                     isPageTurn = true;
@@ -209,7 +241,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                 }
             }
             else if (userInput == "PgUp") {
-				isNavigation = true;
+                isNavigation = true;
                 if (currentPage > 0) {
                     currentPage--;
                     isPageTurn = true;

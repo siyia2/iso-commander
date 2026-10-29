@@ -11,7 +11,7 @@
 #include <thread>
 #include <vector>
 
-// C / System Headers
+// Third-Party Library Headers
 #include <readline/readline.h>
 
 // Project Headers
