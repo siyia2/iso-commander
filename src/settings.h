@@ -98,7 +98,7 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "base",                                             // key
         "white",                                             // defaultValue
-        "Default state and input color (charcoal/black/gray/silver/ash/white/steel)",
+        "Default state and input color",
         "Appearance Settings",                                    // Section Header
         [](const std::string& v) {                           // validate
             static const std::unordered_set<std::string> valid = {
@@ -111,7 +111,7 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "skin",                                     // key
         "white",                                    // defaultValue
-        "Menu and header accent color (green/cyan/white/purple/amber/rose/gray/black)",  // comment
+        "Menu and header color",  // comment
         "",                           // section
         [](const std::string& v) {                  // validate
             return v == "green" || v == "cyan" || v == "white" ||
@@ -122,7 +122,7 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "theme",
         "original",
-        "List and prompt theme (original/classic/high_contrast/neon/ocean/sunset/forest/\n#                          midnight/mono/retro/crimson/dracula/tokyo/paper/sakura)",
+        "List and prompt theme",
         "",
         [](const std::string& v) {
             static const std::unordered_set<std::string> valid = {
@@ -137,14 +137,14 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "auto_update",
         "off",
-        "Refresh ISO database on startup using folder path history (on/off)",
+        "Refresh ISO DB on startup using folder path history",
         "General Settings",
         isOnOff
     },
     {
         "filenames_only",
         "off",
-        "Display only filenames instead of full paths (on/off)",
+        "Display only filenames instead of full paths",
         "",
         isOnOff
     },
@@ -183,35 +183,35 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "mount_list",
         "compact",
-        "Display mode for mount operations (full/compact)",
+        "Display mode for mount operations",
         "Display Modes",
         isDisplay
     },
     {
         "umount_list",
         "full",
-        "Display mode for unmount operations (full/compact)",
+        "Display mode for unmount operations",
         "",
         isDisplay
     },
     {
         "cp_mv_rm_list",
         "full",
-        "Display mode for file operations (full/compact)",
+        "Display mode for file operations",
         "",
         isDisplay
     },
     {
         "write2usb_list",
         "compact",
-        "Display mode for write2usb operations (full/compact)",
+        "Display mode for write2usb operations",
         "",
         isDisplay
     },
     {
         "convert2iso_lists",
         "compact",
-        "Display mode for convert2iso operations (full/compact)",
+        "Display mode for convert2iso operations",
         "",
         isDisplay
     },
@@ -269,14 +269,14 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "thread_cap_for_list_sorting",
         "2",
-        "Max concurrent threads for UI list sorting within the global pool",
+        "Max concurrent threads for list sorting within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 64); }
     },
     {
         "thread_cap_for_list_filtering",
         "2",
-        "Max concurrent threads for UI list filtering within the global pool",
+        "Max concurrent threads for list filtering within the global pool",
         "",
         [](const std::string& v) { return isNum(v, 1, 64); }
     },
