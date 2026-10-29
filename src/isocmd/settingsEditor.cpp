@@ -198,7 +198,7 @@ void interactiveConfigEditor(const std::string& configPath) {
         if (input == "r" || input == "R") {
             reset_custom_keybindingsForSettingsEditor();
             std::string confirmPrompt = std::format(
-                "\001{}\002\nReset all settings to defaults? (y/n): \001{}\002",
+                "\n\001{}\002Reset all settings to defaults? (y/n): \001{}\002",
                 color,
                 UI::Palette::BoldReset
             );
