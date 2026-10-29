@@ -33,12 +33,13 @@
 #include "../themes.h"
 
 /**
- * @brief Validates if a folder path history file is effectively empty.
- * * Performs checks for file existence, size, and content validity. A file is
- * considered empty if it contains only whitespace or lacks any entries
- * starting with a forward slash.
- * * @param filePath The filesystem path to the history file.
- * @return true If the file is missing, size zero, or contains no valid paths.
+ * @brief Validates whether a folder-path history file is effectively empty.
+ *
+ * A file is considered empty if it is missing, has zero size, contains only
+ * whitespace, or contains no entry starting with a forward slash.
+ *
+ * @param filePath The filesystem path to the history file.
+ * @return true  If the file is missing, empty, or contains no valid path entry.
  * @return false If the file contains at least one valid path entry.
  */
 bool isHistoryFileEmpty(const std::string& filePath) {
@@ -82,12 +83,13 @@ bool isHistoryFileEmpty(const std::string& filePath) {
 
 /**
  * @brief Loads history from a file into the GNU Readline buffer.
- * * Swaps the current history context based on whether the user is filtering
- * or navigating. Uses advisory file locking (flock) to ensure thread-safe
- * and process-safe reads. If the configured max lines for this history type
- * is 0, history is disabled: the in-memory list is cleared and the function
- * returns without touching the file on disk.
- * * @param filterHistory Boolean toggle; true for filter history, false for path history.
+ *
+ * Selects the path-history or filter-history file based on @p filterHistory
+ * and reads it under a shared advisory lock (flock). If the configured max
+ * lines for this history type is 0, history is disabled: the in-memory list
+ * is cleared and the file on disk is left untouched.
+ *
+ * @param filterHistory True for filter history, false for path history.
  */
 void loadHistory(bool& filterHistory) {
     clear_history();
@@ -128,21 +130,21 @@ void loadHistory(bool& filterHistory) {
 
 /**
  * @brief Saves the current Readline history to a persistent file.
- * * Performs deduplication (keeping only the most recent unique entries)
- * and truncates the file to the maximum allowed lines. Employs exclusive
- * file locking (flock) during the write process. If the configured max
- * lines for this history type is 0, history is disabled: the in-memory
- * list is cleared and the function returns without opening, truncating,
- * or otherwise modifying the file on disk.
- * * @param filterHistory Boolean toggle; determines which database file to write to.
+ *
+ * Selects the path-history or filter-history file based on @p filterHistory,
+ * writes the most recent unique entries (newest first, then reversed to file
+ * order) up to the configured maximum, and holds an exclusive advisory lock
+ * (flock) for the duration. If the configured max lines for this history
+ * type is 0, history is disabled: the in-memory list is cleared and the file
+ * on disk is left untouched.
+ *
+ * @param filterHistory True for filter history, false for path history.
  */
 void saveHistory(bool& filterHistory) {
     std::string targetFilePath = !filterHistory ? GlobalState::historyFilePath : GlobalState::filterHistoryFilePath;
     size_t maxLines = !filterHistory ? GlobalState::MAX_HISTORY_LINES : GlobalState::MAX_HISTORY_PATTERN_LINES;
 
     if (maxLines == 0) {
-        // History is disabled for this type: don't touch the file on disk at all,
-        // just drop whatever's in RAM for this session.
         clear_history();
         return;
     }
@@ -206,9 +208,15 @@ void saveHistory(bool& filterHistory) {
 
 /**
  * @brief Clears the specified history database file and the current session history.
- * * Handles user commands to wipe either path or filter databases.
- * Re-routes output based on the active theme for error/success messaging.
- * * @param inputSearch The command string (e.g., "!clr_paths" or "!clr_filter").
+ *
+ * Truncates either the path-history or filter-history file depending on
+ * @p inputSearch, then clears the in-memory Readline history. The success
+ * or failure message is rendered via a `render` lambda so it can be replayed
+ * by the resize watcher and the press-Enter prompt without drift; the actual
+ * side effect (clear_history, on success) runs exactly once, outside the
+ * lambda.
+ *
+ * @param inputSearch The command string ("!clr_paths" or "!clr_filter").
  */
 void clearHistory(const std::string& inputSearch) {
     signal(SIGINT, SIG_IGN);
@@ -235,8 +243,6 @@ void clearHistory(const std::string& inputSearch) {
 
     std::ofstream ofs(filePath, std::ofstream::out | std::ofstream::trunc);
     if (!ofs) {
-        // Failure: message is fixed at this point. Repaint reprints it; a
-        // resize during the wait shows the same error, not a re-derived one.
         auto render = [&] {
             SyncOutput sync;
             clearScrollBuffer();
@@ -250,10 +256,6 @@ void clearHistory(const std::string& inputSearch) {
         pressEnterToContinueWithRepaint(render);
     } else {
         ofs.close();
-
-        // clear_history() is a side effect of the successful truncate. Run it
-        // exactly once, before the wait — never inside the render lambda, or
-        // it would re-run on every repaint.
         clear_history();
 
         auto render = [&] {

@@ -58,10 +58,10 @@ namespace fs = std::filesystem;
 /**
  * @brief Reads a block device's model name from sysfs.
  *
- * Looks up @c /sys/block/<name>/device/model and trims surrounding whitespace.
+ * Reads /sys/block/<name>/device/model and trims surrounding whitespace.
  *
- * @param device Absolute block-device path (e.g. @c /dev/sdc).
- * @return Model name, or @c "Unknown Drive" if the file is absent or empty.
+ * @param device Absolute block-device path (e.g. /dev/sdc).
+ * @return Model name, or "Unknown Drive" if the file is absent or empty.
  */
 std::string getDriveName(const std::string& device) {
     std::string deviceName = device.substr(device.find_last_of('/') + 1);
@@ -99,18 +99,15 @@ bool isFlashDrive(const std::string& devicePath) {
 
         std::error_code ec;
 
-        // Resolve symlinks so /dev/disk/by-id/usb-... maps to /dev/sdX.
         const fs::path devNode = fs::canonical(devicePath, ec);
         if (ec) return false;
 
-        // Whole disks only: partitions (sda1) have no entry in /sys/block.
         const std::string name = devNode.filename().string();
         if (name.empty()) return false;
 
         const fs::path sysPath = fs::path("/sys/block") / name;
         if (!fs::exists(sysPath, ec) || ec) return false;
 
-        // The removable attribute must read "1" (fail-closed if unreadable).
         {
             std::ifstream file(sysPath / "removable");
             std::string value;
@@ -122,7 +119,6 @@ bool isFlashDrive(const std::string& devicePath) {
             if (value != "1") return false;
         }
 
-        // Walk up the real sysfs path; a USB device node has an idVendor file.
         const fs::path resolved = fs::canonical(sysPath, ec);
         if (ec) return false;
 
@@ -140,10 +136,9 @@ bool isFlashDrive(const std::string& devicePath) {
 /**
  * @brief Enumerates removable USB block devices visible in /sys/block.
  *
- * Skips loop devices, RAM disks, zram devices, and any entry whose name
- * ends with a digit (partition suffix). A device is included only when its
- * removable sysfs attribute reads "1" and isFlashDrive() confirms it is
- * USB-attached.
+ * Skips loop devices, RAM disks, zram devices, and partition entries (names
+ * ending in a digit). A device is included only when its removable sysfs
+ * attribute reads "1" and isFlashDrive() confirms it is USB-attached.
  *
  * @return Absolute device paths such as /dev/sdb.
  */
@@ -154,19 +149,16 @@ std::vector<std::string> getRemovableDevices() {
         for (const auto& entry : fs::directory_iterator("/sys/block")) {
             const std::string deviceName = entry.path().filename().string();
 
-            // Skip virtual / pseudo devices by prefix.
             if (deviceName.rfind("loop", 0) == 0 ||
                 deviceName.rfind("ram",  0) == 0 ||
                 deviceName.rfind("zram", 0) == 0) {
                 continue;
             }
 
-            // Only skip names that END with a digit (partition suffix, e.g. "sda1").
             if (!deviceName.empty() && std::isdigit(static_cast<unsigned char>(deviceName.back()))) {
                 continue;
             }
 
-            // Must be marked removable.
             std::ifstream removableFile(entry.path() / "removable");
             std::string removable;
             if (!(removableFile >> removable) || removable != "1") {
@@ -175,7 +167,6 @@ std::vector<std::string> getRemovableDevices() {
 
             const std::string devPath = "/dev/" + deviceName;
 
-            // Also filter by USB.
             if (isFlashDrive(devPath)) {
                 devices.push_back(devPath);
             }
@@ -188,14 +179,13 @@ std::vector<std::string> getRemovableDevices() {
 }
 
 /**
- * @brief Returns true if @p device or any of its partitions is currently
- * mounted.
+ * @brief Returns true if @p device or any of its partitions is mounted.
  *
- * Parses @c /proc/mounts and compares the base device name (without
- * @c /dev/) against each mounted entry, including partition nodes whose
- * names start with the same base and continue with a digit.
+ * Parses /proc/mounts and compares the base device name (without /dev/)
+ * against each mounted entry, including partition nodes whose names start
+ * with the same base and continue with a digit.
  *
- * @param device Absolute block-device path (e.g. @c /dev/sdb).
+ * @param device Absolute block-device path (e.g. /dev/sdb).
  * @return true if the device or a partition of it is mounted.
  */
 bool isDeviceMounted(const std::string& device) {
@@ -269,7 +259,7 @@ std::string pathErr(const WriteTheme& wt, const std::string& path, const std::st
  * @brief Prints a themed "Validation errors:" block to stderr.
  *
  * Each entry is printed as an indented bullet. Entries are expected to be
- * already themed (see @ref plainErr and @ref pathErr).
+ * already themed (see plainErr and pathErr).
  *
  * @param wt   Active write theme.
  * @param errs Pre-formatted error messages.
@@ -284,9 +274,8 @@ void printValidationErrors(const WriteTheme& wt, const std::vector<std::string>&
 /**
  * @brief Reports whether a block device still has write I/O in flight.
  *
- * Reads the kernel's per-device in-flight counters from
- * /sys/block/<name>/inflight, so it also sees flushing started by another
- * process. Returns false if the counters cannot be read.
+ * Reads /sys/block/<name>/inflight, so it also sees flushing started by
+ * another process. Returns false if the counters cannot be read.
  *
  * @param device Whole-disk path (e.g. "/dev/sdb").
  * @return true if one or more write requests are still pending.
@@ -304,15 +293,15 @@ bool isDeviceBusy(const std::string& device) {
  * @brief Runs the device-level checks, independent of the paired ISO.
  *
  * Checks, in order:
- * -# The device is a removable USB flash drive (@ref isFlashDrive).
- * -# The device and its partitions are not mounted (@ref isDeviceMounted).
- * -# The device is not in @ref g_drainingDevices (pending kernel-level tasks
+ * -# The device is a removable USB flash drive (isFlashDrive).
+ * -# The device and its partitions are not mounted (isDeviceMounted).
+ * -# The device is not in g_drainingDevices (pending kernel-level tasks
  *    tracked by the interactive UI).
- * -# In non-interactive mode only, the device has no write I/O still in
- *    flight (@ref isDeviceBusy). This catches flushing started by another
- *    process, such as a previously cancelled write, which the in-process
- *    @ref g_drainingDevices set cannot see.
- * -# The device size can be determined (@ref getBlockDeviceSize).
+ * -# In non-interactive mode only, the device has no write I/O in flight
+ *    (isDeviceBusy). This catches flushing started by another process, such
+ *    as a previously cancelled write, which the in-process g_drainingDevices
+ *    set cannot see.
+ * -# The device size can be determined (getBlockDeviceSize).
  *
  * @param wt     Active write theme.
  * @param device Path used for the checks (canonical /dev/sdX).
@@ -356,10 +345,9 @@ std::optional<std::string> checkDevice(const WriteTheme& wt, const std::string& 
  * @param iso        ISO to be written.
  * @param device     Device path, used for the message and to look up the
  *                   drive name.
- * @param deviceSize Device capacity in bytes (as returned by @ref checkDevice).
- * @return A themed validation error message with aligned size details
- *         (filenames, device paths, and drive names), or std::nullopt if the
- *         ISO fits.
+ * @param deviceSize Device capacity in bytes (as returned by checkDevice).
+ * @return A themed validation error with aligned size details (filename,
+ *         device path, drive name), or std::nullopt if the ISO fits.
  */
 std::optional<std::string> checkCapacity(const WriteTheme& wt, const IsoInfo& iso,
                                          const std::string& device, uint64_t deviceSize) {
@@ -369,7 +357,6 @@ std::optional<std::string> checkCapacity(const WriteTheme& wt, const IsoInfo& is
     const std::string deviceSizeStr = formatFileSize(deviceSize);
     const std::string driveName = getDriveName(device);
 
-    // Format just the padding and arrow with a fixed width of 10 for the label.
     const auto isoLabelPadded   = std::format("    {:<5} = ", "ISO");
     const auto driveLabelPadded = std::format("    {:<5} = ", "Drive");
 
@@ -397,13 +384,13 @@ std::optional<std::string> checkCapacity(const WriteTheme& wt, const IsoInfo& is
  *
  * If @p noPermissions is true on entry, validation is skipped and a
  * "Root privileges are required" error is reported. Otherwise each pair is
- * checked with @ref WriteValidation::checkDevice and then
- * @ref WriteValidation::checkCapacity.
+ * checked with WriteValidation::checkDevice and then
+ * WriteValidation::checkCapacity.
  *
- * @note If any error occurs, all errors are printed, SIGINT and Ctrl-D are
- * disabled, the user is prompted to retry, and an empty vector is returned,
- * even if some pairs were valid. Valid pairs are returned only when every
- * pair passes all checks.
+ * If any error occurs, all errors are printed, SIGINT and Ctrl-D are
+ * disabled, the user is prompted (retry or continue), and an empty vector is
+ * returned — even if some pairs were valid. Valid pairs are returned only
+ * when every pair passes all checks.
  *
  * @param deviceMap     Pairs of (1-based ISO index, device path) to validate.
  * @param selectedIsos  Ordered ISOs corresponding to the indices.
@@ -443,9 +430,6 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(
     }
 
     if (!validationErrors.empty()) {
-        // The errors were decided above, once. The repaint lambda reprints
-        // exactly those lines — never re-runs validation, never touches
-        // noPermissions.
         auto render = [&] {
             SyncOutput sync;
             clearScrollBuffer();
@@ -455,8 +439,6 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(
         signal(SIGINT, SIG_IGN);
         disable_ctrl_d();
 
-        // The noPermissions side effect (clearing the flag) happens once,
-        // before the wait. It must not run inside render.
         const bool wasNoPermissions = noPermissions;
         if (wasNoPermissions) {
             noPermissions = false;
@@ -475,36 +457,33 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(
 }
 
 /**
- * @brief Parses a semicolon-delimited mapping string into (index, device)
- * pairs.
+ * @brief Parses a semicolon-delimited mapping string into (index, device) pairs.
  *
- * Expected format: @c "1>/dev/sdb;2>/dev/sdc", where each token is
- * @c INDEX>DEVICE_PATH. Whitespace around the index and the device path is
- * ignored (e.g. @c "1 > /dev/sdb"). Enforced:
- *  - Valid @c INDEX>DEVICE format per token.
- *  - Index within @c [1, selectedIsos.size()].
- *  - Device path starts with @c /dev/ and exists.
+ * Expected format: "1>/dev/sdb;2>/dev/sdc", where each token is
+ * INDEX>DEVICE_PATH. Whitespace around the index and the device path is
+ * ignored (e.g. "1 > /dev/sdb"). Enforced:
+ *  - Valid INDEX>DEVICE format per token.
+ *  - Index within [1, selectedIsos.size()].
+ *  - Device path starts with /dev/ and exists.
  *  - No device used more than once, compared after symlink resolution (e.g.
- *    @c /dev/sdb and its @c /dev/disk/by-id/usb-... alias count as the same
- *    device).
+ *    /dev/sdb and its /dev/disk/by-id/usb-... alias count as the same device).
  *  - Every ISO index in @p selectedIsos has at least one mapping.
  *
  * @par Symlink resolution
- * Each device path is resolved with @c std::filesystem::canonical(), so the
- * returned paths are always the real device nodes (e.g. @c /dev/sdb), never
- * the alias the user typed. Callers must use the returned path for every
- * later check and for the write itself, so all of them refer to the same
- * device. Messages that show a device afterwards therefore display the
- * resolved path.
+ * Each device path is resolved with std::filesystem::canonical(), so the
+ * returned paths are always the real device nodes (e.g. /dev/sdb), never the
+ * alias the user typed. Callers must use the returned path for every later
+ * check and for the write itself. Messages that show a device afterwards
+ * therefore display the resolved path.
  *
  * Errors are appended to @p errors; the caller inspects this vector to
  * decide whether to re-prompt. Error messages for a rejected token show the
  * path as the user typed it, except for the duplicate-device error, which
  * shows the resolved path.
  *
- * @note Only checks that the path exists and is unique. Does not check that
- *       the device is a removable USB drive, unmounted, or large enough;
- *       that is done later by @ref validateDevices.
+ * This only checks that the path exists and is unique. It does not check
+ * that the device is a removable USB drive, unmounted, or large enough;
+ * that is done later by validateDevices().
  *
  * @param pairString   Raw input containing semicolon-separated mappings.
  * @param selectedIsos Ordered ISO list; only its size() is used, to bound
@@ -559,8 +538,6 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
                 continue;
             }
 
-            // Resolve symlinks (by-id, by-path, ...) to the real node. From here
-            // on only the canonical path is used.
             std::error_code ec;
             const fs::path canon = fs::canonical(device, ec);
             if (ec) {
@@ -608,12 +585,12 @@ void displayErrors();
  *
  * Multi-byte UTF-8 sequences count as one column each, so a 3-byte
  * codepoint such as "…" contributes 1. Continuation bytes (top two bits
- * `10`) are skipped.
+ * 10) are skipped.
  *
- * @note Code-point count, not Unicode display width: East-Asian wide
- * characters (CJK, emoji) are counted as 1 column here even though
- * terminals render them as 2. Correct for the ASCII and common Latin-1
- * filenames this file handles.
+ * This is a code-point count, not Unicode display width: East-Asian wide
+ * characters (CJK, emoji) are counted as 1 column here even though terminals
+ * render them as 2. Correct for the ASCII and common Latin-1 filenames this
+ * file handles.
  *
  * @param s UTF-8 string, possibly containing multi-byte sequences.
  * @return Number of visible columns @p s occupies.
@@ -628,8 +605,8 @@ static size_t utf8Width(const std::string& s) {
 /**
  * @brief Visible width of a string that may contain ANSI CSI escapes.
  *
- * Like @ref utf8Width, but skips ANSI CSI sequences (`ESC [` … final byte
- * in 0x40..0x7E), which the terminal interprets rather than renders. The
+ * Like utf8Width, but skips ANSI CSI sequences (ESC [ … final byte in
+ * 0x40..0x7E), which the terminal interprets rather than renders. The
  * escapes count as 0 columns; every other UTF-8 code point counts as 1.
  *
  * @param s String that may contain colour/formatting escapes.
@@ -642,7 +619,7 @@ static size_t visibleWidth(const std::string& s) {
         if (c == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
             i += 2;
             while (i < s.size() && !(s[i] >= 0x40 && s[i] <= 0x7E)) ++i;
-            if (i < s.size()) ++i;   // final byte of the sequence
+            if (i < s.size()) ++i;
             continue;
         }
         if ((c & 0xC0) != 0x80) ++w;
@@ -664,7 +641,7 @@ static size_t visibleWidth(const std::string& s) {
  * @param maxCols Maximum visible columns to keep. 0 returns an empty string;
  *                escapes appearing before the first visible character are
  *                still emitted.
- * @return The longest prefix of @p s whose visible width is ≤ @p maxCols.
+ * @return The longest prefix of @p s whose visible width is <= @p maxCols.
  */
 static std::string clipToWidth(const std::string& s, size_t maxCols) {
     std::string out;
@@ -693,18 +670,16 @@ static std::string clipToWidth(const std::string& s, size_t maxCols) {
 /**
  * @brief Current terminal size in columns and rows.
  *
- * Queries @c TIOCGWINSZ on stdout. On success the size is remembered; if a
+ * Queries TIOCGWINSZ on stdout. On success the size is remembered; if a
  * later call fails or reports a zero dimension (detached or transiently
- * resized pty), the last known good size is returned instead, so a transient
- * failure is never mistaken for a resize. Before any success the result is
- * {80, 24}.
+ * resized pty), the last known good size is returned instead. Before any
+ * success the result is {80, 24}.
  *
- * @par Threading
  * Called from the resize watcher, the WriteScreen keeper and the main
- * thread. The remembered size is one packed @c std::atomic<uint64_t>
+ * thread. The remembered size is one packed std::atomic<uint64_t>
  * (cols << 32 | rows), so a reader never sees a torn pair.
  *
- * @return @c {columns, rows}.
+ * @return {columns, rows}.
  */
 static std::pair<size_t, size_t> terminalSize() {
     static std::atomic<uint64_t> lastGood{(uint64_t{80} << 32) | 24u};
@@ -725,20 +700,20 @@ static std::pair<size_t, size_t> terminalSize() {
  *
  * If @p name already fits in @p maxCols columns it is returned unchanged.
  * Otherwise a trailing ".iso" extension (case-insensitive) is separated off,
- * the stem is cut to @c maxCols − (width of "…" + ".iso") columns (floored at
- * 4), and the result is reconstructed as @c "stem….iso". Truncation walks
+ * the stem is cut to maxCols minus (width of "…" + ".iso") columns (floored
+ * at 4), and the result is reconstructed as "stem….iso". Truncation walks
  * whole UTF-8 code points, so a multi-byte sequence is never split.
  *
  * @par Stem floor
- * @c MIN_STEM is 4 columns, so on very narrow terminals the returned string
- * can exceed @p maxCols by up to 5 columns (4 stem + 1 "…") when an extension
- * is present, or by 1 column when it is not. Callers should clip the
- * containing line with @ref clipToWidth to prevent wrap.
+ * MIN_STEM is 4 columns, so on very narrow terminals the returned string
+ * can exceed @p maxCols by up to 5 columns (4 stem + 1 "…") when an
+ * extension is present, or by 1 column when it is not. Callers should clip
+ * the containing line with clipToWidth to prevent wrap.
  *
- * @param name    Filename to shorten (may be empty, with or without a
- *                ".iso" extension).
+ * @param name    Filename to shorten (may be empty, with or without a ".iso"
+ *                extension).
  * @param maxCols Column budget the result should fit within; 0 forces the
- *                stem floor and returns @c "….iso" or @c "…".
+ *                stem floor and returns "….iso" or "…".
  * @return @p name unchanged if it fits, otherwise the shortened form.
  */
 static std::string truncateIsoName(const std::string& name, size_t maxCols) {
@@ -757,8 +732,8 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
         }
     }
 
-    constexpr size_t MIN_STEM = 4;                    // never shrink below this
-    const size_t overhead = 1 + utf8Width(ext);       // "…" + ".iso"
+    constexpr size_t MIN_STEM = 4;
+    const size_t overhead = 1 + utf8Width(ext);
     const size_t keep = std::max(MIN_STEM, maxCols > overhead ? maxCols - overhead : 0);
 
     std::string out;
@@ -771,7 +746,7 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
         i += len;
         ++cols;
     }
-    if (i >= stem.size()) return name;                // stem fit after all, nothing to cut
+    if (i >= stem.size()) return name;
 
     out += "\u2026";
     out += ext;
@@ -779,7 +754,7 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
 }
 
 // ------------------------------------------------------------------------- //
-// Resize watcher (main-thread repaint via rl_event_hook)                     //
+// Resize watcher (main-thread repaint via rl_event_hook)                    //
 // ------------------------------------------------------------------------- //
 
 /**
@@ -788,22 +763,20 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
  *
  * The watcher thread only sets @ref pending (plus the new size); the repaint
  * hook on the main thread does all terminal I/O and readline access, which is
- * the only place @c rl_line_buffer / @c rl_end can be read without a data
- * race.
+ * the only place rl_line_buffer / rl_end can be read without a data race.
  *
  * @par Threading
- * @ref pending, @ref pendingCols, @ref pendingRows and @ref lastCols are
- * @c std::atomic because both threads touch them. Everything else is
- * main-thread-only: @ref paint and @ref promptWidth are written once in
- * @ref ConfirmResizeWatcher's constructor (on the main thread), and
- * @ref lineWidths is written only by @ref confirmResizeHook.
+ * pending, pendingCols, pendingRows and lastCols are std::atomic because both
+ * threads touch them. Everything else is main-thread-only: paint and
+ * promptWidth are written once in ConfirmResizeWatcher's constructor (on the
+ * main thread), and lineWidths is written only by confirmResizeHook.
  *
  * @par Ownership
  * Instances are owned by the caller — normally a single file-scope object
- * (@ref g_confirmResize). The watcher and the hook both take it by
- * reference, so a `ConfirmResizeWatcher` cannot exist without a state, and a
- * hook cannot be installed without one. That makes the "one watcher at a
- * time" contract explicit at the type level.
+ * (g_confirmResize). The watcher and the hook both take it by reference, so a
+ * ConfirmResizeWatcher cannot exist without a state, and a hook cannot be
+ * installed without one. That makes the "one watcher at a time" contract
+ * explicit at the type level.
  */
 struct ResizeRepaintState {
     // Cross-thread signalling: written by watcher, consumed by hook.
@@ -818,49 +791,48 @@ struct ResizeRepaintState {
     size_t promptWidth = 0;
 };
 
-/// The one state used by the confirmation prompt (see @ref ResizeRepaintState
+/// The one state used by the confirmation prompt (see ResizeRepaintState
 /// for the "one watcher at a time" assumption).
 static ResizeRepaintState g_confirmResize;
 
 /**
- * @brief `rl_event_hook`: repaints the warning block on the main thread.
+ * @brief rl_event_hook: repaints the warning block on the main thread.
  *
  * Called by readline from its idle input loop when no keystroke is pending.
  * If the watcher has flagged a width change, it:
- * -# Defensively discards a pending resize with a zero @c cols or @c rows
- *    (@ref terminalSize never reports one, but the row arithmetic below
- *    divides by @c cols, so the guard stays).
- * -# Tells readline the new screen size via @c rl_set_screen_size() so its
- *    own line-wrapping agrees with the layout computed here.
+ * -# Defensively discards a pending resize with a zero cols or rows
+ *    (terminalSize never reports one, but the row arithmetic below divides
+ *    by cols, so the guard stays).
+ * -# Tells readline the new screen size via rl_set_screen_size() so its own
+ *    line-wrapping agrees with the layout computed here.
  * -# Computes how far the cursor must travel to reach the top of the warning
- *    block: the block's own wrapped height **plus** the wrapped height of the
- *    prompt + typed buffer (@c rl_point gives the cursor's offset inside that
+ *    block: the block's own wrapped height plus the wrapped height of the
+ *    prompt + typed buffer (rl_point gives the cursor's offset inside that
  *    buffer).
- * -# If the cursor-up would clamp at row 1 (@c up >= rows), skips the repaint
+ * -# If the cursor-up would clamp at row 1 (up >= rows), skips the repaint
  *    entirely — the terminal keeps the reflowed layout, the "ERASE ALL DATA"
  *    header stays visible, and the ISO / device lists above the block are
- *    preserved — **without** emitting any terminal escape (so no dangling
- *    `?2026h` is ever sent).
+ *    preserved — without emitting any terminal escape (so no dangling
+ *    ?2026h is ever sent).
  * -# Otherwise, opens a DEC mode 2026 synchronized-output envelope, moves the
  *    cursor up over the previous block + prompt, clears to end of screen,
- *    repaints the warning block at the new width, and calls
- *    @c rl_on_new_line() + @c rl_redisplay() so readline reprints the prompt
- *    and re-echoes whatever the user has typed, cursor position included, then
- *    closes the 2026 envelope to commit the frame atomically.
+ *    repaints the warning block at the new width, and calls rl_on_new_line()
+ *    + rl_redisplay() so readline reprints the prompt and re-echoes whatever
+ *    the user has typed, cursor position included, then closes the 2026
+ *    envelope to commit the frame atomically.
  *
- * The envelope is owned by an RAII guard (@ref SyncOutput), so a throwing
- * @c paint() callback still emits the closing `?2026l`. A @c std::cout flush
- * is issued *inside* the envelope, immediately before @c rl_redisplay(), so
- * ordering against readline's writes stays explicit even if
- * `sync_with_stdio(false)` is ever set.
+ * The envelope is owned by an RAII guard (SyncOutput), so a throwing paint()
+ * callback still emits the closing ?2026l. A std::cout flush is issued inside
+ * the envelope, immediately before rl_redisplay(), so ordering against
+ * readline's writes stays explicit even if sync_with_stdio(false) is ever set.
  *
  * Restoring the typed input is possible here — and only here — because
- * @c rl_line_buffer / @c rl_end / @c rl_point are mutated by readline on the
- * same thread.
+ * rl_line_buffer / rl_end / rl_point are mutated by readline on the same
+ * thread.
  *
- * @note The envelope must close before this hook returns.
+ * The envelope must close before this hook returns.
  *
- * @param s Shared state populated by @ref ConfirmResizeWatcher.
+ * @param s Shared state populated by ConfirmResizeWatcher.
  * @return Always 0 (do not abort readline).
  */
 static int confirmResizeHook(ResizeRepaintState& s) {
@@ -870,72 +842,52 @@ static int confirmResizeHook(ResizeRepaintState& s) {
     const size_t cols = s.pendingCols.load(std::memory_order_relaxed);
     const size_t rows = s.pendingRows.load(std::memory_order_relaxed);
 
-    // Defensive: terminalSize() never reports a zero dimension, but the row
-    // math below divides by `cols`. Leave `pending` set so a valid value
-    // can still be consumed on a later call.
     if (cols == 0 || rows == 0) return 0;
 
     s.pending.store(false, std::memory_order_release);
 
-    // Sync readline's cached screen size with the one this layout is based
-    // on. Done before the skip guard so readline stays consistent even when
-    // we decline to repaint.
     rl_set_screen_size(static_cast<int>(rows), static_cast<int>(cols));
 
-    // Rows occupied by the warning block at the new width.
     size_t warningRows = 0;
     for (size_t w : s.lineWidths)
         warningRows += std::max<size_t>(1, (w + cols - 1) / cols);
 
-    // Cursor sits somewhere in the prompt+buffer block, directly below the
-    // warning block. rl_point is the cursor's offset inside the buffer; adding
-    // promptWidth gives the column from start of prompt. Integer division by
-    // cols gives the physical line the cursor is on.
     const size_t cursorCols = s.promptWidth + rl_point;
     const size_t cursorLine = cursorCols / cols;
 
     const size_t up = warningRows + cursorLine;
 
-    // Skip guard: if cursor-up would clamp at row 1, do nothing. Nothing has
-    // been written to the terminal yet, so no `?2026h` is left dangling.
     if (up >= rows) return 0;
 
-    // One atomic frame: cursor movement + clear + warning block + prompt
-    // + typed input all present together at `?2026l`.
     SyncOutput sync;
 
     if (up > 0) std::cout << "\033[" << up << "A";
     std::cout << "\r\033[J";
 
-    // Repaint the warning block at the new width.
     s.lineWidths = s.paint(cols);
 
-    // Drain our buffer before readline writes to the same fd.
     std::cout.flush();
 
-    // Restore the prompt + the user's typed text; rl_redisplay puts the
-    // cursor back where it was inside the buffer.
     rl_on_new_line();
     rl_redisplay();
 
     return 0;
-}   // ~SyncOutput: `?2026l` + flush commits the frame
+}
 
 /**
  * @brief Signals a main-thread repaint when the terminal width changes.
  *
  * Runs as a background thread while readline waits at the confirmation
  * prompt. Never touches the terminal or readline directly: it only sets
- * @ref ResizeRepaintState::pending, and the main thread's
- * @ref confirmResizeHook does the redraw and restores the user's typed input
- * via @c rl_redisplay().
+ * ResizeRepaintState::pending, and the main thread's confirmResizeHook does
+ * the redraw and restores the user's typed input via rl_redisplay().
  *
  * Reacts to width changes only. Height changes are ignored: the terminal's
  * own reflow repositions the block, and the skip guard in the hook handles
  * the case where the block no longer fits.
  *
- * @note Must be stopped before @c readline returns (see @ref stop) so no
- * repaint can fire after the prompt has been answered.
+ * Must be stopped before readline returns (see stop()) so no repaint can fire
+ * after the prompt has been answered.
  */
 class ConfirmResizeWatcher {
 public:
@@ -950,7 +902,7 @@ public:
     /**
      * @brief Populates @p state and starts the watcher thread.
      *
-     * @param state       State shared with @ref confirmResizeHook.
+     * @param state       State shared with confirmResizeHook.
      * @param paint       Callback that (re)prints the warning block for a
      *                    given width and returns its per-line widths.
      * @param drawnCols   Terminal width the block was last drawn at.
@@ -987,8 +939,8 @@ public:
     }
 
     /**
-     * @brief The state the watcher writes to. Pass to @ref confirmResizeHook
-     *        when installing it as @c rl_event_hook (via the trampoline below).
+     * @brief The state the watcher writes to. Pass to confirmResizeHook when
+     *        installing it as rl_event_hook (via the trampoline below).
      */
     ResizeRepaintState& state() { return state_; }
 
@@ -996,8 +948,8 @@ private:
     /**
      * @brief Poll loop: signals the main thread on a width change.
      *
-     * Wakes every 100 ms (or immediately on @ref stop). Only width changes
-     * set @ref ResizeRepaintState::pending; height changes are ignored.
+     * Wakes every 100 ms (or immediately on stop). Only width changes set
+     * ResizeRepaintState::pending; height changes are ignored.
      */
     void loop() {
         constexpr auto kPoll = std::chrono::milliseconds(100);
@@ -1026,15 +978,15 @@ private:
 };
 
 /**
- * @brief `rl_event_hook` trampoline for @ref g_confirmResize.
+ * @brief rl_event_hook trampoline for g_confirmResize.
  *
- * @c rl_event_hook is a plain function pointer (`int (*)(void)`), so it
- * cannot carry a state argument. This trampoline closes over
- * @ref g_confirmResize — the only state a hook is ever installed for in this
- * program. If a second modal prompt ever needs its own watcher, this is the
- * one place that has to change (e.g. a `std::function`-based dispatcher).
+ * rl_event_hook is a plain function pointer (int (*)(void)), so it cannot
+ * carry a state argument. This trampoline closes over g_confirmResize — the
+ * only state a hook is ever installed for in this program. If a second modal
+ * prompt ever needs its own watcher, this is the one place that has to change
+ * (e.g. a std::function-based dispatcher).
  *
- * @return @ref confirmResizeHook's return value (always 0).
+ * @return confirmResizeHook's return value (always 0).
  */
 static int confirmResizeHookTrampoline(void) {
     return confirmResizeHook(g_confirmResize);
@@ -1047,43 +999,43 @@ static int confirmResizeHookTrampoline(void) {
  * Shows the sorted list of selected ISOs (largest first) alongside detected
  * removable USB devices, then reads mapping input via readline. Repeats until
  * the user provides a valid, confirmed set of mappings or cancels with Esc
- * (@c "\x1b").
+ * ("\x1b").
  *
  * Readline tab-completion is configured for both ISO indices and device
- * paths. @c "?" triggers the help screen. After a valid mapping is entered,
- * a destructive-write warning is shown and must be confirmed with @c y/Y.
+ * paths. "?" triggers the help screen. After a valid mapping is entered, a
+ * destructive-write warning is shown and must be confirmed with y/Y.
  *
  * @par Warning block and resize
  * ISO names in the warning are truncated to fit the current terminal width.
  * While the confirmation prompt waits, a resize re-lays out the block (with
  * truncation recomputed for the new width). The redraw runs on the main
- * thread via @c rl_event_hook — the watcher thread only signals — so any
+ * thread via rl_event_hook — the watcher thread only signals — so any
  * half-typed answer survives the resize and the cursor stays where the user
  * left it. If the block cannot be redrawn without clamping at row 1
- * (@c up >= rows), the redraw is skipped: the terminal keeps the reflowed
+ * (up >= rows), the redraw is skipped: the terminal keeps the reflowed
  * layout, the safety header stays visible, and the ISO / device lists above
  * the block are preserved.
  *
  * @par Device prompt and resize
  * The ISO/device screen is embedded in the mappings prompt itself, so
- * @c readline() is wrapped by @c readlineWithResize(): on a width change the
+ * readline() is wrapped by readlineWithResize(): on a width change the
  * screen is cleared and the prompt's header text re-printed (see
- * @c promptHeaderForRepaint), then Readline redraws the last prompt line and
+ * promptHeaderForRepaint), then Readline redraws the last prompt line and
  * the typed input. The list is not rebuilt, and error messages from
- * @c displayErrors() are not repeated. This watcher is stopped before the
- * confirmation prompt starts, which uses its own @c ConfirmResizeWatcher.
+ * displayErrors() are not repeated. This watcher is stopped before the
+ * confirmation prompt starts, which uses its own ConfirmResizeWatcher.
  *
  * Detected devices are annotated with status indicators:
- * - @b [MOUNTED] — device or a partition is currently mounted; cannot be
- *                  written to.
- * - @b [FLUSHING] — device was part of a cancelled operation and is still
- *                   draining in the background; cannot be written to until
- *                   draining finishes.
+ * - [MOUNTED]  — device or a partition is currently mounted; cannot be
+ *                written to.
+ * - [FLUSHING] — device was part of a cancelled operation and is still
+ *                draining in the background; cannot be written to until
+ *                draining finishes.
  *
  * @param selectedIsos ISOs chosen by the user for writing.
  * @return Validated (IsoInfo, device) pairs ready for
- *         @ref performWriteOperation, or an empty vector if the user aborted
- *         or if the number of selected ISOs exceeds the thread pool size.
+ *         performWriteOperation, or an empty vector if the user aborted or
+ *         if the number of selected ISOs exceeds the thread pool size.
  */
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos) {
     PendingReadlineTextClearGuard pendingTextGuard;
@@ -1094,8 +1046,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         ThreadPool& pool = getStaticThreadPool();
         if (selectedIsos.size() > pool.threadCount()) {
-            // Message + wait. The message is fixed at this point; the repaint
-            // lambda only reprints it. No side effects run inside it.
             auto render = [&] {
                 SyncOutput sync;
                 clearScrollBuffer();
@@ -1110,7 +1060,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
             ListResizeWatcher watcher(render);
             pressEnterToTryWithRepaint(render);
-            return {};  // termGuard destructor restores readline state
+            return {};
         }
 
         displayErrors();
@@ -1203,9 +1153,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         std::string devicePrompt = devicePromptStream.str();
 
-        // Resize repaint: clear and re-print the prompt's embedded screen
-        // (selected ISOs + device list). No side effects: the lists were
-        // captured in devicePrompt, so no devices are re-queried.
         const auto repaintDevices = [&] {
             SyncOutput sync;
             clearScrollBuffer();
@@ -1217,16 +1164,16 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         rl_startup_hook = nullptr;
 
         if (!deviceInput) {
-            return {};  // termGuard destructor restores readline state
+            return {};
         }
 
         if (deviceInput.get()[0] == '\0') {
-            continue;  // termGuard destructor restores; next iteration re-acquires
+            continue;
         }
 
         std::string mainInputString(deviceInput.get());
         if (mainInputString == "\x1b") {
-            return {};  // termGuard destructor restores readline state
+            return {};
         }
 
         if (mainInputString == "?") {
@@ -1245,8 +1192,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         auto deviceMap = parseDeviceMappings(deviceInput.get(), isoFilenames, errors);
 
         if (!errors.empty()) {
-            // Errors + wait. The error list is fixed at this point; the
-            // repaint lambda only reprints it. No side effects run inside it.
             auto render = [&] {
                 SyncOutput sync;
                 clearScrollBuffer();
@@ -1261,14 +1206,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             continue;
         }
 
-        // Check for root privileges.
         bool noPermissions = (geteuid() != 0);
         auto validPairs = validateDevices(deviceMap, sortedIsos, noPermissions);
         if (validPairs.empty()) {
             continue;
         }
 
-        // Collect the per-pair data once; a resize only re-renders it.
         struct WarnRow {
             std::string device, driveName, deviceSizeStr, filename, isoSizeStr;
         };
@@ -1286,15 +1229,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             const size_t usableCols = cols > 1 ? cols - 1 : 1;
             std::vector<size_t> widths;
 
-            // Header is allowed to wrap naturally: clipping "ERASE ALL DATA"
-            // would hide the safety message. repaint()'s up-count handles
-            // wrapping via (w + cols - 1) / cols.
             std::cout << "\n" << wt.colorWarning << "WARNING: This will "
                       << UI::Palette::Red << "*ERASE ALL DATA*"
                       << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
-            widths.push_back(0);                                                // blank line
+            widths.push_back(0);
             widths.push_back(utf8Width("WARNING: This will *ERASE ALL DATA* on:"));
-            widths.push_back(0);                                                // blank line
+            widths.push_back(0);
 
             for (const auto& r : warnRows) {
                 const size_t fixedWidth = 17 + r.device.size() + utf8Width(r.driveName)
@@ -1310,30 +1250,23 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                     << shownName << UI::Palette::DimGray << " (" << wt.sizeCol
                     << r.isoSizeStr << UI::Palette::DimGray << ")}";
 
-                // Clip so an over-long row (truncateIsoName's MIN_STEM floor
-                // on very narrow terminals) cannot wrap past usableCols, and
-                // record the actual on-screen width so repaint()'s up-count
-                // stays accurate.
                 const std::string clipped = clipToWidth(row.str(), usableCols);
                 std::cout << clipped << "\n";
                 widths.push_back(std::min(visibleWidth(clipped), usableCols));
             }
 
             std::cout << "\n";
-            widths.push_back(0);                                                // blank line
+            widths.push_back(0);
             return widths;
         };
 
         const size_t drawnCols = terminalSize().first;
         std::vector<size_t> drawnWidths;
         {
-            SyncOutput sync;                     // emits ?2026h
+            SyncOutput sync;
             drawnWidths = printWarning(drawnCols);
-        }                                        // dtor: ?2026l + flush
+        }
 
-        // Readline needs the \001/\002 markers around escape sequences so it
-        // can measure the prompt; plain output must not have them.
-        // No leading "\n": the blank line is already printed by printWarning.
         const std::string promptText = "Proceed? (y/n): ";
         const std::string confirmPrompt =
             "\001" + std::string(color) + "\002" + promptText + wt.rl_resetCol;
@@ -1344,25 +1277,19 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             ConfirmResizeWatcher watcher(g_confirmResize, printWarning,
                                          drawnCols, drawnWidths, promptText);
 
-            // Install the repaint hook only for this readline() call, and
-            // save any hook the surrounding context had set.
             auto* savedHook = rl_event_hook;
             rl_event_hook = confirmResizeHookTrampoline;
             confirmation.reset(readline(confirmPrompt.c_str()));
             rl_event_hook = savedHook;
 
-            watcher.stop();   // no repaint can fire after this returns
+            watcher.stop();
         }
-        // confirmGuard destructor has already re-applied the mappings-prompt
-        // readline configuration here.
 
         if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
             setupSignalHandlerCancellations();
             GlobalState::g_operationCancelled.store(false);
-            return validPairs;  // termGuard destructor restores readline state
+            return validPairs;
         }
-
-        // "no" -> loop continues; termGuard destructor restores readline state
     }
 }
 
@@ -1376,8 +1303,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  * natural sort by ISO filename (device path as tie-break).
  *
  * The caller's vector is not modified or copied. A vector of indices into
- * @p validPairsIn is stable-sorted instead, and the pairs are visited in that
- * order; only the four fields ProgressInfo carries (filename, device,
+ * @p validPairsIn is stable-sorted instead, and the pairs are visited in
+ * that order; only the four fields ProgressInfo carries (filename, device,
  * sizeStr, sourcePath) are copied, directly into the progress vector.
  *
  * The progress vector is reserved to exactly @p validPairsIn.size() before
@@ -1385,14 +1312,14 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  * (ProgressInfo holds atomics and is therefore non-movable — the reserve is
  * load-bearing, not just an optimisation).
  *
- * The returned @c shared_ptr is captured by every pooled write task and by
- * the cancellation drain, so the entries outlive this function whenever a
- * task or drain thread still needs them.
+ * The returned shared_ptr is captured by every pooled write task and by the
+ * cancellation drain, so the entries outlive this function whenever a task
+ * or drain thread still needs them.
  *
  * @par Ordering
- * Primary key: @c IsoInfo::filename via @ref naturalCompare (case-insensitive,
- * numeric-aware: "archlinux-9.iso" before "archlinux-10.iso"). Secondary key:
- * the device path under ordinary @c std::string ordering. Equal
+ * Primary key: IsoInfo::filename via naturalCompare (case-insensitive,
+ * numeric-aware: "archlinux-9.iso" before "archlinux-10.iso"). Secondary
+ * key: the device path under ordinary std::string ordering. Equal
  * (filename, device) keys keep their input order.
  *
  * @param validPairsIn Validated (IsoInfo, device) pairs targeted for writing.
@@ -1404,9 +1331,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
  */
 static std::shared_ptr<std::vector<ProgressInfo>>
 prepareWriteData(const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
-    // Sort indices, not pairs: no IsoInfo copy, no device-string copy.
     std::vector<size_t> order(validPairsIn.size());
-    std::iota(order.begin(), order.end(), size_t{0});   // requires <numeric>
+    std::iota(order.begin(), order.end(), size_t{0});
 
     std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
         const int c = naturalCompare(validPairsIn[a].first.filename,
@@ -1417,7 +1343,7 @@ prepareWriteData(const std::vector<std::pair<IsoInfo, std::string>>& validPairsI
 
     auto progressPtr = std::make_shared<std::vector<ProgressInfo>>();
     auto& progress   = *progressPtr;
-    progress.reserve(validPairsIn.size());   // must not reallocate: atomics block it
+    progress.reserve(validPairsIn.size());
 
     for (size_t idx : order) {
         const auto& [iso, device] = validPairsIn[idx];
@@ -1437,41 +1363,43 @@ prepareWriteData(const std::vector<std::pair<IsoInfo, std::string>>& validPairsI
  * safely after control has returned to the shell prompt.
  *
  * One detached thread is spawned per pending future. Each waits on its own
- * future and, on completion, erases that device from @ref g_drainingDevices.
+ * future and, on completion, erases that device from g_drainingDevices.
  * Because every pending device has an independent waiter, a device's
- * "[FLUSHING]" indicator clears the moment *its* task finishes, regardless
- * of how long the others take. When the last thread empties the set,
- * @ref g_drainingCancelled is cleared.
+ * "[FLUSHING]" indicator clears the moment its task finishes, regardless of
+ * how long the others take. When the last thread empties the set,
+ * g_drainingCancelled is cleared.
  *
  * Only devices whose tasks had not yet completed or failed at the moment of
- * cancellation are added to @ref g_drainingDevices — tasks that had already
+ * cancellation are added to g_drainingDevices — tasks that had already
  * returned from writeIsoToDevice() are known to be flush-clean.
  *
  * The non-copyable, non-movable progressData vector is deliberately not
  * moved or captured by value; the shared_ptr is captured instead so the
- * per-operation data stays alive for as long as the detached threads need it.
- * The device path for each pending future is read from progressData[i].device.
+ * per-operation data stays alive for as long as the detached threads need
+ * it. The device path for each pending future is read from
+ * progressData[i].device.
  *
- * @param futures        Pending per-task futures. Taken by value; each element
- *                       is moved into its own detached thread, so the caller's
- *                       vector is left empty after this call.
+ * @param futures        Pending per-task futures. Taken by value; each
+ *                       element is moved into its own detached thread, so the
+ *                       caller's vector is left empty after this call.
  * @param progressData   Per-task progress records. Read only: .completed /
  *                       .failed are inspected to decide which devices still
- *                       need draining, and .device enumerates the draining set.
- * @param progressDataPtr Shared ownership of the progress records; captured by
- *                       each detached thread to keep the operation data alive
- *                       until that device's drain completes.
+ *                       need draining, and .device enumerates the draining
+ *                       set.
+ * @param progressDataPtr Shared ownership of the progress records; captured
+ *                       by each detached thread to keep the operation data
+ *                       alive until that device's drain completes.
  *
  * @note The caller must not touch @p futures after this returns — it has been
- *       moved from. This is intentional: the point is to transfer ownership of
- *       the pending work out of the local scope.
+ *       moved from. This is intentional: the point is to transfer ownership
+ *       of the pending work out of the local scope.
  *
  * @note @p futures and @p progressData must have the same size:
  *       drainDevices[i] is paired with futures[i], and each spawned thread
  *       indexes both. A mismatch is an out-of-bounds read.
  *
  * @note May spawn multiple threads (one per pending future) for a single call.
- *       @ref g_drainingManager must accept more than one thread per operation.
+ *       g_drainingManager must accept more than one thread per operation.
  *
  * @note Only for the cancellation path. The non-cancelled path in
  *       performWriteOperation waits on the futures inline instead, because
@@ -1508,8 +1436,6 @@ void drainManagerForWrite2UsbUI(
             dev = drainDevices[i],
             progressDataPtr
         ]() mutable {
-            // Keep the per-operation progress data alive for any async task
-            // that still holds references into it.
             (void)progressDataPtr;
 
             if (f.valid()) {
@@ -1517,7 +1443,7 @@ void drainManagerForWrite2UsbUI(
             }
 
             std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-            g_drainingDevices.erase(dev); // no-op if never inserted
+            g_drainingDevices.erase(dev);
 
             if (g_drainingDevices.empty()) {
                 g_drainingCancelled.store(false);
@@ -1530,44 +1456,46 @@ void drainManagerForWrite2UsbUI(
  * @brief Owns the live progress screen and keeps it correctly laid out.
  *
  * The screen has two phases:
- * - @b Running  — a keeper thread redraws the per-task rows.
- * - @b Finished — after @ref finish() it shows the final rows, the status line,
- *   the summary and, once set with @ref setPrompt, the prompt. The keeper keeps
- *   running and repaints on terminal resize, so the screen stays correct while
- *   the program waits for input.
+ * - Running  — a keeper thread redraws the per-task rows.
+ * - Finished — after finish() it shows the final rows, the status line, the
+ *   summary and, once set with setPrompt, the prompt. The keeper keeps
+ *   running and repaints on terminal resize, so the screen stays correct
+ *   while the program waits for input.
  *
  * @par Rendering
- * All drawing happens under one mutex (@c renderMutex_), from either the keeper
- * thread or @ref finish(), so frames never interleave. The keeper wakes on a task
- * completion (condition variable in the shared @c WriteSync state) or every
+ * All drawing happens under one mutex (renderMutex_), from either the keeper
+ * thread or finish(), so frames never interleave. The keeper wakes on a task
+ * completion (condition variable in the shared WriteSync state) or every
  * 100 ms to compare the terminal size with the last frame. While running it
- * redraws on completion, on a size change, or every 500 ms (live percentages and
- * speeds). Once finished it redraws only on a size change.
+ * redraws on completion, on a size change, or every 500 ms (live percentages
+ * and speeds). Once finished it redraws only on a size change.
  *
  * @par Row layout
  * @code
  * filename → /dev/sdX <drive name> [▇▇▄░░] percentage speed
  * @endcode
- * Device path, drive name and speed are padded to the widest value across rows so
- * the bars line up. Drive names are always shown in full. The bar has 5 cells and
- * 10 steps of 10% (empty ░, half ▄, full ▇), floored from the percentage, so it is
- * full only at 100%. The status column shows the live percentage, or DONE (speed
- * shown as " (avg)"), FAIL or CXL (cancelled).
+ * Device path, drive name and speed are padded to the widest value across
+ * rows so the bars line up. Drive names are always shown in full. The bar
+ * has 5 cells and 10 steps of 10% (empty ░, half ▄, full ▇), floored from
+ * the percentage, so it is full only at 100%. The status column shows the
+ * live percentage, or DONE (speed shown as " (avg)"), FAIL or CXL
+ * (cancelled).
  *
  * @par Filename truncation
- * Names are shown in full unless the widest row exceeds the terminal width. Only
- * then is each name shortened to the space the terminal actually leaves for the
- * filename column (terminal width minus the rest of the row) as "stem….iso": the
- * ".iso" extension is always kept, the stem never shrinks below 4 columns, and
- * truncation is UTF-8 safe. On very narrow terminals the stem floor can make the
- * row slightly wider than the budget; the per-row clip then prevents wrap.
+ * Names are shown in full unless the widest row exceeds the terminal width.
+ * Only then is each name shortened to the space the terminal actually leaves
+ * for the filename column (terminal width minus the rest of the row) as
+ * "stem….iso": the ".iso" extension is always kept, the stem never shrinks
+ * below 4 columns, and truncation is UTF-8 safe. On very narrow terminals
+ * the stem floor can make the row slightly wider than the budget; the
+ * per-row clip then prevents wrap.
  *
  * @par Redraw and result screen
  * At an unchanged size, a frame moves the cursor up by the previous frame's
- * physical line count and redraws. After a size change, and always for the result
- * screen, the screen and scrollback are wiped and redrawn from the top. Rows are
- * clipped to avoid wrapping, and each frame is written once inside a synchronized
- * update. The result screen looks like this:
+ * physical line count and redraws. After a size change, and always for the
+ * result screen, the screen and scrollback are wiped and redrawn from the
+ * top. Rows are clipped to avoid wrapping, and each frame is written once
+ * inside a synchronized update. The result screen looks like this:
  * @code
  * (line 1: empty)
  * Status: write2usb → COMPLETED        (line 2)
@@ -1579,9 +1507,9 @@ void drainManagerForWrite2UsbUI(
  * @endcode
  *
  * @par Lifetime
- * Holds @c shared_ptr copies of the progress vector and the @c WriteSync state, so
- * it never refers to the stack of the function that created it. The destructor
- * stops and joins the keeper thread.
+ * Holds shared_ptr copies of the progress vector and the WriteSync state, so
+ * it never refers to the stack of the function that created it. The
+ * destructor stops and joins the keeper thread.
  */
 class WriteScreen {
 public:
@@ -1653,7 +1581,7 @@ public:
         summaryText_ = sm.str();
 
         phase_ = Phase::Finished;
-        renderLocked();   // wrapper overload: queries terminal, then dispatches
+        renderLocked();
     }
 
     /// Text printed under the summary on every result-screen repaint. Must be
@@ -1668,7 +1596,7 @@ public:
     void stop() {
         if (!thread_.joinable()) return;
         stop_.store(true, std::memory_order_release);
-        { std::lock_guard<std::mutex> lk(syncPtr_->mutex); }   // close check-then-block race
+        { std::lock_guard<std::mutex> lk(syncPtr_->mutex); }
         syncPtr_->cv.notify_all();
         thread_.join();
     }
@@ -1676,14 +1604,10 @@ public:
 private:
     enum class Phase { Running, Finished };
 
-    static constexpr int  BAR_WIDTH = 5;                    // character cells
-    static constexpr int  BAR_STEPS = BAR_WIDTH * 2;        // 10 steps, 10% each
-    static constexpr auto kPulse = std::chrono::milliseconds(500);   // live-value refresh while running
-    static constexpr auto kPoll  = std::chrono::milliseconds(100);   // resize polling interval
-
-    // ---- helpers ------------------------------------------------------------
-    // utf8Width(), terminalSize() and truncateIsoName() live at file scope so
-    // the confirmation warning (via ConfirmResizeWatcher) can share them.
+    static constexpr int  BAR_WIDTH = 5;
+    static constexpr int  BAR_STEPS = BAR_WIDTH * 2;
+    static constexpr auto kPulse = std::chrono::milliseconds(500);
+    static constexpr auto kPoll  = std::chrono::milliseconds(100);
 
     // Right-pads an ASCII string to the given byte width. Used for device
     // paths and other ASCII-only columns.
@@ -1691,8 +1615,6 @@ private:
         if (s.size() < target) s.append(target - s.size(), ' ');
         return s;
     }
-
-    // ---- per-operation constants -------------------------------------------
 
     // Device names, full (untruncated) drive names and column widths cannot
     // change while the operation runs, so they are computed once, before the
@@ -1704,8 +1626,6 @@ private:
                 deviceNames[prog.device] = getDriveName(prog.device);
         }
 
-        // Index i matches progressData_[i]. Drive names are stored verbatim,
-        // never shortened.
         rowShortNames_.reserve(progressData_.size());
         for (const auto& prog : progressData_) {
             rowShortNames_.push_back(deviceNames[prog.device]);
@@ -1730,25 +1650,21 @@ private:
         return h.str();
     }
 
-    // ---- keeper thread -----------------------------------------------------
-
     void keeperLoop() {
         using clock = std::chrono::steady_clock;
-        clock::time_point lastDraw{};                       // epoch: first pass draws at once
-        size_t seenFinished = static_cast<size_t>(-1);      // differs from any real count: first pass draws
+        clock::time_point lastDraw{};
+        size_t seenFinished = static_cast<size_t>(-1);
 
         while (!stop_.load(std::memory_order_acquire)) {
             {
                 std::lock_guard<std::mutex> rl(renderMutex_);
 
-                // Query the terminal once per frame here and hand the result
-                // to renderLocked(); the renderer no longer re-queries it.
                 const auto   size        = terminalSize();
                 const bool   sizeChanged = hasDrawn_ &&
                                            (size.first != lastCols_ || size.second != lastRows_);
                 const size_t finishedNow = syncPtr_->finishedTasks.load();
                 const bool   completion  = (finishedNow != seenFinished);
-                seenFinished = finishedNow;   // updated in every phase so the wait below can't spin
+                seenFinished = finishedNow;
 
                 if (phase_ == Phase::Running) {
                     const bool pulse = (clock::now() - lastDraw) >= kPulse;
@@ -1757,12 +1673,10 @@ private:
                         lastDraw = clock::now();
                     }
                 } else if (sizeChanged) {
-                    renderLocked(size, sizeChanged);   // result screen: repaint only on a size change
+                    renderLocked(size, sizeChanged);
                 }
             }
 
-            // Wake at once on a task completion (or stop); otherwise re-check the
-            // terminal size after kPoll.
             std::unique_lock<std::mutex> lk(syncPtr_->mutex);
             syncPtr_->cv.wait_for(lk, kPoll, [&] {
                 return stop_.load(std::memory_order_acquire) ||
@@ -1771,13 +1685,9 @@ private:
         }
     }
 
-    // ---- rendering ---------------------------------------------------------
-
     // Convenience overload: queries the terminal size and derives the resize
     // flag itself. Used by finish(), which renders once and does not already
-    // hold this information.
-    //
-    // The caller must hold renderMutex_.
+    // hold this information. The caller must hold renderMutex_.
     void renderLocked() {
         const auto size    = terminalSize();
         const bool resized = hasDrawn_ &&
@@ -1788,7 +1698,6 @@ private:
     // Builds the whole frame in one string and writes it once (less flicker).
     // Terminal size and the resize flag are passed in so the renderer and the
     // keeper share exactly one source of truth for "did the size change?".
-    //
     // The caller must hold renderMutex_.
     void renderLocked(std::pair<size_t, size_t> termSize, bool resized) {
         const bool finished = (phase_ == Phase::Finished);
@@ -1796,9 +1705,6 @@ private:
         size_t maxFilenameWidth = 0;
         size_t maxSpeedWidth    = 0;
 
-        // Speed strings are formatted once per render so the column can be
-        // right-aligned to the widest value (the "(avg)" suffix is appended
-        // after the padded value and does not affect alignment).
         std::vector<std::string> speedStrs;
         speedStrs.reserve(progressData_.size());
         for (const auto& prog : progressData_) {
@@ -1806,17 +1712,11 @@ private:
             maxSpeedWidth = std::max(maxSpeedWidth, utf8Width(speedStrs.back()));
         }
 
-        // Reserve room for " (avg)" only if some task is already showing it,
-        // so names are truncated only when a row is really wider than the
-        // terminal.
         bool anyCompleted = false;
         for (const auto& prog : progressData_)
             if (prog.completed.load()) { anyCompleted = true; break; }
         const size_t avgExtra = anyCompleted ? 6 : 0;
 
-        //   " → " (3) + device + " <name>" (maxNameWidth + 3) + " [" (2) + bar (5)
-        //   + "] " (2) + status (5) + speed (+ " (avg)" once a task is done)
-        // This is the width of everything except the filename column.
         const size_t fixedWidth = 3 + maxDeviceLen_ + (maxNameWidth_ + 3) + 2 + BAR_WIDTH
                                 + 2 + 5 + maxSpeedWidth + avgExtra;
 
@@ -1824,16 +1724,9 @@ private:
         const size_t rows       = termSize.second;
         const size_t usableCols = cols > 1 ? cols - 1 : 1;
 
-        // Space the terminal leaves for the filename column. Filenames are
-        // truncated to this budget, so the cut adapts to the actual terminal
-        // size instead of a fixed width.
         const size_t allowedFilenameWidth =
             usableCols > fixedWidth ? usableCols - fixedWidth : 0;
 
-        // Shortened filenames, computed once per frame. truncateIsoName()
-        // returns the name unchanged when it already fits in
-        // allowedFilenameWidth, so no explicit "should I truncate?" flag is
-        // needed.
         std::vector<std::string> shortFiles;
         shortFiles.reserve(progressData_.size());
         for (const auto& prog : progressData_) {
@@ -1845,9 +1738,9 @@ private:
         frame += "\033[?2026h";
         if (finished || resized) {
             // The result screen is always painted from scratch, and a resized
-            // running screen is too: don't trust cursor-up after a resize, the
-            // terminal may have reflowed or scrolled old content into scrollback,
-            // and cursor-up cannot move above the visible screen.
+            // running screen is too: after a resize the terminal may have
+            // reflowed or scrolled old content into scrollback, and cursor-up
+            // cannot move above the visible screen.
             frame += "\033[H\033[2J\033[3J";   // home, clear screen, clear scrollback
             frame += headerText(finished);
         } else {
@@ -1884,13 +1777,13 @@ private:
             // are bottom-aligned and stop short of the cell top, so bars on
             // consecutive rows never touch.
             int pct = std::clamp(prog.progress.load(), 0, 100);
-            int steps = (pct * BAR_STEPS) / 100;   // 0..BAR_STEPS
+            int steps = (pct * BAR_STEPS) / 100;
             int full  = steps / 2;
             bool half = (steps % 2) != 0;
 
             std::string bar, empty;
             for (int j = 0; j < full; ++j) bar += "▇";
-            if (half)                      bar += "▄";   // 4/8 height, bottom-aligned like ▇
+            if (half)                      bar += "▄";
             for (int j = 0; j < BAR_WIDTH - full - (half ? 1 : 0); ++j) empty += "░";
 
             std::ostringstream row;
@@ -1934,8 +1827,6 @@ private:
         std::cout << frame << std::flush;
     }
 
-    // ---- state -------------------------------------------------------------
-
     std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr_;
     std::vector<ProgressInfo>&                 progressData_;
     std::shared_ptr<WriteSync>                 syncPtr_;
@@ -1971,13 +1862,13 @@ private:
  * @brief Executes validated ISO-to-device writes and manages the progress
  * screen plus completion / cancellation handling.
  *
- * Creates the per-task progress vector with @ref prepareWriteData, which
+ * Creates the per-task progress vector with prepareWriteData, which
  * establishes the ordering by natural, case-insensitive ISO filename sort,
  * device path as tie-breaker. Task index and display-row index stay aligned.
  *
- * Submits one @ref writeIsoToDevice call per task to the global
- * @ref ThreadPool. A shared @ref WriteSync state coordinates task completion
- * between worker threads, the main thread and the @ref WriteScreen keeper.
+ * Submits one writeIsoToDevice call per task to the global ThreadPool. A
+ * shared WriteSync state coordinates task completion between worker threads,
+ * the main thread and the WriteScreen keeper.
  *
  * @par Normal completion
  * Waits until all tasks finish, disables further SIGINT handling, and paints
@@ -1992,10 +1883,10 @@ private:
  *
  * When cancellation is detected, the result screen is painted and terminal
  * input state is restored. Any tasks still running are transferred to
- * @ref drainManagerForWrite2UsbUI, which keeps their futures alive while they
+ * drainManagerForWrite2UsbUI, which keeps their futures alive while they
  * finish in the background. This allows outstanding writes and OS page-cache
  * flushing to continue. The drain manager removes each device from
- * @ref g_drainingDevices when its drain completes, clearing its [FLUSHING]
+ * g_drainingDevices when its drain completes, clearing its [FLUSHING]
  * indicator.
  *
  * The result screen reflects task states at the time it is painted; tasks
@@ -2009,16 +1900,16 @@ private:
  * preventing those objects from being destroyed while background tasks still
  * depend on them.
  *
- * The caller owns the returned @c shared_ptr<WriteScreen>. It should retain
- * the screen while waiting for user input and call @ref WriteScreen::stop
- * when resize-triggered repainting is no longer needed, or allow the screen
- * to be destroyed when its shared ownership ends.
+ * The caller owns the returned shared_ptr<WriteScreen>. It should retain the
+ * screen while waiting for user input and call WriteScreen::stop when
+ * resize-triggered repainting is no longer needed, or allow the screen to be
+ * destroyed when its shared ownership ends.
  *
  * @param validPairsIn Validated (IsoInfo, device) pairs to write. Not
  *                     modified.
  *
- * @return A shared pointer to the live @ref WriteScreen, allowing the caller
- *         to retain the result screen while waiting for user input.
+ * @return A shared pointer to the live WriteScreen, allowing the caller to
+ *         retain the result screen while waiting for user input.
  */
 std::shared_ptr<WriteScreen> performWriteOperation(
         const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
@@ -2040,7 +1931,6 @@ std::shared_ptr<WriteScreen> performWriteOperation(
     disableInput();
     clearScrollBuffer();
 
-    // The screen prints the header, hides the cursor and starts its keeper thread.
     auto screen = std::make_shared<WriteScreen>(progressDataPtr, syncPtr, getWriteTheme());
     screen->start();
 
@@ -2089,22 +1979,17 @@ std::shared_ptr<WriteScreen> performWriteOperation(
 
     signal(SIGINT, SIG_IGN);
 
-    // Paint the result screen (rows, status, summary). The keeper thread stays
-    // alive so the screen keeps reflowing on resize after this function returns.
     screen->finish();
 
-    // Instantly hand focus and console command lines back to the caller.
     flushStdin();
     restoreInput();
 
-    // On cancellation the drain manager for write2usb takes over.
     if (GlobalState::g_operationCancelled.load()) {
         drainManagerForWrite2UsbUI(
             std::move(futures),
             progressData,
             progressDataPtr);
     } else {
-        // Normal cleanup path: wait for any still-valid futures.
         for (auto& future : futures) {
             if (future.valid()) {
                 future.wait();
@@ -2122,11 +2007,11 @@ std::shared_ptr<WriteScreen> performWriteOperation(
  * 1. Parses the raw @p input string into unique ISO indices.
  * 2. Resolves filesystem metadata (size, name) for each selected ISO,
  *    skipping any files that are inaccessible or no longer present.
- * 3. Prompts the user for target device mappings via @ref collectDeviceMappings.
- * 4. Executes the flashing process via @ref performWriteOperation, which
- *    returns the live @ref WriteScreen.
- * 5. Keeps that screen alive while waiting for the user to press Enter, so the
- *    result screen still re-truncates and re-wraps when the terminal is
+ * 3. Prompts the user for target device mappings via collectDeviceMappings.
+ * 4. Executes the flashing process via performWriteOperation, which returns
+ *    the live WriteScreen.
+ * 5. Keeps that screen alive while waiting for the user to press Enter, so
+ *    the result screen still re-truncates and re-wraps when the terminal is
  *    resized, then stops it.
  *
  * @param input    Raw selection string from the main menu (e.g. "1 3-5").
@@ -2169,7 +2054,6 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
         return;
     }
 
-    // The screen keeps its keeper thread running after the write finishes.
     auto screen = performWriteOperation(validPairs);
 
     signal(SIGINT, SIG_IGN);
@@ -2181,5 +2065,5 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
 
     pressEnterToContinue();
 
-    screen->stop();   // no more repaints once the user moves on
+    screen->stop();
 }
