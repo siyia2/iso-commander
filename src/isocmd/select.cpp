@@ -25,6 +25,7 @@
 #include "../filtering.h"
 #include "../inputHandling.h"
 #include "../globalMutexes.h"
+#include "../listResizeWatcher.h"
 #include "../readline.h"
 #include "../select.h"
 #include "../sharedRefreshState.h"
@@ -148,47 +149,70 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
     return false;
 }
 
-/**
- * @brief Executes a batch operation by serializing and routing queued indices.
- *
- * Converts the @p pendingIndices vector into a space-delimited string and
- * dispatches it to @c processOperationForSelectedIsoFiles. This acts as the
- * "commit" phase for staged user selections.
- *
- * @details **Workflow:**
- * - **Command Guard:** Only executes if @p inputString exactly matches "P".
- * - **Serialization:** Concatenates all queued tokens into a single command-line
- *   compatible string.
- * - **Execution:** Routes the combined input through the standard operation
- *   logic (Mount, Unmount, Write, or CP/MV/RM).
- *
- * @param inputString      User command (must be "P" to trigger).
- * @param pendingIndices   The collection of staged index tokens.
- * @param hasPendingProcess Flag indicating if a queue currently exists.
- * @return **true** if the "P" command was recognized and executed.
- * @return **false** if the queue was empty or the command was invalid.
- */
-bool handlePendingProcess(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-                          bool isFiltered, std::vector<std::string>& filteredFiles,
-						  std::vector<std::string>& isoDirs, const std::string& operation,
-						  bool& umountMvRmBreak, bool& filterHistory) {
 
-    if (hasPendingProcess && !pendingIndices.empty() && inputString == "P") {
-        std::string combinedIndices = "";
-        for (size_t i = 0; i < pendingIndices.size(); ++i) {
-            combinedIndices += pendingIndices[i];
-            if (i < pendingIndices.size() - 1) {
-                combinedIndices += " ";
+/**
+ * @brief Executes a batch operation by sanitizing and dispatching pending indices.
+ *
+ * Sanitizes staged index tokens, serializes valid leading numeric/range
+ * portions into a space-delimited string, and passes the result to the
+ * supplied operation callback.
+ *
+ * @param inputString    User command; must be exactly "P".
+ * @param pendingIndices Staged index tokens; not modified.
+ * @param hasPendingProcess Whether a pending queue exists.
+ * @param processBatch   Callback that executes the sanitized indices.
+ * @return true if the batch was dispatched; false otherwise.
+ */
+template <typename ProcessBatch>
+bool handlePendingProcess(const std::string& inputString,
+                          const std::vector<std::string>& pendingIndices,
+                          bool hasPendingProcess,
+                          ProcessBatch&& processBatch) {
+    if (inputString != "P" || !hasPendingProcess || pendingIndices.empty()) {
+        return false;
+    }
+
+    std::string combinedIndices;
+
+    for (const std::string& token : pendingIndices) {
+        if (token.empty() ||
+            !std::isdigit(static_cast<unsigned char>(token[0]))) {
+            continue;
+        }
+
+        size_t i = 0;
+
+        while (i < token.size() &&
+               std::isdigit(static_cast<unsigned char>(token[i]))) {
+            ++i;
+        }
+
+        while (i + 1 < token.size() &&
+               token[i] == '-' &&
+               std::isdigit(static_cast<unsigned char>(token[i + 1]))) {
+            ++i;
+
+            while (i < token.size() &&
+                   std::isdigit(static_cast<unsigned char>(token[i]))) {
+                ++i;
             }
         }
 
-        processOperationForSelectedIsoFiles(combinedIndices, isFiltered, filteredFiles, isoDirs, operation, umountMvRmBreak, filterHistory);
+        if (!combinedIndices.empty()) {
+            combinedIndices += ' ';
+        }
 
-        return true;
+        combinedIndices += token.substr(0, i);
     }
 
-    return false;
+    if (combinedIndices.empty()) {
+        return false;
+    }
+
+    std::forward<ProcessBatch>(processBatch)(combinedIndices);
+    return true;
 }
+
 
 /**
  * @brief Background watcher thread that requests an ISO-list redraw after an import completes.
@@ -212,19 +236,28 @@ bool handlePendingProcess(const std::string& inputString, std::vector<std::strin
  *   @c PendingRefreshKind::IsoList via @c GlobalState::g_pendingRefreshKind;
  *   the redraw (including @c rl_on_new_line() / @c rl_redisplay()) happens
  *   later, on the main thread, inside @c checkPendingRefresh.
+ * - **Filtering Indicator Reset:** Clears @c GlobalState::g_filteringIndicator
+ *   (setting it to @c false) to stop displaying any active filtering/sync status
+ *   messages once the import and refresh flow concludes.
  * - **Auto-Termination:** Executes once after the import signal is received
  *   and terminates (non-looping design).
+ * - **Resize Repaint:** Wraps each @c readline() in a @c ListResizeWatcher
+ *   (via @c readlineWithResize) with a lambda that re-runs the normal display
+ *   step, so the list is repainted when the terminal width changes while the
+ *   prompt waits. The same lambda is passed to the filter handler for use when
+ *   the live preview is off. (Image select repaints with a throwaway sort
+ *   flag, so a resize never re-sorts the list.)
  *
- * @param isAtISOList      Atomic flag; a refresh is only requested if the user is in the list view.
- * @param state            Shared state container for:
- *                         - isImportRunning: Atomic flag used as CV predicate
- *                         - importMutex and importCV for event coordination
- *                         - filteredFiles, isFiltered, listSubtype for display context
- *                         - pendingIndices, hasPendingProcess, umountMvRmBreak for list state
- *                         - currentPage, originalPage for pagination
+ * @param isAtISOList     Atomic flag; a refresh is only requested if the user is in the list view.
+ * @param state           Shared state container for:
+ *                        - isImportRunning: Atomic flag used as CV predicate
+ *                        - importMutex and importCV for event coordination
+ *                        - filteredFiles, isFiltered, listSubtype for display context
+ *                        - pendingIndices, hasPendingProcess, umountMvRmBreak for list state
+ *                        - currentPage, originalPage for pagination
  *
- *                         Retained via @c GlobalState::g_pendingRefreshState until
- *                         consumed by @c checkPendingRefresh on the main thread.
+ *                        Retained via @c GlobalState::g_pendingRefreshState until
+ *                        consumed by @c checkPendingRefresh on the main thread.
  */
 void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
                                 std::shared_ptr<RefreshState> state) {
@@ -241,6 +274,7 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
     }
         GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::IsoList); // then publish
     }
+    GlobalState::g_filteringIndicator.store(false);
 }
 
 /**
@@ -283,6 +317,10 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  *   and the loop continues; if no filter is active, the function sets @c currentPage
  *   to 0 and returns to the previous menu (keybinding cleanup handled automatically
  *   by the RAII guard).
+ * - **Filtering Lock Enforcement:** If the user attempts to filter while a background
+ *   import is active, the operation is blocked, and the UI status flag
+ *   @c GlobalState::g_filteringIndicator is set to @c true ("Filtering locked during sync")
+ *   to notify the user via screen output.
  * - **Two-Phase Execution:** Implements an "Induction" model where selected
  *   indices are staged into @c pendingIndices (a @c std::vector<std::string>)
  *   and batch-executed via the @c "P" command; @c "clr" discards the pending set.
@@ -298,21 +336,21 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  *   @c \\033[1B\\033[K) to maintain a static-feeling interface during input.
  *   PgUp/PgDn keybindings are disabled when @c ITEMS_PER_PAGE is 0.
  *
- * @param operation          Target system action ("mount", "umount", "cp", "mv",
- *                           "rm", or "write2usb"). Determines list source,
- *                           colour scheme, and operation dispatch.
- * @param isAtISOList        Set to @c true while the ISO list is displayed (only
- *                           for non-unmount operations); automatically managed
- *                           by RAII guards during operation execution. Also
- *                           gates watcher-thread repaints.
- * @param backgroundThreads  Joinable worker threads (spawned by manual R-press
- *                           imports) retained for lifetime management; stale
- *                           completed threads are joined and erased before each
- *                           new import.
- * @param refreshState       Shared UI state and condition variable used to
- *                           synchronize the watcher with the active import session.
- *                           If @c nullptr, a new @c RefreshState is constructed
- *                           internally.
+ * @param operation         Target system action ("mount", "umount", "cp", "mv",
+ *                          "rm", or "write2usb"). Determines list source,
+ *                          colour scheme, and operation dispatch.
+ * @param isAtISOList       Set to @c true while the ISO list is displayed (only
+ *                          for non-unmount operations); automatically managed
+ *                          by RAII guards during operation execution. Also
+ *                          gates watcher-thread repaints.
+ * @param backgroundThreads Joinable worker threads (spawned by manual R-press
+ *                          imports) retained for lifetime management; stale
+ *                          completed threads are joined and erased before each
+ *                          new import.
+ * @param refreshState      Shared UI state and condition variable used to
+ *                          synchronize the watcher with the active import session.
+ *                          If @c nullptr, a new @c RefreshState is constructed
+ *                          internally.
  */
 void selectForIsoFiles(const std::string& operation,
                        std::atomic<bool>& isAtISOList,
@@ -387,7 +425,6 @@ void selectForIsoFiles(const std::string& operation,
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState))
                     break;
             }
-            if (isUnmount) rl_bind_keyseq("R", rl_insert);
             std::cout << "\n\n";
             umountMvRmBreak = false;
         }
@@ -404,27 +441,45 @@ void selectForIsoFiles(const std::string& operation,
 
         std::cout << "\033[2A\033[K";
 
-        if (GlobalState::ITEMS_PER_PAGE == 0) {
-            rl_bind_keyseq("\\e[5~", rl_insert);
-            rl_bind_keyseq("\\e[6~", rl_insert);
-        }
-
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
-        isFiltered ? (void)rl_bind_keyseq("*", rl_insert) : setup_custom_keybindingsForSelect();
+        setup_custom_keybindingsForSelect();
+
+        // Unbind unused hotkeys for umount prompt
+        if (isUnmount) {
+            rl_bind_keyseq("R", rl_insert);
+            rl_bind_keyseq("*", rl_insert);
+        }
 
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
         std::string prompt =
             "\n" +
             prefix +
-            pt.iso     + "IDX" +
+            std::string(UI::Palette::RL_idxGreen) + "IDX" +
             pt.primary + " ↵ for " + "\001" +
             operationColor + "\002" + operation +
             pt.primary + ", ? for help: " +
             pt.reset;
 
-        std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
+        // Repaints the list when the terminal is resized while the prompt waits.
+        // Runs on the readline thread (rl_event_hook). Same display step as above.
+        auto repaintList = [&] {
+            const bool savedBreak = umountMvRmBreak;
+            if (!isUnmount)
+                loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak,
+                                  pendingIndices, hasPendingProcess, currentPage, originalPage,
+                                  refreshState);
+            else
+                loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak,
+                                          pendingIndices, hasPendingProcess, currentPage, originalPage,
+                                          refreshState);
+            umountMvRmBreak = savedBreak;
+        };
+
+        armPendingInputRestore();
+        RlLine rawInput = readlineWithResize(prompt, repaintList);
+        rl_startup_hook = nullptr;
 
         if (!rawInput) break;
 
@@ -472,7 +527,6 @@ void selectForIsoFiles(const std::string& operation,
                 needsClrScrn = true;
                 continue;
             } else {
-                // Keybinding guard handles reset_custom_keybindingsForSelect()
                 currentPage = 0;
                 return;
             }
@@ -500,18 +554,35 @@ void selectForIsoFiles(const std::string& operation,
         }
         bool need2Sort = false;
 
-        bool validCommand = processPaginationHelpAndDisplay(inputString, totalPages, currentPage, isFiltered, needsClrScrn, operation, need2Sort, &isAtISOList);
+        bool validCommand = processPaginationHelpAndDisplay(
+            inputString,
+            totalPages,
+            currentPage,
+            isFiltered,
+            needsClrScrn,
+            operation,
+            need2Sort,
+            &isAtISOList,
+            filteredFiles
+        );
 
         if (validCommand) continue;
 
         // --- RAII: Lock guard automatically releases when scope exits ---
         bool filteringHandled = false;
         {
-            std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
-            if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn,
-                                      filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage,
-                                      refreshState)) {
-                filteringHandled = true;
+            if ((inputString == "/" || (!inputString.empty() && inputString[0] == '/')) && !refreshState->isImportRunning.load()) {
+                std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
+                if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn,
+                                          filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage,
+                                          refreshState, repaintList)) {
+                    GlobalState::g_filteringIndicator.store(false);
+                    filteringHandled = true;
+                }
+            } else if ((inputString == "/" || (!inputString.empty() && inputString[0] == '/')) && refreshState->isImportRunning.load()) {
+                GlobalState::g_filteringIndicator.store(true);
+                needsClrScrn = true;
+                continue;
             }
         }
 
@@ -528,11 +599,24 @@ void selectForIsoFiles(const std::string& operation,
         bool pendingExecuted = false;
         {
             AtomicFlagGuard processingGuard(isAtISOList, false);
+            AtomicFlagGuard filteringGuard(GlobalState::g_filteringIndicator, true);
 
             needsClrScrn = true;
 
-            pendingExecuted = handlePendingProcess(inputString, pendingIndices, hasPendingProcess, isFiltered, filteredFiles, isoDirs,
-                                                   operation, umountMvRmBreak, filterHistory);
+            pendingExecuted = handlePendingProcess(
+                inputString,
+                pendingIndices,
+                hasPendingProcess,
+                [&](const std::string& combinedIndices) {
+                    processOperationForSelectedIsoFiles(
+                        combinedIndices,
+                        isFiltered,
+                        filteredFiles,
+                        isoDirs,
+                        operation,
+                        umountMvRmBreak,
+                        filterHistory);
+                });
 
             if (!pendingExecuted) {
                 processOperationForSelectedIsoFiles(inputString, isFiltered, filteredFiles, isoDirs,
@@ -547,55 +631,92 @@ void selectForIsoFiles(const std::string& operation,
 }
 
 /**
- * @brief TUI controller for converting proprietary disk images to standard ISO format.
+ * @brief Interactive TUI for batch ISO operations (mount, umount, cp, mv, rm, write2usb).
  *
- * Provides a paginated, filterable interface for selecting non-standard disk images
- * (BIN/IMG, MDF, NRG, CHD, DAA/GBI) and dispatching them to format-specific
- * conversion backends (ccd2iso, mdf2iso, nrg2iso, chd2iso, daa2iso).
+ * Provides a paginated, multi-layer filterable interface for selecting ISO files
+ * and executing system operations. Manages terminal state, background imports,
+ * and operation dispatch within a readline-driven event loop.
  *
- * @details **Operational Logic:**
- * - **Dynamic Context:** Derives @c fileExtension, @c fileExtensionWithOutDots, and
- *   @c operation from @p fileType at entry; an unrecognised @p fileType falls back
- *   to empty extension and "FILES" label with no operation string.
- * - **Input Routing:** After pagination/help is handled by
- *   @c processPaginationHelpAndDisplay, input starting with @c '/' is forwarded to
- *   @c handleFilteringConvert2ISO; input containing @c ';' (but not starting with
- *   @c '/') is forwarded to @c handlePendingInduction; all other non-empty input
- *   goes directly to @c processInputForConversions.
- * - **Input Sanitization:** Input starting with @c ';' or containing @c ";;" is
- *   silently skipped (needsClrScrn = false) to prevent UI flickering or logic
- *   errors. Empty readline input is similarly skipped.
- * - **Batch Processing:** Supports staging multiple files via @c handlePendingInduction.
- *   The @c "P" command (when @c hasPendingProcess is true and @c pendingIndices is
- *   non-empty) joins pending indices space-delimited and dispatches them to
- *   @c processInputForConversions. @c "clr" discards the pending set.
- * - **Cache Restoration:** On receiving the ESC character when a filter
- *   is active, @p files is reloaded from the appropriate @c GlobalState cache
- *   (@c binImgFilesCache, @c mdfMdsFilesCache, @c nrgFilesCache, @c chdFilesCache,
- *   or @c daaGbiFilesCache based on @p fileType), @c filteringStack is cleared,
- *   and @c currentPage is restored to @c originalPage. When no filter is active,
- *   ESC breaks out of the loop and returns to the caller.
+ * @details **Key Behaviors:**
+ * - **Dynamic Context:** Automatically toggles between the global ISO database
+ *   (@c GlobalState::globalIsoFileList) and active mount points (@c isoDirs)
+ *   based on @p operation; unmount operations skip database cleanup and disable
+ *   the manual-refresh keybinding (R). The operation colour is derived from
+ *   @p operation at entry: red for rm, green for cp/mount, yellow for
+ *   mv/write2usb/umount.
  * - **RAII Keybinding Management:** Custom readline keybindings are managed via
  *   @c ReadlineKeybindingGuard, which calls @c setup_custom_keybindingsForSelect()
  *   on construction and @c reset_custom_keybindingsForSelect() on destruction.
- *   This guarantees cleanup on all exit paths (break, return, exception) without
- *   manual reset calls.
- * - **`need2Sort`:** Initialized @c true; passed into @c loadAndDisplayImageFiles
- *   each redraw; set to @c false on ESC-triggered exit and on filter-clear to avoid
- *   redundant sorting.
- * - **No watcher thread:** Unlike @c selectForIsoFiles, @p state is passed only
- *   into @c loadAndDisplayImageFiles; no watcher thread or condition variable wait
- *   is used in this function. The manual-update keybinding (R) is explicitly
- *   disabled for image lists via @c rl_bind_keyseq("R", rl_insert).
-
- * @param fileType   The format category: "bin", "img", "mdf", "nrg", "chd", or "daa".
- *                   "bin" and "img" are treated identically (both map to ccd2iso).
- * @param files      Working list of image file paths to display and process; restored
- *                   from @c GlobalState on filter exit.
- * @param list       Passed directly into @c loadAndDisplayImageFiles; not read or
- *                   written by this function directly.
- * @param state      Shared @c RefreshState passed into @c loadAndDisplayImageFiles
- *                   for display coordination; no watcher thread is spawned here.
+ *   This guarantees cleanup on all exit paths (break, return from ESC, exception)
+ *   without manual reset calls. The guard is scoped to the entire function,
+ *   covering the main event loop and both early-return paths.
+ * - **RAII Atomic Flag Management:** The @p isAtISOList flag is guarded by
+ *   @c AtomicFlagGuard during operation execution blocks. The flag is
+ *   automatically set to @c false before processing and restored to @c true
+ *   afterward (or on exception), preventing stale-state leaks. For non-unmount
+ *   operations, an @c IsoListStateGuard ensures the flag is restored to its
+ *   prior value on scope exit. @c GlobalState::g_filteringIndicator is
+ *   similarly guarded by its own @c AtomicFlagGuard during the same
+ *   processing block: set to @c true while @c handlePendingProcess() /
+ *   @c processOperationForSelectedIsoFiles() run, and guaranteed to be
+ *   restored to @c false on exit (including exceptions). Note this flag is
+ *   also written independently by the Filtering Lock Enforcement path below;
+ *   the two writers are not currently coordinated.
+ * - **Event-Driven Refresh:** Shares a @c RefreshState instance (via
+ *   @c std::shared_ptr) with a detached watcher thread. The watcher is spawned
+ *   only for non-unmount operations while an import is running, at most once per
+ *   import session (guarded by @c isWatcherRunning), and redraws the list when the
+ *   import thread signals completion via @c importCV.
+ * - **Stacked Filtering:** Supports successive narrowing of results via
+ *   @c filteringStack. Read/write mutations to @c filteredFiles and sizing evaluations
+ *   are protected by @c GlobalMutexes::updateListMutex to prevent data races with the
+ *   background watcher thread. On receiving the ESC character (@c '\\x1b', typically
+ *   bound to the @c '<' key via @c setup_custom_keybindingsForSelect): if a filter is
+ *   active, the filter stack is cleared, @c currentPage is restored to @c originalPage,
+ *   and the loop continues; if no filter is active, the function sets @c currentPage
+ *   to 0 and returns to the previous menu (keybinding cleanup handled automatically
+ *   by the RAII guard).
+ * - **Filtering Lock Enforcement:** If the user attempts to filter while a background
+ *   import is active, the operation is blocked, and the UI status flag
+ *   @c GlobalState::g_filteringIndicator is set to @c true ("Filtering locked during sync")
+ *   to notify the user via screen output. On a successful, non-locked filter
+ *   operation, the flag is explicitly set to @c false.
+ * - **Two-Phase Execution:** Implements an "Induction" model where selected
+ *   indices are staged into @c pendingIndices (a @c std::vector<std::string>)
+ *   and batch-executed via the @c "P" command; @c "clr" discards the pending set.
+ *   The @c "P" command with an empty pending set displays a warning and continues.
+ * - **Manual Refresh:** Pressing @c "R" (when not unmount, the ISO list is
+ *   non-empty, and no import is running) spawns a background database import
+ *   thread. Stale completed threads in @p backgroundThreads are joined and
+ *   erased before each new import is launched.
+ * - **Persistent Directory State:** @c isoDirs is @c static, so its contents
+ *   survive re-entry into this function across the lifetime of the process.
+ * - **Terminal Integrity:** Binds @c \\f and @c \\t to no-ops via Readline to
+ *   prevent terminal corruption, and uses ANSI escape sequences (@c \\033[1A\\033[K,
+ *   @c \\033[1B\\033[K) to maintain a static-feeling interface during input.
+ *   PgUp/PgDn keybindings are disabled when @c ITEMS_PER_PAGE is 0.
+ * - **Resize Repaint:** Wraps each @c readline() in a @c ListResizeWatcher
+ *   (via @c readlineWithResize) with a lambda that re-runs the normal display
+ *   step, so the list is repainted when the terminal width changes while the
+ *   prompt waits. The same lambda is passed to the filter handler for use when
+ *   the live preview is off. (Image select repaints with a throwaway sort
+ *   flag, so a resize never re-sorts the list.)
+ *
+ * @param operation         Target system action ("mount", "umount", "cp", "mv",
+ *                          "rm", or "write2usb"). Determines list source,
+ *                          colour scheme, and operation dispatch.
+ * @param isAtISOList       Set to @c true while the ISO list is displayed (only
+ *                          for non-unmount operations); automatically managed
+ *                          by RAII guards during operation execution. Also
+ *                          gates watcher-thread repaints.
+ * @param backgroundThreads Joinable worker threads (spawned by manual R-press
+ *                          imports) retained for lifetime management; stale
+ *                          completed threads are joined and erased before each
+ *                          new import.
+ * @param refreshState      Shared UI state and condition variable used to
+ *                          synchronize the watcher with the active import session.
+ *                          If @c nullptr, a new @c RefreshState is constructed
+ *                          internally.
  */
 void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files,
                          bool& list, std::shared_ptr<RefreshState> state) {
@@ -649,10 +770,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         clearGlobalVerboseSets();
         enable_ctrl_d();
         setupSignalHandlerCancellations();
-        // setup_custom_keybindingsForSelect() handled by keybindingGuard constructor
 
-        // Reset manual-update key for image lists
-        rl_bind_keyseq("R", rl_insert);
         GlobalState::g_operationCancelled.store(false);
         bool verbose = false;
 
@@ -668,28 +786,36 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
         std::cout << "\033[2A\033[K";
 
-        // Disable PgUp&PgDn when pagination is not enabled
-        if (GlobalState::ITEMS_PER_PAGE == 0) {
-            rl_bind_keyseq("\\e[5~", rl_insert);
-            rl_bind_keyseq("\\e[6~", rl_insert);
-        }
-
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
-        isFiltered ? (void)rl_bind_keyseq("*", rl_insert) : setup_custom_keybindingsForSelect();
+        setup_custom_keybindingsForSelect();
+
+        // Unused in convert2iso prompts
+        rl_bind_keyseq("R", rl_insert);
 
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
         std::string prompt =
             "\n" +
             prefix +
-            pt.iso + "IDX" +
+            std::string(UI::Palette::RL_idxGreen) + "IDX" +
             pt.primary   + " ↵ for " +
             pt.highlight + operation +
             pt.primary   + ", ? for help: " +
             pt.reset;
 
-        std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
+        // Repaints the list on terminal resize. A throwaway sort flag keeps a
+        // resize from re-sorting the list.
+        auto repaintList = [&] {
+            bool sortNow = false;
+            loadAndDisplayImageFiles(files, fileType, sortNow, isFiltered, list,
+                                     pendingIndices, hasPendingProcess, currentPage,
+                                     state);
+        };
+
+        armPendingInputRestore();
+        RlLine rawInput = readlineWithResize(prompt, repaintList);
+        rl_startup_hook = nullptr;
 
         if (!rawInput) break;
 
@@ -717,10 +843,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                 need2Sort = false;
                 continue;
             } else {
-                // Keybinding guard handles cleanup via destructor
                 currentPage = 0;
                 need2Sort = false;
-                return;  // No more manual reset_custom_keybindingsForSelect() needed!
+                return;
             }
         }
 
@@ -753,42 +878,52 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             : 0;
 
         bool validCommand = processPaginationHelpAndDisplay(
-            inputString, totalPages, currentPage, isFiltered,
-            needsClrScrn, operation, need2Sort, nullptr);
+            inputString,
+            totalPages,
+            currentPage,
+            isFiltered,
+            needsClrScrn,
+            operation,
+            need2Sort,
+            nullptr,
+            files
+        );
 
         if (validCommand) continue;
 
-        if (inputString == "P" && hasPendingProcess && !pendingIndices.empty()) {
-            std::string combinedIndices = "";
-            for (size_t i = 0; i < pendingIndices.size(); ++i) {
-                combinedIndices += pendingIndices[i];
-                if (i < pendingIndices.size() - 1) {
-                    combinedIndices += " ";
-                }
-            }
-
-            processInputForConversions(combinedIndices, files,
-                                       (fileType == "mdf"),
-                                       (fileType == "nrg"),
-                                       (fileType == "chd"),
-                                       (fileType == "daa"),
-                                       verbose);
+        if (handlePendingProcess(
+                inputString,
+                pendingIndices,
+                hasPendingProcess,
+                [&](const std::string& combinedIndices) {
+                    processInputForConversions(
+                        combinedIndices,
+                        files,
+                        fileType == "mdf",
+                        fileType == "nrg",
+                        fileType == "chd",
+                        fileType == "daa",
+                        verbose);
+                })) {
             keybindingGuard.restore();
 
             needsClrScrn = true;
+
             if (verbose) {
                 verbosePrint(verboseSets.uniqueErrorTokenMessages,
-                            verboseSets.operationCompleted,
-                            verboseSets.operationSkipped,
-                            verboseSets.operationFailed, 3);
+                             verboseSets.operationCompleted,
+                             verboseSets.operationSkipped,
+                             verboseSets.operationFailed, 3);
             }
+
             continue;
         }
 
         if (inputString == "/" || (!inputString.empty() && inputString[0] == '/')) {
             handleFilteringConvert2ISO(inputString, files, operation, isFiltered,
                                        needsClrScrn, filterHistory, need2Sort, currentPage,
-                                       pendingIndices, hasPendingProcess, state);
+                                       pendingIndices, hasPendingProcess, state,
+                                       repaintList);
             keybindingGuard.restore();
             std::cout << "\033[1B\033[K";
             continue;
