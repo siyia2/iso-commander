@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef THREAD_POOL_H
-#define THREAD_POOL_H
+#ifndef THREADPOOL_H
+#define THREADPOOL_H
 
 // C++ Standard Library Headers
 #include <algorithm>
@@ -1034,4 +1034,4 @@ inline ThreadPool& getStaticThreadPool() {
     return instance;
 }
 
-#endif // THREAD_POOL_H
+#endif // THREADPOOL_H

@@ -137,7 +137,7 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "auto_update",
         "off",
-        "Enable background metadata updates from folder path history on startup (on/off)",
+        "Refresh ISO database on startup using folder path history (on/off)",
         "General Settings",
         isOnOff
     },
@@ -147,6 +147,13 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
         "Display only filenames instead of full paths (on/off)",
         "",
         isOnOff
+    },
+    {
+        "live_filter_limit",
+        "10000",
+        "Maximum number of entries for live filtering (0 to disable)",
+        "",
+        [](const std::string& v) { return isNum(v, 0, 100000); }
     },
     {
         "pagination",

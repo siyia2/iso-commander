@@ -5,10 +5,13 @@
 
 // C++ Standard Library Headers
 #include <atomic>
+#include <condition_variable>
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <utility>
@@ -44,6 +47,7 @@ struct ProgressInfo {
     std::string filename;
     std::string device;
     std::string totalSize;
+    std::string sourcePath;
 
     std::atomic<bool> completed{false};
     std::atomic<bool> failed{false};
@@ -52,16 +56,19 @@ struct ProgressInfo {
     std::atomic<double> speed{0.0};
 
     // Constructor
-    ProgressInfo(std::string filename, std::string device, std::string totalSize)
+    ProgressInfo(std::string filename, std::string device, std::string totalSize,
+                 std::string sourcePath)
         : filename(std::move(filename)),
           device(std::move(device)),
-          totalSize(std::move(totalSize)) {}
+          totalSize(std::move(totalSize)),
+          sourcePath(std::move(sourcePath)) {}
 
     // Move Constructor
     ProgressInfo(ProgressInfo&& other) noexcept
         : filename(std::move(other.filename)),
           device(std::move(other.device)),
           totalSize(std::move(other.totalSize)),
+          sourcePath(std::move(other.sourcePath)),
           completed(other.completed.load()),
           failed(other.failed.load()),
           bytesWritten(other.bytesWritten.load()),
@@ -74,6 +81,7 @@ struct ProgressInfo {
             filename = std::move(other.filename);
             device = std::move(other.device);
             totalSize = std::move(other.totalSize);
+            sourcePath = std::move(other.sourcePath);
             completed.store(other.completed.load());
             failed.store(other.failed.load());
             bytesWritten.store(other.bytesWritten.load());
@@ -88,7 +96,24 @@ struct ProgressInfo {
     ProgressInfo& operator=(const ProgressInfo&) = delete;
 };
 
-inline std::vector<ProgressInfo> progressData; ///< Shared progress state for all active write tasks.
+/**
+ * @brief Completion-tracking state shared between pooled write tasks and the UI.
+ *
+ * Holds the counters, mutex and condition variable that pooled write tasks
+ * update and that the display thread and the main thread wait on. It is owned
+ * through a @c std::shared_ptr that every task captures by value, so it stays
+ * alive for tasks that outlive @ref performWriteOperation after cancellation
+ * (a task must never reference these members from the function's stack).
+ *
+ * Neither copyable nor movable, because it contains atomics, a mutex and a
+ * condition variable.
+ */
+struct WriteSync {
+    std::atomic<size_t>     completedTasks{0};
+    std::atomic<size_t>     finishedTasks{0};   // success OR failure
+    std::mutex              mutex;
+    std::condition_variable cv;
+};
 
 /**
  * @brief RAII guard for the readline/terminal state that needs to be set up
@@ -241,7 +266,39 @@ inline std::atomic<bool> g_drainingCancelled{false};
 /**
  * Performs the actual write2usb.
  */
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex);
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex, std::vector<ProgressInfo>& progressData);
+
+/**
+ * Returns true if the block device (e.g. /dev/sdb) is a removable USB flash drive.
+ */
+bool isFlashDrive(const std::string&);
+
+/**
+ * Returns true if the block device or any of its partitions is currently mounted.
+ */
+bool isDeviceMounted(const std::string&);
+
+/**
+ * Returns the drive's model name from sysfs, or "Unknown Drive" if unavailable.
+ */
+std::string getDriveName(const std::string&);
+
+/**
+ * @brief Live progress/result screen for a write2usb operation.
+ *
+ * Opaque handle returned by @ref performWriteOperation. It owns the keeper
+ * thread that keeps the screen laid out correctly on terminal resize, and it
+ * must stay alive until the caller has finished waiting for the user. The
+ * destructor stops and joins that thread. Defined in write2usbUI.cpp.
+ */
+class WriteScreen;
+
+/**
+ * Writes the given (ISO, device) pairs concurrently on the thread pool,
+ * with a live progress display and a final status summary.
+ */
+std::shared_ptr<WriteScreen> performWriteOperation(
+    const std::vector<std::pair<IsoInfo, std::string>>&);
 
 // --- Filesystem & Formatting Utilities ---
 
@@ -261,5 +318,78 @@ std::string formatSpeed(double mbPerSec);
  * @return Size in bytes.
  */
 uint64_t getBlockDeviceSize(const std::string& device);
+
+// --- Shared validation helpers (defined in the same .cpp as validateDevices) ---
+
+namespace UI { struct WriteTheme; }
+
+/**
+ * @namespace WriteValidation
+ * @brief Shared validation helpers used by the interactive write2usb UI and
+ *        the non-interactive CLI writer.
+ *
+ * Defined in write2usbUI.cpp alongside validateDevices().
+ */
+namespace WriteValidation {
+
+/**
+ * @brief Builds a themed error message that has no associated path.
+ *
+ * @param wt  Active write theme supplying the label and reset colours.
+ * @param msg Message text (e.g. "Root privileges are required").
+ * @return The message prefixed with the error label colour and terminated
+ *         with a colour reset.
+ */
+std::string plainErr(const UI::WriteTheme& wt, const std::string& msg);
+
+/**
+ * @brief Builds a themed error message of the form "'<path>' <message>".
+ *
+ * @param wt   Active write theme.
+ * @param path Path to display, quoted, at the start of the message.
+ * @param msg  Message text; include a leading space (e.g. " is not an ISO file").
+ * @return The fully coloured message string.
+ */
+std::string pathErr(const UI::WriteTheme& wt, const std::string& path, const std::string& msg);
+
+/**
+ * @brief Prints a themed "Validation errors:" block to stderr.
+ *
+ * @param wt   Active write theme.
+ * @param errs Pre-formatted error messages, printed as indented bullets.
+ */
+void printValidationErrors(const UI::WriteTheme& wt, const std::vector<std::string>& errs);
+
+/**
+ * @brief Runs the device-level checks, independent of which ISO is paired with it.
+ *
+ * Verifies that the device is a removable USB flash drive, is not mounted,
+ * is not in the draining set (pending kernel-level tasks), has no write I/O
+ * still in flight (non-interactive mode only), and has a determinable size.
+ *
+ * @param wt     Active write theme.
+ * @param device Path used for the checks (canonical /dev/sdX).
+ * @param shown  Path displayed in error messages (what the user typed).
+ * @param[out] size Device size in bytes; only valid when no error is returned.
+ * @return An error message for the first failed check, or std::nullopt if
+ *         the device is usable.
+ */
+std::optional<std::string> checkDevice(const UI::WriteTheme& wt, const std::string& device,
+                                       const std::string& shown, uint64_t& size);
+
+/**
+ * @brief Checks that an ISO fits on a device.
+ *
+ * @param wt         Active write theme.
+ * @param iso        ISO to be written.
+ * @param device     Device path, used for the message and the drive-name lookup.
+ * @param deviceSize Device capacity in bytes (as returned by checkDevice()).
+ * @return A themed "is too large for" message including both sizes and the
+ *         drive name, or std::nullopt if the ISO fits.
+ */
+std::optional<std::string> checkCapacity(const UI::WriteTheme& wt, const IsoInfo& iso,
+                                         const std::string& device, uint64_t deviceSize);
+
+} // namespace WriteValidation
 
 #endif // WRITE2USBUI_H

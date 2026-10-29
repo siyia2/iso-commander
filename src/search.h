@@ -57,11 +57,12 @@ private:
  */
 
 /**
- * @brief Displays usage help for search operations.
- * @param isCpMv Whether the current context is Copy/Move.
- * @param import2ISO Whether the context is ISO conversion.
+ * @brief Displays usage help for directory-related prompts.
+ * @param isCpMv     True for Copy/Move prompts, false for ISO search prompts.
+ * @param import2ISO True for database import, false for image conversion (ignored if @p isCpMv).
+ * @param isCopy     True for Copy, false for Move; selects the tips (only used if @p isCpMv).
  */
-void helpSearches(bool isCpMv, bool import2ISO);
+void helpSearches(bool isCpMv, bool import2ISO, bool isCopy = true);
 
 
 /**

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef GLOBALS_H
-#define GLOBALS_H
+#ifndef STATE_H
+#define STATE_H
 
 // C++ Standard Library Headers
 #include <atomic>
@@ -49,8 +49,8 @@ namespace GlobalState {
     inline const std::string configPath = configDirectory + "config";
 
     // Configuration Limits
-    inline int MAX_HISTORY_LINES         = 100;
-    inline int MAX_HISTORY_PATTERN_LINES = 50;
+    inline int MAX_HISTORY_LINES         = 30;
+    inline int MAX_HISTORY_PATTERN_LINES = 15;
 
     inline constexpr uintmax_t maxDatabaseSize = 1024 * 1024 * 1; // 1MB
 
@@ -61,8 +61,13 @@ namespace GlobalState {
     inline std::atomic<PendingRefreshKind> g_pendingRefreshKind{PendingRefreshKind::None};
     inline std::shared_ptr<RefreshState> g_pendingRefreshState{nullptr};
     inline std::atomic<bool> g_suppressPendingRefresh{false};
+    inline std::atomic<bool> g_filteringIndicator{false};
+    inline std::atomic<bool> isAtMain{true};
+    inline std::atomic<bool> isAtISOList{false};
+    inline std::atomic<bool> isNonInteractive{false};
     inline bool needSortingAfterflno      = false;
     inline size_t ITEMS_PER_PAGE          = 25;
+    inline size_t LIVE_FILTER_LIMIT       = 10000;
     inline int lockFileDescriptor         = -1;
 
 
@@ -76,4 +81,4 @@ namespace GlobalState {
 
 } // namespace GlobalState
 
-#endif // GLOBALS_H
+#endif // STATE_H

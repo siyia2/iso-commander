@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef OPERATIONS_H
-#define OPERATIONS_H
+#ifndef PROCESS_H
+#define PROCESS_H
 
 // C++ Standard Library Headers
 #include <atomic>
@@ -68,7 +68,8 @@ void displayProgressBarWithSize(
     size_t totalTasks,
     std::atomic<bool>* isComplete,
     bool* verbose,
-    const std::string& operation
+    const std::string& operation,
+    const std::string& header = ""
 );
 
 
@@ -107,4 +108,4 @@ std::string userDestDirCpMv(
     bool& overwriteExisting
 );
 
-#endif // OPERATIONS_H
+#endif // PROCESS_H

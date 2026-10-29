@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
-#ifndef CHD_COMMON_H
-#define CHD_COMMON_H
+#ifndef CHD_H
+#define CHD_H
 
 // C++ Standard Library Headers
 #include <memory>
@@ -11,17 +11,17 @@
 
 /**
  * @brief Custom deleter for CHD file handles
- * 
+ *
  * This deleter is designed to be used with std::unique_ptr to automatically
  * manage the lifetime of CHD file handles. It ensures that chd_close() is
  * called when the unique_ptr goes out of scope.
- * 
+ *
  * @note This deleter is noexcept and will not throw exceptions during cleanup.
  */
 struct ChdFileDeleter {
     /**
      * @brief Closes a CHD file handle
-     * 
+     *
      * @param f Pointer to the CHD file handle to close. If nullptr, the
      *          function does nothing.
      */
@@ -32,11 +32,11 @@ struct ChdFileDeleter {
 
 /**
  * @brief RAII smart pointer type for CHD file handles
- * 
+ *
  * This type alias defines a std::unique_ptr that automatically manages
  * CHD file handles using ChdFileDeleter. It provides exception-safe
  * lifetime management for CHD resources.
- * 
+ *
  * Usage example:
  * @code
  * chd_file* raw_handle;
@@ -46,10 +46,10 @@ struct ChdFileDeleter {
  *     // Handle will be automatically closed when it goes out of scope
  * }
  * @endcode
- * 
+ *
  * @note The underlying CHD file handle can be accessed via .get() method
  * @see ChdFileDeleter
  */
 using ChdFilePtr = std::unique_ptr<chd_file, ChdFileDeleter>;
 
-#endif // CHD_COMMON_H
+#endif // CHD_H

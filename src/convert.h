@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef CONVERT
-#define CONVERT
+#ifndef CONVERT_H
+#define CONVERT_H
 
 // C++ Standard Library Headers
 #include <atomic>
@@ -23,4 +23,4 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
 // NRG2ISO
 bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<size_t>* completedBytes);
 
-#endif // CONVERT
+#endif // CONVERT_H
