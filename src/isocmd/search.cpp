@@ -143,11 +143,11 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
 
     while (true) {
         rearmSetup();
+        clearScrollBuffer();
         SearchReadlineGuard guard;
         try {
             const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
-            clearScrollBuffer();
             loadHistory(filterHistory);
 
             RestoreReadlineBuffer();
