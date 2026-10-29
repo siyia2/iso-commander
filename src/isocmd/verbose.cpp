@@ -501,16 +501,22 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
  *   paths; files present but no delta (save not attempted or failed); no ISOs
  *   found; or successful import with the delta count from
  *   @c countDifferentEntries.
+ * - **Total files processed:** the results screen clears the terminal, which
+ *   wipes the live progress counter, so the final count is reprinted at the top
+ *   whenever at least one valid path was scanned. When @p validPaths is empty
+ *   nothing was scanned: the invalid-path block emits its own
+ *   "Total files processed: 0" line instead.
  * - **Invalid path / error reporting:** printed before the save step. When
  *   @p totalFiles is zero and @p validPaths is empty, also emits a "Total files
- *   processed: 0" line before the invalid-path list.
+ *   processed: 0" line before the invalid-path list. Invalid paths are stored
+ *   uncolored; the red color is applied here.
  * - **Resize:** the one-shot side effects (load, save, elapsed time, delta
  *   count) run before the wait; only the printing is replayed by the render
  *   lambda handed to pressEnterToContinueWithRepaint().
  *
  * @param allIsoFiles         Discovered ISO paths to be saved.
- * @param totalFiles          Atomic count of files scanned; gates the
- *                            "Total files processed: 0" line.
+ * @param totalFiles          Atomic count of files scanned; reprinted after the
+ *                            screen clear, and gates the zero-case line.
  * @param validPaths          Base directories successfully traversed; empty
  *                            triggers the "Lack of valid paths" branch.
  * @param invalidPaths        Directories skipped due to permissions or
@@ -546,14 +552,24 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
             ? countDifferentEntries(allIsoFiles, GlobalState::globalIsoFileList)
             : 0;
 
+    // Final count, sampled once so every repaint shows the same number.
+    const size_t totalProcessed = totalFiles.load();
+
     auto render = [&] {
         SyncOutput sync;
         clearScrollBuffer();
         std::cout << "\n";
 
+        // The live counter was wiped by clearScrollBuffer(); reprint it. With
+        // no valid paths nothing was scanned and printInvalidPaths below prints
+        // its own "Total files processed: 0", so skip it here.
+        if (!validPaths.empty()) {
+            std::cout << "\r" << color << "Total files processed: " << totalProcessed << "\n";
+        }
+
         auto printInvalidPaths = [&]() {
             if (invalidPaths.empty()) return;
-            if (totalFiles == 0 && validPaths.empty()) {
+            if (totalProcessed == 0 && validPaths.empty()) {
                 std::cout << "\r" << color << "Total files processed: 0\n" << std::flush;
             }
             std::cout << "\n" << color << "Invalid paths omitted from search: " << vt.red;
@@ -608,6 +624,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
  *   @p directoryPaths is empty and @p invalidDirectoryPaths is non-empty.
  * - **Invalid path output:** the header "Invalid paths omitted from search: "
  *   goes to @c std::cout; the path values and trailing "." go to @c std::cerr.
+ *   Paths are stored uncolored; the red set by the header applies to them.
  * - **Error message output:** entries in @p processedErrorsFind go to
  *   @c std::cout, separated by newlines (no trailing newline after the last
  *   entry).
@@ -660,27 +677,27 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
  * @brief Renders a color-coded summary of image discovery results and cache
  * deltas.
  *
- * Captures @c end_time immediately on entry, then selects one of three display
- * branches based on outcome. Elapsed time and @c pressEnterToContinue always
- * run at the end, regardless of branch or cancellation.
+ * Captures @c end_time immediately on entry, then prints, in order:
+ * -# the "Total files processed" line (only when at least one valid directory
+ *    was scanned; with no valid directories @c verboseFind prints its own
+ *    "Total files processed: 0" line),
+ * -# the captured @c verboseFind output (invalid paths omitted from search,
+ *    traversal errors, and the "search interrupted by user" message),
+ * -# one of three result branches, each gated on
+ *    @c !GlobalState::g_operationCancelled.load():
+ *    - **Files found** (@c !fileNames.empty()): found vs @p currentCacheOld.
+ *    - **No new files, cache non-empty** (@c !newFilesFound && !files.empty() &&
+ *      !list): 0 found vs @c files.size() with an @c "ls ↵" hint.
+ *    - **Cache empty** (@c files.empty() && !list): 0 found and 0 cached.
+ * -# the elapsed time.
  *
- * Branches (all gated on @c !GlobalState::g_operationCancelled.load()):
- * - **Files found** (@c !fileNames.empty()): prints found vs
- *   @p currentCacheOld. Does not call @c verboseFind. Not gated on @p list.
- * - **No new files, cache non-empty** (@c !newFilesFound && !files.empty() && !list):
- *   calls @c verboseFind, then prints 0 found vs @c files.size() with an
- *   @c "ls ↵" hint.
- * - **Cache empty** (@c files.empty() && !list): calls @c verboseFind, then
- *   prints 0 found and 0 cached.
- *
- * If @c g_operationCancelled is set, all three branches are skipped; only
- * elapsed time and the Enter prompt are shown.
+ * Steps 1, 2 and 4 are unconditional, so a cancelled search still shows the
+ * counter, the interruption message and the elapsed time.
  *
  * **Resize:** @c verboseFind mutates its set arguments (clears them), so it
  * runs exactly once, before the wait, with its @c std::cout/@c std::cerr
- * writes redirected into an @c ostringstream. The captured text is replayed
- * by the render lambda on resize, alongside the elapsed time and the other
- * branch output, which are captured by value.
+ * writes redirected into an @c ostringstream. The captured text, the file
+ * count and the elapsed time are replayed by the render lambda on resize.
  *
  * @param fileExtension         Target format label (e.g. ".bin/.img").
  * @param fileNames             Files discovered this run; not modified.
@@ -697,7 +714,10 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
  *                              @c end_time captured at entry.
  * @param processedErrorsFind   Passed to @c verboseFind (cleared there).
  * @param directoryPaths        Passed to @c verboseFind for the
- *                              "Total files processed: 0" gate check.
+ *                              "Total files processed: 0" gate check; also
+ *                              decides whether the real count is printed here.
+ * @param totalFiles            Aggregate number of regular files processed by
+ *                              the scan, filled in by @c findFiles.
  */
 void verboseImageSearchResults(const std::string& fileExtension,
                           std::unordered_set<std::string>& fileNames,
@@ -708,7 +728,8 @@ void verboseImageSearchResults(const std::string& fileExtension,
                           const std::vector<std::string>& files,
                           const std::chrono::high_resolution_clock::time_point& start_time,
                           std::unordered_set<std::string>& processedErrorsFind,
-                          std::vector<std::string>& directoryPaths) {
+                          std::vector<std::string>& directoryPaths,
+                          const std::atomic<size_t>& totalFiles) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
@@ -718,6 +739,12 @@ void verboseImageSearchResults(const std::string& fileExtension,
     // has no return value. To replay its output on resize without re-running
     // it (which would have cleared the sets), run it once into a stringstream
     // here and print that string in the render lambda.
+    //
+    // hadDirectories is sampled independently of verboseFind: when there were
+    // no valid directories, verboseFind itself prints
+    // "Total files processed: 0", so we must not print a second counter.
+    const bool hadDirectories = !directoryPaths.empty();
+
     std::ostringstream verboseFindBuf;
     {
         // Swap the streams into std::cout/std::cerr for the duration of
@@ -728,7 +755,20 @@ void verboseImageSearchResults(const std::string& fileExtension,
         std::cout.rdbuf(oldOut);
         std::cerr.rdbuf(oldErr);
     }
-    const std::string verboseFindOutput = verboseFindBuf.str();
+    std::string verboseFindOutput = verboseFindBuf.str();
+
+    // verboseFind opens with "\n", then "\n\n" before its first section. After
+    // the counter line that gives TWO blank lines; drop one so there is a single
+    // blank line between the counter and the invalid paths / errors.
+    if (hadDirectories && verboseFindOutput.rfind("\n\n\n", 0) == 0) {
+        verboseFindOutput.erase(0, 1);
+    }
+
+    // Beyond its opening "\n", did verboseFind print anything (invalid paths,
+    // errors, interruption message)? Decides the gap before the 0-found blocks.
+    const bool hasFindContent = verboseFindOutput.size() > 1;
+
+    const size_t totalProcessed = totalFiles.load();
 
     const auto end_time = std::chrono::high_resolution_clock::now();
     const double total_elapsed_time =
@@ -738,9 +778,19 @@ void verboseImageSearchResults(const std::string& fileExtension,
         SyncOutput sync;
         clearScrollBuffer();
 
-        // Files were found.
+        // 1. Total files processed (real count; the zero-directory case is
+        //    already part of verboseFindOutput).
+        if (hadDirectories) {
+            std::cout << "\n" << "\r" << color << "Total files processed: " << totalProcessed << vt.reset;
+        }
+
+        // 2. Invalid paths omitted from search, traversal errors, and the
+        //    "search interrupted by user" message.
+        std::cout << verboseFindOutput;
+
+        // 3a. Files were found.
         if (!fileNames.empty() && !GlobalState::g_operationCancelled.load()) {
-            std::cout << "\n\n"
+            std::cout << (hasFindContent ? "\n\n" : "\n")
                       << vt.green << fileNames.size() << " "
                       << vt.orange << "{" << fileExtension << "} "
                       << vt.green << "files found" << vt.yellow << "\n"
@@ -749,10 +799,9 @@ void verboseImageSearchResults(const std::string& fileExtension,
                       << vt.yellow << "cached entries" << vt.reset << vt.bold << "\n\n";
         }
 
-        // No new files, but the cache is non-empty.
+        // 3b. No new files, but the cache is non-empty.
         if (!newFilesFound && !files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
-            std::cout << verboseFindOutput;
-            std::cout << "\n\n"
+            std::cout << (hasFindContent ? "\n\n" : "\n")
                       << vt.red << "0 "
                       << vt.orange << "{" << fileExtension << "} "
                       << vt.red << "files found " << vt.yellow << "\n"
@@ -763,10 +812,9 @@ void verboseImageSearchResults(const std::string& fileExtension,
                       << vt.yellow << "↵ to list" << vt.reset << vt.bold << "\n\n";
         }
 
-        // No files were found.
+        // 3c. No files were found and the cache is empty.
         if (files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
-            std::cout << verboseFindOutput;
-            std::cout << "\n\n"
+            std::cout << (hasFindContent ? "\n\n" : "\n")
                       << vt.red << "0" << vt.orange << " {" << fileExtension << "} "
                       << vt.red << "files found\n"
                       << vt.yellow << "0" << vt.orange << " {" << fileExtension << "} "
@@ -774,6 +822,7 @@ void verboseImageSearchResults(const std::string& fileExtension,
                       << vt.reset << vt.bold << "\n";
         }
 
+        // 4. Elapsed time.
         std::cout << color << "Time Elapsed: " << std::fixed << std::setprecision(1)
                   << total_elapsed_time << "s" << vt.bold << "\n";
     };

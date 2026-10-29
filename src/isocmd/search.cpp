@@ -98,6 +98,11 @@ bool isValidDirectory(const std::string& path) {
  *   three places: inside @c rearmSetup (top of every iteration), before the
  *   early-save path, and before the parallel scan block. This prevents spurious
  *   cancellation from a premature Ctrl+C before input is processed.
+ * - **Task joining:** every scan task is always waited on, even after a
+ *   cancellation. The tasks capture references to locals of this iteration
+ *   (@c allIsoFiles, @c uniqueErrorMessages, @c totalFiles, the mutexes);
+ *   returning before they finish would leave them with dangling references.
+ *   Tasks observe @c g_operationCancelled and exit quickly.
  * - **History:** @c loadHistory(filterHistory) is called unconditionally each
  *   iteration. After parsing, @c add_history is called with only the valid
  *   tokens, trimmed but not normalized, rejoined with @c ';' (e.g. the input
@@ -194,7 +199,8 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 continue;
             }
 
-            if (!input.empty() && (input != "*stats" || input != "?")) {
+            // "?" and the switch commands were already handled above.
+            if (!input.empty()) {
                 std::cout << "\n";
             }
 
@@ -229,7 +235,8 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 path = trimWhitespace(path);
                 if (path.empty()) continue;
                 if (!isValidDirectory(path)) {
-                    invalidPaths.insert(dt.red + path);
+                    // Stored plain; the reporting code applies the color.
+                    invalidPaths.insert(path);
                     continue;
                 }
 
@@ -287,9 +294,11 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                     );
                 }
 
+                // Always join every task: they hold references to the locals
+                // above, which are destroyed when this block ends. On Ctrl+C
+                // the tasks see g_operationCancelled and return quickly.
                 for (auto& future : futures) {
                     future.wait();
-                    if (GlobalState::g_operationCancelled.load()) break;
                 }
             }
 
@@ -659,76 +668,84 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
  * newly discovered files. Supports cancellation, progress reporting, and error
  * aggregation for the parent search.
  *
+ * - **Cache check:** the target cache is copied once into a hash set at the
+ *   start of the task, so each candidate is an O(1) lookup instead of a linear
+ *   scan. This is safe because @c findFiles only modifies the caches after
+ *   every task has been joined.
+ * - **Cancellation:** the flag is read here but never reset; @c findFiles
+ *   resets it once before submitting the tasks. Resetting it per task would let
+ *   late-starting tasks swallow a Ctrl+C.
+ *
+ * @param totalFiles Shared atomic counter of regular files seen, owned by the
+ *                   caller and shared by every parallel task so the live
+ *                   progress line and the final summary show the combined
+ *                   total. This function only increments it; the final
+ *                   "Total files processed" line is printed by the caller.
  * @return Set of newly discovered file paths from this directory.
  */
 std::unordered_set<std::string> processPaths(const std::string& path, const std::string& mode,
                                             const std::function<void(const std::string&, const std::string&)>& callback,
-                                            std::unordered_set<std::string>& processedErrorsFind) {
+                                            std::unordered_set<std::string>& processedErrorsFind,
+                                            std::atomic<size_t>& totalFiles) {
     const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
-    std::atomic<size_t> totalFiles{0};
     std::unordered_set<std::string> localFileNames;
     std::atomic<bool> g_CancelledMessageAdded{false};
 
-    GlobalState::g_operationCancelled.store(false);
     disableInput();
 
     try {
-        bool blacklistMdf = (mode == "mdf");
-        bool blacklistNrg = (mode == "nrg");
-        bool blacklistChd = (mode == "chd");
-        bool blacklistDaa = (mode == "daa");
+        const bool blacklistMdf = (mode == "mdf");
+        const bool blacklistNrg = (mode == "nrg");
+        const bool blacklistChd = (mode == "chd");
+        const bool blacklistDaa = (mode == "daa");
+
+        // One-time snapshot of the target cache for O(1) membership tests.
+        std::unordered_set<std::string> cacheSet;
+        {
+            std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
+            const std::vector<std::string>& cache =
+                blacklistNrg ? GlobalState::nrgFilesCache :
+                blacklistMdf ? GlobalState::mdfMdsFilesCache :
+                blacklistChd ? GlobalState::chdFilesCache :
+                blacklistDaa ? GlobalState::daaGbiFilesCache :
+                               GlobalState::binImgFilesCache;
+            cacheSet.insert(cache.begin(), cache.end());
+        }
 
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (GlobalState::g_operationCancelled.load()) {
-                if (GlobalState::g_operationCancelled.load()) {
-                    std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
+                std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
 
-                    // Re-check under the lock to prevent races between threads.
-                    if (!g_CancelledMessageAdded.exchange(true)) {
-                        processedErrorsFind.clear();
+                // Re-check under the lock to prevent races between threads.
+                if (!g_CancelledMessageAdded.exchange(true)) {
+                    processedErrorsFind.clear();
 
-                        std::string type = (blacklistMdf) ? "MDF" :
-                                           (blacklistNrg) ? "NRG" :
-                                           (blacklistChd) ? "CHD" :
-                                           (blacklistDaa) ? "DAA/GBI" : "BIN/IMG";
+                    std::string type = (blacklistMdf) ? "MDF" :
+                                       (blacklistNrg) ? "NRG" :
+                                       (blacklistChd) ? "CHD" :
+                                       (blacklistDaa) ? "DAA/GBI" : "BIN/IMG";
 
-                        processedErrorsFind.insert(dt.yellow + type +
-                            " search interrupted by user\n\n" + dt.reset);
-                    }
-                    break;
+                    processedErrorsFind.insert(dt.yellow + type +
+                        " search interrupted by user\n\n" + dt.reset);
                 }
+                break;
             }
 
-                if (entry.is_regular_file()) {
-                    uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
-                    if (val % 100 == 0) {
-                        std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
-                        std::cout << "\r" << color << "Total files processed: " << val << std::flush;
-                }
+            if (!entry.is_regular_file()) continue;
 
-                if (blacklist(entry, blacklistMdf, blacklistNrg, blacklistChd, blacklistDaa)) {
-                    std::string fileName = entry.path().string();
-                    {
-                        std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
+            uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
+            if (val % 100 == 0) {
+                std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
+                std::cout << "\r" << color << "Total files processed: " << val << std::flush;
+            }
 
-                        bool isInCache = false;
-                        if (mode == "nrg") {
-                            isInCache = (std::find(GlobalState::nrgFilesCache.begin(), GlobalState::nrgFilesCache.end(), fileName) != GlobalState::nrgFilesCache.end());
-                        } else if (mode == "mdf") {
-                            isInCache = (std::find(GlobalState::mdfMdsFilesCache.begin(), GlobalState::mdfMdsFilesCache.end(), fileName) != GlobalState::mdfMdsFilesCache.end());
-                        } else if (mode == "bin") {
-                            isInCache = (std::find(GlobalState::binImgFilesCache.begin(), GlobalState::binImgFilesCache.end(), fileName) != GlobalState::binImgFilesCache.end());
-                        } else if (mode == "chd") {
-                            isInCache = (std::find(GlobalState::chdFilesCache.begin(), GlobalState::chdFilesCache.end(), fileName) != GlobalState::chdFilesCache.end());
-                        } else if (mode == "daa") {
-                            isInCache = (std::find(GlobalState::daaGbiFilesCache.begin(), GlobalState::daaGbiFilesCache.end(), fileName) != GlobalState::daaGbiFilesCache.end());
-                        }
+            if (blacklist(entry, blacklistMdf, blacklistNrg, blacklistChd, blacklistDaa)) {
+                std::string fileName = entry.path().string();
 
-                        if (!isInCache && localFileNames.insert(fileName).second) {
-                            callback(fileName, entry.path().parent_path().string());
-                        }
-                    }
+                std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
+                if (!cacheSet.contains(fileName) && localFileNames.insert(fileName).second) {
+                    callback(fileName, entry.path().parent_path().string());
                 }
             }
         }
@@ -737,11 +754,6 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
 
         processedErrorsFind.insert(dt.red + "Error traversing path: " + path + " - " +
                                  e.what() + dt.reset);
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
-        std::cout << "\r" << color << "Total files processed: " << totalFiles << dt.reset;
     }
 
     return localFileNames;
@@ -759,18 +771,32 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
  *
  * Results are aggregated, deduplicated against the existing cache, and merged
  * into the appropriate RAM cache. Supports cancellation via the global
- * operation flag and signal handling.
+ * operation flag and signal handling. All tasks are always joined before this
+ * function returns (they hold references to this function's parameters), even
+ * after a cancellation.
+ *
+ * **Resize-relevant contract:** this function intentionally does NOT call
+ * verboseFind(). The invalid-directory set and the processed-error set are
+ * returned to the caller still populated, so verboseImageSearchResults() can
+ * run verboseFind() once into a buffer and replay its output on resize.
+ * Likewise @p totalFiles is left holding the final aggregate so
+ * verboseImageSearchResults() can reprint "Total files processed" after it
+ * clears the screen.
  *
  * @param inputPaths           Raw user-provided directory paths.
  * @param fileNames            Output set of discovered file paths.
  * @param currentCacheOld      Returns the cache size before new additions.
- * @param mode                 File type to search for ("bin", "mdf", "nrg",
- *                             "chd", "daa").
+ * @param mode                 File type to search for ("bin"/"img", "mdf",
+ *                             "nrg", "chd", "daa").
  * @param callback             Optional callback invoked for each discovered file.
  * @param directoryPaths       (Unused) Reserved for future use.
- * @param invalidDirectoryPaths Set of paths that failed validation (for verbose
- *                             output).
- * @param processedErrorsFind  Set of error messages encountered during traversal.
+ * @param invalidDirectoryPaths Set of paths that failed validation; left
+ *                             populated for verboseImageSearchResults().
+ * @param processedErrorsFind  Set of error messages encountered during traversal;
+ *                             left populated for verboseImageSearchResults().
+ * @param totalFiles           Shared counter of regular files processed across
+ *                             all tasks; incremented by processPaths(), read by
+ *                             the caller afterwards.
  * @return Reference to the updated cache vector for @p mode.
  */
 std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
@@ -779,14 +805,15 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
                                    const std::function<void(const std::string&, const std::string&)>& callback,
                                    const std::vector<std::string>& directoryPaths,
                                    std::unordered_set<std::string>& invalidDirectoryPaths,
-                                   std::unordered_set<std::string>& processedErrorsFind) {
+                                   std::unordered_set<std::string>& processedErrorsFind,
+                                   std::atomic<size_t>& totalFiles) {
     setupSignalHandlerCancellations();
     GlobalState::g_operationCancelled.store(false);
 
     disableInput();
 
     std::vector<std::string>* currentCache = nullptr;
-    if (mode == "bin") {
+    if (mode == "bin" || mode == "img") {
         currentCacheOld = GlobalState::binImgFilesCache.size();
         currentCache = &GlobalState::binImgFilesCache;
     } else if (mode == "mdf") {
@@ -850,9 +877,18 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
             // Explicitly isolate a string copy for this thread task.
             std::string pathCopy = path;
 
-            threadFutures.push_back(pool.enqueue([path = std::move(pathCopy), &mode, &callback, &processedErrorsFind]() -> std::unordered_set<std::string> {
-                return processPaths(path, mode, callback, std::ref(processedErrorsFind));
-            }));
+            threadFutures.push_back(pool.enqueue(
+                [path = std::move(pathCopy), &mode, &callback, &processedErrorsFind, &totalFiles]()
+                    -> std::unordered_set<std::string> {
+                    return processPaths(path, mode, callback, processedErrorsFind, totalFiles);
+                }));
+        }
+
+        // Join every task first: they hold references to this function's
+        // parameters, so none may still be running when we return. On Ctrl+C
+        // the tasks see g_operationCancelled and finish quickly.
+        for (auto& future : threadFutures) {
+            if (future.valid()) future.wait();
         }
 
         for (auto& future : threadFutures) {
@@ -860,11 +896,22 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
                 std::unordered_set<std::string> threadResult = future.get();
                 fileNames.insert(threadResult.begin(), threadResult.end());
             }
-            if (GlobalState::g_operationCancelled.load()) break;
         }
     }
 
-    verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
+    // Final aggregate for the live view. verboseImageSearchResults() reprints
+    // it after clearing the screen.
+    {
+        std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
+        std::cout << "\r" << color << "Total files processed: " << totalFiles.load() << std::flush;
+    }
+
+    // NOTE: verboseFind() is deliberately NOT called here. It clears
+    // invalidDirectoryPaths and processedErrorsFind, which would leave
+    // verboseImageSearchResults() with nothing to capture for its resize
+    // replay, and the verbose output would disappear on resize. The caller
+    // (promptSearchBinImgChdDaaMdfNrg -> verboseImageSearchResults) is the
+    // sole owner of that call now.
 
     std::unordered_set<std::string> currentCacheSet(currentCache->begin(), currentCache->end());
     std::vector<std::string> newFiles;
@@ -957,8 +1004,12 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  *   flags (@c modeMdf, @c modeNrg, @c modeChd, @c modeDaa) used downstream.
  * - **Path parsing:** Input is split on @c ';'. Empty and duplicate tokens are
  *   skipped; each remaining token is validated with @c isValidDirectory. Valid
- *   tokens go into @c directoryPaths for scanning; invalid ones into
- *   @c invalidDirectoryPaths for reporting only.
+ *   tokens go into @c directoryPaths for scanning; invalid ones (stored
+ *   uncolored) into @c invalidDirectoryPaths for reporting only.
+ * - **Progress counter:** each iteration owns a @c std::atomic<size_t>
+ *   @c totalFiles that is passed to @c findFiles (shared by all scan tasks) and
+ *   then to @c verboseImageSearchResults, so the final count can be reprinted
+ *   after the results screen clears the terminal.
  * - **History:** Only valid, deduplicated paths are saved to history, rejoined
  *   with @c ';' in their original order (e.g. the input
  *   @c "/home/;/var/;asd" is stored as @c "/home/;/var/"). Invalid paths
@@ -1037,6 +1088,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         std::vector<std::string> directoryPaths;
         std::unordered_set<std::string> uniquePaths, processedErrors, processedErrorsFind;
         std::unordered_set<std::string> invalidDirectoryPaths, fileNames;
+        std::atomic<size_t> totalFiles{0};
         bool filterHistory = false;
 
         initIterationState();
@@ -1097,7 +1149,8 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
                     if (!cleanedInput.empty()) cleanedInput += ';';
                     cleanedInput += path;
                 } else {
-                    invalidDirectoryPaths.insert(dt.red + path);
+                    // Stored plain; the reporting code applies the color.
+                    invalidDirectoryPaths.insert(path);
                 }
             }
         }
@@ -1107,7 +1160,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 
         files = findFiles(directoryPaths, fileNames, currentCacheOld, fileType,
                           [&](const std::string&, const std::string&) { newFilesFound = true; },
-                          directoryPaths, invalidDirectoryPaths, processedErrorsFind);
+                          directoryPaths, invalidDirectoryPaths, processedErrorsFind, totalFiles);
 
         try {
             if (!directoryPaths.empty()) {
@@ -1121,7 +1174,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 
         verboseImageSearchResults(fileExtension, fileNames, invalidDirectoryPaths,
                              newFilesFound, list, currentCacheOld, files,
-                             start_time, processedErrorsFind, directoryPaths);
+                             start_time, processedErrorsFind, directoryPaths, totalFiles);
 
         if (!newFilesFound) continue;
 
