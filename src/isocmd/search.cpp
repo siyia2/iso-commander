@@ -32,9 +32,11 @@
 // Project Headers
 #include "../concurrency.h"
 #include "../databaseOps.h"
+#include "../display.h"
 #include "../globalMutexes.h"
 #include "../history.h"
 #include "../inputHandling.h"
+#include "../listResizeWatcher.h"
 #include "../pausePrompt.h"
 #include "../readline.h"
 #include "../search.h"
@@ -81,6 +83,8 @@ bool isValidDirectory(const std::string& path) {
  * Remaining paths are scanned in parallel via a static thread pool up to
  * @p maxDepth. Results are forwarded to @c saveAndReportResultsForDatabase,
  * which calls @c saveToDatabase and may mutate @p newISOFound.
+ * Invalid paths omitted from the search are also stripped from the history
+ * entry for the submitted input.
  *
  * @details **Control flow:**
  * - **Exit conditions:** ESC input (@c "\\x1b", typically bound to the @c '<' key
@@ -98,8 +102,10 @@ bool isValidDirectory(const std::string& path) {
  *   early-save path, and before the parallel scan block. This prevents spurious
  *   cancellation from a premature Ctrl+C before input is processed.
  * - **History management:** @c loadHistory(filterHistory) is called unconditionally
- *   each iteration. @c add_history is called for any non-empty input string before
- *   the whitespace-only check.
+ *   each iteration. After parsing, @c add_history is called with only the valid
+ *   tokens, trimmed but not normalized, re-joined with @c ';' (e.g. the input
+ *   @c "/home/;/var/;asd" is stored as @c "/home/;/var/"). If no token was valid,
+ *   nothing is added.
  *   @c saveHistory(filterHistory) is called only when both @p validPaths and
  *   @p input are non-empty after a scan completes.
  * - **RAII Keybinding Management:** A @c SearchReadlineGuard RAII object is
@@ -112,6 +118,10 @@ bool isValidDirectory(const std::string& path) {
  *   exit paths from the loop body: @c continue, @c return, and exceptions.
  *   The guard is recreated each iteration so its saved completion state
  *   always reflects the state just after @c rearmSetup runs.
+ * - **Resize Repaint:** The prompt carries its own header line, so @c readline()
+ *   is wrapped by @c readlineWithResize() with a callback that clears the screen
+ *   and re-prints that header (via @c promptHeaderForRepaint). The watcher adds the
+ *   newline and Readline redraws the last prompt line and the typed input.
  *
  * @param promptFlag    Passed to @c traverse() to control scan behaviour.
  * @param maxDepth      Maximum directory recursion depth (-1 for unlimited).
@@ -123,6 +133,7 @@ bool isValidDirectory(const std::string& path) {
  *                      @c saveToDatabase is responsible for setting it.
  */
 void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool& newISOFound) {
+    PendingReadlineTextClearGuard pendingTextGuard;
 
     auto rearmSetup = [&]() {
         enable_ctrl_d();
@@ -149,22 +160,33 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             prompt.append("\001").append(dt.green).append("\002FolderPaths")
                   .append("\001").append(dt.blue).append("\002 ↵ to scan for ")
                   .append("\001").append(dt.green).append("\002.iso")
-                  .append("\001").append(dt.blue).append("\002 entries and import them into the ")
+                  .append("\001").append(dt.blue).append("\002 entries and import into ")
                   .append("\001").append(dt.green).append("\002local")
-                  .append("\001").append(dt.blue).append("\002 database, ? for help:\n")
+                  .append("\001").append(dt.blue).append("\002 DB, ? for help:\n")
                   .append("\001").append(dt.reset).append("\002");
 
-            char* rawSearchQuery = readline(prompt.c_str());
-            if (!rawSearchQuery) return;
+            // Resize repaint: clear and re-print the prompt's header line (no
+            // trailing newline; the watcher supplies it, and Readline redraws
+            // the last prompt line and the typed input).
+            const auto repaintPrompt = [&] {
+                SyncOutput sync;
+                clearScrollBuffer();
+                std::cout << promptHeaderForRepaint(prompt);
+            };
 
-            std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+            RlLine searchQuery = readlineWithResize(prompt, repaintPrompt);
+            if (!searchQuery) return;
+
+            armPendingInputRestore();
+            rl_startup_hook = nullptr;
+
             std::string input = trimWhitespace(searchQuery.get());
 
             if (input == "\x1b") return;
 
             if (input == "?") {
                 bool isCpMv = false, import2ISO = true;
-                helpSearches(isCpMv, import2ISO);
+                helpSearches(isCpMv, import2ISO, false);
                 continue;
             }
 
@@ -174,7 +196,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             }
 
             if (!input.empty()) {
-                add_history(input.c_str());
+                // REMOVED: add_history(input.c_str());  (now done after parsing)
                 std::cout << "\n";
             }
 
@@ -203,18 +225,28 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             };
 
             std::unordered_set<std::string> uniqueNormalizedPaths;
+            std::string cleanedInput;   // only the tokens that passed validation, as typed
 
             while (std::getline(iss, path, ';')) {
                 path = trimWhitespace(path);
+                if (path.empty()) continue;
                 if (!isValidDirectory(path)) {
                     invalidPaths.insert(dt.red + path);
                     continue;
                 }
 
+                if (!cleanedInput.empty()) cleanedInput += ';';
+                cleanedInput += path;
+
                 std::string normPath = normalizePath(path);
                 if (uniqueNormalizedPaths.insert(normPath).second) {
                     validPaths.push_back(normPath);
                 }
+            }
+
+            // save only the valid paths; nothing is added if none were valid
+            if (!cleanedInput.empty()) {
+                add_history(cleanedInput.c_str());
             }
 
             std::sort(validPaths.begin(), validPaths.end());
@@ -626,23 +658,23 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
         for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
             if (GlobalState::g_operationCancelled.load()) {
                 if (GlobalState::g_operationCancelled.load()) {
-					std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
+                    std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
 
-					// Re-check under the lock to prevent races between threads
-					if (!g_CancelledMessageAdded.exchange(true)) {
-						processedErrorsFind.clear();
+                    // Re-check under the lock to prevent races between threads
+                    if (!g_CancelledMessageAdded.exchange(true)) {
+                        processedErrorsFind.clear();
 
-						std::string type = (blacklistMdf) ? "MDF" :
-										   (blacklistNrg) ? "NRG" :
-										   (blacklistChd) ? "CHD" :
-										   (blacklistDaa) ? "DAA/GBI" : "BIN/IMG";
+                        std::string type = (blacklistMdf) ? "MDF" :
+                                           (blacklistNrg) ? "NRG" :
+                                           (blacklistChd) ? "CHD" :
+                                           (blacklistDaa) ? "DAA/GBI" : "BIN/IMG";
 
-						processedErrorsFind.insert(dt.yellow + type +
-							" search interrupted by user\n\n" + dt.reset);
-					}
-					break;
-				}
-			}
+                        processedErrorsFind.insert(dt.yellow + type +
+                            " search interrupted by user\n\n" + dt.reset);
+                    }
+                    break;
+                }
+            }
 
                 if (entry.is_regular_file()) {
                     uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
@@ -859,7 +891,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
     }
     if (input == "?") {
         bool isCpMv = false, import2ISO = false;
-        helpSearches(isCpMv, import2ISO);
+        helpSearches(isCpMv, import2ISO, false);
         return true;
     }
     if (input == "!clr") {
@@ -902,6 +934,15 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  *   static @c unordered_map to derive the file extension, display name, and
  *   per-format boolean flags (@c modeMdf, @c modeNrg, @c modeChd, @c modeDaa)
  *   used by downstream functions.
+ * - **Path parsing:** The input is split on @c ';'. Empty and duplicate tokens
+ *   are skipped; each remaining token is validated with @c isValidDirectory.
+ *   Valid tokens are collected into @c directoryPaths for scanning, invalid
+ *   ones into @c invalidDirectoryPaths for reporting only.
+ * - **History handling:** Only the valid, deduplicated paths are saved to
+ *   history, re-joined with @c ';' in their original order (e.g. the input
+ *   @c "/home/;/var/;asd" is stored as @c "/home/;/var/"). Invalid paths
+ *   omitted from the search are never persisted. If no valid directory
+ *   was found, nothing is added to history.
  * - **RAII Keybinding Management:** A @c SearchReadlineGuard is constructed at
  *   the top of each loop iteration (after @c initIterationState). It saves
  *   the current @c rl_attempted_completion_function on construction. Its
@@ -914,6 +955,10 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  * - **Iteration state:** @c initIterationState is called at the top of each
  *   loop iteration to re-establish keybindings, signal handlers, pagination,
  *   completion function, and cancellation state before prompting for input.
+ * - **Resize Repaint:** The prompt carries its own header line, so @c readline()
+ *   is wrapped by @c readlineWithResize() with a callback that clears the screen
+ *   and re-prints that header (via @c promptHeaderForRepaint). The watcher adds the
+ *   newline and Readline redraws the last prompt line and the typed input.
  *
  * @param fileTypeChoice The format category: "bin", "img", "mdf", "nrg", "chd",
  *                       or "daa". "bin" and "img" are treated identically.
@@ -921,6 +966,8 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  *                       @c selectForImageFiles for display coordination.
  */
 void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shared_ptr<RefreshState> state) {
+    PendingReadlineTextClearGuard pendingTextGuard;
+
     struct FileTypeConfig {
         std::string extension;
         std::string name;
@@ -983,15 +1030,25 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         prompt.append("\001").append(dt.green).append("\002FolderPaths")
               .append("\001").append(dt.blue).append("\002 ↵ to scan for \001")
               .append("\001").append(dt.orange).append("\002").append(fileExtension)
-              .append("\001").append(dt.blue).append("\002 entries and cache them in \001")
+              .append("\001").append(dt.blue).append("\002 entries and cache in \001")
               .append("\001").append(dt.yellow).append("\002RAM\001")
               .append("\001").append(dt.blue).append("\002, ? for help:\n\001")
               .append(dt.reset).append("\002");
 
-        char* rawSearchQuery = readline(prompt.c_str());
-        if (!rawSearchQuery) return;
+        // Resize repaint: clear and re-print the prompt's header line (no
+        // trailing newline; the watcher supplies it, and Readline redraws
+        // the last prompt line and the typed input).
+        const auto repaintPrompt = [&] {
+            SyncOutput sync;
+            clearScrollBuffer();
+            std::cout << promptHeaderForRepaint(prompt);
+        };
 
-        std::unique_ptr<char, decltype(&std::free)> searchQuery(rawSearchQuery, &std::free);
+        RlLine searchQuery = readlineWithResize(prompt, repaintPrompt);
+        if (!searchQuery) return;
+
+        armPendingInputRestore();
+        rl_startup_hook = nullptr;
 
         const std::string inputSearch = trimWhitespace(searchQuery.get());
 
@@ -1011,10 +1068,13 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 
         std::istringstream ss(inputSearch);
         std::string path;
+        std::string cleanedInput;   // only valid paths, for history
         while (std::getline(ss, path, ';')) {
             if (!path.empty() && uniquePaths.insert(path).second) {
                 if (isValidDirectory(path)) {
                     directoryPaths.push_back(path);
+                    if (!cleanedInput.empty()) cleanedInput += ';';
+                    cleanedInput += path;
                 } else {
                     invalidDirectoryPaths.insert(dt.red + path);
                 }
@@ -1030,7 +1090,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 
         try {
             if (!directoryPaths.empty()) {
-                add_history(inputSearch.c_str());
+                add_history(cleanedInput.c_str());
                 saveHistory(filterHistory);
             }
         } catch (const std::exception& e) {
