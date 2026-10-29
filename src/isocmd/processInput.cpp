@@ -24,6 +24,7 @@
 // Project Headers
 #include "../concurrency.h"
 #include "../inputHandling.h"
+#include "../listResizeWatcher.h"
 #include "../mount.h"
 #include "../pausePrompt.h"
 #include "../process.h"
@@ -421,10 +422,17 @@ void processInputForConversions(const std::string& input,
     } else return;
 
     if (processedIndices.empty()) {
-        clearScrollBuffer();
-        std::cout << "\n" << (isOrig ? UI::Palette::Red : theme->secondary)
-                  << "No valid input provided." << UI::Palette::BoldReset << "\n";
-        pressEnterToReturn();
+        // Message + wait. The message is fixed at this point; the repaint
+        // lambda only reprints it. No side effects run inside it.
+        auto render = [&] {
+            SyncOutput sync;
+            clearScrollBuffer();
+            std::cout << "\n" << (isOrig ? UI::Palette::Red : theme->secondary)
+                      << "No valid input provided." << UI::Palette::BoldReset << "\n";
+        };
+
+        ListResizeWatcher watcher(render);
+        pressEnterToReturnWithRepaint(render);
         return;
     }
 

@@ -20,9 +20,11 @@
 // Project Headers
 #include "../caches.h"
 #include "../databaseOps.h"
+#include "../display.h"
 #include "../filtering.h"
 #include "../inputHandling.h"
 #include "../globalMutexes.h"
+#include "../listResizeWatcher.h"
 #include "../stringListView.h"
 #include "../pausePrompt.h"
 #include "../sort.h"
@@ -119,9 +121,18 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
     }
 
     if (isEmpty) {
-        const PrintListTheme c = getListColors();
-        std::cout << c.num << "ISO database is empty. Choose 'ImportISO' from the Main Menu." << c.dir << "\n";
-        pressEnterToReturn();
+        // Message + wait. The message is fixed at this point; the repaint
+        // lambda only reprints it. No side effects run inside it.
+        auto render = [&] {
+            const PrintListTheme c = getListColors();
+            SyncOutput sync;
+            clearScrollBuffer();
+            std::cout << c.num << "ISO database is empty. Choose 'ImportISO' from the Main Menu."
+                      << c.dir << "\n";
+        };
+
+        ListResizeWatcher watcher(render);
+        pressEnterToReturnWithRepaint(render);
         return false;
     }
 
@@ -207,16 +218,25 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     isoDirs = lastSortedDirs;
 
     if (isoDirs.empty()) {
-        clearScrollBuffer();
-
+        // Message + wait. The warning color is resolved once (it depends on
+        // globalTheme at call time); the repaint lambda only reprints it. The
+        // cache cleanup side effects run once, after the wait.
         const MainTheme* theme = getActiveTheme();
         const bool isOriginal  = (globalTheme == "original");
 
         const std::string_view warnColor = isOriginal ? UI::Palette::Yellow : theme->warning;
         const std::string_view reset     = UI::Palette::BoldReset;
 
-        std::cerr << "\n" << warnColor << "No paths matching the '/mnt/ISOs/{isoDirName}' pattern found." << reset << "\n";
-        pressEnterToReturn();
+        auto render = [&] {
+            SyncOutput sync;
+            clearScrollBuffer();
+            std::cerr << "\n" << warnColor
+                      << "No paths matching the '/mnt/ISOs/{isoDirName}' pattern found."
+                      << reset << "\n";
+        };
+
+        ListResizeWatcher watcher(render);
+        pressEnterToReturnWithRepaint(render);
 
         std::vector<std::string>().swap(lastSortedDirs);
         lastIsoCount = 0;

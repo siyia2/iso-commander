@@ -443,11 +443,31 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(
     }
 
     if (!validationErrors.empty()) {
-        printValidationErrors(wt, validationErrors);
+        // The errors were decided above, once. The repaint lambda reprints
+        // exactly those lines — never re-runs validation, never touches
+        // noPermissions.
+        auto render = [&] {
+            SyncOutput sync;
+            clearScrollBuffer();
+            printValidationErrors(wt, validationErrors);
+        };
 
         signal(SIGINT, SIG_IGN);
         disable_ctrl_d();
-        noPermissions ? (noPermissions = false, pressEnterToContinue()) : pressEnterToTry();
+
+        // The noPermissions side effect (clearing the flag) happens once,
+        // before the wait. It must not run inside render.
+        const bool wasNoPermissions = noPermissions;
+        if (wasNoPermissions) {
+            noPermissions = false;
+        }
+
+        ListResizeWatcher watcher(render);
+        if (wasNoPermissions) {
+            pressEnterToContinueWithRepaint(render);
+        } else {
+            pressEnterToTryWithRepaint(render);
+        }
         return {};
     }
 
@@ -1074,15 +1094,22 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         ThreadPool& pool = getStaticThreadPool();
         if (selectedIsos.size() > pool.threadCount()) {
-            std::cout << "\n"
-                      << wt.colorFailure << "Error: "
-                      << UI::Palette::Yellow << "write2usb"
-                      << wt.colorFailure << " selection limit" << wt.colorFailure << " is "
-                      << wt.colorWarning << pool.threadCount()
-                      << wt.colorFailure << " (thread pool size)."
-                      << wt.speedCol << "\n";
+            // Message + wait. The message is fixed at this point; the repaint
+            // lambda only reprints it. No side effects run inside it.
+            auto render = [&] {
+                SyncOutput sync;
+                clearScrollBuffer();
+                std::cout << "\n"
+                          << wt.colorFailure << "Error: "
+                          << UI::Palette::Yellow << "write2usb"
+                          << wt.colorFailure << " selection limit" << wt.colorFailure << " is "
+                          << wt.colorWarning << pool.threadCount()
+                          << wt.colorFailure << " (thread pool size)."
+                          << wt.speedCol << "\n";
+            };
 
-            pressEnterToTry();
+            ListResizeWatcher watcher(render);
+            pressEnterToTryWithRepaint(render);
             return {};  // termGuard destructor restores readline state
         }
 
@@ -1218,12 +1245,19 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         auto deviceMap = parseDeviceMappings(deviceInput.get(), isoFilenames, errors);
 
         if (!errors.empty()) {
-            std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
-            for (const auto& err : errors) {
-                std::cerr << color << " • " << err << "\n";
-            }
+            // Errors + wait. The error list is fixed at this point; the
+            // repaint lambda only reprints it. No side effects run inside it.
+            auto render = [&] {
+                SyncOutput sync;
+                clearScrollBuffer();
+                std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
+                for (const auto& err : errors) {
+                    std::cerr << color << " • " << err << "\n";
+                }
+            };
 
-            pressEnterToTry();
+            ListResizeWatcher watcher(render);
+            pressEnterToTryWithRepaint(render);
             continue;
         }
 

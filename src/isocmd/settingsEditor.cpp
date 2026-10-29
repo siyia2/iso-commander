@@ -215,15 +215,34 @@ void interactiveConfigEditor(const std::string& configPath) {
                     }
                     applyConfigEffects(ConfigCaches::g_configCache);
                     tc = resolveOptionsTheme();
+
+                    // Status lines are drawn from a render lambda so a resize
+                    // during the wait repaints them, instead of clearing the
+                    // screen and leaving only the prompt. The side effects
+                    // (applyConfigEffects, flushCache) happen once, before the
+                    // wait — not inside the lambda.
+                    bool saved = false;
                     {
                         SyncOutput sync;
                         std::cout << tc.label << "[+] Defaults applied.\n" << tc.reset;
-                        if (flushCache(configPath)) {
+                        saved = flushCache(configPath);
+                        if (saved) {
                             tc = resolveOptionsTheme();
                             std::cout << tc.highlight << "\n[✔] Settings saved to disk.\n" << tc.reset;
                         }
-                        pressEnterToContinue();
                     }
+
+                    auto render = [&] {
+                        SyncOutput sync;
+                        clearScrollBuffer();
+                        std::cout << tc.label << "[+] Defaults applied.\n" << tc.reset;
+                        if (saved) {
+                            std::cout << tc.highlight << "\n[✔] Settings saved to disk.\n" << tc.reset;
+                        }
+                    };
+
+                    ListResizeWatcher watcher(render);
+                    pressEnterToContinueWithRepaint(render);
                 }
             }
             continue;
@@ -238,8 +257,20 @@ void interactiveConfigEditor(const std::string& configPath) {
             if (!verboseSets.uniqueErrorTokenMessages.empty()) std::cout << "\n";
             for (const auto& err : verboseSets.uniqueErrorTokenMessages)
                 std::cout << err << "\n";
-            if (!verboseSets.uniqueErrorTokenMessages.empty())
-                pressEnterToContinue();
+            if (!verboseSets.uniqueErrorTokenMessages.empty()) {
+                // Reprint the tokenization errors on resize. Captured by
+                // reference so if a later iteration clears the set, this
+                // lambda isn't used again — it lives only for this wait.
+                auto render = [&] {
+                    SyncOutput sync;
+                    clearScrollBuffer();
+                    std::cout << "\n";
+                    for (const auto& err : verboseSets.uniqueErrorTokenMessages)
+                        std::cout << err << "\n";
+                };
+                ListResizeWatcher watcher(render);
+                pressEnterToContinueWithRepaint(render);
+            }
 
             std::vector<int> ordered(choices.begin(), choices.end());
             std::sort(ordered.begin(), ordered.end());
@@ -363,8 +394,17 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 
         // Validation.
         if (entry->validate && !entry->validate(newVal)) {
-            std::cout << "\n" << tc.error << "Invalid value: " << tc.warning << "'" << newVal << "'" << tc.reset << "\n";
-            pressEnterToTry();
+            // Failure message + wait. The message is fixed at this point;
+            // the repaint lambda only reprints it, so a resize shows the same
+            // invalid-value text, not a re-derived one.
+            auto render = [&] {
+                SyncOutput sync;
+                clearScrollBuffer();
+                std::cout << "\n" << tc.error << "Invalid value: "
+                          << tc.warning << "'" << newVal << "'" << tc.reset << "\n";
+            };
+            ListResizeWatcher watcher(render);
+            pressEnterToTryWithRepaint(render);
             continue;
         }
 
@@ -377,21 +417,30 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         // Refresh the local theme context in case 'skin' or 'theme' changed.
         tc = resolveOptionsTheme();
 
-        if (saved) {
-            std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n",
-                                     tc.label, tc.reset, configPath);
-        } else {
-            std::cout << tc.warning << "Notice: " << tc.error
-                      << "Setting update is memory-only (Disk write failed)."
-                      << tc.reset << "\n";
-        }
+        // The status line is fixed once the save attempt has completed; the
+        // repaint lambda reprints it. flushCache and the theme refresh have
+        // already happened, so a resize cannot re-flush or re-resolve.
+        auto render = [&] {
+            SyncOutput sync;
+            clearScrollBuffer();
+            if (saved) {
+                std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n",
+                                         tc.label, tc.reset, configPath);
+            } else {
+                std::cout << tc.warning << "Notice: " << tc.error
+                          << "Setting update is memory-only (Disk write failed)."
+                          << tc.reset << "\n";
+            }
+        };
+        ListResizeWatcher watcher(render);
+        pressEnterToContinueWithRepaint(render);
 
-        // Specific side-effect for the filenames display toggle.
+        // Specific side-effect for the filenames display toggle. Runs once,
+        // after the wait — never inside the render lambda.
         if (key == "filenames_only") {
             sortAfterFilenamesOnlyFlag();
         }
 
-        pressEnterToContinue();
         break;
     }
     return true;

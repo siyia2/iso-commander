@@ -37,6 +37,7 @@
 #include "../concurrency.h"
 #include "../databaseOps.h"
 #include "../display.h"
+#include "../listResizeWatcher.h"
 #include "../history.h"
 #include "../inputHandling.h"
 #include "../globalMutexes.h"
@@ -611,11 +612,16 @@ void loadFromDatabase(std::vector<std::string>& outList) {
 void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
-    {
-            SyncOutput sync;
+
+    // Everything that paints the screen lives in `render` so it can be replayed
+    // by the resize watcher and by the "press Enter" prompt.
+    auto render = [&] {
+        SyncOutput sync;
         clearScrollBuffer();
 
         auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveDatabaseTheme();
+        (void)path;
+        (void)highlight;
 
         try {
             for (const auto& path : {GlobalState::databaseFilePath, GlobalState::historyFilePath, GlobalState::filterHistoryFilePath}) {
@@ -660,8 +666,18 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
                       << warning << "'" << GlobalState::configPath << "'"
                       << error << ".\n" << reset;
         }
-    }
-    pressEnterToReturn();
+    };
+
+    render();
+
+    // Keep a resize watcher alive across the wait-for-Enter, then let its
+    // destructor uninstall the rl_event_hook.
+    ListResizeWatcher watcher(render);
+
+    // Hand the same repaint to the prompt so a resize during the wait redraws
+    // the stats (not just a cleared screen) — this is the correct, drift-free,
+    // stripe-free behavior on VTE-based terminals.
+    pressEnterToReturnWithRepaint(render);
 }
 
 /**
@@ -682,24 +698,48 @@ void databaseSwitches(std::string& inputSearch) {
     auto db = resolveDatabaseTheme();
 
     if (inputSearch == "*stats") {
+        // displayDatabaseStatistics handles its own resize repaint; do not
+        // wrap it in another watcher or the stats will be rendered twice per
+        // SIGWINCH.
         displayDatabaseStatistics(GlobalState::databaseFilePath, GlobalState::maxDatabaseSize);
     } else if (inputSearch == "!clr") {
         std::ofstream ofs(GlobalState::databaseFilePath, std::ofstream::out | std::ofstream::trunc);
         if (!ofs) {
-            std::cerr << "\n" << db.error << "Error clearing ISO database: "
-                      << db.path << "'" << GlobalState::databaseFilePath << "'"
-                      << db.error << ". File missing or inaccessible.\033[J" << std::endl;
-
-            pressEnterToContinue();
+            // Failure message + wait. The message is fixed at this point; the
+            // repaint lambda only reprints it, so a resize shows the same
+            // error text, not a different one derived from state that may
+            // have changed during the wait.
+            auto render = [&] {
+                SyncOutput sync;
+                clearScrollBuffer();
+                std::cerr << "\n" << db.error << "Error clearing ISO database: "
+                          << db.path << "'" << GlobalState::databaseFilePath << "'"
+                          << db.error << ". File missing or inaccessible.\033[J" << std::endl;
+            };
+            render();
+            ListResizeWatcher watcher(render);
+            pressEnterToContinueWithRepaint(render);
         } else {
             ofs.close();
-			GlobalCaches::transformationCache.clear();
+            GlobalCaches::transformationCache.clear();
 
-            std::cout << "\n" << db.highlight << "ISO database cleared successfully." << "\033[J" << std::endl;
-            pressEnterToContinue();
+            auto render = [&] {
+                SyncOutput sync;
+                clearScrollBuffer();
+                std::cout << "\n" << db.highlight << "ISO database cleared successfully."
+                          << "\033[J" << std::endl;
+            };
+            render();
+            ListResizeWatcher watcher(render);
+            pressEnterToContinueWithRepaint(render);
+
+            // Post-wait side effect stays outside the lambda so it runs
+            // exactly once, after Enter/Esc/Ctrl+D — not on every repaint.
             std::vector<std::string>().swap(GlobalState::globalIsoFileList);
         }
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
+        // clearHistory owns its own prompt (and, once fixed, its own resize
+        // repaint). Nothing to do here beyond calling it.
         clearHistory(inputSearch);
     }
     return;

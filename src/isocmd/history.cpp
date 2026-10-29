@@ -24,8 +24,10 @@
 #include <readline/history.h>
 
 // Project Headers
+#include "../display.h"
 #include "../history.h"
 #include "../inputHandling.h"
+#include "../listResizeWatcher.h"
 #include "../pausePrompt.h"
 #include "../state.h"
 #include "../themes.h"
@@ -233,15 +235,35 @@ void clearHistory(const std::string& inputSearch) {
 
     std::ofstream ofs(filePath, std::ofstream::out | std::ofstream::trunc);
     if (!ofs) {
-        std::cerr << "\n" << (hc.error)
-                  << "Error clearing " << historyType << " database: "
-                  << (hc.warning) << "'" << filePath << "'"
-                  << (hc.error) << ". File missing or inaccessible.\033[J" << std::endl;
+        // Failure: message is fixed at this point. Repaint reprints it; a
+        // resize during the wait shows the same error, not a re-derived one.
+        auto render = [&] {
+            SyncOutput sync;
+            clearScrollBuffer();
+            std::cerr << "\n" << (hc.error)
+                      << "Error clearing " << historyType << " database: "
+                      << (hc.warning) << "'" << filePath << "'"
+                      << (hc.error) << ". File missing or inaccessible.\033[J" << std::endl;
+        };
+        render();
+        ListResizeWatcher watcher(render);
+        pressEnterToContinueWithRepaint(render);
     } else {
         ofs.close();
-        std::cout << "\n" << (hc.highlight)
-                  << historyType << " database cleared successfully.\033[J" << std::endl;
+
+        // clear_history() is a side effect of the successful truncate. Run it
+        // exactly once, before the wait — never inside the render lambda, or
+        // it would re-run on every repaint.
         clear_history();
+
+        auto render = [&] {
+            SyncOutput sync;
+            clearScrollBuffer();
+            std::cout << "\n" << (hc.highlight)
+                      << historyType << " database cleared successfully.\033[J" << std::endl;
+        };
+        render();
+        ListResizeWatcher watcher(render);
+        pressEnterToContinueWithRepaint(render);
     }
-    pressEnterToContinue();
 }

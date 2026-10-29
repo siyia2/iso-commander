@@ -188,6 +188,8 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             }
 
             if (input == "*stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter") {
+                // databaseSwitches owns its own prompt now (displayDatabaseStatistics
+                // and clearHistory both handle resize themselves). Don't wrap.
                 databaseSwitches(input);
                 continue;
             }
@@ -308,8 +310,18 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
 
         } catch (const std::exception& e) {
             const VerboseAndDatabaseTheme dt = getDatabaseTheme();
-            std::cerr << "\n" << dt.red << "Unable to access ISO database: " << e.what() << dt.reset << std::endl;
-            pressEnterToContinue();
+
+            // Error message + wait. The message is fixed at this point; the
+            // repaint lambda only reprints it, so a resize during the wait
+            // shows the same error, not a re-derived one.
+            auto render = [&] {
+                SyncOutput sync;
+                clearScrollBuffer();
+                std::cerr << "\n" << dt.red << "Unable to access ISO database: "
+                          << e.what() << dt.reset << std::endl;
+            };
+            ListResizeWatcher watcher(render);
+            pressEnterToContinueWithRepaint(render);
         }
     }
 }
@@ -465,10 +477,19 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
     }
 
     if (isEmpty && list) {
-        std::cout << "\n" << dt.yellow << "No cached " << fileExtension << " entries to display.\033[J"
-                  << dt.reset << "\n";
+        // Message + wait. The message is fixed at this point; the repaint
+        // lambda only reprints it. The side effects (files.clear(),
+        // clearScrollBuffer()) run once, after the wait.
+        auto render = [&] {
+            SyncOutput sync;
+            clearScrollBuffer();
+            std::cout << "\n" << dt.yellow << "No cached " << fileExtension
+                      << " entries to display.\033[J"
+                      << dt.reset << "\n";
+        };
 
-        pressEnterToContinue();
+        ListResizeWatcher watcher(render);
+        pressEnterToContinueWithRepaint(render);
 
         files.clear();
 
@@ -539,15 +560,29 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
         if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::binImgFilesCache);
     }
 
-    if (cacheIsEmpty) {
-        std::cout << "\n" << dt.yellow << cacheType << " cache is empty. Nothing to clear.\033[J"
-                  << dt.reset << "\n";
-    } else {
-        std::cout << "\n" << dt.green << cacheType << " cache cleared.\033[J"
-                  << dt.reset << "\n";
-    }
+    // Draws the result message. The message decision was made above (once);
+    // the lambda only reprints it. Captured by value so a resize during the
+    // wait reprints the same message, not one re-derived from state that may
+    // have changed since.
+    auto render = [&, cacheType, cacheIsEmpty] {
+        SyncOutput sync;
+        clearScrollBuffer();
 
-    pressEnterToContinue();
+        if (cacheIsEmpty) {
+            std::cout << "\n" << dt.yellow << cacheType
+                      << " cache is empty. Nothing to clear.\033[J"
+                      << dt.reset << "\n";
+        } else {
+            std::cout << "\n" << dt.green << cacheType
+                      << " cache cleared.\033[J"
+                      << dt.reset << "\n";
+        }
+    };
+
+    render();
+    ListResizeWatcher watcher(render);
+    pressEnterToContinueWithRepaint(render);
+
     clearScrollBuffer();
 }
 
