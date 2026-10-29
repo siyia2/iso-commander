@@ -22,7 +22,6 @@
 // Project Headers
 #include "../display.h"
 #include "../inputHandling.h"
-#include "../listResizeWatcher.h"
 #include "../pausePrompt.h"
 #include "../readline.h"
 #include "../sort.h"
@@ -114,11 +113,6 @@ void syncCache(const std::string& filePath);
  * - **Persistence:** Synchronizes with @c g_configCache. Note that a full reset triggers an immediate @c flushCache to disk upon confirmation.
  * - **Cleanup (RAII):** Employs a local @c SettingsGuard to ensure terminal keybindings are restored even if the loop breaks unexpectedly.
  * - **Signal Handling:** Temporarily ignores @c SIGINT to prevent accidental session termination during configuration.
- * - **Resize Repaint:** The settings screen is drawn by a lambda (@c drawSettings) that is
- *   called once per iteration and also passed to @c readlineWithResize() for both the main
- *   prompt and the reset confirmation prompt, so the screen is repainted when the terminal
- *   width changes while a prompt waits. The lambda ends on the line after "Actions:", which
- *   is where each prompt's leading newline expects the cursor.
  *
  * @param configPath The filesystem path to the @c .conf file used for synchronization.
  */
@@ -135,12 +129,7 @@ void interactiveConfigEditor(const std::string& configPath) {
     while (true) {
         verboseSets.uniqueErrorTokenMessages.clear();
         auto tc = resolveOptionsTheme();
-
-        // Draws the whole settings screen. Used for the normal draw and as the
-        // resize repaint (runs on the Readline thread; must not call readline()).
-        // `tc` is captured by reference, so a theme refresh in the reset branch
-        // is picked up by later repaints.
-        auto drawSettings = [&] {
+        {
             SyncOutput sync;
             clearScrollBuffer();
             std::cout << "\n" << tc.highlight << "=== Settings Editor ===\n\n" << tc.reset;
@@ -163,9 +152,8 @@ void interactiveConfigEditor(const std::string& configPath) {
             }
             std::cout << "\n" << tc.accent << "Actions: " << tc.warning << "1-" << (index-1)
                       << tc.reset << " ↵ Edit | " << tc.warning << "r" << tc.reset << " Reset\n";
-        };
 
-        drawSettings();
+        }
 
         setup_custom_keybindingsForSettingsEditor();
 
@@ -178,7 +166,7 @@ void interactiveConfigEditor(const std::string& configPath) {
             tc.reset
         );
         armPendingInputRestore();
-        RlLine rawInput = readlineWithResize(prompt, drawSettings);
+        std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
         rl_startup_hook = nullptr;
 
         if (!rawInput) break;
@@ -192,16 +180,14 @@ void interactiveConfigEditor(const std::string& configPath) {
         }
 
         if (input == "r" || input == "R") {
-            reset_custom_keybindingsForSettingsEditor();
+			reset_custom_keybindingsForSettingsEditor();
             std::string confirmPrompt = std::format(
                 "\001{}\002\nReset all settings to defaults? (y/n): \001{}\002",
                 color,
                 UI::Palette::BoldReset
             );
 
-            // The settings list is still on screen and the prompt starts with a
-            // newline, so the same repaint applies here.
-            RlLine confirmInput = readlineWithResize(confirmPrompt, drawSettings);
+            std::unique_ptr<char, decltype(&std::free)> confirmInput(readline(confirmPrompt.c_str()), &std::free);
 
             if (confirmInput) {
                 std::string confirm = trim(confirmInput.get());
@@ -209,17 +195,17 @@ void interactiveConfigEditor(const std::string& configPath) {
                     for (const auto& e : CONFIG_ORDERED_DEFAULTS) {
                         ConfigCaches::g_configCache[e.key] = e.defaultValue;
                     }
-                    applyConfigEffects(ConfigCaches::g_configCache);
-                    tc = resolveOptionsTheme();
-                    {
-                        SyncOutput sync;
-                        std::cout << tc.label << "[+] Defaults applied.\n" << tc.reset;
-                        if (flushCache(configPath)) {
-                            tc = resolveOptionsTheme();
-                            std::cout << tc.highlight << "\n[✔] Settings saved to disk.\n" << tc.reset;
+                        applyConfigEffects(ConfigCaches::g_configCache);
+                        tc = resolveOptionsTheme();
+                        {
+                            SyncOutput sync;
+                            std::cout << tc.label << "[+] Defaults applied.\n" << tc.reset;
+                            if (flushCache(configPath)) {
+                                tc = resolveOptionsTheme();
+                                std::cout << tc.highlight << "\n[✔] Settings saved to disk.\n" << tc.reset;
                         }
-                        pressEnterToContinue();
-                    }
+						pressEnterToContinue();
+					}
                 }
             }
             continue;
@@ -264,11 +250,6 @@ void interactiveConfigEditor(const std::string& configPath) {
  *   the user is notified that the change is "memory-only."
  * - **State Refresh:** Triggers @c sortAfterFilenamesOnlyFlag if the filenames display
  *   toggle is modified to ensure UI consistency.
- * - **Resize Repaint:** The screen is drawn by a lambda (@c drawEdit) that is also passed
- *   to @c readlineWithResize(), so it is repainted when the terminal width changes while
- *   the prompt waits. The lambda stops at the last hint line, one line short of the blank
- *   line before the prompt (this prompt has no leading newline): the normal path prints
- *   that blank line itself, and the resize watcher prints it after a repaint.
  *
  * @param configPath Path to the @c .conf file for persistence.
  * @param key The unique configuration key to be modified.
@@ -287,11 +268,9 @@ bool editSetting(const std::string& configPath, const std::string& key) {
     // Move current value outside the loop so we can compare changes
     std::string current = ConfigCaches::g_configCache.count(key) ? ConfigCaches::g_configCache[key] : entry->defaultValue;
 
-    // Draws the edit screen up to the last hint line (NOT the blank line before
-    // the prompt). Used for the first draw and as the resize repaint; the blank
-    // line comes from the caller / the watcher.
-    auto drawEdit = [&] {
+    while (true) {
         clearScrollBuffer();
+        rl_bind_keyseq("\\e", exit_handler);
         std::cout << "\n" << tc.highlight << "=== Edit Setting ===\n\n" << tc.reset;
         std::cout << tc.label << "Setting: " << tc.reset << tc.warning << key << tc.reset << "\n";
         std::cout << tc.label << "Current: " << tc.reset << tc.highlight << current << tc.reset << "\n";
@@ -305,51 +284,46 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         if (key == "base") {
             std::cout << "charcoal, black, gray, silver, ash, white, steel\n";
         } else if (key == "skin") {
-            std::cout << "green, cyan, white, purple, amber, rose, gray, black\n";
-        } else if (key == "theme") {
-            std::cout << "original, classic, high_contrast, neon, ocean, sunset, forest,\n"
-                      << "               midnight, mono, retro, crimson, dracula, tokyo, paper, sakura\n";
-        } else if (key == "auto_update" || key == "filenames_only") {
-            std::cout << "on, off\n";
-        } else if (key == "pagination" || key == "live_filter_limit" || key.find("thread_cap") != std::string::npos || key.find("_lines") != std::string::npos) {
-            int min = 1, max = 256;
-            if (key == "live_filter_limit")                   { min = 0;  max = 100000; }
-            if (key == "pagination")                          { min = 0;  max = 1000;  }
-            else if (key == "folder_path_history_lines")      { min = 0;  max = 5000;  }
-            else if (key == "filter_history_lines")           { min = 0;  max = 1000;  }
-            else if (key == "combined_thread_cap")            { min = 1;  max = 256;   }
-            else if (key == "thread_cap_for_mount")           { min = 1;  max = 128;   }
-            else if (key == "thread_cap_for_umount")          { min = 1;  max = 128;   }
-            else if (key == "thread_cap_for_cp_mv")           { min = 1;  max = 128;   }
-            else if (key == "thread_cap_for_rm")              { min = 1;  max = 128;   }
-            else if (key == "thread_cap_for_convert2iso")     { min = 1;  max = 128;   }
-            else if (key == "thread_cap_for_database_cleanup"){ min = 1;  max = 128;   }
-            else if (key == "thread_cap_for_list_sorting")    { min = 1;  max = 64;    }
-            else if (key == "thread_cap_for_list_filtering")  { min = 1;  max = 64;    }
+			std::cout << "green, cyan, white, purple, amber, rose, gray, black\n";
+		} else if (key == "theme") {
+			std::cout << "original, classic, high_contrast, neon, ocean, sunset, forest,\n"
+					  << "               midnight, mono, retro, crimson, dracula, tokyo, paper, sakura\n";
+		} else if (key == "auto_update" || key == "filenames_only") {
+			std::cout << "on, off\n";
+		} else if (key == "pagination" || key == "live_filter_limit" || key.find("thread_cap") != std::string::npos || key.find("_lines") != std::string::npos) {
+			int min = 1, max = 256;
+			if (key == "live_filter_limit")                   { min = 0;  max = 100000; }
+			if (key == "pagination")                          { min = 0;  max = 1000;  }
+			else if (key == "folder_path_history_lines")      { min = 0;  max = 5000;  }
+			else if (key == "filter_history_lines")           { min = 0;  max = 1000;  }
+			else if (key == "combined_thread_cap")            { min = 1;  max = 256;   }
+			else if (key == "thread_cap_for_mount")           { min = 1;  max = 128;   }
+			else if (key == "thread_cap_for_umount")          { min = 1;  max = 128;   }
+			else if (key == "thread_cap_for_cp_mv")           { min = 1;  max = 128;   }
+			else if (key == "thread_cap_for_rm")              { min = 1;  max = 128;   }
+			else if (key == "thread_cap_for_convert2iso")     { min = 1;  max = 128;   }
+			else if (key == "thread_cap_for_database_cleanup"){ min = 1;  max = 128;   }
+			else if (key == "thread_cap_for_list_sorting")    { min = 1;  max = 64;    }
+			else if (key == "thread_cap_for_list_filtering")  { min = 1;  max = 64;    }
 
-            std::cout << "numeric value (min - max: " << min << " - " << max << ")\n";
-        } else if (key.find("_list") != std::string::npos) {
-            std::cout << "full, compact\n";
-        } else {
-            std::cout << "Refer to description above\n";
-        }
-    };
+			std::cout << "numeric value (min - max: " << min << " - " << max << ")\n";
+		} else if (key.find("_list") != std::string::npos) {
+			std::cout << "full, compact\n";
+		} else {
+			std::cout << "Refer to description above\n";
+		}
+        std::cout << "\n";
 
-    while (true) {
-        rl_bind_keyseq("\\e", exit_handler);
-        drawEdit();
-        std::cout << "\n";   // blank line before the prompt
+		std::string prompt = std::format(
+			"\001{}\002Value\001{}\002 ↵ | ↵ \001{}\002Skip\001{}\002: \001{}\002",
+			UI::Palette::Green,
+			tc.label,
+			UI::Palette::Yellow,
+			tc.reset,
+			tc.reset
+		);
 
-        std::string prompt = std::format(
-            "\001{}\002Value\001{}\002 ↵ | ↵ \001{}\002Skip\001{}\002: \001{}\002",
-            UI::Palette::Green,
-            tc.label,
-            UI::Palette::Yellow,
-            tc.reset,
-            tc.reset
-        );
-
-        RlLine rawInput = readlineWithResize(prompt, drawEdit);
+        std::unique_ptr<char, decltype(&std::free)> rawInput(readline(prompt.c_str()), &std::free);
 
         // Handle Cancel (Ctrl+D/Esc)
         if (!rawInput || rawInput.get()[0] == 27) return false;
@@ -389,6 +363,6 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 
         pressEnterToContinue();
         break;
-    }
-    return true;
+	}
+	return true;
 }

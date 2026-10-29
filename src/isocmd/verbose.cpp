@@ -512,47 +512,50 @@ void verboseImageSearchResults(const std::string& fileExtension,
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
     auto end_time = std::chrono::high_resolution_clock::now();
+    {
+        SyncOutput sync;
 
-    // Case: Files were found
-    if (!fileNames.empty() && !GlobalState::g_operationCancelled.load()) {
-        std::cout << "\n\n"
-                  << vt.green << fileNames.size() << " "
-                  << vt.orange << "{" << fileExtension << "} "
-                  << vt.green << "files found" << vt.yellow << "\n"
-                  << currentCacheOld << " "
-                  << vt.orange << "{" << fileExtension << "} "
-                  << vt.yellow << "cached entries" << vt.reset << vt.bold << "\n\n";
+        // Case: Files were found
+        if (!fileNames.empty() && !GlobalState::g_operationCancelled.load()) {
+            std::cout << "\n\n"
+                      << vt.green << fileNames.size() << " "
+                      << vt.orange << "{" << fileExtension << "} "
+                      << vt.green << "files found" << vt.yellow << "\n"
+                      << currentCacheOld << " "
+                      << vt.orange << "{" << fileExtension << "} "
+                      << vt.yellow << "cached entries" << vt.reset << vt.bold << "\n\n";
+        }
+
+        // Case: No new files were found, but files exist in cache
+        if (!newFilesFound && !files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
+            verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
+            std::cout << "\n\n"
+                      << vt.red << "0 "
+                      << vt.orange << "{" << fileExtension << "} "
+                      << vt.red << "files found " << vt.yellow << "\n"
+                      << files.size() << " "
+                      << vt.orange << "{" << fileExtension << "} "
+                      << vt.yellow << "cached entries | "
+                      << vt.blue << "ls "
+                      << vt.yellow << "↵ to list" << vt.reset << vt.bold << "\n\n";
+        }
+
+        // Case: No files were found
+        if (files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
+            verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
+            std::cout << "\n\n"
+                      << vt.red << "0" << vt.orange << " {" << fileExtension << "} "
+                      << vt.red << "files found\n"
+                      << vt.yellow << "0" << vt.orange << " {" << fileExtension << "} "
+                      << vt.yellow << "cached entries\n"
+                      << vt.reset << vt.bold << "\n";
+        }
+
+        auto total_elapsed_time =
+            std::chrono::duration<double>(end_time - start_time).count();
+        std::cout << color << "Time Elapsed: " << std::fixed << std::setprecision(1)
+                  << total_elapsed_time << "s" << vt.bold << "\n";
     }
-
-    // Case: No new files were found, but files exist in cache
-    if (!newFilesFound && !files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
-        verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
-        std::cout << "\n\n"
-                  << vt.red << "0 "
-                  << vt.orange << "{" << fileExtension << "} "
-                  << vt.red << "files found " << vt.yellow << "\n"
-                  << files.size() << " "
-                  << vt.orange << "{" << fileExtension << "} "
-                  << vt.yellow << "cached entries | "
-                  << vt.blue << "ls "
-                  << vt.yellow << "↵ to list" << vt.reset << vt.bold << "\n\n";
-    }
-
-    // Case: No files were found
-    if (files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
-        verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
-        std::cout << "\n\n"
-                  << vt.red << "0" << vt.orange << " {" << fileExtension << "} "
-                  << vt.red << "files found\n"
-                  << vt.yellow << "0" << vt.orange << " {" << fileExtension << "} "
-                  << vt.yellow << "cached entries\n"
-                  << vt.reset << vt.bold << "\n";
-    }
-
-    auto total_elapsed_time =
-        std::chrono::duration<double>(end_time - start_time).count();
-    std::cout << color << "Time Elapsed: " << std::fixed << std::setprecision(1)
-              << total_elapsed_time << "s" << vt.bold << "\n";
 
     pressEnterToContinue();
     clearScrollBuffer();
