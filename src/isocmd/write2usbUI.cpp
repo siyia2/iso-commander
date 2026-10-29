@@ -1005,17 +1005,6 @@ static int confirmResizeHookTrampoline(void) {
  * paths. "?" triggers the help screen. After a valid mapping is entered, a
  * destructive-write warning is shown and must be confirmed with y/Y.
  *
- * @par Warning block and resize
- * ISO names in the warning are truncated to fit the current terminal width.
- * While the confirmation prompt waits, a resize re-lays out the block (with
- * truncation recomputed for the new width). The redraw runs on the main
- * thread via rl_event_hook — the watcher thread only signals — so any
- * half-typed answer survives the resize and the cursor stays where the user
- * left it. If the block cannot be redrawn without clamping at row 1
- * (up >= rows), the redraw is skipped: the terminal keeps the reflowed
- * layout, the safety header stays visible, and the ISO / device lists above
- * the block are preserved.
- *
  * @par Device prompt and resize
  * The ISO/device screen is embedded in the mappings prompt itself, so
  * readline() is wrapped by readlineWithResize(): on a width change the
@@ -1024,6 +1013,36 @@ static int confirmResizeHookTrampoline(void) {
  * the typed input. The list is not rebuilt, and error messages from
  * displayErrors() are not repeated. This watcher is stopped before the
  * confirmation prompt starts, which uses its own ConfirmResizeWatcher.
+ *
+ * @par Warning block and resize
+ * ISO names in the warning are truncated to fit the current terminal width,
+ * recomputed on every repaint so the block re-lays out on a resize. The
+ * confirmation screen is redrawn from scratch on SIGWINCH: the callback
+ * installed on ConfirmResizeWatcher clears the whole screen with
+ * "\033[H\033[2J", reprints the ISO/device prompt header via
+ * promptHeaderForRepaint(devicePrompt), then reprints the warning block;
+ * ConfirmResizeWatcher redraws its "Proceed? (y/n):" line afterwards.
+ * Because "\033[H" homes regardless of the cursor position, the watcher's
+ * own in-place cursor-up math cannot cause partial erases — the same scheme
+ * the rest of the app uses for repaint-aware prompts, and the only one that
+ * works on terminals that do not reflow the live cursor (VTE-based ones
+ * such as xfce4-terminal and gnome-terminal). The initial draw uses
+ * clearFirst=false so the ISO/device list already on screen from
+ * readlineWithResize is preserved; the warning prints below it. Every
+ * resize uses clearFirst=true, so the whole confirmation screen (device
+ * prompt, warning block, prompt line) is reconstructed from a known top and
+ * no copies of the "WARNING: This will *ERASE ALL DATA* on:" header
+ * accumulate over successive resizes.
+ *
+ * A note on the initial draw versus the resize path: on the first pass,
+ * readlineWithResize has already printed the device prompt and the warning
+ * is appended beneath it. On resize, readline does not reprint its earlier
+ * prompt, so the device prompt header must come from the resize callback
+ * itself; hence promptHeaderForRepaint(devicePrompt) inside the
+ * clearFirst=true branch. The leading "\n" before "WARNING:" is therefore
+ * added only on the resize path (where the header precedes the warning and
+ * needs one blank separator); on the initial draw, the typed-input line
+ * above the warning already provides that separator.
  *
  * Detected devices are annotated with status indicators:
  * - [MOUNTED]  — device or a partition is currently mounted; cannot be
@@ -1225,11 +1244,44 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                                  iso.sizeStr });
         }
 
-        auto printWarning = [&](size_t cols) -> std::vector<size_t> {
+        // Full redraw used by ConfirmResizeWatcher on SIGWINCH. On a resize,
+        // BOTH the ISO/device list (drawn by readlineWithResize above) and
+        // the warning block must be redrawn — readline does not reprint its
+        // earlier prompt after we clear the screen, so the ISO/device list
+        // must come from here. \033[H\033[2J homes regardless of cursor
+        // position, which neutralizes ConfirmResizeWatcher's own cursor-up
+        // math (drawnWidths goes stale after a reflow on terminals that
+        // don't reflow the live cursor, e.g. VTE).
+        //
+        // The `\n` that used to precede "WARNING:" is dropped: `\033[H\033[2J`
+        // already clears the screen to a blank state, and promptHeaderForRepaint
+        // ends with the device prompt's ": " prompt string (no newline). We add
+        // one "\n" to separate the device prompt from the warning header, so
+        // the layout is:
+        //
+        //   <device prompt header lines>
+        //   IDX>DEVICE ... ? for help: <typed input>
+        //                                         <- blank line
+        //   WARNING: This will *ERASE ALL DATA* on:
+        //                                         <- blank line
+        //    {...} ← {...}
+        //                                         <- blank line
+        //   Proceed? (y/n):
+        //
+        // (readlineWithResize on the first pass draws the device prompt and
+        // the typed input; on resize, promptHeaderForRepaint reproduces the
+        // header, and readline redraws its prompt line + typed input.)
+        auto renderConfirm = [&](size_t cols, bool clearFirst) -> std::vector<size_t> {
             const size_t usableCols = cols > 1 ? cols - 1 : 1;
             std::vector<size_t> widths;
 
-            std::cout << "\n" << wt.colorWarning << "WARNING: This will "
+            if (clearFirst) {
+                std::cout << "\033[H\033[2J";
+                std::cout << promptHeaderForRepaint(devicePrompt);
+                std::cout << "\n";   // separator between device prompt and warning
+            }
+
+            std::cout << wt.colorWarning << "WARNING: This will "
                       << UI::Palette::Red << "*ERASE ALL DATA*"
                       << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
             widths.push_back(0);
@@ -1264,7 +1316,10 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::vector<size_t> drawnWidths;
         {
             SyncOutput sync;
-            drawnWidths = printWarning(drawnCols);
+            // Initial draw: the device prompt is already on screen from
+            // readlineWithResize, so we must NOT clear. Print only the warning
+            // block beneath it.
+            drawnWidths = renderConfirm(drawnCols, /*clearFirst=*/false);
         }
 
         const std::string promptText = "Proceed? (y/n): ";
@@ -1274,7 +1329,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
         {
             ConfirmationModeGuard confirmGuard;
-            ConfirmResizeWatcher watcher(g_confirmResize, printWarning,
+            // The watcher's repaint always clears first and redraws both the
+            // device prompt header and the warning block. ConfirmResizeWatcher's
+            // own cursor-up math (based on drawnWidths) is bypassed because
+            // \033[H\033[2J homes regardless of cursor position.
+            ConfirmResizeWatcher watcher(g_confirmResize,
+                                         [&](size_t cols) { return renderConfirm(cols, /*clearFirst=*/true); },
                                          drawnCols, drawnWidths, promptText);
 
             auto* savedHook = rl_event_hook;
