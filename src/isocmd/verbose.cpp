@@ -497,7 +497,7 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
  *   stored uncolored; the red color is applied here.
  * - **Resize:** the one-shot side effects (load, save, elapsed time, delta
  *   count) run before the wait; only the printing is replayed by the render
- *   lambda handed to pressEnterToContinueWithRepaint().
+ *   lambda handed to pressEnterToReturnWithRepaint().
  *
  * @param allIsoFiles         Discovered ISO paths to be saved.
  * @param totalFiles          Atomic count of files scanned; reprinted after
@@ -586,7 +586,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
     };
 
     ListResizeWatcher watcher(render);
-    pressEnterToContinueWithRepaint(render);
+    pressEnterToReturnWithRepaint(render);
 }
 
 /**
@@ -782,6 +782,6 @@ void verboseImageSearchResults(const std::string& fileExtension,
     };
 
     ListResizeWatcher watcher(render);
-    pressEnterToContinueWithRepaint(render);
+    pressEnterToReturnWithRepaint(render);
     clearScrollBuffer();
 }

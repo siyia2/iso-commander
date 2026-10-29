@@ -306,7 +306,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                           << e.what() << dt.reset << std::endl;
             };
             ListResizeWatcher watcher(render);
-            pressEnterToContinueWithRepaint(render);
+            pressEnterToReturnWithRepaint(render);
         }
     }
 }
@@ -466,7 +466,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
         };
 
         ListResizeWatcher watcher(render);
-        pressEnterToContinueWithRepaint(render);
+        pressEnterToReturnWithRepaint(render);
 
         files.clear();
 
@@ -554,7 +554,7 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
 
     render();
     ListResizeWatcher watcher(render);
-    pressEnterToContinueWithRepaint(render);
+    pressEnterToReturnWithRepaint(render);
 
     clearScrollBuffer();
 }
