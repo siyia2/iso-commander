@@ -105,7 +105,7 @@ PrintListTheme getListColors() {
         isOriginal ? UI::Palette::Blue      : theme->background,
         isOriginal ? UI::Palette::DimGray   : UI::Palette::DimGray,
         isOriginal ? UI::Palette::Red       : theme->secondary,
-        isOriginal ? UI::Palette::Green     : theme->accent,
+        isOriginal ? UI::Palette::Green     : theme->indexDouble,
         isOriginal ? UI::Palette::BoldReset : theme->muted,
         isOriginal ? UI::Palette::BGNavy    : theme->background,  // bracketBg
         isOriginal ? UI::Palette::Green     : theme->accent       // procText

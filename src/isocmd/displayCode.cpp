@@ -23,24 +23,29 @@
 #include "../filtering.h"
 #include "../inputHandling.h"
 #include "../globalMutexes.h"
+#include "../stringListView.h"
 #include "../pausePrompt.h"
 #include "../sort.h"
 #include "../state.h"
 #include "../themes.h"
 
-void printList(const std::vector<std::string>& items, const std::string& listType, const std::string& listSubType,
-               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& isFiltered,
-               size_t& currentPage, std::shared_ptr<RefreshState> state);
+void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
+               std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
+               size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst = true, bool showPendingIndices = true);
 
 /**
  * @brief Loads ISO files from the database and updates the display.
  *
  * Synchronizes the global ISO list with the database when the dirty flag is set.
- * If a filter is active during a reload, it is re-applied to ensure the visible
- * results and original index mappings remain consistent with the new data.
+ * If a filter is active during a reload, the entries already shown are kept
+ * (if they still exist), and only newly discovered ISOs are tested against the
+ * filter stack, each level using the text mode (filenames-only or full path)
+ * it was committed with. Existing results are not re-evaluated. See
+ * @c refreshFilterKeepingResults.
  *
- * @note If a re-applied filter returns no results, the filter stack is cleared
- * and the view resets to the full list to prevent a blank UI.
+ * @note If no entries remain after the refresh (for example, every filtered
+ * ISO was removed from disk), the filter stack is cleared and the view resets
+ * to the full list to prevent a blank UI.
  *
  * @param filteredFiles      Reference to the vector of currently filtered files.
  * @param isFiltered         Boolean flag indicating if a filter is active.
@@ -70,8 +75,19 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
         std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
 
         if (needToReload) {
+            // Remember which paths existed before the reload, so the filter
+            // refresh can tell new ISOs from old ones. Only needed while a
+            // filter is active.
+            std::unordered_set<std::string> oldPaths;
+            if (isFiltered) {
+                oldPaths.reserve(GlobalState::globalIsoFileList.size());
+                oldPaths.insert(GlobalState::globalIsoFileList.begin(),
+                                GlobalState::globalIsoFileList.end());
+            }
+
             GlobalState::globalIsoFileList = std::move(freshList);
-            //  Only reset to originalPage if we are NOT actively filtered ---
+
+            // Only reset to originalPage if we are NOT actively filtered
             if (!isFiltered) {
                 currentPage = originalPage;
             }
@@ -79,7 +95,9 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
             hasPendingProcess = false;
             sortFilesCaseInsensitive(GlobalState::globalIsoFileList);
 
-            syncFilteringStackForIso(GlobalState::globalIsoFileList, filteringStack, filteredFiles, isFiltered);
+            // Keep what is already shown; test only newly found ISOs.
+            refreshFilterKeepingResults(GlobalState::globalIsoFileList, oldPaths,
+                                        filteringStack, filteredFiles, isFiltered);
         }
 
         if (GlobalState::needSortingAfterflno) {
@@ -93,11 +111,9 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
             isFiltered = false;
         }
 
-        clearScrollBuffer();
-
         // Use either the recently refreshed filteredFiles or the global master list
         printList(isFiltered ? filteredFiles : GlobalState::globalIsoFileList, "ISO_FILES", listSubType,
-                  pendingIndices, hasPendingProcess, isFiltered, currentPage, state);
+                  pendingIndices, hasPendingProcess, currentPage, state, true, true);
 
         isEmpty = GlobalState::globalIsoFileList.empty();
     }
@@ -209,8 +225,6 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         return false;
     }
 
-    clearScrollBuffer();
-
     if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {
         originalPage = currentPage;
         filteringStack.clear();
@@ -218,7 +232,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         filteredFiles.clear();
     }
 
-    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, isFiltered, currentPage, state);
+    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices, hasPendingProcess, currentPage, state, true, true);
     return true;
 }
 
@@ -245,7 +259,6 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
  */
 void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,
                               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::shared_ptr<RefreshState> state) {
-    clearScrollBuffer();
 
     // Restore from the appropriate cache when not filtered and the cache is valid
     files =
@@ -290,5 +303,5 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
         need2Sort = false;
     }
 
-    printList(files, "IMAGE_FILES", "convert2iso", pendingIndices, hasPendingProcess, isFiltered, currentPage, state);
+    printList(files, "IMAGE_FILES", "convert2iso", pendingIndices, hasPendingProcess, currentPage, state, true, true);
 }

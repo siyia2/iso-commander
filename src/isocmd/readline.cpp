@@ -619,25 +619,63 @@ void RestoreReadlineBuffer() {
     }
 }
 
+/**
+ * @brief Arms a one-shot readline startup hook that restores stashed input.
+ *
+ * If @c RetainAndRestoreReadlineBuffer::g_rl_pending_text is non-empty,
+ * installs an @c rl_startup_hook that re-inserts it into the buffer before
+ * the next prompt is displayed, places the cursor at the end of the text,
+ * then clears both the stash and the hook so the text is restored exactly once.
+ * If the stash is empty, the function does nothing.
+ *
+ * Call immediately before @c readline(). Unlike @c RestoreReadlineBuffer(),
+ * it does not rebind any keys, so prompts that disable Tab completion and
+ * Ctrl+L keep that behavior.
+ *
+ * @note The stash is filled by @c pgup_handler and @c pgdn_handler, and is
+ *       cleared by @c ReadlineKeybindingGuard on scope exit.
+ *
+ * @see RetainAndRestoreReadlineBuffer::g_rl_pending_text
+ * @see RestoreReadlineBuffer()
+ */
+void armPendingInputRestore() {
+    if (RetainAndRestoreReadlineBuffer::g_rl_pending_text.empty()) return;
+    rl_startup_hook = []() -> int {
+        rl_insert_text(RetainAndRestoreReadlineBuffer::g_rl_pending_text.c_str());
+        rl_point = rl_end;
+        RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
+        rl_startup_hook = nullptr;   // one-shot
+        return 0;
+    };
+}
+
 //=============================================================================
 // Event Driven Key Section
 //=============================================================================
 
 /* --- Navigation & View Handlers --- */
 
+static void stashTypedInput() {
+    RetainAndRestoreReadlineBuffer::g_rl_pending_text.assign(
+        rl_line_buffer ? rl_line_buffer : "", rl_end);
+}
+
 int pgup_handler(int, int) {
+    stashTypedInput();
     rl_replace_line("PgUp", 0);
     rl_done = 1;
     return 0;
 }
 
 int pgdn_handler(int, int) {
+    stashTypedInput();
     rl_replace_line("PgDn", 0);
     rl_done = 1;
     return 0;
 }
 
 int toggleList_handler(int, int) {
+    stashTypedInput();
     rl_replace_line("~", 0);
     rl_done = 1;
     return 0;
@@ -646,12 +684,14 @@ int toggleList_handler(int, int) {
 /* --- Action & Command Handlers --- */
 
 int proc_handler(int, int) {
+    stashTypedInput();
     rl_replace_line("P", 0);
     rl_done = 1;
     return 0;
 }
 
 int clr_handler(int, int) {
+    stashTypedInput();
     rl_replace_line("clr", 0);
     rl_done = 1;
     return 0;
@@ -670,18 +710,13 @@ int filter_handler(int, int) {
 }
 
 int toggleFlno_handler(int, int) {
+    stashTypedInput();
     rl_replace_line("*", 0);
     rl_done = 1;
     return 0;
 }
 
 /* --- Settings & State Handlers --- */
-
-int save_handler(int, int) {
-    rl_replace_line("s", 0);
-    rl_done = 1;
-    return 0;
-}
 
 int reset_handler(int, int) {
     rl_replace_line("r", 0);
@@ -692,6 +727,7 @@ int reset_handler(int, int) {
 /* --- Global Utility Handlers --- */
 
 int help_handler(int, int) {
+    stashTypedInput();
     rl_replace_line("?", 0);
     rl_done = 1;
     return 0;

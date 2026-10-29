@@ -146,6 +146,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
                            std::vector<std::vector<int>>& indexChunks,
                            bool& umountMvRmBreak,
                            bool& abortDel) {
+    PendingReadlineTextClearGuard pendingTextGuard;
     rl_attempted_completion_function = nullptr;
     reset_custom_keybindingsForRm();
     rl_bind_keyseq("\\e", exit_handler);
@@ -161,11 +162,13 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
         blue + "The selected " +
         green + "ISO" +
         blue + " will be " +
-        red + "*PERMANENTLY DELETED FROM DISK*" +
+        red + "*PERMANENTLY DELETED*" +
         blue + ". Proceed? (y/n): " +
         reset;
     bool isPageTurn = false;
     auto setupEnv = [&]() {
+        RestoreReadlineBuffer();
+
         rl_bind_key('\f', [](int count, int key) -> int {
             clear_screen_and_buffer(count, key);
             rl_on_new_line();
@@ -202,7 +205,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
     }
 }
 
-void helpSearches(bool isCpMv, bool import2ISO);
+void helpSearches(bool isCpMv, bool import2ISO, bool isCopy);
 
 /**
  * @brief Prompts for a destination directory or routes to deletion confirmation.
@@ -240,6 +243,7 @@ void helpSearches(bool isCpMv, bool import2ISO);
 std::string userDestDirCpMv(const std::vector<std::string>& isoFiles, std::vector<std::vector<int>>& indexChunks,
 std::string& userDestDir, std::string& operationColor, std::string& operationDescription, bool& umountMvRmBreak, bool& filterHistory, bool& isDelete, bool& isCopy, bool& abortDel,
 bool& overwriteExisting) {
+    PendingReadlineTextClearGuard pendingTextGuard;
     rl_attempted_completion_function = nullptr;
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
     sortFilesCaseInsensitive(entries);
@@ -310,7 +314,7 @@ bool& overwriteExisting) {
             if (userInput == "EOF_SIGNAL") { shouldContinue = false; break; }
             if (userInput == "?") {
                 bool import2ISO = false, isCpMv = true;
-                helpSearches(isCpMv, import2ISO);
+                helpSearches(isCpMv, import2ISO, isCopy);
                 userDestDir = "";
                 continue;
             }
