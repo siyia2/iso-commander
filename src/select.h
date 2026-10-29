@@ -11,6 +11,9 @@
 #include <string>
 #include <vector>
 
+// Project Headers
+#include "./state.h"
+
 // Forward declaration of shared state
 struct RefreshState;
 
@@ -36,6 +39,7 @@ public:
 
     ~ReadlineKeybindingGuard() {
         reset_custom_keybindingsForSelect();
+        RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
     }
 
     /**
@@ -88,12 +92,13 @@ private:
  * @brief RAII guard for controlling the "at ISO list" state.
  *
  * Ensures isAtISOList is restored to the desired value even on exception
- * or early return paths.
+ * or early return paths. Also guarantees the global filtering indicator
+ * is cleared when the guard goes out of scope.
  */
 class IsoListStateGuard {
 public:
     IsoListStateGuard(std::atomic<bool>& isAtISOList,
-                      const std::function<bool()>& isUnmountCheck)
+                       const std::function<bool()>& isUnmountCheck)
         : isAtISOList_(isAtISOList),
           wasAtList_(isAtISOList.load(std::memory_order_acquire)),
           isUnmountCheck_(isUnmountCheck) {}
@@ -103,6 +108,10 @@ public:
         if (!isUnmountCheck_()) {
             isAtISOList_.store(wasAtList_, std::memory_order_release);
         }
+
+        // Always ensure the filtering indicator is cleared, regardless
+        // of exception or early-return paths.
+        GlobalState::g_filteringIndicator.store(false, std::memory_order_release);
     }
 
     IsoListStateGuard(const IsoListStateGuard&) = delete;
@@ -215,49 +224,36 @@ void writeToUsb(
  * Manages pagination state and help text display.
  */
 bool processPaginationHelpAndDisplay(
-    const std::string& command,
-    size_t& totalPages,
+    const std::string& inputString,
+    size_t& totalPages, // Match the actual definition exactly.
     size_t& currentPage,
     bool& isFiltered,
     bool& needsClrScrn,
     const std::string& operation,
     bool& need2Sort,
-    std::atomic<bool>* isAtISOList
+    std::atomic<bool>* isAtISOList,
+    std::vector<std::string>& filteredFiles
 );
 
 /**
  * Generic string filtering for the ISO list.
  */
-bool handleFilteringForISO(
-    const std::string &inputString,
-    std::vector<std::string> &filteredFiles,
-    bool &isFiltered,
-    bool &needsClrScrn,
-    bool &filterHistory,
-    const std::string &operation,
-    const std::string &operationColor,
-    const std::vector<std::string> &isoDirs,
-    bool isUnmount,
-    size_t &currentPage,
-    std::shared_ptr<RefreshState> state = nullptr
-);
+bool handleFilteringForISO(const std::string& inputString, std::vector<std::string>& filteredFiles,
+    bool& isFiltered, bool& needsClrScrn, bool& filterHistory,
+    const std::string& operation, const std::string& operationColor,
+    const std::vector<std::string>& isoDirs, bool isUnmount, size_t& currentPage,
+    std::shared_ptr<RefreshState> state,
+    std::function<void()> repaintList = nullptr);
 
 /**
  * Filtering specifically for the conversion list.
  */
-void handleFilteringConvert2ISO(
-    const std::string &mainInputString,
-    std::vector<std::string> &files,
-    const std::string &operation,
-    bool &isFiltered,
-    bool &needsClrScrn,
-    bool &filterHistory,
-    bool &need2Sort,
-    size_t &currentPage,
-    std::vector<std::string> &pendingIndices,
-    bool &hasPendingProcess,
-    std::shared_ptr<RefreshState> state = nullptr
-);
+void handleFilteringConvert2ISO(const std::string& inputString, std::vector<std::string>& files,
+    const std::string& operation, bool& isFiltered, bool& needsClrScrn,
+    bool& filterHistory, bool& need2Sort, size_t& currentPage,
+    std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
+    std::shared_ptr<RefreshState> state,
+    std::function<void()> repaintList = nullptr);
 
 
 // --- Utility & Cleanup ---
