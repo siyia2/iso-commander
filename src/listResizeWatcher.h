@@ -45,4 +45,19 @@ inline RlLine readlineWithResize(const std::string& prompt,
     return line;
 }
 
+/// Visible text of every prompt line except the last, with Readline's
+/// \001/\002 invisible-text markers removed. Used by repaint callbacks for
+/// prompts that carry their own header line(s) before a final '\n'.
+inline std::string promptHeaderForRepaint(const std::string& prompt) {
+    const std::size_t nl = prompt.rfind('\n');
+    if (nl == std::string::npos) return {};
+    std::string out;
+    out.reserve(nl);
+    for (std::size_t i = 0; i < nl; ++i) {
+        const char c = prompt[i];
+        if (c != '\001' && c != '\002') out.push_back(c);
+    }
+    return out;
+}
+
 #endif // LISTRESIZEWATCHER_H
