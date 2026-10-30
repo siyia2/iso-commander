@@ -402,54 +402,33 @@ std::optional<std::string> checkCapacity(const WriteTheme& wt, const IsoInfo& is
  */
 std::vector<std::pair<IsoInfo, std::string>> validateDevices(
         const std::vector<std::pair<size_t, std::string>>& deviceMap,
-        const std::vector<IsoInfo>& selectedIsos, bool& noPermissions) {
+        const std::vector<IsoInfo>& selectedIsos,
+        bool& noPermissions,
+        std::vector<std::string>& validationErrors) {
 
     using namespace WriteValidation;
     const WriteTheme wt = getWriteTheme();
 
-    std::vector<std::string> validationErrors;
     std::vector<std::pair<IsoInfo, std::string>> validPairs;
 
     if (noPermissions) {
         validationErrors.push_back(plainErr(wt, "Root privileges are required"));
-    } else {
-        for (const auto& [index, device] : deviceMap) {
-            const auto& iso = selectedIsos[index - 1];
-
-            uint64_t deviceSize = 0;
-            if (auto err = checkDevice(wt, device, device, deviceSize)) {
-                validationErrors.push_back(std::move(*err));
-                continue;
-            }
-            if (auto err = checkCapacity(wt, iso, device, deviceSize)) {
-                validationErrors.push_back(std::move(*err));
-                continue;
-            }
-            validPairs.emplace_back(iso, device);
-        }
+        return {};
     }
 
-    if (!validationErrors.empty()) {
-        auto render = [&] {
-            SyncOutput sync;
-            clearScrollBuffer();
-            printValidationErrors(wt, validationErrors);
-        };
+    for (const auto& [index, device] : deviceMap) {
+        const auto& iso = selectedIsos[index - 1];
 
-        signal(SIGINT, SIG_IGN);
-        disable_ctrl_d();
-
-        const bool wasNoPermissions = noPermissions;
-        if (wasNoPermissions) {
-            noPermissions = false;
+        uint64_t deviceSize = 0;
+        if (auto err = checkDevice(wt, device, device, deviceSize)) {
+            validationErrors.push_back(std::move(*err));
+            continue;
         }
-
-        if (wasNoPermissions) {
-            pressEnterToContinueWithRepaint(render);
-        } else {
-            pressEnterToTryWithRepaint(render);
+        if (auto err = checkCapacity(wt, iso, device, deviceSize)) {
+            validationErrors.push_back(std::move(*err));
+            continue;
         }
-        return {};
+        validPairs.emplace_back(iso, device);
     }
 
     return validPairs;
@@ -1031,6 +1010,21 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
     PendingReadlineTextClearGuard pendingTextGuard;
     const WriteTheme wt = getWriteTheme();
 
+    auto buildIdxPrompt = [&]() -> std::string {
+        std::ostringstream s;
+        s << "\n" << UI::Palette::RL_idxGreen << "IDX>DEVICE"
+          << wt.rl_primaryCol << " ↵ for "
+          << UI::Palette::RL_Yellow << "write2usb"
+          << wt.rl_primaryCol << ", ? for help: "
+          << wt.rl_resetCol;
+        return s.str();
+    };
+
+    // Hoisted so the "root check already failed once" reset persists across
+    // loop iterations; redeclaring it inside the loop would re-trigger the
+    // root error forever.
+    bool noPermissions = (geteuid() != 0);
+
     while (true) {
         TerminalStateGuard termGuard;
 
@@ -1134,11 +1128,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         g_completerData.usbDevices = &usbDevices;
         reset_custom_keybindingsForCpMvWrite2Usb();
 
-        devicePromptStream << "\n" << UI::Palette::RL_idxGreen << "IDX>DEVICE"
-                          << wt.rl_primaryCol << " ↵ for "
-                          << UI::Palette::RL_Yellow << "write2usb"
-                          << wt.rl_primaryCol << ", ? for help: "
-                          << wt.rl_resetCol;
+        devicePromptStream << buildIdxPrompt();
 
         std::string devicePrompt = devicePromptStream.str();
 
@@ -1172,6 +1162,24 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         if (deviceInput && *deviceInput) add_history(deviceInput.get());
 
+        // Single renderer for both parse and validation errors. promptHeaderForRepaint
+        // only emits the header (no prompt line), so we re-emit buildIdxPrompt()
+        // plus the typed input to match the pre-error screen. buildIdxPrompt()
+        // starts with "\n", which is exactly the blank line between the device
+        // list and the prompt, so it is kept as-is.
+        // Nothing is printed after this: pressEnterTo*WithRepaint appends its
+        // own "↵ to try again..." / "Press Enter..." line as the final line.
+        auto renderErrors = [&](const std::vector<std::string>& errs) {
+            SyncOutput sync;
+            clearScrollBuffer();
+            std::cout << promptHeaderForRepaint(devicePrompt);
+            std::cout << buildIdxPrompt() << deviceInput.get() << "\n";
+            std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
+            for (const auto& e : errs) {
+                std::cerr << color << " • " << e << "\n";
+            }
+        };
+
         std::vector<std::string> errors;
         std::vector<std::string> isoFilenames;
         for (const auto& iso : sortedIsos) {
@@ -1181,22 +1189,34 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         auto deviceMap = parseDeviceMappings(deviceInput.get(), isoFilenames, errors);
 
         if (!errors.empty()) {
-            auto render = [&] {
-                SyncOutput sync;
-                clearScrollBuffer();
-                std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
-                for (const auto& err : errors) {
-                    std::cerr << color << " • " << err << "\n";
-                }
-            };
-
-            pressEnterToTryWithRepaint(render);
+            pressEnterToTryWithRepaint([&] { renderErrors(errors); });
             continue;
         }
 
-        bool noPermissions = (geteuid() != 0);
-        auto validPairs = validateDevices(deviceMap, sortedIsos, noPermissions);
+        std::vector<std::string> validationErrors;
+        auto validPairs = validateDevices(deviceMap, sortedIsos, noPermissions, validationErrors);
+
+        if (!validationErrors.empty()) {
+            const bool wasNoPermissions = noPermissions;
+            if (wasNoPermissions) {
+                // Don't re-check root on the next pass; retrying can't grant it.
+                noPermissions = false;
+            }
+
+            signal(SIGINT, SIG_IGN);
+            disable_ctrl_d();
+
+            if (wasNoPermissions) {
+                pressEnterToContinueWithRepaint([&] { renderErrors(validationErrors); });
+            } else {
+                pressEnterToTryWithRepaint([&] { renderErrors(validationErrors); });
+            }
+            continue;
+        }
+
         if (validPairs.empty()) {
+            // No errors reported but nothing validated — shouldn't happen;
+            // avoid looping without repainting anything new.
             continue;
         }
 
