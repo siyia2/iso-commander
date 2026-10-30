@@ -282,12 +282,27 @@ void interactiveConfigEditor(const std::string& configPath) {
  *   the change is "memory-only".
  * - **State refresh:** sortAfterFilenamesOnlyFlag is called when the
  *   filenames-only toggle changes.
- * - **Resize repaint:** the screen is drawn by a lambda (drawEdit) that is
- *   also passed to readlineWithResize(), so it repaints on terminal-width
- *   changes while the prompt waits. The lambda stops at the last hint line,
- *   one line short of the blank line before the prompt (this prompt has no
- *   leading newline): the normal path prints that blank line itself, and the
- *   resize watcher prints it after a repaint.
+ * - **Resize repaint:** drawEdit is the single renderer of the edit screen
+ *   (it clears the screen internally, then prints everything up to the last
+ *   hint line — it does not print the trailing blank line, since each caller
+ *   supplies its own separator). It is used in three places:
+ *   - as the repaint callback passed to readlineWithResize() for the value
+ *     prompt, so a resize while the user is typing redraws the edit screen
+ *     and Readline redraws the last prompt line and the typed input;
+ *   - inside the invalid-value render lambda handed to
+ *     pressEnterToTryWithRepaint(), so a resize during the "↵ to try again"
+ *     wait redraws the edit screen above the "Invalid value: '…'" message;
+ *   - inside the success render lambda handed to
+ *     pressEnterToContinueWithRepaint(), so a resize during the "↵ to
+ *     continue" wait redraws the edit screen above the "✓ Updated and
+ *     saved…" / "Notice: …" message.
+ *   In both *WithRepaint paths, the prompt's own SIGWINCH handling clears
+ *   the screen and invokes the render lambda; no ListResizeWatcher is
+ *   installed (it would race the prompt's handler and cannot fire during
+ *   the raw read anyway). The edit screen is therefore preserved on resize
+ *   in every phase, and the first frame is identical to the post-resize
+ *   frame (render runs once at entry of pressEnterToImpl, producing the same
+ *   layout the user sees on the initial draw).
  *
  * @param configPath Path to the .conf file for persistence.
  * @param key        Configuration key to modify.
@@ -352,7 +367,7 @@ bool editSetting(const std::string& configPath, const std::string& key) {
     while (true) {
         rl_bind_keyseq("\\e", exit_handler);
         drawEdit();
-        std::cout << "\n";   // blank line before the prompt
+        std::cout << "\n";
 
         std::string prompt = std::format(
             "\001{}\002Value\001{}\002 ↵ | ↵ \001{}\002Skip\001{}\002: \001{}\002",
@@ -372,11 +387,10 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         if (entry->validate && !entry->validate(newVal)) {
             auto render = [&] {
                 SyncOutput sync;
-                clearScrollBuffer();
+                drawEdit();
                 std::cout << "\n" << tc.error << "Invalid value: "
                           << tc.warning << "'" << newVal << "'" << tc.reset << "\n";
             };
-            ListResizeWatcher watcher(render);
             pressEnterToTryWithRepaint(render);
             continue;
         }
@@ -390,7 +404,7 @@ bool editSetting(const std::string& configPath, const std::string& key) {
 
         auto render = [&] {
             SyncOutput sync;
-            clearScrollBuffer();
+            drawEdit();
             if (saved) {
                 std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n",
                                          tc.label, tc.reset, configPath);
@@ -400,7 +414,6 @@ bool editSetting(const std::string& configPath, const std::string& key) {
                           << tc.reset << "\n";
             }
         };
-        ListResizeWatcher watcher(render);
         pressEnterToContinueWithRepaint(render);
 
         if (key == "filenames_only") {
