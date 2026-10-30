@@ -666,8 +666,6 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
 
     render();
 
-    ListResizeWatcher watcher(render);
-
     pressEnterToReturnWithRepaint(render);
 }
 
@@ -696,25 +694,30 @@ void databaseSwitches(std::string& inputSearch, const std::function<void()>& rep
             auto render = [&] {
                 SyncOutput sync;
                 clearScrollBuffer();
+                // Screen was just cleared, so the header is always needed here
+                if (repaintHeader) repaintHeader();
+
                 std::cerr << "\n" << db.error << "Error clearing ISO database: "
                           << db.path << "'" << GlobalState::databaseFilePath << "'"
                           << db.error << ". File missing or inaccessible.\033[J" << std::endl;
             };
-            render();
-            ListResizeWatcher watcher(render);
             pressEnterToContinueWithRepaint(render);
         } else {
             ofs.close();
             GlobalCaches::transformationCache.clear();
 
+            // First draw: the prompt is still on screen. Later draws
+            // (resize repaints) come after a clear, so redraw the header.
+            bool firstDraw = true;
+
             auto render = [&] {
                 SyncOutput sync;
-                clearScrollBuffer();
+                if (!firstDraw && repaintHeader) repaintHeader();
+                firstDraw = false;
+
                 std::cout << "\n" << db.highlight << "ISO database cleared successfully."
                           << "\033[J" << std::endl;
             };
-            render();
-            ListResizeWatcher watcher(render);
             pressEnterToContinueWithRepaint(render);
 
             std::vector<std::string>().swap(GlobalState::globalIsoFileList);
