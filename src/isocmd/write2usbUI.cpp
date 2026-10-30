@@ -1626,6 +1626,15 @@ public:
         promptText_ = std::move(prompt);
     }
 
+    /// Re-emits the result screen (summary + prompt) at the current terminal
+    /// width. Called by the pressEnterTo*WithRepaint() machinery on resize so
+    /// the summary survives a terminal wipe. Safe to call from the main thread
+    /// after finish(); takes the same lock the keeper uses.
+    void repaint() {
+        std::lock_guard<std::mutex> rl(renderMutex_);
+        renderLocked();
+    }
+
     /// Stops and joins the keeper thread. Safe to call more than once.
     void stop() {
         if (!thread_.joinable()) return;
@@ -1855,7 +1864,6 @@ private:
 
         if (finished) {
             frame += summaryText_;
-            frame += promptText_;
             frame += "\033[?25h";            // show the cursor again
         }
         frame += "\033[?2026l";              // end synchronized update
@@ -2094,11 +2102,9 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    // A resize repaint wipes the screen, so the screen reprints this text to
-    // put the prompt back under the summary.
     screen->setPrompt(std::string(color) + "\n↵ to continue...");
 
-    pressEnterToContinue();
+    pressEnterToContinueWithRepaint([&] { screen->repaint(); });
 
     screen->stop();
 }
