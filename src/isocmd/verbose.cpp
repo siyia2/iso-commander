@@ -598,7 +598,7 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
             for (auto it = invalidPaths.begin(); it != invalidPaths.end();) {
                 std::cout << "'" << *it << "'" << (++it != invalidPaths.end() ? " " : "");
             }
-            std::cout << color << ".\n";
+            std::cout << color << "\n";
         };
 
         auto printErrorMessages = [&]() {
@@ -675,7 +675,7 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
         for (auto it = invalidDirectoryPaths.begin(); it != invalidDirectoryPaths.end(); ++it) {
             std::cerr << "'" << *it << "'" << (std::next(it) != invalidDirectoryPaths.end() ? " " : "");
         }
-        std::cerr << color << ".";
+        std::cerr << color;
     }
 
     if (!processedErrorsFind.empty()) {
