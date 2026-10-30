@@ -41,7 +41,7 @@
 #include "../history.h"
 #include "../inputHandling.h"
 #include "../globalMutexes.h"
-#include "../pausePrompt.h"
+#include "../pausePrompts.h"
 #include "../sharedRefreshState.h"
 #include "../state.h"
 #include "../themes.h"

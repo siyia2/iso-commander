@@ -27,7 +27,7 @@
 #include "../rendering.h"
 #include "../history.h"
 #include "../inputHandling.h"
-#include "../pausePrompt.h"
+#include "../pausePrompts.h"
 #include "../state.h"
 #include "../themes.h"
 

@@ -26,7 +26,7 @@
 #include "../inputHandling.h"
 #include "../rendering.h"
 #include "../mount.h"
-#include "../pausePrompt.h"
+#include "../pausePrompts.h"
 #include "../process.h"
 #include "../state.h"
 #include "../verbose.h"

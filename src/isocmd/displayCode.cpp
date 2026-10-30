@@ -26,7 +26,7 @@
 #include "../globalMutexes.h"
 #include "../rendering.h"
 #include "../stringListView.h"
-#include "../pausePrompt.h"
+#include "../pausePrompts.h"
 #include "../sort.h"
 #include "../state.h"
 #include "../themes.h"

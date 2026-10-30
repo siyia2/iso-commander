@@ -23,7 +23,7 @@
 #include "../display.h"
 #include "../inputHandling.h"
 #include "../rendering.h"
-#include "../pausePrompt.h"
+#include "../pausePrompts.h"
 #include "../readline.h"
 #include "../sort.h"
 #include "../state.h"

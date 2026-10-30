@@ -10,7 +10,7 @@
 // Project Headers
 #include "../inputHandling.h"
 #include "../rendering.h"
-#include "../pausePrompt.h"
+#include "../pausePrompts.h"
 #include "../themes.h"
 
 namespace {
