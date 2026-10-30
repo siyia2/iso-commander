@@ -33,15 +33,6 @@
 /** @brief Blocks until Enter, Esc or Ctrl+D, showing "\n<prompt>". */
 void pressEnterTo(const std::string& prompt);
 
-/** @brief Shows "\u21B5 to try again..." and blocks until Enter, Esc or Ctrl+D. */
-void pressEnterToTry();
-
-/** @brief Shows "\u21B5 to return..." and blocks until Enter, Esc or Ctrl+D. */
-void pressEnterToReturn();
-
-/** @brief Shows "\u21B5 to continue..." and blocks until Enter, Esc or Ctrl+D. */
-void pressEnterToContinue();
-
 /**
  * @brief Like pressEnterTo(), but @p repaint redraws the caller's content on
  *        resize. The prompt is reprinted after the callback returns.
