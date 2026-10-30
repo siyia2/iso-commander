@@ -664,8 +664,6 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
         }
     };
 
-    render();
-
     pressEnterToReturnWithRepaint(render);
 }
 
@@ -706,8 +704,6 @@ void databaseSwitches(std::string& inputSearch, const std::function<void()>& rep
             ofs.close();
             GlobalCaches::transformationCache.clear();
 
-            // First draw: the prompt is still on screen. Later draws
-            // (resize repaints) come after a clear, so redraw the header.
             bool firstDraw = true;
 
             auto render = [&] {

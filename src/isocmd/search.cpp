@@ -317,7 +317,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
 
             auto render = [&] {
                 SyncOutput sync;
-                clearScrollBuffer();
                 std::cerr << "\n" << dt.red << "Unable to access ISO database: "
                           << e.what() << dt.reset << std::endl;
             };
@@ -480,7 +479,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
                       << dt.reset << "\n";
         };
 
-        pressEnterToContinueWithRepaint(render);
+        pressEnterToReturnWithRepaint(render);
 
         files.clear();
 
@@ -551,8 +550,6 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa,
         auto render = [&, cacheType, cacheIsEmpty] {
             SyncOutput sync;
 
-            // First draw: the prompt is still on screen. Later draws
-            // (resize repaints) come after a clear, so redraw the header.
             if (!firstDraw && repaintHeader) repaintHeader();
             firstDraw = false;
 
@@ -568,7 +565,6 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa,
         };
 
 
-    // The helper draws on entry, so no direct render() call here
     pressEnterToContinueWithRepaint(render);
 
     clearScrollBuffer();
