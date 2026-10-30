@@ -28,8 +28,12 @@
 /**
  * @brief Renders the multi-colored ASCII art banner to the terminal.
  *
- * Uses 24-bit TrueColor escapes for a vertical flame gradient (near-white heat
- * at the top, burnt maroon at the base).
+ * Writes eight rows of ASCII art to std::cout, one color per row, using
+ * 24-bit TrueColor escapes for a vertical flame gradient (near-white heat at
+ * the top, burnt maroon at the base). Each row is emitted with its own
+ * rgb(...) escape; a final reset ("\033[0m") is appended after the last row,
+ * followed by "\n\n". The function does not clear the screen and does not
+ * flush explicitly (later std::endl/std::flush calls flush the stream).
  */
 void print_ascii() {
 
@@ -62,6 +66,7 @@ void print_ascii() {
     std::cout << rows[7] << R"(|___|___/ \___/   \___\___/|_|  |_|_|  |_/_/ \_\|_|\_||___/|___|_|_\ )" << "\n\n" << reset;
 }
 
+// Forward declaration; definition and documentation live in select.cpp.
 void selectForIsoFiles(const std::string& operation,
     std::atomic<bool>& isAtISOList,
     std::vector<std::thread>& backgroundThreads,
@@ -77,15 +82,23 @@ void selectForIsoFiles(const std::string& operation,
  * "umount", "rm", "mv", "cp", "write2usb"). Multi-character input is ignored
  * and the menu redraws.
  *
- * - @c isAtISOList is set to @c false on every iteration before drawing.
+ * - @c isAtISOList is set to @c false on every iteration before drawing
+ *   (default memory ordering).
  * - A null readline return (Ctrl+D) or Esc breaks the loop.
  * - @c \\f and @c \\t are bound to no-ops each iteration so default Readline
  *   bindings cannot corrupt the menu.
- * - The menu is drawn by a lambda (@c drawMenu) also passed to
- *   @c readlineWithResize(), so it repaints on terminal-width changes while
- *   the prompt waits. The lambda stops one line short of the blank line
- *   before the prompt: the normal path prints that line itself, and the
- *   resize watcher prints it after a repaint.
+ * - The menu is drawn by a lambda (@c drawMenu) that wraps output in
+ *   @c SyncOutput and calls @c clearScrollBuffer() before each draw, so every
+ *   draw (including resize repaints) starts from a cleared screen. The same
+ *   lambda is passed to @c readlineWithResize(), so it repaints on
+ *   terminal-width changes while the prompt waits. The lambda stops one line
+ *   short of the blank line before the prompt: the loop body prints that line
+ *   itself on the normal path, and the resize watcher prints it after a
+ *   repaint.
+ * - The prompt is rebuilt from @c getPromptTheme() every iteration, so a
+ *   theme change is reflected on the next redraw.
+ * - @c clearScrollBuffer() is called before each @c selectForIsoFiles
+ *   dispatch (once per switch arm).
  *
  * @param isAtISOList       Set to @c false each iteration; forwarded to
  *                          @c selectForIsoFiles.
@@ -173,6 +186,8 @@ void submenu1(std::atomic<bool>& isAtISOList,
     }
 }
 
+// Forward declaration; definition and documentation live in the conversion
+// prompt translation unit.
 void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shared_ptr<RefreshState> state);
 
 /**
@@ -187,11 +202,17 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
  *
  * - A null readline return (Ctrl+D) or Esc breaks the loop.
  * - @c \\f and @c \\t are bound to no-ops each iteration.
- * - The menu is drawn by a lambda also passed to @c readlineWithResize(), so
- *   it repaints on terminal-width changes while the prompt waits. The lambda
- *   stops one line short of the blank line before the prompt (the prompt has
- *   no leading newline): the normal path prints that line itself, and the
- *   resize watcher prints it after a repaint.
+ * - The menu is drawn by a lambda that wraps output in @c SyncOutput and
+ *   calls @c clearScrollBuffer() before each draw, and is passed to
+ *   @c readlineWithResize(), so it repaints on terminal-width changes while
+ *   the prompt waits. The lambda stops one line short of the blank line
+ *   before the prompt (the prompt has no leading newline): the loop body
+ *   prints that line itself, and the resize watcher prints it after a
+ *   repaint.
+ * - The prompt is rebuilt from @c getPromptTheme() every iteration.
+ * - Unlike @c submenu1, this function does NOT call @c clearScrollBuffer()
+ *   before dispatching to @c promptSearchBinImgChdDaaMdfNrg; clearing is
+ *   left to the callee.
  *
  * @param state Shared @c RefreshState forwarded to each
  *              @c promptSearchBinImgChdDaaMdfNrg call; not read directly here.
@@ -267,6 +288,11 @@ void submenu2(std::shared_ptr<RefreshState> state) {
 
 /**
  * @brief Prints the primary application menu options.
+ *
+ * Emits a five-option box (ManageISO, Convert2ISO, ImportISO, Settings, Exit)
+ * using the global @c color for the box border. Does not clear the screen,
+ * does not flush explicitly, and does not add the blank line before the
+ * prompt — callers (drawMainMenu and the resize watcher) own that spacing.
  */
 void printMenu() {
     std::cout << color << "+----------------------+\n"
@@ -287,10 +313,14 @@ void printMenu() {
 /**
  * @brief Draws the main menu screen (clear, banner, menu).
  *
+ * Wraps output in @c SyncOutput, clears the screen/scrollback via
+ * @c clearScrollBuffer(), then calls @c print_ascii() and @c printMenu().
  * Ends right after the menu's last line, so the caller (or the resize watcher)
  * supplies the blank line before the prompt. Shared by the main prompt's
- * resize repaint (@c readlineWithResize) and @c checkPendingRefresh(). Must
- * not call @c readline().
+ * resize repaint (@c readlineWithResize) and @c checkPendingRefresh().
+ *
+ * Must not call @c readline() and must not block: it is invoked from the
+ * resize-watcher and Readline event-hook contexts.
  */
 void drawMainMenu() {
     SyncOutput sync;
@@ -310,9 +340,10 @@ void drawMainMenu() {
  * @c monitorAndClearMessage, @c clearMessageAfterTimeoutInMain,
  * @c refreshListAfterAutoUpdate). This function is installed as
  * @c rl_event_hook and invoked periodically by Readline itself, on the main
- * thread, while idle and waiting for input. It drains any pending request and
- * performs the corresponding redraw before restoring the user's current input
- * line.
+ * thread, while idle and waiting for input. It drains any pending request
+ * atomically via @c g_pendingRefreshKind.exchange(PendingRefreshKind::None)
+ * and performs the corresponding redraw before restoring the user's current
+ * input line.
  *
  * - **Suppression:** If @c GlobalState::g_suppressPendingRefresh is set, the
  *   hook returns immediately without consuming or acting on any pending
@@ -323,19 +354,23 @@ void drawMainMenu() {
  *   @c g_pendingRefreshKind and retried on a later poll — refreshes are
  *   deferred, not dropped.
  * - **MainMenu:** Re-renders the main menu screen via @c drawMainMenu()
- *   (clear screen/scrollback, banner, menu).
- * - **IsoList:** Copies @c GlobalState::g_pendingRefreshState under its
- *   dedicated mutex (the pointer handoff is not otherwise thread-safe), then
- *   re-renders the ISO list via @c loadAndDisplayIso using that state.
+ *   (clear screen/scrollback, banner, menu), then prints a blank line and
+ *   flushes before calling @c rl_on_new_line() and @c rl_redisplay().
+ * - **IsoList:** Copies @c GlobalState::g_pendingRefreshState under
+ *   @c GlobalMutexes::readLineMutex (the pointer handoff is not otherwise
+ *   thread-safe), then re-renders the ISO list via @c loadAndDisplayIso using
+ *   that state. If the copied state is null, no repaint or Readline restore
+ *   is performed.
  * - **None:** No-op.
- * - In all non-@c None cases, finishes by calling @c rl_on_new_line() and
+ * - In the MainMenu branch, and in the IsoList branch only when the copied
+ *   state is non-null, the hook finishes by calling @c rl_on_new_line() and
  *   @c rl_redisplay() to repaint the user's prompt/input line beneath the new
  *   output without discarding what they've typed.
  * - **Staleness:** After consuming a request, the hook verifies on the main
- *   thread that the target screen is still active (@c GlobalState::isAtMain for
- *   MainMenu, @c GlobalState::isAtISOList for IsoList); otherwise the request
- *   is discarded. The publisher-side checks are only an optimization, since
- *   they can go stale before this hook runs.
+ *   thread that the target screen is still active (@c GlobalState::isAtMain
+ *   for MainMenu, @c GlobalState::isAtISOList for IsoList); otherwise the
+ *   request is discarded. The publisher-side checks are only an optimization,
+ *   since they can go stale before this hook runs.
  * - **Chaining:** When a @c ListResizeWatcher is active, its hook calls this
  *   function as the previously installed hook, so both keep working.
  *
@@ -380,20 +415,30 @@ int checkPendingRefresh() {
  * @brief Observes background task completion and requests an asynchronous UI
  * refresh.
  *
- * Runs in a background thread, waiting for a database import to finish (or the
- * program to signal shutdown), then, if the user is at the main menu, publishes
- * @c PendingRefreshKind::MainMenu via @c GlobalState::g_pendingRefreshKind.
+ * Runs in a background thread and blocks until either the database import
+ * finishes or the program signals shutdown (whichever comes first). Waking is
+ * not the same as publishing: a refresh is requested only if the import has
+ * actually completed, the program is not shutting down, a temporary status
+ * message is currently visible, and the user is at the main menu. In that case
+ * it publishes @c PendingRefreshKind::MainMenu via
+ * @c GlobalState::g_pendingRefreshKind. On shutdown it wakes and returns
+ * without publishing anything.
+ *
  * The actual redraw — clearing the "Auto-Update" status line, re-rendering the
  * banner and menu, and restoring the user's input prompt via Readline's
  * @c rl_on_new_line() / @c rl_redisplay() — happens later, on the main thread,
  * in @c checkPendingRefresh. This function makes no Readline calls and writes
  * nothing to the terminal, since Readline is not thread-safe.
  *
- * @param state         Shared state with the import flag; refresh fires when
- *                      the import completes.
- * @param messageActive Flag tracking whether the status message is visible.
- * @param stopSignal    Abort monitoring during program exit.
- * @param isAtMain      Restricts the refresh to the primary menu.
+ * @param state         Shared state with the import flag. The wait ends when
+ *                      @c isImportRunning becomes false or @c stopSignal is
+ *                      set; a refresh is published only in the former case.
+ * @param messageActive Flag tracking whether the status message is visible;
+ *                      the refresh is published only when this is true.
+ * @param stopSignal    Abort monitoring during program exit. When set, the
+ *                      function returns without publishing a refresh.
+ * @param isAtMain      Restricts the refresh to the primary menu; the refresh
+ *                      is published only when this is true.
  */
 void monitorAndClearMessage(std::shared_ptr<RefreshState> state, std::atomic<bool>& messageActive,
                             std::atomic<bool>& stopSignal, std::atomic<bool>& isAtMain) {
@@ -413,20 +458,26 @@ void monitorAndClearMessage(std::shared_ptr<RefreshState> state, std::atomic<boo
  * @brief Threaded worker that requests a status-message clear/redraw after a
  * delay.
  *
- * Waits for a given number of 500 ms ticks, checking a stop flag each tick so
- * it can exit promptly on program termination. If the user is at the main menu
- * and no import is running, publishes @c PendingRefreshKind::MainMenu via
- * @c GlobalState::g_pendingRefreshKind so @c checkPendingRefresh performs the
- * actual redraw on the main thread. Makes no Readline calls and writes nothing
- * to the terminal itself.
+ * Sleeps for a given number of 500 ms ticks. After each tick it checks a stop
+ * flag and returns early if it is set, so shutdown latency is bounded by one
+ * tick (up to ~500 ms) rather than being immediate. If the full timeout
+ * elapses without a stop, and no import is running, and a temporary message is
+ * visible, and the user is at the main menu, it publishes
+ * @c PendingRefreshKind::MainMenu via @c GlobalState::g_pendingRefreshKind so
+ * @c checkPendingRefresh performs the actual redraw on the main thread. If a
+ * stop is observed on the final tick, it returns without publishing. Makes no
+ * Readline calls and writes nothing to the terminal itself.
  *
  * @param timeoutTicks  Number of 500 ms ticks to wait before clearing
  *                      (e.g. 2 = 1s, 8 = 4s).
- * @param isAtMain      Tracks whether the user is on the main menu.
+ * @param isAtMain      Tracks whether the user is on the main menu; required
+ *                      for the refresh to be published.
  * @param state         Shared state with the import flag; suppresses the
  *                      clear while an import is running.
- * @param messageActive Flag indicating a temporary message is visible.
- * @param stopMessage   Stop flag checked every 500 ms for early exit.
+ * @param messageActive Flag indicating a temporary message is visible; the
+ *                      refresh is published only when this is true.
+ * @param stopMessage   Stop flag checked after every 500 ms tick; when set,
+ *                      the function returns early without publishing.
  */
 void clearMessageAfterTimeoutInMain(int timeoutTicks, std::atomic<bool>& isAtMain,
                                     std::shared_ptr<RefreshState> state,
@@ -447,10 +498,16 @@ void clearMessageAfterTimeoutInMain(int timeoutTicks, std::atomic<bool>& isAtMai
 }
 
 /**
- * @brief Clears the terminal screen and resets the scrollback buffer.
+ * @brief Clears the terminal screen and requests clearing of the scrollback
+ * buffer.
  *
- * Uses ANSI escapes: \033[2J (clear screen), \033[3J (clear scrollback),
- * \033[H (cursor home), \033[0m (reset attributes).
+ * Emits ANSI escapes in this order: \033[2J (clear screen), \033[3J (request
+ * scrollback clear), \033[H (cursor home), \033[0m (reset attributes). The
+ * scrollback clear is terminal-dependent: some terminals support it, others
+ * ignore or interpret \033[3J differently, so it should not be relied on as a
+ * guaranteed reset. Writes via std::cout without flushing and does not touch
+ * Readline state; calling it while Readline is active may leave the prompt /
+ * line-editing state inconsistent.
  */
 void clearScrollBuffer() {
     std::cout << "\033[2J\033[3J\033[H\033[0m";

@@ -55,11 +55,21 @@ namespace {
 /**
  * @brief Removes non-existent ISO paths from the database and in-memory cache.
  *
- * Reads the database file under a shared lock, checks each path for existence
- * in parallel via the thread pool, and atomically rewrites the database with
- * surviving entries if any paths were removed. Readers always see either the
- * complete old file or the complete new one. Updates the in-memory list only
- * if at least one path was removed.
+ * Acquires dbFileMutex, opens the database with O_RDONLY and takes a shared
+ * flock. If the file is missing (ENOENT), clears globalIsoFileList under
+ * GlobalMutexes::updateListMutex and returns. Reads all non-empty lines,
+ * checks each path for existence in parallel via the static thread pool
+ * (chunked across min(pool.threadCount(), CLEAN_THREAD_CAP, lineCount)
+ * workers), and if any paths are missing, writes the surviving entries to a
+ * mkstemp temp file (fchmod 0644, write, fsync) and atomically renames it over
+ * the database, so readers always see either the complete old file or the
+ * complete new one. Sets GlobalState::isoListDirty to true after a successful
+ * rewrite. Replaces globalIsoFileList (under GlobalMutexes::updateListMutex)
+ * only if at least one path was removed.
+ *
+ * Early returns (lock failure, empty cache, all paths surviving, or any
+ * temp-file/fchmod/write/fsync/rename failure) leave both the database file
+ * and the in-memory list untouched.
  *
  * @param globalIsoFileList  Reference to the in-memory list of ISO files to update.
  */
@@ -185,8 +195,12 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
 /**
  * @brief Counts non-empty lines in a file.
  *
+ * A line is considered non-empty if it contains at least one character other
+ * than space, tab, newline, carriage return, form feed, or vertical tab.
+ *
  * @param filePath Path to the file to analyze
- * @return Number of non-empty lines, or -1 if file cannot be opened
+ * @return Number of non-empty lines, or -1 if the file cannot be opened
+ *         (in which case an error is written to std::cerr)
  */
 int countNonEmptyLines(const std::string& filePath) {
     std::ifstream file(filePath);
@@ -210,7 +224,8 @@ int countNonEmptyLines(const std::string& filePath) {
 /**
  * @brief Gets the user's home directory path.
  *
- * @return Home directory path string, or empty string if not found
+ * @return Contents of the HOME environment variable, or an empty string if
+ *         HOME is not set
  */
 std::string getHomeDirectory() {
     const char* homeDir = getenv("HOME");
@@ -223,14 +238,25 @@ std::string getHomeDirectory() {
 /**
  * @brief Saves new ISO file paths to the database, merging with existing entries.
  *
- * Deduplicates incoming paths against the existing cache and against each other,
- * appends new entries, and trims to maxDatabaseSize if needed. Writes the new
- * database contents to a temporary file and atomically renames it into place,
- * so readers always see either the complete old file or the complete new one.
+ * Creates GlobalState::databaseDirectory if absent (returning false if
+ * creation fails or the path exists but is not a directory), then acquires
+ * dbFileMutex and reads existing entries from the database under a shared
+ * flock. Deduplicates incoming paths against the existing cache and against
+ * each other via an unordered_set; appends new entries; trims to
+ * GlobalState::maxDatabaseSize by dropping the oldest entries (front erase)
+ * if needed. Writes the merged contents to a mkstemp temp file (fchmod 0644,
+ * write, fsync) and atomically renames it into place, so readers always see
+ * either the complete old file or the complete new one. Sets
+ * GlobalState::isoListDirty to true on success.
+ *
+ * Returns false if no new entries were found (and sets *newISOFound to false),
+ * or if any I/O step fails (create_directories, mkstemp, fchmod, write, fsync,
+ * rename); in the I/O-failure case *newISOFound is left at false.
  *
  * @param discoveredISO  Const reference to vector of ISO file paths to add.
  * @param newISOFound    Set to true if at least one new entry was added,
- *                       false if all paths already existed in the cache.
+ *                       false if all paths already existed in the cache or
+ *                       an I/O error occurred. May be nullptr.
  * @return true  if new entries were written successfully.
  * @return false if no new entries were found, or if an I/O error occurred.
  */
@@ -332,8 +358,9 @@ bool saveToDatabase(const std::vector<std::string>& discoveredISO, bool* newISOF
  * @brief Passes successfully operated ISO file paths to the database.
  *
  * Accepts a semicolon-separated list of destination paths produced by a
- * completed copy or move operation and forwards them to saveToDatabase()
- * in a single batch call.
+ * completed copy or move operation, splits it into individual paths, and
+ * forwards them to saveToDatabase() in a single batch call. The return value
+ * of saveToDatabase() is ignored.
  *
  * @param filePathsStr  Semicolon-delimited string of destination ISO paths.
  *
@@ -357,11 +384,19 @@ void updateDatabaseAfterOperations(const std::string& filePathsStr) {
 /**
  * @brief Reduces hierarchical paths by grouping related directories.
  *
- * Groups paths by their first 3 directory levels and collapses redundant
- * parent paths to optimize directory traversal.
+ * Splits each input string on ';' and keeps only absolute paths (those whose
+ * first character is '/'), appending a trailing '/' if missing. Groups the
+ * resulting paths by the prefix up to their third '/' (or the whole path if
+ * fewer than three slashes are present). For each group, emits the shared
+ * prefix if the group contains more than one path, otherwise the single path.
+ * Sorts the grouped result, then removes any path with two or fewer directory
+ * levels that is a strict prefix of another path, eliminating redundant
+ * parent entries.
+ *
+ * Non-absolute paths and empty segments are silently discarded.
  *
  * @param paths Vector of semicolon-delimited path strings
- * @return Vector of reduced/optimized path strings
+ * @return Vector of reduced/optimized absolute path strings
  */
 std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string>& paths) {
     std::map<std::string, std::vector<std::string>> pathGroups;
@@ -422,27 +457,33 @@ bool isValidDirectory(const std::string& path);
 /**
  * @brief Performs background ISO file import without blocking the UI.
  *
- * Reads semicolon-delimited paths from the history file, deduplicates them,
- * removes the root path "/" if other paths are present, then reduces them
- * hierarchically. Traverses the resulting directories in concurrent groups
- * sized to the global thread pool's thread count, collecting ISO files and
- * errors across all groups, then saves all results to the database in a
- * single call once every group has completed.
+ * Reads semicolon-delimited paths from the history file (checking stopImport
+ * on each line), deduplicates them, removes the root path "/" if other paths
+ * are present, then reduces them hierarchically via hierarchicalPathReduction().
+ * Traverses the resulting directories in concurrent groups sized to the
+ * global static thread pool's thread count, collecting ISO files and unique
+ * error messages across all groups under processMutex/traverseErrorMutex,
+ * then saves all results to the database in a single saveToDatabase() call
+ * once every group has completed.
  *
- * Checks stopImport after history parsing, after path reduction, between
- * groups, and after all traversal completes before saving. When stopImport
- * fires mid-group, the workerCV wait unblocks early but all spawned threads
- * are still joined before the function exits. localMaxDepth (-1) and
- * localPromptFlag (false) are hardcoded locals passed to each traversal.
+ * Checks stopImport while reading history, after history parsing, after path
+ * reduction, between groups, inside the per-group thread-spawn loop, and
+ * after all traversal completes before saving. On any early exit, signalDone()
+ * is invoked. When stopImport fires mid-group, the workerCV wait unblocks
+ * early (its predicate is activeWorkers == 0 || stopImport) but all spawned
+ * threads are still joined before the function exits. localMaxDepth (-1) and
+ * localPromptFlag (false) are hardcoded locals passed to each traverse() call.
  *
- * activeWorkers is incremented after validation but before thread launch,
- * and decremented by each thread on exit; the last thread to decrement
- * (fetch_sub returning 1) signals workerCV to wake the waiting main thread.
- * If thread construction throws, activeWorkers is decremented to stay
- * consistent. Signals completion via RefreshState::importCV; if stopImport
- * was not set, waits 500ms before doing so. isImportRunning is stored false
- * under printMutex before importCV is notified, ensuring printList cannot
- * observe a stale sync indicator after the signal.
+ * activeWorkers is reset to 0 at the start of each group, then incremented
+ * after isValidDirectory() validation but before thread launch; each worker
+ * decrements it on exit, and the last worker to decrement (fetch_sub returning
+ * 1) signals workerCV to wake the waiting main thread. If thread construction
+ * throws, activeWorkers is decremented to stay consistent.
+ *
+ * Completion is signaled via RefreshState::importCV. If stopImport was not
+ * set, signalDone() waits 500ms before notifying. isImportRunning is stored
+ * false under printMutex before importCV is notified, ensuring printList
+ * cannot observe a stale sync indicator after the signal.
  *
  * @param state  Shared state holding isImportRunning, stopImport,
  *               importCV/mutex for completion signaling, workerCV/mutex
@@ -549,6 +590,14 @@ void backgroundDatabaseImport(std::shared_ptr<RefreshState> state) {
 /**
  * @brief Loads the ISO database from file into memory.
  *
+ * Acquires dbFileMutex, opens the database with O_RDONLY and takes a shared
+ * flock. If the open or flock fails, returns without modifying outList. If
+ * fstat fails or the file is empty, clears outList and returns. Otherwise
+ * reads the whole file, splits on '\n', strips trailing '\r', skips empty
+ * lines, and replaces outList wholesale (move-assign) with the parsed entries.
+ * If read() returns <= 0 or more bytes than the reported file size, returns
+ * without modifying outList.
+ *
  * @param outList Reference to vector that will receive the loaded ISO paths
  */
 void loadFromDatabase(std::vector<std::string>& outList) {
@@ -595,17 +644,20 @@ void loadFromDatabase(std::vector<std::string>& outList) {
 /**
  * @brief Displays database statistics including on-disk and RAM usage.
  *
- * Creates database and history files if absent, then prints capacity,
- * entry counts, and locations for the ISO and history databases, followed
- * by RAM-buffered entry counts for ISO, STR, BIN/IMG, DAA/GBI, CHD, MDF,
- * and NRG caches sourced from GlobalCaches and GlobalState.
+ * Ignores SIGINT, disables Ctrl-D handling, and creates the ISO database,
+ * history, and filter-history files if absent. Then prints capacity, entry
+ * counts, and locations for the ISO and history databases, followed by
+ * RAM-buffered entry counts for ISO, STR, BIN/IMG, DAA/GBI, CHD, MDF, and NRG
+ * caches sourced from GlobalCaches and GlobalState. Catches
+ * std::filesystem::filesystem_error and prints an error referencing
+ * GlobalState::configPath.
  *
  * The screen content is generated by a `render` lambda so it can be replayed
  * by the resize watcher and by the "press Enter" prompt, keeping the display
  * consistent across SIGWINCH events.
  *
  * @param databaseFilePath Path to the ISO database file.
- * @param maxDatabaseSize  Maximum allowed database size in bytes.
+ * @param maxDatabaseSize  Maximum allowed database size, in bytes (displayed as KB).
  */
 void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax_t maxDatabaseSize) {
     signal(SIGINT, SIG_IGN);
@@ -670,13 +722,21 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
 /**
  * @brief Handles database management commands.
  *
- * Dispatches on inputSearch:
+ * Ignores SIGINT, disables Ctrl-D handling, then dispatches on inputSearch:
  *   *stats                   — calls displayDatabaseStatistics()
- *   !clr                     — truncates the ISO database file and clears
- *                              transformationCache and globalIsoFileList
+ *   !clr                     — truncates the ISO database file; on success
+ *                              clears GlobalCaches::transformationCache and
+ *                              (after the "press Enter" prompt) swaps
+ *                              GlobalState::globalIsoFileList for an empty
+ *                              vector; on truncation failure shows an error
+ *                              and clears nothing
  *   !clr_paths / !clr_filter — delegates to clearHistory()
  *
- * @param inputSearch Command string to process.
+ * repaintHeader is used to restore the screen header after clearing and is
+ * forwarded to clearHistory().
+ *
+ * @param inputSearch   Command string to process.
+ * @param repaintHeader Callback invoked to repaint the screen header when needed.
  */
 void databaseSwitches(std::string& inputSearch, const std::function<void()>& repaintHeader) {
     signal(SIGINT, SIG_IGN);

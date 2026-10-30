@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -24,12 +25,21 @@
 #include "../filtering.h"
 #include "../inputHandling.h"
 #include "../globalMutexes.h"
-#include "../rendering.h"
 #include "../stringListView.h"
 #include "../pausePrompts.h"
 #include "../sort.h"
 #include "../state.h"
 #include "../themes.h"
+
+/**
+ * @file
+ * @brief "Load from a source, then render" entry points.
+ *
+ * Each function here refreshes one of the list views (ISO database, mounted
+ * ISOs, cached image files) and hands the result to @c printList. They share
+ * the same blocking policy: SIGINT is ignored and Ctrl+D is disabled for the
+ * duration of the call (the SIGINT handler is not restored on return).
+ */
 
 void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
@@ -38,27 +48,41 @@ void printList(const StringListView& items, const std::string& listType, const s
 /**
  * @brief Loads ISO files from the database and updates the display.
  *
- * Synchronizes the global ISO list with the database when the dirty flag is set.
- * If a filter is active during a reload, the entries already shown are kept
- * (if they still exist), and only newly discovered ISOs are tested against the
- * filter stack, each level using the text mode (filenames-only or full path)
- * it was committed with. Existing results are not re-evaluated. See
- * @c refreshFilterKeepingResults.
+ * Synchronizes the global ISO list with the database when the dirty flag is
+ * set. If a filter is active during a reload, the entries already shown are
+ * kept (if they still exist), and only newly discovered ISOs are tested
+ * against the filter stack, each level using the text mode (filenames-only or
+ * full path) it was committed with. Existing results are not re-evaluated.
+ * See @c refreshFilterKeepingResults.
  *
- * @note If no entries remain after the refresh (for example, every filtered
- * ISO was removed from disk), the filter stack is cleared and the view resets
- * to the full list to prevent a blank UI.
+ * @note When no entries remain after the refresh (for example, every filtered
+ *       ISO was removed from disk), the filter stack is cleared and the view
+ *       resets to the full list to prevent a blank UI. In that case the
+ *       function also blocks on @ref pressEnterToReturnWithRepaint with an
+ *       "ISO database is empty" message before returning @c false.
  *
- * @param filteredFiles      Reference to the vector of currently filtered files.
- * @param isFiltered         Boolean flag indicating if a filter is active.
- * @param listSubType        String representing the sub-category of the list.
- * @param umountMvRmBreak    Flag to force a break/refresh in the UI state.
- * @param pendingIndices     Vector of indices currently marked for processing.
- * @param hasPendingProcess  Boolean flag indicating if there are active background tasks.
- * @param currentPage        Current page index for pagination.
- * @param originalPage       Backup of the page index before filtering.
- * @param state              Shared state with import flag and CV for event coordination.
- * @return true if the list contains items, false if the cache is empty.
+ * @note SIGINT is set to @c SIG_IGN and Ctrl+D is disabled for the duration
+ *       of the call; the SIGINT handler is not restored on return.
+ *
+ * @param filteredFiles      Currently filtered files; may be cleared when the
+ *                           filter is reset.
+ * @param isFiltered         Whether a filter is active. Set to @c false when
+ *                           the filter stack is cleared.
+ * @param listSubType        Sub-category string passed through to @c printList.
+ * @param umountMvRmBreak    When @c true, clears the filter stack,
+ *                           @p filteredFiles and @p isFiltered, so the full
+ *                           list is shown again.
+ * @param pendingIndices     Indices currently marked for processing; cleared
+ *                           on a full reload.
+ * @param hasPendingProcess  Whether background tasks are active; cleared on a
+ *                           full reload.
+ * @param currentPage        Current page index for pagination; may be reset
+ *                           to @p originalPage on a reload when not filtered.
+ * @param originalPage       Page index to restore to on an unfiltered reload.
+ * @param state              Shared state forwarded to @c printList.
+ * @return @c true if the global ISO list is non-empty after the refresh,
+ *         @c false if it is empty (a message is shown and the call blocks
+ *         until acknowledged).
  */
 bool loadAndDisplayIso(std::vector<std::string>& filteredFiles, bool& isFiltered, const std::string& listSubType, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
 size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) {
@@ -144,28 +168,42 @@ const std::string MOUNTED_ISO_PATH = "/mnt/ISOs";
 /**
  * @brief Scans, filters, and renders currently mounted ISO directories.
  *
- * Uses stat-based caching to detect changes in MOUNTED_ISO_PATH. A full re-scan
- * and re-sort occur only if the directory's modification time or link count changes.
+ * Uses stat-based caching to detect changes in @ref MOUNTED_ISO_PATH: a full
+ * re-scan and re-sort runs only when the directory's modification time
+ * (@c st_mtime) or link count (@c st_nlink) changes. If the resulting
+ * directory list differs from the cached one, the static cache is updated and
+ * pending process state is reset.
  *
- * If changes are detected and the resulting directory list differs from the cache:
- * - Updates the static cache.
- * - Resets pending process states and indices.
+ * If the mount directory is missing or inaccessible, it is treated as empty.
+ * If no ISO directories are found, the function shows a warning and blocks on
+ * @ref pressEnterToReturnWithRepaint, then clears the static caches and
+ * returns @c false. Otherwise it manages pagination state and delegates to
+ * @c printList.
  *
- * If no ISOs are found, it clears internal caches and displays a warning.
- * Otherwise, it manages pagination state and invokes the UI rendering (printList).
+ * @note SIGINT is set to @c SIG_IGN and Ctrl+D is disabled for the duration
+ *       of the call; the SIGINT handler is not restored on return.
  *
- * @note Temporarily ignores SIGINT and disables Ctrl+D during execution.
- *
- * @param isoDirs            [out] Vector populated with current mount paths.
- * @param filteredFiles      [in/out] List of files post-filtering.
- * @param isFiltered         [in/out] Boolean toggle for filtering mode.
- * @param umountMvRmBreak    [in] UI flag to force a refresh/reset of the view.
- * @param pendingIndices     [in/out] Tracks items marked for batch operations.
- * @param hasPendingProcess  [in/out] Flag indicating active background tasks.
- * @param currentPage        [in/out] Current UI pagination index.
- * @param originalPage       [out] Backup of page index when filtering is reset.
- * @param state              [in] Shared state with import flag and CV for event coordination.
- * @return true if ISOs were found and displayed; false if the directory is empty.
+ * @param isoDirs            [out] Current mount paths.
+ * @param filteredFiles      [in/out] Files after filtering; cleared when the
+ *                           filter is reset (see @p umountMvRmBreak and the
+ *                           size-equality branch below).
+ * @param isFiltered         [in/out] Filtering mode toggle; set to @c false
+ *                           when the filter stack is cleared.
+ * @param umountMvRmBreak    [in] When @c true, resets the filter stack and
+ *                           filter state so the full list is shown.
+ * @param pendingIndices     [in/out] Items marked for batch operations;
+ *                           cleared when the directory list changes.
+ * @param hasPendingProcess  [in/out] Background-task flag; cleared when the
+ *                           directory list changes.
+ * @param currentPage        [in/out] Current pagination index.
+ * @param originalPage       [out] Page index backup, written only when the
+ *                           filter is reset (i.e. when
+ *                           @c filteredFiles.size() == isoDirs.size() or
+ *                           @p umountMvRmBreak is set).
+ * @param state              [in] Shared state forwarded to @c printList.
+ * @return @c true if ISO directories were found and displayed; @c false if
+ *         none were found (a warning is shown and the call blocks until
+ *         acknowledged).
  */
 bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles,
                                bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices,
@@ -255,23 +293,34 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 /**
  * @brief Prepares and displays cached disc image file lists.
  *
- * Restores file lists from the appropriate format cache (BIN/IMG, MDF, NRG, CHD, DAA/GBI)
- * when not filtered and when cache state differs from the current view.
+ * When not filtered and the format-specific cache is non-empty and differs
+ * from the current view, the working list is replaced from that cache
+ * (BIN/IMG, MDF, NRG, CHD, DAA/GBI) and a re-sort is requested.
  *
- * If required, sorts both the active file list and the corresponding cache,
- * using format-specific mutex protection for thread-safe updates.
+ * If @p list is false, or a re-sort is pending (@c needSortingAfterflno), the
+ * active list is sorted and the corresponding cache is sorted under its
+ * format-specific mutex. The function then delegates rendering and
+ * interaction to @c printList with @c listType "IMAGE_FILES" and
+ * @c listSubType "convert2iso".
  *
- * Finally delegates rendering and interaction to the list display system.
+ * @note @c fileType "daa" and "gbi" share @c daaGbiFilesCache; the sort
+ *       branch matches @c "daa" only.
  *
- * @param files            Current working file list (may be replaced by cache)
- * @param fileType         File extension type ("bin", "img", "mdf", "nrg", "chd", "daa", "gbi")
- * @param need2Sort        Flag indicating whether sorting is required
- * @param isFiltered       Filter state affecting cache restoration
- * @param list             Controls whether list refresh behavior is executed
- * @param pendingIndices   Files queued for processing or convert2iso
- * @param hasPendingProcess Global processing state flag
- * @param currentPage      Pagination state for UI display
- * @param state            Shared state with import flag and CV for event coordination
+ * @param files              [in/out] Working file list; may be replaced
+ *                           wholesale from a cache.
+ * @param fileType           File extension type: "bin", "img", "mdf", "nrg",
+ *                           "chd", or "daa" (the "daa" branch also backs
+ *                           "gbi" via @c daaGbiFilesCache).
+ * @param need2Sort          [in/out] Set to @c true when a cache replacement
+ *                           requires a re-sort; cleared after sorting.
+ * @param isFiltered         [in] When @c true, cache restoration is skipped.
+ * @param list               [in] When @c false, or when a re-sort is pending,
+ *                           the sort block runs; otherwise it is skipped.
+ * @param pendingIndices     [in/out] Files queued for processing or
+ *                           convert2iso.
+ * @param hasPendingProcess  [in/out] Global processing state flag.
+ * @param currentPage        [in/out] Pagination state for UI display.
+ * @param state              [in] Shared state forwarded to @c printList.
  */
 void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,
                               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::shared_ptr<RefreshState> state) {
@@ -290,7 +339,7 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
     : (!isFiltered && !GlobalState::chdFilesCache.empty() && fileType == "chd" &&
        (GlobalState::chdFilesCache.size() != files.size() || !std::equal(GlobalState::chdFilesCache.begin(), GlobalState::chdFilesCache.end(), files.begin())))
         ? (need2Sort = true, GlobalState::chdFilesCache)
-    : (!isFiltered && !GlobalState::daaGbiFilesCache.empty() && fileType == "daa" &&               // <-- DAA branch
+    : (!isFiltered && !GlobalState::daaGbiFilesCache.empty() && fileType == "daa" &&
        (GlobalState::daaGbiFilesCache.size() != files.size() || !std::equal(GlobalState::daaGbiFilesCache.begin(), GlobalState::daaGbiFilesCache.end(), files.begin())))
         ? (need2Sort = true, GlobalState::daaGbiFilesCache)
     : files;

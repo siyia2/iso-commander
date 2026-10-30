@@ -274,8 +274,9 @@ void printValidationErrors(const WriteTheme& wt, const std::vector<std::string>&
 /**
  * @brief Reports whether a block device still has write I/O in flight.
  *
- * Reads /sys/block/<name>/inflight, so it also sees flushing started by
- * another process. Returns false if the counters cannot be read.
+ * Reads the read/write request counters in
+ * /sys/block/<name>/inflight. This also detects writes still being flushed
+ * by another process. Returns false if the counters cannot be read.
  *
  * @param device Whole-disk path (e.g. "/dev/sdb").
  * @return true if one or more write requests are still pending.
@@ -295,12 +296,11 @@ bool isDeviceBusy(const std::string& device) {
  * Checks, in order:
  * -# The device is a removable USB flash drive (isFlashDrive).
  * -# The device and its partitions are not mounted (isDeviceMounted).
- * -# The device is not in g_drainingDevices (pending kernel-level tasks
- *    tracked by the interactive UI).
- * -# In non-interactive mode only, the device has no write I/O in flight
- *    (isDeviceBusy). This catches flushing started by another process, such
- *    as a previously cancelled write, which the in-process g_drainingDevices
- *    set cannot see.
+ * -# The device is not in @c g_drainingDevices, which tracks writes still
+ *    being drained by this process after cancellation.
+ * -# In non-interactive mode, the device has no write I/O in flight
+ *    (@ref isDeviceBusy). This also catches pending writes from another
+ *    process, which the in-process set cannot track.
  * -# The device size can be determined (getBlockDeviceSize).
  *
  * @param wt     Active write theme.
@@ -459,9 +459,9 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(
  * path as the user typed it, except for the duplicate-device error, which
  * shows the resolved path.
  *
- * This only checks that the path exists and is unique. It does not check
- * that the device is a removable USB drive, unmounted, or large enough;
- * that is done later by validateDevices().
+ * This parser checks path existence and mapping uniqueness only. It does
+ * not verify that a device is removable, unmounted, or large enough; those
+ * checks are performed later by validateDevices().
  *
  * @param pairString   Raw input containing semicolon-separated mappings.
  * @param selectedIsos Ordered ISO list; only its size() is used, to bound
@@ -1410,32 +1410,30 @@ prepareWriteData(const std::vector<std::pair<IsoInfo, std::string>>& validPairsI
  * @brief Detaches in-flight write tasks into per-device background drain
  * threads after cancellation.
  *
- * Called at the tail of performWriteOperation() when the user has
- * interrupted via Ctrl+C (GlobalState::g_operationCancelled). Moves the
- * still-running futures out of the local function scope into detached
- * background threads so hardware tasks still flushing cache data can finish
- * safely after control has returned to the shell prompt.
+ * Called by performWriteOperation() after Ctrl+C
+ * (@c GlobalState::g_operationCancelled). Transfers the outstanding futures
+ * to background drain threads managed by @c g_drainingManager, allowing
+ * writes and pending cache flushes to finish after the operation returns to
+ * the prompt.
  *
- * One detached thread is spawned per pending future. Each waits on its own
- * future and, on completion, erases that device from g_drainingDevices.
+ * One managed background thread is started per future. Each waits on its
+ * future and, on completion, erases that device from @c g_drainingDevices.
  * Because every pending device has an independent waiter, a device's
  * "[FLUSHING]" indicator clears the moment its task finishes, regardless of
  * how long the others take. When the last thread empties the set,
  * g_drainingCancelled is cleared.
  *
- * Only devices whose tasks had not yet completed or failed at the moment of
- * cancellation are added to g_drainingDevices — tasks that had already
- * returned from writeIsoToDevice() are known to be flush-clean.
+ * Only devices whose tasks had neither completed nor failed when
+ * cancellation was handled are added to @c g_drainingDevices. Tasks that
+ * have already returned from writeIsoToDevice() need no further draining.
  *
- * The non-copyable, non-movable progressData vector is deliberately not
- * moved or captured by value; the shared_ptr is captured instead so the
- * per-operation data stays alive for as long as the detached threads need
- * it. The device path for each pending future is read from
- * progressData[i].device.
+ * The progress vector is shared rather than copied or moved. Each drain
+ * thread captures the shared pointer to keep the per-operation records alive
+ * until its future completes. Device paths are paired with futures by index
+ * through @p progressData[i].device.
  *
- * @param futures        Pending per-task futures. Taken by value; each
- *                       element is moved into its own detached thread, so the
- *                       caller's vector is left empty after this call.
+ * @param futures        Per-task futures, taken by value and moved into the
+ *                       background drain threads.
  * @param progressData   Per-task progress records. Read only: .completed /
  *                       .failed are inspected to decide which devices still
  *                       need draining, and .device enumerates the draining
@@ -1444,16 +1442,15 @@ prepareWriteData(const std::vector<std::pair<IsoInfo, std::string>>& validPairsI
  *                       by each detached thread to keep the operation data
  *                       alive until that device's drain completes.
  *
- * @note The caller must not touch @p futures after this returns — it has been
- *       moved from. This is intentional: the point is to transfer ownership
- *       of the pending work out of the local scope.
+ * @note The caller's future vector is consumed by this call; ownership of
+ *       each future is transferred to its background drain thread.
  *
  * @note @p futures and @p progressData must have the same size:
  *       drainDevices[i] is paired with futures[i], and each spawned thread
  *       indexes both. A mismatch is an out-of-bounds read.
  *
- * @note May spawn multiple threads (one per pending future) for a single call.
- *       g_drainingManager must accept more than one thread per operation.
+ * @note May add multiple threads to @c g_drainingManager in one call
+ *       (one per future).
  *
  * @note Only for the cancellation path. The non-cancelled path in
  *       performWriteOperation waits on the futures inline instead, because

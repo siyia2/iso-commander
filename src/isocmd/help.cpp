@@ -17,6 +17,10 @@ namespace {
 
     /**
      * @brief Theme color roles used to pick a fallback color from MainTheme.
+     *
+     * Backed by std::uint8_t and used only internally by resolveColor() and
+     * ThemeColors. The set of enumerators is exhaustive for the switch in
+     * resolveColor(); adding a new role requires adding a matching case there.
      */
     enum class ColorRole : std::uint8_t {
         Accent,
@@ -29,7 +33,10 @@ namespace {
      * @brief Resolves a color for the current theme.
      *
      * When @p isOriginal is true (or @p theme is null), @p originalColor is
-     * returned as-is. Otherwise the themed color matching @p role is returned.
+     * returned as-is. Otherwise the themed color matching @p role is returned
+     * (theme->accent/highlight/primary/muted). Marked noexcept and
+     * [[nodiscard]]; the trailing `return originalColor;` after the switch is
+     * a defensive fallback that is unreachable for the current ColorRole set.
      */
     [[nodiscard]] inline std::string_view resolveColor(
         const MainTheme* theme,
@@ -52,8 +59,17 @@ namespace {
     /**
      * @brief Aggregates resolved theme colors used by all help screens.
      *
-     * Construct once per help screen; all members are lightweight views into
-     * either the global palette or the active theme, so no allocation occurs.
+     * The default constructor reads the current active theme and the
+     * "original" flag from globals (getActiveTheme(), globalTheme) at
+     * construction time. All members are lightweight std::string_view handles
+     * into either the global palette or the active theme, so no allocation
+     * occurs.
+     *
+     * Note: help functions construct a fresh ThemeColors inside their render
+     * lambda on every replay (including resize redraws), so theme changes made
+     * while the help screen is displayed are reflected on the next repaint.
+     * The "construct once per help screen" intuition is therefore wrong — one
+     * instance is constructed per draw.
      */
     struct ThemeColors {
         const MainTheme* theme;
@@ -79,8 +95,13 @@ namespace {
 /**
  * @brief Prints a themed section header followed by its body.
  *
- * The header is printed in the theme's section color and the body (if any)
- * verbatim. An empty body still emits one blank line for spacing.
+ * The header is printed in the theme's section color (tc.head) followed by
+ * UI::Palette::BoldReset and a newline. The body (if any) is printed verbatim
+ * and followed by std::endl (flush); an empty body still emits one blank line
+ * for spacing. Any coloring inside the body must be embedded by the caller —
+ * this function does not apply theme colors to it. Spacing before the header
+ * is controlled by the caller's @p head string (callers typically prefix it
+ * with "\n").
  */
 void printSection(const ThemeColors& tc, std::string_view head, const std::string& body) {
     std::cout << tc.head << head << UI::Palette::BoldReset << "\n";
@@ -103,14 +124,29 @@ void printSection(const ThemeColors& tc, std::string_view head, const std::strin
  *
  * The body is wrapped in a `render` lambda so a resize while waiting at the
  * "↵ to return..." prompt redraws the help text (not just the prompt). The
- * lambda captures by reference because @p isAtISOListForHelp is a live
- * reference the caller may update between invocations; each replay must
- * observe the current value.
+ * lambda captures all three parameters by reference; they are live references
+ * the caller may update between invocations, so each replay must observe the
+ * current values. A fresh ThemeColors is constructed on every replay, so a
+ * theme change while the screen is open is reflected on the next redraw.
+ *
+ * Content adjustments:
+ *   • @p isUnmount switches the section-2 heading from "Selecting Files" to
+ *     "Selecting Mount-Points" and suppresses the '*' (FilenamesOnly) line in
+ *     section 3.
+ *   • (@p isUnmount || @p isMount) appends "/All" to the "Pending" label in
+ *     section 2 and adds the "'00'" alternative to the pending-indices entry.
+ *   • @p isAtISOListForHelp includes the 'R' (Refresh ISO list from
+ *     FolderPath history) line in section 3.
+ *
+ * Sections rendered are numbered 1, 2, 3, 4.
  *
  * @param isAtISOListForHelp Live reference; when true, the ISO-list-only
  *                           'R' refresh entry is included.
- * @param isUnmount          True when the help is shown from an unmount flow.
- * @param isMount            True when the help is shown from a mount flow.
+ * @param isUnmount          Live reference; true when the help is shown from
+ *                           an unmount flow (changes heading and hides '*').
+ * @param isMount            Live reference; true when the help is shown from
+ *                           a mount flow (contributes to the "Pending/All"
+ *                           label and '00' alternative).
  */
 void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool& isMount) {
     auto render = [&] {
@@ -156,6 +192,16 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
 
 /**
  * @brief Displays a help guide for the settings editor.
+ *
+ * Renders sections "Hotkeys", "Selecting Edits", and "Tips" via a `render`
+ * lambda that is replayed by the resize watcher and the press-Enter prompt,
+ * with a fresh ThemeColors constructed per replay so theme changes are
+ * picked up on the next redraw.
+ *
+ * Note: the on-screen headings are numbered 1, 2, and 4 — there is no
+ * section 3 in the rendered output. This gap is intentional as far as the
+ * doc is concerned (kept to match the established help-screen layout) and
+ * is not a documentation omission.
  */
 void helpSettingsEditor() {
     auto render = [&] {
@@ -184,7 +230,23 @@ void helpSettingsEditor() {
  *
  * The content adapts to @p isCpMv (copy/move vs import/convert), to
  * @p import2ISO (ISO import vs image-cache convert), and, for copy/move, to
- * @p isCopy (tips and overwrite guidance differ between cp and mv).
+ * @p isCopy (tips and overwrite guidance differ between cp and mv). Uses the
+ * same `render` lambda + pressEnterToReturnWithRepaint pattern as the other
+ * help screens; a fresh ThemeColors is constructed per replay.
+ *
+ * Content adjustments:
+ *   • When @p isCpMv is false, an extra "Cancel Search : Ctrl+c" hotkey line
+ *     is inserted, and a Cleanup/Display Commands section is shown instead of
+ *     the copy/move tips. In that section, the '!clr' description is
+ *     "Clear IsoDatabase" when @p import2ISO is true and "Clear corresponding
+ *     ImageCache" otherwise; the display line is "'ls'|'*stats'" when
+ *     @p import2ISO is false and "'*stats'" only when it is true.
+ *   • When @p isCpMv is true, an Overwrite line is added to section 2, and
+ *     the tips section differs between cp and mv (self-copy vs same-device /
+ *     multi-destination behavior); @p isCopy selects between them.
+ *
+ * Rendered section numbering is contiguous in both branches (1,2,3 for
+ * copy/move; 1,2,3,4 for import/convert).
  *
  * @param isCpMv     True for copy/move flows; false for import/convert.
  * @param import2ISO True when the flow imports ISOs into the database.
@@ -249,6 +311,11 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
 
 /**
  * @brief Displays a help guide for ISO-to-Device mappings (write2usb).
+ *
+ * Renders sections "Hotkeys", "Selecting Pairs", and "Tips" via a `render`
+ * lambda replayed by the resize watcher and the press-Enter prompt, with a
+ * fresh ThemeColors constructed per replay. Takes no parameters; the layout
+ * is fixed. Section numbering is contiguous (1, 2, 3).
  */
 void helpMappings() {
     auto render = [&] {

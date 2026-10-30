@@ -37,24 +37,17 @@
  * @brief Routes validated user input to the correct filesystem or mount
  * operation.
  *
- * Picks the active file list from the UI state (filtered vs. global) and the
- * operation, then dispatches to the matching handler.
+ * Selects the active list (filtered files, global ISO files, or mounted
+ * directories for unmount) and dispatches the input to the matching handler.
+ * The caller manages list-view locking around the operation.
  *
- * - **List selection:** @p filteredFiles when @p isFiltered; otherwise
- *   @c globalIsoFileList (or @p isoDirs for unmounts).
- * - **UI locking:** sets @p isAtISOList to @c false so no concurrent refresh
- *   runs during a blocking operation.
- * - **Destructive safety:** sets @p umountMvRmBreak so the view is refreshed
- *   after move, remove, or unmount.
- *
- * @param inputString      Raw user string (usually indices or paths).
- * @param[in,out] isFiltered Updated if the operation invalidates the current
- *                           filter.
- * @param filteredFiles    The currently visible subset of files.
- * @param isoDirs          Currently active mount points.
- * @param operation        Operation identifier for logging and UI feedback.
- * @param umountMvRmBreak  Forces a view refresh after destructive actions.
- * @param filterHistory    Clears/updates the readline search history.
+ * @param inputString      User input, typically indices or paths.
+ * @param isFiltered       Updated if the operation invalidates the filter.
+ * @param filteredFiles    Currently visible filtered subset.
+ * @param isoDirs          Active mount points used by unmount.
+ * @param operation        Operation to dispatch.
+ * @param umountMvRmBreak  Requests a list refresh after destructive actions.
+ * @param filterHistory    Readline search-history state updated by the handler.
  */
 void processOperationForSelectedIsoFiles(const std::string& inputString,
                                          bool& isFiltered,
@@ -92,22 +85,17 @@ void processOperationForSelectedIsoFiles(const std::string& inputString,
 /**
  * @brief Parses and queues semicolon-delimited indices for batch processing.
  *
- * Separates "induction" input (e.g. `1 2 3;`) from direct commands so the user
- * can stage multiple indices into a pending queue without executing them
- * immediately.
+ * Recognizes input containing a semicolon and no forward slash, then appends
+ * the tokens before the first semicolon to the pending queue. Existing and
+ * newly supplied tokens are deduplicated; token validation occurs later when
+ * the batch is dispatched.
  *
- * - **Trigger:** requires a semicolon (@c ';').
- * - **Sanity check:** aborts if a forward slash (@c '/') is present, assuming
- *   the input is a direct path rather than an index list.
- * - **Deduplication:** an internal @c std::unordered_set ensures only unique
- *   indices are appended to @p pendingIndices.
- *
- * @param inputString           The raw line from @c readline.
- * @param[out] pendingIndices   Vector where unique staged tokens are appended.
- * @param[out] hasPendingProcess Set to true if at least one new index was queued.
- * @param[out] needsClrScrn     Signals the UI to refresh the updated queue.
- * @return true if the input was valid induction syntax and was queued; false
- *         if it should be treated as a standard command.
+ * @param inputString           Raw Readline input.
+ * @param[out] pendingIndices   Queue receiving unique tokens.
+ * @param[out] hasPendingProcess Set when the queue is non-empty.
+ * @param[out] needsClrScrn     Requests a redraw when the queue is updated.
+ * @return true when the input is accepted as induction syntax; false when it
+ *         should be handled by the normal command path.
  */
 bool handlePendingInduction(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& needsClrScrn) {
     if (inputString.find(';') == std::string::npos || inputString.find('/') != std::string::npos) {
@@ -154,15 +142,15 @@ bool handlePendingInduction(const std::string& inputString, std::vector<std::str
  * @brief Executes a batch operation by sanitizing and dispatching pending
  * indices.
  *
- * Sanitizes staged index tokens, serializes valid leading numeric/range
- * portions into a space-delimited string, and passes the result to the
- * supplied callback.
+ * Handles the exact "P" command when a pending queue exists. For each token,
+ * keeps only its leading numeric/range portion, joins the accepted portions
+ * with spaces, and passes the result to the callback.
  *
- * @param inputString     User command; must be exactly "P".
- * @param pendingIndices  Staged index tokens; not modified.
- * @param hasPendingProcess Whether a pending queue exists.
- * @param processBatch    Callback that executes the sanitized indices.
- * @return true if the batch was dispatched; false otherwise.
+ * @param inputString      User command; must be exactly "P".
+ * @param pendingIndices   Staged tokens; not modified.
+ * @param hasPendingProcess Whether a pending operation is recorded.
+ * @param processBatch     Callback receiving the sanitized index string.
+ * @return true if a non-empty batch was dispatched; false otherwise.
  */
 template <typename ProcessBatch>
 bool handlePendingProcess(const std::string& inputString,
@@ -291,11 +279,11 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  *   @c AtomicFlagGuard during the same block. For non-unmount operations,
  *   @c IsoListStateGuard restores @p isAtISOList to its prior value on scope
  *   exit.
- * - **Event-driven refresh:** a detached watcher thread shares the
- *   @c RefreshState (via @c std::shared_ptr). It is spawned only for
- *   non-unmount operations while an import is running, at most once per import
- *   session (guarded by @c isWatcherRunning), and redraws the list when the
- *   import thread signals completion via @c importCV.
+ * - **Event-driven refresh:** a detached watcher shares @c RefreshState via
+ *   @c std::shared_ptr. It is started only for non-unmount operations while an
+ *   import is running, at most once per session, and publishes a pending list
+ *   refresh when @c importCV signals completion. The main Readline thread
+ *   performs the actual redraw.
  * - **Stacked filtering:** supports successive narrowing via @c filteringStack.
  *   Reads/writes of @c filteredFiles and sizing evaluations are protected by
  *   @c GlobalMutexes::updateListMutex to avoid races with the watcher thread.
@@ -335,7 +323,7 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  * @param isAtISOList       Set to @c true while the ISO list is displayed
  *                          (non-unmount only); managed by the RAII guards
  *                          during operation execution. Also gates
- *                          watcher-thread repaints.
+ *                          watcher-thread refresh requests.
  * @param backgroundThreads Joinable worker threads (from manual R-press
  *                          imports), retained for lifetime management; stale
  *                          completed threads are joined and erased before each

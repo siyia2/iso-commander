@@ -786,54 +786,28 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 
 // ─── Live incremental filter preview ─────────────────────────────────────────
 //
-// History/motivation and the overall design are summarized inline below;
-// the invariants a reader must know are:
+// The preview is a temporary view of the list while the user edits the query;
+// it does not commit results or modify ctx.files/filteringStack. Enter still
+// uses applyFilterCore() as the single commit path.
 //
-//  - Every keystroke triggers rl_redisplay_function; we hook it to recompute
-//    matches for the in-progress (uncommitted) query and repaint the REAL
-//    list via printList(), right where it is already displayed.
-//  - The preview is ALWAYS rendered unpaginated (UnpaginatedScope sets
-//    ITEMS_PER_PAGE = 0 around the printList() call and restores it
-//    immediately). Committed (Enter) results keep normal pagination.
-//  - After a full printList() repaint, readline's screen cache is stale, so
-//    we call rl_forced_update_display() to redraw the prompt and in-progress
-//    line fresh. When the query is unchanged (cursor movement), plain
-//    rl_redisplay() suffices.
-//  - Purely visual until Enter: filteringStack and ctx.files are never
-//    permanently modified here. Enter runs the same commit path as before
-//    (applyFilterCore + saveQueryToHistory).
-//  - Zero-copy rendering: matches are computed as indices; printList()
-//    receives a StringListView over the source list, optionally narrowed by
-//    the matched indices. An empty query shows the whole source list with no
-//    allocation at all.
-//  - Search-corpus caching: the searched text (basename, unmount key, or
-//    raw path) and its lowercased form depend only on the source list and
-//    the name-only/unmount toggles — never the in-progress query — so both
-//    are built once per runFilterLoop() call (primeLivePreviewCaches) rather
-//    than rebuilt per keystroke.
-//  - Incremental narrowing: when the new query strictly extends the previous
-//    one ("is" -> "iso", or "iso" -> "iso&boot"), every match must already be
-//    in the previous match set, so only that set is re-tested
-//    (filterFilesIndicesSubset). Backspacing, pasting a different query, an
-//    empty query, or ';' (OR-ed) queries fall back to a full search. '&'
-//    (AND) queries qualify; negated ('!') queries never do, because
-//    extending a negated term widens the match set. A previous query ending
-//    in an unpaired backslash is not trusted as a prefix (see
-//    hasDanglingBackslash), since the next character may turn it into an
-//    escape.
+// Key invariants:
+//  - Matches are represented as indices and rendered through StringListView,
+//    avoiding copies of the source strings.
+//  - The preview is unpaginated. UnpaginatedScope restores ITEMS_PER_PAGE on
+//    every exit path, and PreviewStackGuard removes its temporary index map.
+//  - The searchable labels and lowercase corpus are cached once per prompt.
+//    The source list and name/unmount display modes remain stable until commit.
+//  - A strict query extension can reuse the previous matches only for a
+//    single OR-group without negation. Backspacing, edits, OR queries and
+//    negation require a full search; an incomplete trailing escape is not a
+//    safe prefix either.
+//  - After printList() repaints the screen, readline's display cache is stale,
+//    so the hook forces a prompt redraw. Unchanged query text uses normal
+//    redisplay (for example, when moving the cursor).
 //
-// Trade-offs:
-//  - Index tags: for a non-empty query the preview pushes a temporary
-//    filteringStack entry so printList() draws the "[123]^" original-index
-//    tags relative to the full list while typing. For an empty query nothing
-//    is pushed and printList() uses the real stack, so an already-committed
-//    filter's tags show as usual.
-//  - A full printList() per keystroke is heavier than a delta redraw and can
-//    flicker on slow terminals. Above LIVE_FILTER_LIMIT source items we skip
-//    live repainting entirely and fall back to Enter-only behavior.
-//  - The derived/lowercase caches are primed once per runFilterLoop() call
-//    and never refreshed mid-loop: the source list only changes on a
-//    successful commit, which immediately ends the loop.
+// Live repainting is disabled above LIVE_FILTER_LIMIT to avoid repeatedly
+// redrawing large lists. The prompt then retains the normal Enter-to-commit
+// behavior, while resize handling can still use the caller's repaint callback.
 
 namespace {
 
@@ -1249,41 +1223,23 @@ struct LivePreviewGuard {
 // ─── Interactive / quick filter driver ───────────────────────────────────────
 
 /**
- * @brief Runs an interactive filter session: shows the Filter prompt,
- * live-previews matches as the user types (when enabled), and commits the
- * filter on Enter.
+ * @brief Runs the interactive filter prompt and commits a query on Enter.
  *
- * Setup, done once per call: loads filter history, installs the live preview
- * hook (LivePreviewGuard), points the preview at the list this function would
- * search (same source-resolution rule as applyFilterCore), and primes the
- * derived/lowercase search caches. ctx.files is only reassigned on a
- * successful commit (inside applyFilterCore), and a successful commit
- * immediately breaks the loop, so none of that setup can change under the
- * loop while it runs.
+ * Live preview is enabled only when the caller supplies the required list
+ * rendering state and the source list is within LIVE_FILTER_LIMIT. Otherwise
+ * the prompt uses Enter-to-commit filtering. Each readline iteration resets
+ * incremental-preview state and installs a resize repaint appropriate to the
+ * current display mode.
  *
- * Loop, one readline() per iteration: the per-call incremental-narrowing
- * state (lastQuery / lastMatches / primed) is reset each time, and the
- * readline() is wrapped by readlineWithResize() so the list is repainted if
- * the terminal width changes while the prompt waits (the watcher lives only
- * for that call, so it never overlaps another prompt's watcher). The resize
- * repaint is paintLivePreviewFrame() on the current input while the live
- * preview is running, otherwise @c ctx.repaintList (the caller's normal-list
- * repaint), otherwise nothing. Then:
- *  - Esc as the first character, or EOF (Ctrl+D), cancels: history is
- *    cleared and the loop ends. If the preview repainted the screen,
- *    ctx.needsClrScrn is set so the caller redraws the normal paginated list
- *    instead of leaving the long unpaginated one behind.
- *  - Otherwise the entered text is committed via applyFilterCore. On success
- *    the query is saved to history, @p onSuccess runs and the loop ends; on
- *    failure (empty query or no matches) the prompt is shown again.
+ * Esc or EOF cancels the prompt. A preview that has repainted the list marks
+ * the screen for a normal paginated redraw before control returns. A failed
+ * commit (empty query or no matches) leaves the prompt active; a successful
+ * commit saves the query, invokes @p onSuccess and exits.
  *
- * @param promptText   The prompt text to display.
- * @param ctx          FilterContext containing state, including the optional
- *                     @c repaintList used for resize repaints.
- * @param onSuccess    Callback invoked when a filter is successfully applied.
- * @param onEmptyInput Optional callback for empty/cancelled input. Note: it
- *                     is currently bound but not invoked by the loop body;
- *                     cancellation is handled inline as described above.
+ * @param promptText   Prompt text passed to readlineWithResize().
+ * @param ctx          Filter context and optional normal-list resize callback.
+ * @param onSuccess    Callback invoked after a successful filter commit.
+ * @param onEmptyInput Retained callback parameter; currently not invoked.
  */
 static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
     const std::function<void()>& onSuccess,
@@ -1560,9 +1516,9 @@ void refreshFilteredSourceIndices(
 
 /**
  * @brief Core implementation shared by all filter entry points.
- * @details Validates the input string, builds the readline prompt, constructs
- * a @c FilterContext from @p cfg, then delegates to @c runFilterLoop. Returns
- * early without side effects if @p inputString is not @c "/".
+ * @details Handles only the exact "/" command. Builds the filter context,
+ * suppresses asynchronous list refreshes while the nested readline prompt
+ * owns the terminal, then delegates to @c runFilterLoop.
  *
  * While the nested FilterTerms prompt is active, pending asynchronous UI
  * refreshes (see @c GlobalState::g_pendingRefreshKind /
@@ -1579,10 +1535,9 @@ void refreshFilteredSourceIndices(
  * same suppression is what makes the live preview's temporary ITEMS_PER_PAGE
  * override (UnpaginatedScope) safe.
  *
- * The live main-list preview is opt-in: it is only wired up when @p cfg
- * supplies everything printList() needs (listType, pendingIndices,
- * hasPendingProcess and state); otherwise the prompt behaves as the classic
- * Enter-only filter.
+ * Live preview is opt-in: @p cfg must provide the list type, pending-selection
+ * state and shared refresh state required by printList(). Otherwise filtering
+ * remains Enter-to-commit only.
  *
  * @param inputString  Raw input from the user; must be exactly @c "/" to trigger filtering.
  * @param cfg          Configuration struct with all state pointers and display options.

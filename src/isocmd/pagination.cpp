@@ -26,12 +26,12 @@
 #include "../themes.h"
 #include "../verbose.h"
 
-void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool& isMount);
-
 /**
  * @file pagination.cpp
  * @brief Terminal pagination, navigation commands, and display toggles.
  */
+
+void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool& isMount);
 
 /**
  * @brief Processes standard navigation and help commands for the main

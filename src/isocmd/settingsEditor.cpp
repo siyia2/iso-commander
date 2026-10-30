@@ -58,16 +58,14 @@ bool flushCache(const std::string& configPath) {
 }
 
 /**
- * @brief Applies the configuration cache to the global runtime state.
+ * @brief Applies cached configuration values to the runtime state.
  *
- * Bridges the raw string g_configCache to the functional variables the app
- * actually uses (UI toggles, thread limits, skinning). Updates, in order:
- * thread caps and history limits, list-display toggles (full/compact,
- * filenames-only), skin and theme (via getskin() to refresh the color
- * palette), the default input color, pagination, and the live-filter limit.
- * Numeric settings that fail to parse keep their previous value.
+ * Updates thread and history limits, list-display options, the selected skin
+ * and theme, the default input color, pagination, and the live-filter limit.
+ * Changing the skin also refreshes the derived color palette. Numeric values
+ * that cannot be parsed leave the corresponding runtime setting unchanged.
  *
- * @param cache The key-value pairs to apply.
+ * @param cache Configuration key-value pairs to apply.
  */
 void applyConfigEffects(const std::map<std::string, std::string>& cache) {
     applyThreadCapsAndHistoryLimits(cache);
@@ -99,29 +97,24 @@ void helpSettingsEditor();
 void syncCache(const std::string& filePath);
 
 /**
- * @brief Launches the interactive TUI for configuration management.
+ * @brief Runs the interactive configuration editor.
  *
- * Menu-driven environment for viewing current settings, editing them by
- * index, or resetting the whole configuration to defaults.
+ * Displays settings grouped by section and lets the user edit entries by
+ * index or restore all defaults.
  *
- * - **Sectioning:** groups settings by the sections in
- *   CONFIG_ORDERED_DEFAULTS.
- * - **Input handling:** GNU Readline; supports single indices and tokenized
- *   multi-edits.
- * - **Validation:** delegated to editSetting per key.
- * - **Persistence:** synchronized with g_configCache; a full reset triggers
- *   an immediate flushCache on confirmation.
- * - **Cleanup (RAII):** a local SettingsGuard restores terminal keybindings
- *   on every exit path.
- * - **Signals:** SIGINT is ignored during the session.
- * - **Resize repaint:** the screen is drawn by a lambda (drawSettings) that
- *   runs once per iteration and is also passed to readlineWithResize() for
- *   both the main prompt and the reset confirmation prompt, so the screen
- *   repaints on terminal-width changes while a prompt waits. The lambda ends
- *   on the line after "Actions:", where each prompt's leading newline
- *   expects the cursor.
+ * - **Input:** GNU Readline accepts individual selections and tokenized
+ *   multi-selections; per-setting validation is handled by @c editSetting.
+ * - **Persistence:** edits update the in-memory cache and runtime state, then
+ *   attempt to write the configuration file. Resetting all settings follows
+ *   the same sequence after confirmation.
+ * - **Terminal cleanup:** a local RAII guard restores the settings-editor
+ *   keybindings on every exit path.
+ * - **Signals:** SIGINT is ignored while the editor is active.
+ * - **Resize handling:** the @c drawSettings renderer is reused by
+ *   @c readlineWithResize for both the main prompt and reset confirmation, so
+ *   the settings list is redrawn when the terminal width changes.
  *
- * @param configPath Path to the .conf file used for synchronization.
+ * @param configPath Configuration file used to load and save settings.
  */
 void interactiveConfigEditor(const std::string& configPath) {
     PendingReadlineTextClearGuard pendingTextGuard;
@@ -265,47 +258,31 @@ void interactiveConfigEditor(const std::string& configPath) {
 }
 
 /**
- * @brief Interactive CLI for modifying a single configuration setting.
+ * @brief Interactively edits one configuration setting.
  *
- * Shows the current value, the description, and a value hint. Loops until
- * valid input is received, the change is skipped, or the session is aborted.
+ * Displays the current value, its description, and valid-value guidance.
+ * Invalid input returns to the prompt; an empty input or unchanged value
+ * skips the edit.
  *
- * - **Key discovery:** looks up the ConfigEntry for metadata and defaults.
- * - **Dynamic UX:** context-aware hints for themes, skins, and numeric ranges.
- * - **Validation:** via the entry's validate lambda before acceptance.
- * - **Hot-reload:** updates g_configCache and immediately calls
- *   applyConfigEffects so changes take effect in the running session (e.g.
- *   instant theme switching).
- * - **Persistence:** via flushCache; on disk-write failure the user is told
- *   the change is "memory-only".
- * - **State refresh:** sortAfterFilenamesOnlyFlag is called when the
- *   filenames-only toggle changes.
- * - **Resize repaint:** drawEdit is the single renderer of the edit screen
- *   (it clears the screen internally, then prints everything up to the last
- *   hint line — it does not print the trailing blank line, since each caller
- *   supplies its own separator). It is used in three places:
- *   - as the repaint callback passed to readlineWithResize() for the value
- *     prompt, so a resize while the user is typing redraws the edit screen
- *     and Readline redraws the last prompt line and the typed input;
- *   - inside the invalid-value render lambda handed to
- *     pressEnterToTryWithRepaint(), so a resize during the "↵ to try again"
- *     wait redraws the edit screen above the "Invalid value: '…'" message;
- *   - inside the success render lambda handed to
- *     pressEnterToContinueWithRepaint(), so a resize during the "↵ to
- *     continue" wait redraws the edit screen above the "✓ Updated and
- *     saved…" / "Notice: …" message.
- *   In both *WithRepaint paths, the prompt's own SIGWINCH handling clears
- *   the screen and invokes the render lambda; no ListResizeWatcher is
- *   installed (it would race the prompt's handler and cannot fire during
- *   the raw read anyway). The edit screen is therefore preserved on resize
- *   in every phase, and the first frame is identical to the post-resize
- *   frame (render runs once at entry of pressEnterToImpl, producing the same
- *   layout the user sees on the initial draw).
+ * - **Metadata:** finds the matching @c ConfigEntry for its description,
+ *   default, and validation callback.
+ * - **Validation:** accepts a new value only when the entry's validator
+ *   approves it.
+ * - **Runtime update:** stores the accepted value in @c g_configCache and
+ *   calls @c applyConfigEffects immediately, so the change takes effect
+ *   without restarting the application.
+ * - **Persistence:** attempts to save the updated cache with @c flushCache.
+ *   If writing fails, the runtime change remains active but is memory-only.
+ * - **Display refresh:** changing @c filenames_only also calls
+ *   @c sortAfterFilenamesOnlyFlag.
+ * - **Resize handling:** @c drawEdit is reused for the value prompt and for
+ *   the invalid-value and success messages, keeping the edit screen visible
+ *   when the terminal is resized during either input or confirmation.
  *
- * @param configPath Path to the .conf file for persistence.
- * @param key        Configuration key to modify.
- * @return true if the setting was updated, matched the current value, or was
- *         skipped; false if the user aborted (Ctrl+D or Esc).
+ * @param configPath Configuration file used to persist the change.
+ * @param key        Configuration key to edit.
+ * @return true if the value was updated or the edit was skipped; false if the
+ *         user aborted with Ctrl+D or Esc.
  */
 bool editSetting(const std::string& configPath, const std::string& key) {
     auto tc = resolveOptionsTheme();

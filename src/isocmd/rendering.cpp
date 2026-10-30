@@ -31,11 +31,11 @@
 // ------------------------------------------------------------------------- //
 
 /**
- * @brief State shared by the watcher thread and the Readline event hook.
+ * @brief State shared by the resize-monitoring thread and Readline's event hook.
  *
- * The watcher thread only sets @ref pending. Everything that touches the terminal
- * or Readline (@ref tick) runs on the main thread, from the hook, where Readline's
- * globals (rl_line_buffer, rl_point, ...) can be used without a data race.
+ * The worker thread only detects width changes and sets @ref pending. Terminal
+ * output and Readline operations are handled by @ref tick on the main thread,
+ * where Readline's line-buffer and cursor state can be accessed safely.
  */
 struct ListResizeWatcher::Impl {
     explicit Impl(Repaint r) : repaint(std::move(r)), lastCols(terminalSize().cols) {}
@@ -50,8 +50,8 @@ struct ListResizeWatcher::Impl {
     bool                    stopRequested = false;
     std::thread             thread;
 
-    /// Polls the width every 100 ms and flags a change. A failed query keeps the
-    /// last good size (see terminalSize()), so it can never look like a resize.
+    /// Polls terminal width every 100 ms and marks changes for the main thread.
+    /// Failed size queries retain the last known dimensions.
     void loop() {
         constexpr auto kPoll = std::chrono::milliseconds(100);
         std::unique_lock<std::mutex> lk(m);
@@ -69,24 +69,23 @@ struct ListResizeWatcher::Impl {
         }
     }
 
-    /// Main thread: if a resize is pending, repaint the list and restore the prompt.
+    /// Runs from Readline's event hook on the main thread. Repaints the list
+    /// after a resize, updates Readline's screen dimensions, and restores the prompt.
     void tick() {
         if (!pending.exchange(false, std::memory_order_acquire)) return;
 
         const TermSize sz = terminalSize();
         if (sz.cols == 0 || sz.rows == 0) return;
 
-        // Keep Readline's own wrapping in step with the layout painted below.
+        // Keep Readline's wrapping in sync with the dimensions used by the list renderer.
         rl_set_screen_size(static_cast<int>(sz.rows), static_cast<int>(sz.cols));
 
-        // The callback re-runs the normal list display step (it must not throw
-        // through Readline's C frames).
+        // The repaint callback performs the normal list display step. Prevent
+        // exceptions from propagating through Readline's C call stack.
         try { repaint(); } catch (...) {}
 
-        // Normal layout: the list ends, one blank line, then the prompt line. The
-        // callback leaves the cursor where the list display step does; this newline
-        // is the blank line. Readline then redraws the prompt's last line plus
-        // whatever the user had typed, cursor position included.
+        // Leave a blank line after the list, then let Readline redraw the prompt
+        // and the current input, including its cursor position.
         std::cout << '\n' << std::flush;
         rl_on_new_line();
         rl_redisplay();
@@ -95,13 +94,12 @@ struct ListResizeWatcher::Impl {
 
 namespace {
 
-/// The watcher the event hook serves. Main thread only (set in the constructor,
-/// cleared in stop(), read from the hook, all on the thread that runs readline()).
+/// Active watcher used by the Readline event hook. Accessed only on the
+/// thread running Readline; set during construction and cleared by stop().
 ListResizeWatcher::Impl* g_activeListWatcher = nullptr;
 
-/// `rl_event_hook`: repaint if a resize is pending, then chain to the previous
-/// hook (e.g. the pending-refresh hook) so it keeps working while a watcher is
-/// active.
+/// Handles pending resize repainting, then invokes the hook that was installed
+/// before this watcher so other Readline event processing remains active.
 int listResizeHook() {
     ListResizeWatcher::Impl* w = g_activeListWatcher;
     if (!w) return 0;
