@@ -1276,6 +1276,11 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 std::cout << "\033[H\033[2J";
                 std::cout << promptHeaderForRepaint(devicePrompt);
                 std::cout << "\n";   // separator between device prompt and warning
+            } else {
+                // Initial draw: device prompt is already on screen; add the
+                // same extra blank line so the layout matches the repaint path.
+                std::cout << "\n";
+                widths.push_back(0);
             }
 
             std::cout << wt.colorWarning << "WARNING: This will "
