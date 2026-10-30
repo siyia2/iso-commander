@@ -121,17 +121,14 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
     }
 
     if (isEmpty) {
-        // Message + wait. The message is fixed at this point; the repaint
-        // lambda only reprints it. No side effects run inside it.
         auto render = [&] {
             const PrintListTheme c = getListColors();
             SyncOutput sync;
             clearScrollBuffer();
-            std::cout << c.num << "ISO database is empty. Choose 'ImportISO' from the Main Menu."
+            std::cout << c.num << "\nISO database is empty. Choose 'ImportISO' from the Main Menu."
                       << c.dir << "\n";
         };
 
-        ListResizeWatcher watcher(render);
         pressEnterToReturnWithRepaint(render);
         return false;
     }
@@ -235,7 +232,6 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
                       << reset << "\n";
         };
 
-        ListResizeWatcher watcher(render);
         pressEnterToReturnWithRepaint(render);
 
         std::vector<std::string>().swap(lastSortedDirs);
