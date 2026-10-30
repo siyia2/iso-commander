@@ -214,28 +214,6 @@ void pressEnterTo(const std::string& prompt) {
 }
 
 /**
- * @brief Waits for Enter, Esc or Ctrl+D before allowing another attempt.
- *
- * Shows "\u21B5 to try again...".
- */
-void pressEnterToTry()      { pressEnterTo("\u21B5 to try again..."); }
-
-/**
- * @brief Waits for Enter, Esc or Ctrl+D before returning to the previous menu
- * or state.
- *
- * Shows "\u21B5 to return...".
- */
-void pressEnterToReturn()   { pressEnterTo("\u21B5 to return..."); }
-
-/**
- * @brief Waits for Enter, Esc or Ctrl+D before continuing.
- *
- * Shows "\u21B5 to continue...".
- */
-void pressEnterToContinue() { pressEnterTo("\u21B5 to continue..."); }
-
-/**
  * @brief Like pressEnterTo(), but @p repaint is called to redraw the
  *        caller's content on resize, so the screen is fully restored instead
  *        of just the prompt.
