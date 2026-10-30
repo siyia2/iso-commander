@@ -36,6 +36,11 @@
  * The previously installed @c rl_event_hook (for example @c checkPendingRefresh) is
  * chained, not replaced, and is restored when the watcher stops.
  *
+ * @note The watcher itself does not touch Readline's @c rl_catch_sigwinch. If you
+ *       construct it directly and want to avoid the double redraw described under
+ *       @ref readlineWithResize, disable @c rl_catch_sigwinch yourself around the
+ *       watcher's lifetime. @ref readlineWithResize does this for you.
+ *
  * @par Repaint callback contract
  * The callback must redraw the screen exactly like the normal display step before the
  * prompt does (clearing the screen first) and leave the cursor on the line after the
@@ -104,6 +109,16 @@ using RlLine = std::unique_ptr<char, decltype(&std::free)>;
  * terminal width changes while the prompt waits. The watcher is stopped and the
  * previous @c rl_event_hook restored before this returns.
  *
+ * Readline's own SIGWINCH handling (@c rl_catch_sigwinch) is DISABLED for the
+ * watcher's lifetime and restored before this returns. The watcher already redraws
+ * on resize; leaving Readline's built-in SIGWINCH handler enabled makes it call
+ * @c rl_resize_terminal() -> @c rl_forced_update_display() -> @c rl_redisplay_function()
+ * on the same event, racing the watcher's redraw and painting the prompt twice (most
+ * visibly when the repaint callback does direct terminal I/O that leaves Readline's
+ * internal cursor bookkeeping stale, e.g. a full @c printList() repaint).
+ * The previous value is restored on every exit path, including exceptions from the
+ * watcher constructor (RAII guard below).
+ *
  * @param prompt  Prompt passed to @c readline() (may contain \001/\002 markers).
  * @param repaint Repaint callback (see @ref ListResizeWatcher for the contract).
  *                Empty means a plain @c readline() with no watcher and no thread.
@@ -116,6 +131,18 @@ inline RlLine readlineWithResize(const std::string& prompt,
         line.reset(readline(prompt.c_str()));
         return line;
     }
+
+    // Suppress Readline's own SIGWINCH redraw for the watcher's lifetime so a
+    // resize triggers exactly one redraw (the watcher's). Restore on every
+    // exit path, including if the watcher constructor throws.
+    struct SigwinchGuard {
+        int saved;
+        SigwinchGuard() : saved(rl_catch_sigwinch) { rl_catch_sigwinch = 0; }
+        ~SigwinchGuard() { rl_catch_sigwinch = saved; }
+        SigwinchGuard(const SigwinchGuard&)            = delete;
+        SigwinchGuard& operator=(const SigwinchGuard&) = delete;
+    } guard;
+
     ListResizeWatcher watcher(std::move(repaint));   // stopped when this scope ends
     line.reset(readline(prompt.c_str()));
     return line;
