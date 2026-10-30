@@ -418,7 +418,7 @@ void selectForIsoFiles(const std::string& operation,
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState))
                     break;
             }
-            std::cout << "\n\n";
+            std::cout << "\n\n" << std::flush;
             umountMvRmBreak = false;
         }
 
@@ -721,7 +721,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             loadAndDisplayImageFiles(files, fileType, need2Sort, isFiltered, list,
                                      pendingIndices, hasPendingProcess, currentPage,
                                      state);
-            std::cout << "\n\n";
+            std::cout << "\n\n" << std::flush;;
         }
 
         std::cout << "\033[2A\033[K";

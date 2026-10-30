@@ -149,8 +149,17 @@ namespace {
                 break;
             }
             if (n == 0) break;
-            if (ch == '\n' || ch == '\r' || ch == 4 || ch == 27) done = true;
-        }
+            if (ch == '\n' || ch == '\r' || ch == 4) done = true;
+                else if (ch == 27) {
+                    done = true;
+                    // swallow the tail of an arrow-key / function-key sequence
+                    struct pollfd p{ STDIN_FILENO, POLLIN, 0 };
+                    while (poll(&p, 1, 20) > 0) {
+                        char junk;
+                        if (read(STDIN_FILENO, &junk, 1) <= 0) break;
+                    }
+                }
+            }
 
         tcflush(STDIN_FILENO, TCIFLUSH);
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved);
@@ -755,7 +764,7 @@ void verboseImageSearchResults(const std::string& fileExtension,
                           const std::vector<std::string>& files,
                           const std::chrono::high_resolution_clock::time_point& start_time,
                           std::unordered_set<std::string>& processedErrorsFind,
-                          std::vector<std::string>& directoryPaths,
+                          const std::vector<std::string>& directoryPaths,
                           const std::atomic<size_t>& totalFiles,
                           const std::function<void()>& repaintCallerHeader) {
     signal(SIGINT, SIG_IGN);
