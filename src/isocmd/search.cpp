@@ -200,7 +200,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             }
 
             if (input == "*stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter") {
-                databaseSwitches(input);
+                databaseSwitches(input, repaintCallerPrompt);
                 continue;
             }
 
@@ -514,59 +514,61 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
  * @param modeChd Select CHD cache mode (mutually exclusive).
  * @param modeDaa Select DAA/GBI cache mode (mutually exclusive).
  */
-void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
+void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa,
+                   const std::function<void()>& repaintHeader) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
     const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
-    std::vector<std::string> extensions;
     std::string cacheType;
     bool cacheIsEmpty = false;
 
     if (modeDaa) {
-        extensions = {".daa", ".gbi"};
         cacheType = "DAA/GBI";
         cacheIsEmpty = GlobalState::daaGbiFilesCache.empty();
         if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::daaGbiFilesCache);
     } else if (modeChd) {
-        extensions = {".chd"};
         cacheType = "CHD";
         cacheIsEmpty = GlobalState::chdFilesCache.empty();
         if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::chdFilesCache);
     } else if (modeMdf) {
-        extensions = {".mdf"};
         cacheType = "MDF";
         cacheIsEmpty = GlobalState::mdfMdsFilesCache.empty();
         if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::mdfMdsFilesCache);
     } else if (modeNrg) {
-        extensions = {".nrg"};
         cacheType = "NRG";
         cacheIsEmpty = GlobalState::nrgFilesCache.empty();
         if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::nrgFilesCache);
     } else {
-        extensions = {".bin", ".img"};
         cacheType = "BIN/IMG";
         cacheIsEmpty = GlobalState::binImgFilesCache.empty();
         if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::binImgFilesCache);
     }
 
-    auto render = [&, cacheType, cacheIsEmpty] {
-        SyncOutput sync;
-        clearScrollBuffer();
+    bool firstDraw = true;
 
-        if (cacheIsEmpty) {
-            std::cout << "\n" << dt.yellow << cacheType
-                      << " cache is empty. Nothing to clear.\033[J"
-                      << dt.reset << "\n";
-        } else {
-            std::cout << "\n" << dt.green << cacheType
-                      << " cache cleared.\033[J"
-                      << dt.reset << "\n";
-        }
-    };
+        auto render = [&, cacheType, cacheIsEmpty] {
+            SyncOutput sync;
 
-    render();
+            // First draw: the prompt is still on screen. Later draws
+            // (resize repaints) come after a clear, so redraw the header.
+            if (!firstDraw && repaintHeader) repaintHeader();
+            firstDraw = false;
+
+            if (cacheIsEmpty) {
+                std::cout << "\n" << dt.yellow << cacheType
+                          << " cache is empty. Nothing to clear.\033[J"
+                          << dt.reset << "\n";
+            } else {
+                std::cout << "\n" << dt.green << cacheType
+                          << " cache cleared.\033[J"
+                          << dt.reset << "\n";
+            }
+        };
+
+
+    // The helper draws on entry, so no direct render() call here
     pressEnterToContinueWithRepaint(render);
 
     clearScrollBuffer();
@@ -905,18 +907,20 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
  * @return true if @p input was handled as a special command, false otherwise.
  */
 bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
-                                                  bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa,
-                                                  const std::string& fileExtension,
-                                                  std::vector<std::string>& files, const std::string& fileType,
-                                                  bool& list,
-                                                  std::shared_ptr<RefreshState> state) {
+                                                 bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa,
+                                                 const std::string& fileExtension,
+                                                 std::vector<std::string>& files,
+                                                 const std::string& fileType,
+                                                 bool& list,
+                                                 std::shared_ptr<RefreshState> state,
+                                                 const std::function<void()>& repaintHeader) {
 
     if (input == "*stats") {
         displayDatabaseStatistics(GlobalState::databaseFilePath, GlobalState::maxDatabaseSize);
         return true;
     }
     if (input == "!clr_paths" || input == "!clr_filter") {
-        clearHistory(input);
+        clearHistory(input, repaintHeader);
         return true;
     }
     if (input == "?") {
@@ -925,7 +929,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
         return true;
     }
     if (input == "!clr") {
-        clearRamCache(modeMdf, modeNrg, modeChd, modeDaa);
+        clearRamCache(modeMdf, modeNrg, modeChd, modeDaa, repaintHeader);
         return true;
     }
     if (input == "ls") {
@@ -1107,7 +1111,8 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         bool list = false;
 
         if (dispatchSpecialCommandForBinImgMdfNrgSearch(inputSearch, modeMdf, modeNrg, modeChd, modeDaa,
-                                   fileExtension, files, fileType, list, state))
+                                   fileExtension, files, fileType, list, state,
+                                   repaintCallerPrompt))
             continue;
 
         std::cout << " \n\033[3H\033[J\n";

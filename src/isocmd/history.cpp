@@ -217,7 +217,8 @@ void saveHistory(bool& filterHistory) {
  *
  * @param inputSearch The command string ("!clr_paths" or "!clr_filter").
  */
-void clearHistory(const std::string& inputSearch) {
+void clearHistory(const std::string& inputSearch,
+                  const std::function<void()>& repaintHeader) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
@@ -240,17 +241,22 @@ void clearHistory(const std::string& inputSearch) {
         return;
     }
 
+    // First draw: the prompt is still on screen. Later draws
+    // (resize repaints) come after a clear, so redraw the header.
+    bool firstDraw = true;
+
     std::ofstream ofs(filePath, std::ofstream::out | std::ofstream::trunc);
     if (!ofs) {
         auto render = [&] {
             SyncOutput sync;
-            clearScrollBuffer();
+            if (!firstDraw && repaintHeader) repaintHeader();
+            firstDraw = false;
+
             std::cerr << "\n" << (hc.error)
                       << "Error clearing " << historyType << " database: "
                       << (hc.warning) << "'" << filePath << "'"
                       << (hc.error) << ". File missing or inaccessible.\033[J" << std::endl;
         };
-        render();
         pressEnterToContinueWithRepaint(render);
     } else {
         ofs.close();
@@ -258,11 +264,12 @@ void clearHistory(const std::string& inputSearch) {
 
         auto render = [&] {
             SyncOutput sync;
-            clearScrollBuffer();
+            if (!firstDraw && repaintHeader) repaintHeader();
+            firstDraw = false;
+
             std::cout << "\n" << (hc.highlight)
                       << historyType << " database cleared successfully.\033[J" << std::endl;
         };
-        render();
         pressEnterToContinueWithRepaint(render);
     }
 }

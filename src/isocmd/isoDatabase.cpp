@@ -682,7 +682,7 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
  *
  * @param inputSearch Command string to process.
  */
-void databaseSwitches(std::string& inputSearch) {
+void databaseSwitches(std::string& inputSearch, const std::function<void()>& repaintHeader) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
@@ -720,7 +720,7 @@ void databaseSwitches(std::string& inputSearch) {
             std::vector<std::string>().swap(GlobalState::globalIsoFileList);
         }
     } else if (inputSearch == "!clr_paths" || inputSearch == "!clr_filter") {
-        clearHistory(inputSearch);
+        clearHistory(inputSearch, repaintHeader);
     }
     return;
 }
