@@ -418,6 +418,10 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
  * copies its contents into @p files; if the selected cache is empty, displays
  * a message, waits for input, and clears @p files.
  *
+ * If the cache is empty, the message screen is repainted through
+ * @p repaintPrompt on a terminal resize, so the prompt header and the line
+ * the user typed stay visible above the message.
+ *
  * @param files             Receives the selected cache contents.
  * @param list              Enables listing and its user interaction.
  * @param fileExtension     Format label used in the empty-cache message.
@@ -430,6 +434,9 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
  * @param modeNrg           Selects the NRG cache.
  * @param modeChd           Selects the CHD cache.
  * @param modeDaa           Selects the DAA/GBI cache.
+ * @param repaintHeader     Optional callback that prints the prompt header and
+ *                          typed line; invoked only on resize repaints, not on
+ *                          the first draw.
  */
 void ramCacheList(std::vector<std::string>& files, bool& list, const std::string& fileExtension,
                   const std::vector<std::string>& binImgFilesCache,
@@ -437,7 +444,8 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
                   const std::vector<std::string>& nrgFilesCache,
                   const std::vector<std::string>& chdFilesCache,
                   const std::vector<std::string>& daaGbiFilesCache,
-                  bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa) {
+                  bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa,
+                  const std::function<void()>& repaintHeader) {
 
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
@@ -458,15 +466,19 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
     }
 
     if (isEmpty && list) {
+        bool firstDraw = true;
+
         auto render = [&] {
             SyncOutput sync;
-            clearScrollBuffer();
+
+            if (!firstDraw && repaintHeader) repaintHeader();
+            firstDraw = false;
+
             std::cout << "\n" << dt.yellow << "No cached " << fileExtension
                       << " entries to display.\033[J"
                       << dt.reset << "\n";
         };
-
-        pressEnterToReturnWithRepaint(render);
+        pressEnterToContinueWithRepaint(render);
 
         files.clear();
 
@@ -891,7 +903,7 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
         list = true;
         ramCacheList(files, list, fileExtension,
                      GlobalState::binImgFilesCache, GlobalState::mdfMdsFilesCache, GlobalState::nrgFilesCache, GlobalState::chdFilesCache, GlobalState::daaGbiFilesCache,
-                     modeMdf, modeNrg, modeChd, modeDaa);
+                     modeMdf, modeNrg, modeChd, modeDaa, repaintHeader);
         if (!files.empty())
             selectForImageFiles(fileType, files, list, state);
         return true;
