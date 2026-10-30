@@ -454,7 +454,6 @@ void processInputForConversions(const std::string& input,
                       << "No valid input provided." << UI::Palette::BoldReset << "\n";
         };
 
-        ListResizeWatcher watcher(render);
         pressEnterToReturnWithRepaint(render);
         return;
     }
