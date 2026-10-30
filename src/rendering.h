@@ -22,42 +22,43 @@
 // Third-Party Library Headers
 #include <readline/readline.h>
 
-/**
- * @brief RAII guard that brackets a terminal repaint in DEC mode 2026
- *        (synchronized output).
- *
- * Writes `CSI ? 2026 h` on construction and `CSI ? 2026 l` on destruction,
- * so every `std::cout` write between the two is held by the terminal
- * emulator and presented as a single atomic frame. Terminals that do not
- * implement 2026 ignore the sequences as no-ops (per the VT spec unknown
- * DEC private modes are dropped), and every emulator that does implement
- * it has a watchdog (~1 s) that auto-commits if the matching `l` never
- * arrives — so a throwing code path between construction and destruction
- * cannot leave the terminal permanently frozen, only briefly stalled.
- *
- * The destructor flushes because the commit only happens when the closing
- * sequence reaches the terminal — a buffered `?2026l` is not a commit.
- *
- * Non-copyable and non-movable: one guard owns one envelope. Do not nest
- * two `SyncOutput` objects around code that mixes `std::cout` and
- * `std::cerr` — `std::cerr` is unbuffered and unitbuf, so a nested
- * envelope can split the frame and reorder the two streams.
- */
-struct SyncOutput {
-    SyncOutput()  { std::cout << "\033[?2026h"; }
-    ~SyncOutput() { std::cout << "\033[?2026l" << std::flush; }
-
-    SyncOutput(const SyncOutput&)            = delete;
-    SyncOutput& operator=(const SyncOutput&) = delete;
-};
-
 namespace {
-    /// Wrap each frame in "synchronized output" (DEC mode 2026) to eliminate tearing.
-    /// Terminals that don't support it silently ignore the sequences.
+    /// Synchronized-output (DEC mode 2026) control sequences, kept as named
+    /// constants so callers that write the sequences by hand stay in sync
+    /// with @ref SyncOutput.
     constexpr bool             kUseSynchronizedOutput = true;
     constexpr std::string_view kSyncBegin             = "\033[?2026h";
     constexpr std::string_view kSyncEnd               = "\033[?2026l";
 }
+
+/**
+ * @brief RAII guard that brackets a terminal repaint in DEC mode 2026
+ *        (synchronized output).
+ *
+ * Writes @ref kSyncBegin (`CSI ? 2026 h`) on construction and @ref kSyncEnd
+ * (`CSI ? 2026 l`) on destruction, so every `std::cout` write between the two
+ * is held by the terminal emulator and presented as a single atomic frame.
+ * Terminals that do not implement mode 2026 typically ignore the sequences
+ * (or, on a few, print them literally); every emulator that does implement it
+ * has a watchdog (~1 s) that auto-commits if the matching `l` never arrives,
+ * so a throwing code path between construction and destruction cannot leave
+ * the terminal permanently frozen — only briefly stalled.
+ *
+ * The destructor flushes, because the commit only happens when the closing
+ * sequence actually reaches the terminal; a buffered `?2026l` is not a commit.
+ *
+ * Non-copyable and non-movable: one guard owns one envelope. Do not nest two
+ * `SyncOutput` objects around code that mixes `std::cout` and `std::cerr`:
+ * `std::cerr` is `unitbuf` and tied to `std::cout`, so a nested envelope can
+ * split the frame and reorder the two streams.
+ */
+struct SyncOutput {
+    SyncOutput()  { std::cout << kSyncBegin; }
+    ~SyncOutput() { std::cout << kSyncEnd << std::flush; }
+
+    SyncOutput(const SyncOutput&)            = delete;
+    SyncOutput& operator=(const SyncOutput&) = delete;
+};
 
 // ------------------------------------------------------------------------- //
 // Terminal width helpers                                                     //
@@ -66,16 +67,9 @@ namespace {
 /**
  * @brief Terminal size in columns and rows; {0, 0} if it has never been known.
  *
- * Queries @c TIOCGWINSZ on stdout. On success the size is remembered; if a later
- * query fails or reports a zero dimension (detached or transiently resized pty),
- * the last known good size is returned instead, so a transient failure never
- * changes the layout and is never mistaken for a resize. Until the first success
- * (e.g. output is redirected, not a tty) the result is {0, 0}, which callers
- * treat as "no limit": rows are printed unclipped.
- *
- * The remembered size is one packed atomic (cols << 32 | rows), so a reader never
- * sees a torn pair. It is read by the main thread, by the Readline event hook and
- * by the ListResizeWatcher thread.
+ * Produced by @ref terminalSize. @c cols and @c rows are both @c std::size_t
+ * copies of the @c winsize fields (`unsigned short` on POSIX), so each always
+ * fits in 32 bits and the packed representation described there is lossless.
  */
 struct TermSize { std::size_t cols; std::size_t rows; };
 
@@ -97,10 +91,10 @@ struct TermSize { std::size_t cols; std::size_t rows; };
  *
  * @par Thread safety
  * The remembered size is one packed @c std::atomic<uint64_t>
- * (@c cols @c << @c 32 @c | @c rows), so concurrent readers never observe a
- * torn (cols from one query, rows from another) pair. The function is safe to
- * call from the main thread, from the Readline event hook and from the
- * ListResizeWatcher thread.
+ * (`cols << 32 | rows`), so concurrent readers never observe a torn pair
+ * (cols from one query, rows from another). The function is safe to call from
+ * the main thread, from the Readline event hook, and from the
+ * @ref ListResizeWatcher polling thread.
  *
  * @return The current size as @c {cols, rows}, or the last known good size if
  *         the query fails; @c {0, 0} if no successful query has happened yet.
@@ -132,16 +126,21 @@ inline std::size_t terminalColumns() { return terminalSize().cols; }
  * @brief Visible columns of a string that may contain ANSI CSI escapes.
  *
  * Counts UTF-8 code points as 1 column each and ANSI CSI escape sequences
- * (ESC @c [ … final byte in 0x40..0x7E) as 0 columns, so the result matches
+ * (`ESC [ … final byte in 0x40..0x7E`) as 0 columns, so the result matches
  * what a terminal would actually render. Continuation bytes (top two bits
- * @c 10) are skipped, so a multi-byte codepoint such as "…" counts once.
+ * @c 10) are skipped, so a multi-byte code point such as "…" counts once.
  *
  * This is a code-point count, not full Unicode display width: East-Asian
  * wide characters (CJK, emoji) are counted as 1 column even though terminals
- * render them as 2. Correct for the ASCII and common Latin-1 text this file
- * measures.
+ * usually render them as 2. It is correct for the ASCII and common Latin-1
+ * text this file measures.
  *
- * @param s    String to measure, possibly containing ANSI escapes and UTF-8.
+ * Only CSI sequences are recognised. Other escape sequences — for example
+ * OSC (`ESC ] … BEL`), two-character escapes such as `ESC c`, or SGR runs
+ * split across writes — are not parsed: their bytes are counted as ordinary
+ * visible characters. Keep input to CSI-only text if exact widths matter.
+ *
+ * @param s    String to measure, possibly containing ANSI CSI escapes and UTF-8.
  * @param from Byte offset at which to start measuring (e.g. after a prefix
  *             that must not count). Bytes before @p from are ignored.
  * @return Number of visible columns @c s[from..] occupies.
@@ -166,9 +165,9 @@ inline std::size_t visibleWidthFrom(const std::string& s, std::size_t from) {
  * @brief Visible columns of a plain UTF-8 string.
  *
  * Counts UTF-8 code points as 1 column each, skipping continuation bytes
- * (top two bits @c 10). No escape parsing is performed: the input is
- * assumed to be plain text (e.g. a prompt or a filename), so an embedded
- * ESC byte would be counted as an ordinary character.
+ * (top two bits @c 10). No escape parsing is performed: the input is assumed
+ * to be plain text (e.g. a prompt or a filename), so an embedded `ESC` byte
+ * would be counted as an ordinary character.
  *
  * For strings that may contain ANSI CSI escapes, use @ref visibleWidthFrom.
  *
@@ -212,20 +211,23 @@ inline std::string_view tailColumns(std::string_view s, std::size_t cols) noexce
 }
 
 /**
- * @brief Cuts the row that starts at out[from] to at most @p maxCols visible columns.
+ * @brief Cuts the row that starts at @c out[from] to at most @p maxCols
+ *        visible columns.
  *
- * Last line of defence against wrapping. If the row is wider than @p maxCols it is
- * cut in place so that it ends with "…" and occupies exactly @p maxCols columns.
- * ANSI CSI escapes before the cut are kept (callers append their own reset
- * afterwards); a multi-byte character is never split. A row that already fits is
- * left untouched. @p maxCols below 2 leaves the row alone (no room for even one
- * character and "…").
+ * Last line of defence against wrapping. If the row is wider than @p maxCols
+ * it is cut in place so that it ends with "…" and occupies exactly
+ * @p maxCols columns. ANSI CSI escapes before the cut are kept; any escape
+ * sequence that would have appeared after the cut is dropped along with the
+ * text it belonged to (callers append their own reset afterwards). A
+ * multi-byte character is never split. A row that already fits is left
+ * untouched. @p maxCols below 2 leaves the row alone (there is no room for
+ * even one character plus "…").
  */
 inline void fitRowToWidth(std::string& out, std::size_t from, std::size_t maxCols) {
     if (maxCols < 2) return;
 
     std::size_t w = 0;
-    std::size_t cutAt = std::string::npos;   // offset just before the maxCols-th visible char
+    std::size_t cutAt = std::string::npos;   // offset just before the (maxCols)th visible char
 
     for (std::size_t i = from; i < out.size(); ) {
         const unsigned char c = static_cast<unsigned char>(out[i]);
@@ -249,39 +251,47 @@ inline void fitRowToWidth(std::string& out, std::size_t from, std::size_t maxCol
 }
 
 /**
- * @brief Repaints a screen when the terminal width changes while a Readline prompt waits.
+ * @brief Repaints a screen when the terminal width changes while a Readline
+ *        prompt waits.
  *
- * Construct it immediately before @c readline() and let it go out of scope immediately
- * after (or use @ref readlineWithResize, which does exactly that). While it exists:
- * - a background thread polls the terminal width every 100 ms (a failed or zero-sized
- *   query keeps the last known good size, so it is never mistaken for a resize) and only
- *   raises a flag;
- * - an @c rl_event_hook, which Readline calls from its idle loop on the calling thread,
- *   sees the flag, wipes and redraws the screen through the callback, then calls
- *   @c rl_on_new_line() + @c rl_redisplay() so the prompt and any half-typed input come
- *   back. All terminal and Readline access therefore stays on that one thread.
+ * Construct it immediately before @c readline() and let it go out of scope
+ * immediately after (or use @ref readlineWithResize, which does exactly that).
+ * While it exists:
+ * - a background thread polls the terminal width every 100 ms (a failed or
+ *   zero-sized query keeps the last known good size, so it is never mistaken
+ *   for a resize) and only raises a flag;
+ * - an @c rl_event_hook, which Readline calls from its idle loop on the
+ *   calling thread, sees the flag, wipes and redraws the screen through the
+ *   callback, then calls @c rl_on_new_line() + @c rl_redisplay() so the
+ *   prompt and any half-typed input come back. All terminal and Readline
+ *   access therefore stays on that one thread.
  *
- * The previously installed @c rl_event_hook (for example @c checkPendingRefresh) is
- * chained, not replaced, and is restored when the watcher stops.
+ * The previously installed @c rl_event_hook (for example
+ * @c checkPendingRefresh) is chained, not replaced, and is restored when the
+ * watcher stops.
  *
- * @note The watcher itself does not touch Readline's @c rl_catch_sigwinch. If you
- *       construct it directly and want to avoid the double redraw described under
- *       @ref readlineWithResize, disable @c rl_catch_sigwinch yourself around the
- *       watcher's lifetime. @ref readlineWithResize does this for you.
+ * @note The watcher itself does not touch Readline's @c rl_catch_sigwinch.
+ *       If you construct it directly and want to avoid the double redraw
+ *       described under @ref readlineWithResize, disable @c rl_catch_sigwinch
+ *       yourself around the watcher's lifetime. @ref readlineWithResize does
+ *       this for you.
  *
  * @par Repaint callback contract
- * The callback must redraw the screen exactly like the normal display step before the
- * prompt does (clearing the screen first) and leave the cursor on the line after the
- * last content line, ONE LINE SHORT of the blank line that precedes the prompt's last
- * line: the watcher prints that '\n' itself. Concretely:
+ * The callback must redraw the screen exactly like the normal display step
+ * before the prompt does (clearing the screen first) and leave the cursor on
+ * the line after the last content line, ONE LINE SHORT of the blank line that
+ * precedes the prompt's last line: the watcher prints that '\n' itself.
+ * Concretely:
  * - prompt starts with "\n": the callback ends after the last content line;
- * - prompt has no leading "\n" but the normal draw prints a blank line: the callback
- *   omits that blank line (the normal path prints it after the same draw);
- * - prompt carries its own header line(s) before a final '\n': the callback re-prints
- *   them without the trailing '\n' (see @ref promptHeaderForRepaint).
+ * - prompt has no leading "\n" but the normal draw prints a blank line: the
+ *   callback omits that blank line (the normal path prints it after the same
+ *   draw);
+ * - prompt carries its own header line(s) before a final '\n': the callback
+ *   re-prints them without the trailing '\n' (see @ref promptHeaderForRepaint).
  *
- * It runs on the Readline thread, must not call @c readline(), must have no side effects
- * beyond drawing (no thread spawns, no state advance), and should not throw.
+ * It runs on the Readline thread, must not call @c readline(), must have no
+ * side effects beyond drawing (no thread spawns, no state advance), and
+ * should not throw.
  *
  * @par Example
  * @code
@@ -291,9 +301,8 @@ inline void fitRowToWidth(std::string& out, std::size_t from, std::size_t maxCol
  * RlLine line = readlineWithResize(prompt, repaint);   // watcher lives only for this call
  * @endcode
  *
- * @note Only one watcher may be active at a time. The implementation lives in
- *       printList.cpp because it uses that file's @c terminalSize() helper.
- * @see readlineWithResize, ConsoleResizeWatcher
+ * @note Only one watcher may be active at a time.
+ * @see readlineWithResize
  */
 class ListResizeWatcher {
 public:
@@ -318,8 +327,8 @@ public:
     /**
      * @brief Stops the thread and uninstalls the hook, restoring the previous one.
      *
-     * Safe to call more than once. The hook is only restored if it is still ours,
-     * so a hook installed by someone else in the meantime is left alone.
+     * Safe to call more than once. The hook is only restored if it is still
+     * ours, so a hook installed by someone else in the meantime is left alone.
      */
     void stop();
 
@@ -333,19 +342,20 @@ using RlLine = std::unique_ptr<char, decltype(&std::free)>;
 /**
  * @brief @c readline() wrapped in a @ref ListResizeWatcher.
  *
- * Runs @p repaint (on the calling thread, from Readline's idle hook) whenever the
- * terminal width changes while the prompt waits. The watcher is stopped and the
- * previous @c rl_event_hook restored before this returns.
+ * Runs @p repaint (on the calling thread, from Readline's idle hook) whenever
+ * the terminal width changes while the prompt waits. The watcher is stopped
+ * and the previous @c rl_event_hook restored before this returns.
  *
  * Readline's own SIGWINCH handling (@c rl_catch_sigwinch) is DISABLED for the
- * watcher's lifetime and restored before this returns. The watcher already redraws
- * on resize; leaving Readline's built-in SIGWINCH handler enabled makes it call
- * @c rl_resize_terminal() -> @c rl_forced_update_display() -> @c rl_redisplay_function()
- * on the same event, racing the watcher's redraw and painting the prompt twice (most
- * visibly when the repaint callback does direct terminal I/O that leaves Readline's
- * internal cursor bookkeeping stale, e.g. a full @c printList() repaint).
- * The previous value is restored on every exit path, including exceptions from the
- * watcher constructor (RAII guard below).
+ * watcher's lifetime and restored before this returns. The watcher already
+ * redraws on resize; leaving Readline's built-in SIGWINCH handler enabled
+ * makes it call @c rl_resize_terminal() -> @c rl_forced_update_display() ->
+ * @c rl_redisplay_function() on the same event, racing the watcher's redraw
+ * and painting the prompt twice (most visibly when the repaint callback does
+ * direct terminal I/O that leaves Readline's internal cursor bookkeeping
+ * stale, e.g. a full @c printList() repaint). The previous value is restored
+ * on every exit path, including exceptions from the watcher constructor (the
+ * @c SigwinchGuard RAII object below).
  *
  * @param prompt  Prompt passed to @c readline() (may contain \001/\002 markers).
  * @param repaint Repaint callback (see @ref ListResizeWatcher for the contract).
@@ -379,11 +389,12 @@ inline RlLine readlineWithResize(const std::string& prompt,
 /**
  * @brief Visible text of every prompt line except the last.
  *
- * For prompts that carry their own header line(s) before a final '\n' (for example
- * "FolderPaths ↵ to scan ... :\n"), so a repaint callback can re-print the header.
- * Readline's \001/\002 invisible-text markers are removed, because they must not be
- * written to the terminal directly. The text before the last '\n' is returned
- * WITHOUT that '\n': the watcher supplies it, and Readline redraws the last line.
+ * For prompts that carry their own header line(s) before a final '\n' (for
+ * example "FolderPaths ↵ to scan ... :\n"), so a repaint callback can re-print
+ * the header. Readline's \001/\002 invisible-text markers are removed, because
+ * they must not be written to the terminal directly. The text before the last
+ * '\n' is returned WITHOUT that '\n': the watcher supplies it, and Readline
+ * redraws the last line.
  *
  * @param prompt The full prompt string passed to @c readline().
  * @return The header text, or an empty string if @p prompt contains no '\n'.
