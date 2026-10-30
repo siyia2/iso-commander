@@ -112,13 +112,11 @@ void syncCache(const std::string& filePath);
  * - **Signals:** SIGINT is ignored while the editor is active.
  * - **Resize handling:** every screen shares @c paintSettingsBody, so a
  *   resize repaints the full settings view rather than just the last
- *   message. Each prompt supplies its own repaint callback to
- *   @c readlineWithResize or @c pressEnterToContinueWithRepaint:
- *   @c drawSettings for the main prompt, @c drawConfirmScreen for the
- *   reset confirmation (which also re-echoes the main prompt line with the
- *   typed command), and @c render for the post-reset status screen (which
- *   re-echoes both prompt lines before the status messages). Echoed
- *   prompts are printed with readline's non-printing markers stripped.
+ *   message. @c drawSettings is the repaint callback for both the main
+ *   prompt and the reset confirmation, and @c render serves the post-reset
+ *   status screen. Once a reset is requested, the screen is repainted
+ *   without the main prompt line, and neither that line nor the
+ *   confirmation line is re-echoed afterwards.
  *
  * @param configPath Configuration file used to load and save settings.
  */
@@ -176,9 +174,9 @@ void interactiveConfigEditor(const std::string& configPath) {
         std::string prompt = std::format(
             "\n{}IDX\001{}\002 ↵ for {}editor\001{}\002, ? for help: \001{}\002",
             UI::Palette::RL_idxGreen,
-            tc.label,
+            tc.highlight,
             UI::Palette::RL_Yellow,
-            tc.label,
+            tc.highlight,
             tc.reset
         );
         armPendingInputRestore();
@@ -203,29 +201,22 @@ void interactiveConfigEditor(const std::string& configPath) {
                 UI::Palette::BoldReset
             );
 
-            // Prompts as the user saw them, with readline's \001/\002
-            // non-printing markers stripped since we print them ourselves.
+            // Readline's \001/\002 non-printing markers stripped, since we print
+            // the confirm line ourselves in the post-reset repaint.
             auto stripRlMarkers = [](std::string s) {
                 s.erase(std::remove_if(s.begin(), s.end(),
                                        [](char c) { return c == '\001' || c == '\002'; }),
                         s.end());
                 return s;
             };
-
-            std::string idxPromptEcho = stripRlMarkers(prompt) + input;   // "r" / "R"
             std::string confirmPromptEcho = stripRlMarkers(confirmPrompt);
 
-            // Repaint for the y/n prompt: body, then the original prompt line, then
-            // stop. Readline owns the confirm row beneath and redraws it once.
-            auto drawConfirmScreen = [&] {
-                SyncOutput sync;
-                clearScrollBuffer();
-                paintSettingsBody();
-                std::cout << idxPromptEcho << tc.reset;
-            };
+            // Wipe the IDX prompt line now so the screen looks the same before and
+            // after a resize: settings body, then the y/n prompt directly beneath.
+            drawSettings();
 
             armPendingInputRestore();
-            RlLine confirmInput = readlineWithResize(confirmPrompt, drawConfirmScreen);
+            RlLine confirmInput = readlineWithResize(confirmPrompt, drawSettings);
             rl_startup_hook = nullptr;
 
             if (confirmInput) {
@@ -240,23 +231,16 @@ void interactiveConfigEditor(const std::string& configPath) {
                     bool saved = false;
                     {
                         SyncOutput sync;
-                        // No printing here — the render callback below owns
-                        // the user-visible output, so it isn't emitted twice.
                         saved = flushCache(configPath);
                     }
 
-                    // Full-screen repaint: settings body, the two prompt lines
-                    // that were on screen, then the status footer. This is what
-                    // survives a resize while waiting for Enter.
                     auto render = [&] {
                         SyncOutput sync;
                         clearScrollBuffer();
                         paintSettingsBody();
-                        std::cout << idxPromptEcho << tc.reset
-                                  << confirmPromptEcho << confirm << tc.reset << "\n";
-                        std::cout << "\n" << tc.label << "[+] Defaults applied.\n" << tc.reset;
+                        std::cout << "\n" << tc.label << "[+] Defaults applied\n" << tc.reset;
                         if (saved) {
-                            std::cout << tc.highlight << "[✔] Settings saved to disk.\n" << tc.reset;
+                            std::cout << tc.highlight << "[✔] Saved to disk\n" << tc.reset;
                         }
                     };
 
