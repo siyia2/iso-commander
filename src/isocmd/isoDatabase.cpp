@@ -756,8 +756,7 @@ void databaseSwitches(std::string& inputSearch, const std::function<void()>& rep
                 if (repaintHeader) repaintHeader();
 
                 std::cerr << "\n" << db.error << "Error clearing ISO database: "
-                          << db.path << "'" << GlobalState::databaseFilePath << "'"
-                          << db.error << ". File missing or inaccessible.\033[J" << std::endl;
+                          << db.warning << "File missing or inaccessible" << db.error << "." << "\033[J" << std::endl;
             };
             pressEnterToContinueWithRepaint(render);
         } else {

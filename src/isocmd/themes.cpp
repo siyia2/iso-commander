@@ -257,7 +257,7 @@ SemanticUIColors resolveDatabaseTheme() {
         return {
             .label     = UI::Palette::Green,
             .accent    = UI::Palette::Blue,
-            .warning   = UI::Palette::Orange,
+            .warning   = UI::Palette::Yellow,
             .error     = UI::Palette::Red,
             .reset     = UI::Palette::BoldReset,
             .path      = UI::Palette::Yellow,

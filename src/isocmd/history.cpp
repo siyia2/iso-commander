@@ -288,8 +288,7 @@ void clearHistory(const std::string& inputSearch,
 
             std::cerr << "\n" << (hc.error)
                       << "Error clearing " << historyType << " database: "
-                      << (hc.warning) << "'" << filePath << "'"
-                      << (hc.error) << ". File missing or inaccessible.\033[J" << std::endl;
+                      << (hc.warning) << "File missing or inaccessible" << (hc.error) << "." << "\033[J" << std::endl;
         };
         pressEnterToContinueWithRepaint(render);
     } else {
