@@ -125,13 +125,11 @@ namespace {
                 }
                 g_winch = 0;
 
-                // \033[2J erases the visible screen; \033[3J erases scrollback.
-                // Without \033[3J, VTE-based terminals push the cleared frame
-                // into scrollback on each resize, and a user scrolling up sees
-                // a growing stack of past frames — looking like duplication
-                // even though the visible frame is correct.
-                std::cout << "\033[H\033[2J\033[3J";
-                drawLayout();
+                {
+                    SyncOutput sync;
+                    std::cout << "\033[H\033[2J\033[3J";
+                    drawLayout();
+                }
             }
 
             struct pollfd pfd{ STDIN_FILENO, POLLIN, 0 };
