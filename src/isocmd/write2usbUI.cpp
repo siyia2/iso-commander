@@ -955,14 +955,28 @@ static int confirmResizeHookTrampoline(void) {
  * paths. "?" triggers the help screen. After a valid mapping is entered, a
  * destructive-write warning is shown and must be confirmed with y/Y.
  *
+ * @par Typed input: reprint and pre-fill
+ * The mapping line the user typed is kept in a std::string copy and used in
+ * two ways:
+ * - Reprint: every repaint that follows the prompt (the parse/validation
+ *   error screens and the confirmation screen after a resize) re-emits the
+ *   IDX>DEVICE prompt line together with the typed mapping, so the screen
+ *   matches what the user saw before pressing Enter.
+ * - Pre-fill: after a parse error, a validation error or a declined
+ *   "Proceed? (y/n)", the same line is inserted into the next readline
+ *   buffer (via a temporary rl_startup_hook chained to the hook installed by
+ *   armPendingInputRestore()), so it can be edited instead of retyped. The
+ *   empty-input and "?" paths start with a clean line.
+ *
  * @par Device prompt and resize
  * The ISO/device screen is embedded in the mappings prompt itself, so
  * readline() is wrapped by readlineWithResize(): on a width change the
  * screen is cleared and the prompt's header text re-printed (see
  * promptHeaderForRepaint), then Readline redraws the last prompt line and
- * the typed input. The list is not rebuilt, and error messages from
- * displayErrors() are not repeated. This watcher is stopped before the
- * confirmation prompt starts, which uses its own ConfirmResizeWatcher.
+ * the typed input (including any pre-filled text). The list is not rebuilt,
+ * and error messages from displayErrors() are not repeated. This watcher is
+ * stopped before the confirmation prompt starts, which uses its own
+ * ConfirmResizeWatcher.
  *
  * @par Warning block and resize
  * ISO names in the warning are truncated to fit the current terminal width,
@@ -970,29 +984,29 @@ static int confirmResizeHookTrampoline(void) {
  * confirmation screen is redrawn from scratch on SIGWINCH: the callback
  * installed on ConfirmResizeWatcher clears the whole screen with
  * "\033[H\033[2J", reprints the ISO/device prompt header via
- * promptHeaderForRepaint(devicePrompt), then reprints the warning block;
- * ConfirmResizeWatcher redraws its "Proceed? (y/n):" line afterwards.
- * Because "\033[H" homes regardless of the cursor position, the watcher's
- * own in-place cursor-up math cannot cause partial erases — the same scheme
- * the rest of the app uses for repaint-aware prompts, and the only one that
- * works on terminals that do not reflow the live cursor (VTE-based ones
- * such as xfce4-terminal and gnome-terminal). The initial draw uses
- * clearFirst=false so the ISO/device list already on screen from
- * readlineWithResize is preserved; the warning prints below it. Every
- * resize uses clearFirst=true, so the whole confirmation screen (device
- * prompt, warning block, prompt line) is reconstructed from a known top and
- * no copies of the "WARNING: This will *ERASE ALL DATA* on:" header
- * accumulate over successive resizes.
+ * promptHeaderForRepaint(devicePrompt), then the IDX>DEVICE prompt line with
+ * the typed mapping, then the warning block; ConfirmResizeWatcher redraws its
+ * "Proceed? (y/n):" line afterwards. Because "\033[H" homes regardless of
+ * the cursor position, the watcher's own in-place cursor-up math cannot
+ * cause partial erases — the same scheme the rest of the app uses for
+ * repaint-aware prompts, and the only one that works on terminals that do
+ * not reflow the live cursor (VTE-based ones such as xfce4-terminal and
+ * gnome-terminal). The initial draw uses clearFirst=false so the ISO/device
+ * list already on screen from readlineWithResize is preserved; the warning
+ * prints below it. Every resize uses clearFirst=true, so the whole
+ * confirmation screen (device prompt, typed mapping, warning block, prompt
+ * line) is reconstructed from a known top and no copies of the
+ * "WARNING: This will *ERASE ALL DATA* on:" header accumulate over
+ * successive resizes.
  *
  * A note on the initial draw versus the resize path: on the first pass,
- * readlineWithResize has already printed the device prompt and the warning
- * is appended beneath it. On resize, readline does not reprint its earlier
- * prompt, so the device prompt header must come from the resize callback
- * itself; hence promptHeaderForRepaint(devicePrompt) inside the
- * clearFirst=true branch. The leading "\n" before "WARNING:" is therefore
- * added only on the resize path (where the header precedes the warning and
- * needs one blank separator); on the initial draw, the typed-input line
- * above the warning already provides that separator.
+ * readlineWithResize has already printed the device prompt and the typed
+ * input, so only a blank separator line is added before the warning. On
+ * resize, readline does not reprint its earlier prompt, so the resize
+ * callback itself re-emits promptHeaderForRepaint(devicePrompt), the
+ * IDX>DEVICE line with the typed mapping, and the same blank separator
+ * (the clearFirst=true branch); both paths therefore produce the same
+ * layout.
  *
  * Detected devices are annotated with status indicators:
  * - [MOUNTED]  — device or a partition is currently mounted; cannot be
@@ -1024,6 +1038,18 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
     // loop iterations; redeclaring it inside the loop would re-trigger the
     // root error forever.
     bool noPermissions = (geteuid() != 0);
+
+    // Hoisted so the last typed mapping survives across iterations and can
+    // be pre-filled into the next readline prompt (after parse/validation
+    // errors or a declined confirmation). Stays empty on the empty-input
+    // and "?" paths, so those start with a clean line.
+    std::string pendingInput;
+
+    // State for the readline pre-fill hook. Function-local statics so the
+    // captureless startup-hook lambda below (readline needs a plain function
+    // pointer) can reach them without a separate named function.
+    static std::string prefillText;
+    static rl_hook_func_t* prevStartupHook = nullptr;
 
     while (true) {
         TerminalStateGuard termGuard;
@@ -1139,8 +1165,25 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         };
 
         armPendingInputRestore();
+
+        // Pre-fill the previous mapping (if any) into the readline buffer.
+        // Installed AFTER armPendingInputRestore() and chained to its hook,
+        // so both keep working.
+        prefillText = pendingInput;
+        pendingInput.clear();
+        if (!prefillText.empty()) {
+            prevStartupHook = rl_startup_hook;
+            rl_startup_hook = +[]() -> int {
+                if (prevStartupHook) prevStartupHook();
+                if (!prefillText.empty()) rl_insert_text(prefillText.c_str());
+                return 0;
+            };
+        }
+
         RlLine deviceInput = readlineWithResize(devicePrompt, repaintDevices);
         rl_startup_hook = nullptr;
+        prevStartupHook = nullptr;
+        prefillText.clear();
 
         if (!deviceInput) {
             return {};
@@ -1150,6 +1193,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             continue;
         }
 
+        // Copy now; this std::string is used for the error/confirmation
+        // repaints and handed back to the next prompt as pre-fill.
         std::string mainInputString(deviceInput.get());
         if (mainInputString == "\x1b") {
             return {};
@@ -1173,7 +1218,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             SyncOutput sync;
             clearScrollBuffer();
             std::cout << promptHeaderForRepaint(devicePrompt);
-            std::cout << buildIdxPrompt() << deviceInput.get() << "\n";
+            std::cout << buildIdxPrompt() << mainInputString << "\n";
             std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
             for (const auto& e : errs) {
                 std::cerr << color << " • " << e << "\n";
@@ -1189,6 +1234,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         auto deviceMap = parseDeviceMappings(deviceInput.get(), isoFilenames, errors);
 
         if (!errors.empty()) {
+            pendingInput = mainInputString;   // pre-fill next prompt for editing
             pressEnterToTryWithRepaint([&] { renderErrors(errors); });
             continue;
         }
@@ -1197,6 +1243,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         auto validPairs = validateDevices(deviceMap, sortedIsos, noPermissions, validationErrors);
 
         if (!validationErrors.empty()) {
+            pendingInput = mainInputString;   // pre-fill next prompt for editing
+
             const bool wasNoPermissions = noPermissions;
             if (wasNoPermissions) {
                 // Don't re-check root on the next pass; retrying can't grant it.
@@ -1217,6 +1265,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         if (validPairs.empty()) {
             // No errors reported but nothing validated — shouldn't happen;
             // avoid looping without repainting anything new.
+            pendingInput = mainInputString;
             continue;
         }
 
@@ -1242,11 +1291,9 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         // math (drawnWidths goes stale after a reflow on terminals that
         // don't reflow the live cursor, e.g. VTE).
         //
-        // The `\n` that used to precede "WARNING:" is dropped: `\033[H\033[2J`
-        // already clears the screen to a blank state, and promptHeaderForRepaint
-        // ends with the device prompt's ": " prompt string (no newline). We add
-        // one "\n" to separate the device prompt from the warning header, so
-        // the layout is:
+        // On repaint we re-emit the device prompt header, then the IDX>DEVICE
+        // prompt line plus the typed mapping (same as renderErrors), so the
+        // user still sees what they entered. Layout:
         //
         //   <device prompt header lines>
         //   IDX>DEVICE ... ? for help: <typed input>
@@ -1256,10 +1303,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         //    {...} ← {...}
         //                                         <- blank line
         //   Proceed? (y/n):
-        //
-        // (readlineWithResize on the first pass draws the device prompt and
-        // the typed input; on resize, promptHeaderForRepaint reproduces the
-        // header, and readline redraws its prompt line + typed input.)
         auto renderConfirm = [&](size_t cols, bool clearFirst) -> std::vector<size_t> {
             const size_t usableCols = cols > 1 ? cols - 1 : 1;
             std::vector<size_t> widths;
@@ -1267,6 +1310,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             if (clearFirst) {
                 std::cout << "\033[H\033[2J";
                 std::cout << promptHeaderForRepaint(devicePrompt);
+                std::cout << buildIdxPrompt() << mainInputString << "\n";
                 std::cout << "\n";   // separator between device prompt and warning
             } else {
                 // Initial draw: device prompt is already on screen; add the
@@ -1344,6 +1388,10 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             GlobalState::g_operationCancelled.store(false);
             return validPairs;
         }
+
+        // Declined (or empty/EOF): bring the mapping back so it can be tweaked
+        // instead of retyped.
+        pendingInput = mainInputString;
     }
 }
 

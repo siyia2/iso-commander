@@ -81,6 +81,15 @@ bool isValidDirectory(const std::string& path) {
  * ends, including after cancellation, because they reference iteration-local
  * data.
  *
+ * @par Repaint
+ * The line the user typed is kept as a std::string copy. Whenever the screen
+ * is repainted after the prompt (the results report, database commands such
+ * as "*stats" and "!clr*", or a terminal resize while waiting), the prompt
+ * header is re-printed, followed by the typed line in the theme color on its
+ * own line directly under it, so the verbose output below always starts on a
+ * fresh line and the question the user answered stays visible. The typed
+ * line is not restored into the next prompt, which always starts empty.
+ *
  * @param promptFlag    Passed to traverse() to control progress and error
  *                      reporting.
  * @param maxDepth      Maximum directory recursion depth (-1 for unlimited).
@@ -127,12 +136,43 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 std::cout << promptHeaderForRepaint(prompt);
             };
 
+            // What the user typed on the prompt line, set right after readline
+            // returns. Reprinted under the header so the repainted screen
+            // matches what they saw, followed by the verbose output.
+            std::string typedLine;
+
+            // Header, then the typed line in `color` on its own line directly
+            // under the prompt, then a final newline so whatever prints next
+            // (verbose/error output) starts on a fresh line.
             const auto repaintCallerPrompt = [&] {
-                std::cout << promptHeaderForRepaint(prompt) << "\n";
+                const std::string header = promptHeaderForRepaint(prompt);
+                std::cout << header;
+
+                // Make sure the typed line starts on a new line: find the last
+                // visible character of the header, skipping trailing ANSI SGR
+                // sequences (e.g. "\033[0m") and readline's \001/\002 markers.
+                size_t end = header.size();
+                while (end > 0) {
+                    const char c = header[end - 1];
+                    if (c == '\001' || c == '\002') { --end; continue; }
+                    if (c == 'm') {
+                        const size_t esc = header.rfind('\033', end - 1);
+                        if (esc != std::string::npos && esc + 1 < end && header[esc + 1] == '[') {
+                            end = esc;
+                            continue;
+                        }
+                    }
+                    break;
+                }
+                if (end == 0 || header[end - 1] != '\n') std::cout << "\n";
+
+                std::cout << color << typedLine << dt.reset << "\n";
             };
 
             RlLine searchQuery = readlineWithResize(prompt, repaintPrompt);
             if (!searchQuery) return;
+
+            typedLine = searchQuery.get();
 
             armPendingInputRestore();
             rl_startup_hook = nullptr;
@@ -258,6 +298,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             if (!validPaths.empty() && !input.empty()) {
                 saveHistory(filterHistory);
             }
+
             saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, newISOFound, start_time, repaintCallerPrompt);
 
         } catch (const std::exception& e) {
@@ -871,6 +912,16 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  * their entered text and order. If new files are found and the scan was not
  * cancelled, the user is taken to the file-selection interface.
  *
+ * @par Repaint
+ * The line the user typed is kept as a std::string copy. Whenever the screen
+ * is repainted after the prompt (the results report from
+ * verboseImageSearchResults(), the output of special commands, or a terminal
+ * resize while waiting), the prompt header is re-printed, followed by the
+ * typed line in the theme color on its own line directly under it, so the
+ * verbose output below always starts on a fresh line and the question the
+ * user answered stays visible. The typed line is not restored into the next
+ * prompt, which always starts empty.
+ *
  * @param fileTypeChoice Format category: "bin", "img", "mdf", "nrg", "chd",
  *                       or "daa". "bin" and "img" use the same cache.
  * @param state          Shared refresh state forwarded to file selection.
@@ -952,15 +1003,45 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
             std::cout << promptHeaderForRepaint(prompt);
         };
 
-        // Reprints the FolderPaths prompt line on a resize during the
-        // verboseImageSearchResults wait, so the question the user just
-        // answered stays visible above the results block.
+        // What the user typed on the prompt line, set right after readline
+        // returns. Reprinted under the header so the repainted screen matches
+        // what they saw, followed by the verbose output.
+        std::string typedLine;
+
+        // Reprints the FolderPaths prompt on a resize during the
+        // verboseImageSearchResults wait (and for special commands): header,
+        // then the typed line in `color` on its own line directly under the
+        // prompt, then a final newline so whatever prints next starts on a
+        // fresh line.
         const auto repaintCallerPrompt = [&] {
-            std::cout << promptHeaderForRepaint(prompt) << "\n";
+            const std::string header = promptHeaderForRepaint(prompt);
+            std::cout << header;
+
+            // Make sure the typed line starts on a new line: find the last
+            // visible character of the header, skipping trailing ANSI SGR
+            // sequences (e.g. "\033[0m") and readline's \001/\002 markers.
+            size_t end = header.size();
+            while (end > 0) {
+                const char c = header[end - 1];
+                if (c == '\001' || c == '\002') { --end; continue; }
+                if (c == 'm') {
+                    const size_t esc = header.rfind('\033', end - 1);
+                    if (esc != std::string::npos && esc + 1 < end && header[esc + 1] == '[') {
+                        end = esc;
+                        continue;
+                    }
+                }
+                break;
+            }
+            if (end == 0 || header[end - 1] != '\n') std::cout << "\n";
+
+            std::cout << color << typedLine << dt.reset << "\n";
         };
 
         RlLine searchQuery = readlineWithResize(prompt, repaintPrompt);
         if (!searchQuery) return;
+
+        typedLine = searchQuery.get();
 
         armPendingInputRestore();
         rl_startup_hook = nullptr;
