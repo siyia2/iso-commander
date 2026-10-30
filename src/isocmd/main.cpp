@@ -26,7 +26,7 @@
 #include "../databaseOps.h"
 #include "../display.h"
 #include "../inputHandling.h"
-#include "../listResizeWatcher.h"
+#include "../rendering.h"
 #include "../main.h"
 #include "../readline.h"
 #include "../state.h"

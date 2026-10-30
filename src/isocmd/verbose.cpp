@@ -32,7 +32,7 @@
 #include "../databaseOps.h"
 #include "../display.h"
 #include "../inputHandling.h"
-#include "../listResizeWatcher.h"
+#include "../rendering.h"
 #include "../pausePrompt.h"
 #include "../readline.h"
 #include "../state.h"

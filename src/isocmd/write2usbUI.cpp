@@ -42,7 +42,7 @@
 // Project Headers
 #include "../display.h"
 #include "../inputHandling.h"
-#include "../listResizeWatcher.h"
+#include "../rendering.h"
 #include "../pausePrompt.h"
 #include "../readline.h"
 #include "../sort.h"
@@ -667,34 +667,6 @@ static std::string clipToWidth(const std::string& s, size_t maxCols) {
 }
 
 /**
- * @brief Current terminal size in columns and rows.
- *
- * Queries TIOCGWINSZ on stdout. On success the size is remembered; if a
- * later call fails or reports a zero dimension (detached or transiently
- * resized pty), the last known good size is returned instead. Before any
- * success the result is {80, 24}.
- *
- * Called from the resize watcher, the WriteScreen keeper and the main
- * thread. The remembered size is one packed std::atomic<uint64_t>
- * (cols << 32 | rows), so a reader never sees a torn pair.
- *
- * @return {columns, rows}.
- */
-static std::pair<size_t, size_t> terminalSize() {
-    static std::atomic<uint64_t> lastGood{(uint64_t{80} << 32) | 24u};
-
-    struct winsize ws{};
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0 && ws.ws_row > 0) {
-        lastGood.store((uint64_t{ws.ws_col} << 32) | uint64_t{ws.ws_row},
-                       std::memory_order_relaxed);
-        return { ws.ws_col, ws.ws_row };
-    }
-
-    const uint64_t v = lastGood.load(std::memory_order_relaxed);
-    return { static_cast<size_t>(v >> 32), static_cast<size_t>(v & 0xFFFFFFFFu) };
-}
-
-/**
  * @brief Shortens an ISO filename to fit a column budget, keeping ".iso".
  *
  * If @p name already fits in @p maxCols columns it is returned unchanged.
@@ -958,8 +930,8 @@ private:
             if (stop_) break;
 
             const auto size = terminalSize();
-            const size_t cols = size.first;
-            const size_t rows = size.second;
+            const size_t cols = size.cols;
+            const size_t rows = size.rows;
             if (cols == state_.lastCols.load(std::memory_order_relaxed))
                 continue;
             state_.lastCols.store(cols, std::memory_order_relaxed);
@@ -1314,7 +1286,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             return widths;
         };
 
-        const size_t drawnCols = terminalSize().first;
+        const size_t drawnCols = terminalSize().cols;
         std::vector<size_t> drawnWidths;
         {
             SyncOutput sync;
@@ -1723,7 +1695,8 @@ private:
 
                 const auto   size        = terminalSize();
                 const bool   sizeChanged = hasDrawn_ &&
-                                           (size.first != lastCols_ || size.second != lastRows_);
+                    (size.cols != lastCols_ || size.rows != lastRows_);
+
                 const size_t finishedNow = syncPtr_->finishedTasks.load();
                 const bool   completion  = (finishedNow != seenFinished);
                 seenFinished = finishedNow;
@@ -1753,7 +1726,7 @@ private:
     void renderLocked() {
         const auto size    = terminalSize();
         const bool resized = hasDrawn_ &&
-                             (size.first != lastCols_ || size.second != lastRows_);
+            (size.cols != lastCols_ || size.rows != lastRows_);
         renderLocked(size, resized);
     }
 
@@ -1761,7 +1734,7 @@ private:
     // Terminal size and the resize flag are passed in so the renderer and the
     // keeper share exactly one source of truth for "did the size change?".
     // The caller must hold renderMutex_.
-    void renderLocked(std::pair<size_t, size_t> termSize, bool resized) {
+    void renderLocked(TermSize termSize, bool resized) {
         const bool finished = (phase_ == Phase::Finished);
 
         size_t maxFilenameWidth = 0;
@@ -1782,8 +1755,8 @@ private:
         const size_t fixedWidth = 3 + maxDeviceLen_ + (maxNameWidth_ + 3) + 2 + BAR_WIDTH
                                 + 2 + 5 + maxSpeedWidth + avgExtra;
 
-        const size_t cols       = termSize.first;
-        const size_t rows       = termSize.second;
+        const size_t cols = termSize.cols;
+        const size_t rows = termSize.rows;
         const size_t usableCols = cols > 1 ? cols - 1 : 1;
 
         const size_t allowedFilenameWidth =

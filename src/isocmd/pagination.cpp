@@ -19,7 +19,7 @@
 #include "../display.h"
 #include "../filtering.h"
 #include "../inputHandling.h"
-#include "../listResizeWatcher.h"
+#include "../rendering.h"
 #include "../sort.h"
 #include "../state.h"
 #include "../stringManipulation.h"

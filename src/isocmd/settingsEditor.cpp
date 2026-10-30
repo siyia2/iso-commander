@@ -22,7 +22,7 @@
 // Project Headers
 #include "../display.h"
 #include "../inputHandling.h"
-#include "../listResizeWatcher.h"
+#include "../rendering.h"
 #include "../pausePrompt.h"
 #include "../readline.h"
 #include "../sort.h"

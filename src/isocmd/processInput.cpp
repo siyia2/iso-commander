@@ -24,7 +24,7 @@
 // Project Headers
 #include "../concurrency.h"
 #include "../inputHandling.h"
-#include "../listResizeWatcher.h"
+#include "../rendering.h"
 #include "../mount.h"
 #include "../pausePrompt.h"
 #include "../process.h"

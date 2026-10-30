@@ -9,7 +9,7 @@
 
 // Project Headers
 #include "../inputHandling.h"
-#include "../display.h"
+#include "../rendering.h"
 #include "../pausePrompt.h"
 #include "../themes.h"
 

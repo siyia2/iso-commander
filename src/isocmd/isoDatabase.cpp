@@ -37,7 +37,7 @@
 #include "../concurrency.h"
 #include "../databaseOps.h"
 #include "../display.h"
-#include "../listResizeWatcher.h"
+#include "../rendering.h"
 #include "../history.h"
 #include "../inputHandling.h"
 #include "../globalMutexes.h"

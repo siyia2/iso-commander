@@ -35,7 +35,7 @@
 #include "../filtering.h"
 #include "../history.h"
 #include "../inputHandling.h"
-#include "../listResizeWatcher.h"
+#include "../rendering.h"
 #include "../readline.h"
 #include "../sharedRefreshState.h"
 #include "../stringManipulation.h"

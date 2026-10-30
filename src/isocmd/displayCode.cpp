@@ -20,11 +20,11 @@
 // Project Headers
 #include "../caches.h"
 #include "../databaseOps.h"
-#include "../display.h"
+#include "../rendering.h"
 #include "../filtering.h"
 #include "../inputHandling.h"
 #include "../globalMutexes.h"
-#include "../listResizeWatcher.h"
+#include "../rendering.h"
 #include "../stringListView.h"
 #include "../pausePrompt.h"
 #include "../sort.h"

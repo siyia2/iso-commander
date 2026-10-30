@@ -22,6 +22,7 @@
 #include "../concurrency.h"
 #include "../inputHandling.h"
 #include "../mount.h"
+#include "../rendering.h"
 #include "../state.h"
 #include "../themes.h"
 #include "../threadpool.h"

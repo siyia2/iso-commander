@@ -25,7 +25,7 @@
 #include "../filtering.h"
 #include "../inputHandling.h"
 #include "../globalMutexes.h"
-#include "../listResizeWatcher.h"
+#include "../rendering.h"
 #include "../readline.h"
 #include "../select.h"
 #include "../sharedRefreshState.h"

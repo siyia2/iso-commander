@@ -24,7 +24,7 @@
 #include <readline/history.h>
 
 // Project Headers
-#include "../display.h"
+#include "../rendering.h"
 #include "../history.h"
 #include "../inputHandling.h"
 #include "../pausePrompt.h"

@@ -17,7 +17,7 @@
 // Project Headers
 #include "../globalMutexes.h"
 #include "../inputHandling.h"
-#include "../listResizeWatcher.h"
+#include "../rendering.h"
 #include "../readline.h"
 #include "../select.h"
 #include "../state.h"
