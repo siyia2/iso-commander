@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef pausePrompts_H
-#define pausePrompts_H
+#ifndef PAUSEPROMPTS_H
+#define PAUSEPROMPTS_H
 
 #include <functional>
 #include <string>
@@ -76,4 +76,4 @@ void pressEnterToContinueWithRepaint(const std::function<void()>& repaint);
  */
 void pressEnterToContinueNoResize();
 
-#endif // pausePrompts_H
+#endif // PAUSEPROMPTS_H
