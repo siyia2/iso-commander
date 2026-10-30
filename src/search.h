@@ -86,7 +86,8 @@ void displayDatabaseStatistics(
  * search input field.
  */
 void databaseSwitches(
-    std::string& inputSearch
+    std::string& inputSearch,
+    const std::function<void()>& repaintHeader
 );
 
 #endif // SEARCHES_H

@@ -4,10 +4,12 @@
 #define HISTORY_H
 
 // C++ Standard Library Headers
+#include <functional>
 #include <string>
 
 void loadHistory(bool& filterHistory);
 void saveHistory(bool& filterHistory);
-void clearHistory(const std::string& inputSearch);
+void clearHistory(const std::string& inputSearch,
+                  const std::function<void()>& repaintHeader);
 
 #endif // HISTORY_H
