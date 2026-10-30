@@ -88,54 +88,74 @@ inline void appendNumPadded(std::string& out, std::size_t value, std::size_t wid
 }
 
 /**
- * @brief Renders formatted lists (ISO, Image, or Mounts) to the terminal.
+ * @brief Renders one page of an ISO, image, or mounted-ISO list to the terminal.
  *
- * Performance:
- *  - The frame is built in a thread_local std::string (one per list type) that
- *    keeps its capacity across redraws, so steady-state rendering performs no heap
- *    allocation for the buffer, and switching between list types never reallocates.
- *  - Numbers are formatted via std::to_chars straight into the buffer.
- *  - Everything that can be computed without the print lock (filesystem checks,
- *    sync indicator text) is computed before locking. The critical section only
- *    re-reads the isImportRunning flag, writes the frame (in segments, no
- *    mid-buffer insert), and flushes once.
- *  - The frame is wrapped in synchronized-output escapes to avoid tearing.
+ * The whole frame (optional clear, header, rows, footer, pending-indices line)
+ * is built in a retained buffer and written to stdout with a single flush.
+ *
+ * @par Layout
+ *  - "No filter results" is shown when the list is empty because of an active
+ *    filter (or, for non-ISO lists, simply empty).
+ *  - When the list spans more than one page, a header ("Page n/N (Items
+ *    (a-b)/total)") and a footer with PgUp / PgDn / g# hints are shown.
+ *    Pagination is disabled if ITEMS_PER_PAGE is 0 or all items fit on one page.
+ *  - Rows are numbered and right-aligned. While a filter is active, each row
+ *    also shows the item's original index ("n:m^").
+ *  - ISO mode only: while a background import is running, a dim
+ *    "[↻ Syncing: NewISO → Restructure]" indicator (or a "no history" notice)
+ *    is inserted after the header, plus a "Filtering locked" note if the
+ *    filtering indicator is set.
+ *  - If @p showPendingIndices is set and a process is staged, a
+ *    "Pending Indices [P]: ..." line is appended.
  *
  * @par Terminal width
- * Item rows never wrap. The width is queried once per frame (see
- * terminalColumns(); a transient query failure keeps the last known good width,
- * and an unknown width, e.g. redirected output, means no clipping). The last
- * column stays free so a row can never trigger auto-wrap. An over-wide row is
+ * Rows never wrap. The width is queried once per frame via terminalColumns()
+ * (a transient failure keeps the last known width; an unknown width, e.g.
+ * redirected output, disables clipping), and the last column is always left
+ * free so a full-width row cannot trigger auto-wrap. An over-wide row is
  * shortened in two steps:
- * - File lists (ISO / image), when the directory is shown: the directory is cut
- *   from its left side and prefixed with "…", so the part next to the filename
- *   survives and the filename stays complete. If even that leaves no room, the
- *   directory is dropped for that row.
- * - Any row still too wide (an extremely long filename, a narrow terminal, or a
- *   mounted-ISO row) is cut at the right with "…" (ANSI-escape and UTF-8 aware).
- * The pagination header, footer, sync indicator and pending-indices line are not
- * clipped. A resize only changes what the next call produces; to repaint while a
- * prompt is waiting, the prompt owner starts a @ref ListResizeWatcher around its
- * @c readline() call (see the end of this file).
+ *  1. File lists with the directory shown: the directory is cut from its left
+ *     side and prefixed with "…" so the filename stays intact. If there is no
+ *     room even for that, the directory is dropped for that row.
+ *  2. Any row still too wide (very long filename, narrow terminal, or a
+ *     mounted-ISO row) is cut at the right with "…" (ANSI- and UTF-8-aware).
+ * The header, footer, sync indicator and pending-indices line are not clipped.
+ * A resize only affects the next call; to repaint while a prompt is waiting,
+ * the prompt owner runs a @ref ListResizeWatcher around its @c readline() call.
  *
- * Thread Safety: the sync-indicator read and the terminal write happen atomically
- * under printMutex, so a background ISO import can never leave a stale indicator
- * on screen.
+ * @par Performance
+ *  - The frame is built in a thread_local std::string per list type. Capacity
+ *    is retained across redraws (no steady-state allocation, and switching list
+ *    types never reallocates another type's buffer). A buffer that grows past
+ *    kMaxRetainedCapacity (5 MiB) is released after the render.
+ *  - Numbers are formatted with std::to_chars directly into the buffer.
+ *  - Filesystem checks and the sync-indicator text are computed before taking
+ *    the print lock. Under the lock, the code re-reads isImportRunning, writes
+ *    the frame (in segments, so the indicator is spliced in without an insert),
+ *    and flushes once.
+ *  - If kUseSynchronizedOutput is set, the frame is wrapped in
+ *    synchronized-output escapes to avoid tearing.
  *
- * @param items              Non-owning view of the strings to display (no copies
- *                           are made; the underlying vectors must outlive this call).
- * @param listType           Category of the list (e.g. "ISO_FILES").
- * @param listSubType        Extension or sub-format details.
- * @param pendingIndices     Current user selection indices awaiting processing.
+ * @par Thread safety
+ * The sync-indicator check and the terminal write happen atomically under
+ * RefreshState::printMutex, so a background import finishing cannot leave a
+ * stale "Syncing" indicator on screen.
+ *
+ * @param items              Non-owning view of the strings to display. No copies
+ *                           are made; the underlying storage must outlive the call.
+ * @param listType           List category: "ISO_FILES", "IMAGE_FILES" or "MOUNTED_ISOS".
+ * @param listSubType        Extension / sub-format used to split directory and filename.
+ * @param pendingIndices     Indices staged for processing (shown in the pending line).
  * @param hasPendingProcess  Whether a process action is staged.
- * @param currentPage        Mutable reference to the current pagination index.
- * @param state              Shared state providing printMutex and isImportRunning;
- *                           guards the "[↻ Syncing: NewISO → Restructure]" indicator
- *                           against races with background import completion.
- * @param clearFirst         If true, clears the screen and scrollback inside the same
- *                           synchronized-output frame, so clear and content present
- *                           atomically (no blank flash). Default is declared in the
- *                           header.
+ * @param currentPage        Requested zero-based page. It is clamped to the last
+ *                           page for display; the caller's value is not modified.
+ * @param state              Shared state providing printMutex and isImportRunning.
+ * @param clearFirst         If true, clears screen and scrollback inside the same
+ *                           synchronized frame, so clear and content appear
+ *                           atomically (no blank flash). Default is declared in
+ *                           the header.
+ * @param showPendingIndices If true, appends the pending-indices line when a
+ *                           process is staged. Default is declared in the header.
  */
 void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
