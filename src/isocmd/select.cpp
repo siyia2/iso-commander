@@ -475,7 +475,17 @@ void selectForIsoFiles(const std::string& operation,
         RlLine rawInput = readlineWithResize(prompt, repaintList);
         rl_startup_hook = nullptr;
 
-        if (!rawInput) break;
+        if (!rawInput) {
+            if (isFiltered) {
+            isFiltered = false;
+            filteringStack.clear();
+            currentPage = originalPage;
+            needsClrScrn = true;
+            break;
+            } else {
+                break;
+            }
+        }
 
         std::string inputString(rawInput.get());
 
@@ -757,7 +767,18 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         RlLine rawInput = readlineWithResize(prompt, repaintList);
         rl_startup_hook = nullptr;
 
-        if (!rawInput) break;
+        if (!rawInput) {
+            if (isFiltered) {
+                needsClrScrn = true;
+                isFiltered = false;
+                filteringStack.clear();
+                currentPage = originalPage;
+                need2Sort = false;
+                break;
+            } else {
+                break;
+            }
+        }
 
         std::string inputString(rawInput.get());
 
