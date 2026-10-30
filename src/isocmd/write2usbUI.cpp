@@ -444,7 +444,6 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(
             noPermissions = false;
         }
 
-        ListResizeWatcher watcher(render);
         if (wasNoPermissions) {
             pressEnterToContinueWithRepaint(render);
         } else {
@@ -1077,7 +1076,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                           << wt.speedCol << "\n";
             };
 
-            ListResizeWatcher watcher(render);
             pressEnterToTryWithRepaint(render);
             return {};
         }
@@ -1220,7 +1218,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 }
             };
 
-            ListResizeWatcher watcher(render);
             pressEnterToTryWithRepaint(render);
             continue;
         }

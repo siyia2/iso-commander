@@ -10,7 +10,6 @@
 // Project Headers
 #include "../inputHandling.h"
 #include "../display.h"
-#include "../listResizeWatcher.h"
 #include "../pausePrompt.h"
 #include "../themes.h"
 
@@ -153,7 +152,6 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
     };
 
     render();
-    ListResizeWatcher watcher(render);
     pressEnterToReturnWithRepaint(render);
 }
 
@@ -179,7 +177,6 @@ void helpSettingsEditor() {
     };
 
     render();
-    ListResizeWatcher watcher(render);
     pressEnterToReturnWithRepaint(render);
 }
 
@@ -250,7 +247,6 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
     };
 
     render();
-    ListResizeWatcher watcher(render);
     pressEnterToReturnWithRepaint(render);
 }
 
@@ -280,6 +276,5 @@ void helpMappings() {
     };
 
     render();
-    ListResizeWatcher watcher(render);
     pressEnterToReturnWithRepaint(render);
 }

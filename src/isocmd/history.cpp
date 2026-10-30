@@ -27,7 +27,6 @@
 #include "../display.h"
 #include "../history.h"
 #include "../inputHandling.h"
-#include "../listResizeWatcher.h"
 #include "../pausePrompt.h"
 #include "../state.h"
 #include "../themes.h"
@@ -252,7 +251,6 @@ void clearHistory(const std::string& inputSearch) {
                       << (hc.error) << ". File missing or inaccessible.\033[J" << std::endl;
         };
         render();
-        ListResizeWatcher watcher(render);
         pressEnterToContinueWithRepaint(render);
     } else {
         ofs.close();
@@ -265,7 +263,6 @@ void clearHistory(const std::string& inputSearch) {
                       << historyType << " database cleared successfully.\033[J" << std::endl;
         };
         render();
-        ListResizeWatcher watcher(render);
         pressEnterToContinueWithRepaint(render);
     }
 }

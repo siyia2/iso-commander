@@ -227,7 +227,6 @@ void interactiveConfigEditor(const std::string& configPath) {
                         }
                     };
 
-                    ListResizeWatcher watcher(render);
                     pressEnterToContinueWithRepaint(render);
                 }
             }
@@ -251,7 +250,6 @@ void interactiveConfigEditor(const std::string& configPath) {
                     for (const auto& err : verboseSets.uniqueErrorTokenMessages)
                         std::cout << err << "\n";
                 };
-                ListResizeWatcher watcher(render);
                 pressEnterToContinueWithRepaint(render);
             }
 

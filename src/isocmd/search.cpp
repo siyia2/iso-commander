@@ -480,7 +480,6 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
                       << dt.reset << "\n";
         };
 
-        ListResizeWatcher watcher(render);
         pressEnterToContinueWithRepaint(render);
 
         files.clear();
@@ -568,7 +567,6 @@ void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa) {
     };
 
     render();
-    ListResizeWatcher watcher(render);
     pressEnterToContinueWithRepaint(render);
 
     clearScrollBuffer();
