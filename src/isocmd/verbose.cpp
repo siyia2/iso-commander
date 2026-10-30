@@ -194,7 +194,6 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
                       << UI::Palette::BoldReset << "\n";
         };
 
-        ListResizeWatcher watcher(render);
         pressEnterToReturnWithRepaint(render);
     }
     else if (verbose) {
