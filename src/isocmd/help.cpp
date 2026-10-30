@@ -151,7 +151,6 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
             "   • Filtering spans all pages and is incremental");
     };
 
-    render();
     pressEnterToReturnWithRepaint(render);
 }
 
@@ -176,7 +175,6 @@ void helpSettingsEditor() {
             "   • Successful edits are auto-saved to disk");
     };
 
-    render();
     pressEnterToReturnWithRepaint(render);
 }
 
@@ -246,7 +244,6 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
         }
     };
 
-    render();
     pressEnterToReturnWithRepaint(render);
 }
 
@@ -275,6 +272,5 @@ void helpMappings() {
             "   • Only unmounted parent devices are eligible for write2usb");
     };
 
-    render();
     pressEnterToReturnWithRepaint(render);
 }

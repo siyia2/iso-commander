@@ -22,7 +22,7 @@
 #include <vector>
 
 // C / System Headers
-#include <immintrin.h>
+#include <emmintrin.h>
 #include <string.h>
 
 // Third-Party Library Headers
