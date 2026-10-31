@@ -35,10 +35,10 @@
 /**
  * @brief Result of a single @c editSetting screen.
  *
- * - @c Advance: the setting has no matching entry, so there is nothing to
- *               edit; move on to the next pending setting (wrapping), or
- *               leave if it was the only one. Blank Enter does not produce
- *               this: it just redraws the edit screen.
+ * - @c Advance: the edit was skipped with a blank Enter (or the setting has
+ *               no matching entry, so there is nothing to edit). The setting
+ *               is removed from the selection (and therefore from the
+ *               PgUp / PgDn / g# loop), exactly like @c Updated.
  * - @c Updated: a value was accepted and saved (re-entering the current value
  *               counts too); the setting is removed
  *               from the selection (and therefore from the PgUp / PgDn / g#
@@ -137,20 +137,20 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
  * - **Input:** GNU Readline accepts individual selections and tokenized
  *   multi-selections; per-setting validation is handled by @c editSetting.
  * - **Multi-selection navigation:** when several settings are selected, they
- *   are edited one screen at a time. A blank Enter does nothing; a valid
- *   value (even one equal to the current value) is saved and removes the
- *   setting from the loop. The loop ends only
- *   on Esc / Ctrl+D or once every selected setting has been updated.
- *   PgDn / PgUp move to the next / previous selected setting without
- *   wrapping: at either end the key is ignored and the matching footer hint
- *   is hidden.
- * - **Updated settings leave the loop:** once a setting's value has been
- *   changed (@c EditNav::Updated) it is removed from the selection, so the
- *   "(n/total)" indicator, PgUp / PgDn navigation and "g#" numbering only
- *   cover the settings that are still pending (skipped or not yet visited).
- *   After an update the loop continues with the setting that followed the
- *   updated one (wrapping to the first pending one) and ends only when no
- *   setting is left. Settings that have not been updated stay in the loop.
+ *   are edited one screen at a time. A blank Enter skips the current setting
+ *   and a valid value (even one equal to the current value) is saved; either
+ *   way the setting is removed from the loop. The loop ends on Esc / Ctrl+D
+ *   or once every selected setting has been updated or skipped. PgDn / PgUp
+ *   move to the next / previous selected setting without wrapping: at either
+ *   end the key is ignored and the matching footer hint is hidden.
+ * - **Handled settings leave the loop:** once a setting has been updated
+ *   (@c EditNav::Updated) or skipped (@c EditNav::Advance) it is removed from
+ *   the selection, so the "(n/total)" indicator, PgUp / PgDn navigation and
+ *   "g#" numbering only cover the settings that have not been handled yet.
+ *   After either result the loop continues with the setting that followed
+ *   the removed one (wrapping to the first remaining one) and ends only when
+ *   no setting is left. Settings reached only by navigation (PgUp / PgDn /
+ *   g#) stay in the loop.
  * - **Input errors:** token errors from a multi-selection are passed to the
  *   first @c editSetting call and printed above its "Edit Setting" header.
  *   If the input produced only errors and no valid selection, the errors are
@@ -355,18 +355,13 @@ void interactiveConfigEditor(const std::string& configPath) {
                 showErrors = false;
 
                 switch (r) {
-                    case EditNav::Advance:
-                        // Only returned when the setting key has no matching
-                        // entry (nothing to edit). Move on to the next pending
-                        // setting, or leave if it was the only one.
-                        if (n == 1) done = true;
-                        else        i = (i + 1) % n;
-                        break;
+                    case EditNav::Advance:   // skipped: dropped just like an update
                     case EditNav::Updated:
-                        // Updated settings leave the PgUp/PgDn/g# loop. The next
-                        // setting slides into index i, so don't increment; past
-                        // the end, wrap to the first pending setting. The loop
-                        // ends only once nothing is left to edit.
+                        // Skipped and updated settings both leave the
+                        // PgUp/PgDn/g# loop. The next setting slides into
+                        // index i, so don't increment; past the end, wrap to
+                        // the first pending setting. The loop ends only once
+                        // nothing is left to edit.
                         ordered.erase(ordered.begin() + static_cast<std::ptrdiff_t>(i));
                         if (ordered.empty()) done = true;
                         else if (i >= ordered.size()) i = 0;
@@ -385,9 +380,9 @@ void interactiveConfigEditor(const std::string& configPath) {
  * @brief Interactively edits one configuration setting.
  *
  * Displays the current value, its description, and valid-value guidance.
- * Invalid input returns to the prompt; an empty input does nothing and
- * redraws the screen. Entering the current value again counts as an update.
- * Leaving requires Esc / Ctrl+D, a navigation key, or an accepted value.
+ * Invalid input returns to the prompt; a blank input skips the edit (the
+ * caller drops the setting from the selection). Entering the current value
+ * again counts as an update.
  *
  * - **Metadata:** finds the matching @c ConfigEntry for its description,
  *   default, and validation callback.
@@ -424,11 +419,12 @@ void interactiveConfigEditor(const std::string& configPath) {
  * @param total       Number of settings in the selection; navigation keys are
  *                    only active when this is greater than one.
  * @return @c EditNav::Updated if a value was accepted, including the same value
- *         as the current one (the caller removes
- *         the setting from the selection); @c EditNav::Advance only if the
- *         key has no matching entry; @c Next / @c Prev if PgDn / PgUp was
- *         pressed; @c GoTo if "g#" selected another setting; @c Abort if the
- *         user aborted with Ctrl+D or Esc.
+ *         as the current one (the caller removes the setting from the
+ *         selection); @c EditNav::Advance if the edit was skipped with a blank
+ *         Enter or the key has no matching entry (the caller also removes the
+ *         setting); @c Next / @c Prev if PgDn /
+ *         PgUp was pressed; @c GoTo if "g#" selected another setting;
+ *         @c Abort if the user aborted with Ctrl+D or Esc.
  */
 EditNav editSetting(const std::string& configPath, const std::string& key,
                     const std::vector<std::string>& inputErrors,
@@ -525,7 +521,10 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
         std::cout << "\n";
 
         std::string prompt = std::format(
-            "\001{}\002Value ↵ : \001{}\002",
+            "\001{}\002Value \001{}\002↵ | ↵ \001{}\002Skip\001{}\002: \001{}\002",
+            UI::Palette::idxGreen,
+            tc.path,
+            UI::Palette::Yellow,
             tc.path,
             tc.reset
         );
@@ -561,11 +560,10 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
             continue;
         }
 
-        // Blank Enter does nothing: redraw this screen. Leaving requires Esc /
-        // Ctrl+D, a navigation key, or an accepted value. Re-entering the
-        // current value counts as an update (it is validated, saved, and the
-        // setting leaves the loop like any other).
-        if (newVal.empty()) continue;
+        // Blank Enter skips: the caller drops the setting from its loop.
+        // Re-entering the current value is NOT a skip: it counts as an update
+        // (validated, saved, and the setting leaves the loop like any other).
+        if (newVal.empty()) return EditNav::Advance;
 
         if (entry->validate && !entry->validate(newVal)) {
             auto render = [&] {
