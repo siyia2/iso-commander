@@ -1163,9 +1163,9 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
         armPendingInputRestore();
 
-        // Pre-fill the previous mapping (if any) into the readline buffer.
-        // Installed AFTER armPendingInputRestore() and chained to its hook,
-        // so both keep working.
+        // Pre-fill the previous mapping (only set after a declined confirmation)
+        // into the readline buffer. Installed AFTER armPendingInputRestore() and
+        // chained to its hook, so both keep working.
         prefillText = pendingInput;
         pendingInput.clear();
         if (!prefillText.empty()) {
