@@ -3,9 +3,7 @@
 // C++ Standard Library Headers
 #include <algorithm>
 #include <atomic>
-#include <cassert>
 #include <cctype>
-#include <cerrno>
 #include <chrono>
 #include <condition_variable>
 #include <csignal>
@@ -34,8 +32,6 @@
 #include <vector>
 
 // C / System Headers
-#include <fcntl.h>
-#include <signal.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -59,95 +55,6 @@
 
 namespace fs = std::filesystem;
 
-// ------------------------------------------------------------------------- //
-// Shared small helpers                                                      //
-// ------------------------------------------------------------------------- //
-
-/**
- * @brief Trims leading and trailing ASCII whitespace in place.
- *
- * Whitespace set: space, \\t, \\n, \\r, \\f, \\v. An all-whitespace string
- * becomes empty.
- *
- * @param s String to trim.
- */
-static void trimWs(std::string& s) {
-    static constexpr const char* kWs = " \t\n\r\f\v";
-    s.erase(s.find_last_not_of(kWs) + 1);
-    s.erase(0, s.find_first_not_of(kWs));
-}
-
-/**
- * @brief Returns the final path component (e.g. "/dev/sdb" -> "sdb").
- *
- * @param path Any filesystem path.
- * @return The filename component, or an empty string if there is none.
- */
-static std::string blockName(const std::string& path) {
-    return fs::path(path).filename().string();
-}
-
-/**
- * @brief Returns true if @p device is still being drained by this process
- * after a cancelled write (see g_drainingDevices).
- *
- * Shared by the device-list "[FLUSHING]" annotation and
- * WriteValidation::checkDevice so both agree on the same lookup.
- *
- * @param device Canonical block-device path (e.g. /dev/sdb).
- */
-static bool isDraining(const std::string& device) {
-    std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-    return g_drainingDevices.count(device) != 0;
-}
-
-/**
- * @brief Wakes every waiter on a WriteSync condition variable.
- *
- * Briefly takes and releases the mutex before notifying. This pairs with the
- * waiters' predicate check so a state change made just before the call cannot
- * be missed. Uses notify_all because the screen's keeper thread and the main
- * thread wait on the same condition variable.
- *
- * @param s Shared synchronisation state.
- */
-static void notifySync(WriteSync& s) {
-    { std::lock_guard<std::mutex> lk(s.mutex); }
-    s.cv.notify_all();
-}
-
-// ---- Themed fragment builders (shared by errors, lists and warning rows) ----
-
-/**
- * @brief Wraps @p inner as " (inner)" with dim-gray parentheses.
- *
- * @param inner Already-coloured text to place inside the parentheses.
- */
-static std::string dimParen(std::string_view inner) {
-    return std::string(UI::Palette::DimGray) + " (" + std::string(inner)
-         + std::string(UI::Palette::DimGray) + ")";
-}
-
-/// " (<size>)" with the size in the theme's size colour.
-static std::string sizeTag(const WriteTheme& wt, std::string_view sizeStr) {
-    return dimParen(std::string(wt.sizeCol) + std::string(sizeStr));
-}
-
-/// "<drive name>" in the theme's info colour (no leading space).
-static std::string driveTag(const WriteTheme& wt, std::string_view driveName) {
-    return std::string(wt.infoLabel) + "<" + std::string(driveName) + ">";
-}
-
-/// "filename (size)" with the filename in the theme's file colour.
-static std::string isoRef(const WriteTheme& wt, std::string_view filename,
-                          std::string_view sizeStr) {
-    return std::string(wt.fileCol) + std::string(filename) + sizeTag(wt, sizeStr);
-}
-
-// ------------------------------------------------------------------------- //
-// Device discovery                                                          //
-// ------------------------------------------------------------------------- //
-
 /**
  * @brief Reads a block device's model name from sysfs.
  *
@@ -157,12 +64,16 @@ static std::string isoRef(const WriteTheme& wt, std::string_view filename,
  * @return Model name, or "Unknown Drive" if the file is absent or empty.
  */
 std::string getDriveName(const std::string& device) {
-    std::ifstream modelFile("/sys/block/" + blockName(device) + "/device/model");
+    std::string deviceName = device.substr(device.find_last_of('/') + 1);
+    std::string sysfsPath = "/sys/block/" + deviceName + "/device/model";
+
+    std::ifstream modelFile(sysfsPath);
     std::string driveName;
 
     if (modelFile.is_open()) {
         std::getline(modelFile, driveName);
-        trimWs(driveName);
+        driveName.erase(0, driveName.find_first_not_of(" \t"));
+        driveName.erase(driveName.find_last_not_of(" \t") + 1);
     }
 
     return driveName.empty() ? "Unknown Drive" : driveName;
@@ -180,6 +91,7 @@ std::string getDriveName(const std::string& device) {
  * @return true if the device is a removable USB block device.
  */
 bool isFlashDrive(const std::string& devicePath) {
+    namespace fs = std::filesystem;
     try {
         if (devicePath.size() <= 5 || devicePath.rfind("/dev/", 0) != 0) {
             return false;
@@ -190,7 +102,7 @@ bool isFlashDrive(const std::string& devicePath) {
         const fs::path devNode = fs::canonical(devicePath, ec);
         if (ec) return false;
 
-        const std::string name = blockName(devNode.string());
+        const std::string name = devNode.filename().string();
         if (name.empty()) return false;
 
         const fs::path sysPath = fs::path("/sys/block") / name;
@@ -200,7 +112,10 @@ bool isFlashDrive(const std::string& devicePath) {
             std::ifstream file(sysPath / "removable");
             std::string value;
             if (!file || !std::getline(file, value)) return false;
-            trimWs(value);
+            while (!value.empty() &&
+                   std::isspace(static_cast<unsigned char>(value.back()))) {
+                value.pop_back();
+            }
             if (value != "1") return false;
         }
 
@@ -222,9 +137,8 @@ bool isFlashDrive(const std::string& devicePath) {
  * @brief Enumerates removable USB block devices visible in /sys/block.
  *
  * Skips loop devices, RAM disks, zram devices, and partition entries (names
- * ending in a digit). Every remaining candidate is checked with
- * isFlashDrive(), which verifies both the removable attribute and USB
- * attachment.
+ * ending in a digit). A device is included only when its removable sysfs
+ * attribute reads "1" and isFlashDrive() confirms it is USB-attached.
  *
  * @return Absolute device paths such as /dev/sdb.
  */
@@ -242,6 +156,12 @@ std::vector<std::string> getRemovableDevices() {
             }
 
             if (!deviceName.empty() && std::isdigit(static_cast<unsigned char>(deviceName.back()))) {
+                continue;
+            }
+
+            std::ifstream removableFile(entry.path() / "removable");
+            std::string removable;
+            if (!(removableFile >> removable) || removable != "1") {
                 continue;
             }
 
@@ -274,27 +194,31 @@ bool isDeviceMounted(const std::string& device) {
         return false;
     }
 
-    auto stripDev = [](std::string s) {
-        if (s.rfind("/dev/", 0) == 0) s.erase(0, 5);
-        return s;
-    };
-
-    const std::string deviceName = stripDev(device);
-
     std::string line;
+    std::string deviceName = device;
+
+    if (deviceName.substr(0, 5) == "/dev/") {
+        deviceName = deviceName.substr(5);
+    }
+
     while (std::getline(mountsFile, line)) {
         std::istringstream iss(line);
         std::string mountDevice;
         iss >> mountDevice;
-        mountDevice = stripDev(std::move(mountDevice));
+
+        if (mountDevice.substr(0, 5) == "/dev/") {
+            mountDevice = mountDevice.substr(5);
+        }
 
         if (mountDevice == deviceName ||
             (mountDevice.find(deviceName) == 0 &&
-             std::isdigit(static_cast<unsigned char>(mountDevice[deviceName.length()])))) {
+             std::isdigit(mountDevice[deviceName.length()]))) {
+            mountsFile.close();
             return true;
         }
     }
 
+    mountsFile.close();
     return false;
 }
 
@@ -332,27 +256,6 @@ namespace WriteValidation {
     }
 
     /**
-     * @brief Builds a themed error message of the form "<label> '<path>'".
-     *
-     * The mirror image of pathErr(): the label text comes first, in the error
-     * label colour, followed by the quoted path in the path colour.
-     *
-     * @param wt    Active write theme.
-     * @param label Message text before the path; include a trailing space
-     *              (e.g. "Failed to get size for ").
-     * @param path  Path to display, quoted, after the label.
-     * @return The fully coloured message string.
-     */
-    std::string labelledPathErr(const WriteTheme& wt, const std::string& label,
-                                const std::string& path) {
-        std::string s;
-        s.append(wt.errLabel).append(label)
-         .append(wt.errPath).append("'").append(path).append("'")
-         .append(wt.rl_resetCol);
-        return s;
-    }
-
-    /**
      * @brief Prints a themed "Validation errors:" block to stderr.
      *
      * Each entry is printed as an indented bullet. Entries are expected to be
@@ -379,7 +282,8 @@ namespace WriteValidation {
      * @return true if one or more write requests are still pending.
      */
     bool isDeviceBusy(const std::string& device) {
-        std::ifstream in("/sys/block/" + blockName(device) + "/inflight");
+        const std::string name = std::filesystem::path(device).filename().string();
+        std::ifstream in("/sys/block/" + name + "/inflight");
         unsigned long reads = 0, writes = 0;
         if (!(in >> reads >> writes))
             return false;
@@ -392,8 +296,8 @@ namespace WriteValidation {
      * Checks, in order:
      * -# The device is a removable USB flash drive (isFlashDrive).
      * -# The device and its partitions are not mounted (isDeviceMounted).
-     * -# The device is not being drained by this process after cancellation
-     *    (isDraining).
+     * -# The device is not in @c g_drainingDevices, which tracks writes still
+     *    being drained by this process after cancellation.
      * -# In non-interactive mode, the device has no write I/O in flight
      *    (@ref isDeviceBusy). This also catches pending writes from another
      *    process, which the in-process set cannot track.
@@ -414,16 +318,23 @@ namespace WriteValidation {
         if (isDeviceMounted(device))
             return pathErr(wt, shown, " or its partitions are mounted");
 
-        if (isDraining(device))
-            return pathErr(wt, shown, " has pending kernel-level tasks");
+        {
+            std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+            if (g_drainingDevices.count(device))
+                return pathErr(wt, shown, " has pending kernel-level tasks");
+        }
 
         if (GlobalState::isNonInteractive.load() && isDeviceBusy(device))
             return pathErr(wt, shown, " has pending kernel-level tasks");
 
         size = getBlockDeviceSize(device);
-        if (size == 0)
-            return labelledPathErr(wt, "Failed to get size for ", shown);
-
+        if (size == 0) {
+            std::string e;
+            e.append(wt.errLabel).append("Failed to get size for ")
+             .append(wt.errPath).append("'").append(shown).append("'")
+             .append(wt.rl_resetCol);
+            return e;
+        }
         return std::nullopt;
     }
 
@@ -453,11 +364,13 @@ namespace WriteValidation {
         e.append(wt.errLabel).append("ISO exceeds target drive capacity:\n")
          .append(wt.errLabel).append(isoLabelPadded)
          .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol)
-         .append(dimParen(std::string(wt.fileCol) + std::string(iso.filename))).append("\n")
+         .append(UI::Palette::DimGray).append(" (").append(wt.fileCol).append(iso.filename)
+         .append(UI::Palette::DimGray).append(")\n")
          .append(wt.errLabel).append(driveLabelPadded)
          .append(wt.sizeCol).append(deviceSizeStr).append(wt.rl_resetCol)
-         .append(dimParen(std::string(wt.warnLabel) + std::string(device) + " "
-                          + driveTag(wt, driveName)))
+         .append(UI::Palette::DimGray).append(" (").append(wt.warnLabel).append(device)
+         .append(wt.infoLabel).append(" <").append(driveName).append(">")
+         .append(UI::Palette::DimGray).append(")")
          .append(wt.rl_resetCol);
 
         return e;
@@ -570,8 +483,13 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 
     errors.clear();
 
+    auto trim = [](std::string& s) {
+        s.erase(s.find_last_not_of(" \t\n\r\f\v") + 1);
+        s.erase(0, s.find_first_not_of(" \t\n\r\f\v"));
+    };
+
     while (std::getline(pairStream, pair, ';')) {
-        trimWs(pair);
+        trim(pair);
         if (pair.empty()) continue;
 
         size_t sepPos = pair.find('>');
@@ -582,8 +500,8 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 
         std::string indexStr = pair.substr(0, sepPos);
         std::string device   = pair.substr(sepPos + 1);
-        trimWs(indexStr);
-        trimWs(device);
+        trim(indexStr);
+        trim(device);
 
         try {
             size_t index = std::stoul(indexStr);
@@ -637,52 +555,8 @@ void helpMappings();
 void displayErrors();
 
 // ------------------------------------------------------------------------- //
-// Terminal / UTF-8 / ANSI helpers (shared by WriteScreen and                //
-// ConfirmResizeWatcher)                                                     //
+// Terminal / UTF-8 helpers (shared by WriteScreen and ConfirmResizeWatcher) //
 // ------------------------------------------------------------------------- //
-
-/**
- * @brief Number of bytes in the UTF-8 code point that starts at @p s[i].
- *
- * Counts the lead byte plus any following continuation bytes (top two bits
- * 10). Always returns at least 1, so callers that step by the result always
- * make progress.
- *
- * @param s UTF-8 string.
- * @param i Index of a code point's first byte (must be < s.size()).
- */
-static size_t utf8SeqLen(const std::string& s, size_t i) {
-    size_t len = 1;
-    while (i + len < s.size() &&
-           (static_cast<unsigned char>(s[i + len]) & 0xC0) == 0x80) ++len;
-    return len;
-}
-
-/**
- * @brief True if an ANSI CSI sequence (ESC '[') begins at @p s[i].
- *
- * @param s String that may contain colour/formatting escapes.
- * @param i Index to test (must be < s.size()).
- */
-static bool isCsiStart(const std::string& s, size_t i) {
-    return static_cast<unsigned char>(s[i]) == 0x1B && i + 1 < s.size() && s[i + 1] == '[';
-}
-
-/**
- * @brief Index one past the end of the CSI sequence starting at @p s[i].
- *
- * Scans parameter bytes up to and including the final byte in 0x40..0x7E.
- * An unterminated sequence runs to the end of the string.
- *
- * @param s String containing a CSI sequence at @p i (see isCsiStart).
- * @param i Index of the ESC byte.
- */
-static size_t csiEnd(const std::string& s, size_t i) {
-    size_t j = i + 2;
-    while (j < s.size() && !(s[j] >= 0x40 && s[j] <= 0x7E)) ++j;
-    if (j < s.size()) ++j;
-    return j;
-}
 
 /**
  * @brief Visible columns of a UTF-8 string, counted by code point.
@@ -709,9 +583,9 @@ static size_t utf8Width(const std::string& s) {
 /**
  * @brief Visible width of a string that may contain ANSI CSI escapes.
  *
- * Like utf8Width, but skips ANSI CSI sequences, which the terminal
- * interprets rather than renders. The escapes count as 0 columns; every
- * other UTF-8 code point counts as 1.
+ * Like utf8Width, but skips ANSI CSI sequences (ESC [ … final byte in
+ * 0x40..0x7E), which the terminal interprets rather than renders. The
+ * escapes count as 0 columns; every other UTF-8 code point counts as 1.
  *
  * @param s String that may contain colour/formatting escapes.
  * @return Visible columns @p s occupies when printed.
@@ -719,12 +593,15 @@ static size_t utf8Width(const std::string& s) {
 static size_t visibleWidth(const std::string& s) {
     size_t w = 0;
     for (size_t i = 0; i < s.size(); ) {
-        if (isCsiStart(s, i)) {
-            i = csiEnd(s, i);
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        if (c == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
+            i += 2;
+            while (i < s.size() && !(s[i] >= 0x40 && s[i] <= 0x7E)) ++i;
+            if (i < s.size()) ++i;
             continue;
         }
-        i += utf8SeqLen(s, i);
-        ++w;
+        if ((c & 0xC0) != 0x80) ++w;
+        ++i;
     }
     return w;
 }
@@ -749,13 +626,17 @@ static std::string clipToWidth(const std::string& s, size_t maxCols) {
     out.reserve(s.size());
     size_t w = 0;
     for (size_t i = 0; i < s.size(); ) {
-        if (isCsiStart(s, i)) {
-            const size_t j = csiEnd(s, i);
+        if (static_cast<unsigned char>(s[i]) == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
+            size_t j = i + 2;
+            while (j < s.size() && !(s[j] >= 0x40 && s[j] <= 0x7E)) ++j;
+            if (j < s.size()) ++j;
             out.append(s, i, j - i);
             i = j;
             continue;
         }
-        const size_t len = utf8SeqLen(s, i);
+        size_t len = 1;
+        while (i + len < s.size() &&
+            (static_cast<unsigned char>(s[i + len]) & 0xC0) == 0x80) ++len;
         if (w >= maxCols) break;
         out.append(s, i, len);
         i += len;
@@ -808,7 +689,9 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
     std::string out;
     size_t cols = 0, i = 0;
     while (i < stem.size() && cols < keep) {
-        const size_t len = utf8SeqLen(stem, i);
+        size_t len = 1;
+        while (i + len < stem.size() &&
+               (static_cast<unsigned char>(stem[i + len]) & 0xC0) == 0x80) ++len;
         out.append(stem, i, len);
         i += len;
         ++cols;
@@ -821,83 +704,22 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
 }
 
 // ------------------------------------------------------------------------- //
-// SIGWINCH handler chaining (shared by both resize mechanisms)              //
-// ------------------------------------------------------------------------- //
-
-/**
- * @brief Installs a SIGWINCH handler while remembering, forwarding to and
- * later restoring the previously installed one.
- *
- * Forwarding keeps Readline's own SIGWINCH handling (rl_catch_sigwinch)
- * working while a watcher is active. Each owner keeps its own instance, so
- * the "previous handler" of one mechanism is never overwritten by the other.
- *
- * @par Signal safety
- * forward() is async-signal-safe provided the previous handler is. install()
- * and restore() must be called from normal (non-handler) context.
- */
-class SigwinchChain {
-public:
-    using Handler = void (*)(int, siginfo_t*, void*);
-
-    /**
-     * @brief Installs @p handler for SIGWINCH (SA_SIGINFO | SA_RESTART),
-     * saving the previous disposition.
-     *
-     * @return true if sigaction succeeded.
-     */
-    bool install(Handler handler) {
-        struct sigaction sa {};
-        sa.sa_sigaction = handler;
-        sa.sa_flags = SA_SIGINFO | SA_RESTART;
-        sigemptyset(&sa.sa_mask);
-        installed_ = (sigaction(SIGWINCH, &sa, &prev_) == 0);
-        return installed_;
-    }
-
-    /// Calls the previously installed handler, if it is a real one.
-    /// Meant to be called from inside our own handler.
-    void forward(int sig, siginfo_t* info, void* ctx) const {
-        if (prev_.sa_handler == SIG_DFL || prev_.sa_handler == SIG_IGN) return;
-        if (prev_.sa_flags & SA_SIGINFO) {
-            if (prev_.sa_sigaction) prev_.sa_sigaction(sig, info, ctx);
-        } else {
-            prev_.sa_handler(sig);
-        }
-    }
-
-    /// Reinstalls the previous handler. Safe to call more than once.
-    void restore() {
-        if (!installed_) return;
-        sigaction(SIGWINCH, &prev_, nullptr);
-        installed_ = false;
-    }
-
-private:
-    struct sigaction prev_ {};
-    bool             installed_ = false;
-};
-
-// ------------------------------------------------------------------------- //
 // Resize watcher (main-thread repaint via rl_event_hook)                    //
 // ------------------------------------------------------------------------- //
 
 /**
- * @brief State shared between the SIGWINCH handler and the repaint hook
- *        (main thread).
+ * @brief State shared between the resize watcher (background) and the
+ *        repaint hook (main thread).
  *
- * The signal handler only sets @ref pending (a lock-free atomic store, which
- * is async-signal-safe). The repaint hook on the main thread measures the
- * terminal itself and does all terminal I/O and readline access, which is the
- * only place rl_line_buffer / rl_end can be read without a data race.
+ * The watcher thread only sets @ref pending (plus the new size); the repaint
+ * hook on the main thread does all terminal I/O and readline access, which is
+ * the only place rl_line_buffer / rl_end can be read without a data race.
  *
  * @par Threading
- * pending is std::atomic because it is written from a signal handler and
- * consumed by the hook. lastCols is atomic for convenience; after the
- * constructor it is only touched by the hook on the main thread. Everything
- * else is main-thread-only: paint and promptWidth are written once in
- * ConfirmResizeWatcher's constructor, and lineWidths is written only by
- * confirmResizeHook.
+ * pending, pendingCols, pendingRows and lastCols are std::atomic because both
+ * threads touch them. Everything else is main-thread-only: paint and
+ * promptWidth are written once in ConfirmResizeWatcher's constructor (on the
+ * main thread), and lineWidths is written only by confirmResizeHook.
  *
  * @par Ownership
  * Instances are owned by the caller — normally a single file-scope object
@@ -907,9 +729,10 @@ private:
  * explicit at the type level.
  */
 struct ResizeRepaintState {
-    // Signalling: set by the SIGWINCH handler, consumed by the hook.
+    // Cross-thread signalling: written by watcher, consumed by hook.
     std::atomic<bool>   pending{false};
-    // Width the block was last drawn at; used to ignore height-only resizes.
+    std::atomic<size_t> pendingCols{0};
+    std::atomic<size_t> pendingRows{0};
     std::atomic<size_t> lastCols{0};
 
     // Main-thread-only.
@@ -926,12 +749,10 @@ static ResizeRepaintState g_confirmResize;
  * @brief rl_event_hook: repaints the warning block on the main thread.
  *
  * Called by readline from its idle input loop when no keystroke is pending.
- * If a SIGWINCH has been flagged, it:
- * -# Measures the terminal itself. A failed query (zero cols or rows) and a
- *    height-only change (same width as the last drawn block) are ignored; the
- *    terminal's own reflow repositions the block, and the skip guard below
- *    handles the case where it no longer fits. The row arithmetic below
- *    divides by cols, so the zero guard stays.
+ * If the watcher has flagged a width change, it:
+ * -# Defensively discards a pending resize with a zero cols or rows
+ *    (terminalSize never reports one, but the row arithmetic below divides
+ *    by cols, so the guard stays).
  * -# Tells readline the new screen size via rl_set_screen_size() so its own
  *    line-wrapping agrees with the layout computed here.
  * -# Computes how far the cursor must travel to reach the top of the warning
@@ -965,16 +786,15 @@ static ResizeRepaintState g_confirmResize;
  * @return Always 0 (do not abort readline).
  */
 static int confirmResizeHook(ResizeRepaintState& s) {
-    if (!s.pending.exchange(false, std::memory_order_acquire))
+    if (!s.pending.load(std::memory_order_acquire))
         return 0;
 
-    const TermSize sz = terminalSize();
-    const size_t cols = sz.cols;
-    const size_t rows = sz.rows;
+    const size_t cols = s.pendingCols.load(std::memory_order_relaxed);
+    const size_t rows = s.pendingRows.load(std::memory_order_relaxed);
 
     if (cols == 0 || rows == 0) return 0;
-    if (cols == s.lastCols.load(std::memory_order_relaxed)) return 0;
-    s.lastCols.store(cols, std::memory_order_relaxed);
+
+    s.pending.store(false, std::memory_order_release);
 
     rl_set_screen_size(static_cast<int>(rows), static_cast<int>(cols));
 
@@ -1004,43 +824,20 @@ static int confirmResizeHook(ResizeRepaintState& s) {
     return 0;
 }
 
-namespace confirm_resize_detail {
-
-static_assert(std::atomic<bool>::is_always_lock_free,
-              "pending flag must be lock-free to be set from a signal handler");
-
-/// State the SIGWINCH handler writes to. Set while a watcher is active.
-inline std::atomic<ResizeRepaintState*> g_state{nullptr};
-
-/// Chain to the handler that was installed before ours.
-inline SigwinchChain g_chain;
-
-inline void onConfirmWinch(int sig, siginfo_t* info, void* ctx) {
-    if (ResizeRepaintState* s = g_state.load(std::memory_order_acquire))
-        s->pending.store(true, std::memory_order_release);
-
-    g_chain.forward(sig, info, ctx);
-}
-
-} // namespace confirm_resize_detail
-
 /**
- * @brief Signals a main-thread repaint when the terminal is resized.
+ * @brief Signals a main-thread repaint when the terminal width changes.
  *
- * Installs a SIGWINCH handler while readline waits at the confirmation
- * prompt. The handler never touches the terminal or readline: it only sets
- * ResizeRepaintState::pending (an async-signal-safe atomic store) and forwards
- * to the previously installed handler. The main thread's confirmResizeHook
- * measures the terminal, does the redraw and restores the user's typed input
- * via rl_redisplay().
+ * Runs as a background thread while readline waits at the confirmation
+ * prompt. Never touches the terminal or readline directly: it only sets
+ * ResizeRepaintState::pending, and the main thread's confirmResizeHook does
+ * the redraw and restores the user's typed input via rl_redisplay().
  *
- * Reacts to width changes only. Height changes are ignored by the hook: the
- * terminal's own reflow repositions the block, and the skip guard in the hook
- * handles the case where the block no longer fits.
+ * Reacts to width changes only. Height changes are ignored: the terminal's
+ * own reflow repositions the block, and the skip guard in the hook handles
+ * the case where the block no longer fits.
  *
- * Only one watcher may be active at a time (hook and signal state are
- * process-global). Must be stopped before readline returns (see stop()) so no
- * repaint can fire after the prompt has been answered.
+ * Must be stopped before readline returns (see stop()) so no repaint can fire
+ * after the prompt has been answered.
  */
 class ConfirmResizeWatcher {
 public:
@@ -1053,10 +850,9 @@ public:
     using Painter = std::function<std::vector<size_t>(size_t cols)>;
 
     /**
-     * @brief Populates @p state and installs the SIGWINCH handler.
+     * @brief Populates @p state and starts the watcher thread.
      *
-     * @param state       State shared with confirmResizeHook. Must outlive
-     *                    this watcher.
+     * @param state       State shared with confirmResizeHook.
      * @param paint       Callback that (re)prints the warning block for a
      *                    given width and returns its per-line widths.
      * @param drawnCols   Terminal width the block was last drawn at.
@@ -1069,37 +865,27 @@ public:
                          size_t drawnCols, std::vector<size_t> drawnWidths,
                          const std::string& promptText)
         : state_(state) {
-        using namespace confirm_resize_detail;
-        assert(g_state.load() == nullptr && "only one ConfirmResizeWatcher may be active");
-
         state_.paint        = std::move(paint);
         state_.lineWidths   = std::move(drawnWidths);
         state_.promptWidth  = utf8Width(promptText);
         state_.lastCols.store(drawnCols, std::memory_order_relaxed);
         state_.pending.store(false, std::memory_order_relaxed);
 
-        g_state.store(&state_, std::memory_order_release);
-
-        g_chain.install(onConfirmWinch);
-        active_ = true;
+        thread_ = std::thread([this] { loop(); });
     }
 
-    /// Uninstalls the handler. Safe to call more than once.
+    /// Stops and joins the watcher thread. Safe to call more than once.
     ~ConfirmResizeWatcher() { stop(); }
 
     ConfirmResizeWatcher(const ConfirmResizeWatcher&)            = delete;
     ConfirmResizeWatcher& operator=(const ConfirmResizeWatcher&) = delete;
 
-    /// Uninstalls the handler and discards any unprocessed resize event so no
-    /// repaint fires after the prompt is answered. Safe to call more than once.
+    /// Stops and joins the watcher thread. Safe to call more than once.
     void stop() {
-        using namespace confirm_resize_detail;
-        if (!active_) return;
-        active_ = false;
-
-        g_chain.restore();
-        g_state.store(nullptr, std::memory_order_release);
-        state_.pending.store(false, std::memory_order_release);
+        if (!thread_.joinable()) return;
+        { std::lock_guard<std::mutex> lk(m_); stop_ = true; }
+        cv_.notify_all();
+        thread_.join();
     }
 
     /**
@@ -1109,8 +895,36 @@ public:
     ResizeRepaintState& state() { return state_; }
 
 private:
-    ResizeRepaintState& state_;
-    bool                active_ = false;
+    /**
+     * @brief Poll loop: signals the main thread on a width change.
+     *
+     * Wakes every 100 ms (or immediately on stop). Only width changes set
+     * ResizeRepaintState::pending; height changes are ignored.
+     */
+    void loop() {
+        constexpr auto kPoll = std::chrono::milliseconds(100);
+        std::unique_lock<std::mutex> lk(m_);
+        while (!stop_) {
+            cv_.wait_for(lk, kPoll, [&] { return stop_; });
+            if (stop_) break;
+
+            const auto size = terminalSize();
+            const size_t cols = size.cols;
+            const size_t rows = size.rows;
+            if (cols == state_.lastCols.load(std::memory_order_relaxed))
+                continue;
+            state_.lastCols.store(cols, std::memory_order_relaxed);
+            state_.pendingCols.store(cols, std::memory_order_relaxed);
+            state_.pendingRows.store(rows, std::memory_order_relaxed);
+            state_.pending.store(true, std::memory_order_release);
+        }
+    }
+
+    ResizeRepaintState&     state_;
+    std::mutex              m_;
+    std::condition_variable cv_;
+    bool                    stop_ = false;
+    std::thread             thread_;
 };
 
 /**
@@ -1201,12 +1015,6 @@ static int confirmResizeHookTrampoline(void) {
  *                draining in the background; cannot be written to until
  *                draining finishes.
  *
- * @par Drive details are gathered once
- * Drive name and size are read into the per-device DeviceInfo list when the
- * device screen is built. The confirmation warning rows reuse those values
- * instead of querying sysfs / ioctl again, falling back to a fresh query
- * only if a device is not in that list.
- *
  * @param selectedIsos ISOs chosen by the user for writing.
  * @return Validated (IsoInfo, device) pairs ready for
  *         performWriteOperation, or an empty vector if the user aborted or
@@ -1280,7 +1088,10 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 devicePromptStream << wt.pathCol << isoDir << "/";
             }
 
-            devicePromptStream << isoRef(wt, filename, sortedIsos[i].sizeStr) << "\n";
+            devicePromptStream << wt.fileCol << filename;
+
+            devicePromptStream << UI::Palette::DimGray << " (" << wt.sizeCol << sortedIsos[i].sizeStr
+                              << UI::Palette::DimGray << ")\n";
         }
 
         devicePromptStream << "\n" << color << "Removable USB Flash Devices:" << wt.rl_resetCol << "\n\n";
@@ -1320,12 +1131,14 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 if (dev.error) {
                     devicePromptStream << " " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
                 } else {
-                    devicePromptStream << " " << wt.deviceCol << dev.path << " "
-                                      << driveTag(wt, dev.driveName)
-                                      << sizeTag(wt, dev.sizeStr)
+                    devicePromptStream << " " << wt.deviceCol << dev.path
+                                      << wt.infoLabel << " <" << dev.driveName
+                                      << ">" << UI::Palette::DimGray << " (" << wt.sizeCol << dev.sizeStr
+                                      << UI::Palette::DimGray << ")"
                                       << ([&]() -> std::string {
                                           if (dev.mounted) return wt.colorFailure + " [MOUNTED]" + wt.rl_resetCol;
-                                          if (isDraining(dev.path))
+                                          std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+                                          if (g_drainingDevices.count(dev.path))
                                               return wt.colorFailure + " [FLUSHING]" + wt.rl_resetCol;
                                           return "";
                                       }())
@@ -1447,30 +1260,14 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         struct WarnRow {
             std::string device, driveName, deviceSizeStr, filename, isoSizeStr;
         };
-
-        // Reuse the drive name / size already gathered for the device list;
-        // fall back to a fresh query only for a device that is not in it.
-        std::unordered_map<std::string, const DeviceInfo*> infoByPath;
-        for (const auto& d : deviceInfos)
-            if (!d.error) infoByPath.emplace(d.path, &d);
-
         std::vector<WarnRow> warnRows;
         warnRows.reserve(validPairs.size());
         for (const auto& [iso, device] : validPairs) {
-            const auto it = infoByPath.find(device);
-            if (it != infoByPath.end()) {
-                warnRows.push_back({ device,
-                                     it->second->driveName,
-                                     it->second->sizeStr,
-                                     iso.filename,
-                                     iso.sizeStr });
-            } else {
-                warnRows.push_back({ device,
-                                     getDriveName(device),
-                                     formatFileSize(getBlockDeviceSize(device)),
-                                     iso.filename,
-                                     iso.sizeStr });
-            }
+            warnRows.push_back({ device,
+                                 getDriveName(device),
+                                 formatFileSize(getBlockDeviceSize(device)),
+                                 iso.filename,
+                                 iso.sizeStr });
         }
 
         // Full redraw used by ConfirmResizeWatcher on SIGWINCH. On a resize,
@@ -1524,10 +1321,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 const std::string shownName = truncateIsoName(r.filename, availForName);
 
                 std::ostringstream row;
-                row << UI::Palette::DimGray << " {" << wt.deviceCol << r.device << " "
-                    << driveTag(wt, r.driveName) << sizeTag(wt, r.deviceSizeStr)
-                    << "} " << color << "←" << UI::Palette::DimGray << " {"
-                    << isoRef(wt, shownName, r.isoSizeStr) << "}";
+                row << UI::Palette::DimGray << " {" << wt.deviceCol << r.device
+                    << " " << wt.infoLabel << "<" << r.driveName << ">" << UI::Palette::DimGray << " ("
+                    << wt.sizeCol << r.deviceSizeStr
+                    << UI::Palette::DimGray << ")} " << color << "←" << UI::Palette::DimGray << " {" << wt.fileCol
+                    << shownName << UI::Palette::DimGray << " (" << wt.sizeCol
+                    << r.isoSizeStr << UI::Palette::DimGray << ")}";
 
                 const std::string clipped = clipToWidth(row.str(), usableCols);
                 std::cout << clipped << "\n";
@@ -1572,7 +1371,14 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             watcher.stop();
         }
 
-        if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
+        std::string ans;
+        if (confirmation) {
+            ans = confirmation.get();
+            while (!ans.empty() && std::isspace(static_cast<unsigned char>(ans.back())))
+                ans.pop_back();
+        }
+
+        if (ans == "y" || ans == "Y") {
             setupSignalHandlerCancellations();
             GlobalState::g_operationCancelled.store(false);
             return validPairs;
@@ -1740,64 +1546,23 @@ void drainManagerForWrite2UsbUI(
     }
 }
 
-namespace write_screen_detail {
-
-/// Write end of the self-pipe the SIGWINCH handler pokes. -1 = no watcher active.
-inline std::atomic<int> g_fd{-1};
-
-/// Chain to the handler that was installed before ours.
-inline SigwinchChain g_chain;
-
-static_assert(std::atomic<int>::is_always_lock_free,
-              "g_fd must be lock-free to be read from a signal handler");
-
-inline void onWriteWinch(int sig, siginfo_t* info, void* ctx) {
-    const int savedErrno = errno;
-    const int fd = g_fd.load(std::memory_order_acquire);
-    if (fd >= 0) {
-        const char b = 1;
-        [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);   // async-signal-safe; non-blocking
-    }
-    errno = savedErrno;
-
-    g_chain.forward(sig, info, ctx);
-}
-
-} // namespace write_screen_detail
-
 /**
  * @brief Owns the live progress screen and keeps it correctly laid out.
  *
  * The screen has two phases:
  * - Running  — a keeper thread redraws the per-task rows.
- * - Finished — after finish() it shows the final rows, the status line and
- *   the summary. The keeper keeps running and repaints on terminal resize,
- *   unless a prompt was registered with setPrompt(): then the program's
- *   resize hook owns repainting (it calls repaint() and lets Readline redraw
- *   the prompt and typed input), so the keeper stays out of the way.
+ * - Finished — after finish() it shows the final rows, the status line, the
+ *   summary and, once set with setPrompt, the prompt. The keeper keeps
+ *   running and repaints on terminal resize, so the screen stays correct
+ *   while the program waits for input.
  *
  * @par Rendering
  * All drawing happens under one mutex (renderMutex_), from either the keeper
- * thread, finish() or repaint(), so frames never interleave.
- *
- * @par Waking the keeper (no polling)
- * The keeper blocks on the condition variable in the shared WriteSync state
- * and wakes only for:
- * - a task completion,
- * - a terminal resize (SIGWINCH), and
- * - while running, the 500 ms pulse deadline (live percentages and speeds).
- * Once finished it sleeps indefinitely until a resize or stop().
- *
- * A signal handler cannot notify a condition variable, so SIGWINCH is relayed:
- * the handler writes one byte to a self-pipe (async-signal-safe) and forwards
- * to the previously installed handler; a small relay thread blocked in read()
- * on that pipe sets resizeSignalled_ and notifies the condition variable.
- * The relay thread consumes no CPU while idle. If the pipe or handler cannot
- * be set up, the keeper falls back to checking the terminal size every
- * 100 ms.
- *
- * Only one WriteScreen may be started at a time (the handler state is
- * process-global).
+ * thread or finish(), so frames never interleave. The keeper wakes on a task
+ * completion (condition variable in the shared WriteSync state) or every
+ * 100 ms to compare the terminal size with the last frame. While running it
+ * redraws on completion, on a size change, or every 500 ms (live percentages
+ * and speeds). Once finished it redraws only on a size change.
  *
  * @par Row layout
  * @code
@@ -1824,8 +1589,7 @@ inline void onWriteWinch(int sig, siginfo_t* info, void* ctx) {
  * physical line count and redraws. After a size change, and always for the
  * result screen, the screen and scrollback are wiped and redrawn from the
  * top. Rows are clipped to avoid wrapping, and each frame is written once
- * inside a synchronized update. Frames are skipped while the terminal size
- * is unknown (0 columns or rows). The result screen looks like this:
+ * inside a synchronized update. The result screen looks like this:
  * @code
  * (line 1: empty)
  * Status: write2usb → COMPLETED        (line 2)
@@ -1833,16 +1597,13 @@ inline void onWriteWinch(int sig, siginfo_t* info, void* ctx) {
  * <rows...>                            (from line 4)
  * (empty)
  * Successful: n/m | Time Elapsed: x.xs
+ * <prompt, if set>
  * @endcode
- * The prompt itself is not printed by this class: after repaint() the
- * program's resize hook calls rl_redisplay(), which redraws the prompt and
- * the user's typed input.
  *
  * @par Lifetime
  * Holds shared_ptr copies of the progress vector and the WriteSync state, so
  * it never refers to the stack of the function that created it. The
- * destructor stops and joins the keeper and relay threads and restores the
- * previous SIGWINCH handler.
+ * destructor stops and joins the keeper thread.
  */
 class WriteScreen {
 public:
@@ -1861,14 +1622,13 @@ public:
     WriteScreen& operator=(const WriteScreen&) = delete;
 
     /// Prints the header, hides the cursor, computes the per-operation column
-    /// data, installs the resize signal relay and starts the keeper thread.
+    /// data and starts the keeper thread.
     void start() {
         {
             std::lock_guard<std::mutex> rl(renderMutex_);
             std::cout << headerText(false) << "\033[?25l" << std::flush;
         }
         computeConstants();
-        installResizeSignal();
         thread_ = std::thread([this] { keeperLoop(); });
     }
 
@@ -1918,39 +1678,30 @@ public:
         renderLocked();
     }
 
-    /// Registers the program's "press Enter" prompt. Once set, the keeper no
-    /// longer repaints on resize by itself: the program's resize hook calls
-    /// repaint() instead and Readline redraws the prompt and typed input.
+    /// Text printed under the summary on every result-screen repaint. Must be
+    /// the same text the program prints for its "press Enter" prompt, so a
+    /// repaint can put the prompt back after wiping the screen.
     void setPrompt(std::string prompt) {
         std::lock_guard<std::mutex> rl(renderMutex_);
         promptText_ = std::move(prompt);
     }
 
-    /// Re-emits the result screen (summary) at the current terminal width.
-    /// Called by the pressEnterTo*WithRepaint() machinery on resize so the
-    /// summary survives a terminal wipe. Safe to call from the main thread
+    /// Re-emits the result screen (summary + prompt) at the current terminal
+    /// width. Called by the pressEnterTo*WithRepaint() machinery on resize so
+    /// the summary survives a terminal wipe. Safe to call from the main thread
     /// after finish(); takes the same lock the keeper uses.
     void repaint() {
         std::lock_guard<std::mutex> rl(renderMutex_);
         renderLocked();
     }
 
-    /// Stops and joins the keeper and relay threads and restores the previous
-    /// SIGWINCH handler. Safe to call more than once.
+    /// Stops and joins the keeper thread. Safe to call more than once.
     void stop() {
         if (!thread_.joinable()) return;
         stop_.store(true, std::memory_order_release);
-
-        if (wakeWr_ >= 0) {                         // wake the relay thread out of read()
-            const char b = 1;
-            [[maybe_unused]] const ssize_t r = ::write(wakeWr_, &b, 1);
-        }
-        if (relay_.joinable()) relay_.join();
-
-        notifySync(*syncPtr_);
+        { std::lock_guard<std::mutex> lk(syncPtr_->mutex); }
+        syncPtr_->cv.notify_all();
         thread_.join();
-
-        uninstallResizeSignal();
     }
 
 private:
@@ -1959,7 +1710,7 @@ private:
     static constexpr int  BAR_WIDTH = 5;
     static constexpr int  BAR_STEPS = BAR_WIDTH * 2;
     static constexpr auto kPulse = std::chrono::milliseconds(500);
-    static constexpr auto kPoll  = std::chrono::milliseconds(100);   // fallback only
+    static constexpr auto kPoll  = std::chrono::milliseconds(100);
 
     // Right-pads an ASCII string to the given byte width. Used for device
     // paths and other ASCII-only columns.
@@ -1967,59 +1718,6 @@ private:
         if (s.size() < target) s.append(target - s.size(), ' ');
         return s;
     }
-
-    // ---- Resize signal relay -------------------------------------------------
-
-    void installResizeSignal() {
-        using namespace write_screen_detail;
-        assert(g_fd.load() < 0 && "only one WriteScreen may be started at a time");
-
-        int fds[2];
-        if (::pipe(fds) != 0) { pollFallback_ = true; return; }
-        for (int fd : fds) ::fcntl(fd, F_SETFD, FD_CLOEXEC);
-        ::fcntl(fds[1], F_SETFL, O_NONBLOCK);       // handler must never block
-        wakeRd_ = fds[0];
-        wakeWr_ = fds[1];
-
-        g_fd.store(wakeWr_, std::memory_order_release);
-
-        if (!g_chain.install(onWriteWinch)) {
-            g_fd.store(-1, std::memory_order_release);
-            ::close(wakeRd_); ::close(wakeWr_);
-            wakeRd_ = wakeWr_ = -1;
-            pollFallback_ = true;
-            return;
-        }
-
-        relay_ = std::thread([this] { relayLoop(); });
-    }
-
-    void uninstallResizeSignal() {
-        using namespace write_screen_detail;
-        g_chain.restore();
-        if (wakeWr_ >= 0) {
-            g_fd.store(-1, std::memory_order_release);
-            ::close(wakeWr_);
-            wakeWr_ = -1;
-        }
-        if (wakeRd_ >= 0) { ::close(wakeRd_); wakeRd_ = -1; }
-    }
-
-    // Blocks in read() until the handler (or stop()) writes a byte. Zero CPU
-    // while idle. Turns the signal into a condition-variable wakeup.
-    void relayLoop() {
-        char buf[64];
-        for (;;) {
-            const ssize_t n = ::read(wakeRd_, buf, sizeof buf);
-            if (n < 0 && errno == EINTR) continue;
-            if (n <= 0 || stop_.load(std::memory_order_acquire)) break;
-
-            resizeSignalled_.store(true, std::memory_order_release);
-            notifySync(*syncPtr_);   // pairs with the keeper's predicate check
-        }
-    }
-
-    // ---- Layout --------------------------------------------------------------
 
     // Device names, full (untruncated) drive names and column widths cannot
     // change while the operation runs, so they are computed once, before the
@@ -2061,64 +1759,41 @@ private:
         size_t seenFinished = static_cast<size_t>(-1);
 
         while (!stop_.load(std::memory_order_acquire)) {
-            bool finishedPhase = false;
             {
                 std::lock_guard<std::mutex> rl(renderMutex_);
 
-                const bool   resizeEvt   = resizeSignalled_.exchange(false, std::memory_order_acquire);
+                const auto   size        = terminalSize();
+                const bool   sizeChanged = hasDrawn_ &&
+                    (size.cols != lastCols_ || size.rows != lastRows_);
+
                 const size_t finishedNow = syncPtr_->finishedTasks.load();
                 const bool   completion  = (finishedNow != seenFinished);
                 seenFinished = finishedNow;
-                finishedPhase = (phase_ == Phase::Finished);
 
-                if (!finishedPhase) {
-                    const auto size = terminalSize();
-                    if (size.cols == 0 || size.rows == 0) {
-                        lastDraw = clock::now();            // size unknown: skip, don't spin
-                    } else {
-                        const bool sizeChanged = hasDrawn_ &&
-                            (size.cols != lastCols_ || size.rows != lastRows_);
-                        const bool pulse = (clock::now() - lastDraw) >= kPulse;
-                        if (sizeChanged || completion || pulse) {
-                            renderLocked(size, sizeChanged);
-                            lastDraw = clock::now();
-                        }
+                if (phase_ == Phase::Running) {
+                    const bool pulse = (clock::now() - lastDraw) >= kPulse;
+                    if (sizeChanged || completion || pulse) {
+                        renderLocked(size, sizeChanged);
+                        lastDraw = clock::now();
                     }
-                } else if ((resizeEvt || pollFallback_) && promptText_.empty()) {
-                    // Finished and no prompt registered: the keeper owns resize
-                    // repaints. With a prompt, the resize hook calls repaint().
-                    const auto size = terminalSize();
-                    if (size.cols != 0 && size.rows != 0 &&
-                        hasDrawn_ && (size.cols != lastCols_ || size.rows != lastRows_))
-                        renderLocked(size, true);
+                } else if (sizeChanged) {
+                    renderLocked(size, sizeChanged);
                 }
             }
 
             std::unique_lock<std::mutex> lk(syncPtr_->mutex);
-            const auto pred = [&] {
+            syncPtr_->cv.wait_for(lk, kPoll, [&] {
                 return stop_.load(std::memory_order_acquire) ||
-                       resizeSignalled_.load(std::memory_order_acquire) ||
                        syncPtr_->finishedTasks.load() != seenFinished;
-            };
-
-            // Running: wake for the pulse. Finished: sleep until an event.
-            // Fallback (no signal relay): also wake every kPoll to check size.
-            if (!finishedPhase || pollFallback_) {
-                auto deadline = finishedPhase ? clock::now() + kPoll : lastDraw + kPulse;
-                if (pollFallback_) deadline = std::min(deadline, clock::now() + kPoll);
-                syncPtr_->cv.wait_until(lk, deadline, pred);
-            } else {
-                syncPtr_->cv.wait(lk, pred);
-            }
+            });
         }
     }
 
     // Convenience overload: queries the terminal size and derives the resize
-    // flag itself. Used by finish() and repaint(), which render once and do
-    // not already hold this information. The caller must hold renderMutex_.
+    // flag itself. Used by finish(), which renders once and does not already
+    // hold this information. The caller must hold renderMutex_.
     void renderLocked() {
-        const auto size = terminalSize();
-        if (size.cols == 0 || size.rows == 0) return;       // size unknown: skip
+        const auto size    = terminalSize();
         const bool resized = hasDrawn_ &&
             (size.cols != lastCols_ || size.rows != lastRows_);
         renderLocked(size, resized);
@@ -2129,8 +1804,6 @@ private:
     // keeper share exactly one source of truth for "did the size change?".
     // The caller must hold renderMutex_.
     void renderLocked(TermSize termSize, bool resized) {
-        if (termSize.cols == 0 || termSize.rows == 0) return;   // also guards the division below
-
         const bool finished = (phase_ == Phase::Finished);
 
         size_t maxFilenameWidth = 0;
@@ -2220,7 +1893,7 @@ private:
             std::ostringstream row;
             row << wt_.fileCol << paddedFilename
                 << color << " → " << wt_.deviceCol << paddedDevice
-                << color << " " << driveTag(wt_, name) << namePad
+                << color << " " << wt_.infoLabel << "<" << name << ">" << namePad
                 << color << " ["
                 << bar << wt_.speedCol << empty
                 << color << "] ";
@@ -2274,7 +1947,7 @@ private:
     Phase               phase_ = Phase::Running;
     std::string         statusLine_;
     std::string         summaryText_;
-    std::string         promptText_;     // non-empty = the resize hook owns repainting
+    std::string         promptText_;
     // Visible width (in columns) of every row printed by the previous frame.
     // Used to work out how far to move the cursor back up, even if the
     // terminal was resized (and therefore re-wrapped the old rows) in between.
@@ -2283,13 +1956,6 @@ private:
     // dimension triggers a full wipe + repaint instead of a cursor-up redraw.
     size_t              lastCols_ = 0, lastRows_ = 0;
     bool                hasDrawn_ = false;
-
-    // Resize relay. wakeRd_/wakeWr_/pollFallback_ are set in start() before
-    // the threads run and only cleared after they are joined.
-    int                 wakeRd_ = -1, wakeWr_ = -1;
-    bool                pollFallback_ = false;
-    std::atomic<bool>   resizeSignalled_{false};
-    std::thread         relay_;
 
     std::atomic<bool>   stop_{false};
     std::thread         thread_;
@@ -2387,10 +2053,13 @@ std::shared_ptr<WriteScreen> performWriteOperation(
 
             syncPtr->finishedTasks.fetch_add(1);
 
+            {
+                std::lock_guard<std::mutex> lock(syncPtr->mutex);
+            }
             // notify_all: the screen's keeper thread and the main thread wait
             // on this same condition variable, and notify_one could wake the
             // wrong one.
-            notifySync(*syncPtr);
+            syncPtr->cv.notify_all();
         }));
     }
 
