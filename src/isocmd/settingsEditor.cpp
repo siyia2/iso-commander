@@ -33,6 +33,30 @@
 #include "../tokenize.h"
 
 /**
+ * @brief Result of a single @c editSetting screen.
+ *
+ * - @c Advance: the setting has no matching entry, so there is nothing to
+ *               edit; move on to the next pending setting (wrapping), or
+ *               leave if it was the only one. Blank Enter does not produce
+ *               this: it just redraws the edit screen.
+ * - @c Updated: a value was accepted and saved (re-entering the current value
+ *               counts too); the setting is removed
+ *               from the selection (and therefore from the PgUp / PgDn / g#
+ *               loop), then the loop moves on to the setting that followed it
+ *               (wrapping to the first pending one) and finishes only when
+ *               nothing is left.
+ * - @c Next:    PgDn was pressed; go to the next selected setting.
+ * - @c Prev:    PgUp was pressed; go to the previous selected setting.
+ * - @c GoTo:    "g#" was entered; jump to selected setting number # (see
+ *               @c g_editGotoPos).
+ * - @c Abort:   Esc or Ctrl+D; leave the whole multi-edit sequence.
+ */
+enum class EditNav { Advance, Updated, Next, Prev, GoTo, Abort };
+
+// Target position (1-based, within the current selection) for EditNav::GoTo.
+static size_t g_editGotoPos = 0;
+
+/**
  * @brief Prints the standard "configuration file inaccessible" error.
  *
  * @param configPath Path of the configuration file to name in the message.
@@ -96,6 +120,14 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache) {
 void helpSettingsEditor();
 void syncCache(const std::string& filePath);
 
+// Existing handlers from readline.cpp: they replace the line with "PgUp" /
+// "PgDn" and set rl_done. (Redeclared here in case readline.h doesn't expose them.)
+int pgup_handler(int, int);
+int pgdn_handler(int, int);
+EditNav editSetting(const std::string& configPath, const std::string& key,
+                    const std::vector<std::string>& inputErrors,
+                    size_t pos, size_t total);
+
 /**
  * @brief Runs the interactive configuration editor.
  *
@@ -104,6 +136,26 @@ void syncCache(const std::string& filePath);
  *
  * - **Input:** GNU Readline accepts individual selections and tokenized
  *   multi-selections; per-setting validation is handled by @c editSetting.
+ * - **Multi-selection navigation:** when several settings are selected, they
+ *   are edited one screen at a time. A blank Enter does nothing; a valid
+ *   value (even one equal to the current value) is saved and removes the
+ *   setting from the loop. The loop ends only
+ *   on Esc / Ctrl+D or once every selected setting has been updated.
+ *   PgDn / PgUp move to the next / previous selected setting without
+ *   wrapping: at either end the key is ignored and the matching footer hint
+ *   is hidden.
+ * - **Updated settings leave the loop:** once a setting's value has been
+ *   changed (@c EditNav::Updated) it is removed from the selection, so the
+ *   "(n/total)" indicator, PgUp / PgDn navigation and "g#" numbering only
+ *   cover the settings that are still pending (skipped or not yet visited).
+ *   After an update the loop continues with the setting that followed the
+ *   updated one (wrapping to the first pending one) and ends only when no
+ *   setting is left. Settings that have not been updated stay in the loop.
+ * - **Input errors:** token errors from a multi-selection are passed to the
+ *   first @c editSetting call and printed above its "Edit Setting" header.
+ *   If the input produced only errors and no valid selection, the errors are
+ *   listed followed by "No valid input provided", and the editor returns to
+ *   the main prompt.
  * - **Persistence:** edits update the in-memory cache and runtime state, then
  *   attempt to write the configuration file. Resetting all settings follows
  *   the same sequence after confirmation.
@@ -114,9 +166,9 @@ void syncCache(const std::string& filePath);
  *   resize repaints the full settings view rather than just the last
  *   message. @c drawSettings is the repaint callback for both the main
  *   prompt and the reset confirmation, and @c render serves the post-reset
- *   status screen. Once a reset is requested, the screen is repainted
- *   without the main prompt line, and neither that line nor the
- *   confirmation line is re-echoed afterwards.
+ *   status screen and the "No valid input provided" screen. Once a reset is
+ *   requested, the screen is repainted without the main prompt line, and
+ *   neither that line nor the confirmation line is re-echoed afterwards.
  *
  * @param configPath Configuration file used to load and save settings.
  */
@@ -174,9 +226,9 @@ void interactiveConfigEditor(const std::string& configPath) {
         std::string prompt = std::format(
             "\n{}IDX\001{}\002 ↵ for {}editor\001{}\002, ? for help: \001{}\002",
             UI::Palette::RL_idxGreen,
-            tc.highlight,
+            tc.path,
             UI::Palette::RL_Yellow,
-            tc.highlight,
+            tc.path,
             tc.reset
         );
         armPendingInputRestore();
@@ -258,25 +310,71 @@ void interactiveConfigEditor(const std::string& configPath) {
             std::unordered_set<int> choices;
 
             tokenizeInput(input, slots, choices);
-            if (!verboseSets.uniqueErrorTokenMessages.empty()) std::cout << "\n";
-            for (const auto& err : verboseSets.uniqueErrorTokenMessages)
-                std::cout << err << "\n";
-            if (!verboseSets.uniqueErrorTokenMessages.empty()) {
-                auto render = [&] {
-                    SyncOutput sync;
-                    clearScrollBuffer();
-                    std::cout << "\n";
-                    for (const auto& err : verboseSets.uniqueErrorTokenMessages)
-                        std::cout << err << "\n";
-                };
-                pressEnterToContinueWithRepaint(render);
+
+            // Snapshot of the token errors so they can be handed to editSetting
+            // and survive repaint callbacks.
+            const std::vector<std::string> inputErrors(
+                verboseSets.uniqueErrorTokenMessages.begin(),
+                verboseSets.uniqueErrorTokenMessages.end());
+
+            // Only errors, nothing valid to edit: report and return to the main prompt.
+            if (choices.empty()) {
+                if (!inputErrors.empty()) {
+                    auto render = [&] {
+                        SyncOutput sync;
+                        clearScrollBuffer();
+                        std::cout << "\n";
+                        for (const auto& err : inputErrors)
+                            std::cout << err << "\n";
+                        std::cout << "\n" << tc.error << "No valid input provided"
+                                  << tc.reset << "\n";
+                    };
+                    pressEnterToContinueWithRepaint(render);
+                }
+                continue;
             }
 
+            // Valid choices exist: errors (if any) are shown above the first
+            // edit screen only.
+            const std::vector<std::string> noErrors;
             std::vector<int> ordered(choices.begin(), choices.end());
             std::sort(ordered.begin(), ordered.end());
-            for (int choice : ordered) {
-                if (!editSetting(configPath, CONFIG_ORDERED_DEFAULTS[choice - 1].key)) {
-                    break;
+
+            size_t i = 0;
+            bool showErrors = true;          // token errors only on the first screen
+            bool done = false;
+            while (!done) {
+                // Recomputed every iteration: updated settings are erased from
+                // `ordered`, so the total shown in "(n/total)" and used for
+                // PgUp/PgDn/g# shrinks accordingly.
+                const size_t n = ordered.size();
+                EditNav r = editSetting(configPath,
+                                        CONFIG_ORDERED_DEFAULTS[ordered[i] - 1].key,
+                                        showErrors ? inputErrors : noErrors,
+                                        i + 1, n);
+                showErrors = false;
+
+                switch (r) {
+                    case EditNav::Advance:
+                        // Only returned when the setting key has no matching
+                        // entry (nothing to edit). Move on to the next pending
+                        // setting, or leave if it was the only one.
+                        if (n == 1) done = true;
+                        else        i = (i + 1) % n;
+                        break;
+                    case EditNav::Updated:
+                        // Updated settings leave the PgUp/PgDn/g# loop. The next
+                        // setting slides into index i, so don't increment; past
+                        // the end, wrap to the first pending setting. The loop
+                        // ends only once nothing is left to edit.
+                        ordered.erase(ordered.begin() + static_cast<std::ptrdiff_t>(i));
+                        if (ordered.empty()) done = true;
+                        else if (i >= ordered.size()) i = 0;
+                        break;
+                    case EditNav::Next:    if (i + 1 < n) ++i;        break;
+                    case EditNav::Prev:    if (i > 0)     --i;        break;
+                    case EditNav::GoTo:    if (g_editGotoPos >= 1 && g_editGotoPos <= n) i = g_editGotoPos - 1; break;
+                    case EditNav::Abort:   done = true;               break;
                 }
             }
         }
@@ -287,11 +385,14 @@ void interactiveConfigEditor(const std::string& configPath) {
  * @brief Interactively edits one configuration setting.
  *
  * Displays the current value, its description, and valid-value guidance.
- * Invalid input returns to the prompt; an empty input or unchanged value
- * skips the edit.
+ * Invalid input returns to the prompt; an empty input does nothing and
+ * redraws the screen. Entering the current value again counts as an update.
+ * Leaving requires Esc / Ctrl+D, a navigation key, or an accepted value.
  *
  * - **Metadata:** finds the matching @c ConfigEntry for its description,
  *   default, and validation callback.
+ * - **Input errors:** any @c inputErrors supplied by the caller are printed
+ *   above the "Edit Setting" header on every redraw of this screen.
  * - **Validation:** accepts a new value only when the entry's validator
  *   approves it.
  * - **Runtime update:** stores the accepted value in @c g_configCache and
@@ -301,34 +402,74 @@ void interactiveConfigEditor(const std::string& configPath) {
  *   If writing fails, the runtime change remains active but is memory-only.
  * - **Display refresh:** changing @c filenames_only also calls
  *   @c sortAfterFilenamesOnlyFlag.
+ * - **Navigation:** when @p total is greater than one, PgDn / PgUp are bound
+ *   for the lifetime of this call and return @c EditNav::Next / @c Prev so the
+ *   caller can step through the selected settings (no wrap-around; at the
+ *   first/last setting the key just redraws this screen). The bindings are
+ *   restored on every exit path. An "(n/total)" indicator is shown in the
+ *   header and a "[PgUp] Prev | [PgDn] Next | [g#] ↵ GoTo" footer lists the
+ *   available actions. Entering "g#" jumps to the #-th selected setting
+ *   (@c EditNav::GoTo); an invalid or same-screen target just redraws.
  * - **Resize handling:** @c drawEdit is reused for the value prompt and for
- *   the invalid-value and success messages, keeping the edit screen visible
- *   when the terminal is resized during either input or confirmation.
+ *   the invalid-value and success messages, keeping the edit screen (and any
+ *   input errors above it) visible when the terminal is resized during
+ *   either input or confirmation.
  *
- * @param configPath Configuration file used to persist the change.
- * @param key        Configuration key to edit.
- * @return true if the value was updated or the edit was skipped; false if the
+ * @param configPath  Configuration file used to persist the change.
+ * @param key         Configuration key to edit.
+ * @param inputErrors Token errors from the selection prompt, printed above the
+ *                    edit screen header. Callers pass them for the first edit
+ *                    of a selection only; defaults to none.
+ * @param pos         1-based position of this setting within the selection.
+ * @param total       Number of settings in the selection; navigation keys are
+ *                    only active when this is greater than one.
+ * @return @c EditNav::Updated if a value was accepted, including the same value
+ *         as the current one (the caller removes
+ *         the setting from the selection); @c EditNav::Advance only if the
+ *         key has no matching entry; @c Next / @c Prev if PgDn / PgUp was
+ *         pressed; @c GoTo if "g#" selected another setting; @c Abort if the
  *         user aborted with Ctrl+D or Esc.
  */
-bool editSetting(const std::string& configPath, const std::string& key) {
+EditNav editSetting(const std::string& configPath, const std::string& key,
+                    const std::vector<std::string>& inputErrors,
+                    size_t pos, size_t total) {
     auto tc = resolveOptionsTheme();
     const ConfigEntry* entry = nullptr;
     for (const auto& e : CONFIG_ORDERED_DEFAULTS) {
         if (e.key == key) { entry = &e; break; }
     }
-    if (!entry) return true;
+    if (!entry) return EditNav::Advance;
     reset_custom_keybindingsForSettingsEditor();
+
+    // Restores PgUp/PgDn to history navigation on every exit path (same
+    // restore used by reset_custom_keybindingsForSelect / restoreReadline).
+    struct NavBindGuard {
+        bool on;
+        ~NavBindGuard() {
+            if (on) {
+                rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+                rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+            }
+        }
+    } navGuard{ total > 1 };
 
     std::string current = ConfigCaches::g_configCache.count(key) ? ConfigCaches::g_configCache[key] : entry->defaultValue;
 
     auto drawEdit = [&] {
         clearScrollBuffer();
-        std::cout << "\n" << tc.highlight << "=== Edit Setting ===\n\n" << tc.reset;
+        if (!inputErrors.empty()) {
+            std::cout << "\n";
+            for (const auto& err : inputErrors)
+                std::cout << err << "\n";
+        }
+        std::cout << "\n" << tc.highlight << "=== Edit Setting ===";
+        if (total > 1) std::cout << "  (" << pos << "/" << tc.warning << total << tc.highlight << ")";
+        std::cout << "\n\n" << tc.reset;
         std::cout << tc.label << "Setting: " << tc.reset << tc.warning << key << tc.reset << "\n";
         std::cout << tc.label << "Current: " << tc.reset << tc.highlight << current << tc.reset << "\n";
         std::string displayComment = entry->comment;
-        size_t pos = displayComment.find("\n# ");
-        if (pos != std::string::npos) displayComment.replace(pos, 3, "\n             ");
+        size_t cpos = displayComment.find("\n# ");
+        if (cpos != std::string::npos) displayComment.replace(cpos, 3, "\n             ");
         std::cout << "\nDescription: " << displayComment << tc.reset << "\n\n";
 
         std::cout << tc.label << "Valid values: " << tc.reset;
@@ -363,27 +504,70 @@ bool editSetting(const std::string& configPath, const std::string& key) {
         } else {
             std::cout << "Refer to description above\n";
         }
+
+        // Navigation footer (multi-selection only); a hint is shown only
+        // when that direction is available.
+        if (total > 1) {
+            std::cout << "\n" << tc.str;
+            if (pos > 1)     std::cout << "[PgUp] Prev | ";
+            if (pos < total) std::cout << "[PgDn] Next | ";
+            std::cout << "[g#] ↵ GoTo" << tc.reset << "\n";
+        }
     };
 
     while (true) {
         rl_bind_keyseq("\\e", exit_handler);
+        if (total > 1) {
+            rl_bind_keyseq("\\e[5~", pgup_handler);
+            rl_bind_keyseq("\\e[6~", pgdn_handler);
+        }
         drawEdit();
         std::cout << "\n";
 
         std::string prompt = std::format(
-            "\001{}\002Value\001{}\002 ↵ | ↵ \001{}\002Skip\001{}\002: \001{}\002",
+            "\001{}\002Value\001{}\002 ↵ for edit: \001{}\002",
             UI::Palette::Green,
-            tc.label,
-            UI::Palette::Yellow,
+            tc.path,
             tc.reset,
             tc.reset
         );
 
         RlLine rawInput = readlineWithResize(prompt, drawEdit);
 
-        if (!rawInput || rawInput.get()[0] == 27) return false;
+        if (rawInput) {
+            const std::string_view s = rawInput.get();
+            if (s == "PgUp" || s == "PgDn") {
+                // pgup/pgdn_handler stash the typed text; it belongs to this
+                // setting only, so drop it instead of leaking it to the next
+                // screen or the main prompt.
+                RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
+                if (s == "PgDn" && pos < total) return EditNav::Next;
+                if (s == "PgUp" && pos > 1)     return EditNav::Prev;
+                continue;   // at either end: stay on this screen
+            }
+        }
+        if (!rawInput || rawInput.get()[0] == 27) return EditNav::Abort;
         std::string newVal = trim(rawInput.get());
-        if (newVal.empty() || newVal == current) return true;
+
+        // "g#" jumps to the #-th selected setting (multi-selection only).
+        // Out-of-range or same-screen targets just redraw, like the paginator.
+        if (total > 1 && newVal.size() >= 2 && newVal[0] == 'g' &&
+            std::isdigit(static_cast<unsigned char>(newVal[1]))) {
+            try {
+                size_t target = std::stoul(newVal.substr(1));
+                if (target >= 1 && target <= total && target != pos) {
+                    g_editGotoPos = target;
+                    return EditNav::GoTo;
+                }
+            } catch (...) {}
+            continue;
+        }
+
+        // Blank Enter does nothing: redraw this screen. Leaving requires Esc /
+        // Ctrl+D, a navigation key, or an accepted value. Re-entering the
+        // current value counts as an update (it is validated, saved, and the
+        // setting leaves the loop like any other).
+        if (newVal.empty()) continue;
 
         if (entry->validate && !entry->validate(newVal)) {
             auto render = [&] {
@@ -410,7 +594,7 @@ bool editSetting(const std::string& configPath, const std::string& key) {
                 std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n",
                                          tc.label, tc.reset, configPath);
             } else {
-                std::cout << tc.warning << "Notice: " << tc.error
+                std::cout << tc.warning << "\nNotice: " << tc.error
                           << "Setting update is memory-only (Disk write failed)."
                           << tc.reset << "\n";
             }
@@ -421,7 +605,9 @@ bool editSetting(const std::string& configPath, const std::string& key) {
             sortAfterFilenamesOnlyFlag();
         }
 
-        break;
+        // The value changed: tell the caller to drop this setting from the
+        // PgUp/PgDn/g# loop.
+        return EditNav::Updated;
     }
-    return true;
+    return EditNav::Advance;   // unreachable; kept for the compiler
 }

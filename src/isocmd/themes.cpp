@@ -360,10 +360,10 @@ SemanticUIColors resolveOptionsTheme() {
             .warning   = UI::Palette::Yellow,
             .error     = UI::Palette::Red,
             .reset     = UI::Palette::BoldReset,
-            .path      = {},
+            .path      = UI::Palette::Blue,
             .highlight = UI::Palette::Blue,
             .data      = UI::Palette::BoldReset,
-            .str       = {}
+            .str       = UI::Palette::Brown
         };
     }
     return {
@@ -372,10 +372,10 @@ SemanticUIColors resolveOptionsTheme() {
         .warning   = theme->warning,
         .error     = theme->secondary,
         .reset     = UI::Palette::BoldReset,
-        .path      = {},
+        .path      = theme->muted,
         .highlight = theme->accent,
         .data      = theme->accent,
-        .str       = {}
+        .str       = theme->muted
     };
 }
 
