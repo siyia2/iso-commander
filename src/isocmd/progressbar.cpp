@@ -3,8 +3,8 @@
 // C++ Standard Library Headers
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
-#include <condition_variable>
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
@@ -13,7 +13,6 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
-#include <mutex>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -23,6 +22,7 @@
 // C / System Headers
 #include <fcntl.h>
 #include <poll.h>
+#include <signal.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
@@ -55,13 +55,55 @@ constexpr std::string_view kSyncEnd   = "\033[?2026l";
 
 namespace {
 
+/// Write end of the self-pipe the SIGWINCH handler pokes. -1 = no watcher
+/// is currently installed.
+std::atomic<int>  g_progressWinchFd{-1};
+
+/// Set by the SIGWINCH handler, cleared when the size is re-read.
+std::atomic<bool> g_progressWinchDirty{false};
+
+/// Handler that was installed before ours; forwarded to so any other
+/// SIGWINCH handling keeps working.
+struct sigaction  g_progressPrevWinch {};
+
+static_assert(std::atomic<int>::is_always_lock_free &&
+              std::atomic<bool>::is_always_lock_free,
+              "handler state must be lock-free to be used from a signal handler");
+
+/// SIGWINCH handler. Async-signal-safe: two atomic stores and one write() to
+/// a non-blocking pipe, then a forward to the previous handler.
+void onProgressWinch(int sig, siginfo_t* info, void* ctx) {
+    const int savedErrno = errno;
+
+    g_progressWinchDirty.store(true, std::memory_order_release);
+    const int fd = g_progressWinchFd.load(std::memory_order_acquire);
+    if (fd >= 0) {
+        const char b = 1;
+        [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);
+    }
+    errno = savedErrno;
+
+    if (g_progressPrevWinch.sa_handler == SIG_DFL ||
+        g_progressPrevWinch.sa_handler == SIG_IGN) return;
+    if (g_progressPrevWinch.sa_flags & SA_SIGINFO) {
+        if (g_progressPrevWinch.sa_sigaction)
+            g_progressPrevWinch.sa_sigaction(sig, info, ctx);
+    } else {
+        g_progressPrevWinch.sa_handler(sig);
+    }
+}
+
 /**
- * @brief Background watcher that tracks the terminal size and wakes the
- *        render loop on a change.
+ * @brief Tracks the terminal size and wakes the render loop on a change,
+ *        without a polling thread.
  *
- * A watcher thread polls TIOCGWINSZ on stdout every kPoll. The size is kept
- * as one packed std::atomic<uint64_t> (cols << 32 | rows), so readers never
- * see a torn cols/rows pair.
+ * A SIGWINCH handler (chained to the previously installed one) marks the size
+ * dirty and writes one byte to a non-blocking self-pipe. The render loop polls
+ * the read end together with stdin, so a resize is repainted at once rather
+ * than on the next timeout. The size is re-read with TIOCGWINSZ on stdout
+ * only when the dirty flag is set, and is kept as one packed
+ * std::atomic<uint64_t> (cols << 32 | rows), so readers never see a torn
+ * cols/rows pair.
  *
  * @par Hardening
  * A query that fails or reports a zero dimension (detached or transiently
@@ -69,38 +111,60 @@ namespace {
  * not mistaken for a resize. Before the first success the size is 80x24
  * (e.g. stdout is not a tty).
  *
- * @par Wake-up
- * When the stored size changes, the watcher writes one byte to a
- * non-blocking self-pipe. The render loop polls the read end together with
- * stdin, so a resize is repainted at once rather than on the next timeout.
- * If the pipe cannot be created the wake fd is -1 (ignored by poll()) and
- * the loop's own timeout still picks the change up.
+ * @par Fallback
+ * If the pipe or the handler cannot be set up (or another watcher is already
+ * installed), the watcher falls back to polling: the wake fd is -1 (ignored
+ * by poll()) and every get() re-reads the size, so the render loop's own
+ * 100 ms timeout still picks a resize up.
  *
  * @par Threading
- * The watcher thread only updates the atomic and writes to the pipe; it
- * never touches the terminal output. All drawing stays on the caller's
- * thread.
+ * There is no background thread. The handler only sets a flag and writes to
+ * the pipe; it never touches the terminal output. All drawing stays on the
+ * caller's thread. Only one watcher can be installed at a time (the handler
+ * state is process-global).
  */
 class TerminalSizeWatcher {
 public:
     struct Size { size_t cols; size_t rows; };
 
     TerminalSizeWatcher() {
-        if (pipe2(wake_, O_NONBLOCK | O_CLOEXEC) != 0) wake_[0] = wake_[1] = -1;
         update();
-        thread_ = std::thread([this] { loop(); });
+
+        if (g_progressWinchFd.load(std::memory_order_acquire) >= 0) {
+            polling_ = true;                          // another watcher owns the handler
+            return;
+        }
+        if (pipe2(wake_, O_NONBLOCK | O_CLOEXEC) != 0) {
+            wake_[0] = wake_[1] = -1;
+            polling_ = true;
+            return;
+        }
+
+        g_progressWinchFd.store(wake_[1], std::memory_order_release);
+
+        struct sigaction sa {};
+        sa.sa_sigaction = onProgressWinch;
+        sa.sa_flags = SA_SIGINFO | SA_RESTART;
+        sigemptyset(&sa.sa_mask);
+        if (sigaction(SIGWINCH, &sa, &g_progressPrevWinch) != 0) {
+            g_progressWinchFd.store(-1, std::memory_order_release);
+            closeWake();
+            polling_ = true;
+            return;
+        }
+        installed_ = true;
     }
 
-    ~TerminalSizeWatcher() {
-        stop();
-        for (int fd : wake_) if (fd >= 0) close(fd);
-    }
+    ~TerminalSizeWatcher() { stop(); }
 
     TerminalSizeWatcher(const TerminalSizeWatcher&)            = delete;
     TerminalSizeWatcher& operator=(const TerminalSizeWatcher&) = delete;
 
-    /// Last known good size (never 0x0, never torn).
-    Size get() const {
+    /// Last known good size (never 0x0, never torn). Re-reads the terminal
+    /// only if a SIGWINCH arrived since the last call (or in fallback mode).
+    Size get() {
+        if (polling_ || g_progressWinchDirty.exchange(false, std::memory_order_acquire))
+            update();
         const uint64_t v = packed_.load(std::memory_order_relaxed);
         return { static_cast<size_t>(v >> 32), static_cast<size_t>(v & 0xFFFFFFFFu) };
     }
@@ -108,7 +172,12 @@ public:
     /// Queries the terminal synchronously on the calling thread and returns
     /// the result. Use where the very latest size matters (e.g. just before
     /// the final report).
-    Size refresh() { update(); return get(); }
+    Size refresh() {
+        g_progressWinchDirty.store(false, std::memory_order_release);
+        update();
+        const uint64_t v = packed_.load(std::memory_order_relaxed);
+        return { static_cast<size_t>(v >> 32), static_cast<size_t>(v & 0xFFFFFFFFu) };
+    }
 
     /// Read end of the self-pipe for poll(), or -1 if unavailable.
     int wakeFd() const { return wake_[0]; }
@@ -120,17 +189,19 @@ public:
         while (read(wake_[0], buf, sizeof buf) > 0) {}
     }
 
-    /// Stops and joins the watcher thread. Safe to call more than once.
+    /// Restores the previous SIGWINCH handler and closes the pipe. Safe to
+    /// call more than once.
     void stop() {
-        if (!thread_.joinable()) return;
-        { std::lock_guard<std::mutex> lk(m_); stop_ = true; }
-        cv_.notify_all();
-        thread_.join();
+        if (!installed_) return;
+        installed_ = false;
+
+        sigaction(SIGWINCH, &g_progressPrevWinch, nullptr);
+        g_progressWinchFd.store(-1, std::memory_order_release);
+        closeWake();
+        polling_ = true;                              // any further get() just re-reads
     }
 
 private:
-    static constexpr auto kPoll = std::chrono::milliseconds(50);
-
     /// Queries the terminal; stores and returns true only if a valid,
     /// different size was read.
     bool update() {
@@ -141,29 +212,16 @@ private:
         return packed_.exchange(v, std::memory_order_relaxed) != v;
     }
 
-    void wake() const {
-        if (wake_[1] < 0) return;
-        const char b = 1;
-        // A full pipe (EAGAIN) already means "a wake-up is pending", so the
-        // result is ignored.
-        (void)!write(wake_[1], &b, 1);
-    }
-
-    void loop() {
-        std::unique_lock<std::mutex> lk(m_);
-        while (!stop_) {
-            cv_.wait_for(lk, kPoll, [&] { return stop_; });
-            if (stop_) break;
-            if (update()) wake();
+    void closeWake() {
+        for (int& fd : wake_) {
+            if (fd >= 0) { close(fd); fd = -1; }
         }
     }
 
-    std::atomic<uint64_t>   packed_{(uint64_t{80} << 32) | 24u};
-    int                     wake_[2] = {-1, -1};
-    std::mutex              m_;
-    std::condition_variable cv_;
-    bool                    stop_ = false;
-    std::thread             thread_;
+    std::atomic<uint64_t> packed_{(uint64_t{80} << 32) | 24u};
+    int                   wake_[2] = {-1, -1};
+    bool                  installed_ = false;
+    bool                  polling_   = false;
 };
 
 /// Repaint callback used by the readline event hook while the verbose prompt
@@ -235,19 +293,20 @@ void restoreInput(struct termios *oldt, int oldf) {
  * resize.
  *
  * @par Terminal resize
- * A TerminalSizeWatcher thread polls the size every 50 ms and wakes the
- * render loop through a self-pipe when it changes, so no SIGWINCH handler is
- * needed and a resize is repainted immediately. The loop also still renders
- * every 100 ms for live values. The watcher only reports sizes; all drawing
- * happens on the calling thread. Redrawing relies on moving the cursor up
- * over the previous frame, which cannot be trusted after a resize: the
- * terminal may have reflowed the old lines or pushed them into scrollback,
- * where cursor movement cannot reach. When the size changes, the screen and
- * scrollback are wiped, the caller-supplied @p header ("Processing ...
- * (Ctrl+c:cancel)") is reprinted, and the block is redrawn below it, so the
- * header line that the final "Status:" report overwrites is preserved. The
- * same check runs once more when the operation completes, so a resize between
- * the last frame and the final report is handled.
+ * A TerminalSizeWatcher installs a SIGWINCH handler (chained to the
+ * previously installed one) that writes to a self-pipe polled together with
+ * stdin, so a resize is repainted immediately and no polling thread is
+ * needed. The loop also still renders every 100 ms for live values. The
+ * watcher only reports sizes; all drawing happens on the calling thread.
+ * Redrawing relies on moving the cursor up over the previous frame, which
+ * cannot be trusted after a resize: the terminal may have reflowed the old
+ * lines or pushed them into scrollback, where cursor movement cannot reach.
+ * When the size changes, the screen and scrollback are wiped, the
+ * caller-supplied @p header ("Processing ... (Ctrl+c:cancel)") is reprinted,
+ * and the block is redrawn below it, so the header line that the final
+ * "Status:" report overwrites is preserved. The same check runs once more
+ * when the operation completes, so a resize between the last frame and the
+ * final report is handled.
  *
  * @par Resize at the verbose prompt
  * The watcher keeps running while the "Display verbose output?" prompt waits.
@@ -256,7 +315,9 @@ void restoreInput(struct termios *oldt, int oldf) {
  * wipes the screen, repaints the final report (header, status, bar, with the
  * elapsed time and counters frozen at completion) and then calls
  * rl_on_new_line() + rl_redisplay() so the prompt and any half-typed answer
- * are restored. The whole repaint is one synchronized update.
+ * are restored. The whole repaint is one synchronized update. Readline's own
+ * SIGWINCH handling is disabled for that call (rl_catch_sigwinch = 0), so the
+ * watcher's handler is the only one involved.
  *
  * @param completedBytes Atomic counter for bytes processed.
  * @param totalBytes     Total bytes to process.
