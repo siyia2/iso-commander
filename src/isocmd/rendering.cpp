@@ -30,7 +30,7 @@
 #include "../rendering.h"
 
 // ------------------------------------------------------------------------- //
-// ListResizeWatcher                                                          //
+// ListResizeWatcher                                                         //
 // ------------------------------------------------------------------------- //
 
 /**
@@ -44,8 +44,8 @@
 struct ListResizeWatcher::Impl {
     explicit Impl(Repaint r) : repaint(std::move(r)), last(terminalSize()) {}
 
-    Repaint         repaint;
-    TermSize        last;                   // last dimensions we repainted for (main thread only)
+    Repaint           repaint;
+    TermSize          last;                     // last dimensions we repainted for (main thread only)
     rl_hook_func_t* prevHook = nullptr;     // hook installed before ours (chained)
 
     /// Runs from Readline's event hook on the main thread. Repaints the list
@@ -55,8 +55,8 @@ struct ListResizeWatcher::Impl {
 
 namespace {
 
-/// Set from the signal handler, cleared on the main thread.
-volatile std::sig_atomic_t g_winch = 0;
+/// Atomically set from the signal handler, cleared on the main thread.
+std::atomic<bool> g_winch{false};
 
 /// Handler that was installed before ours; we forward to it so Readline's own
 /// SIGWINCH handling (rl_catch_sigwinch) keeps working.
@@ -68,7 +68,7 @@ bool             g_winchInstalled = false;
 ListResizeWatcher::Impl* g_activeListWatcher = nullptr;
 
 extern "C" void onWinch(int sig, siginfo_t* info, void* ctx) {
-    g_winch = 1;
+    g_winch.store(true, std::memory_order_relaxed);
     if (g_prevWinch.sa_handler == SIG_DFL || g_prevWinch.sa_handler == SIG_IGN) return;
     if (g_prevWinch.sa_flags & SA_SIGINFO) {
         if (g_prevWinch.sa_sigaction) g_prevWinch.sa_sigaction(sig, info, ctx);
@@ -89,12 +89,14 @@ int listResizeHook() {
 } // namespace
 
 void ListResizeWatcher::Impl::tick() {
-    if (!g_winch) return;
-    g_winch = 0;                            // clear before reading size so a new signal isn't lost
+    // Atomically check if true and reset to false in a single instruction.
+    // If a signal arrives during processing, exchange() will leave/set it to true
+    // so a subsequent tick catches it.
+    if (!g_winch.exchange(false, std::memory_order_relaxed)) return;
 
     const TermSize sz = terminalSize();
     if (sz.cols == 0 || sz.rows == 0) return;
-    if (sz.cols == last.cols && sz.rows == last.rows) return;   // spurious or already handled
+    if (sz.cols == last.cols && sz.rows == last.rows) return;
     last = sz;
 
     // Keep Readline's wrapping in sync with the dimensions used by the list renderer.
