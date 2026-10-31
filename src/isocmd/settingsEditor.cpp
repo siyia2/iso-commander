@@ -323,9 +323,6 @@ void interactiveConfigEditor(const std::string& configPath) {
                     auto render = [&] {
                         SyncOutput sync;
                         clearScrollBuffer();
-                        std::cout << "\n";
-                        for (const auto& err : inputErrors)
-                            std::cout << err << "\n";
                         std::cout << "\n" << tc.error << "No valid input provided"
                                   << tc.reset << "\n";
                     };
@@ -451,12 +448,15 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
 
     std::string current = ConfigCaches::g_configCache.count(key) ? ConfigCaches::g_configCache[key] : entry->defaultValue;
 
+    std::vector<std::string> pendingErrors = inputErrors;
+
     auto drawEdit = [&] {
         clearScrollBuffer();
-        if (!inputErrors.empty()) {
+        if (!pendingErrors.empty()) {
             std::cout << "\n";
-            for (const auto& err : inputErrors)
+            for (const auto& err : pendingErrors)
                 std::cout << err << "\n";
+            pendingErrors.clear();
         }
         std::cout << "\n" << tc.highlight << "=== Edit Setting ===";
         if (total > 1) std::cout << "  (" << pos << "/" << tc.warning << total << tc.highlight << ")";
