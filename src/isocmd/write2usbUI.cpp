@@ -1342,7 +1342,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             widths.push_back(0);
             widths.push_back(utf8Width("WARNING: This will *ERASE ALL DATA* on:"));
             widths.push_back(0);
-
+            rl_bind_keyseq("?", rl_insert);
             for (const auto& r : warnRows) {
                 const size_t fixedWidth = 17 + r.device.size() + utf8Width(r.driveName)
                                         + utf8Width(r.deviceSizeStr) + utf8Width(r.isoSizeStr);
@@ -1400,10 +1400,19 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             watcher.stop();
         }
 
-        if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
+        std::string ans;
+        if (confirmation) {
+            ans = confirmation.get();
+            while (!ans.empty() && std::isspace(static_cast<unsigned char>(ans.back())))
+                ans.pop_back();
+        }
+
+        if (ans == "y" || ans == "Y") {
             setupSignalHandlerCancellations();
             GlobalState::g_operationCancelled.store(false);
             return validPairs;
+        } else {
+            rl_bind_keyseq("?", help_handler);
         }
 
         // Declined (or empty/EOF): bring the mapping back so it can be tweaked
