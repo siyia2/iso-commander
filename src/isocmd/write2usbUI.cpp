@@ -3,7 +3,9 @@
 // C++ Standard Library Headers
 #include <algorithm>
 #include <atomic>
+#include <cassert>
 #include <cctype>
+#include <cerrno>
 #include <chrono>
 #include <condition_variable>
 #include <csignal>
@@ -32,6 +34,8 @@
 #include <vector>
 
 // C / System Headers
+#include <fcntl.h>
+#include <signal.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -708,18 +712,21 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
 // ------------------------------------------------------------------------- //
 
 /**
- * @brief State shared between the resize watcher (background) and the
- *        repaint hook (main thread).
+ * @brief State shared between the SIGWINCH handler and the repaint hook
+ *        (main thread).
  *
- * The watcher thread only sets @ref pending (plus the new size); the repaint
- * hook on the main thread does all terminal I/O and readline access, which is
- * the only place rl_line_buffer / rl_end can be read without a data race.
+ * The signal handler only sets @ref pending (a lock-free atomic store, which
+ * is async-signal-safe). The repaint hook on the main thread measures the
+ * terminal itself and does all terminal I/O and readline access, which is the
+ * only place rl_line_buffer / rl_end can be read without a data race.
  *
  * @par Threading
- * pending, pendingCols, pendingRows and lastCols are std::atomic because both
- * threads touch them. Everything else is main-thread-only: paint and
- * promptWidth are written once in ConfirmResizeWatcher's constructor (on the
- * main thread), and lineWidths is written only by confirmResizeHook.
+ * pending is std::atomic because it is written from a signal handler and
+ * consumed by the hook. lastCols is atomic for convenience; after the
+ * constructor it is only touched by the hook on the main thread. Everything
+ * else is main-thread-only: paint and promptWidth are written once in
+ * ConfirmResizeWatcher's constructor, and lineWidths is written only by
+ * confirmResizeHook.
  *
  * @par Ownership
  * Instances are owned by the caller — normally a single file-scope object
@@ -729,10 +736,9 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
  * explicit at the type level.
  */
 struct ResizeRepaintState {
-    // Cross-thread signalling: written by watcher, consumed by hook.
+    // Signalling: set by the SIGWINCH handler, consumed by the hook.
     std::atomic<bool>   pending{false};
-    std::atomic<size_t> pendingCols{0};
-    std::atomic<size_t> pendingRows{0};
+    // Width the block was last drawn at; used to ignore height-only resizes.
     std::atomic<size_t> lastCols{0};
 
     // Main-thread-only.
@@ -749,10 +755,12 @@ static ResizeRepaintState g_confirmResize;
  * @brief rl_event_hook: repaints the warning block on the main thread.
  *
  * Called by readline from its idle input loop when no keystroke is pending.
- * If the watcher has flagged a width change, it:
- * -# Defensively discards a pending resize with a zero cols or rows
- *    (terminalSize never reports one, but the row arithmetic below divides
- *    by cols, so the guard stays).
+ * If a SIGWINCH has been flagged, it:
+ * -# Measures the terminal itself. A failed query (zero cols or rows) and a
+ *    height-only change (same width as the last drawn block) are ignored; the
+ *    terminal's own reflow repositions the block, and the skip guard below
+ *    handles the case where it no longer fits. The row arithmetic below
+ *    divides by cols, so the zero guard stays.
  * -# Tells readline the new screen size via rl_set_screen_size() so its own
  *    line-wrapping agrees with the layout computed here.
  * -# Computes how far the cursor must travel to reach the top of the warning
@@ -786,15 +794,16 @@ static ResizeRepaintState g_confirmResize;
  * @return Always 0 (do not abort readline).
  */
 static int confirmResizeHook(ResizeRepaintState& s) {
-    if (!s.pending.load(std::memory_order_acquire))
+    if (!s.pending.exchange(false, std::memory_order_acquire))
         return 0;
 
-    const size_t cols = s.pendingCols.load(std::memory_order_relaxed);
-    const size_t rows = s.pendingRows.load(std::memory_order_relaxed);
+    const TermSize sz = terminalSize();
+    const size_t cols = sz.cols;
+    const size_t rows = sz.rows;
 
     if (cols == 0 || rows == 0) return 0;
-
-    s.pending.store(false, std::memory_order_release);
+    if (cols == s.lastCols.load(std::memory_order_relaxed)) return 0;
+    s.lastCols.store(cols, std::memory_order_relaxed);
 
     rl_set_screen_size(static_cast<int>(rows), static_cast<int>(cols));
 
@@ -824,20 +833,50 @@ static int confirmResizeHook(ResizeRepaintState& s) {
     return 0;
 }
 
+namespace confirm_resize_detail {
+
+static_assert(std::atomic<bool>::is_always_lock_free,
+              "pending flag must be lock-free to be set from a signal handler");
+
+/// State the SIGWINCH handler writes to. Set while a watcher is active.
+inline std::atomic<ResizeRepaintState*> g_state{nullptr};
+
+/// Handler that was installed before ours; forwarded to so Readline's own
+/// SIGWINCH handling (rl_catch_sigwinch) keeps working.
+inline struct sigaction g_prev {};
+inline bool             g_installed = false;
+
+inline void onConfirmWinch(int sig, siginfo_t* info, void* ctx) {
+    if (ResizeRepaintState* s = g_state.load(std::memory_order_acquire))
+        s->pending.store(true, std::memory_order_release);
+
+    if (g_prev.sa_handler == SIG_DFL || g_prev.sa_handler == SIG_IGN) return;
+    if (g_prev.sa_flags & SA_SIGINFO) {
+        if (g_prev.sa_sigaction) g_prev.sa_sigaction(sig, info, ctx);
+    } else {
+        g_prev.sa_handler(sig);
+    }
+}
+
+} // namespace confirm_resize_detail
+
 /**
- * @brief Signals a main-thread repaint when the terminal width changes.
+ * @brief Signals a main-thread repaint when the terminal is resized.
  *
- * Runs as a background thread while readline waits at the confirmation
- * prompt. Never touches the terminal or readline directly: it only sets
- * ResizeRepaintState::pending, and the main thread's confirmResizeHook does
- * the redraw and restores the user's typed input via rl_redisplay().
+ * Installs a SIGWINCH handler while readline waits at the confirmation
+ * prompt. The handler never touches the terminal or readline: it only sets
+ * ResizeRepaintState::pending (an async-signal-safe atomic store) and forwards
+ * to the previously installed handler. The main thread's confirmResizeHook
+ * measures the terminal, does the redraw and restores the user's typed input
+ * via rl_redisplay().
  *
- * Reacts to width changes only. Height changes are ignored: the terminal's
- * own reflow repositions the block, and the skip guard in the hook handles
- * the case where the block no longer fits.
+ * Reacts to width changes only. Height changes are ignored by the hook: the
+ * terminal's own reflow repositions the block, and the skip guard in the hook
+ * handles the case where the block no longer fits.
  *
- * Must be stopped before readline returns (see stop()) so no repaint can fire
- * after the prompt has been answered.
+ * Only one watcher may be active at a time (hook and signal state are
+ * process-global). Must be stopped before readline returns (see stop()) so no
+ * repaint can fire after the prompt has been answered.
  */
 class ConfirmResizeWatcher {
 public:
@@ -850,9 +889,10 @@ public:
     using Painter = std::function<std::vector<size_t>(size_t cols)>;
 
     /**
-     * @brief Populates @p state and starts the watcher thread.
+     * @brief Populates @p state and installs the SIGWINCH handler.
      *
-     * @param state       State shared with confirmResizeHook.
+     * @param state       State shared with confirmResizeHook. Must outlive
+     *                    this watcher.
      * @param paint       Callback that (re)prints the warning block for a
      *                    given width and returns its per-line widths.
      * @param drawnCols   Terminal width the block was last drawn at.
@@ -865,27 +905,44 @@ public:
                          size_t drawnCols, std::vector<size_t> drawnWidths,
                          const std::string& promptText)
         : state_(state) {
+        using namespace confirm_resize_detail;
+        assert(g_state.load() == nullptr && "only one ConfirmResizeWatcher may be active");
+
         state_.paint        = std::move(paint);
         state_.lineWidths   = std::move(drawnWidths);
         state_.promptWidth  = utf8Width(promptText);
         state_.lastCols.store(drawnCols, std::memory_order_relaxed);
         state_.pending.store(false, std::memory_order_relaxed);
 
-        thread_ = std::thread([this] { loop(); });
+        g_state.store(&state_, std::memory_order_release);
+
+        struct sigaction sa {};
+        sa.sa_sigaction = onConfirmWinch;
+        sa.sa_flags = SA_SIGINFO | SA_RESTART;
+        sigemptyset(&sa.sa_mask);
+        g_installed = (sigaction(SIGWINCH, &sa, &g_prev) == 0);
+        active_ = true;
     }
 
-    /// Stops and joins the watcher thread. Safe to call more than once.
+    /// Uninstalls the handler. Safe to call more than once.
     ~ConfirmResizeWatcher() { stop(); }
 
     ConfirmResizeWatcher(const ConfirmResizeWatcher&)            = delete;
     ConfirmResizeWatcher& operator=(const ConfirmResizeWatcher&) = delete;
 
-    /// Stops and joins the watcher thread. Safe to call more than once.
+    /// Uninstalls the handler and discards any unprocessed resize event so no
+    /// repaint fires after the prompt is answered. Safe to call more than once.
     void stop() {
-        if (!thread_.joinable()) return;
-        { std::lock_guard<std::mutex> lk(m_); stop_ = true; }
-        cv_.notify_all();
-        thread_.join();
+        using namespace confirm_resize_detail;
+        if (!active_) return;
+        active_ = false;
+
+        if (g_installed) {
+            sigaction(SIGWINCH, &g_prev, nullptr);
+            g_installed = false;
+        }
+        g_state.store(nullptr, std::memory_order_release);
+        state_.pending.store(false, std::memory_order_release);
     }
 
     /**
@@ -895,36 +952,8 @@ public:
     ResizeRepaintState& state() { return state_; }
 
 private:
-    /**
-     * @brief Poll loop: signals the main thread on a width change.
-     *
-     * Wakes every 100 ms (or immediately on stop). Only width changes set
-     * ResizeRepaintState::pending; height changes are ignored.
-     */
-    void loop() {
-        constexpr auto kPoll = std::chrono::milliseconds(100);
-        std::unique_lock<std::mutex> lk(m_);
-        while (!stop_) {
-            cv_.wait_for(lk, kPoll, [&] { return stop_; });
-            if (stop_) break;
-
-            const auto size = terminalSize();
-            const size_t cols = size.cols;
-            const size_t rows = size.rows;
-            if (cols == state_.lastCols.load(std::memory_order_relaxed))
-                continue;
-            state_.lastCols.store(cols, std::memory_order_relaxed);
-            state_.pendingCols.store(cols, std::memory_order_relaxed);
-            state_.pendingRows.store(rows, std::memory_order_relaxed);
-            state_.pending.store(true, std::memory_order_release);
-        }
-    }
-
-    ResizeRepaintState&     state_;
-    std::mutex              m_;
-    std::condition_variable cv_;
-    bool                    stop_ = false;
-    std::thread             thread_;
+    ResizeRepaintState& state_;
+    bool                active_ = false;
 };
 
 /**
@@ -1274,9 +1303,14 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         // BOTH the ISO/device list (drawn by readlineWithResize above) and
         // the warning block must be redrawn — readline does not reprint its
         // earlier prompt after we clear the screen, so the ISO/device list
-        // must come from here.
+        // must come from here. \033[H\033[2J homes regardless of cursor
+        // position, which neutralizes ConfirmResizeWatcher's own cursor-up
+        // math (drawnWidths goes stale after a reflow on terminals that
+        // don't reflow the live cursor, e.g. VTE).
         //
-        // Layout (unchanged):
+        // On repaint we re-emit the device prompt header, then the IDX>DEVICE
+        // prompt line plus the typed mapping (same as renderErrors), so the
+        // user still sees what they entered. Layout:
         //
         //   <device prompt header lines>
         //   IDX>DEVICE ... ? for help: <typed input>
@@ -1287,13 +1321,11 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         //                                         <- blank line
         //   Proceed? (y/n):
         auto renderConfirm = [&](size_t cols, bool clearFirst) -> std::vector<size_t> {
-            SyncOutput sync;
             const size_t usableCols = cols > 1 ? cols - 1 : 1;
             std::vector<size_t> widths;
 
             if (clearFirst) {
-                clearScrollBuffer();
-                std::cout << "\033[H";
+                std::cout << "\033[H\033[2J";
                 std::cout << promptHeaderForRepaint(devicePrompt);
                 std::cout << buildIdxPrompt() << mainInputString << "\n";
                 std::cout << "\n";   // separator between device prompt and warning
@@ -1310,7 +1342,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             widths.push_back(0);
             widths.push_back(utf8Width("WARNING: This will *ERASE ALL DATA* on:"));
             widths.push_back(0);
-            rl_bind_keyseq("?", rl_insert);
+
             for (const auto& r : warnRows) {
                 const size_t fixedWidth = 17 + r.device.size() + utf8Width(r.driveName)
                                         + utf8Width(r.deviceSizeStr) + utf8Width(r.isoSizeStr);
@@ -1352,9 +1384,10 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
         {
             ConfirmationModeGuard confirmGuard;
-            // The watcher's repaint always clears first (and now also flushes
-            // the scroll buffer) and redraws both the device prompt header and
-            // the warning block. The raw ANSI clear is gone; see renderConfirm.
+            // The watcher's repaint always clears first and redraws both the
+            // device prompt header and the warning block. ConfirmResizeWatcher's
+            // own cursor-up math (based on drawnWidths) is bypassed because
+            // \033[H\033[2J homes regardless of cursor position.
             ConfirmResizeWatcher watcher(g_confirmResize,
                                          [&](size_t cols) { return renderConfirm(cols, /*clearFirst=*/true); },
                                          drawnCols, drawnWidths, promptText);
@@ -1367,19 +1400,10 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             watcher.stop();
         }
 
-        std::string ans;
-        if (confirmation) {
-            ans = confirmation.get();
-            while (!ans.empty() && std::isspace(static_cast<unsigned char>(ans.back())))
-                ans.pop_back();
-        }
-
-        if (ans == "y" || ans == "Y") {
+        if (confirmation && (confirmation.get()[0] == 'y' || confirmation.get()[0] == 'Y')) {
             setupSignalHandlerCancellations();
             GlobalState::g_operationCancelled.store(false);
             return validPairs;
-        } else {
-            rl_bind_keyseq("?", help_handler);
         }
 
         // Declined (or empty/EOF): bring the mapping back so it can be tweaked
@@ -1544,23 +1568,71 @@ void drainManagerForWrite2UsbUI(
     }
 }
 
+namespace write_screen_detail {
+
+/// Write end of the self-pipe the SIGWINCH handler pokes. -1 = no watcher active.
+inline std::atomic<int> g_fd{-1};
+
+/// Handler that was installed before ours; forwarded to so Readline's own
+/// SIGWINCH handling (rl_catch_sigwinch) keeps working.
+inline struct sigaction g_prev {};
+inline bool             g_installed = false;
+
+static_assert(std::atomic<int>::is_always_lock_free,
+              "g_fd must be lock-free to be read from a signal handler");
+
+inline void onWriteWinch(int sig, siginfo_t* info, void* ctx) {
+    const int savedErrno = errno;
+    const int fd = g_fd.load(std::memory_order_acquire);
+    if (fd >= 0) {
+        const char b = 1;
+        [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);   // async-signal-safe; non-blocking
+    }
+    errno = savedErrno;
+
+    if (g_prev.sa_handler == SIG_DFL || g_prev.sa_handler == SIG_IGN) return;
+    if (g_prev.sa_flags & SA_SIGINFO) {
+        if (g_prev.sa_sigaction) g_prev.sa_sigaction(sig, info, ctx);
+    } else {
+        g_prev.sa_handler(sig);
+    }
+}
+
+} // namespace write_screen_detail
+
 /**
  * @brief Owns the live progress screen and keeps it correctly laid out.
  *
  * The screen has two phases:
  * - Running  — a keeper thread redraws the per-task rows.
- * - Finished — after finish() it shows the final rows, the status line, the
- *   summary and, once set with setPrompt, the prompt. The keeper keeps
- *   running and repaints on terminal resize, so the screen stays correct
- *   while the program waits for input.
+ * - Finished — after finish() it shows the final rows, the status line and
+ *   the summary. The keeper keeps running and repaints on terminal resize,
+ *   unless a prompt was registered with setPrompt(): then the program's
+ *   resize hook owns repainting (it calls repaint() and lets Readline redraw
+ *   the prompt and typed input), so the keeper stays out of the way.
  *
  * @par Rendering
  * All drawing happens under one mutex (renderMutex_), from either the keeper
- * thread or finish(), so frames never interleave. The keeper wakes on a task
- * completion (condition variable in the shared WriteSync state) or every
- * 100 ms to compare the terminal size with the last frame. While running it
- * redraws on completion, on a size change, or every 500 ms (live percentages
- * and speeds). Once finished it redraws only on a size change.
+ * thread, finish() or repaint(), so frames never interleave.
+ *
+ * @par Waking the keeper (no polling)
+ * The keeper blocks on the condition variable in the shared WriteSync state
+ * and wakes only for:
+ * - a task completion,
+ * - a terminal resize (SIGWINCH), and
+ * - while running, the 500 ms pulse deadline (live percentages and speeds).
+ * Once finished it sleeps indefinitely until a resize or stop().
+ *
+ * A signal handler cannot notify a condition variable, so SIGWINCH is relayed:
+ * the handler writes one byte to a self-pipe (async-signal-safe) and forwards
+ * to the previously installed handler; a small relay thread blocked in read()
+ * on that pipe sets resizeSignalled_ and notifies the condition variable.
+ * The relay thread consumes no CPU while idle. If the pipe or handler cannot
+ * be set up, the keeper falls back to checking the terminal size every
+ * 100 ms.
+ *
+ * Only one WriteScreen may be started at a time (the handler state is
+ * process-global).
  *
  * @par Row layout
  * @code
@@ -1587,7 +1659,8 @@ void drainManagerForWrite2UsbUI(
  * physical line count and redraws. After a size change, and always for the
  * result screen, the screen and scrollback are wiped and redrawn from the
  * top. Rows are clipped to avoid wrapping, and each frame is written once
- * inside a synchronized update. The result screen looks like this:
+ * inside a synchronized update. Frames are skipped while the terminal size
+ * is unknown (0 columns or rows). The result screen looks like this:
  * @code
  * (line 1: empty)
  * Status: write2usb → COMPLETED        (line 2)
@@ -1595,13 +1668,16 @@ void drainManagerForWrite2UsbUI(
  * <rows...>                            (from line 4)
  * (empty)
  * Successful: n/m | Time Elapsed: x.xs
- * <prompt, if set>
  * @endcode
+ * The prompt itself is not printed by this class: after repaint() the
+ * program's resize hook calls rl_redisplay(), which redraws the prompt and
+ * the user's typed input.
  *
  * @par Lifetime
  * Holds shared_ptr copies of the progress vector and the WriteSync state, so
  * it never refers to the stack of the function that created it. The
- * destructor stops and joins the keeper thread.
+ * destructor stops and joins the keeper and relay threads and restores the
+ * previous SIGWINCH handler.
  */
 class WriteScreen {
 public:
@@ -1620,13 +1696,14 @@ public:
     WriteScreen& operator=(const WriteScreen&) = delete;
 
     /// Prints the header, hides the cursor, computes the per-operation column
-    /// data and starts the keeper thread.
+    /// data, installs the resize signal relay and starts the keeper thread.
     void start() {
         {
             std::lock_guard<std::mutex> rl(renderMutex_);
             std::cout << headerText(false) << "\033[?25l" << std::flush;
         }
         computeConstants();
+        installResizeSignal();
         thread_ = std::thread([this] { keeperLoop(); });
     }
 
@@ -1676,30 +1753,40 @@ public:
         renderLocked();
     }
 
-    /// Text printed under the summary on every result-screen repaint. Must be
-    /// the same text the program prints for its "press Enter" prompt, so a
-    /// repaint can put the prompt back after wiping the screen.
+    /// Registers the program's "press Enter" prompt. Once set, the keeper no
+    /// longer repaints on resize by itself: the program's resize hook calls
+    /// repaint() instead and Readline redraws the prompt and typed input.
     void setPrompt(std::string prompt) {
         std::lock_guard<std::mutex> rl(renderMutex_);
         promptText_ = std::move(prompt);
     }
 
-    /// Re-emits the result screen (summary + prompt) at the current terminal
-    /// width. Called by the pressEnterTo*WithRepaint() machinery on resize so
-    /// the summary survives a terminal wipe. Safe to call from the main thread
+    /// Re-emits the result screen (summary) at the current terminal width.
+    /// Called by the pressEnterTo*WithRepaint() machinery on resize so the
+    /// summary survives a terminal wipe. Safe to call from the main thread
     /// after finish(); takes the same lock the keeper uses.
     void repaint() {
         std::lock_guard<std::mutex> rl(renderMutex_);
         renderLocked();
     }
 
-    /// Stops and joins the keeper thread. Safe to call more than once.
+    /// Stops and joins the keeper and relay threads and restores the previous
+    /// SIGWINCH handler. Safe to call more than once.
     void stop() {
         if (!thread_.joinable()) return;
         stop_.store(true, std::memory_order_release);
+
+        if (wakeWr_ >= 0) {                         // wake the relay thread out of read()
+            const char b = 1;
+            [[maybe_unused]] const ssize_t r = ::write(wakeWr_, &b, 1);
+        }
+        if (relay_.joinable()) relay_.join();
+
         { std::lock_guard<std::mutex> lk(syncPtr_->mutex); }
         syncPtr_->cv.notify_all();
         thread_.join();
+
+        uninstallResizeSignal();
     }
 
 private:
@@ -1708,7 +1795,7 @@ private:
     static constexpr int  BAR_WIDTH = 5;
     static constexpr int  BAR_STEPS = BAR_WIDTH * 2;
     static constexpr auto kPulse = std::chrono::milliseconds(500);
-    static constexpr auto kPoll  = std::chrono::milliseconds(100);
+    static constexpr auto kPoll  = std::chrono::milliseconds(100);   // fallback only
 
     // Right-pads an ASCII string to the given byte width. Used for device
     // paths and other ASCII-only columns.
@@ -1716,6 +1803,68 @@ private:
         if (s.size() < target) s.append(target - s.size(), ' ');
         return s;
     }
+
+    // ---- Resize signal relay -------------------------------------------------
+
+    void installResizeSignal() {
+        using namespace write_screen_detail;
+        assert(g_fd.load() < 0 && "only one WriteScreen may be started at a time");
+
+        int fds[2];
+        if (::pipe(fds) != 0) { pollFallback_ = true; return; }
+        for (int fd : fds) ::fcntl(fd, F_SETFD, FD_CLOEXEC);
+        ::fcntl(fds[1], F_SETFL, O_NONBLOCK);       // handler must never block
+        wakeRd_ = fds[0];
+        wakeWr_ = fds[1];
+
+        g_fd.store(wakeWr_, std::memory_order_release);
+
+        struct sigaction sa {};
+        sa.sa_sigaction = onWriteWinch;
+        sa.sa_flags = SA_SIGINFO | SA_RESTART;
+        sigemptyset(&sa.sa_mask);
+        if (sigaction(SIGWINCH, &sa, &g_prev) != 0) {
+            g_fd.store(-1, std::memory_order_release);
+            ::close(wakeRd_); ::close(wakeWr_);
+            wakeRd_ = wakeWr_ = -1;
+            pollFallback_ = true;
+            return;
+        }
+        g_installed = true;
+
+        relay_ = std::thread([this] { relayLoop(); });
+    }
+
+    void uninstallResizeSignal() {
+        using namespace write_screen_detail;
+        if (g_installed) {
+            sigaction(SIGWINCH, &g_prev, nullptr);
+            g_installed = false;
+        }
+        if (wakeWr_ >= 0) {
+            g_fd.store(-1, std::memory_order_release);
+            ::close(wakeWr_);
+            wakeWr_ = -1;
+        }
+        if (wakeRd_ >= 0) { ::close(wakeRd_); wakeRd_ = -1; }
+    }
+
+    // Blocks in read() until the handler (or stop()) writes a byte. Zero CPU
+    // while idle. Turns the signal into a condition-variable wakeup.
+    void relayLoop() {
+        char buf[64];
+        for (;;) {
+            const ssize_t n = ::read(wakeRd_, buf, sizeof buf);
+            if (n < 0 && errno == EINTR) continue;
+            if (n <= 0 || stop_.load(std::memory_order_acquire)) break;
+
+            resizeSignalled_.store(true, std::memory_order_release);
+            { std::lock_guard<std::mutex> lk(syncPtr_->mutex); }   // pairs with the keeper's predicate check
+            syncPtr_->cv.notify_all();
+        }
+    }
+
+    // ---- Layout --------------------------------------------------------------
 
     // Device names, full (untruncated) drive names and column widths cannot
     // change while the operation runs, so they are computed once, before the
@@ -1757,41 +1906,64 @@ private:
         size_t seenFinished = static_cast<size_t>(-1);
 
         while (!stop_.load(std::memory_order_acquire)) {
+            bool finishedPhase = false;
             {
                 std::lock_guard<std::mutex> rl(renderMutex_);
 
-                const auto   size        = terminalSize();
-                const bool   sizeChanged = hasDrawn_ &&
-                    (size.cols != lastCols_ || size.rows != lastRows_);
-
+                const bool   resizeEvt   = resizeSignalled_.exchange(false, std::memory_order_acquire);
                 const size_t finishedNow = syncPtr_->finishedTasks.load();
                 const bool   completion  = (finishedNow != seenFinished);
                 seenFinished = finishedNow;
+                finishedPhase = (phase_ == Phase::Finished);
 
-                if (phase_ == Phase::Running) {
-                    const bool pulse = (clock::now() - lastDraw) >= kPulse;
-                    if (sizeChanged || completion || pulse) {
-                        renderLocked(size, sizeChanged);
-                        lastDraw = clock::now();
+                if (!finishedPhase) {
+                    const auto size = terminalSize();
+                    if (size.cols == 0 || size.rows == 0) {
+                        lastDraw = clock::now();            // size unknown: skip, don't spin
+                    } else {
+                        const bool sizeChanged = hasDrawn_ &&
+                            (size.cols != lastCols_ || size.rows != lastRows_);
+                        const bool pulse = (clock::now() - lastDraw) >= kPulse;
+                        if (sizeChanged || completion || pulse) {
+                            renderLocked(size, sizeChanged);
+                            lastDraw = clock::now();
+                        }
                     }
-                } else if (sizeChanged) {
-                    renderLocked(size, sizeChanged);
+                } else if ((resizeEvt || pollFallback_) && promptText_.empty()) {
+                    // Finished and no prompt registered: the keeper owns resize
+                    // repaints. With a prompt, the resize hook calls repaint().
+                    const auto size = terminalSize();
+                    if (size.cols != 0 && size.rows != 0 &&
+                        hasDrawn_ && (size.cols != lastCols_ || size.rows != lastRows_))
+                        renderLocked(size, true);
                 }
             }
 
             std::unique_lock<std::mutex> lk(syncPtr_->mutex);
-            syncPtr_->cv.wait_for(lk, kPoll, [&] {
+            const auto pred = [&] {
                 return stop_.load(std::memory_order_acquire) ||
+                       resizeSignalled_.load(std::memory_order_acquire) ||
                        syncPtr_->finishedTasks.load() != seenFinished;
-            });
+            };
+
+            // Running: wake for the pulse. Finished: sleep until an event.
+            // Fallback (no signal relay): also wake every kPoll to check size.
+            if (!finishedPhase || pollFallback_) {
+                auto deadline = finishedPhase ? clock::now() + kPoll : lastDraw + kPulse;
+                if (pollFallback_) deadline = std::min(deadline, clock::now() + kPoll);
+                syncPtr_->cv.wait_until(lk, deadline, pred);
+            } else {
+                syncPtr_->cv.wait(lk, pred);
+            }
         }
     }
 
     // Convenience overload: queries the terminal size and derives the resize
-    // flag itself. Used by finish(), which renders once and does not already
-    // hold this information. The caller must hold renderMutex_.
+    // flag itself. Used by finish() and repaint(), which render once and do
+    // not already hold this information. The caller must hold renderMutex_.
     void renderLocked() {
-        const auto size    = terminalSize();
+        const auto size = terminalSize();
+        if (size.cols == 0 || size.rows == 0) return;       // size unknown: skip
         const bool resized = hasDrawn_ &&
             (size.cols != lastCols_ || size.rows != lastRows_);
         renderLocked(size, resized);
@@ -1802,6 +1974,8 @@ private:
     // keeper share exactly one source of truth for "did the size change?".
     // The caller must hold renderMutex_.
     void renderLocked(TermSize termSize, bool resized) {
+        if (termSize.cols == 0 || termSize.rows == 0) return;   // also guards the division below
+
         const bool finished = (phase_ == Phase::Finished);
 
         size_t maxFilenameWidth = 0;
@@ -1945,7 +2119,7 @@ private:
     Phase               phase_ = Phase::Running;
     std::string         statusLine_;
     std::string         summaryText_;
-    std::string         promptText_;
+    std::string         promptText_;     // non-empty = the resize hook owns repainting
     // Visible width (in columns) of every row printed by the previous frame.
     // Used to work out how far to move the cursor back up, even if the
     // terminal was resized (and therefore re-wrapped the old rows) in between.
@@ -1954,6 +2128,13 @@ private:
     // dimension triggers a full wipe + repaint instead of a cursor-up redraw.
     size_t              lastCols_ = 0, lastRows_ = 0;
     bool                hasDrawn_ = false;
+
+    // Resize relay. wakeRd_/wakeWr_/pollFallback_ are set in start() before
+    // the threads run and only cleared after they are joined.
+    int                 wakeRd_ = -1, wakeWr_ = -1;
+    bool                pollFallback_ = false;
+    std::atomic<bool>   resizeSignalled_{false};
+    std::thread         relay_;
 
     std::atomic<bool>   stop_{false};
     std::thread         thread_;
