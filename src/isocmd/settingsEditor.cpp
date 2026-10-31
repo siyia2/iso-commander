@@ -525,10 +525,11 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
         std::cout << "\n";
 
         std::string prompt = std::format(
-            "\001{}\002Value\001{}\002 ↵ for edit: \001{}\002",
+            "\001{}\002Value\001{}\002 ↵ for \001{}\002editor\001{}\002: \001{}\002",
             UI::Palette::Green,
             tc.path,
-            tc.reset,
+            UI::Palette::Yellow,
+            tc.path,
             tc.reset
         );
 
