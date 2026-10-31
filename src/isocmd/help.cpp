@@ -193,15 +193,14 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
 /**
  * @brief Displays a help guide for the settings editor.
  *
- * Renders sections "Hotkeys", "Selecting Edits", and "Tips" via a `render`
- * lambda that is replayed by the resize watcher and the press-Enter prompt,
- * with a fresh ThemeColors constructed per replay so theme changes are
- * picked up on the next redraw.
+ * Renders three numbered sections ("1. Hotkeys", "2. Selecting Edits",
+ * "3. Tips") via a `render` lambda. The lambda is replayed by the resize
+ * watcher and the press-Enter prompt, with a fresh ThemeColors constructed
+ * on each replay so theme changes are picked up on the next redraw.
  *
- * Note: the on-screen headings are numbered 1, 2, and 4 — there is no
- * section 3 in the rendered output. This gap is intentional as far as the
- * doc is concerned (kept to match the established help-screen layout) and
- * is not a documentation omission.
+ * Colors: hotkey values use `keysYellow`, selection examples use `keysPurple`.
+ *
+ * Blocks until the user presses Enter, then returns.
  */
 void helpSettingsEditor() {
     auto render = [&] {
@@ -216,9 +215,10 @@ void helpSettingsEditor() {
         printSection(tc, "\n2. Selecting Edits (↵):", std::string(UI::Palette::BoldReset) +
             "   • Single/Multiple : " + std::string(tc.keysPurple) + "'1' or '1 5 6'\n" + std::string(UI::Palette::BoldReset) +
             "   • Range/Combine   : " + std::string(tc.keysPurple) + "'1-3' or '1-3 5 7-9'" + std::string(UI::Palette::BoldReset));
-        printSection(tc, "\n4. Tips:",
+        printSection(tc, "\n3. Tips:",
             "   • On reset defaults are auto-saved to disk\n"
-            "   • Successful edits are auto-saved to disk");
+            "   • Successful edits are auto-saved to disk\n"
+            "   • Falls back to memory if config is unavailable");
     };
 
     pressEnterToReturnWithRepaint(render);
