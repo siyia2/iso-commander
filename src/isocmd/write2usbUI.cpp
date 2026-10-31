@@ -60,7 +60,7 @@
 namespace fs = std::filesystem;
 
 // ------------------------------------------------------------------------- //
-// Shared small helpers (each replaces several former copies)                //
+// Shared small helpers                                                      //
 // ------------------------------------------------------------------------- //
 
 /**
