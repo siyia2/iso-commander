@@ -3,9 +3,11 @@
 // C++ Standard Library Headers
 #include <array>
 #include <atomic>
+#include <cassert>
 #include <charconv>
 #include <chrono>
 #include <condition_variable>
+#include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -17,6 +19,7 @@
 #include <utility>
 
 // C / System Headers
+#include <signal.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -31,72 +34,48 @@
 // ------------------------------------------------------------------------- //
 
 /**
- * @brief State shared by the resize-monitoring thread and Readline's event hook.
+ * @brief State for the SIGWINCH-driven resize watcher.
  *
- * The worker thread only detects width changes and sets @ref pending. Terminal
- * output and Readline operations are handled by @ref tick on the main thread,
- * where Readline's line-buffer and cursor state can be accessed safely.
+ * The signal handler only sets an async-signal-safe flag (and forwards to the
+ * previously installed handler, e.g. Readline's own). Terminal output and
+ * Readline operations happen in @ref tick on the main thread, from Readline's
+ * event hook, where Readline's line-buffer and cursor state are safe to touch.
  */
 struct ListResizeWatcher::Impl {
-    explicit Impl(Repaint r) : repaint(std::move(r)), lastCols(terminalSize().cols) {}
+    explicit Impl(Repaint r) : repaint(std::move(r)), last(terminalSize()) {}
 
-    Repaint            repaint;
-    std::size_t        lastCols;            // watcher thread only after construction
-    std::atomic<bool>  pending{false};
-    rl_hook_func_t*    prevHook = nullptr;  // hook installed before ours (chained)
-
-    std::mutex              m;
-    std::condition_variable cv;
-    bool                    stopRequested = false;
-    std::thread             thread;
-
-    /// Polls terminal width every 100 ms and marks changes for the main thread.
-    /// Failed size queries retain the last known dimensions.
-    void loop() {
-        constexpr auto kPoll = std::chrono::milliseconds(100);
-        std::unique_lock<std::mutex> lk(m);
-        while (!stopRequested) {
-            cv.wait_for(lk, kPoll, [&] { return stopRequested; });
-            if (stopRequested) break;
-
-            const std::size_t cols = terminalSize().cols;
-            if (cols == 0) continue;                            // size never known
-            if (lastCols == 0) { lastCols = cols; continue; }   // first reading = baseline
-            if (cols != lastCols) {
-                lastCols = cols;
-                pending.store(true, std::memory_order_release);
-            }
-        }
-    }
+    Repaint         repaint;
+    TermSize        last;                   // last dimensions we repainted for (main thread only)
+    rl_hook_func_t* prevHook = nullptr;     // hook installed before ours (chained)
 
     /// Runs from Readline's event hook on the main thread. Repaints the list
     /// after a resize, updates Readline's screen dimensions, and restores the prompt.
-    void tick() {
-        if (!pending.exchange(false, std::memory_order_acquire)) return;
-
-        const TermSize sz = terminalSize();
-        if (sz.cols == 0 || sz.rows == 0) return;
-
-        // Keep Readline's wrapping in sync with the dimensions used by the list renderer.
-        rl_set_screen_size(static_cast<int>(sz.rows), static_cast<int>(sz.cols));
-
-        // The repaint callback performs the normal list display step. Prevent
-        // exceptions from propagating through Readline's C call stack.
-        try { repaint(); } catch (...) {}
-
-        // Leave a blank line after the list, then let Readline redraw the prompt
-        // and the current input, including its cursor position.
-        std::cout << '\n' << std::flush;
-        rl_on_new_line();
-        rl_redisplay();
-    }
+    void tick();
 };
 
 namespace {
 
+/// Set from the signal handler, cleared on the main thread.
+volatile std::sig_atomic_t g_winch = 0;
+
+/// Handler that was installed before ours; we forward to it so Readline's own
+/// SIGWINCH handling (rl_catch_sigwinch) keeps working.
+struct sigaction g_prevWinch {};
+bool             g_winchInstalled = false;
+
 /// Active watcher used by the Readline event hook. Accessed only on the
 /// thread running Readline; set during construction and cleared by stop().
 ListResizeWatcher::Impl* g_activeListWatcher = nullptr;
+
+extern "C" void onWinch(int sig, siginfo_t* info, void* ctx) {
+    g_winch = 1;
+    if (g_prevWinch.sa_handler == SIG_DFL || g_prevWinch.sa_handler == SIG_IGN) return;
+    if (g_prevWinch.sa_flags & SA_SIGINFO) {
+        if (g_prevWinch.sa_sigaction) g_prevWinch.sa_sigaction(sig, info, ctx);
+    } else {
+        g_prevWinch.sa_handler(sig);
+    }
+}
 
 /// Handles pending resize repainting, then invokes the hook that was installed
 /// before this watcher so other Readline event processing remains active.
@@ -109,29 +88,57 @@ int listResizeHook() {
 
 } // namespace
 
+void ListResizeWatcher::Impl::tick() {
+    if (!g_winch) return;
+    g_winch = 0;                            // clear before reading size so a new signal isn't lost
+
+    const TermSize sz = terminalSize();
+    if (sz.cols == 0 || sz.rows == 0) return;
+    if (sz.cols == last.cols && sz.rows == last.rows) return;   // spurious or already handled
+    last = sz;
+
+    // Keep Readline's wrapping in sync with the dimensions used by the list renderer.
+    rl_set_screen_size(static_cast<int>(sz.rows), static_cast<int>(sz.cols));
+
+    // The repaint callback performs the normal list display step. Prevent
+    // exceptions from propagating through Readline's C call stack.
+    try { repaint(); } catch (...) {}
+
+    // Leave a blank line after the list, then let Readline redraw the prompt
+    // and the current input, including its cursor position.
+    std::cout << '\n' << std::flush;
+    rl_on_new_line();
+    rl_redisplay();
+}
+
 ListResizeWatcher::ListResizeWatcher(Repaint repaint)
     : impl_(std::make_unique<Impl>(std::move(repaint))) {
+    // Only one watcher may be active at a time: hook and signal state are process-global.
+    assert(g_activeListWatcher == nullptr && "only one ListResizeWatcher may be active");
+
     impl_->prevHook = rl_event_hook;
     if (impl_->prevHook == listResizeHook) impl_->prevHook = nullptr;   // never chain to ourselves
     g_activeListWatcher = impl_.get();
     rl_event_hook = listResizeHook;
-    impl_->thread = std::thread([p = impl_.get()] { p->loop(); });
+
+    struct sigaction sa {};
+    sa.sa_sigaction = onWinch;
+    sa.sa_flags = SA_SIGINFO | SA_RESTART;
+    sigemptyset(&sa.sa_mask);
+    g_winchInstalled = (sigaction(SIGWINCH, &sa, &g_prevWinch) == 0);
 }
 
 ListResizeWatcher::~ListResizeWatcher() { stop(); }
 
 void ListResizeWatcher::stop() {
-    if (!impl_ || !impl_->thread.joinable()) return;
-    {
-        std::lock_guard<std::mutex> lk(impl_->m);
-        impl_->stopRequested = true;
-    }
-    impl_->cv.notify_all();
-    impl_->thread.join();
+    if (!impl_ || g_activeListWatcher != impl_.get()) return;
 
-    if (g_activeListWatcher == impl_.get()) {
-        g_activeListWatcher = nullptr;
-        // Only undo our own installation; leave it alone if someone replaced the hook since.
-        if (rl_event_hook == listResizeHook) rl_event_hook = impl_->prevHook;
+    if (g_winchInstalled) {
+        sigaction(SIGWINCH, &g_prevWinch, nullptr);
+        g_winchInstalled = false;
     }
+
+    g_activeListWatcher = nullptr;
+    // Only undo our own installation; leave it alone if someone replaced the hook since.
+    if (rl_event_hook == listResizeHook) rl_event_hook = impl_->prevHook;
 }
