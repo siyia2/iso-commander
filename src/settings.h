@@ -86,7 +86,8 @@ bool writeConfig(const std::string& configPath, const std::map<std::string, std:
  * INTERACTIVE EDITOR & APPLICATION LOGIC
  */
 void interactiveConfigEditor(const std::string& configPath);
-bool editSetting(const std::string& configPath, const std::string& key);
+bool editSetting(const std::string& configPath, const std::string& key,
+                 const std::vector<std::string>& inputErrors = {});
 void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap);
 
 /**
