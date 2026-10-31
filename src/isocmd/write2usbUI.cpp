@@ -1036,10 +1036,10 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
 
     const bool noPermissions = (geteuid() != 0);
 
-    // Hoisted so the last typed mapping survives across iterations and can
-    // be pre-filled into the next readline prompt (after parse/validation
-    // errors or a declined confirmation). Stays empty on the empty-input
-    // and "?" paths, so those start with a clean line.
+    // Hoisted so the last typed mapping survives a declined confirmation and
+    // can be pre-filled into the next readline prompt. Stays empty on the
+    // empty-input, "?", and parse/validation-error paths, so those start with
+    // a clean line.
     std::string pendingInput;
 
     // State for the readline pre-fill hook. Function-local statics so the
@@ -1231,7 +1231,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         auto deviceMap = parseDeviceMappings(deviceInput.get(), isoFilenames, errors);
 
         if (!errors.empty()) {
-            pendingInput = mainInputString;   // pre-fill next prompt for editing
             pressEnterToTryWithRepaint([&] { renderErrors(errors); });
             continue;
         }
@@ -1240,8 +1239,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         auto validPairs = validateDevices(deviceMap, sortedIsos, noPermissions, validationErrors);
 
         if (!validationErrors.empty()) {
-            pendingInput = mainInputString;   // pre-fill next prompt for editing
-
             signal(SIGINT, SIG_IGN);
             disable_ctrl_d();
 
