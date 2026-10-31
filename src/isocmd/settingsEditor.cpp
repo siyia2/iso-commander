@@ -241,6 +241,8 @@ void interactiveConfigEditor(const std::string& configPath) {
                         std::cout << "\n" << tc.label << "[+] Defaults applied\n" << tc.reset;
                         if (saved) {
                             std::cout << tc.highlight << "[✔] Saved to disk\n" << tc.reset;
+                        } else {
+                            std::cout << tc.error << "[✗] Save failed\n" << tc.reset;
                         }
                     };
 
