@@ -129,7 +129,6 @@ void verbosePrint(std::unordered_set<std::string>& primarySet,
         }
     };
 
-    ListResizeWatcher watcher(render);
     pressEnterToContinueWithRepaint(render);
 }
 
