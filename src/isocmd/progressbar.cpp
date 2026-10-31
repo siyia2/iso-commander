@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -62,25 +63,39 @@ std::atomic<int>  g_progressWinchFd{-1};
 /// Set by the SIGWINCH handler, cleared when the size is re-read.
 std::atomic<bool> g_progressWinchDirty{false};
 
+/// Set by the SIGWINCH handler around its write() so closeWake() can wait
+/// for any in-flight handler invocation before closing the fd.
+std::atomic<bool> g_progressWinchInHandler{false};
+
 /// Handler that was installed before ours; forwarded to so any other
 /// SIGWINCH handling keeps working.
 struct sigaction  g_progressPrevWinch {};
+
+/// Serializes closeWake() against an in-flight handler write. Only the
+/// non-signal side ever locks this; the handler never touches it.
+std::mutex        g_progressWinchCloseMutex;
 
 static_assert(std::atomic<int>::is_always_lock_free &&
               std::atomic<bool>::is_always_lock_free,
               "handler state must be lock-free to be used from a signal handler");
 
-/// SIGWINCH handler. Async-signal-safe: two atomic stores and one write() to
-/// a non-blocking pipe, then a forward to the previous handler.
+/// SIGWINCH handler. Async-signal-safe: atomic stores, one write() to a
+/// non-blocking pipe, then a forward to the previous handler. The
+/// g_progressWinchInHandler bracket lets closeWake() know whether a write
+/// to g_progressWinchFd may still be in flight.
 void onProgressWinch(int sig, siginfo_t* info, void* ctx) {
     const int savedErrno = errno;
 
     g_progressWinchDirty.store(true, std::memory_order_release);
+
+    g_progressWinchInHandler.store(true, std::memory_order_seq_cst);
     const int fd = g_progressWinchFd.load(std::memory_order_acquire);
     if (fd >= 0) {
         const char b = 1;
         [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);
     }
+    g_progressWinchInHandler.store(false, std::memory_order_release);
+
     errno = savedErrno;
 
     if (g_progressPrevWinch.sa_handler == SIG_DFL ||
@@ -122,6 +137,14 @@ void onProgressWinch(int sig, siginfo_t* info, void* ctx) {
  * the pipe; it never touches the terminal output. All drawing stays on the
  * caller's thread. Only one watcher can be installed at a time (the handler
  * state is process-global).
+ *
+ * @par Close/write ordering
+ * closeWake() stores -1 into the fd, then waits (under a mutex) until the
+ * handler is no longer inside its write, and only then closes the fd. The
+ * handler only uses atomics and write(), so it never contends the mutex.
+ * This makes the close of the write end deterministic with respect to the
+ * signal handler and prevents the fd from being closed while a write to it
+ * is still in flight.
  */
 class TerminalSizeWatcher {
 public:
@@ -147,7 +170,6 @@ public:
         sa.sa_flags = SA_SIGINFO | SA_RESTART;
         sigemptyset(&sa.sa_mask);
         if (sigaction(SIGWINCH, &sa, &g_progressPrevWinch) != 0) {
-            g_progressWinchFd.store(-1, std::memory_order_release);
             closeWake();
             polling_ = true;
             return;
@@ -195,9 +217,14 @@ public:
         if (!installed_) return;
         installed_ = false;
 
+        // 1. Restore the previous handler so no *new* signal invocations
+        //    can enter onProgressWinch.
         sigaction(SIGWINCH, &g_progressPrevWinch, nullptr);
-        g_progressWinchFd.store(-1, std::memory_order_release);
+
+        // 2. Disarm the fd and wait out any in-flight handler, then close.
+        //    closeWake() does the ordering internally.
         closeWake();
+
         polling_ = true;                              // any further get() just re-reads
     }
 
@@ -213,6 +240,19 @@ private:
     }
 
     void closeWake() {
+        // Serialize against a handler invocation that loaded the fd just
+        // before we are about to close it. The handler only uses atomics,
+        // so it cannot deadlock with us; we simply wait for it to finish.
+        std::lock_guard<std::mutex> lk(g_progressWinchCloseMutex);
+
+        // Make the fd unreachable for *future* handler invocations.
+        g_progressWinchFd.store(-1, std::memory_order_release);
+
+        // Wait for any handler that already loaded the fd to finish writing.
+        while (g_progressWinchInHandler.load(std::memory_order_seq_cst)) {
+            std::this_thread::yield();
+        }
+
         for (int& fd : wake_) {
             if (fd >= 0) { close(fd); fd = -1; }
         }
