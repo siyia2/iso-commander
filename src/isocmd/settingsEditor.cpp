@@ -526,7 +526,6 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
 
         std::string prompt = std::format(
             "\001{}\002Value ↵ : \001{}\002",
-            UI::Palette::Blue,
             tc.path,
             tc.reset
         );
