@@ -1274,14 +1274,19 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         // BOTH the ISO/device list (drawn by readlineWithResize above) and
         // the warning block must be redrawn — readline does not reprint its
         // earlier prompt after we clear the screen, so the ISO/device list
-        // must come from here. \033[H\033[2J homes regardless of cursor
-        // position, which neutralizes ConfirmResizeWatcher's own cursor-up
-        // math (drawnWidths goes stale after a reflow on terminals that
-        // don't reflow the live cursor, e.g. VTE).
+        // must come from here.
         //
-        // On repaint we re-emit the device prompt header, then the IDX>DEVICE
-        // prompt line plus the typed mapping (same as renderErrors), so the
-        // user still sees what they entered. Layout:
+        // FIX: the previous implementation used a raw "\033[H\033[2J" here.
+        // "\033[2J" clears only the *visible* screen; it does NOT touch the
+        // scrollback buffer, so every resize left the prior frames behind in
+        // scrollback (the "unclean scroll buffer" symptom). Every other
+        // repaint path in this file (repaintDevices, renderErrors, the
+        // selection-limit error, etc.) correctly calls clearScrollBuffer().
+        // We now do the same, then home the cursor. The whole body is also
+        // wrapped in SyncOutput so a rapid sequence of SIGWINCH-driven
+        // repaints cannot interleave with readline's own redraw.
+        //
+        // Layout (unchanged):
         //
         //   <device prompt header lines>
         //   IDX>DEVICE ... ? for help: <typed input>
@@ -1292,11 +1297,15 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         //                                         <- blank line
         //   Proceed? (y/n):
         auto renderConfirm = [&](size_t cols, bool clearFirst) -> std::vector<size_t> {
+            SyncOutput sync;                 // FIX: serialize with readline redraws
             const size_t usableCols = cols > 1 ? cols - 1 : 1;
             std::vector<size_t> widths;
 
             if (clearFirst) {
-                std::cout << "\033[H\033[2J";
+                // FIX: clean the scroll buffer exactly like every other
+                // repaint path. "\033[2J" alone leaves the scrollback dirty.
+                clearScrollBuffer();
+                std::cout << "\033[H";
                 std::cout << promptHeaderForRepaint(devicePrompt);
                 std::cout << buildIdxPrompt() << mainInputString << "\n";
                 std::cout << "\n";   // separator between device prompt and warning
@@ -1355,10 +1364,9 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
         {
             ConfirmationModeGuard confirmGuard;
-            // The watcher's repaint always clears first and redraws both the
-            // device prompt header and the warning block. ConfirmResizeWatcher's
-            // own cursor-up math (based on drawnWidths) is bypassed because
-            // \033[H\033[2J homes regardless of cursor position.
+            // The watcher's repaint always clears first (and now also flushes
+            // the scroll buffer) and redraws both the device prompt header and
+            // the warning block. The raw ANSI clear is gone; see renderConfirm.
             ConfirmResizeWatcher watcher(g_confirmResize,
                                          [&](size_t cols) { return renderConfirm(cols, /*clearFirst=*/true); },
                                          drawnCols, drawnWidths, promptText);
