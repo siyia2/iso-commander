@@ -1276,16 +1276,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         // earlier prompt after we clear the screen, so the ISO/device list
         // must come from here.
         //
-        // FIX: the previous implementation used a raw "\033[H\033[2J" here.
-        // "\033[2J" clears only the *visible* screen; it does NOT touch the
-        // scrollback buffer, so every resize left the prior frames behind in
-        // scrollback (the "unclean scroll buffer" symptom). Every other
-        // repaint path in this file (repaintDevices, renderErrors, the
-        // selection-limit error, etc.) correctly calls clearScrollBuffer().
-        // We now do the same, then home the cursor. The whole body is also
-        // wrapped in SyncOutput so a rapid sequence of SIGWINCH-driven
-        // repaints cannot interleave with readline's own redraw.
-        //
         // Layout (unchanged):
         //
         //   <device prompt header lines>
@@ -1297,13 +1287,11 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         //                                         <- blank line
         //   Proceed? (y/n):
         auto renderConfirm = [&](size_t cols, bool clearFirst) -> std::vector<size_t> {
-            SyncOutput sync;                 // FIX: serialize with readline redraws
+            SyncOutput sync;
             const size_t usableCols = cols > 1 ? cols - 1 : 1;
             std::vector<size_t> widths;
 
             if (clearFirst) {
-                // FIX: clean the scroll buffer exactly like every other
-                // repaint path. "\033[2J" alone leaves the scrollback dirty.
                 clearScrollBuffer();
                 std::cout << "\033[H";
                 std::cout << promptHeaderForRepaint(devicePrompt);
