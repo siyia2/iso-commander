@@ -166,7 +166,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 }
                 if (end == 0 || header[end - 1] != '\n') std::cout << "\n";
 
-                std::cout << color << typedLine << dt.reset << "\n";
+                std::cout << UI::Palette::BoldReset << typedLine << dt.reset << "\n";
             };
 
             RlLine searchQuery = readlineWithResize(prompt, repaintPrompt);
@@ -1047,7 +1047,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
             }
             if (end == 0 || header[end - 1] != '\n') std::cout << "\n";
 
-            std::cout << color << typedLine << dt.reset << "\n";
+            std::cout << UI::Palette::BoldReset << typedLine << dt.reset << "\n";
         };
 
         RlLine searchQuery = readlineWithResize(prompt, repaintPrompt);
