@@ -59,6 +59,95 @@
 
 namespace fs = std::filesystem;
 
+// ------------------------------------------------------------------------- //
+// Shared small helpers (each replaces several former copies)                //
+// ------------------------------------------------------------------------- //
+
+/**
+ * @brief Trims leading and trailing ASCII whitespace in place.
+ *
+ * Whitespace set: space, \\t, \\n, \\r, \\f, \\v. An all-whitespace string
+ * becomes empty.
+ *
+ * @param s String to trim.
+ */
+static void trimWs(std::string& s) {
+    static constexpr const char* kWs = " \t\n\r\f\v";
+    s.erase(s.find_last_not_of(kWs) + 1);
+    s.erase(0, s.find_first_not_of(kWs));
+}
+
+/**
+ * @brief Returns the final path component (e.g. "/dev/sdb" -> "sdb").
+ *
+ * @param path Any filesystem path.
+ * @return The filename component, or an empty string if there is none.
+ */
+static std::string blockName(const std::string& path) {
+    return fs::path(path).filename().string();
+}
+
+/**
+ * @brief Returns true if @p device is still being drained by this process
+ * after a cancelled write (see g_drainingDevices).
+ *
+ * Shared by the device-list "[FLUSHING]" annotation and
+ * WriteValidation::checkDevice so both agree on the same lookup.
+ *
+ * @param device Canonical block-device path (e.g. /dev/sdb).
+ */
+static bool isDraining(const std::string& device) {
+    std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
+    return g_drainingDevices.count(device) != 0;
+}
+
+/**
+ * @brief Wakes every waiter on a WriteSync condition variable.
+ *
+ * Briefly takes and releases the mutex before notifying. This pairs with the
+ * waiters' predicate check so a state change made just before the call cannot
+ * be missed. Uses notify_all because the screen's keeper thread and the main
+ * thread wait on the same condition variable.
+ *
+ * @param s Shared synchronisation state.
+ */
+static void notifySync(WriteSync& s) {
+    { std::lock_guard<std::mutex> lk(s.mutex); }
+    s.cv.notify_all();
+}
+
+// ---- Themed fragment builders (shared by errors, lists and warning rows) ----
+
+/**
+ * @brief Wraps @p inner as " (inner)" with dim-gray parentheses.
+ *
+ * @param inner Already-coloured text to place inside the parentheses.
+ */
+static std::string dimParen(std::string_view inner) {
+    return std::string(UI::Palette::DimGray) + " (" + std::string(inner)
+         + std::string(UI::Palette::DimGray) + ")";
+}
+
+/// " (<size>)" with the size in the theme's size colour.
+static std::string sizeTag(const WriteTheme& wt, std::string_view sizeStr) {
+    return dimParen(std::string(wt.sizeCol) + std::string(sizeStr));
+}
+
+/// "<drive name>" in the theme's info colour (no leading space).
+static std::string driveTag(const WriteTheme& wt, std::string_view driveName) {
+    return std::string(wt.infoLabel) + "<" + std::string(driveName) + ">";
+}
+
+/// "filename (size)" with the filename in the theme's file colour.
+static std::string isoRef(const WriteTheme& wt, std::string_view filename,
+                          std::string_view sizeStr) {
+    return std::string(wt.fileCol) + std::string(filename) + sizeTag(wt, sizeStr);
+}
+
+// ------------------------------------------------------------------------- //
+// Device discovery                                                          //
+// ------------------------------------------------------------------------- //
+
 /**
  * @brief Reads a block device's model name from sysfs.
  *
@@ -68,16 +157,12 @@ namespace fs = std::filesystem;
  * @return Model name, or "Unknown Drive" if the file is absent or empty.
  */
 std::string getDriveName(const std::string& device) {
-    std::string deviceName = device.substr(device.find_last_of('/') + 1);
-    std::string sysfsPath = "/sys/block/" + deviceName + "/device/model";
-
-    std::ifstream modelFile(sysfsPath);
+    std::ifstream modelFile("/sys/block/" + blockName(device) + "/device/model");
     std::string driveName;
 
     if (modelFile.is_open()) {
         std::getline(modelFile, driveName);
-        driveName.erase(0, driveName.find_first_not_of(" \t"));
-        driveName.erase(driveName.find_last_not_of(" \t") + 1);
+        trimWs(driveName);
     }
 
     return driveName.empty() ? "Unknown Drive" : driveName;
@@ -95,7 +180,6 @@ std::string getDriveName(const std::string& device) {
  * @return true if the device is a removable USB block device.
  */
 bool isFlashDrive(const std::string& devicePath) {
-    namespace fs = std::filesystem;
     try {
         if (devicePath.size() <= 5 || devicePath.rfind("/dev/", 0) != 0) {
             return false;
@@ -106,7 +190,7 @@ bool isFlashDrive(const std::string& devicePath) {
         const fs::path devNode = fs::canonical(devicePath, ec);
         if (ec) return false;
 
-        const std::string name = devNode.filename().string();
+        const std::string name = blockName(devNode.string());
         if (name.empty()) return false;
 
         const fs::path sysPath = fs::path("/sys/block") / name;
@@ -116,10 +200,7 @@ bool isFlashDrive(const std::string& devicePath) {
             std::ifstream file(sysPath / "removable");
             std::string value;
             if (!file || !std::getline(file, value)) return false;
-            while (!value.empty() &&
-                   std::isspace(static_cast<unsigned char>(value.back()))) {
-                value.pop_back();
-            }
+            trimWs(value);
             if (value != "1") return false;
         }
 
@@ -141,8 +222,9 @@ bool isFlashDrive(const std::string& devicePath) {
  * @brief Enumerates removable USB block devices visible in /sys/block.
  *
  * Skips loop devices, RAM disks, zram devices, and partition entries (names
- * ending in a digit). A device is included only when its removable sysfs
- * attribute reads "1" and isFlashDrive() confirms it is USB-attached.
+ * ending in a digit). Every remaining candidate is checked with
+ * isFlashDrive(), which verifies both the removable attribute and USB
+ * attachment.
  *
  * @return Absolute device paths such as /dev/sdb.
  */
@@ -160,12 +242,6 @@ std::vector<std::string> getRemovableDevices() {
             }
 
             if (!deviceName.empty() && std::isdigit(static_cast<unsigned char>(deviceName.back()))) {
-                continue;
-            }
-
-            std::ifstream removableFile(entry.path() / "removable");
-            std::string removable;
-            if (!(removableFile >> removable) || removable != "1") {
                 continue;
             }
 
@@ -198,31 +274,27 @@ bool isDeviceMounted(const std::string& device) {
         return false;
     }
 
+    auto stripDev = [](std::string s) {
+        if (s.rfind("/dev/", 0) == 0) s.erase(0, 5);
+        return s;
+    };
+
+    const std::string deviceName = stripDev(device);
+
     std::string line;
-    std::string deviceName = device;
-
-    if (deviceName.substr(0, 5) == "/dev/") {
-        deviceName = deviceName.substr(5);
-    }
-
     while (std::getline(mountsFile, line)) {
         std::istringstream iss(line);
         std::string mountDevice;
         iss >> mountDevice;
-
-        if (mountDevice.substr(0, 5) == "/dev/") {
-            mountDevice = mountDevice.substr(5);
-        }
+        mountDevice = stripDev(std::move(mountDevice));
 
         if (mountDevice == deviceName ||
             (mountDevice.find(deviceName) == 0 &&
-             std::isdigit(mountDevice[deviceName.length()]))) {
-            mountsFile.close();
+             std::isdigit(static_cast<unsigned char>(mountDevice[deviceName.length()])))) {
             return true;
         }
     }
 
-    mountsFile.close();
     return false;
 }
 
@@ -260,6 +332,27 @@ namespace WriteValidation {
     }
 
     /**
+     * @brief Builds a themed error message of the form "<label> '<path>'".
+     *
+     * The mirror image of pathErr(): the label text comes first, in the error
+     * label colour, followed by the quoted path in the path colour.
+     *
+     * @param wt    Active write theme.
+     * @param label Message text before the path; include a trailing space
+     *              (e.g. "Failed to get size for ").
+     * @param path  Path to display, quoted, after the label.
+     * @return The fully coloured message string.
+     */
+    std::string labelledPathErr(const WriteTheme& wt, const std::string& label,
+                                const std::string& path) {
+        std::string s;
+        s.append(wt.errLabel).append(label)
+         .append(wt.errPath).append("'").append(path).append("'")
+         .append(wt.rl_resetCol);
+        return s;
+    }
+
+    /**
      * @brief Prints a themed "Validation errors:" block to stderr.
      *
      * Each entry is printed as an indented bullet. Entries are expected to be
@@ -286,8 +379,7 @@ namespace WriteValidation {
      * @return true if one or more write requests are still pending.
      */
     bool isDeviceBusy(const std::string& device) {
-        const std::string name = std::filesystem::path(device).filename().string();
-        std::ifstream in("/sys/block/" + name + "/inflight");
+        std::ifstream in("/sys/block/" + blockName(device) + "/inflight");
         unsigned long reads = 0, writes = 0;
         if (!(in >> reads >> writes))
             return false;
@@ -300,8 +392,8 @@ namespace WriteValidation {
      * Checks, in order:
      * -# The device is a removable USB flash drive (isFlashDrive).
      * -# The device and its partitions are not mounted (isDeviceMounted).
-     * -# The device is not in @c g_drainingDevices, which tracks writes still
-     *    being drained by this process after cancellation.
+     * -# The device is not being drained by this process after cancellation
+     *    (isDraining).
      * -# In non-interactive mode, the device has no write I/O in flight
      *    (@ref isDeviceBusy). This also catches pending writes from another
      *    process, which the in-process set cannot track.
@@ -322,23 +414,16 @@ namespace WriteValidation {
         if (isDeviceMounted(device))
             return pathErr(wt, shown, " or its partitions are mounted");
 
-        {
-            std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-            if (g_drainingDevices.count(device))
-                return pathErr(wt, shown, " has pending kernel-level tasks");
-        }
+        if (isDraining(device))
+            return pathErr(wt, shown, " has pending kernel-level tasks");
 
         if (GlobalState::isNonInteractive.load() && isDeviceBusy(device))
             return pathErr(wt, shown, " has pending kernel-level tasks");
 
         size = getBlockDeviceSize(device);
-        if (size == 0) {
-            std::string e;
-            e.append(wt.errLabel).append("Failed to get size for ")
-             .append(wt.errPath).append("'").append(shown).append("'")
-             .append(wt.rl_resetCol);
-            return e;
-        }
+        if (size == 0)
+            return labelledPathErr(wt, "Failed to get size for ", shown);
+
         return std::nullopt;
     }
 
@@ -368,13 +453,11 @@ namespace WriteValidation {
         e.append(wt.errLabel).append("ISO exceeds target drive capacity:\n")
          .append(wt.errLabel).append(isoLabelPadded)
          .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol)
-         .append(UI::Palette::DimGray).append(" (").append(wt.fileCol).append(iso.filename)
-         .append(UI::Palette::DimGray).append(")\n")
+         .append(dimParen(std::string(wt.fileCol) + std::string(iso.filename))).append("\n")
          .append(wt.errLabel).append(driveLabelPadded)
          .append(wt.sizeCol).append(deviceSizeStr).append(wt.rl_resetCol)
-         .append(UI::Palette::DimGray).append(" (").append(wt.warnLabel).append(device)
-         .append(wt.infoLabel).append(" <").append(driveName).append(">")
-         .append(UI::Palette::DimGray).append(")")
+         .append(dimParen(std::string(wt.warnLabel) + std::string(device) + " "
+                          + driveTag(wt, driveName)))
          .append(wt.rl_resetCol);
 
         return e;
@@ -487,13 +570,8 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 
     errors.clear();
 
-    auto trim = [](std::string& s) {
-        s.erase(s.find_last_not_of(" \t\n\r\f\v") + 1);
-        s.erase(0, s.find_first_not_of(" \t\n\r\f\v"));
-    };
-
     while (std::getline(pairStream, pair, ';')) {
-        trim(pair);
+        trimWs(pair);
         if (pair.empty()) continue;
 
         size_t sepPos = pair.find('>');
@@ -504,8 +582,8 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 
         std::string indexStr = pair.substr(0, sepPos);
         std::string device   = pair.substr(sepPos + 1);
-        trim(indexStr);
-        trim(device);
+        trimWs(indexStr);
+        trimWs(device);
 
         try {
             size_t index = std::stoul(indexStr);
@@ -559,8 +637,52 @@ void helpMappings();
 void displayErrors();
 
 // ------------------------------------------------------------------------- //
-// Terminal / UTF-8 helpers (shared by WriteScreen and ConfirmResizeWatcher) //
+// Terminal / UTF-8 / ANSI helpers (shared by WriteScreen and                //
+// ConfirmResizeWatcher)                                                     //
 // ------------------------------------------------------------------------- //
+
+/**
+ * @brief Number of bytes in the UTF-8 code point that starts at @p s[i].
+ *
+ * Counts the lead byte plus any following continuation bytes (top two bits
+ * 10). Always returns at least 1, so callers that step by the result always
+ * make progress.
+ *
+ * @param s UTF-8 string.
+ * @param i Index of a code point's first byte (must be < s.size()).
+ */
+static size_t utf8SeqLen(const std::string& s, size_t i) {
+    size_t len = 1;
+    while (i + len < s.size() &&
+           (static_cast<unsigned char>(s[i + len]) & 0xC0) == 0x80) ++len;
+    return len;
+}
+
+/**
+ * @brief True if an ANSI CSI sequence (ESC '[') begins at @p s[i].
+ *
+ * @param s String that may contain colour/formatting escapes.
+ * @param i Index to test (must be < s.size()).
+ */
+static bool isCsiStart(const std::string& s, size_t i) {
+    return static_cast<unsigned char>(s[i]) == 0x1B && i + 1 < s.size() && s[i + 1] == '[';
+}
+
+/**
+ * @brief Index one past the end of the CSI sequence starting at @p s[i].
+ *
+ * Scans parameter bytes up to and including the final byte in 0x40..0x7E.
+ * An unterminated sequence runs to the end of the string.
+ *
+ * @param s String containing a CSI sequence at @p i (see isCsiStart).
+ * @param i Index of the ESC byte.
+ */
+static size_t csiEnd(const std::string& s, size_t i) {
+    size_t j = i + 2;
+    while (j < s.size() && !(s[j] >= 0x40 && s[j] <= 0x7E)) ++j;
+    if (j < s.size()) ++j;
+    return j;
+}
 
 /**
  * @brief Visible columns of a UTF-8 string, counted by code point.
@@ -587,9 +709,9 @@ static size_t utf8Width(const std::string& s) {
 /**
  * @brief Visible width of a string that may contain ANSI CSI escapes.
  *
- * Like utf8Width, but skips ANSI CSI sequences (ESC [ … final byte in
- * 0x40..0x7E), which the terminal interprets rather than renders. The
- * escapes count as 0 columns; every other UTF-8 code point counts as 1.
+ * Like utf8Width, but skips ANSI CSI sequences, which the terminal
+ * interprets rather than renders. The escapes count as 0 columns; every
+ * other UTF-8 code point counts as 1.
  *
  * @param s String that may contain colour/formatting escapes.
  * @return Visible columns @p s occupies when printed.
@@ -597,15 +719,12 @@ static size_t utf8Width(const std::string& s) {
 static size_t visibleWidth(const std::string& s) {
     size_t w = 0;
     for (size_t i = 0; i < s.size(); ) {
-        const unsigned char c = static_cast<unsigned char>(s[i]);
-        if (c == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
-            i += 2;
-            while (i < s.size() && !(s[i] >= 0x40 && s[i] <= 0x7E)) ++i;
-            if (i < s.size()) ++i;
+        if (isCsiStart(s, i)) {
+            i = csiEnd(s, i);
             continue;
         }
-        if ((c & 0xC0) != 0x80) ++w;
-        ++i;
+        i += utf8SeqLen(s, i);
+        ++w;
     }
     return w;
 }
@@ -630,17 +749,13 @@ static std::string clipToWidth(const std::string& s, size_t maxCols) {
     out.reserve(s.size());
     size_t w = 0;
     for (size_t i = 0; i < s.size(); ) {
-        if (static_cast<unsigned char>(s[i]) == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
-            size_t j = i + 2;
-            while (j < s.size() && !(s[j] >= 0x40 && s[j] <= 0x7E)) ++j;
-            if (j < s.size()) ++j;
+        if (isCsiStart(s, i)) {
+            const size_t j = csiEnd(s, i);
             out.append(s, i, j - i);
             i = j;
             continue;
         }
-        size_t len = 1;
-        while (i + len < s.size() &&
-            (static_cast<unsigned char>(s[i + len]) & 0xC0) == 0x80) ++len;
+        const size_t len = utf8SeqLen(s, i);
         if (w >= maxCols) break;
         out.append(s, i, len);
         i += len;
@@ -693,9 +808,7 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
     std::string out;
     size_t cols = 0, i = 0;
     while (i < stem.size() && cols < keep) {
-        size_t len = 1;
-        while (i + len < stem.size() &&
-               (static_cast<unsigned char>(stem[i + len]) & 0xC0) == 0x80) ++len;
+        const size_t len = utf8SeqLen(stem, i);
         out.append(stem, i, len);
         i += len;
         ++cols;
@@ -706,6 +819,64 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
     out += ext;
     return out;
 }
+
+// ------------------------------------------------------------------------- //
+// SIGWINCH handler chaining (shared by both resize mechanisms)              //
+// ------------------------------------------------------------------------- //
+
+/**
+ * @brief Installs a SIGWINCH handler while remembering, forwarding to and
+ * later restoring the previously installed one.
+ *
+ * Forwarding keeps Readline's own SIGWINCH handling (rl_catch_sigwinch)
+ * working while a watcher is active. Each owner keeps its own instance, so
+ * the "previous handler" of one mechanism is never overwritten by the other.
+ *
+ * @par Signal safety
+ * forward() is async-signal-safe provided the previous handler is. install()
+ * and restore() must be called from normal (non-handler) context.
+ */
+class SigwinchChain {
+public:
+    using Handler = void (*)(int, siginfo_t*, void*);
+
+    /**
+     * @brief Installs @p handler for SIGWINCH (SA_SIGINFO | SA_RESTART),
+     * saving the previous disposition.
+     *
+     * @return true if sigaction succeeded.
+     */
+    bool install(Handler handler) {
+        struct sigaction sa {};
+        sa.sa_sigaction = handler;
+        sa.sa_flags = SA_SIGINFO | SA_RESTART;
+        sigemptyset(&sa.sa_mask);
+        installed_ = (sigaction(SIGWINCH, &sa, &prev_) == 0);
+        return installed_;
+    }
+
+    /// Calls the previously installed handler, if it is a real one.
+    /// Meant to be called from inside our own handler.
+    void forward(int sig, siginfo_t* info, void* ctx) const {
+        if (prev_.sa_handler == SIG_DFL || prev_.sa_handler == SIG_IGN) return;
+        if (prev_.sa_flags & SA_SIGINFO) {
+            if (prev_.sa_sigaction) prev_.sa_sigaction(sig, info, ctx);
+        } else {
+            prev_.sa_handler(sig);
+        }
+    }
+
+    /// Reinstalls the previous handler. Safe to call more than once.
+    void restore() {
+        if (!installed_) return;
+        sigaction(SIGWINCH, &prev_, nullptr);
+        installed_ = false;
+    }
+
+private:
+    struct sigaction prev_ {};
+    bool             installed_ = false;
+};
 
 // ------------------------------------------------------------------------- //
 // Resize watcher (main-thread repaint via rl_event_hook)                    //
@@ -841,21 +1012,14 @@ static_assert(std::atomic<bool>::is_always_lock_free,
 /// State the SIGWINCH handler writes to. Set while a watcher is active.
 inline std::atomic<ResizeRepaintState*> g_state{nullptr};
 
-/// Handler that was installed before ours; forwarded to so Readline's own
-/// SIGWINCH handling (rl_catch_sigwinch) keeps working.
-inline struct sigaction g_prev {};
-inline bool             g_installed = false;
+/// Chain to the handler that was installed before ours.
+inline SigwinchChain g_chain;
 
 inline void onConfirmWinch(int sig, siginfo_t* info, void* ctx) {
     if (ResizeRepaintState* s = g_state.load(std::memory_order_acquire))
         s->pending.store(true, std::memory_order_release);
 
-    if (g_prev.sa_handler == SIG_DFL || g_prev.sa_handler == SIG_IGN) return;
-    if (g_prev.sa_flags & SA_SIGINFO) {
-        if (g_prev.sa_sigaction) g_prev.sa_sigaction(sig, info, ctx);
-    } else {
-        g_prev.sa_handler(sig);
-    }
+    g_chain.forward(sig, info, ctx);
 }
 
 } // namespace confirm_resize_detail
@@ -916,11 +1080,7 @@ public:
 
         g_state.store(&state_, std::memory_order_release);
 
-        struct sigaction sa {};
-        sa.sa_sigaction = onConfirmWinch;
-        sa.sa_flags = SA_SIGINFO | SA_RESTART;
-        sigemptyset(&sa.sa_mask);
-        g_installed = (sigaction(SIGWINCH, &sa, &g_prev) == 0);
+        g_chain.install(onConfirmWinch);
         active_ = true;
     }
 
@@ -937,10 +1097,7 @@ public:
         if (!active_) return;
         active_ = false;
 
-        if (g_installed) {
-            sigaction(SIGWINCH, &g_prev, nullptr);
-            g_installed = false;
-        }
+        g_chain.restore();
         g_state.store(nullptr, std::memory_order_release);
         state_.pending.store(false, std::memory_order_release);
     }
@@ -1044,6 +1201,12 @@ static int confirmResizeHookTrampoline(void) {
  *                draining in the background; cannot be written to until
  *                draining finishes.
  *
+ * @par Drive details are gathered once
+ * Drive name and size are read into the per-device DeviceInfo list when the
+ * device screen is built. The confirmation warning rows reuse those values
+ * instead of querying sysfs / ioctl again, falling back to a fresh query
+ * only if a device is not in that list.
+ *
  * @param selectedIsos ISOs chosen by the user for writing.
  * @return Validated (IsoInfo, device) pairs ready for
  *         performWriteOperation, or an empty vector if the user aborted or
@@ -1117,10 +1280,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 devicePromptStream << wt.pathCol << isoDir << "/";
             }
 
-            devicePromptStream << wt.fileCol << filename;
-
-            devicePromptStream << UI::Palette::DimGray << " (" << wt.sizeCol << sortedIsos[i].sizeStr
-                              << UI::Palette::DimGray << ")\n";
+            devicePromptStream << isoRef(wt, filename, sortedIsos[i].sizeStr) << "\n";
         }
 
         devicePromptStream << "\n" << color << "Removable USB Flash Devices:" << wt.rl_resetCol << "\n\n";
@@ -1160,14 +1320,12 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 if (dev.error) {
                     devicePromptStream << " " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
                 } else {
-                    devicePromptStream << " " << wt.deviceCol << dev.path
-                                      << wt.infoLabel << " <" << dev.driveName
-                                      << ">" << UI::Palette::DimGray << " (" << wt.sizeCol << dev.sizeStr
-                                      << UI::Palette::DimGray << ")"
+                    devicePromptStream << " " << wt.deviceCol << dev.path << " "
+                                      << driveTag(wt, dev.driveName)
+                                      << sizeTag(wt, dev.sizeStr)
                                       << ([&]() -> std::string {
                                           if (dev.mounted) return wt.colorFailure + " [MOUNTED]" + wt.rl_resetCol;
-                                          std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-                                          if (g_drainingDevices.count(dev.path))
+                                          if (isDraining(dev.path))
                                               return wt.colorFailure + " [FLUSHING]" + wt.rl_resetCol;
                                           return "";
                                       }())
@@ -1289,14 +1447,30 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         struct WarnRow {
             std::string device, driveName, deviceSizeStr, filename, isoSizeStr;
         };
+
+        // Reuse the drive name / size already gathered for the device list;
+        // fall back to a fresh query only for a device that is not in it.
+        std::unordered_map<std::string, const DeviceInfo*> infoByPath;
+        for (const auto& d : deviceInfos)
+            if (!d.error) infoByPath.emplace(d.path, &d);
+
         std::vector<WarnRow> warnRows;
         warnRows.reserve(validPairs.size());
         for (const auto& [iso, device] : validPairs) {
-            warnRows.push_back({ device,
-                                 getDriveName(device),
-                                 formatFileSize(getBlockDeviceSize(device)),
-                                 iso.filename,
-                                 iso.sizeStr });
+            const auto it = infoByPath.find(device);
+            if (it != infoByPath.end()) {
+                warnRows.push_back({ device,
+                                     it->second->driveName,
+                                     it->second->sizeStr,
+                                     iso.filename,
+                                     iso.sizeStr });
+            } else {
+                warnRows.push_back({ device,
+                                     getDriveName(device),
+                                     formatFileSize(getBlockDeviceSize(device)),
+                                     iso.filename,
+                                     iso.sizeStr });
+            }
         }
 
         // Full redraw used by ConfirmResizeWatcher on SIGWINCH. On a resize,
@@ -1350,12 +1524,10 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
                 const std::string shownName = truncateIsoName(r.filename, availForName);
 
                 std::ostringstream row;
-                row << UI::Palette::DimGray << " {" << wt.deviceCol << r.device
-                    << " " << wt.infoLabel << "<" << r.driveName << ">" << UI::Palette::DimGray << " ("
-                    << wt.sizeCol << r.deviceSizeStr
-                    << UI::Palette::DimGray << ")} " << color << "←" << UI::Palette::DimGray << " {" << wt.fileCol
-                    << shownName << UI::Palette::DimGray << " (" << wt.sizeCol
-                    << r.isoSizeStr << UI::Palette::DimGray << ")}";
+                row << UI::Palette::DimGray << " {" << wt.deviceCol << r.device << " "
+                    << driveTag(wt, r.driveName) << sizeTag(wt, r.deviceSizeStr)
+                    << "} " << color << "←" << UI::Palette::DimGray << " {"
+                    << isoRef(wt, shownName, r.isoSizeStr) << "}";
 
                 const std::string clipped = clipToWidth(row.str(), usableCols);
                 std::cout << clipped << "\n";
@@ -1573,10 +1745,8 @@ namespace write_screen_detail {
 /// Write end of the self-pipe the SIGWINCH handler pokes. -1 = no watcher active.
 inline std::atomic<int> g_fd{-1};
 
-/// Handler that was installed before ours; forwarded to so Readline's own
-/// SIGWINCH handling (rl_catch_sigwinch) keeps working.
-inline struct sigaction g_prev {};
-inline bool             g_installed = false;
+/// Chain to the handler that was installed before ours.
+inline SigwinchChain g_chain;
 
 static_assert(std::atomic<int>::is_always_lock_free,
               "g_fd must be lock-free to be read from a signal handler");
@@ -1590,12 +1760,7 @@ inline void onWriteWinch(int sig, siginfo_t* info, void* ctx) {
     }
     errno = savedErrno;
 
-    if (g_prev.sa_handler == SIG_DFL || g_prev.sa_handler == SIG_IGN) return;
-    if (g_prev.sa_flags & SA_SIGINFO) {
-        if (g_prev.sa_sigaction) g_prev.sa_sigaction(sig, info, ctx);
-    } else {
-        g_prev.sa_handler(sig);
-    }
+    g_chain.forward(sig, info, ctx);
 }
 
 } // namespace write_screen_detail
@@ -1782,8 +1947,7 @@ public:
         }
         if (relay_.joinable()) relay_.join();
 
-        { std::lock_guard<std::mutex> lk(syncPtr_->mutex); }
-        syncPtr_->cv.notify_all();
+        notifySync(*syncPtr_);
         thread_.join();
 
         uninstallResizeSignal();
@@ -1819,28 +1983,20 @@ private:
 
         g_fd.store(wakeWr_, std::memory_order_release);
 
-        struct sigaction sa {};
-        sa.sa_sigaction = onWriteWinch;
-        sa.sa_flags = SA_SIGINFO | SA_RESTART;
-        sigemptyset(&sa.sa_mask);
-        if (sigaction(SIGWINCH, &sa, &g_prev) != 0) {
+        if (!g_chain.install(onWriteWinch)) {
             g_fd.store(-1, std::memory_order_release);
             ::close(wakeRd_); ::close(wakeWr_);
             wakeRd_ = wakeWr_ = -1;
             pollFallback_ = true;
             return;
         }
-        g_installed = true;
 
         relay_ = std::thread([this] { relayLoop(); });
     }
 
     void uninstallResizeSignal() {
         using namespace write_screen_detail;
-        if (g_installed) {
-            sigaction(SIGWINCH, &g_prev, nullptr);
-            g_installed = false;
-        }
+        g_chain.restore();
         if (wakeWr_ >= 0) {
             g_fd.store(-1, std::memory_order_release);
             ::close(wakeWr_);
@@ -1859,8 +2015,7 @@ private:
             if (n <= 0 || stop_.load(std::memory_order_acquire)) break;
 
             resizeSignalled_.store(true, std::memory_order_release);
-            { std::lock_guard<std::mutex> lk(syncPtr_->mutex); }   // pairs with the keeper's predicate check
-            syncPtr_->cv.notify_all();
+            notifySync(*syncPtr_);   // pairs with the keeper's predicate check
         }
     }
 
@@ -2065,7 +2220,7 @@ private:
             std::ostringstream row;
             row << wt_.fileCol << paddedFilename
                 << color << " → " << wt_.deviceCol << paddedDevice
-                << color << " " << wt_.infoLabel << "<" << name << ">" << namePad
+                << color << " " << driveTag(wt_, name) << namePad
                 << color << " ["
                 << bar << wt_.speedCol << empty
                 << color << "] ";
@@ -2232,13 +2387,10 @@ std::shared_ptr<WriteScreen> performWriteOperation(
 
             syncPtr->finishedTasks.fetch_add(1);
 
-            {
-                std::lock_guard<std::mutex> lock(syncPtr->mutex);
-            }
             // notify_all: the screen's keeper thread and the main thread wait
             // on this same condition variable, and notify_one could wake the
             // wrong one.
-            syncPtr->cv.notify_all();
+            notifySync(*syncPtr);
         }));
     }
 
