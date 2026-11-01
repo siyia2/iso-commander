@@ -11,6 +11,7 @@
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
@@ -35,6 +36,7 @@
 
 // C / System Headers
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -708,43 +710,33 @@ static std::string truncateIsoName(const std::string& name, size_t maxCols) {
 }
 
 // ------------------------------------------------------------------------- //
-// Resize watcher (main-thread repaint via rl_event_hook)                    //
+// Resize watcher (main-thread repaint, event-driven)                        //
 // ------------------------------------------------------------------------- //
 
 /**
- * @brief State shared between the SIGWINCH handler and the repaint hook
- *        (main thread).
+ * @brief State used by the confirmation prompt's resize repaint.
  *
- * The signal handler only sets @ref pending (a lock-free atomic store, which
- * is async-signal-safe). The repaint hook on the main thread measures the
- * terminal itself and does all terminal I/O and readline access, which is the
- * only place rl_line_buffer / rl_end can be read without a data race.
- *
- * @par Threading
- * pending is std::atomic because it is written from a signal handler and
- * consumed by the hook. lastCols is atomic for convenience; after the
- * constructor it is only touched by the hook on the main thread. Everything
- * else is main-thread-only: paint and promptWidth are written once in
- * ConfirmResizeWatcher's constructor, and lineWidths is written only by
- * confirmResizeHook.
+ * Everything here is main-thread-only. The SIGWINCH handler never touches
+ * this struct: it only writes one byte to a self-pipe (see
+ * confirm_resize_detail::g_fd). The read end of that pipe is stored in
+ * @ref wakeRd and is waited on by confirmResizeGetc() together with stdin,
+ * so the main thread sleeps in poll() until a key or a resize arrives.
  *
  * @par Ownership
- * Instances are owned by the caller — normally a single file-scope object
- * (g_confirmResize). The watcher and the hook both take it by reference, so a
- * ConfirmResizeWatcher cannot exist without a state, and a hook cannot be
- * installed without one. That makes the "one watcher at a time" contract
- * explicit at the type level.
+ * Instances are owned by the caller, normally the single file-scope object
+ * g_confirmResize. ConfirmResizeWatcher takes the state by reference, so a
+ * watcher cannot exist without one.
  */
 struct ResizeRepaintState {
-    // Signalling: set by the SIGWINCH handler, consumed by the hook.
-    std::atomic<bool>   pending{false};
-    // Width the block was last drawn at; used to ignore height-only resizes.
-    std::atomic<size_t> lastCols{0};
+    /// Width the block was last drawn at; used to ignore height-only resizes.
+    size_t lastCols = 0;
 
-    // Main-thread-only.
     std::function<std::vector<size_t>(size_t)> paint;
     std::vector<size_t> lineWidths;
     size_t promptWidth = 0;
+
+    /// Read end of the wake-up pipe (set by ConfirmResizeWatcher, -1 if none).
+    int wakeRd = -1;
 };
 
 /// The one state used by the confirmation prompt (see ResizeRepaintState
@@ -752,10 +744,10 @@ struct ResizeRepaintState {
 static ResizeRepaintState g_confirmResize;
 
 /**
- * @brief rl_event_hook: repaints the warning block on the main thread.
+ * @brief Repaints the warning block for the current terminal size.
  *
- * Called by readline from its idle input loop when no keystroke is pending.
- * If a SIGWINCH has been flagged, it:
+ * Runs on the main thread, from inside readline's character read, after a
+ * SIGWINCH wake-up. It:
  * -# Measures the terminal itself. A failed query (zero cols or rows) and a
  *    height-only change (same width as the last drawn block) are ignored; the
  *    terminal's own reflow repositions the block, and the skip guard below
@@ -763,47 +755,42 @@ static ResizeRepaintState g_confirmResize;
  *    divides by cols, so the zero guard stays.
  * -# Tells readline the new screen size via rl_set_screen_size() so its own
  *    line-wrapping agrees with the layout computed here.
- * -# Computes how far the cursor must travel to reach the top of the warning
- *    block: the block's own wrapped height plus the wrapped height of the
- *    prompt + typed buffer (rl_point gives the cursor's offset inside that
- *    buffer).
- * -# If the cursor-up would clamp at row 1 (up >= rows), skips the repaint
- *    entirely — the terminal keeps the reflowed layout, the "ERASE ALL DATA"
- *    header stays visible, and the ISO / device lists above the block are
- *    preserved — without emitting any terminal escape (so no dangling
- *    ?2026h is ever sent).
- * -# Otherwise, opens a DEC mode 2026 synchronized-output envelope, moves the
- *    cursor up over the previous block + prompt, clears to end of screen,
- *    repaints the warning block at the new width, and calls rl_on_new_line()
+ * -# Computes the wrapped height of the warning block plus the wrapped height
+ *    of the prompt + typed buffer (rl_point gives the cursor's offset inside
+ *    that buffer).
+ * -# If that height does not fit on screen (>= rows), skips the repaint
+ *    entirely, without emitting any terminal escape (so no dangling ?2026h
+ *    is ever sent).
+ * -# Otherwise, opens a DEC mode 2026 synchronized-output envelope, lets the
+ *    painter redraw the whole screen at the new width (it homes the cursor
+ *    and wipes the screen and scrollback itself), and calls rl_on_new_line()
  *    + rl_redisplay() so readline reprints the prompt and re-echoes whatever
  *    the user has typed, cursor position included, then closes the 2026
  *    envelope to commit the frame atomically.
  *
+ * @par Why no cursor-up / erase here
+ * An earlier version moved the cursor up and erased to the end of the screen
+ * before calling the painter. The painter's own full-screen erase then made
+ * VTE-based terminals push the half-erased screen into scrollback, leaving one
+ * stale copy per resize. The painter alone owns the wipe now.
+ *
  * The envelope is owned by an RAII guard (SyncOutput), so a throwing paint()
- * callback still emits the closing ?2026l. A std::cout flush is issued inside
- * the envelope, immediately before rl_redisplay(), so ordering against
- * readline's writes stays explicit even if sync_with_stdio(false) is ever set.
+ * callback still emits the closing ?2026l. The envelope closes before this
+ * function returns.
  *
- * Restoring the typed input is possible here — and only here — because
- * rl_line_buffer / rl_end / rl_point are mutated by readline on the same
- * thread.
- *
- * The envelope must close before this hook returns.
+ * Restoring the typed input is possible here because rl_line_buffer /
+ * rl_end / rl_point are mutated by readline on the same thread.
  *
  * @param s Shared state populated by ConfirmResizeWatcher.
- * @return Always 0 (do not abort readline).
  */
-static int confirmResizeHook(ResizeRepaintState& s) {
-    if (!s.pending.exchange(false, std::memory_order_acquire))
-        return 0;
-
+static void confirmResizeRepaint(ResizeRepaintState& s) {
     const TermSize sz = terminalSize();
     const size_t cols = sz.cols;
     const size_t rows = sz.rows;
 
-    if (cols == 0 || rows == 0) return 0;
-    if (cols == s.lastCols.load(std::memory_order_relaxed)) return 0;
-    s.lastCols.store(cols, std::memory_order_relaxed);
+    if (cols == 0 || rows == 0) return;
+    if (cols == s.lastCols) return;
+    s.lastCols = cols;
 
     rl_set_screen_size(static_cast<int>(rows), static_cast<int>(cols));
 
@@ -816,30 +803,80 @@ static int confirmResizeHook(ResizeRepaintState& s) {
 
     const size_t up = warningRows + cursorLine;
 
-    if (up >= rows) return 0;
+    if (up >= rows) return;
 
     SyncOutput sync;
 
-    if (up > 0) std::cout << "\033[" << up << "A";
-    std::cout << "\r\033[J";
-
+    // No cursor-up / erase-to-end here. The painter homes the cursor and wipes
+    // the screen and scrollback itself. Erasing part of the screen first would
+    // be harmful: terminals such as VTE push the screen into scrollback on a
+    // full erase, so a half-erased copy would be left behind on every resize.
     s.lineWidths = s.paint(cols);
 
     std::cout.flush();
 
     rl_on_new_line();
     rl_redisplay();
+}
 
-    return 0;
+/**
+ * @brief rl_getc_function: blocks until a key or a resize arrives.
+ *
+ * Readline calls this whenever it needs the next input byte (and
+ * rl_event_hook is null; ConfirmResizeWatcher nulls it while active). Instead
+ * of waking on a timer, it sleeps in poll() on two descriptors:
+ * - stdin: a byte is available, so the call is handed to readline's own
+ *   rl_getc(), which keeps its EOF / EINTR / EAGAIN handling and returns the
+ *   byte.
+ * - the wake pipe: the SIGWINCH handler wrote to it. The pipe is drained,
+ *   the warning block is repainted via confirmResizeRepaint(), and the wait
+ *   resumes.
+ *
+ * A signal that interrupts poll() (EINTR) simply loops; because the handler's
+ * byte stays in the pipe until it is read, a resize that lands between two
+ * poll() calls is never lost. CPU use while idle is zero.
+ *
+ * This is a plain function pointer (int (*)(FILE*)) and so closes over
+ * g_confirmResize, the only state a watcher is ever created for in this
+ * program. If a second modal prompt ever needs its own watcher, this is the
+ * one place that has to change.
+ *
+ * @param stream readline's input stream (stdin).
+ * @return The next input byte, or EOF, as rl_getc() would.
+ */
+static int confirmResizeGetc(FILE* stream) {
+    ResizeRepaintState& s = g_confirmResize;
+    const int inFd = fileno(stream);
+
+    for (;;) {
+        struct pollfd fds[2] = {
+            { inFd,     POLLIN, 0 },
+            { s.wakeRd, POLLIN, 0 },
+        };
+
+        if (::poll(fds, 2, -1) < 0) {
+            if (errno == EINTR) continue;
+            return rl_getc(stream);          // let readline report the failure
+        }
+
+        if (fds[1].revents & POLLIN) {
+            char buf[64];
+            while (::read(s.wakeRd, buf, sizeof buf) > 0) {}   // non-blocking drain
+            confirmResizeRepaint(s);
+        }
+
+        if (fds[0].revents & (POLLIN | POLLHUP | POLLERR))
+            return rl_getc(stream);
+    }
 }
 
 namespace confirm_resize_detail {
 
-static_assert(std::atomic<bool>::is_always_lock_free,
-              "pending flag must be lock-free to be set from a signal handler");
+/// Write end of the self-pipe the SIGWINCH handler pokes. -1 = no watcher active.
+inline std::atomic<int> g_fd{-1};
 
-/// State the SIGWINCH handler writes to. Set while a watcher is active.
-inline std::atomic<ResizeRepaintState*> g_state{nullptr};
+static_assert(std::atomic<int>::is_always_lock_free,
+              "g_fd must be lock-free to be read from a signal handler");
 
 /// Handler that was installed before ours; forwarded to so Readline's own
 /// SIGWINCH handling (rl_catch_sigwinch) keeps working.
@@ -847,8 +884,13 @@ inline struct sigaction g_prev {};
 inline bool             g_installed = false;
 
 inline void onConfirmWinch(int sig, siginfo_t* info, void* ctx) {
-    if (ResizeRepaintState* s = g_state.load(std::memory_order_acquire))
-        s->pending.store(true, std::memory_order_release);
+    const int savedErrno = errno;
+    const int fd = g_fd.load(std::memory_order_acquire);
+    if (fd >= 0) {
+        const char b = 1;
+        [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);   // async-signal-safe; non-blocking
+    }
+    errno = savedErrno;
 
     if (g_prev.sa_handler == SIG_DFL || g_prev.sa_handler == SIG_IGN) return;
     if (g_prev.sa_flags & SA_SIGINFO) {
@@ -861,22 +903,31 @@ inline void onConfirmWinch(int sig, siginfo_t* info, void* ctx) {
 } // namespace confirm_resize_detail
 
 /**
- * @brief Signals a main-thread repaint when the terminal is resized.
+ * @brief Repaints the confirmation screen on terminal resize, without polling.
  *
- * Installs a SIGWINCH handler while readline waits at the confirmation
- * prompt. The handler never touches the terminal or readline: it only sets
- * ResizeRepaintState::pending (an async-signal-safe atomic store) and forwards
- * to the previously installed handler. The main thread's confirmResizeHook
- * measures the terminal, does the redraw and restores the user's typed input
- * via rl_redisplay().
+ * While alive it:
+ * - creates a self-pipe and installs a SIGWINCH handler that writes one byte
+ *   to it (async-signal-safe) and forwards to the previous handler;
+ * - sets rl_event_hook to null and rl_getc_function to confirmResizeGetc, so
+ *   readline blocks in poll() on stdin + the pipe instead of waking on its
+ *   own timer (readline's idle loop re-runs rl_event_hook roughly ten times
+ *   a second). The previous hook and getc function are restored by stop().
  *
- * Reacts to width changes only. Height changes are ignored by the hook: the
- * terminal's own reflow repositions the block, and the skip guard in the hook
- * handles the case where the block no longer fits.
+ * The repaint itself runs on the main thread inside confirmResizeGetc(), the
+ * only place rl_line_buffer / rl_end / rl_point can be read without a data
+ * race, so the user's typed input survives via rl_redisplay().
  *
- * Only one watcher may be active at a time (hook and signal state are
- * process-global). Must be stopped before readline returns (see stop()) so no
- * repaint can fire after the prompt has been answered.
+ * Reacts to width changes only. Height changes are ignored: the terminal's
+ * own reflow repositions the block, and the skip guard in
+ * confirmResizeRepaint() handles the case where the block no longer fits.
+ *
+ * If the pipe or handler cannot be set up, the watcher stays inactive: no
+ * readline hooks are touched and resizes are simply not repainted (still no
+ * polling).
+ *
+ * Only one watcher may be active at a time (handler and readline hooks are
+ * process-global). Must be stopped before the prompt's readline() result is
+ * used (see stop()) so no repaint can fire after the prompt is answered.
  */
 class ConfirmResizeWatcher {
 public:
@@ -889,10 +940,11 @@ public:
     using Painter = std::function<std::vector<size_t>(size_t cols)>;
 
     /**
-     * @brief Populates @p state and installs the SIGWINCH handler.
+     * @brief Populates @p state, installs the SIGWINCH handler and the
+     *        readline getc function.
      *
-     * @param state       State shared with confirmResizeHook. Must outlive
-     *                    this watcher.
+     * @param state       State shared with confirmResizeGetc. Must be
+     *                    g_confirmResize and outlive this watcher.
      * @param paint       Callback that (re)prints the warning block for a
      *                    given width and returns its per-line widths.
      * @param drawnCols   Terminal width the block was last drawn at.
@@ -906,70 +958,83 @@ public:
                          const std::string& promptText)
         : state_(state) {
         using namespace confirm_resize_detail;
-        assert(g_state.load() == nullptr && "only one ConfirmResizeWatcher may be active");
+        assert(g_fd.load() < 0 && "only one ConfirmResizeWatcher may be active");
 
-        state_.paint        = std::move(paint);
-        state_.lineWidths   = std::move(drawnWidths);
-        state_.promptWidth  = utf8Width(promptText);
-        state_.lastCols.store(drawnCols, std::memory_order_relaxed);
-        state_.pending.store(false, std::memory_order_relaxed);
+        state_.paint       = std::move(paint);
+        state_.lineWidths  = std::move(drawnWidths);
+        state_.promptWidth = utf8Width(promptText);
+        state_.lastCols    = drawnCols;
 
-        g_state.store(&state_, std::memory_order_release);
+        int fds[2];
+        if (::pipe(fds) != 0) return;
+        for (int fd : fds) {
+            ::fcntl(fd, F_SETFD, FD_CLOEXEC);
+            ::fcntl(fd, F_SETFL, O_NONBLOCK);   // handler must never block; drain must not block
+        }
+        wakeWr_       = fds[1];
+        state_.wakeRd = fds[0];
+        g_fd.store(wakeWr_, std::memory_order_release);
 
         struct sigaction sa {};
         sa.sa_sigaction = onConfirmWinch;
         sa.sa_flags = SA_SIGINFO | SA_RESTART;
         sigemptyset(&sa.sa_mask);
-        g_installed = (sigaction(SIGWINCH, &sa, &g_prev) == 0);
+        if (sigaction(SIGWINCH, &sa, &g_prev) != 0) {
+            closePipe();
+            return;
+        }
+        g_installed = true;
+
+        // The event hook must be null: while it is set, readline's idle loop
+        // reads input itself and never calls rl_getc_function.
+        savedEventHook_  = rl_event_hook;
+        savedGetc_       = rl_getc_function;
+        rl_event_hook    = nullptr;
+        rl_getc_function = confirmResizeGetc;
+
         active_ = true;
     }
 
-    /// Uninstalls the handler. Safe to call more than once.
+    /// Restores the hooks and handler. Safe to call more than once.
     ~ConfirmResizeWatcher() { stop(); }
 
     ConfirmResizeWatcher(const ConfirmResizeWatcher&)            = delete;
     ConfirmResizeWatcher& operator=(const ConfirmResizeWatcher&) = delete;
 
-    /// Uninstalls the handler and discards any unprocessed resize event so no
-    /// repaint fires after the prompt is answered. Safe to call more than once.
+    /// Restores readline's hooks and the previous SIGWINCH handler, then
+    /// closes the pipe, discarding any unprocessed resize event so no repaint
+    /// fires after the prompt is answered. Safe to call more than once.
     void stop() {
         using namespace confirm_resize_detail;
         if (!active_) return;
         active_ = false;
 
+        rl_getc_function = savedGetc_;
+        rl_event_hook    = savedEventHook_;
+
         if (g_installed) {
             sigaction(SIGWINCH, &g_prev, nullptr);
             g_installed = false;
         }
-        g_state.store(nullptr, std::memory_order_release);
-        state_.pending.store(false, std::memory_order_release);
+        closePipe();
     }
 
-    /**
-     * @brief The state the watcher writes to. Pass to confirmResizeHook when
-     *        installing it as rl_event_hook (via the trampoline below).
-     */
+    /// The state the watcher writes to.
     ResizeRepaintState& state() { return state_; }
 
 private:
+    void closePipe() {
+        confirm_resize_detail::g_fd.store(-1, std::memory_order_release);
+        if (wakeWr_ >= 0)        { ::close(wakeWr_);       wakeWr_ = -1; }
+        if (state_.wakeRd >= 0)  { ::close(state_.wakeRd); state_.wakeRd = -1; }
+    }
+
     ResizeRepaintState& state_;
     bool                active_ = false;
+    int                 wakeWr_ = -1;
+    rl_hook_func_t*     savedEventHook_ = nullptr;
+    rl_getc_func_t*     savedGetc_      = nullptr;
 };
-
-/**
- * @brief rl_event_hook trampoline for g_confirmResize.
- *
- * rl_event_hook is a plain function pointer (int (*)(void)), so it cannot
- * carry a state argument. This trampoline closes over g_confirmResize — the
- * only state a hook is ever installed for in this program. If a second modal
- * prompt ever needs its own watcher, this is the one place that has to change
- * (e.g. a std::function-based dispatcher).
- *
- * @return confirmResizeHook's return value (always 0).
- */
-static int confirmResizeHookTrampoline(void) {
-    return confirmResizeHook(g_confirmResize);
-}
 
 /**
  * @brief Interactive loop that collects and validates ISO-to-device mappings
@@ -1012,7 +1077,7 @@ static int confirmResizeHookTrampoline(void) {
  * recomputed on every repaint so the block re-lays out on a resize. The
  * confirmation screen is redrawn from scratch on SIGWINCH: the callback
  * installed on ConfirmResizeWatcher clears the whole screen with
- * "\033[H\033[2J", reprints the ISO/device prompt header via
+ * "\033[H\033[2J\033[3J", reprints the ISO/device prompt header via
  * promptHeaderForRepaint(devicePrompt), then the IDX>DEVICE prompt line with
  * the typed mapping, then the warning block; ConfirmResizeWatcher redraws its
  * "Proceed? (y/n):" line afterwards. Because "\033[H" homes regardless of
@@ -1325,7 +1390,11 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             std::vector<size_t> widths;
 
             if (clearFirst) {
-                std::cout << "\033[H\033[2J";
+                // Home, clear screen, clear scrollback. The \033[3J matters:
+                // terminals such as VTE push the screen into scrollback on
+                // \033[2J, so without it every resize leaves a stale copy of
+                // the confirmation screen behind (same sequence WriteScreen uses).
+                std::cout << "\033[H\033[2J\033[3J";
                 std::cout << promptHeaderForRepaint(devicePrompt);
                 std::cout << buildIdxPrompt() << mainInputString << "\n";
                 std::cout << "\n";   // separator between device prompt and warning
@@ -1388,14 +1457,13 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             // device prompt header and the warning block. ConfirmResizeWatcher's
             // own cursor-up math (based on drawnWidths) is bypassed because
             // \033[H\033[2J homes regardless of cursor position.
+            // The watcher installs and restores readline's hooks itself, so
+            // readline() is called plainly while it is alive.
             ConfirmResizeWatcher watcher(g_confirmResize,
                                          [&](size_t cols) { return renderConfirm(cols, /*clearFirst=*/true); },
                                          drawnCols, drawnWidths, promptText);
 
-            auto* savedHook = rl_event_hook;
-            rl_event_hook = confirmResizeHookTrampoline;
             confirmation.reset(readline(confirmPrompt.c_str()));
-            rl_event_hook = savedHook;
 
             watcher.stop();
         }
@@ -1594,7 +1662,7 @@ inline void onWriteWinch(int sig, siginfo_t* info, void* ctx) {
     const int savedErrno = errno;
     const int fd = g_fd.load(std::memory_order_acquire);
     if (fd >= 0) {
-        const char b = 1;
+        const char b = 'w';
         [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);   // async-signal-safe; non-blocking
     }
     errno = savedErrno;
@@ -1605,6 +1673,31 @@ inline void onWriteWinch(int sig, siginfo_t* info, void* ctx) {
     } else {
         g_prev.sa_handler(sig);
     }
+}
+
+/// SIGINT handler that was installed before ours (the program's cancellation
+/// handler, which sets g_operationCancelled). Always called first.
+inline struct sigaction g_prevInt {};
+inline bool             g_intInstalled = false;
+
+/// Chained SIGINT handler. Forwards to the cancellation handler FIRST, so
+/// g_operationCancelled is already set when the relay thread wakes the
+/// waiters, then pokes the same self-pipe as SIGWINCH (byte 'c').
+inline void onWriteInt(int sig, siginfo_t* info, void* ctx) {
+    const int savedErrno = errno;
+
+    if (g_prevInt.sa_flags & SA_SIGINFO) {
+        if (g_prevInt.sa_sigaction) g_prevInt.sa_sigaction(sig, info, ctx);
+    } else if (g_prevInt.sa_handler != SIG_DFL && g_prevInt.sa_handler != SIG_IGN) {
+        g_prevInt.sa_handler(sig);
+    }
+
+    const int fd = g_fd.load(std::memory_order_acquire);
+    if (fd >= 0) {
+        const char b = 'c';
+        [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);   // async-signal-safe; non-blocking
+    }
+    errno = savedErrno;
 }
 
 } // namespace write_screen_detail
@@ -1628,17 +1721,28 @@ inline void onWriteWinch(int sig, siginfo_t* info, void* ctx) {
  * The keeper blocks on the condition variable in the shared WriteSync state
  * and wakes only for:
  * - a task completion,
- * - a terminal resize (SIGWINCH), and
+ * - a terminal resize (SIGWINCH),
+ * - Ctrl+C (SIGINT), which also wakes the thread waiting in
+ *   performWriteOperation(), and
  * - while running, the 500 ms pulse deadline (live percentages and speeds).
  * Once finished it sleeps indefinitely until a resize or stop().
  *
- * A signal handler cannot notify a condition variable, so SIGWINCH is relayed:
- * the handler writes one byte to a self-pipe (async-signal-safe) and forwards
- * to the previously installed handler; a small relay thread blocked in read()
- * on that pipe sets resizeSignalled_ and notifies the condition variable.
- * The relay thread consumes no CPU while idle. If the pipe or handler cannot
- * be set up, the keeper falls back to checking the terminal size every
- * 100 ms.
+ * A signal handler cannot notify a condition variable, so SIGWINCH and SIGINT
+ * are relayed: each handler writes one byte to a self-pipe (async-signal-safe)
+ * and a small relay thread blocked in read() on that pipe notifies the
+ * condition variable (and, for SIGWINCH, sets resizeSignalled_). The relay
+ * thread consumes no CPU while idle.
+ *
+ * The SIGWINCH handler forwards to the previously installed handler. The
+ * SIGINT handler is chained in front of the program's cancellation handler:
+ * it calls that handler first (so g_operationCancelled is set) and only then
+ * pokes the pipe. It is installed only if a real handler is present, and is
+ * restored by stop() only if it is still the active one (performWriteOperation
+ * sets SIGINT to SIG_IGN after the wait, which must not be overwritten).
+ *
+ * If the pipe or handler cannot be set up, the keeper falls back to checking
+ * the terminal size every 100 ms, and cancelWakeable() reports false so the
+ * cancellation wait falls back to a 500 ms recheck.
  *
  * Only one WriteScreen may be started at a time (the handler state is
  * process-global).
@@ -1770,6 +1874,11 @@ public:
         promptText_ = std::move(prompt);
     }
 
+    /// True if Ctrl+C is relayed into the shared condition variable, i.e. a
+    /// waiter on that condition variable is woken immediately on cancellation
+    /// and needs no timed recheck. Valid after start().
+    bool cancelWakeable() const { return cancelChained_; }
+
     /// Re-emits the result screen (summary) at the current terminal width.
     /// Called by the pressEnterTo*WithRepaint() machinery on resize so the
     /// summary survives a terminal wipe. Safe to call from the main thread
@@ -1842,10 +1951,48 @@ private:
         g_installed = true;
 
         relay_ = std::thread([this] { relayLoop(); });
+
+        installCancelSignal();
+    }
+
+    // Chains SIGINT in front of the program's cancellation handler so Ctrl+C
+    // wakes cv waiters immediately. Skipped when no real handler is installed
+    // (nothing would set g_operationCancelled anyway). The previous handler's
+    // SA_RESTART bit and mask are kept so its behaviour towards blocking
+    // syscalls in the worker threads does not change.
+    void installCancelSignal() {
+        using namespace write_screen_detail;
+
+        struct sigaction cur {};
+        if (sigaction(SIGINT, nullptr, &cur) != 0) return;
+        if (!(cur.sa_flags & SA_SIGINFO) &&
+            (cur.sa_handler == SIG_DFL || cur.sa_handler == SIG_IGN)) return;
+
+        g_prevInt = cur;
+
+        struct sigaction sa {};
+        sa.sa_sigaction = onWriteInt;
+        sa.sa_flags     = SA_SIGINFO | (cur.sa_flags & SA_RESTART);
+        sa.sa_mask      = cur.sa_mask;
+        if (sigaction(SIGINT, &sa, nullptr) != 0) return;
+
+        g_intInstalled = true;
+        cancelChained_ = true;
     }
 
     void uninstallResizeSignal() {
         using namespace write_screen_detail;
+        if (g_intInstalled) {
+            // Restore only if our handler is still the active one; after
+            // performWriteOperation's signal(SIGINT, SIG_IGN) it is not, and
+            // the ignore must stay.
+            struct sigaction cur {};
+            if (sigaction(SIGINT, nullptr, &cur) == 0 &&
+                (cur.sa_flags & SA_SIGINFO) && cur.sa_sigaction == onWriteInt)
+                sigaction(SIGINT, &g_prevInt, nullptr);
+            g_intInstalled = false;
+            cancelChained_ = false;
+        }
         if (g_installed) {
             sigaction(SIGWINCH, &g_prev, nullptr);
             g_installed = false;
@@ -1867,7 +2014,14 @@ private:
             if (n < 0 && errno == EINTR) continue;
             if (n <= 0 || stop_.load(std::memory_order_acquire)) break;
 
-            resizeSignalled_.store(true, std::memory_order_release);
+            // 'w' = SIGWINCH, 'c' = SIGINT. Either way the waiters are
+            // notified below; only a resize sets the resize flag.
+            for (ssize_t i = 0; i < n; ++i) {
+                if (buf[i] == 'w') {
+                    resizeSignalled_.store(true, std::memory_order_release);
+                    break;
+                }
+            }
             { std::lock_guard<std::mutex> lk(syncPtr_->mutex); }   // pairs with the keeper's predicate check
             syncPtr_->cv.notify_all();
         }
@@ -2142,6 +2296,7 @@ private:
     // the threads run and only cleared after they are joined.
     int                 wakeRd_ = -1, wakeWr_ = -1;
     bool                pollFallback_ = false;
+    bool                cancelChained_ = false;   // SIGINT relayed into the cv
     std::atomic<bool>   resizeSignalled_{false};
     std::thread         relay_;
 
@@ -2168,9 +2323,13 @@ private:
  * are waited on before returning.
  *
  * @par Cancellation (Ctrl+C)
- * The cancellation flag is checked while waiting for task completion.
- * Because the signal handler cannot safely notify the condition variable,
- * the main thread rechecks cancellation at intervals of up to 500 ms.
+ * The cancellation flag is part of the wait predicate. The signal handler
+ * cannot safely notify the condition variable, so WriteScreen chains its own
+ * SIGINT handler in front of the cancellation handler and relays the signal
+ * through its self-pipe; the relay thread then notifies the condition
+ * variable and the main thread wakes immediately, with no periodic recheck.
+ * Only if that relay could not be installed does the wait fall back to
+ * rechecking every 500 ms.
  *
  * When cancellation is detected, the result screen is painted and terminal
  * input state is restored. Any tasks still running are transferred to
@@ -2251,20 +2410,27 @@ std::shared_ptr<WriteScreen> performWriteOperation(
         }));
     }
 
-    // Wait for all tasks to finish, woken instantly by each task's
-    // notify_all() rather than polling each future individually. Still
-    // time-boxed to a 500 ms cycle (not an unbounded wait) because
-    // g_operationCancelled is set from a SIGINT handler, which cannot safely
-    // call notify_one() — so cancellation must also be picked up by periodic
-    // re-check, not solely by notification.
+    // Wait for all tasks to finish. Each task's notify_all() wakes this
+    // thread on completion. Ctrl+C is also a wakeup: a SIGINT handler cannot
+    // notify a condition variable itself, but WriteScreen chains into it and
+    // relays the signal through its self-pipe, so its relay thread notifies
+    // this same condition variable after g_operationCancelled is set. The
+    // wait is therefore unbounded, with no periodic recheck.
+    //
+    // Only if that relay could not be set up (pipe/handler failure) do we
+    // fall back to a 500 ms recheck so cancellation still works.
     {
         std::unique_lock<std::mutex> lock(progressCvMutex);
-        while (finishedTasks.load() != totalTasks &&
-            !GlobalState::g_operationCancelled.load()) {
-            progressCv.wait_for(lock, std::chrono::milliseconds(500), [&] {
-                return finishedTasks.load() == totalTasks ||
-                    GlobalState::g_operationCancelled.load();
-            });
+        const auto done = [&] {
+            return finishedTasks.load() == totalTasks ||
+                   GlobalState::g_operationCancelled.load();
+        };
+
+        if (screen->cancelWakeable()) {
+            progressCv.wait(lock, done);
+        } else {
+            while (!done())
+                progressCv.wait_for(lock, std::chrono::milliseconds(500), done);
         }
     }
 
