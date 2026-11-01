@@ -100,7 +100,9 @@ inline void appendNumPadded(std::string& out, std::size_t value, std::size_t wid
  *    (a-b)/total)") and a footer with PgUp / PgDn / g# hints are shown.
  *    Pagination is disabled if ITEMS_PER_PAGE is 0 or all items fit on one page.
  *  - Rows are numbered and right-aligned. While a filter is active, each row
- *    also shows the item's original index ("n:m^").
+ *    also shows the item's original index ("n:m^"). The original-index field
+ *    is padded (after the '^') so that filenames line up across all rows on
+ *    the page.
  *  - ISO mode only: while a background import is running, a dim
  *    "[↻ Syncing: NewISO → Restructure]" indicator (or a "no history" notice)
  *    is inserted after the header, plus a "Filtering locked" note if the
@@ -274,6 +276,19 @@ void printList(const StringListView& items, const std::string& listType, const s
     const auto* origIdx = filteringStack.empty() ? nullptr : &filteringStack.back().originalIndices;
     const size_t origSize = origIdx ? origIdx->size() : 0;
 
+    // Widest original-index field on this page (for uniform row prefix padding).
+    // Computed up front so every row on the page pads to the same width, keeping
+    // filenames aligned even when the displayed original indices have differing
+    // digit counts (e.g. 1 vs 29).
+    std::size_t maxOrigDigits = 0;
+    if (origIdx) {
+        const std::size_t lim = std::min(endIndex, origSize);
+        for (std::size_t k = startIndex; k < lim; ++k) {
+            maxOrigDigits = std::max(maxOrigDigits,
+                digitCount(static_cast<std::size_t>((*origIdx)[k]) + 1));
+        }
+    }
+
     // --- Main item loop ---
     for (size_t i = startIndex; i < endIndex; ++i) {
         const std::size_t rowStart = output.size();   // start of this row, for width fitting
@@ -283,10 +298,14 @@ void printList(const StringListView& items, const std::string& listType, const s
         appendNumPadded(output, i + 1, maxDigits);
 
         if (origIdx && i < origSize) {
+            const std::size_t origVal = static_cast<std::size_t>((*origIdx)[i]) + 1;
             output.append(":").append(UI::Palette::BoldReset).append(c.square);
-            appendNum(output, static_cast<std::size_t>((*origIdx)[i]) + 1);
-            output.append(UI::Palette::BoldReset).append(c.square).append("^ ")
-                  .append(UI::Palette::BoldReset);
+            appendNum(output, origVal);                 // left-justified "n"
+            output.append("^");
+            // Pad after the '^' so the filename column is identical on every row.
+            const std::size_t pad = maxOrigDigits - digitCount(origVal);
+            if (pad) output.append(pad, ' ');
+            output.append(" ").append(UI::Palette::BoldReset);
         } else {
             output.append(". ").append(UI::Palette::BoldReset);
         }
