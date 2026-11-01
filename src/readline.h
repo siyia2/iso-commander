@@ -89,6 +89,8 @@ void armPendingInputRestore();
 
 // --- Exit Handler ---
 int exit_handler(int, int);
+// --- Help Handler ---
+int help_handler(int, int);
 
 // --- File Selection Mode ---
 void setup_custom_keybindingsForSelect(void);
