@@ -203,9 +203,6 @@ namespace {
                 break;
             }
 
-            if (r == 0)
-                continue;
-
             // Handle terminal error and hangup conditions.
             if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))
                 break;
@@ -222,26 +219,8 @@ namespace {
 
                 break;
             }
-
-            if (n == 0) {
+            if (n == 0 || ch == '\n' || ch == '\r' || ch == 4 || ch == 27) {
                 done = true;
-            }
-            else if (ch == '\n' || ch == '\r' || ch == 4) {
-                done = true;
-            }
-            else if (ch == 27) {
-                done = true;
-
-                // Swallow the tail of an arrow-key / function-key sequence.
-                // Bounded wait is only used on this one-shot Esc path.
-                struct pollfd p{STDIN_FILENO, POLLIN, 0};
-
-                while (poll(&p, 1, 20) > 0) {
-                    char junk;
-
-                    if (read(STDIN_FILENO, &junk, 1) <= 0)
-                        break;
-                }
             }
         }
 
