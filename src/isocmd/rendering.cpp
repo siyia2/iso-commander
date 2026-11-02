@@ -109,6 +109,13 @@ void ListResizeWatcher::Impl::tick() {
     // Leave a blank line after the list, then let Readline redraw the prompt
     // and the current input, including its cursor position.
     std::cout << '\n' << std::flush;
+    // Re-expand the prompt for the new width. rl_set_prompt() frees rl_prompt,
+    // so pass it a copy. Only the last line of a multi-line prompt is
+    // redrawn by Readline, which matches repaint() re-printing the header.
+    if (rl_prompt) {
+        const std::string p = rl_prompt;
+        rl_set_prompt(p.c_str());
+    }
     rl_on_new_line();
     rl_redisplay();
 }
