@@ -753,6 +753,8 @@ void mountIsoFiles(
                 break;
             }
             default:
+                // Clear any fstype left over from a previous HFS/HFS+ iteration.
+                mnt_context_set_fstype(ctx, nullptr);
                 mnt_context_set_fstype_pattern(ctx, "udf,iso9660");
                 break;
         }
