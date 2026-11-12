@@ -2,8 +2,10 @@
 
 // C++ Standard Library Headers
 #include <atomic>
+#include <cerrno>
 #include <cstddef>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -17,7 +19,9 @@
 // C / System Headers
 #include <fcntl.h>
 #include <stdint.h>
+#include <spawn.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 // Third-Party Library Headers
@@ -52,94 +56,342 @@ extern "C" const char* __lsan_default_suppressions() {
     return "leak:mnt_context_prepare_mount\n";
 }
 
+// ---------------------------------------------------------------------------
+// Image detection
+// ---------------------------------------------------------------------------
+
+/// Filesystem family that should be used to mount a detected image.
+enum class ImageKind {
+    None,         ///< Not recognised.
+    Iso9660Udf,   ///< ISO 9660 / UDF (kernel autodetects between "udf" and "iso9660").
+    HfsPlus,      ///< HFS+ / HFSX (kernel "hfsplus" driver).
+    Hfs,          ///< Classic HFS (kernel "hfs" driver), e.g. Mac OS 8.0 and earlier media.
+    Apfs          ///< APFS container (needs an out-of-tree "apfs" driver, e.g. linux-apfs-rw).
+};
+
 /**
- * @brief Heuristic check to determine if a file is a valid ISO 9660 or UDF disk image.
+ * @brief Result of image detection.
  *
- * Performs a series of signature-based checks to identify disk image formats.
- * Validation is heuristic: it confirms the presence of standard volume descriptors
- * but does not perform a full filesystem integrity parse.
- *
- * @param path Filesystem path to the file to be checked.
- * @param st   The stat struct of the file (used for an initial size gate).
- * @return true if a recognized disk image signature is found, false otherwise.
- *
- * @note Performs binary reads only; does not modify the file.
- * @note ISO 9660 detection: Checks for descriptor type 0x01 and identifier "CD001"
- * at logical sector 16 (offset 32768, ECMA-119 §8.1).
- * @note UDF detection: Probes for Volume Recognition Sequence (VRS) identifiers
- * ("BEA01", "NSR02", "NSR03", "TEA01") starting at offset 32768.
- * - Scans up to 6 descriptors at strides of 2048 (default) and 4096 bytes.
- * - Identifier is read starting at byte 1 of each descriptor (byte 0 is type).
- * - Anchor Volume Descriptor Pointer (AVDP) at sector 256 is not checked.
- * @note Requires a minimum file size of 34816 bytes (17 * 2048).
- *
- * @warning May return true for truncated images that contain valid magic bytes.
- * @warning This is a header-level validator; a "true" result does not guarantee
- * that the subsequent filesystem structures are readable or intact.
- *
- * @see ECMA-119 (ISO 9660), ECMA-167 §7.2 (UDF VRS).
+ * For images where the filesystem does not start at byte 0 (Apple Partition Map or
+ * GUID Partition Table layouts), @c offset and @c size describe the partition so the
+ * loop device can be set up with @c offset= / @c sizelimit=.
  */
-static bool isValidIsoFile(const std::string& path, const struct stat& st) {
-    // Early size check using pre-existing stat
-    if (st.st_size < 34816) {
-        return false;
+struct ImageInfo {
+    ImageKind kind   = ImageKind::None;
+    off_t     offset = 0;  ///< Byte offset of the filesystem inside the image file.
+    off_t     size   = 0;  ///< Byte length of the filesystem; 0 means "until end of file".
+};
+
+namespace {
+
+/// Bounds-checked pread() wrapper over an open image file.
+class ImageReader {
+public:
+    ImageReader(int fd, off_t fileSize) : fd_(fd), size_(fileSize) {}
+
+    bool read(off_t offset, void* dst, std::size_t n) const {
+        if (offset < 0 || n == 0) return false;
+        if (offset > size_ || static_cast<off_t>(n) > size_ - offset) return false;
+        return pread(fd_, dst, n, offset) == static_cast<ssize_t>(n);
     }
-    const off_t fileSize = st.st_size;
+
+    off_t fileSize() const { return size_; }
+
+private:
+    int   fd_;
+    off_t size_;
+};
+
+uint32_t be32(const unsigned char* p) {
+    return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) |
+           (uint32_t(p[2]) << 8)  |  uint32_t(p[3]);
+}
+
+uint32_t le32(const unsigned char* p) {
+    return (uint32_t(p[3]) << 24) | (uint32_t(p[2]) << 16) |
+           (uint32_t(p[1]) << 8)  |  uint32_t(p[0]);
+}
+
+uint64_t le64(const unsigned char* p) {
+    return (uint64_t(le32(p + 4)) << 32) | le32(p);
+}
+
+/**
+ * @brief Probes for an HFS+/HFSX or APFS volume starting at @p base.
+ *
+ * - HFS+ / HFSX: volume header at base + 1024, signature "H+" (v4) or "HX" (v5).
+ * - APFS: container superblock at base; the magic "NXSB" sits at byte 32 (after obj_phys_t).
+ *
+ * - HFS wrapper (Mac OS 8.1-9 era): a classic HFS Master Directory Block at base + 1024
+ *   ("BD") whose embedded-volume signature (MDB offset 124) is "H+" or "HX". Plain HFS
+ *   volumes without an embedded HFS+ volume are reported as Hfs. The kernel's hfsplus driver
+ *   locates the embedded volume itself, so the wrapper is reported as HfsPlus with no
+ *   extra offset.
+ */
+ImageKind probeVolumeAt(const ImageReader& rd, off_t base) {
+    unsigned char sig[4];
+
+    if (rd.read(base + 1024, sig, 2) &&
+        (std::memcmp(sig, "H+", 2) == 0 || std::memcmp(sig, "HX", 2) == 0))
+        return ImageKind::HfsPlus;
+
+    // HFS wrapper around an embedded HFS+ volume.
+    unsigned char embedSig[2];
+    if (rd.read(base + 1024, sig, 2) && std::memcmp(sig, "BD", 2) == 0 &&
+        rd.read(base + 1024 + 124, embedSig, 2) &&
+        (std::memcmp(embedSig, "H+", 2) == 0 || std::memcmp(embedSig, "HX", 2) == 0))
+        return ImageKind::HfsPlus;
+
+    // Plain classic HFS: MDB signature "BD" with no embedded HFS+ volume.
+    if (rd.read(base + 1024, sig, 2) && std::memcmp(sig, "BD", 2) == 0)
+        return ImageKind::Hfs;
+
+    if (rd.read(base + 32, sig, 4) && std::memcmp(sig, "NXSB", 4) == 0)
+        return ImageKind::Apfs;
+
+    return ImageKind::None;
+}
+
+/// Clamps a partition size so a truncated image never yields a sizelimit past EOF.
+off_t clampedSize(const ImageReader& rd, off_t base, uint64_t bytes) {
+    const uint64_t maxBytes = static_cast<uint64_t>(rd.fileSize() - base);
+    return (bytes == 0 || bytes > maxBytes) ? 0 : static_cast<off_t>(bytes);
+}
+
+/**
+ * @brief Walks an Apple Partition Map and returns the first HFS+/APFS partition.
+ *
+ * Layout: Driver Descriptor Record ("ER") at block 0 holding the block size, followed
+ * by "PM" partition entries starting at block 1. Every partition is probed by content,
+ * not by its type string, so mislabelled partitions still work.
+ */
+bool scanApm(const ImageReader& rd, uint32_t bs, ImageInfo& out) {
+    uint32_t mapEntries = 1;
+    for (uint32_t i = 1; i <= mapEntries && i <= 128; ++i) {
+        unsigned char e[80];
+        if (!rd.read(off_t(i) * bs, e, sizeof(e)) || e[0] != 'P' || e[1] != 'M') break;
+
+        if (i == 1) mapEntries = be32(e + 4);
+
+        const uint64_t start = be32(e + 8);
+        const uint64_t count = be32(e + 12);
+        const uint64_t base  = start * bs;
+        if (base >= static_cast<uint64_t>(rd.fileSize())) continue;
+
+        const ImageKind kind = probeVolumeAt(rd, static_cast<off_t>(base));
+        if (kind != ImageKind::None) {
+            out.kind   = kind;
+            out.offset = static_cast<off_t>(base);
+            out.size   = clampedSize(rd, out.offset, count * bs);
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * @brief Finds an HFS/HFS+/APFS partition in an Apple Partition Map.
+ *
+ * Tries the block size declared in the driver descriptor first, then 512 and 2048,
+ * because old CD images (Mac OS 8 era) don't always declare the block size that the
+ * partition map entries are actually laid out with.
+ */
+bool findInApm(const ImageReader& rd, ImageInfo& out) {
+    unsigned char ddr[4];
+    if (!rd.read(0, ddr, 4) || ddr[0] != 'E' || ddr[1] != 'R') return false;
+
+    const uint32_t declared = (uint32_t(ddr[2]) << 8) | ddr[3];
+    for (const uint32_t bs : {declared, 512u, 2048u}) {
+        if (bs != 512 && bs != 1024 && bs != 2048 && bs != 4096) continue;
+        if (scanApm(rd, bs, out)) return true;
+    }
+    return false;
+}
+
+/**
+ * @brief Walks a GUID Partition Table and returns the first HFS+/APFS partition.
+ *
+ * Modern macOS installer media (and anything created with a GPT layout) uses this.
+ * Sector sizes 512 and 4096 are both tried. Partitions are probed by content, which
+ * covers Apple HFS+ (48465300-...), APFS (7C3457EF-...) and mislabelled entries alike.
+ */
+bool findInGpt(const ImageReader& rd, ImageInfo& out) {
+    for (const uint32_t ss : {512u, 4096u}) {
+        unsigned char hdr[92];
+        if (!rd.read(ss, hdr, sizeof(hdr)) || std::memcmp(hdr, "EFI PART", 8) != 0)
+            continue;
+
+        const uint64_t entriesLba = le64(hdr + 72);
+        const uint32_t numEntries = le32(hdr + 80);
+        const uint32_t entrySize  = le32(hdr + 84);
+        if (entrySize < 48 || entrySize > 4096 || numEntries == 0) continue;
+
+        const uint32_t limit = numEntries < 256 ? numEntries : 256;
+        for (uint32_t i = 0; i < limit; ++i) {
+            const uint64_t entryOff = entriesLba * ss + uint64_t(i) * entrySize;
+            if (entryOff > static_cast<uint64_t>(rd.fileSize())) break;
+
+            unsigned char e[48];
+            if (!rd.read(static_cast<off_t>(entryOff), e, sizeof(e))) break;
+
+            // Unused entry: all-zero type GUID.
+            bool empty = true;
+            for (int b = 0; b < 16; ++b)
+                if (e[b]) { empty = false; break; }
+            if (empty) continue;
+
+            const uint64_t first = le64(e + 32);
+            const uint64_t last  = le64(e + 40);
+            if (last < first) continue;
+
+            const uint64_t base = first * ss;
+            if (base >= static_cast<uint64_t>(rd.fileSize())) continue;
+
+            const ImageKind kind = probeVolumeAt(rd, static_cast<off_t>(base));
+            if (kind != ImageKind::None) {
+                out.kind   = kind;
+                out.offset = static_cast<off_t>(base);
+                out.size   = clampedSize(rd, out.offset, (last - first + 1) * ss);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+/**
+ * @brief Heuristic detection of mountable disk images.
+ *
+ * Recognised, in order:
+ *  1. ISO 9660 Primary Volume Descriptor ("CD001" at sector 16). Hybrid ISO9660+HFS
+ *     discs are mounted through their ISO 9660 side.
+ *  2. UDF Volume Recognition Sequence ("BEA01", "NSR02", "NSR03", "TEA01").
+ *  3. Bare HFS+/HFSX or APFS at offset 0.
+ *  4. Apple Partition Map containing HFS+/APFS (classic hdiutil "SPUD" layout).
+ *  5. GUID Partition Table containing HFS+/APFS (modern macOS installer images).
+ *
+ * Validation is signature-based only; it does not parse the filesystem.
+ *
+ * @param path Filesystem path of the image.
+ * @param st   stat() of the file (used for size gating).
+ * @return ImageInfo with @c kind == ImageKind::None if nothing was recognised.
+ */
+static ImageInfo detectImage(const std::string& path, const struct stat& st) {
+    ImageInfo info;
+    if (st.st_size < 2048) return info;
 
     const int fd = open(path.c_str(), O_RDONLY | O_NOATIME | O_CLOEXEC);
-    // Note: O_NOATIME silently has no effect if caller doesn't own the file;
+    // O_NOATIME silently has no effect if the caller doesn't own the file;
     // open() still succeeds, so this is safe for a read-only validator.
-    if (fd < 0) return false;
+    if (fd < 0) return info;
 
-    // RAII guard for file descriptor
     struct FdGuard {
         int fd;
-        ~FdGuard() { if (fd >= 0) close(fd); }
+        ~FdGuard() {
+            if (fd >= 0) {
+                posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
+                close(fd);
+            }
+        }
     } fdGuard{fd};
 
     posix_fadvise(fd, 0, 0, POSIX_FADV_RANDOM);
+    const ImageReader rd(fd, st.st_size);
 
-    // Buffer scoped inside lambda to avoid stale data across reads.
-    char sig[6]{};
-    auto readAt = [&](off_t offset, std::size_t n) -> bool {
-        if (offset + static_cast<off_t>(n) > fileSize) return false;
-        return pread(fd, sig, n, offset) == static_cast<ssize_t>(n);
-    };
+    unsigned char sig[6]{};
 
-    bool found = false;
-
-    // --- 1. ISO 9660: Primary Volume Descriptor at sector 16 ---
-    // Byte 0 of the sector is the descriptor type; type 1 = Primary Volume Descriptor.
-    // Identifier at bytes 1–5 must be "CD001" (ECMA-119 §8.1).
-    if (readAt(32768, 6)) {
-        if (sig[0] == 0x01 && std::string_view(sig + 1, 5) == "CD001")
-            found = true;
+    // --- 1. ISO 9660 Primary Volume Descriptor at sector 16 (ECMA-119 §8.1) ---
+    if (rd.read(32768, sig, 6) && sig[0] == 0x01 && std::memcmp(sig + 1, "CD001", 5) == 0) {
+        info.kind = ImageKind::Iso9660Udf;
+        return info;
     }
 
-    // --- 2. UDF Volume Recognition Sequence ---
-    // Per ECMA-167 §2/3 (VRS), the sequence starts at byte 32768 and consists of
-    // consecutive 2048-byte descriptors. Media with 4096-byte blocks use a 4096-byte
-    // stride (stride = max(block size, 2048)); 512-byte media share the 2048 layout.
-    // Up to 6 descriptors are scanned at each stride, with 2048 tried first as it is
-    // overwhelmingly the common case. Scanning past the first four also tolerates
-    // bridge images that place extra descriptors (e.g. BOOT2, CDW02) ahead of BEA01.
-    //
-    // Sector 256 (UDF Anchor VDP) is intentionally excluded: the tokens below
-    // (BEA01, NSR02/03, TEA01) are VRS identifiers and are not present at the anchor.
-    if (!found) {
-        for (const off_t stride : {off_t{2048}, off_t{4096}}) {
-            for (int i = 0; i < 6 && !found; ++i) {
-                if (!readAt(32768 + i * stride + 1, 5)) break;
-                const std::string_view sv(sig, 5);
-                found = (sv == "BEA01" || sv == "NSR02" || sv == "NSR03" || sv == "TEA01");
+    // --- 2. UDF Volume Recognition Sequence (ECMA-167 §2/3) ---
+    // Up to 6 descriptors at 2048- and 4096-byte strides, identifier at byte 1.
+    for (const off_t stride : {off_t{2048}, off_t{4096}}) {
+        for (int i = 0; i < 6; ++i) {
+            if (!rd.read(32768 + i * stride + 1, sig, 5)) break;
+            if (!std::memcmp(sig, "BEA01", 5) || !std::memcmp(sig, "NSR02", 5) ||
+                !std::memcmp(sig, "NSR03", 5) || !std::memcmp(sig, "TEA01", 5)) {
+                info.kind = ImageKind::Iso9660Udf;
+                return info;
             }
-            if (found) break;
         }
     }
 
-    posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
-    return found;
-    // fdGuard automatically closes the file descriptor
+    // --- 3. Bare HFS+/HFSX or APFS ---
+    if (const ImageKind k = probeVolumeAt(rd, 0); k != ImageKind::None) {
+        info.kind = k;
+        return info;
+    }
+
+    // --- 4. Apple Partition Map, then 5. GUID Partition Table ---
+    if (findInApm(rd, info)) return info;
+    if (findInGpt(rd, info)) return info;
+
+    return ImageInfo{};
+}
+
+extern char** environ;
+
+/**
+ * @brief Returns true if the kernel currently has filesystem type @p name registered.
+ *
+ * Parses /proc/filesystems, where each line is either "<TAB>name" or "nodev<TAB>name".
+ */
+static bool isFilesystemRegistered(std::string_view name) {
+    std::ifstream f("/proc/filesystems");
+    std::string line;
+    while (std::getline(f, line)) {
+        const std::string_view sv(line);
+        const auto pos = sv.find_last_of(" \t");
+        const std::string_view fsName =
+            (pos == std::string_view::npos) ? sv : sv.substr(pos + 1);
+        if (fsName == name) return true;
+    }
+    return false;
+}
+
+/**
+ * @brief Best-effort load of the kernel module providing filesystem @p name.
+ *
+ * Does nothing if the filesystem is already registered. Otherwise runs
+ * `modprobe -q <name>` (absolute path, so a user-controlled PATH is never consulted,
+ * with all stdio redirected to /dev/null) and re-checks /proc/filesystems.
+ * Uses posix_spawn rather than system()/fork() so it is safe in a multi-threaded process.
+ *
+ * @return true if the filesystem is registered after the call.
+ */
+static bool ensureFilesystemModule(const char* name) {
+    if (isFilesystemRegistered(name)) return true;
+
+    posix_spawn_file_actions_t actions;
+    if (posix_spawn_file_actions_init(&actions) != 0) return false;
+    posix_spawn_file_actions_addopen(&actions, STDIN_FILENO,  "/dev/null", O_RDONLY, 0);
+    posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
+    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
+
+    char* const argv[] = {
+        const_cast<char*>("modprobe"), const_cast<char*>("-q"),
+        const_cast<char*>(name), nullptr
+    };
+
+    for (const char* exe : {"/usr/sbin/modprobe", "/sbin/modprobe"}) {
+        pid_t pid = 0;
+        if (posix_spawn(&pid, exe, &actions, nullptr, argv, environ) != 0)
+            continue; // binary not at this path, try the next one
+
+        int status = 0;
+        while (waitpid(pid, &status, 0) < 0) {
+            if (errno != EINTR) break;
+        }
+        break;
+    }
+
+    posix_spawn_file_actions_destroy(&actions);
+    return isFilesystemRegistered(name);
 }
 
 /**
@@ -187,10 +439,12 @@ static std::string mountPointSuffix(const std::string& isoPath) {
 }
 
 /**
- * @brief Mounts a batch of ISO files to unique directories under /mnt using loop devices.
+ * @brief Mounts a batch of disk images to unique directories under /mnt using loop devices.
  *
- * This function handles bulk mounting by performing multi-stage validation (root privileges,
- * cancellation state, file existence, and filesystem format) to minimize unnecessary I/O.
+ * Supported images: ISO 9660, UDF, and Apple images (HFS+/HFSX or APFS, either bare or
+ * inside an Apple Partition Map / GPT layout, as used by macOS installer media).
+ * Multi-stage validation (root privileges, cancellation state, file existence, and
+ * filesystem format) minimises unnecessary I/O.
  *
  * ### Integrity & Performance Features:
  * - **Resource Efficiency:** Uses a single `libmnt_context` per batch, reset via `mnt_reset_context`
@@ -205,7 +459,17 @@ static std::string mountPointSuffix(const std::string& isoPath) {
  * ### Mount Path Schema:
  * `/mnt/ISOs/<stem>~<5-char base-36 FNV-1a suffix>`
  *
- * @param isoFiles      Vector of absolute paths to the ISO files.
+ * ### Partitioned Apple images:
+ * When the filesystem lives inside a partition, the loop device is configured with
+ * `offset=` and `sizelimit=` so the kernel sees only that partition.
+ *
+ * ### Kernel requirements:
+ * - HFS+ needs the `hfsplus` module.
+ * - Classic HFS (Mac OS 8.0 and earlier) needs the `hfs` module.
+ * - APFS needs an out-of-tree driver registering the `apfs` filesystem type
+ *   (e.g. linux-apfs-rw); mainline Linux has none.
+ *
+ * @param isoFiles      Vector of absolute paths to the image files.
  * @param completedTasks Atomic counter for successful mounts and skipped duplicates.
  * @param failedTasks   Atomic counter for any failures (e.g., missing root, I/O errors).
  * @param silentMode    If true, suppresses all log generation; only updates atomics.
@@ -304,7 +568,6 @@ void mountIsoFiles(
                 // any renames that have happened since the mount.
                 unsigned int loopNum = 0;
                 if (std::sscanf(src, "/dev/loop%u", &loopNum) == 1) {
-                    // Use pre-sized string buffer to avoid multiple allocations
                     char backingPath[256];
                     int written = snprintf(backingPath, sizeof(backingPath),
                                           "/sys/block/loop%u/loop/backing_file", loopNum);
@@ -312,13 +575,11 @@ void mountIsoFiles(
                         continue; // Path too long, skip this entry
                     }
 
-                    // Use RAII for file stream
                     std::ifstream f(backingPath);
                     if (!f.is_open()) continue;
 
                     std::string realPath;
                     if (std::getline(f, realPath) && !realPath.empty()) {
-                        // Trim trailing whitespace
                         while (!realPath.empty() &&
                                (realPath.back() == '\n' || realPath.back() == '\r'))
                             realPath.pop_back();
@@ -327,14 +588,12 @@ void mountIsoFiles(
                         if (::stat(realPath.c_str(), &backingSt) == 0)
                             inodes.insert(makeInodeKey(backingSt));
                     }
-                    // f is automatically closed when it goes out of scope
                 }
             } else {
                 // Direct file mount (no loop device) — stat it normally.
                 inodes.insert(makeInodeKey(st));
             }
         }
-        // IterGuard and TableGuard automatically clean up
         return inodes;
     };
 
@@ -407,8 +666,9 @@ void mountIsoFiles(
             continue;
         }
 
-        // Validate ISO format using pre-existing stat result (avoids redundant stat)
-        if (!isValidIsoFile(isoFile, isoStat)) {
+        // Detect the image format (ISO/UDF/HFS+/APFS, bare or partitioned)
+        const ImageInfo imgInfo = detectImage(isoFile, isoStat);
+        if (imgInfo.kind == ImageKind::None) {
             recordFail(isoFile, "badFS");
             maybeFlush();
             continue;
@@ -443,7 +703,6 @@ void mountIsoFiles(
         // leaves the original mount intact but under a stale path in our
         // name-derived mountPointCache.  Detect this by checking whether the
         // file's (dev, inode) pair is already present in the live mount table.
-        // Reuse the isoStat we already have
         if (mountedInodes.count(makeInodeKey(isoStat))) {
             if (!silentMode)
                 tempSkipped.push_back(
@@ -465,11 +724,49 @@ void mountIsoFiles(
             continue;
         }
 
+        // Loop options: partitioned Apple images need offset/sizelimit so the
+        // kernel driver sees only the partition, not the partition table.
+        std::string mountOpts = "loop,ro";
+        if (imgInfo.offset > 0)
+            mountOpts += ",offset=" + std::to_string(static_cast<long long>(imgInfo.offset));
+        if (imgInfo.size > 0)
+            mountOpts += ",sizelimit=" + std::to_string(static_cast<long long>(imgInfo.size));
+
         mnt_reset_context(ctx);
         mnt_context_set_source(ctx, isoFile.c_str());
         mnt_context_set_target(ctx, mountPoint.c_str());
-        mnt_context_set_options(ctx, "loop,ro");
-        mnt_context_set_fstype_pattern(ctx, "udf,iso9660");
+        mnt_context_set_options(ctx, mountOpts.c_str());
+
+        const char* wantedFs = nullptr; // kernel fs type, used to diagnose a missing driver
+        switch (imgInfo.kind) {
+            case ImageKind::HfsPlus: {
+                // Runs at most once per process, on the first HFS+ image seen. A
+                // function-local static is initialised thread-safely (C++11), so
+                // concurrent callers wait for the first one instead of each probing.
+                // Best effort: if loading fails, the mount below still runs and
+                // reports failure normally (the kernel may also autoload it).
+                static const bool hfsModuleReady = ensureFilesystemModule("hfsplus");
+                (void)hfsModuleReady;
+                wantedFs = "hfsplus";
+                mnt_context_set_fstype(ctx, wantedFs);
+                break;
+            }
+            case ImageKind::Hfs: {
+                // Same once-per-process, best-effort module load as hfsplus above.
+                static const bool hfsClassicModuleReady = ensureFilesystemModule("hfs");
+                (void)hfsClassicModuleReady;
+                wantedFs = "hfs";
+                mnt_context_set_fstype(ctx, wantedFs);
+                break;
+            }
+            case ImageKind::Apfs:
+                wantedFs = "apfs";
+                mnt_context_set_fstype(ctx, wantedFs);
+                break;
+            default:
+                mnt_context_set_fstype_pattern(ctx, "udf,iso9660");
+                break;
+        }
 
         const int ret = mnt_context_mount(ctx);
 
@@ -488,7 +785,10 @@ void mountIsoFiles(
             mountedInodes.insert(makeInodeKey(isoStat));
             completedTasks->fetch_add(1, std::memory_order_relaxed);
         } else {
-            recordFail(isoFile, "badFS");
+            // Tell "kernel has no driver for this filesystem" apart from "bad image".
+            // Checked only on failure, so the success path pays nothing for it.
+            const bool driverMissing = wantedFs && !isFilesystemRegistered(wantedFs);
+            recordFail(isoFile, driverMissing ? "needsHFS" : "badFS");
             // Only remove the directory we just created if it is empty;
             // a concurrent mount may have legitimately used it.
             if (fs::is_directory(mountPoint) && fs::is_empty(mountPoint))
