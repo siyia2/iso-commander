@@ -65,8 +65,7 @@ enum class ImageKind {
     None,         ///< Not recognised.
     Iso9660Udf,   ///< ISO 9660 / UDF (kernel autodetects between "udf" and "iso9660").
     HfsPlus,      ///< HFS+ / HFSX (kernel "hfsplus" driver).
-    Hfs,          ///< Classic HFS (kernel "hfs" driver), e.g. Mac OS 8.0 and earlier media.
-    Apfs          ///< APFS container (needs an out-of-tree "apfs" driver, e.g. linux-apfs-rw).
+    Hfs           ///< Classic HFS (kernel "hfs" driver), e.g. Mac OS 8.0 and earlier media.
 };
 
 /**
@@ -117,11 +116,9 @@ uint64_t le64(const unsigned char* p) {
 }
 
 /**
- * @brief Probes for an HFS+/HFSX or APFS volume starting at @p base.
+ * @brief Probes for an HFS or HFS+/HFSX volume starting at @p base.
  *
  * - HFS+ / HFSX: volume header at base + 1024, signature "H+" (v4) or "HX" (v5).
- * - APFS: container superblock at base; the magic "NXSB" sits at byte 32 (after obj_phys_t).
- *
  * - HFS wrapper (Mac OS 8.1-9 era): a classic HFS Master Directory Block at base + 1024
  *   ("BD") whose embedded-volume signature (MDB offset 124) is "H+" or "HX". Plain HFS
  *   volumes without an embedded HFS+ volume are reported as Hfs. The kernel's hfsplus driver
@@ -146,9 +143,6 @@ ImageKind probeVolumeAt(const ImageReader& rd, off_t base) {
     if (rd.read(base + 1024, sig, 2) && std::memcmp(sig, "BD", 2) == 0)
         return ImageKind::Hfs;
 
-    if (rd.read(base + 32, sig, 4) && std::memcmp(sig, "NXSB", 4) == 0)
-        return ImageKind::Apfs;
-
     return ImageKind::None;
 }
 
@@ -159,7 +153,7 @@ off_t clampedSize(const ImageReader& rd, off_t base, uint64_t bytes) {
 }
 
 /**
- * @brief Walks an Apple Partition Map and returns the first HFS+/APFS partition.
+ * @brief Walks an Apple Partition Map and returns the first HFS/HFS+ partition.
  *
  * Layout: Driver Descriptor Record ("ER") at block 0 holding the block size, followed
  * by "PM" partition entries starting at block 1. Every partition is probed by content,
@@ -190,7 +184,7 @@ bool scanApm(const ImageReader& rd, uint32_t bs, ImageInfo& out) {
 }
 
 /**
- * @brief Finds an HFS/HFS+/APFS partition in an Apple Partition Map.
+ * @brief Finds an HFS/HFS+ partition in an Apple Partition Map.
  *
  * Tries the block size declared in the driver descriptor first, then 512 and 2048,
  * because old CD images (Mac OS 8 era) don't always declare the block size that the
@@ -209,11 +203,11 @@ bool findInApm(const ImageReader& rd, ImageInfo& out) {
 }
 
 /**
- * @brief Walks a GUID Partition Table and returns the first HFS+/APFS partition.
+ * @brief Walks a GUID Partition Table and returns the first HFS/HFS+ partition.
  *
  * Modern macOS installer media (and anything created with a GPT layout) uses this.
  * Sector sizes 512 and 4096 are both tried. Partitions are probed by content, which
- * covers Apple HFS+ (48465300-...), APFS (7C3457EF-...) and mislabelled entries alike.
+ * covers Apple HFS+ (48465300-...) and mislabelled entries alike.
  */
 bool findInGpt(const ImageReader& rd, ImageInfo& out) {
     for (const uint32_t ss : {512u, 4096u}) {
@@ -268,9 +262,9 @@ bool findInGpt(const ImageReader& rd, ImageInfo& out) {
  *  1. ISO 9660 Primary Volume Descriptor ("CD001" at sector 16). Hybrid ISO9660+HFS
  *     discs are mounted through their ISO 9660 side.
  *  2. UDF Volume Recognition Sequence ("BEA01", "NSR02", "NSR03", "TEA01").
- *  3. Bare HFS+/HFSX or APFS at offset 0.
- *  4. Apple Partition Map containing HFS+/APFS (classic hdiutil "SPUD" layout).
- *  5. GUID Partition Table containing HFS+/APFS (modern macOS installer images).
+ *  3. Bare HFS, HFS+/HFSX (or HFS-wrapped HFS+) at offset 0.
+ *  4. Apple Partition Map containing HFS/HFS+ (classic hdiutil "SPUD" layout).
+ *  5. GUID Partition Table containing HFS+ (modern macOS installer images).
  *
  * Validation is signature-based only; it does not parse the filesystem.
  *
@@ -321,7 +315,7 @@ static ImageInfo detectImage(const std::string& path, const struct stat& st) {
         }
     }
 
-    // --- 3. Bare HFS+/HFSX or APFS ---
+    // --- 3. Bare HFS / HFS+ / HFSX ---
     if (const ImageKind k = probeVolumeAt(rd, 0); k != ImageKind::None) {
         info.kind = k;
         return info;
@@ -441,7 +435,7 @@ static std::string mountPointSuffix(const std::string& isoPath) {
 /**
  * @brief Mounts a batch of disk images to unique directories under /mnt using loop devices.
  *
- * Supported images: ISO 9660, UDF, and Apple images (HFS+/HFSX or APFS, either bare or
+ * Supported images: ISO 9660, UDF, and Apple images (HFS or HFS+/HFSX, either bare or
  * inside an Apple Partition Map / GPT layout, as used by macOS installer media).
  * Multi-stage validation (root privileges, cancellation state, file existence, and
  * filesystem format) minimises unnecessary I/O.
@@ -466,8 +460,7 @@ static std::string mountPointSuffix(const std::string& isoPath) {
  * ### Kernel requirements:
  * - HFS+ needs the `hfsplus` module.
  * - Classic HFS (Mac OS 8.0 and earlier) needs the `hfs` module.
- * - APFS needs an out-of-tree driver registering the `apfs` filesystem type
- *   (e.g. linux-apfs-rw); mainline Linux has none.
+ * - APFS is not supported: mainline Linux has no APFS driver.
  *
  * @param isoFiles      Vector of absolute paths to the image files.
  * @param completedTasks Atomic counter for successful mounts and skipped duplicates.
@@ -666,7 +659,7 @@ void mountIsoFiles(
             continue;
         }
 
-        // Detect the image format (ISO/UDF/HFS+/APFS, bare or partitioned)
+        // Detect the image format (ISO/UDF/HFS/HFS+, bare or partitioned)
         const ImageInfo imgInfo = detectImage(isoFile, isoStat);
         if (imgInfo.kind == ImageKind::None) {
             recordFail(isoFile, "badFS");
@@ -759,10 +752,6 @@ void mountIsoFiles(
                 mnt_context_set_fstype(ctx, wantedFs);
                 break;
             }
-            case ImageKind::Apfs:
-                wantedFs = "apfs";
-                mnt_context_set_fstype(ctx, wantedFs);
-                break;
             default:
                 mnt_context_set_fstype_pattern(ctx, "udf,iso9660");
                 break;
