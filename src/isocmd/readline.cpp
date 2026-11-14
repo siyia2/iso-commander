@@ -185,7 +185,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     if (num_matches > 1) {
         const char* header_label;
         if (is_special_cmd_completion)        header_label = "CMD Completion Matches";
-        else if (is_setting_value_completion) header_label = "Valid Completion Matches";
+        else if (is_setting_value_completion) header_label = "Value Completion Matches";
         else                                  header_label = "Tab Completion Matches";
 
         if (total_pages > 1) {
