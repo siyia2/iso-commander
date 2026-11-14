@@ -545,20 +545,20 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
         key.find("thread_cap") != std::string::npos ||
         key.find("_lines") != std::string::npos;
 
-    // Valid values for Tab completion. These mirror the "Valid values:"
-    // strings printed by drawEdit below, so the completion list and the
-    // on-screen hint can never drift apart.
+    // Valid values: the single source of truth for both Tab completion and
+    // the "Valid values:" hint printed by drawEdit below, so the two can never
+    // drift apart. Keep each list in alphabetical order.
     std::vector<std::string> validValues;
     if (isNumeric) {
         // numeric settings: no completion candidates
     } else if (key == "base") {
-        validValues = {"charcoal", "black", "gray", "silver", "ash", "white", "steel"};
+        validValues = {"ash", "black", "charcoal", "gray", "silver", "steel", "white"};
     } else if (key == "skin") {
-        validValues = {"green", "cyan", "white", "purple", "amber", "rose", "gray", "black"};
+        validValues = {"amber", "black", "cyan", "gray", "green", "purple", "rose", "white"};
     } else if (key == "theme") {
-        validValues = {"original", "classic", "high_contrast", "neon", "ocean", "sunset",
-                       "forest", "midnight", "mono", "retro", "crimson", "dracula",
-                       "tokyo", "paper", "sakura"};
+        validValues = {"classic", "crimson", "dracula", "forest", "high_contrast", "midnight",
+                       "mono", "neon", "ocean", "original", "paper", "retro", "sakura",
+                       "sunset", "tokyo"};
     } else if (key == "auto_update" || key == "filenames_only") {
         validValues = {"off", "on"};
     } else if (key.find("_list") != std::string::npos) {
@@ -630,15 +630,19 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
         std::cout << "\nDescription: " << displayComment << tc.reset << "\n\n";
 
         std::cout << tc.str << "Valid values: " << tc.reset;
-        if (key == "base") {
-            std::cout << "ash, black, charcoal, gray, silver, steel, white\n";
-        } else if (key == "skin") {
-            std::cout << "amber, black, cyan, gray, green, purple, rose, white\n";
-        } else if (key == "theme") {
-            std::cout << "classic, crimson, dracula, forest, high_contrast, midnight, mono,\n"
-                        << "               neon, ocean, original, paper, retro, sakura, sunset, tokyo\n";
-        } else if (key == "auto_update" || key == "filenames_only") {
-            std::cout << "off, on\n";
+        if (!validValues.empty()) {
+            // Printed straight from validValues, so the hint always matches the
+            // Tab-completion list. Only the theme list is long enough to wrap:
+            // break the line after its 7th entry and indent the continuation
+            // under the first value.
+            const size_t wrapAfter = (key == "theme") ? 7 : validValues.size();
+            for (size_t k = 0; k < validValues.size(); ++k) {
+                if (k == wrapAfter)  std::cout << "\n               ";
+                else if (k > 0)      std::cout << ", ";
+                std::cout << validValues[k];
+                if (k + 1 == wrapAfter && k + 1 < validValues.size()) std::cout << ",";
+            }
+            std::cout << "\n";
         } else if (isNumeric) {
             int min = 1, max = 256;
             if (key == "live_filter_limit")                   { min = 0;  max = 100000; }
@@ -656,8 +660,6 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
             else if (key == "thread_cap_for_list_filtering")  { min = 1;  max = 64;    }
 
             std::cout << "numeric value (min - max: " << min << " - " << max << ")\n";
-        } else if (key.find("_list") != std::string::npos) {
-            std::cout << "compact, full\n";
         } else {
             std::cout << "Refer to description above\n";
         }
