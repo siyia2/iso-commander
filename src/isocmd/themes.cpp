@@ -71,24 +71,24 @@ ReadlineColors resolveReadlineTheme() {
 
     if (isOrig) {
         return {
-            UI::Palette::Brown.data(),
-            UI::Palette::Yellow.data(),
-            UI::Palette::Blue.data(),
-            UI::Palette::Reset.data(),
-            UI::Palette::BoldReset.data(),
-            UI::Palette::Yellow.data(),     // warning
-            UI::Palette::Purple.data()      // accent
+            UI::Palette::Brown.data(),       // label
+            UI::Palette::Yellow.data(),      // hint
+            UI::Palette::BoldReset.data(),   // dir  (highlighted base color)
+            UI::Palette::Blue.data(),        // file
+            UI::Palette::Reset.data(),       // reset (true SGR reset, \033[0m)
+            UI::Palette::Yellow.data(),      // warning
+            UI::Palette::Purple.data()       // accent
         };
     }
 
     return {
-        theme->muted.data(),
-        theme->accent.data(),
-        theme->accent.data(),
-        UI::Palette::Reset.data(),
-        UI::Palette::BoldReset.data(),
-        theme->warning.data(),              // warning
-        theme->accent.data()                // accent
+        theme->muted.data(),                 // label
+        theme->accent.data(),                // hint
+        UI::Palette::BoldReset.data(),       // dir  (highlighted base color)
+        theme->accent.data(),                // file
+        UI::Palette::Reset.data(),           // reset (true SGR reset, \033[0m)
+        theme->warning.data(),               // warning
+        theme->accent.data()                 // accent
     };
 }
 
@@ -364,7 +364,7 @@ SemanticUIColors resolveOptionsTheme() {
             .error     = UI::Palette::Red,
             .reset     = UI::Palette::BoldReset,
             .path      = UI::Palette::Blue,
-            .highlight = UI::Palette::Blue,
+            .highlight = UI::Palette::Green,
             .data      = UI::Palette::BoldReset,
             .str       = UI::Palette::Brown
         };

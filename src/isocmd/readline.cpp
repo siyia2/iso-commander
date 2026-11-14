@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
+#include <functional>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -29,6 +31,18 @@
 
 static int current_page = 0;
 static char last_common_prefix[1024] = "";
+
+/**
+ * @brief True while a Settings Editor prompt is active.
+ *
+ * The Settings Editor is identified by its body-repaint hook, which is the
+ * same signal @c clear_screen_and_buffer already consults. Using it here keeps
+ * the "Esc after a completion list" behaviour unchanged everywhere except the
+ * Settings Editor, which needs a single Esc to exit.
+ */
+static bool in_settings_editor() {
+    return static_cast<bool>(SettingsEditorRepaint::g_fn);
+}
 
 /**
  * @brief List of available special commands for completion.
@@ -93,7 +107,17 @@ char** my_special_completion_entry(const char* text, int start, int end) {
 void customListingsFunction(char **matches, int num_matches, int max_length) {
     (void)max_length;
 
-    rl_bind_keyseq("\\e", clear_screen_and_buffer);
+    // Preserve the historical Esc → clear_screen_and_buffer hijack
+    // for every screen EXCEPT the Settings Editor.
+    //
+    // On ordinary prompts this pair (hijack here, restore in
+    // clear_screen_and_buffer) is the intended behaviour: pressing Esc after a
+    // completion list clears/repaints, and a second Esc exits. The Settings
+    // Editor, however, needs Esc to exit on the *first* press after a value
+    // Tab-completion list, so we simply do not install the hijack there.
+    if (!in_settings_editor()) {
+        rl_bind_keyseq("\\e", clear_screen_and_buffer);
+    }
 
     // Resolve the raw pointer struct
     ReadlineColors rc = resolveReadlineTheme();
@@ -106,6 +130,11 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
             is_special_cmd_completion = true;
         }
     }
+
+    // --- Detect if we are completing setting values ---
+    bool is_setting_value_completion =
+        (g_activeSettingValues != nullptr && !g_activeSettingValues->empty())
+        && !is_special_cmd_completion;
 
     // --- Pagination state management ---
     const char* current_prefix = matches[0];
@@ -133,7 +162,10 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
 
     // --- Header printing using raw pointers ---
     if (num_matches > 1) {
-        const char* header_label = is_special_cmd_completion ? "CMD Completion Matches" : "Tab Completion Matches";
+        const char* header_label;
+        if (is_special_cmd_completion)        header_label = "CMD Completion Matches";
+        else if (is_setting_value_completion) header_label = "Valid Completion Matches";
+        else                                  header_label = "Tab Completion Matches";
 
         if (total_pages > 1) {
             printf("\n%s%s [page %d/%d%s]:%s\n\n",
@@ -181,7 +213,7 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     // Base path handling (only used in file branch)
     const char* base_path = matches[1];
     int base_len = 0;
-    if (!is_special_cmd_completion) {
+    if (!is_special_cmd_completion && !is_setting_value_completion) {
         const char* last_slash = strrchr(base_path, '/');
         base_len = (last_slash != NULL) ? (last_slash - base_path + 1) : 0;
     }
@@ -191,6 +223,9 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
     const char* qmarkColor = rc.accent;
     const char* starColor = rc.accent;
     const char* resetPlain = rc.reset;
+
+    // Base color (dynamic, tracks the 'base' setting) for setting values
+    const char* baseColor = UI::Palette::BoldReset.c_str();
 
     // Lambda to check if a path is a directory (file branch only)
     auto isDirectory = [](const char* path) -> bool {
@@ -215,6 +250,11 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
             std::string truncated = smartTruncate(raw, 1000); // temporarily use large width
             vis_len = (int)truncated.length();
             display = std::string(color) + truncated + resetPlain;
+        } else if (is_setting_value_completion) {
+            // Settings value: base color
+            std::string truncated = smartTruncate(raw, 1000);
+            vis_len = (int)truncated.length();
+            display = std::string(baseColor) + truncated + resetPlain;
         } else {
             // File/directory: relative path
             const char* relative = raw + base_len;
@@ -260,6 +300,10 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
             std::string truncated = smartTruncate(raw, column_width);
             item.visual_length = (int)truncated.length();
             item.display_text = std::string(color) + truncated + resetPlain;
+        } else if (is_setting_value_completion) {
+            std::string truncated = smartTruncate(raw, column_width);
+            item.visual_length = (int)truncated.length();
+            item.display_text = std::string(baseColor) + truncated + resetPlain;
         } else {
             const char* relative = raw + base_len;
             bool is_dir = isDirectory(raw);
@@ -304,6 +348,57 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
 }
 
 CompleterData g_completerData = {nullptr, nullptr};
+
+//=============================================================================
+// Settings-Value Tab Completion
+//=============================================================================
+
+/**
+ * @brief Valid values for the setting currently being edited.
+ *
+ * Set by @c editSetting before each @c readlineWithResize call, cleared after.
+ * When non-null, @c setting_value_completion_entry emits matches from this
+ * list. Using a pointer (rather than copying) keeps it cheap to switch per
+ * setting and keeps the generator's semantics identical to
+ * @c command_generator.
+ */
+
+/**
+ * @brief Generates matches for the active setting's valid values.
+ */
+static char* setting_value_generator(const char* text, int state) {
+    static size_t idx;
+    static size_t len;
+    if (!state) {
+        idx = 0;
+        len = strlen(text);
+        rl_completion_append_character = ' ';
+    }
+    if (!g_activeSettingValues) return nullptr;
+    while (idx < g_activeSettingValues->size()) {
+        const std::string& v = (*g_activeSettingValues)[idx++];
+        if (v.compare(0, len, text) == 0) {
+            return strdup(v.c_str());
+        }
+    }
+    return nullptr;
+}
+
+/**
+ * @brief Completion entry for the Settings Editor.
+ *
+ * Mirrors @c my_special_completion_entry: readline will hand the match list
+ * to @c customListingsFunction (already set as
+ * @c rl_completion_display_matches_hook), so pagination, colors, column
+ * layout, resize repaints and Esc handling all behave exactly like the
+ * search prompt.
+ */
+char** setting_value_completion_entry(const char* text, int /*start*/, int /*end*/) {
+    if (!g_activeSettingValues || g_activeSettingValues->empty()) return nullptr;
+    rl_attempted_completion_over = 1;
+    rl_completion_append_character = ' ';
+    return rl_completion_matches(text, setting_value_generator);
+}
 
 /**
  * @brief Callback for Readline to handle ISO-to-USB mapping completions.
@@ -465,6 +560,7 @@ int prevent_readline_keybindings(int, int) {
     return 0;
 }
 
+
 /**
  * @brief Clears the terminal screen, scrollback buffer, and resets pagination/UI state.
  *
@@ -479,13 +575,26 @@ int prevent_readline_keybindings(int, int) {
  * @return Always 0.
  */
 int clear_screen_and_buffer(int, int) {
-    clearScrollBuffer();
+    if (SettingsEditorRepaint::g_fn) {
+        SettingsEditorRepaint::g_fn();
+        std::cout << "\n";
+    } else {
+        clearScrollBuffer();
+    }
     fflush(stdout);
     rl_forced_update_display();
 
     current_page = 0;
     last_common_prefix[0] = '\0';
-    rl_bind_keyseq("\\e", exit_handler);
+
+    // Preserve the historical restore only where the hijack was
+    // installed. On non-Settings-Editor screens customListingsFunction /
+    // my_rl_complete point Esc at clear_screen_and_buffer, so we put it back
+    // to exit_handler here exactly as before. In the Settings Editor no
+    // hijack was installed, so we leave Esc alone.
+    if (!in_settings_editor()) {
+        rl_bind_keyseq("\\e", exit_handler);
+    }
 
     char *new_text = rl_copy_text(0, rl_end);
 
@@ -497,10 +606,7 @@ int clear_screen_and_buffer(int, int) {
         RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 0;
     }
 
-    // Note: If new_text was allocated, ensure it is freed here
-    // if it isn't being managed by g_rl_pending_text.
     free(new_text);
-
     return 0;
 }
 
@@ -524,7 +630,12 @@ int clear_screen_and_buffer(int, int) {
  */
 int my_rl_complete(int ignore, int invoking_key)
 {
-    rl_bind_keyseq("\\e", clear_screen_and_buffer);
+    // Only hijack Esc on non-Settings-Editor screens. The
+    // Settings Editor must leave Esc alone so a single press exits after a
+    // value completion list is shown.
+    if (!in_settings_editor()) {
+        rl_bind_keyseq("\\e", clear_screen_and_buffer);
+    }
     (void)ignore;
     (void)invoking_key;
 
@@ -589,20 +700,14 @@ int my_rl_complete(int ignore, int invoking_key)
  * @note The startup hook consumes @p g_rl_pending_text exactly once,
  *       clearing it after insertion to prevent repeated re-insertion.
  *
- * @warning The `\f` lambda captures the current line text into a `static`
- *          variable on its first invocation only — subsequent calls will
- *          reuse the original captured value. This is likely unintentional.
- *
  * @see RetainAndRestoreReadlineBuffer::g_rl_pending_text
  * @see clear_screen_and_buffer()
  * @see my_rl_complete()
  */
 void RestoreReadlineBuffer() {
-    rl_bind_key('\f', [](int count, int key) -> int {
-        static std::string saved_line = rl_copy_text(0, rl_end);
-        clear_screen_and_buffer(count, key);
-        return 0;
-    });
+    // Ctrl+L now calls clear_screen_and_buffer directly (no static-captured
+    // line that was reused on every later press).
+    rl_bind_key('\f', clear_screen_and_buffer);
     rl_bind_key('\t', my_rl_complete);
 
     if (!RetainAndRestoreReadlineBuffer::g_rl_pending_text.empty()) {

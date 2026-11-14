@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <format>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -55,6 +56,77 @@ enum class EditNav { Advance, Updated, Next, Prev, GoTo, Abort };
 
 // Target position (1-based, within the current selection) for EditNav::GoTo.
 static size_t g_editGotoPos = 0;
+
+/**
+ * @brief Body-repaint hook shared with @c readline_completion.cpp.
+ *
+ * The completion subsystem's <kbd>Ctrl+L</kbd> path
+ * (@c clear_screen_and_buffer) normally only clears the terminal and redraws
+ * the readline prompt line. On the Settings Editor screens that is not enough:
+ * the header, current value, description and navigation footer are printed by
+ * the editor's own draw lambdas (passed to @c readlineWithResize as the resize
+ * repaint callback), so a bare clear leaves only the "Value …" prompt visible.
+ *
+ * While a @c readlineWithResize call in this file is active, the draw lambda
+ * that was supplied as its repaint callback is stored in
+ * @c g_activeSettingsRepaint. @c clear_screen_and_buffer consults it (via the
+ * two accessors below) before clearing, and — when set — uses it to repaint
+ * the whole screen body instead of just clearing. The hook is installed and
+ * removed around each @c readlineWithResize call by @c readlineWithRepaint(),
+ * so it is only ever live on the Settings Editor screens.
+ *
+ * Using accessor functions instead of a shared @c extern variable keeps the
+ * @c std::function out of any header and lets @c readline_completion.cpp stay
+ * oblivious to its type.
+ */
+namespace {
+std::function<void()> g_activeSettingsRepaint;
+} // namespace
+
+/**
+ * @brief Returns the currently active Settings Editor body-repaint callback.
+ *
+ * Called by @c clear_screen_and_buffer in readline_completion.cpp. An empty
+ * @c std::function means no Settings Editor prompt is active and the caller
+ * should fall back to the ordinary clear-and-redraw-prompt behaviour.
+ */
+const std::function<void()>& getActiveSettingsRepaint() {
+    return g_activeSettingsRepaint;
+}
+
+/**
+ * @brief Installs (or clears, with an empty function) the body-repaint hook.
+ *
+ * Invoked exclusively by @c readlineWithRepaint() below, so ordinary readline
+ * prompts elsewhere in the program are unaffected.
+ */
+void setActiveSettingsRepaint(std::function<void()> fn) {
+    g_activeSettingsRepaint = std::move(fn);
+}
+
+/**
+ * @brief Like @c readlineWithResize, but also routes <kbd>Ctrl+L</kbd> clears
+ *        through @p repaint.
+ *
+ * Binds @p repaint as the active Settings Editor body-repaint hook for the
+ * duration of the @c readlineWithResize call and unbinds it immediately after,
+ * so @c clear_screen_and_buffer (triggered by <kbd>Ctrl+L</kbd>) repaints the
+ * full setting screen — header, current value, description, valid values,
+ * navigation footer — instead of leaving only the input prompt on screen.
+ * @p repaint is also passed to @c readlineWithResize unchanged so
+ * terminal-resize repaints keep working.
+ *
+ * @param prompt  The readline prompt string.
+ * @param repaint Full-screen body repaint callback for this prompt.
+ * @return The line read by readline, or an empty @c RlLine on EOF / abort.
+ */
+static RlLine readlineWithRepaint(const std::string& prompt,
+                                  const std::function<void()>& repaint) {
+    SettingsEditorRepaint::set(repaint);
+    RlLine line = readlineWithResize(prompt, repaint);
+    SettingsEditorRepaint::set(nullptr);
+    return line;
+}
 
 /**
  * @brief Prints the standard "configuration file inaccessible" error.
@@ -169,6 +241,9 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
  *   status screen and the "No valid input provided" screen. Once a reset is
  *   requested, the screen is repainted without the main prompt line, and
  *   neither that line nor the confirmation line is re-echoed afterwards.
+ * - **Clear handling:** <kbd>Ctrl+L</kbd> is routed through
+ *   @c readlineWithRepaint, so it repaints the full settings body via
+ *   @c drawSettings instead of leaving a bare input prompt.
  *
  * @param configPath Configuration file used to load and save settings.
  */
@@ -232,7 +307,7 @@ void interactiveConfigEditor(const std::string& configPath) {
             tc.reset
         );
         armPendingInputRestore();
-        RlLine rawInput = readlineWithResize(prompt, drawSettings);
+        RlLine rawInput = readlineWithRepaint(prompt, drawSettings);
         rl_startup_hook = nullptr;
 
         if (!rawInput) break;
@@ -268,7 +343,7 @@ void interactiveConfigEditor(const std::string& configPath) {
             drawSettings();
 
             armPendingInputRestore();
-            RlLine confirmInput = readlineWithResize(confirmPrompt, drawSettings);
+            RlLine confirmInput = readlineWithRepaint(confirmPrompt, drawSettings);
             rl_startup_hook = nullptr;
 
             if (confirmInput) {
@@ -406,6 +481,14 @@ void interactiveConfigEditor(const std::string& configPath) {
  *   the invalid-value and success messages, keeping the edit screen (and any
  *   input errors above it) visible when the terminal is resized during
  *   either input or confirmation.
+ * - **Clear handling:** <kbd>Ctrl+L</kbd> is routed through
+ *   @c readlineWithRepaint, so it repaints the full edit screen via
+ *   @c drawEdit instead of leaving only the "Value …" prompt on screen.
+ * - **Completion mode:** clears @c g_rl_complete_mode for the duration of the
+ *   call (and restores it on exit) so the search prompts' stash-and-exit
+ *   completion behaviour is never inherited here. Without this, a Tab
+ *   completion in this screen would set @c rl_done and drop the user back out
+ *   of the prompt after a previous search-prompt visit.
  *
  * @param configPath  Configuration file used to persist the change.
  * @param key         Configuration key to edit.
@@ -434,8 +517,29 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
     if (!entry) return EditNav::Advance;
     reset_custom_keybindingsForSettingsEditor();
 
-    // Restores PgUp/PgDn to history navigation on every exit path (same
-    // restore used by reset_custom_keybindingsForSelect / restoreReadline).
+    // Valid values for Tab completion. These mirror the "Valid values:"
+    // strings printed by drawEdit below, so the completion list and the
+    // on-screen hint can never drift apart.
+    std::vector<std::string> validValues;
+    if (key == "base") {
+        validValues = {"charcoal", "black", "gray", "silver", "ash", "white", "steel"};
+    } else if (key == "skin") {
+        validValues = {"green", "cyan", "white", "purple", "amber", "rose", "gray", "black"};
+    } else if (key == "theme") {
+        validValues = {"original", "classic", "high_contrast", "neon", "ocean", "sunset",
+                       "forest", "midnight", "mono", "retro", "crimson", "dracula",
+                       "tokyo", "paper", "sakura"};
+    } else if (key == "auto_update" || key == "filenames_only") {
+        validValues = {"on", "off"};
+    } else if (key.find("_list") != std::string::npos) {
+        validValues = {"full", "compact"};
+    }
+
+    // Restores PgUp/PgDn and Esc to their default bindings on every exit path.
+    //
+    // Esc (`\e`) is restored here too as a defensive guarantee: the Settings
+    // Editor's completion path does not hijack Esc, but if anything else ever
+    // did, we must not leak that binding past this screen.
     struct NavBindGuard {
         bool on;
         ~NavBindGuard() {
@@ -443,8 +547,35 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
                 rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
                 rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
             }
+            rl_bind_keyseq("\\e", exit_handler);
         }
     } navGuard{ total > 1 };
+
+    // Restores the default completion entry (nullptr) on every exit path, so
+    // the interactiveConfigEditor's own prompt is not affected by the value
+    // completion we install per-iteration.
+    struct CompletionGuard {
+        ~CompletionGuard() {
+            g_activeSettingValues = nullptr;
+            rl_attempted_completion_function = nullptr;
+            rl_completion_display_matches_hook = customListingsFunction;
+        }
+    } completionGuard;
+
+    // The search prompts enable the "stash the current line, exit readline,
+    // restore on the next prompt" completion flow by setting
+    // RetainAndRestoreReadlineBuffer::g_rl_complete_mode to 1. That flow is
+    // wrong for this screen: my_rl_complete() would set rl_done and drop the
+    // user out of the value prompt after a Tab completion. Force the mode off
+    // for the duration of this call, and restore the previous value on exit so
+    // the caller's own flow is unaffected.
+    struct CompleteModeGuard {
+        int saved = RetainAndRestoreReadlineBuffer::g_rl_complete_mode;
+        ~CompleteModeGuard() {
+            RetainAndRestoreReadlineBuffer::g_rl_complete_mode = saved;
+        }
+    } completeModeGuard;
+    RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 0;
 
     std::string current = ConfigCaches::g_configCache.count(key) ? ConfigCaches::g_configCache[key] : entry->defaultValue;
 
@@ -458,11 +589,11 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
                 std::cout << err << "\n";
             pendingErrors.clear();
         }
-        std::cout << "\n" << tc.highlight << "=== Edit Setting ===";
-        if (total > 1) std::cout << "  (" << pos << "/" << tc.warning << total << tc.highlight << ")";
+        std::cout << "\n" << tc.str << "=== Edit Setting ===";
+        if (total > 1) std::cout << "  ("<< tc.highlight  << pos << tc.str <<"/" << tc.warning << total << tc.str << ")";
         std::cout << "\n\n" << tc.reset;
-        std::cout << tc.label << "Setting: " << tc.reset << tc.warning << key << tc.reset << "\n";
-        std::cout << tc.label << "Current: " << tc.reset << tc.highlight << current << tc.reset << "\n";
+        std::cout << tc.str << "Setting: " << tc.reset << tc.warning << key << tc.reset << "\n";
+        std::cout << tc.str << "Current: " << tc.reset << tc.highlight << current << tc.reset << "\n";
         std::string displayComment = entry->comment;
         size_t cpos = displayComment.find("\n# ");
         if (cpos != std::string::npos) displayComment.replace(cpos, 3, "\n             ");
@@ -470,12 +601,12 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
 
         std::cout << tc.label << "Valid values: " << tc.reset;
         if (key == "base") {
-            std::cout << "charcoal, black, gray, silver, ash, white, steel\n";
+            std::cout << "ash, black, charcoal, gray, silver, steel, white\n";
         } else if (key == "skin") {
-            std::cout << "green, cyan, white, purple, amber, rose, gray, black\n";
+            std::cout << "amber, black, cyan, gray, green, purple, rose, white\n";
         } else if (key == "theme") {
-            std::cout << "original, classic, high_contrast, neon, ocean, sunset, forest,\n"
-                      << "               midnight, mono, retro, crimson, dracula, tokyo, paper, sakura\n";
+            std::cout << "classic, crimson, dracula, forest, high_contrast, midnight, mono,\n"
+                        << "               neon, ocean, original, paper, retro, sakura, sunset, tokyo\n";
         } else if (key == "auto_update" || key == "filenames_only") {
             std::cout << "on, off\n";
         } else if (key == "pagination" || key == "live_filter_limit" || key.find("thread_cap") != std::string::npos || key.find("_lines") != std::string::npos) {
@@ -517,6 +648,23 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
             rl_bind_keyseq("\\e[5~", pgup_handler);
             rl_bind_keyseq("\\e[6~", pgdn_handler);
         }
+
+        // Enable tab completion of this setting's valid values.
+        //
+        // Use the minimal, explicit bindings this screen actually needs
+        // instead of RestoreReadlineBuffer(). RestoreReadlineBuffer() is the
+        // main-prompt helper: it also installs a pending-text startup hook and
+        // (previously) a static-captured Ctrl+L lambda, both of which are out
+        // of place here. Binding Tab -> my_rl_complete and Ctrl+L ->
+        // clear_screen_and_buffer directly is all that is required for value
+        // completion + repaint, and it keeps this screen consistent with the
+        // search prompts' completion behavior.
+        g_activeSettingValues = validValues.empty() ? nullptr : &validValues;
+        rl_attempted_completion_function = setting_value_completion_entry;
+        rl_completion_display_matches_hook = customListingsFunction;
+        rl_bind_key('\t', my_rl_complete);
+        rl_bind_key('\f', clear_screen_and_buffer);
+
         drawEdit();
         std::cout << "\n";
 
@@ -529,7 +677,12 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
             tc.reset
         );
 
-        RlLine rawInput = readlineWithResize(prompt, drawEdit);
+        RlLine rawInput = readlineWithRepaint(prompt, drawEdit);
+
+        // Match search's post-readline cleanup so a stale startup hook can't
+        // fire on the next prompt.
+        armPendingInputRestore();
+        rl_startup_hook = nullptr;
 
         if (rawInput) {
             const std::string_view s = rawInput.get();
