@@ -359,12 +359,12 @@ SemanticUIColors resolveOptionsTheme() {
     if (isOrig) {
         return {
             .label     = UI::Palette::BoldReset,
-            .accent    = UI::Palette::Green,
+            .accent    = UI::Palette::Blue,
             .warning   = UI::Palette::Yellow,
             .error     = UI::Palette::Red,
             .reset     = UI::Palette::BoldReset,
-            .path      = UI::Palette::Blue,
-            .highlight = UI::Palette::Green,
+            .path      = UI::Palette::Green,
+            .highlight = UI::Palette::Blue,
             .data      = UI::Palette::BoldReset,
             .str       = UI::Palette::Brown
         };
