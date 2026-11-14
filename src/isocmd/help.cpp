@@ -259,11 +259,11 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
         clearScrollBuffer();
 
         std::string keys =
-        "   • Exit          : " + std::string(tc.keysYellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
-        "   • Quick Return  : " + std::string(tc.keysYellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset);
-        if (!isCpMv) keys += std::string(UI::Palette::BoldReset) + "   • Cancel Scan   : " + std::string(tc.keysYellow) + "Ctrl+c\n";
-        keys += std::string(UI::Palette::BoldReset) + "   • Clear Line    : " + std::string(tc.keysYellow) + "Ctrl+u\n";
-        keys += std::string(UI::Palette::BoldReset) + "   • Declutter     : " + std::string(tc.keysYellow) + "Ctrl+l";
+        "   • Exit         : " + std::string(tc.keysYellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
+        "   • Quick Return : " + std::string(tc.keysYellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset);
+        if (!isCpMv) keys += std::string(UI::Palette::BoldReset) + "   • Cancel Scan  : " + std::string(tc.keysYellow) + "Ctrl+c\n";
+        keys += std::string(UI::Palette::BoldReset) + "   • Clear Line   : " + std::string(tc.keysYellow) + "Ctrl+u\n";
+        keys += std::string(UI::Palette::BoldReset) + "   • Declutter    : " + std::string(tc.keysYellow) + "Ctrl+l";
         printSection(tc, "\n1. Hotkeys:", keys);
 
         std::string paths =
