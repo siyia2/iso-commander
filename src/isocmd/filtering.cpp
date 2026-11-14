@@ -54,9 +54,6 @@ void printList(const StringListView& items, const std::string& listType, const s
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 namespace AnsiEscape {
-    constexpr const char* CLEAR_LINE_ABOVE = "\033[1A\033[K";
-    constexpr const char* CLEAR_TWO_LINES_ABOVE  = "\033[2A\033[K";
-    constexpr const char* CLEAR_LINE_BELOW  = "\033[1B\033[K";
     // From the row below a prompt back onto the prompt row, cleared.
     constexpr const char* REWIND_TO_PROMPT_ROW = "\033[1A\r\033[K";
 }
@@ -1282,7 +1279,6 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
     };
 
     auto defaultEmptyInput = [&]() {
-        std::cout << AnsiEscape::CLEAR_TWO_LINES_ABOVE;
         ctx.needsClrScrn = false;
     };
 
