@@ -42,7 +42,7 @@ namespace ConfigCaches {
  * VALIDATION HELPERS & UTILITIES
  */
 
-// Validates boolean-like on/off configuration values.
+// Validates boolean-like off/on configuration values.
 inline auto isOnOff = [](const std::string& v) {
     return v == "off" || v == "on";
 };
