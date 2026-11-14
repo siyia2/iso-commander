@@ -363,7 +363,7 @@ SemanticUIColors resolveOptionsTheme() {
             .warning   = UI::Palette::Yellow,
             .error     = UI::Palette::Red,
             .reset     = UI::Palette::BoldReset,
-            .path      = UI::Palette::Green,
+            .path      = UI::Palette::Blue,
             .highlight = UI::Palette::Blue,
             .data      = UI::Palette::BoldReset,
             .str       = UI::Palette::Brown
