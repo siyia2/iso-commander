@@ -59,49 +59,6 @@ enum class EditNav { Advance, Updated, Next, Prev, GoTo, Abort };
 static size_t g_editGotoPos = 0;
 
 /**
- * @brief Legacy Settings Editor repaint store (kept for local consumers).
- *
- * @warning This anonymous-namespace variable and the two accessors below are
- *          @b not what the completion subsystem uses. The live repaint hook
- *          for the completion path is the @c SettingsEditorRepaint::g_fn
- *          object declared @c inline in @c readline.h, which
- *          @c clear_screen_and_buffer consults directly. The accessor pair
- *          here predates that namespace and currently has no callers; it is
- *          retained only as historical scaffolding and should be removed if
- *          nothing else starts using it.
- *
- * The design note that follows the original block ("using accessor functions
- * instead of a shared extern keeps the @c std::function out of any header")
- * no longer applies: the active design does expose the @c std::function
- * through @c readline.h.
- */
-namespace {
-std::function<void()> g_activeSettingsRepaint;
-} // namespace
-
-/**
- * @brief Returns the legacy repaint callback, or an empty @c std::function.
- *
- * @deprecated Not consulted by @c clear_screen_and_buffer; that function uses
- *             @c SettingsEditorRepaint::g_fn instead. Kept only because the
- *             accessor pair is still compiled here; no live caller exists.
- */
-const std::function<void()>& getActiveSettingsRepaint() {
-    return g_activeSettingsRepaint;
-}
-
-/**
- * @brief Installs (or clears, with an empty function) the legacy repaint hook.
- *
- * @deprecated Not called by @c readlineWithRepaint(); that helper calls
- *             @c SettingsEditorRepaint::set(...) instead. Kept only for the
- *             accessor pair's symmetry; no live caller exists.
- */
-void setActiveSettingsRepaint(std::function<void()> fn) {
-    g_activeSettingsRepaint = std::move(fn);
-}
-
-/**
  * @brief Like @c readlineWithResize, but also routes <kbd>Ctrl+L</kbd> clears
  *        through @p repaint.
  *
@@ -496,13 +453,14 @@ void interactiveConfigEditor(const std::string& configPath) {
  * - **Clear handling:** <kbd>Ctrl+L</kbd> is routed through
  *   @c readlineWithRepaint, so it repaints the full edit screen via
  *   @c drawEdit instead of leaving only the "Value …" prompt on screen.
- * - **Numeric settings:** Tab completion is disabled for numeric settings
- *   (@c pagination, @c live_filter_limit, and any key containing
- *   @c thread_cap or @c _lines). Tab is bound to a no-op and no completion
- *   function is installed, so readline's filename-completion fallback never
- *   triggers. Numeric keys are classified before the "_list" check, so
- *   @c thread_cap_for_list_sorting / @c thread_cap_for_list_filtering are no
- *   longer mistaken for compact/full list settings.
+ * - **Numeric settings:** Tab completion is disabled for entries flagged
+ *   @c numeric (created with @c numericEntry). Tab is bound to a no-op and no
+ *   completion function is installed, so readline's filename-completion
+ *   fallback never triggers. The "min - max" hint is read from the entry's
+ *   @c minValue / @c maxValue, the same range its validator enforces.
+ * - **Enumerated settings:** the completion list and the "Valid values:" hint
+ *   both come from the entry's @c values (created with @c enumEntry), the same
+ *   list its validator checks against.
  * - **Completion mode:** clears @c g_rl_complete_mode for the duration of the
  *   call (and restores it on exit) so the search prompts' stash-and-exit
  *   completion behaviour is never inherited here. Without this, a Tab
@@ -537,33 +495,17 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
     reset_custom_keybindingsForSettingsEditor();
 
     // Numeric settings take a free-form number: no Tab completion at all.
-    // Evaluated before the validValues block because some numeric keys
-    // (thread_cap_for_list_sorting / thread_cap_for_list_filtering) contain
-    // "_list" and would otherwise be mistaken for compact/full settings.
-    const bool isNumeric =
-        key == "pagination" || key == "live_filter_limit" ||
-        key.find("thread_cap") != std::string::npos ||
-        key.find("_lines") != std::string::npos;
+    // The flag and the min/max range come from the ConfigEntry itself (set by
+    // numericEntry()), not from guessing at the key name.
+    const bool isNumeric = entry->numeric;
 
-    // Valid values: the single source of truth for both Tab completion and
-    // the "Valid values:" hint printed by drawEdit below, so the two can never
-    // drift apart. Keep each list in alphabetical order.
+    // Valid values: taken from the ConfigEntry (the same list its validator
+    // uses), so Tab completion, the "Valid values:" hint printed by drawEdit
+    // below and validation can never drift apart. Empty for numeric and
+    // free-form settings. Copied rather than pointed at so
+    // g_activeSettingValues keeps pointing at a plain local vector.
     std::vector<std::string> validValues;
-    if (isNumeric) {
-        // numeric settings: no completion candidates
-    } else if (key == "base") {
-        validValues = {"ash", "black", "charcoal", "gray", "silver", "steel", "white"};
-    } else if (key == "skin") {
-        validValues = {"amber", "black", "cyan", "gray", "green", "purple", "rose", "white"};
-    } else if (key == "theme") {
-        validValues = {"classic", "crimson", "dracula", "forest", "high_contrast", "midnight",
-                       "mono", "neon", "ocean", "original", "paper", "retro", "sakura",
-                       "sunset", "tokyo"};
-    } else if (key == "auto_update" || key == "filenames_only") {
-        validValues = {"off", "on"};
-    } else if (key.find("_list") != std::string::npos) {
-        validValues = {"compact", "full"};
-    }
+    if (entry->values) validValues = *entry->values;
 
     // Restores PgUp/PgDn and Esc to their default bindings on every exit path.
     //
@@ -644,22 +586,8 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
             }
             std::cout << "\n";
         } else if (isNumeric) {
-            int min = 1, max = 256;
-            if (key == "live_filter_limit")                   { min = 0;  max = 100000; }
-            if (key == "pagination")                          { min = 0;  max = 1000;  }
-            else if (key == "folder_path_history_lines")      { min = 0;  max = 5000;  }
-            else if (key == "filter_history_lines")           { min = 0;  max = 1000;  }
-            else if (key == "combined_thread_cap")            { min = 1;  max = 256;   }
-            else if (key == "thread_cap_for_mount")           { min = 1;  max = 128;   }
-            else if (key == "thread_cap_for_umount")          { min = 1;  max = 128;   }
-            else if (key == "thread_cap_for_cp_mv")           { min = 1;  max = 128;   }
-            else if (key == "thread_cap_for_rm")              { min = 1;  max = 128;   }
-            else if (key == "thread_cap_for_convert2iso")     { min = 1;  max = 128;   }
-            else if (key == "thread_cap_for_database_cleanup"){ min = 1;  max = 128;   }
-            else if (key == "thread_cap_for_list_sorting")    { min = 1;  max = 64;    }
-            else if (key == "thread_cap_for_list_filtering")  { min = 1;  max = 64;    }
-
-            std::cout << "numeric value (min - max: " << min << " - " << max << ")\n";
+            std::cout << "numeric value (min - max: " << entry->minValue
+                      << " - " << entry->maxValue << ")\n";
         } else {
             std::cout << "Refer to description above\n";
         }
