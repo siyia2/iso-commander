@@ -52,7 +52,6 @@ void printList(const StringListView& items, const std::string& listType, const s
                size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst = true, bool showPendingIndices = true);
 
 // ─── Constants ───────────────────────────────────────────────────────────────
-
 namespace AnsiEscape {
     // From the row below a prompt back onto the prompt row, cleared.
     constexpr const char* REWIND_TO_PROMPT_ROW = "\033[1A\r\033[K";
