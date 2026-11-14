@@ -75,7 +75,9 @@ ReadlineColors resolveReadlineTheme() {
             UI::Palette::Yellow.data(),
             UI::Palette::Blue.data(),
             UI::Palette::Reset.data(),
-            UI::Palette::BoldReset.data()
+            UI::Palette::BoldReset.data(),
+            UI::Palette::Yellow.data(),     // warning
+            UI::Palette::Purple.data()      // accent
         };
     }
 
@@ -84,10 +86,11 @@ ReadlineColors resolveReadlineTheme() {
         theme->accent.data(),
         theme->accent.data(),
         UI::Palette::Reset.data(),
-        UI::Palette::BoldReset.data()
+        UI::Palette::BoldReset.data(),
+        theme->warning.data(),              // warning
+        theme->accent.data()                // accent
     };
 }
-
 
 // ============================================================
 //  List & Navigation Display
