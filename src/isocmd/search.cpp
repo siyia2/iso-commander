@@ -359,7 +359,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                     std::lock_guard<std::mutex> lock(traverseErrorsMutex);
                     uniqueErrorMessages.clear();
 
-                    std::string msg = "\n" + dt.yellow + "ISO search interrupted by user" + dt.reset;
+                    std::string msg = "\n" + dt.yellow + "ISO scan interrupted by user" + dt.reset;
                     uniqueErrorMessages.insert(msg);
                 }
                 break;
@@ -691,7 +691,7 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
                                        (blacklistDaa) ? "DAA/GBI" : "BIN/IMG";
 
                     processedErrorsFind.insert(dt.yellow + type +
-                        " search interrupted by user\n\n" + dt.reset);
+                        " scan interrupted by user\n\n" + dt.reset);
                 }
                 break;
             }
