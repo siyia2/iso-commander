@@ -44,12 +44,12 @@ namespace ConfigCaches {
 
 // Validates boolean-like on/off configuration values.
 inline auto isOnOff = [](const std::string& v) {
-    return v == "on" || v == "off";
+    return v == "off" || v == "on";
 };
 
 // Validates display mode configuration values.
 inline auto isDisplay = [](const std::string& v) {
-    return v == "full" || v == "compact";
+    return v == "compact" || v == "full";
 };
 
 /**
