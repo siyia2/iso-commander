@@ -731,24 +731,21 @@ void mountIsoFiles(
         mnt_context_set_options(ctx, mountOpts.c_str());
 
         const char* wantedFs = nullptr; // kernel fs type, used to diagnose a missing driver
+        const char* missingDriverCode = nullptr; // error code reported if that driver isn't registered
         switch (imgInfo.kind) {
             case ImageKind::HfsPlus: {
-                // Runs at most once per process, on the first HFS+ image seen. A
-                // function-local static is initialised thread-safely (C++11), so
-                // concurrent callers wait for the first one instead of each probing.
-                // Best effort: if loading fails, the mount below still runs and
-                // reports failure normally (the kernel may also autoload it).
                 static const bool hfsModuleReady = ensureFilesystemModule("hfsplus");
                 (void)hfsModuleReady;
                 wantedFs = "hfsplus";
+                missingDriverCode = "needsHFSPlus";
                 mnt_context_set_fstype(ctx, wantedFs);
                 break;
             }
             case ImageKind::Hfs: {
-                // Same once-per-process, best-effort module load as hfsplus above.
                 static const bool hfsClassicModuleReady = ensureFilesystemModule("hfs");
                 (void)hfsClassicModuleReady;
                 wantedFs = "hfs";
+                missingDriverCode = "needsHFS";
                 mnt_context_set_fstype(ctx, wantedFs);
                 break;
             }
@@ -779,7 +776,7 @@ void mountIsoFiles(
             // Tell "kernel has no driver for this filesystem" apart from "bad image".
             // Checked only on failure, so the success path pays nothing for it.
             const bool driverMissing = wantedFs && !isFilesystemRegistered(wantedFs);
-            recordFail(isoFile, driverMissing ? "needsHFS" : "badFS");
+            recordFail(isoFile, driverMissing ? missingDriverCode : "badFS");
             // Only remove the directory we just created if it is empty;
             // a concurrent mount may have legitimately used it.
             if (fs::is_directory(mountPoint) && fs::is_empty(mountPoint))
