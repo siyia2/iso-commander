@@ -202,6 +202,15 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
                     size_t pos, size_t total);
 
 /**
+ * @brief Tab handler that does nothing.
+ *
+ * Bound to Tab on numeric settings so completion is fully disabled there.
+ * Merely clearing @c rl_attempted_completion_function would not be enough:
+ * readline would fall back to its default filename completion.
+ */
+static int noop_tab_handler(int, int) { return 0; }
+
+/**
  * @brief Runs the interactive configuration editor.
  *
  * Displays settings grouped by section and lets the user edit entries by
@@ -487,6 +496,13 @@ void interactiveConfigEditor(const std::string& configPath) {
  * - **Clear handling:** <kbd>Ctrl+L</kbd> is routed through
  *   @c readlineWithRepaint, so it repaints the full edit screen via
  *   @c drawEdit instead of leaving only the "Value …" prompt on screen.
+ * - **Numeric settings:** Tab completion is disabled for numeric settings
+ *   (@c pagination, @c live_filter_limit, and any key containing
+ *   @c thread_cap or @c _lines). Tab is bound to a no-op and no completion
+ *   function is installed, so readline's filename-completion fallback never
+ *   triggers. Numeric keys are classified before the "_list" check, so
+ *   @c thread_cap_for_list_sorting / @c thread_cap_for_list_filtering are no
+ *   longer mistaken for full/compact list settings.
  * - **Completion mode:** clears @c g_rl_complete_mode for the duration of the
  *   call (and restores it on exit) so the search prompts' stash-and-exit
  *   completion behaviour is never inherited here. Without this, a Tab
@@ -520,11 +536,22 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
     if (!entry) return EditNav::Advance;
     reset_custom_keybindingsForSettingsEditor();
 
+    // Numeric settings take a free-form number: no Tab completion at all.
+    // Evaluated before the validValues block because some numeric keys
+    // (thread_cap_for_list_sorting / thread_cap_for_list_filtering) contain
+    // "_list" and would otherwise be mistaken for full/compact settings.
+    const bool isNumeric =
+        key == "pagination" || key == "live_filter_limit" ||
+        key.find("thread_cap") != std::string::npos ||
+        key.find("_lines") != std::string::npos;
+
     // Valid values for Tab completion. These mirror the "Valid values:"
     // strings printed by drawEdit below, so the completion list and the
     // on-screen hint can never drift apart.
     std::vector<std::string> validValues;
-    if (key == "base") {
+    if (isNumeric) {
+        // numeric settings: no completion candidates
+    } else if (key == "base") {
         validValues = {"charcoal", "black", "gray", "silver", "ash", "white", "steel"};
     } else if (key == "skin") {
         validValues = {"green", "cyan", "white", "purple", "amber", "rose", "gray", "black"};
@@ -533,7 +560,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
                        "forest", "midnight", "mono", "retro", "crimson", "dracula",
                        "tokyo", "paper", "sakura"};
     } else if (key == "auto_update" || key == "filenames_only") {
-        validValues = {"on", "off"};
+        validValues = {"off", "on"};
     } else if (key.find("_list") != std::string::npos) {
         validValues = {"full", "compact"};
     }
@@ -611,8 +638,8 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
             std::cout << "classic, crimson, dracula, forest, high_contrast, midnight, mono,\n"
                         << "               neon, ocean, original, paper, retro, sakura, sunset, tokyo\n";
         } else if (key == "auto_update" || key == "filenames_only") {
-            std::cout << "on, off\n";
-        } else if (key == "pagination" || key == "live_filter_limit" || key.find("thread_cap") != std::string::npos || key.find("_lines") != std::string::npos) {
+            std::cout << "off, on\n";
+        } else if (isNumeric) {
             int min = 1, max = 256;
             if (key == "live_filter_limit")                   { min = 0;  max = 100000; }
             if (key == "pagination")                          { min = 0;  max = 1000;  }
@@ -652,7 +679,8 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
             rl_bind_keyseq("\\e[6~", pgdn_handler);
         }
 
-        // Enable tab completion of this setting's valid values.
+        // Enable tab completion of this setting's valid values (disabled for
+        // numeric settings).
         //
         // Use the minimal, explicit bindings this screen actually needs
         // instead of RestoreReadlineBuffer(). RestoreReadlineBuffer() is the
@@ -662,10 +690,15 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
         // clear_screen_and_buffer directly is all that is required for value
         // completion + repaint, and it keeps this screen consistent with the
         // search prompts' completion behavior.
+        //
+        // For numeric settings Tab is bound to a no-op: clearing the
+        // completion function alone would let readline fall back to its
+        // default filename completion.
         g_activeSettingValues = validValues.empty() ? nullptr : &validValues;
-        rl_attempted_completion_function = setting_value_completion_entry;
+        rl_attempted_completion_function =
+            isNumeric ? nullptr : setting_value_completion_entry;
         rl_completion_display_matches_hook = customListingsFunction;
-        rl_bind_key('\t', my_rl_complete);
+        rl_bind_key('\t', isNumeric ? noop_tab_handler : my_rl_complete);
         rl_bind_key('\f', clear_screen_and_buffer);
 
         drawEdit();
