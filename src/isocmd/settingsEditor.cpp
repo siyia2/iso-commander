@@ -235,7 +235,7 @@ void interactiveConfigEditor(const std::string& configPath) {
         // repaint, so a resize reconstructs the whole screen rather than
         // just the status footer.
         auto paintSettingsBody = [&] {
-            std::cout << "\n" << tc.highlight << "=== Settings Editor ===\n\n" << tc.reset;
+            std::cout << "\n" << tc.accent << "=== Settings Editor ===\n\n" << tc.reset;
             std::cout << tc.warning << "Config File: " << tc.reset << configPath << "\n";
 
             int index = 1;
@@ -293,7 +293,7 @@ void interactiveConfigEditor(const std::string& configPath) {
             reset_custom_keybindingsForSettingsEditor();
             std::string confirmPrompt = std::format(
                 "\n\001{}\002Reset all settings to defaults? (y/n): \001{}\002",
-                color,
+                tc.path,
                 UI::Palette::BoldReset
             );
 
@@ -334,6 +334,8 @@ void interactiveConfigEditor(const std::string& configPath) {
                         SyncOutput sync;
                         clearScrollBuffer();
                         paintSettingsBody();
+                        std::cout << tc.path << "\nReset all settings to defaults? (y/n): \n" << UI::Palette::BoldReset;
+
                         std::cout << "\n" << tc.label << "[+] Defaults applied\n" << tc.reset;
                         if (saved) {
                             std::cout << tc.highlight << "[✔] Saved to disk\n" << tc.reset;
@@ -709,7 +711,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
                 std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n",
                                          tc.path, tc.reset, configPath);
             } else {
-                std::cout << tc.warning << "\nNotice: " << tc.error
+                std::cout << tc.warning << "\nWarning: " << tc.error
                           << "Setting update is memory-only (Disk write failed)."
                           << tc.reset << "\n";
             }
