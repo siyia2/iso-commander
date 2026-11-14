@@ -101,6 +101,35 @@ char** my_special_completion_entry(const char* text, int start, int end) {
 }
 
 /**
+ * @brief Rebinds Esc to @c clear_screen_and_buffer on ordinary prompts.
+ *
+ * A first Esc after a completion list clears/repaints, and a second Esc
+ * exits. The Settings Editor deliberately skips this so a single Esc exits
+ * immediately after a value Tab-completion.
+ */
+static void install_esc_hijack() {
+    rl_bind_keyseq("\\e", clear_screen_and_buffer);
+}
+
+/**
+ * @brief Rebinds Esc back to @c exit_handler.
+ */
+static void restore_esc_default() {
+    rl_bind_keyseq("\\e", exit_handler);
+}
+
+/**
+ * @brief True while @c customListingsFunction is displaying a completion
+ *        list for the current @c my_rl_complete() call.
+ *
+ * If Readline inserts a common prefix while also displaying matches, the
+ * subsequent @c clear_screen_and_buffer() call restores the default Esc
+ * binding; @c my_rl_complete() uses this flag to re-install the hijack so
+ * the first Esc still clears the list and the second exits.
+ */
+static bool list_shown_during_completion = false;
+
+/**
  * @brief Custom hook for GNU Readline to display completions with pagination and color themes.
  *
  * @param matches  Array of completion matches in Readline format: matches[0] is the
@@ -118,16 +147,14 @@ char** my_special_completion_entry(const char* text, int start, int end) {
 void customListingsFunction(char **matches, int num_matches, int max_length) {
     (void)max_length;
 
-    // Preserve the historical Esc → clear_screen_and_buffer hijack
-    // for every screen EXCEPT the Settings Editor.
-    //
-    // On ordinary prompts this pair (hijack here, restore in
-    // clear_screen_and_buffer) is the intended behaviour: pressing Esc after a
-    // completion list clears/repaints, and a second Esc exits. The Settings
-    // Editor, however, needs Esc to exit on the *first* press after a value
-    // Tab-completion list, so we simply do not install the hijack there.
-    if (!in_settings_editor()) {
-        rl_bind_keyseq("\\e", clear_screen_and_buffer);
+    list_shown_during_completion = true;
+    if (in_settings_editor()) {
+        // The Settings Editor must exit on the *first* Esc after a value
+        // completion list, so make sure Esc is not left hijacked from a
+        // previous screen.
+        restore_esc_default();
+    } else {
+        install_esc_hijack();
     }
 
     // Resolve the raw pointer struct
@@ -612,14 +639,12 @@ int clear_screen_and_buffer(int, int) {
     current_page = 0;
     last_common_prefix[0] = '\0';
 
-    // Preserve the historical restore only where the hijack was
-    // installed. On non-Settings-Editor screens customListingsFunction /
-    // my_rl_complete point Esc at clear_screen_and_buffer, so we put it back
-    // to exit_handler here exactly as before. In the Settings Editor no
-    // hijack was installed, so we leave Esc alone.
-    if (!in_settings_editor()) {
-        rl_bind_keyseq("\\e", exit_handler);
-    }
+    // Always restore the default Esc binding when clearing. If a completion
+    // list is currently visible on an ordinary prompt, my_rl_complete()
+    // re-installs the hijack right after this returns (tracked by
+    // list_shown_during_completion), so the first Esc still clears the list
+    // and the second exits.
+    restore_esc_default();
 
     char *new_text = rl_copy_text(0, rl_end);
 
@@ -661,14 +686,16 @@ int clear_screen_and_buffer(int, int) {
  */
 int my_rl_complete(int ignore, int invoking_key)
 {
-    // Only hijack Esc on non-Settings-Editor screens. The
-    // Settings Editor must leave Esc alone so a single press exits after a
-    // value completion list is shown.
-    if (!in_settings_editor()) {
-        rl_bind_keyseq("\\e", clear_screen_and_buffer);
-    }
     (void)ignore;
     (void)invoking_key;
+
+    // Reset tracking for this keystroke.
+    list_shown_during_completion = false;
+
+    // Settings Editor: never leave Esc hijacked.
+    if (in_settings_editor()) {
+        restore_esc_default();
+    }
 
     rl_completion_append_character = '\0';
 
@@ -681,27 +708,28 @@ int my_rl_complete(int ignore, int invoking_key)
     else
         ret = rl_complete_internal('!');
 
-    // Post-completion check:
-    // If the match was a directory, Readline usually handles the slash.
-    // If you need manual override, check the result here:
     char *new_text = rl_copy_text(0, rl_end);
 
-    // Only if a change occurred
     if (rl_point != old_point || strcmp(old_text, new_text) != 0) {
 
-        // Check if the newly completed text is a directory
         struct stat st;
         if (stat(new_text, &st) == 0 && S_ISDIR(st.st_mode)) {
-            // If it's a directory and doesn't end in '/', append it
             size_t len = strlen(new_text);
             if (len > 0 && new_text[len - 1] != '/') {
-                // We use rl_insert_text to safely add the character to the buffer
-                rl_point = len; // move to end
+                rl_point = len;
                 rl_insert_text("/");
             }
         }
 
         clear_screen_and_buffer(0, 0);
+
+        // clear_screen_and_buffer() restored the default Esc binding. If a
+        // completion list was just displayed on an ordinary prompt, re-install
+        // the hijack so the first Esc clears the list and the second exits.
+        if (list_shown_during_completion && !in_settings_editor()) {
+            install_esc_hijack();
+        }
+
         if (RetainAndRestoreReadlineBuffer::g_rl_complete_mode == 1) {
             RetainAndRestoreReadlineBuffer::g_rl_pending_text = new_text;
             rl_on_new_line();
@@ -710,6 +738,8 @@ int my_rl_complete(int ignore, int invoking_key)
             RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 0;
         }
     }
+
+    list_shown_during_completion = false;
 
     free(old_text);
     free(new_text);
