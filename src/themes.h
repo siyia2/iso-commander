@@ -114,7 +114,9 @@ namespace UI {
 	struct SemanticUIColors { std::string_view label, accent, warning, error, reset, path, highlight, data, str;
 	};
 
-	struct ReadlineColors { const char* label, *hint, *dir, *file, *reset;
+	struct ReadlineColors {
+    const char* label, *hint, *dir, *file, *reset;
+    const char* warning, *accent;
 	};
 
 	struct ProgressBarColors { const char* success, *failure, *warning, *status, *reset;
