@@ -235,7 +235,7 @@ void helpSettingsEditor() {
  * help screens; a fresh ThemeColors is constructed per replay.
  *
  * Content adjustments:
- *   • When @p isCpMv is false, an extra "Cancel Search : Ctrl+c" hotkey line
+ *   • When @p isCpMv is false, an extra "Cancel Scan : Ctrl+c" hotkey line
  *     is inserted, and a Cleanup/Display Commands section is shown instead of
  *     the copy/move tips. In that section, the '!clr' description is
  *     "Clear IsoDatabase" when @p import2ISO is true and "Clear corresponding
@@ -261,7 +261,7 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
         std::string keys =
         "   • Exit          : " + std::string(tc.keysYellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
         "   • Quick Return  : " + std::string(tc.keysYellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset);
-        if (!isCpMv) keys += std::string(UI::Palette::BoldReset) + "   • Cancel Search : " + std::string(tc.keysYellow) + "Ctrl+c\n";
+        if (!isCpMv) keys += std::string(UI::Palette::BoldReset) + "   • Cancel Scan   : " + std::string(tc.keysYellow) + "Ctrl+c\n";
         keys += std::string(UI::Palette::BoldReset) + "   • Clear Line    : " + std::string(tc.keysYellow) + "Ctrl+u\n";
         keys += std::string(UI::Palette::BoldReset) + "   • Declutter     : " + std::string(tc.keysYellow) + "Ctrl+l";
         printSection(tc, "\n1. Hotkeys:", keys);
