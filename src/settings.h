@@ -11,6 +11,7 @@
 #include <map>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 /**
@@ -20,6 +21,12 @@
 /**
  * @struct ConfigEntry
  * @brief Metadata descriptor for a single configuration setting.
+ *
+ * Enumerated settings carry @c values (the list their validator checks and the
+ * settings editor offers for Tab completion and the "Valid values:" hint);
+ * numeric settings set @c numeric together with the @c minValue / @c maxValue
+ * range their validator enforces. Build entries with @c enumEntry and
+ * @c numericEntry so the validator and the editor metadata come from one place.
  */
 struct ConfigEntry {
     std::string key;
@@ -27,6 +34,11 @@ struct ConfigEntry {
     std::string comment;
     std::string section;
     std::function<bool(const std::string&)> validate;
+
+    const std::vector<std::string>* values = nullptr;  // enumerated settings (static storage)
+    bool numeric = false;                              // free-form number
+    int  minValue = 0;                                 // numeric range, inclusive
+    int  maxValue = 0;
 };
 
 /**
@@ -39,18 +51,30 @@ namespace ConfigCaches {
 }
 
 /**
+ * @namespace ConfigValues
+ * @brief Single definition of every enumerated setting's allowed values.
+ *
+ * Keep each list in alphabetical order: the settings editor prints and
+ * completes them in this order.
+ */
+namespace ConfigValues {
+    inline const std::vector<std::string> base    = {"ash", "black", "charcoal", "gray", "silver", "steel", "white"};
+    inline const std::vector<std::string> skin    = {"amber", "black", "cyan", "gray", "green", "purple", "rose", "white"};
+    inline const std::vector<std::string> theme   = {"classic", "crimson", "dracula", "forest", "high_contrast",
+                                                     "midnight", "mono", "neon", "ocean", "original", "paper",
+                                                     "retro", "sakura", "sunset", "tokyo"};
+    inline const std::vector<std::string> onOff   = {"off", "on"};
+    inline const std::vector<std::string> display = {"compact", "full"};
+}
+
+/**
  * VALIDATION HELPERS & UTILITIES
  */
 
-// Validates boolean-like off/on configuration values.
-inline auto isOnOff = [](const std::string& v) {
-    return v == "off" || v == "on";
-};
-
-// Validates display mode configuration values.
-inline auto isDisplay = [](const std::string& v) {
-    return v == "compact" || v == "full";
-};
+// True if @p v is one of @p values.
+inline bool isOneOf(const std::vector<std::string>& values, const std::string& v) {
+    return std::find(values.begin(), values.end(), v) != values.end();
+}
 
 /**
  * @brief Validates that a string represents a plain non-negative integer within [min, max].
@@ -78,6 +102,33 @@ inline std::string trim(std::string str) {
     return str;
 }
 
+/**
+ * @brief Builds an enumerated setting whose validator and editor metadata share @p values.
+ *
+ * @p values must have static storage duration (use the @c ConfigValues lists).
+ */
+inline ConfigEntry enumEntry(std::string key, std::string def, std::string comment,
+                             std::string section, const std::vector<std::string>& values) {
+    const std::vector<std::string>* p = &values;
+    ConfigEntry e{std::move(key), std::move(def), std::move(comment), std::move(section),
+                  [p](const std::string& v) { return isOneOf(*p, v); }};
+    e.values = p;
+    return e;
+}
+
+/**
+ * @brief Builds a numeric setting whose validator and editor range hint share [min, max].
+ */
+inline ConfigEntry numericEntry(std::string key, std::string def, std::string comment,
+                                std::string section, int min, int max) {
+    ConfigEntry e{std::move(key), std::move(def), std::move(comment), std::move(section),
+                  [min, max](const std::string& v) { return isNum(v, min, max); }};
+    e.numeric  = true;
+    e.minValue = min;
+    e.maxValue = max;
+    return e;
+}
+
 // Forward declaration for the actual writing logic
 bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config);
 
@@ -86,8 +137,6 @@ bool writeConfig(const std::string& configPath, const std::map<std::string, std:
  * INTERACTIVE EDITOR & APPLICATION LOGIC
  */
 void interactiveConfigEditor(const std::string& configPath);
-bool editSetting(const std::string& configPath, const std::string& key,
-                 const std::vector<std::string>& inputErrors = {});
 void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap);
 
 /**
@@ -96,191 +145,93 @@ void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& c
  */
 inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     // --- Appearance Settings ---
-    {
-        "base",                                             // key
-        "white",                                             // defaultValue
-        "Default state and input color (Tab-complete)",
-        "Appearance Settings",                                    // Section Header
-        [](const std::string& v) {                           // validate
-            static const std::unordered_set<std::string> valid = {
-                "ash", "black", "charcoal", "gray", "silver", "steel", "white"
-            };
-            return valid.count(v) > 0;
-        }
-    },
-
-    {
-        "skin",                                     // key
-        "white",                                    // defaultValue
-        "Menu and header color (Tab-complete)",  // comment
-        "",                           // section
-        [](const std::string& v) {                  // validate
-            return v == "amber" || v == "black" || v == "cyan" ||
-                    v == "gray" || v == "green" || v == "purple" || v == "rose" || v == "white" ;
-        }
-    },
-
-    {
-        "theme",
-        "original",
-        "List and prompt theme (Tab-complete)",
-        "",
-        [](const std::string& v) {
-            static const std::unordered_set<std::string> valid = {
-                "classic", "crimson", "dracula", "forest", "high_contrast", "midnight", "mono",
-                "neon", "ocean", "original", "paper", "retro", "sakura", "sunset", "tokyo"
-            };
-            return valid.count(v) > 0;
-        }
-    },
+    enumEntry("base", "white",
+              "Default state and input color (Tab-complete)",
+              "Appearance Settings",
+              ConfigValues::base),
+    enumEntry("skin", "white",
+              "Menu and header color (Tab-complete)",
+              "",
+              ConfigValues::skin),
+    enumEntry("theme", "original",
+              "List and prompt theme (Tab-complete)",
+              "",
+              ConfigValues::theme),
 
     // --- General Settings ---
-    {
-        "auto_update",
-        "off",
-        "Refresh ISO DB on startup using folder path history",
-        "General Settings",
-        isOnOff
-    },
-    {
-        "filenames_only",
-        "off",
-        "Display only filenames instead of full paths",
-        "",
-        isOnOff
-    },
-    {
-        "live_filter_limit",
-        "10000",
-        "Maximum number of entries for live filtering (0 to disable)",
-        "",
-        [](const std::string& v) { return isNum(v, 0, 100000); }
-    },
-    {
-        "pagination",
-        "25",
-        "Items per page in list view (0 to disable)",
-        "",
-        [](const std::string& v) { return isNum(v, 0, 1000); }
-    },
+    enumEntry("auto_update", "off",
+              "Refresh ISO DB on startup using folder path history",
+              "General Settings",
+              ConfigValues::onOff),
+    enumEntry("filenames_only", "off",
+              "Display only filenames instead of full paths",
+              "",
+              ConfigValues::onOff),
+    numericEntry("live_filter_limit", "10000",
+                 "Maximum number of entries for live filtering (0 to disable)",
+                 "", 0, 100000),
+    numericEntry("pagination", "25",
+                 "Items per page in list view (0 to disable)",
+                 "", 0, 1000),
 
     // --- History Settings ---
-    {
-        "folder_path_history_lines",
-        "30",
-        "Max unique FolderPaths to persist in history (0 to disable)",
-        "History Settings",
-        [](const std::string& v) { return isNum(v, 0, 5000); }
-    },
-    {
-        "filter_history_lines",
-        "15",
-        "Max unique FilterTerms to persist in history (0 to disable)",
-        "",
-        [](const std::string& v) { return isNum(v, 0, 1000); }
-    },
+    numericEntry("folder_path_history_lines", "30",
+                 "Max unique FolderPaths to persist in history (0 to disable)",
+                 "History Settings", 0, 5000),
+    numericEntry("filter_history_lines", "15",
+                 "Max unique FilterTerms to persist in history (0 to disable)",
+                 "", 0, 1000),
 
     // --- Display Modes ---
-    {
-        "mount_list",
-        "compact",
-        "Display mode for mount operations",
-        "Display Modes",
-        isDisplay
-    },
-    {
-        "umount_list",
-        "full",
-        "Display mode for unmount operations",
-        "",
-        isDisplay
-    },
-    {
-        "cp_mv_rm_list",
-        "full",
-        "Display mode for file operations",
-        "",
-        isDisplay
-    },
-    {
-        "write2usb_list",
-        "compact",
-        "Display mode for write2usb operations",
-        "",
-        isDisplay
-    },
-    {
-        "convert2iso_lists",
-        "compact",
-        "Display mode for convert2iso operations",
-        "",
-        isDisplay
-    },
+    enumEntry("mount_list", "compact",
+              "Display mode for mount operations",
+              "Display Modes",
+              ConfigValues::display),
+    enumEntry("umount_list", "full",
+              "Display mode for unmount operations",
+              "",
+              ConfigValues::display),
+    enumEntry("cp_mv_rm_list", "full",
+              "Display mode for file operations",
+              "",
+              ConfigValues::display),
+    enumEntry("write2usb_list", "compact",
+              "Display mode for write2usb operations",
+              "",
+              ConfigValues::display),
+    enumEntry("convert2iso_lists", "compact",
+              "Display mode for convert2iso operations",
+              "",
+              ConfigValues::display),
 
     // --- Thread Configuration ---
-    {
-        "combined_thread_cap",
-        "16",
-        "Global thread pool size limit (requires restart to apply)",
-        "Thread Configuration",
-        [](const std::string& v) { return isNum(v, 1, 256); }
-    },
-    {
-        "thread_cap_for_mount",
-        "8",
-        "Max concurrent mounting tasks within the global pool",
-        "",
-        [](const std::string& v) { return isNum(v, 1, 128); }
-    },
-    {
-        "thread_cap_for_umount",
-        "8",
-        "Max concurrent unmounting tasks within the global pool",
-        "",
-        [](const std::string& v) { return isNum(v, 1, 128); }
-    },
-    {
-        "thread_cap_for_cp_mv",
-        "4",
-        "Max concurrent copy/move tasks within the global pool",
-        "",
-        [](const std::string& v) { return isNum(v, 1, 128); }
-    },
-    {
-        "thread_cap_for_rm",
-        "8",
-        "Max concurrent removal tasks within the global pool",
-        "",
-        [](const std::string& v) { return isNum(v, 1, 128); }
-    },
-    {
-        "thread_cap_for_convert2iso",
-        "4",
-        "Max concurrent ISO conversions within the global pool",
-        "",
-        [](const std::string& v) { return isNum(v, 1, 128); }
-    },
-    {
-        "thread_cap_for_database_cleanup",
-        "4",
-        "Max concurrent threads for ISO DB cleanup within the global pool",
-        "",
-        [](const std::string& v) { return isNum(v, 1, 128); }
-    },
-    {
-        "thread_cap_for_list_sorting",
-        "2",
-        "Max concurrent threads for list sorting within the global pool",
-        "",
-        [](const std::string& v) { return isNum(v, 1, 64); }
-    },
-    {
-        "thread_cap_for_list_filtering",
-        "2",
-        "Max concurrent threads for list filtering within the global pool",
-        "",
-        [](const std::string& v) { return isNum(v, 1, 64); }
-    },
+    numericEntry("combined_thread_cap", "16",
+                 "Global thread pool size limit (requires restart to apply)",
+                 "Thread Configuration", 1, 256),
+    numericEntry("thread_cap_for_mount", "8",
+                 "Max concurrent mounting tasks within the global pool",
+                 "", 1, 128),
+    numericEntry("thread_cap_for_umount", "8",
+                 "Max concurrent unmounting tasks within the global pool",
+                 "", 1, 128),
+    numericEntry("thread_cap_for_cp_mv", "4",
+                 "Max concurrent copy/move tasks within the global pool",
+                 "", 1, 128),
+    numericEntry("thread_cap_for_rm", "8",
+                 "Max concurrent removal tasks within the global pool",
+                 "", 1, 128),
+    numericEntry("thread_cap_for_convert2iso", "4",
+                 "Max concurrent ISO conversions within the global pool",
+                 "", 1, 128),
+    numericEntry("thread_cap_for_database_cleanup", "4",
+                 "Max concurrent threads for ISO DB cleanup within the global pool",
+                 "", 1, 128),
+    numericEntry("thread_cap_for_list_sorting", "2",
+                 "Max concurrent threads for list sorting within the global pool",
+                 "", 1, 64),
+    numericEntry("thread_cap_for_list_filtering", "2",
+                 "Max concurrent threads for list filtering within the global pool",
+                 "", 1, 64),
 };
 
 #endif // SETTINGS_H
