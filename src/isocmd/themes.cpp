@@ -263,7 +263,7 @@ SemanticUIColors resolveDatabaseTheme() {
             .warning   = UI::Palette::Yellow,
             .error     = UI::Palette::Red,
             .reset     = UI::Palette::BoldReset,
-            .path      = UI::Palette::Yellow,
+            .path      = UI::Palette::Orange,
             .highlight = UI::Palette::Green,
             .data      = UI::Palette::BoldReset,
             .str       = UI::Palette::Cyan
@@ -364,7 +364,7 @@ SemanticUIColors resolveOptionsTheme() {
             .error     = UI::Palette::Red,
             .reset     = UI::Palette::BoldReset,
             .path      = UI::Palette::Blue,
-            .highlight = UI::Palette::Blue,
+            .highlight = UI::Palette::Green,
             .data      = UI::Palette::BoldReset,
             .str       = UI::Palette::Brown
         };

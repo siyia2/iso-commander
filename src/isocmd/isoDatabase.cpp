@@ -703,11 +703,11 @@ void displayDatabaseStatistics(const std::string& databaseFilePath, std::uintmax
 
             std::cout << "\n" << label << "ISO → RAM: " << data << GlobalState::globalIsoFileList.size() << "\n";
 
-            std::cout << "\n" << warning << "BIN/IMG → RAM: " << data << GlobalState::binImgFilesCache.size() << "\n"
-                      << warning << "DAA/GBI → RAM: " << data << GlobalState::daaGbiFilesCache.size() << "\n"
-                      << warning << "CHD → RAM: " << data << GlobalState::chdFilesCache.size() << "\n"
-                      << warning << "MDF → RAM: " << data << GlobalState::mdfMdsFilesCache.size() << "\n"
-                      << warning << "NRG → RAM: " << data << GlobalState::nrgFilesCache.size() << "\n";
+            std::cout << "\n" << path << "BIN/IMG → RAM: " << data << GlobalState::binImgFilesCache.size() << "\n"
+                      << path << "DAA/GBI → RAM: " << data << GlobalState::daaGbiFilesCache.size() << "\n"
+                      << path << "CHD → RAM: " << data << GlobalState::chdFilesCache.size() << "\n"
+                      << path << "MDF → RAM: " << data << GlobalState::mdfMdsFilesCache.size() << "\n"
+                      << path << "NRG → RAM: " << data << GlobalState::nrgFilesCache.size() << "\n";
 
         } catch (const std::filesystem::filesystem_error& e) {
             std::cerr << "\n" << error << "Error: Unable to access configuration file: "
