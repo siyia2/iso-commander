@@ -593,7 +593,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
             pendingErrors.clear();
         }
         std::cout << "\n" << tc.str << "=== Edit Setting ===";
-        if (total > 1) std::cout << "  ("<< tc.highlight  << pos << tc.str <<"/" << tc.warning << total << tc.str << ")";
+        if (total > 1) std::cout << "  ("<< (globalTheme == "original" ? UI::Palette::DarkCyan : tc.highlight) << pos << tc.str <<"/" << tc.warning << total << tc.str << ")";
         std::cout << "\n\n" << tc.reset;
         std::cout << tc.str << "Setting: " << tc.reset << tc.warning << key << tc.reset << "\n";
         std::cout << tc.str << "Current: " << tc.reset << tc.highlight << current << tc.reset << "\n";
@@ -602,7 +602,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
         if (cpos != std::string::npos) displayComment.replace(cpos, 3, "\n             ");
         std::cout << "\nDescription: " << displayComment << tc.reset << "\n\n";
 
-        std::cout << tc.label << "Valid values: " << tc.reset;
+        std::cout << tc.str << "Valid values: " << tc.reset;
         if (key == "base") {
             std::cout << "ash, black, charcoal, gray, silver, steel, white\n";
         } else if (key == "skin") {
