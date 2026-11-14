@@ -93,8 +93,9 @@ struct TermSize { std::size_t cols; std::size_t rows; };
  * The remembered size is one packed @c std::atomic<uint64_t>
  * (`cols << 32 | rows`), so concurrent readers never observe a torn pair
  * (cols from one query, rows from another). The function is safe to call from
- * the main thread, from the Readline event hook, and from the
- * @ref ListResizeWatcher polling thread.
+ * any thread. In practice it is called from the main thread (list rendering)
+ * and from the Readline event hook, where @ref ListResizeWatcher compares the
+ * current size with the one it last repainted for.
  *
  * @return The current size as @c {cols, rows}, or the last known good size if
  *         the query fails; @c {0, 0} if no successful query has happened yet.
@@ -251,24 +252,31 @@ inline void fitRowToWidth(std::string& out, std::size_t from, std::size_t maxCol
 }
 
 /**
- * @brief Repaints a screen when the terminal width changes while a Readline
+ * @brief Repaints a screen when the terminal size changes while a Readline
  *        prompt waits.
  *
  * Construct it immediately before @c readline() and let it go out of scope
  * immediately after (or use @ref readlineWithResize, which does exactly that).
  * While it exists:
- * - a background thread polls the terminal width every 100 ms (a failed or
- *   zero-sized query keeps the last known good size, so it is never mistaken
- *   for a resize) and only raises a flag;
+ * - a @c SIGWINCH handler is installed. It only sets an async-signal-safe
+ *   flag and forwards to the previously installed handler, so no terminal or
+ *   Readline work happens in signal context;
  * - an @c rl_event_hook, which Readline calls from its idle loop on the
- *   calling thread, sees the flag, wipes and redraws the screen through the
- *   callback, then calls @c rl_on_new_line() + @c rl_redisplay() so the
- *   prompt and any half-typed input come back. All terminal and Readline
- *   access therefore stays on that one thread.
+ *   calling thread, checks the flag. If the terminal size (columns or rows)
+ *   really changed since the last repaint, it updates Readline's screen size
+ *   with @c rl_set_screen_size(), redraws the screen through the callback,
+ *   prints the blank line, re-expands the prompt for the new width, and calls
+ *   @c rl_on_new_line() + @c rl_redisplay() so the prompt and any half-typed
+ *   input come back. All terminal and Readline access therefore stays on that
+ *   one thread; the watcher spawns no thread of its own.
+ *
+ * A signal without a real size change (or a transient failed size query,
+ * which keeps the last known good size) repaints nothing.
  *
  * The previously installed @c rl_event_hook (for example
  * @c checkPendingRefresh) is chained, not replaced, and is restored when the
- * watcher stops.
+ * watcher stops. The previous @c SIGWINCH handler is chained the same way and
+ * restored by @ref stop.
  *
  * @note The watcher itself does not touch Readline's @c rl_catch_sigwinch.
  *       If you construct it directly and want to avoid the double redraw
@@ -301,7 +309,8 @@ inline void fitRowToWidth(std::string& out, std::size_t from, std::size_t maxCol
  * RlLine line = readlineWithResize(prompt, repaint);   // watcher lives only for this call
  * @endcode
  *
- * @note Only one watcher may be active at a time.
+ * @note Only one watcher may be active at a time: the event hook and the
+ *       @c SIGWINCH handler are process-global.
  * @see readlineWithResize
  */
 class ListResizeWatcher {
@@ -313,7 +322,7 @@ public:
     struct Impl;
 
     /**
-     * @brief Starts the polling thread and installs the chained event hook.
+     * @brief Installs the @c SIGWINCH handler and the chained event hook.
      * @param repaint Repaint callback (see the contract above).
      */
     explicit ListResizeWatcher(Repaint repaint);
@@ -325,7 +334,8 @@ public:
     ListResizeWatcher& operator=(const ListResizeWatcher&) = delete;
 
     /**
-     * @brief Stops the thread and uninstalls the hook, restoring the previous one.
+     * @brief Restores the previous @c SIGWINCH handler and uninstalls the
+     *        event hook, restoring the previous one.
      *
      * Safe to call more than once. The hook is only restored if it is still
      * ours, so a hook installed by someone else in the meantime is left alone.
@@ -343,7 +353,7 @@ using RlLine = std::unique_ptr<char, decltype(&std::free)>;
  * @brief @c readline() wrapped in a @ref ListResizeWatcher.
  *
  * Runs @p repaint (on the calling thread, from Readline's idle hook) whenever
- * the terminal width changes while the prompt waits. The watcher is stopped
+ * the terminal size changes while the prompt waits. The watcher is stopped
  * and the previous @c rl_event_hook restored before this returns.
  *
  * Readline's own SIGWINCH handling (@c rl_catch_sigwinch) is DISABLED for the
@@ -359,7 +369,7 @@ using RlLine = std::unique_ptr<char, decltype(&std::free)>;
  *
  * @param prompt  Prompt passed to @c readline() (may contain \001/\002 markers).
  * @param repaint Repaint callback (see @ref ListResizeWatcher for the contract).
- *                Empty means a plain @c readline() with no watcher and no thread.
+ *                Empty means a plain @c readline() with no watcher installed.
  * @return The line read (freed by the returned pointer), or null on EOF (Ctrl+D).
  */
 inline RlLine readlineWithResize(const std::string& prompt,
