@@ -33,18 +33,6 @@ static int current_page = 0;
 static char last_common_prefix[1024] = "";
 
 /**
- * @brief True while a Settings Editor prompt is active.
- *
- * The Settings Editor is identified by its body-repaint hook, which is the
- * same signal @c clear_screen_and_buffer already consults. Using it here keeps
- * the "Esc after a completion list" behaviour unchanged everywhere except the
- * Settings Editor, which needs a single Esc to exit.
- */
-static bool in_settings_editor() {
-    return static_cast<bool>(SettingsEditorRepaint::g_fn);
-}
-
-/**
  * @brief List of available special commands for completion.
  */
 const char* special_cmds[] = {
@@ -101,11 +89,11 @@ char** my_special_completion_entry(const char* text, int start, int end) {
 }
 
 /**
- * @brief Rebinds Esc to @c clear_screen_and_buffer on ordinary prompts.
+ * @brief Rebinds Esc to @c clear_screen_and_buffer while a completion list is shown.
  *
  * A first Esc after a completion list clears/repaints, and a second Esc
- * exits. The Settings Editor deliberately skips this so a single Esc exits
- * immediately after a value Tab-completion.
+ * exits. This applies to every prompt that uses @c my_rl_complete, including
+ * the Settings Editor's value prompt.
  */
 static void install_esc_hijack() {
     rl_bind_keyseq("\\e", clear_screen_and_buffer);
@@ -147,15 +135,10 @@ static bool list_shown_during_completion = false;
 void customListingsFunction(char **matches, int num_matches, int max_length) {
     (void)max_length;
 
+    // While a list is visible, the first Esc clears/repaints it and the
+    // second Esc exits (same behaviour on every prompt, Settings Editor included).
     list_shown_during_completion = true;
-    if (in_settings_editor()) {
-        // The Settings Editor must exit on the *first* Esc after a value
-        // completion list, so make sure Esc is not left hijacked from a
-        // previous screen.
-        restore_esc_default();
-    } else {
-        install_esc_hijack();
-    }
+    install_esc_hijack();
 
     // Resolve the raw pointer struct
     ReadlineColors rc = resolveReadlineTheme();
@@ -426,8 +409,8 @@ static char* setting_value_generator(const char* text, int state) {
  * append character to a single space. When matches exist, Readline hands the
  * list to @c customListingsFunction (already installed as
  * @c rl_completion_display_matches_hook), so pagination, colors, column
- * layout, resize repaints and the Settings-Editor-specific Esc handling all
- * behave exactly like the search prompt.
+ * layout, resize repaints and the Esc handling (first Esc clears the list,
+ * second Esc exits) all behave exactly like the search prompt.
  *
  * @note The candidate list @c g_activeSettingValues is populated/cleared by
  *       the Settings Editor (see @c editSetting / the RAII guard in
@@ -640,10 +623,9 @@ int clear_screen_and_buffer(int, int) {
     last_common_prefix[0] = '\0';
 
     // Always restore the default Esc binding when clearing. If a completion
-    // list is currently visible on an ordinary prompt, my_rl_complete()
-    // re-installs the hijack right after this returns (tracked by
-    // list_shown_during_completion), so the first Esc still clears the list
-    // and the second exits.
+    // list is currently visible, my_rl_complete() re-installs the hijack
+    // right after this returns (tracked by list_shown_during_completion), so
+    // the first Esc still clears the list and the second exits.
     restore_esc_default();
 
     char *new_text = rl_copy_text(0, rl_end);
@@ -670,10 +652,11 @@ int clear_screen_and_buffer(int, int) {
  * appended. If the cursor position or line buffer changed, it clears the
  * scroll buffer.
  *
- * The Esc → @c clear_screen_and_buffer hijack is installed here only when no
- * Settings Editor prompt is active (see @c in_settings_editor); the Settings
- * Editor relies on its own Esc handler so a single press exits after a value
- * completion list.
+ * When a completion list is displayed, Esc is rebound to
+ * @c clear_screen_and_buffer (see @c install_esc_hijack): the first Esc
+ * clears/repaints the list and restores the default binding, and a second Esc
+ * exits. This applies to every prompt using this handler, including the
+ * Settings Editor value prompt.
  *
  * When @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode is 1, it saves the
  * completed text to @c g_rl_pending_text, clears the input buffer, and sets
@@ -691,11 +674,6 @@ int my_rl_complete(int ignore, int invoking_key)
 
     // Reset tracking for this keystroke.
     list_shown_during_completion = false;
-
-    // Settings Editor: never leave Esc hijacked.
-    if (in_settings_editor()) {
-        restore_esc_default();
-    }
 
     rl_completion_append_character = '\0';
 
@@ -724,9 +702,9 @@ int my_rl_complete(int ignore, int invoking_key)
         clear_screen_and_buffer(0, 0);
 
         // clear_screen_and_buffer() restored the default Esc binding. If a
-        // completion list was just displayed on an ordinary prompt, re-install
-        // the hijack so the first Esc clears the list and the second exits.
-        if (list_shown_during_completion && !in_settings_editor()) {
+        // completion list was just displayed, re-install the hijack so the
+        // first Esc clears the list and the second exits.
+        if (list_shown_during_completion) {
             install_esc_hijack();
         }
 
