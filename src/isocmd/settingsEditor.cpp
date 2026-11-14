@@ -292,8 +292,8 @@ void interactiveConfigEditor(const std::string& configPath) {
         if (input == "r" || input == "R") {
             reset_custom_keybindingsForSettingsEditor();
             std::string confirmPrompt = std::format(
-                "\n\001{}\002Reset all settings to defaults? (y/n): \001{}\002",
-                tc.path,
+                "\n\001{}\002Reset all settings to default? (y/n): \001{}\002",
+                color,
                 UI::Palette::BoldReset
             );
 
@@ -334,7 +334,7 @@ void interactiveConfigEditor(const std::string& configPath) {
                         SyncOutput sync;
                         clearScrollBuffer();
                         paintSettingsBody();
-                        std::cout << tc.path << "\nReset all settings to defaults? (y/n): \n" << UI::Palette::BoldReset;
+                        std::cout << color << "\nReset all settings to default? (y/n): \n" << UI::Palette::BoldReset;
 
                         std::cout << "\n" << tc.label << "[+] Defaults applied\n" << tc.reset;
                         if (saved) {
