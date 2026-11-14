@@ -502,7 +502,7 @@ void interactiveConfigEditor(const std::string& configPath) {
  *   function is installed, so readline's filename-completion fallback never
  *   triggers. Numeric keys are classified before the "_list" check, so
  *   @c thread_cap_for_list_sorting / @c thread_cap_for_list_filtering are no
- *   longer mistaken for full/compact list settings.
+ *   longer mistaken for compact/full list settings.
  * - **Completion mode:** clears @c g_rl_complete_mode for the duration of the
  *   call (and restores it on exit) so the search prompts' stash-and-exit
  *   completion behaviour is never inherited here. Without this, a Tab
@@ -539,7 +539,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
     // Numeric settings take a free-form number: no Tab completion at all.
     // Evaluated before the validValues block because some numeric keys
     // (thread_cap_for_list_sorting / thread_cap_for_list_filtering) contain
-    // "_list" and would otherwise be mistaken for full/compact settings.
+    // "_list" and would otherwise be mistaken for compact/full settings.
     const bool isNumeric =
         key == "pagination" || key == "live_filter_limit" ||
         key.find("thread_cap") != std::string::npos ||
@@ -562,7 +562,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
     } else if (key == "auto_update" || key == "filenames_only") {
         validValues = {"off", "on"};
     } else if (key.find("_list") != std::string::npos) {
-        validValues = {"full", "compact"};
+        validValues = {"compact", "full"};
     }
 
     // Restores PgUp/PgDn and Esc to their default bindings on every exit path.
@@ -657,7 +657,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
 
             std::cout << "numeric value (min - max: " << min << " - " << max << ")\n";
         } else if (key.find("_list") != std::string::npos) {
-            std::cout << "full, compact\n";
+            std::cout << "compact, full\n";
         } else {
             std::cout << "Refer to description above\n";
         }
