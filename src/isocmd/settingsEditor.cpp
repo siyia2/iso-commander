@@ -707,7 +707,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
             drawEdit();
             if (saved) {
                 std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n",
-                                         tc.label, tc.reset, configPath);
+                                         tc.path, tc.reset, configPath);
             } else {
                 std::cout << tc.warning << "\nNotice: " << tc.error
                           << "Setting update is memory-only (Disk write failed)."
