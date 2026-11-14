@@ -99,11 +99,11 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "base",                                             // key
         "white",                                             // defaultValue
-        "Default state and input color",
+        "Default state and input color (Tab-complete)",
         "Appearance Settings",                                    // Section Header
         [](const std::string& v) {                           // validate
             static const std::unordered_set<std::string> valid = {
-                "charcoal", "black", "gray", "silver", "ash", "white", "steel"
+                "ash", "black", "charcoal", "gray", "silver", "steel", "white"
             };
             return valid.count(v) > 0;
         }
@@ -112,23 +112,23 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
     {
         "skin",                                     // key
         "white",                                    // defaultValue
-        "Menu and header color",  // comment
+        "Menu and header color (Tab-complete)",  // comment
         "",                           // section
         [](const std::string& v) {                  // validate
-            return v == "green" || v == "cyan" || v == "white" ||
-                   v == "purple" || v == "amber" || v == "rose" || v == "gray" || v == "black" ;
+            return v == "amber" || v == "black" || v == "cyan" ||
+                    v == "gray" || v == "green" || v == "purple" || v == "rose" || v == "white" ;
         }
     },
 
     {
         "theme",
         "original",
-        "List and prompt theme",
+        "List and prompt theme (Tab-complete)",
         "",
         [](const std::string& v) {
             static const std::unordered_set<std::string> valid = {
-                "original", "classic", "high_contrast", "neon", "ocean", "tokyo", "paper",
-                "sunset", "forest", "midnight", "mono", "retro", "crimson", "dracula" , "sakura"
+                "classic", "crimson", "dracula", "forest", "high_contrast", "midnight", "mono",
+                "neon", "ocean", "original", "paper", "retro", "sakura", "sunset", "tokyo"
             };
             return valid.count(v) > 0;
         }
