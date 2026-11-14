@@ -533,6 +533,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
             g_activeSettingValues = nullptr;
             rl_attempted_completion_function = nullptr;
             rl_completion_display_matches_hook = customListingsFunction;
+            rl_bind_key('\t', noop_tab_handler);   // no filename-completion fallback
         }
     } completionGuard;
 
