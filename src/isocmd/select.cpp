@@ -33,6 +33,38 @@
 #include "../themes.h"
 #include "../verbose.h"
 
+// ─── Prompt-row cursor invariant ─────────────────────────────────────────────
+//
+// Layout of every select screen (rows counted from the last list row L):
+//
+//     L      last list row
+//     L+1    blank separator row
+//     L+2    the prompt row            <- readline() is called with the cursor
+//                                         here, at column 0
+//
+// The prompt string itself is a SINGLE line (no leading "\n"), so readline's
+// own cursor bookkeeping is never off by a row. The blank separator row is
+// printed by the caller ("\n" after the list is drawn).
+//
+// After the user submits, the cursor is one row below the prompt row (L+3).
+// That holds for Enter AND for every hotkey: the hotkey handlers finish the
+// line with rl_newline() (see submitHotkey), so readline echoes the newline
+// exactly as it does for Enter. The filter prompt keeps the same rule on every
+// exit (Enter, Esc, Ctrl+D). Every iteration that does not redraw the list
+// therefore brings the cursor back with exactly one call, rewindToPromptRow(),
+// at the top of the loop. There are no other up/down escapes in the loop.
+namespace {
+
+/**
+ * @brief Moves from the row below the prompt back onto the prompt row and
+ * clears it, so the next prompt is drawn in exactly the same place.
+ */
+inline void rewindToPromptRow() {
+    std::cout << "\033[1A\r\033[K";
+}
+
+} // namespace
+
 /**
  * @brief Routes validated user input to the correct filesystem or mount
  * operation.
@@ -52,10 +84,10 @@
 void processOperationForSelectedIsoFiles(const std::string& inputString,
                                          bool& isFiltered,
                                          const std::vector<std::string>& filteredFiles,
-										 std::vector<std::string>& isoDirs,
-										 const std::string& operation,
-										 bool& umountMvRmBreak,
-										 bool& filterHistory) {
+                                         std::vector<std::string>& isoDirs,
+                                         const std::string& operation,
+                                         bool& umountMvRmBreak,
+                                         bool& filterHistory) {
 
     clearScrollBuffer();
     bool verbose = false;
@@ -307,9 +339,13 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  * - **Persistent directory state:** @c isoDirs is @c static, so its contents
  *   survive re-entry for the lifetime of the process.
  * - **Terminal integrity:** @c \\f and @c \\t are bound to no-ops via Readline
- *   to prevent terminal corruption, and ANSI escapes (@c \\033[1A\\033[K,
- *   @c \\033[1B\\033[K) keep the interface feeling static during input.
- *   PgUp/PgDn are disabled when @c ITEMS_PER_PAGE is 0.
+ *   to prevent terminal corruption. PgUp/PgDn are disabled when
+ *   @c ITEMS_PER_PAGE is 0.
+ * - **Prompt-row invariant:** the prompt is a single line and always lands on
+ *   the same row (list, one blank separator row, prompt). When the list is
+ *   redrawn the loop prints one @c "\\n" after it; when it is not, a single
+ *   @c rewindToPromptRow() at the top of the loop returns to the prompt row.
+ *   See the "Prompt-row cursor invariant" note near the top of this file.
  * - **Resize repaint:** each @c readline() is wrapped by
  *   @c readlineWithResize, whose lambda re-runs the normal display step so the
  *   list repaints on terminal-width changes while the prompt waits. The same
@@ -398,6 +434,9 @@ void selectForIsoFiles(const std::string& operation,
             isAtISOList.store(true);
         }
 
+        // Position the cursor on the prompt row (see the invariant note at the
+        // top of this file). Redraw: list, then one blank separator row.
+        // No redraw: single rewind from the row below the previous prompt.
         if (needsClrScrn) {
             if (!isUnmount) {
                 if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState))
@@ -406,8 +445,10 @@ void selectForIsoFiles(const std::string& operation,
                 if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState))
                     break;
             }
-            std::cout << "\n\n";
+            std::cout << "\n";
             umountMvRmBreak = false;
+        } else {
+            rewindToPromptRow();
         }
 
         if (refreshState->isImportRunning.load() && !isUnmount) {
@@ -419,8 +460,6 @@ void selectForIsoFiles(const std::string& operation,
                 }).detach();
             }
         }
-
-        std::cout << "\033[2A\033[K";
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
@@ -434,8 +473,9 @@ void selectForIsoFiles(const std::string& operation,
 
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
+        // Single-line prompt: the blank separator row above it is printed by
+        // the display step, not by a leading "\n" in the prompt.
         std::string prompt =
-            "\n" +
             prefix +
             std::string(UI::Palette::RL_idxGreen) + "IDX" +
             pt.primary + " ↵ for " + "\001" +
@@ -488,7 +528,6 @@ void selectForIsoFiles(const std::string& operation,
         }
 
         if (inputString[0] == 'R' && refreshState->isImportRunning.load()) {
-            std::cout << "\033[1B\033[K";
             needsClrScrn = false;
             continue;
         }
@@ -525,7 +564,6 @@ void selectForIsoFiles(const std::string& operation,
         }
 
         if (inputString == "P" && pendingIndices.empty()) {
-            std::cout << "\033[1B\033[K";
             needsClrScrn = false;
             hasPendingProcess = false;
             continue;
@@ -580,7 +618,6 @@ void selectForIsoFiles(const std::string& operation,
 
         if (filteringHandled) {
             keybindingGuard.restore();
-            std::cout << "\033[1B\033[K";
             continue;
         }
 
@@ -637,6 +674,10 @@ void selectForIsoFiles(const std::string& operation,
  * - **RAII keybindings:** @c ReadlineKeybindingGuard installs select-mode
  *   bindings on construction and resets them on destruction, so cleanup runs
  *   on every exit path.
+ * - **Prompt-row invariant:** same as @c selectForIsoFiles: a single-line
+ *   prompt on a fixed row (list, one blank separator row, prompt), reached
+ *   either by printing one @c "\\n" after a list redraw or by a single
+ *   @c rewindToPromptRow() when the list is not redrawn.
  * - **Resize repaint:** each @c readline() is wrapped in
  *   @c readlineWithResize with a lambda that re-runs the display step. A
  *   throwaway sort flag is used so a resize never re-sorts the list.
@@ -715,14 +756,17 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         if (!isFiltered) originalPage = currentPage;
 
         clear_history();
+
+        // Position the cursor on the prompt row (see the invariant note at the
+        // top of this file).
         if (needsClrScrn) {
             loadAndDisplayImageFiles(files, fileType, need2Sort, isFiltered, list,
                                      pendingIndices, hasPendingProcess, currentPage,
                                      state);
-            std::cout << "\n\n";
+            std::cout << "\n";
+        } else {
+            rewindToPromptRow();
         }
-
-        std::cout << "\033[2A\033[K";
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
 
@@ -733,8 +777,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
         std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
 
+        // Single-line prompt; the blank separator row is printed by the
+        // display step above.
         std::string prompt =
-            "\n" +
             prefix +
             std::string(UI::Palette::RL_idxGreen) + "IDX" +
             pt.primary   + " ↵ for " +
@@ -799,7 +844,6 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         }
 
         if (inputString == "P" && pendingIndices.empty()) {
-            std::cout << "\033[1B\033[K";
             hasPendingProcess = false;
             needsClrScrn = false;
             continue;
@@ -874,7 +918,6 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
                                        pendingIndices, hasPendingProcess, state,
                                        repaintList);
             keybindingGuard.restore();
-            std::cout << "\033[1B\033[K";
             continue;
         }
         else if (inputString.find(';') != std::string::npos) {

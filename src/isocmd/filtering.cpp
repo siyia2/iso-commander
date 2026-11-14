@@ -57,7 +57,29 @@ namespace AnsiEscape {
     constexpr const char* CLEAR_LINE_ABOVE = "\033[1A\033[K";
     constexpr const char* CLEAR_TWO_LINES_ABOVE  = "\033[2A\033[K";
     constexpr const char* CLEAR_LINE_BELOW  = "\033[1B\033[K";
+    // From the row below a prompt back onto the prompt row, cleared.
+    constexpr const char* REWIND_TO_PROMPT_ROW = "\033[1A\r\033[K";
 }
+
+// ─── Prompt-row convention ───────────────────────────────────────────────────
+//
+// Every prompt in this file is a SINGLE line (no leading "\n"), so readline's
+// own cursor bookkeeping never has to cope with a multi-line prompt.
+//
+// The filter prompt REPLACES the select prompt in place: it is drawn on the
+// select prompt's row, under the blank separator row that is already there.
+//
+//  - Entry: the caller's prompt was submitted (Enter or a hotkey, which now
+//    both echo a newline), so the cursor is one row below the prompt row.
+//    runFilterLoop rewinds onto that row once, then calls readline.
+//  - Every exit (success, Esc, Ctrl+D) leaves the cursor one row below the
+//    filter prompt row, so the caller needs no fix-up and rewinds once.
+//  - A failed commit rewinds onto the prompt row and prompts again.
+//  - applyFilterCore does no cursor movement; runFilterLoop owns all of it.
+//  - liveFilterRedisplayHook prints the blank separator row itself after the
+//    live list repaint, before forcing readline to redraw its prompt.
+//  - The resize path leaves the blank row to ListResizeWatcher (see
+//    paintLivePreviewFrame).
 
 // ─── SIMD Search Implementation (SSE2) ───────────────────────────────────────
 
@@ -675,7 +697,8 @@ static std::string extractUnmountKey(const std::string& path) {
  *
  * This is the COMMIT path, run when the user presses Enter. It is separate
  * from the live preview (see the "Live incremental filter preview" section),
- * which never touches @c filteringStack or @c ctx.files.
+ * which never touches @c filteringStack or @c ctx.files. It does no terminal
+ * output or cursor movement; the caller (runFilterLoop) owns that.
  *
  * @param searchString The query to filter by (saved for state recovery).
  *        Unescaped ';' separates OR-ed groups and unescaped '&' separates
@@ -688,10 +711,8 @@ static std::string extractUnmountKey(const std::string& path) {
  *         (the filter would change nothing).
  */
 static bool applyFilterCore(const std::string& searchString, FilterContext& ctx) {
-    if (searchString.empty()) {
-        std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+    if (searchString.empty())
         return false;
-    }
 
     const std::vector<std::string>& sourceList =
         ctx.sourceOverride ? *ctx.sourceOverride : ctx.files;
@@ -717,10 +738,8 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
         }
 
         auto matchedIndices = filterFilesIndices(derived, searchString);
-        if (matchedIndices.empty()) {
-            std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+        if (matchedIndices.empty())
             return false;
-        }
 
         tempFiltered.reserve(matchedIndices.size());
         tempIndices.reserve(matchedIndices.size());
@@ -730,10 +749,8 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
         }
     } else {
         tempIndices = filterFilesIndices(sourceList, searchString);
-        if (tempIndices.empty()) {
-            std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+        if (tempIndices.empty())
             return false;
-        }
 
         tempFiltered.reserve(tempIndices.size());
         for (size_t idx : tempIndices) {
@@ -742,10 +759,8 @@ static bool applyFilterCore(const std::string& searchString, FilterContext& ctx)
     }
 
     if (tempFiltered.empty())                     return false;
-    if (tempFiltered.size() == sourceList.size()) {
-        std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
-        return true;
-    }
+    if (tempFiltered.size() == sourceList.size())
+        return true;   // matches everything: nothing to filter
 
     ctx.currentPage  = 0;
     ctx.needsClrScrn = true;
@@ -801,9 +816,11 @@ static void saveQueryToHistory(const std::string& query, bool& filterHistory, bo
 //    single OR-group without negation. Backspacing, edits, OR queries and
 //    negation require a full search; an incomplete trailing escape is not a
 //    safe prefix either.
-//  - After printList() repaints the screen, readline's display cache is stale,
-//    so the hook forces a prompt redraw. Unchanged query text uses normal
-//    redisplay (for example, when moving the cursor).
+//  - The filter prompt is a single line. After printList() repaints the
+//    screen, the hook prints the blank separator row itself and then forces a
+//    prompt redraw, because readline's display cache is stale after the
+//    repaint. Unchanged query text uses normal redisplay (for example, when
+//    moving the cursor).
 //
 // Live repainting is disabled above LIVE_FILTER_LIMIT to avoid repeatedly
 // redrawing large lists. The prompt then retains the normal Enter-to-commit
@@ -1102,11 +1119,13 @@ struct PreviewStackGuard {
 
 /**
  * @brief Computes the matches for @p query and paints the unpaginated live
- * preview frame (clear + list). Does NOT touch Readline.
+ * preview frame (clear + list). Does NOT touch Readline, and does NOT print
+ * the blank separator row below the list: the cursor is left on the row
+ * directly after the list.
  *
  * Shared by two callers, both on the Readline thread:
- *  - @c liveFilterRedisplayHook, which follows it with
- *    @c rl_forced_update_display();
+ *  - @c liveFilterRedisplayHook, which prints the blank separator row and
+ *    then calls @c rl_forced_update_display();
  *  - the resize repaint in @c runFilterLoop, after which the
  *    @c ListResizeWatcher prints the blank line and redraws the prompt and
  *    the half-typed input itself.
@@ -1160,8 +1179,9 @@ void paintLivePreviewFrame(const std::string& query) {
  * text is unchanged (e.g. cursor movement); (2) otherwise calls
  * paintLivePreviewFrame(), which computes the match set, records the query as
  * @c lastQuery, and repaints the real list unpaginated through printList()
- * with a zero-copy StringListView; (3) asks readline to redraw its prompt
- * from scratch via rl_forced_update_display().
+ * with a zero-copy StringListView; (3) prints the blank separator row (the
+ * single-line prompt no longer carries it as a leading "\n"); (4) asks
+ * readline to redraw its prompt from scratch via rl_forced_update_display().
  *
  * See paintLivePreviewFrame() for the temporary filteringStack entry and the
  * unpaginated scope, which are released before the readline redraw.
@@ -1197,6 +1217,9 @@ void liveFilterRedisplayHook() {
 
     paintLivePreviewFrame(query);
 
+    // Blank separator row between the list and the (single-line) prompt.
+    std::cout << "\n";
+
     // The whole screen was repainted under readline; redraw prompt + input fresh.
     rl_forced_update_display();
 }
@@ -1231,12 +1254,21 @@ struct LivePreviewGuard {
  * incremental-preview state and installs a resize repaint appropriate to the
  * current display mode.
  *
+ * @p promptText must be a single line (no leading "\n").
+ *
+ * Cursor contract: on entry the cursor is one row below the caller's prompt
+ * row (that prompt was just submitted). The loop rewinds onto that row, so the
+ * filter prompt replaces it in place. On every exit (success, Esc, Ctrl+D) the
+ * cursor is one row below the filter prompt row. A failed commit rewinds onto
+ * the prompt row and prompts again.
+ *
+
  * Esc or EOF cancels the prompt. A preview that has repainted the list marks
  * the screen for a normal paginated redraw before control returns. A failed
  * commit (empty query or no matches) leaves the prompt active; a successful
  * commit saves the query, invokes @p onSuccess and exits.
  *
- * @param promptText   Prompt text passed to readlineWithResize().
+ * @param promptText   Single-line prompt text passed to readlineWithResize().
  * @param ctx          Filter context and optional normal-list resize callback.
  * @param onSuccess    Callback invoked after a successful filter commit.
  * @param onEmptyInput Retained callback parameter; currently not invoked.
@@ -1257,7 +1289,8 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
     const auto& handleEmpty = onEmptyInput ? onEmptyInput : defaultEmptyInput;
     (void)handleEmpty;   // bound but not invoked by the loop body (see doc comment)
 
-    std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+    // Draw the filter prompt on the row of the prompt that was just submitted.
+    std::cout << AnsiEscape::REWIND_TO_PROMPT_ROW;
     ctx.filterHistory = true;
     loadHistory(ctx.filterHistory);
 
@@ -1331,8 +1364,11 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
 
         //---- Robust handling of FilterTerms prompt ----
         if (!raw || raw.get()[0] == 27) {
+            // Esc echoed its newline (exit_handler ends with rl_newline).
+            // Ctrl+D (EOF) does not, so add it: every exit leaves the cursor
+            // one row below the prompt row.
             if (!raw) {
-                std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+                std::cout << "\n";
             }
             // The live preview painted an unpaginated list over the screen.
             // Make the caller redo its normal (paginated) refresh.
@@ -1351,7 +1387,8 @@ static void runFilterLoop(const std::string& promptText, FilterContext& ctx,
             break;
         }
 
-        std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
+        // Failed commit (empty query or no matches): back onto the prompt row.
+        std::cout << AnsiEscape::REWIND_TO_PROMPT_ROW;
     }
 }
 
@@ -1535,6 +1572,10 @@ void refreshFilteredSourceIndices(
  * same suppression is what makes the live preview's temporary ITEMS_PER_PAGE
  * override (UnpaginatedScope) safe.
  *
+ * The filter prompt is a single line that replaces the caller's prompt in
+ * place; see @c runFilterLoop for the cursor contract. The caller must have
+ * submitted its own prompt (cursor one row below it) before calling.
+ *
  * Live preview is opt-in: @p cfg must provide the list type, pending-selection
  * state and shared refresh state required by printList(). Otherwise filtering
  * remains Enter-to-commit only.
@@ -1557,14 +1598,12 @@ bool runSharedFilterFlow(const std::string& inputString, const FilterCallConfig&
 
     rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
     rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
-    std::cout << "\n";
     reset_custom_keybindingsForSelect();
     rl_bind_keyseq("\\e", exit_handler);
-    std::cout << AnsiEscape::CLEAR_LINE_ABOVE;
 
     const ReadlineAndPromptTheme ft = getFilterTheme("", false);
+    // Single-line prompt; runFilterLoop positions the cursor on the prompt row.
     const std::string prompt =
-        "\n" +
         ft.filter  + "Filter: " +
         ft.reset;
 

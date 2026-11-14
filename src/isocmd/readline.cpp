@@ -653,91 +653,52 @@ void armPendingInputRestore() {
 // Event Driven Key Section
 //=============================================================================
 
-/* --- Navigation & View Handlers --- */
+/* --- Hotkey submit helper ---------------------------------------------------
+ *
+ * Every hotkey submits a command by replacing the line buffer and finishing
+ * the line. Finishing it with rl_newline() (what Enter does) instead of just
+ * setting rl_done makes readline run its final-update step, which moves to the
+ * end of the prompt and prints the newline. As a result a hotkey submit and an
+ * Enter submit leave the cursor in the same place: one row below the prompt.
+ * Callers no longer need any "step below the prompt row" fix-up after a hotkey.
+ */
 
 static void stashTypedInput() {
     RetainAndRestoreReadlineBuffer::g_rl_pending_text.assign(
         rl_line_buffer ? rl_line_buffer : "", rl_end);
 }
 
-int pgup_handler(int, int) {
-    stashTypedInput();
-    rl_replace_line("PgUp", 0);
-    rl_done = 1;
-    return 0;
+/// Replaces the line with @p command and submits it exactly as Enter would.
+/// @param stash true to remember what the user had typed (restored by
+///              armPendingInputRestore on the next prompt).
+static int submitHotkey(const char* command, bool stash) {
+    if (stash) stashTypedInput();
+    rl_replace_line(command, 0);
+    return rl_newline(1, '\n');
 }
 
-int pgdn_handler(int, int) {
-    stashTypedInput();
-    rl_replace_line("PgDn", 0);
-    rl_done = 1;
-    return 0;
-}
+/* --- Navigation & View Handlers --- */
 
-int toggleList_handler(int, int) {
-    stashTypedInput();
-    rl_replace_line("~", 0);
-    rl_done = 1;
-    return 0;
-}
+int pgup_handler(int, int)       { return submitHotkey("PgUp", true); }
+int pgdn_handler(int, int)       { return submitHotkey("PgDn", true); }
+int toggleList_handler(int, int) { return submitHotkey("~",    true); }
 
 /* --- Action & Command Handlers --- */
 
-int proc_handler(int, int) {
-    stashTypedInput();
-    rl_replace_line("P", 0);
-    rl_done = 1;
-    return 0;
-}
-
-int clr_handler(int, int) {
-    stashTypedInput();
-    rl_replace_line("clr", 0);
-    rl_done = 1;
-    return 0;
-}
-
-int refresh_handler(int, int) {
-    rl_replace_line("R", 0);
-    rl_done = 1;
-    return 0;
-}
-
-int filter_handler(int, int) {
-    rl_replace_line("/", 0);
-    rl_done = 1;
-    return 0;
-}
-
-int toggleFlno_handler(int, int) {
-    stashTypedInput();
-    rl_replace_line("*", 0);
-    rl_done = 1;
-    return 0;
-}
+int proc_handler(int, int)       { return submitHotkey("P",   true);  }
+int clr_handler(int, int)        { return submitHotkey("clr", true);  }
+int refresh_handler(int, int)    { return submitHotkey("R",   false); }
+int filter_handler(int, int)     { return submitHotkey("/",   false); }
+int toggleFlno_handler(int, int) { return submitHotkey("*",   true);  }
 
 /* --- Settings & State Handlers --- */
 
-int reset_handler(int, int) {
-    rl_replace_line("r", 0);
-    rl_done = 1;
-    return 0;
-}
+int reset_handler(int, int)      { return submitHotkey("r", false); }
 
 /* --- Global Utility Handlers --- */
 
-int help_handler(int, int) {
-    stashTypedInput();
-    rl_replace_line("?", 0);
-    rl_done = 1;
-    return 0;
-}
-
-int exit_handler(int, int) {
-    rl_replace_line("\x1b", 0);
-    rl_done = 1;
-    return 0;
-}
+int help_handler(int, int)       { return submitHotkey("?",     true);  }
+int exit_handler(int, int)       { return submitHotkey("\x1b",  false); }
 
 /**
  * @brief Keybindings for the main File Selection interface.
