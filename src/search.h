@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef SEARCHES_H
-#define SEARCHES_H
+#ifndef SEARCH_H
+#define SEARCH_H
 
 // C++ Standard Library Headers
 #include <cstdint>
@@ -90,4 +90,4 @@ void databaseSwitches(
     const std::function<void()>& repaintHeader
 );
 
-#endif // SEARCHES_H
+#endif // SEARCH_H
