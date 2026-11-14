@@ -76,6 +76,14 @@ char* command_generator(const char* text, int state) {
 
 /**
  * @brief Dispatches completion requests to the command generator if triggers are detected.
+ *
+ * Trigger characters are @c '!' and @c '*' at the start of the current word.
+ * This entry point deliberately does @b not set
+ * @c rl_attempted_completion_over; when no trigger is present it returns
+ * @c nullptr (not an empty array) so Readline falls back to its default
+ * filename completion. This is the opposite of
+ * @c setting_value_completion_entry(), which suppresses the default.
+ *
  * @param text The partial text.
  * @param start Start index in line buffer.
  * @param end End index in line buffer.
@@ -98,7 +106,10 @@ char** my_special_completion_entry(const char* text, int start, int end) {
  * @param matches  Array of completion matches in Readline format: matches[0] is the
  *                 common prefix of all completions (used for pagination state tracking,
  *                 not displayed), and matches[1..num_matches] are the actual completion
- *                 candidates.
+ *                 candidates. Note that matches[1] is interpreted as a filesystem path
+ *                 prefix only in the file/directory completion branch; for special
+ *                 command and settings-value completions it is simply the first
+ *                 candidate string.
  * @param num_matches  Total number of completion candidates (excluding matches[0]).
  * @param max_length   Length of the longest match string as provided by Readline.
  *                     Unused by this implementation — column widths are computed
@@ -354,17 +365,12 @@ CompleterData g_completerData = {nullptr, nullptr};
 //=============================================================================
 
 /**
- * @brief Valid values for the setting currently being edited.
- *
- * Set by @c editSetting before each @c readlineWithResize call, cleared after.
- * When non-null, @c setting_value_completion_entry emits matches from this
- * list. Using a pointer (rather than copying) keeps it cheap to switch per
- * setting and keeps the generator's semantics identical to
- * @c command_generator.
- */
-
-/**
  * @brief Generates matches for the active setting's valid values.
+ *
+ * Iterates over the candidate list in @c g_activeSettingValues, comparing each
+ * entry against @p text by prefix. The append character is set to a single
+ * space so accepted matches remain editable. Mirrors @c command_generator's
+ * static-index contract (state == 0 restarts iteration).
  */
 static char* setting_value_generator(const char* text, int state) {
     static size_t idx;
@@ -387,11 +393,18 @@ static char* setting_value_generator(const char* text, int state) {
 /**
  * @brief Completion entry for the Settings Editor.
  *
- * Mirrors @c my_special_completion_entry: readline will hand the match list
- * to @c customListingsFunction (already set as
+ * Mirrors @c my_special_completion_entry in shape, but differs in two
+ * deliberate ways: it sets @c rl_attempted_completion_over = 1 (so Readline
+ * does not fall back to filename completion on this prompt) and forces the
+ * append character to a single space. When matches exist, Readline hands the
+ * list to @c customListingsFunction (already installed as
  * @c rl_completion_display_matches_hook), so pagination, colors, column
- * layout, resize repaints and Esc handling all behave exactly like the
- * search prompt.
+ * layout, resize repaints and the Settings-Editor-specific Esc handling all
+ * behave exactly like the search prompt.
+ *
+ * @note The candidate list @c g_activeSettingValues is populated/cleared by
+ *       the Settings Editor (see @c editSetting / the RAII guard in
+ *       settingsEditor.cpp); this function only consumes it.
  */
 char** setting_value_completion_entry(const char* text, int /*start*/, int /*end*/) {
     if (!g_activeSettingValues || g_activeSettingValues->empty()) return nullptr;
@@ -519,7 +532,14 @@ char** completion_cb(const char* text, int start, int end) {
 }
 
 /**
- * @brief Resets the pagination state for completions.
+ * @brief Resets the completion-list pagination state.
+ *
+ * Clears the current page counter and the cached common prefix used to
+ * detect the start of a new completion session. Called by
+ * @c completion_cb at the start of each completion attempt (inline reset),
+ * and after a screen wipe via @c clear_screen_and_buffer and
+ * @c my_rl_complete. Does not touch any Settings Editor flag — none exists in
+ * this translation unit.
  */
 void resetReadlinePagination() {
     current_page = 0;
@@ -564,11 +584,16 @@ int prevent_readline_keybindings(int, int) {
 /**
  * @brief Clears the terminal screen, scrollback buffer, and resets pagination/UI state.
  *
- * This function clears the terminal scrollback and forces a display update.
- * It resets pagination variables and restores specific key bindings.
- * If @c GlobalState::g_rl_complete_mode is active, it captures the current
- * input line, forces a clean exit of the current Readline loop, and resets
- * the completion mode to allow for a state-preserved refresh.
+ * If a Settings Editor body-repaint hook is installed
+ * (@c SettingsEditorRepaint::g_fn), the editor's own draw lambda is invoked
+ * instead of @c clearScrollBuffer so the header/value/description/footer are
+ * repainted along with the prompt. Otherwise the scrollback is cleared and
+ * Readline is asked to redraw. Pagination state is then reset.
+ *
+ * When @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode is active, the
+ * current input line is captured, Readline is forced to exit its loop, and the
+ * completion mode flag is cleared so a subsequent loop iteration can restore
+ * the buffer cleanly.
  *
  * @param ignore1 Unused parameter (typically 0).
  * @param ignore2 Unused parameter (typically 0).
@@ -620,9 +645,15 @@ int clear_screen_and_buffer(int, int) {
  * appended. If the cursor position or line buffer changed, it clears the
  * scroll buffer.
  *
- * When @c GlobalState::g_rl_complete_mode is 1, it saves the completed
- * text to @c g_rl_pending_text, clears the input buffer, and sets @c rl_done
- * to exit readline, allowing the next loop iteration to restore the text.
+ * The Esc → @c clear_screen_and_buffer hijack is installed here only when no
+ * Settings Editor prompt is active (see @c in_settings_editor); the Settings
+ * Editor relies on its own Esc handler so a single press exits after a value
+ * completion list.
+ *
+ * When @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode is 1, it saves the
+ * completed text to @c g_rl_pending_text, clears the input buffer, and sets
+ * @c rl_done to exit readline, allowing the next loop iteration to restore the
+ * text.
  *
  * @param ignore      Numeric argument (unused).
  * @param invoking_key Triggering key (unused).
@@ -807,6 +838,10 @@ int exit_handler(int, int)       { return submitHotkey("\x1b",  false); }
 
 /**
  * @brief Keybindings for the main File Selection interface.
+ *
+ * Binds PageUp/PageDown (navigation), `*` (toggle file-number display),
+ * `/` (filter), `P` (process), `C` (clear), `R` (refresh), `~` (toggle
+ * list view), Esc (exit), and `?` (help).
  */
 void setup_custom_keybindingsForSelect(void) {
     // Navigation
@@ -867,6 +902,10 @@ void reset_custom_keybindingsForSelect(void) {
 
 /**
  * @brief Restores bindings used in File Operations (Cp/Mv/USB).
+ *
+ * Reverts the single-character hotkeys (`*`, `/`, `P`, `R`, `C`, `~`) to
+ * plain text insertion so they can be typed into path/name prompts. Esc is
+ * intentionally left untouched here.
  */
 void reset_custom_keybindingsForCpMvWrite2Usb(void) {
     rl_bind_keyseq("*", rl_insert);
@@ -878,7 +917,10 @@ void reset_custom_keybindingsForCpMvWrite2Usb(void) {
 }
 
 /**
- * @brief Restores bindings used in the Settings Editor.
+ * @brief Restores bindings used in File Operations (Rm).
+ *
+ * Reverts the single-character hotkeys (`*`, `/`, `P`, `C`, `R`, `~`, `?`) to
+ * plain text insertion and rebinds Esc to @c exit_handler.
  */
 void reset_custom_keybindingsForRm(void) {
     // Restore characters to standard insertion
@@ -905,6 +947,11 @@ void reset_custom_keybindingsForSettingsEditor(void) {
     rl_bind_keyseq("\\e", exit_handler);
 }
 
+/**
+ * @brief Restores bindings used in the Search Prompts.
+ *
+ * Reverts `?` to plain text insertion and rebinds Esc to @c exit_handler.
+ */
 void reset_custom_keybindingsForSearches(void) {
     rl_bind_keyseq("?", rl_insert);
 

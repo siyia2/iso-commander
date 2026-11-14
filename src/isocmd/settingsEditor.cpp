@@ -49,7 +49,8 @@
  * - @c Next:    PgDn was pressed; go to the next selected setting.
  * - @c Prev:    PgUp was pressed; go to the previous selected setting.
  * - @c GoTo:    "g#" was entered; jump to selected setting number # (see
- *               @c g_editGotoPos).
+ *               @c g_editGotoPos). A target equal to the current position is
+ *               treated like an invalid target and simply redraws.
  * - @c Abort:   Esc or Ctrl+D; leave the whole multi-edit sequence.
  */
 enum class EditNav { Advance, Updated, Next, Prev, GoTo, Abort };
@@ -58,47 +59,43 @@ enum class EditNav { Advance, Updated, Next, Prev, GoTo, Abort };
 static size_t g_editGotoPos = 0;
 
 /**
- * @brief Body-repaint hook shared with @c readline_completion.cpp.
+ * @brief Legacy Settings Editor repaint store (kept for local consumers).
  *
- * The completion subsystem's <kbd>Ctrl+L</kbd> path
- * (@c clear_screen_and_buffer) normally only clears the terminal and redraws
- * the readline prompt line. On the Settings Editor screens that is not enough:
- * the header, current value, description and navigation footer are printed by
- * the editor's own draw lambdas (passed to @c readlineWithResize as the resize
- * repaint callback), so a bare clear leaves only the "Value …" prompt visible.
+ * @warning This anonymous-namespace variable and the two accessors below are
+ *          @b not what the completion subsystem uses. The live repaint hook
+ *          for the completion path is the @c SettingsEditorRepaint::g_fn
+ *          object declared @c inline in @c readline.h, which
+ *          @c clear_screen_and_buffer consults directly. The accessor pair
+ *          here predates that namespace and currently has no callers; it is
+ *          retained only as historical scaffolding and should be removed if
+ *          nothing else starts using it.
  *
- * While a @c readlineWithResize call in this file is active, the draw lambda
- * that was supplied as its repaint callback is stored in
- * @c g_activeSettingsRepaint. @c clear_screen_and_buffer consults it (via the
- * two accessors below) before clearing, and — when set — uses it to repaint
- * the whole screen body instead of just clearing. The hook is installed and
- * removed around each @c readlineWithResize call by @c readlineWithRepaint(),
- * so it is only ever live on the Settings Editor screens.
- *
- * Using accessor functions instead of a shared @c extern variable keeps the
- * @c std::function out of any header and lets @c readline_completion.cpp stay
- * oblivious to its type.
+ * The design note that follows the original block ("using accessor functions
+ * instead of a shared extern keeps the @c std::function out of any header")
+ * no longer applies: the active design does expose the @c std::function
+ * through @c readline.h.
  */
 namespace {
 std::function<void()> g_activeSettingsRepaint;
 } // namespace
 
 /**
- * @brief Returns the currently active Settings Editor body-repaint callback.
+ * @brief Returns the legacy repaint callback, or an empty @c std::function.
  *
- * Called by @c clear_screen_and_buffer in readline_completion.cpp. An empty
- * @c std::function means no Settings Editor prompt is active and the caller
- * should fall back to the ordinary clear-and-redraw-prompt behaviour.
+ * @deprecated Not consulted by @c clear_screen_and_buffer; that function uses
+ *             @c SettingsEditorRepaint::g_fn instead. Kept only because the
+ *             accessor pair is still compiled here; no live caller exists.
  */
 const std::function<void()>& getActiveSettingsRepaint() {
     return g_activeSettingsRepaint;
 }
 
 /**
- * @brief Installs (or clears, with an empty function) the body-repaint hook.
+ * @brief Installs (or clears, with an empty function) the legacy repaint hook.
  *
- * Invoked exclusively by @c readlineWithRepaint() below, so ordinary readline
- * prompts elsewhere in the program are unaffected.
+ * @deprecated Not called by @c readlineWithRepaint(); that helper calls
+ *             @c SettingsEditorRepaint::set(...) instead. Kept only for the
+ *             accessor pair's symmetry; no live caller exists.
  */
 void setActiveSettingsRepaint(std::function<void()> fn) {
     g_activeSettingsRepaint = std::move(fn);
@@ -108,9 +105,10 @@ void setActiveSettingsRepaint(std::function<void()> fn) {
  * @brief Like @c readlineWithResize, but also routes <kbd>Ctrl+L</kbd> clears
  *        through @p repaint.
  *
- * Binds @p repaint as the active Settings Editor body-repaint hook for the
- * duration of the @c readlineWithResize call and unbinds it immediately after,
- * so @c clear_screen_and_buffer (triggered by <kbd>Ctrl+L</kbd>) repaints the
+ * Installs @p repaint as the active body-repaint hook
+ * (@c SettingsEditorRepaint::set) for the duration of the
+ * @c readlineWithResize call and clears it immediately after, so
+ * @c clear_screen_and_buffer (triggered by <kbd>Ctrl+L</kbd>) repaints the
  * full setting screen — header, current value, description, valid values,
  * navigation footer — instead of leaving only the input prompt on screen.
  * @p repaint is also passed to @c readlineWithResize unchanged so
@@ -193,7 +191,10 @@ void helpSettingsEditor();
 void syncCache(const std::string& filePath);
 
 // Existing handlers from readline.cpp: they replace the line with "PgUp" /
-// "PgDn" and set rl_done. (Redeclared here in case readline.h doesn't expose them.)
+// "PgDn", stash the typed text, and submit via rl_newline (which sets
+// rl_done). The stash is cleared by editSetting() after either key is
+// observed, so it cannot leak to the next screen. (Redeclared here in case
+// readline.h doesn't expose them.)
 int pgup_handler(int, int);
 int pgdn_handler(int, int);
 EditNav editSetting(const std::string& configPath, const std::string& key,
@@ -233,7 +234,9 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
  *   the same sequence after confirmation.
  * - **Terminal cleanup:** a local RAII guard restores the settings-editor
  *   keybindings on every exit path.
- * - **Signals:** SIGINT is ignored while the editor is active.
+ * - **Signals:** SIGINT is set to @c SIG_IGN for the duration of the editor.
+ *   The previous disposition is @b not restored on exit; this matches the
+ *   program-wide policy of ignoring Ctrl+C once the interactive UI is up.
  * - **Resize handling:** every screen shares @c paintSettingsBody, so a
  *   resize repaints the full settings view rather than just the last
  *   message. @c drawSettings is the repaint callback for both the main
