@@ -716,6 +716,10 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
         ConfigCaches::g_configCache[key] = newVal;
         applyConfigEffects(ConfigCaches::g_configCache, key);
 
+        current = ConfigCaches::g_configCache.count(key)
+                      ? ConfigCaches::g_configCache[key]
+                      : entry->defaultValue;
+
         bool saved = flushCache(configPath);
 
         tc = resolveOptionsTheme();
