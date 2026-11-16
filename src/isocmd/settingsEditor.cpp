@@ -579,11 +579,16 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
                 std::cout << err << "\n";
             pendingErrors.clear();
         }
+
+        std::string_view currentColor = (key == "base") ? tc.reset
+                                       : (key == "skin") ? color
+                                       : tc.highlight;
+
         std::cout << "\n" << tc.str << "=== Edit Setting ===";
         if (total > 1) std::cout << "  ("<< (globalTheme == "original" ? UI::Palette::DarkCyan : tc.highlight) << pos << tc.str <<"/" << tc.warning << total << tc.str << ")";
         std::cout << "\n\n" << tc.reset;
         std::cout << tc.str << "Setting: " << tc.reset << tc.warning << key << tc.reset << "\n";
-        std::cout << tc.str << "Current: " << tc.reset << tc.highlight << current << tc.reset << "\n";
+        std::cout << tc.str << "Current: " << tc.reset << currentColor << current << tc.reset << "\n";
         std::string displayComment = entry->comment;
         size_t cpos = displayComment.find("\n# ");
         if (cpos != std::string::npos) displayComment.replace(cpos, 3, "\n             ");
