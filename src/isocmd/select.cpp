@@ -123,6 +123,7 @@ bool parseIndexToken(std::string_view tok, IndexToken& out) {
 
 /**
  * @brief Maps staged paths to sorted, unique 1-based indices in @p source.
+ *        Returns immediately when nothing is staged (no lookup map is built).
  * @param prune If true, paths that are not in @p source are erased from
  *              @p paths; otherwise @p paths is left untouched (display use,
  *              where @p source may be momentarily stale).
@@ -130,6 +131,7 @@ bool parseIndexToken(std::string_view tok, IndexToken& out) {
 std::vector<size_t> resolveIndices(std::vector<std::string>& paths,
                                    const std::vector<std::string>& source,
                                    bool prune) {
+    if (paths.empty()) return {};
     std::unordered_map<std::string_view, size_t> indexOf;
     indexOf.reserve(source.size());
     for (size_t i = 0; i < source.size(); ++i)
