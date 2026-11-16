@@ -116,30 +116,45 @@ bool flushCache(const std::string& configPath) {
  * Changing the skin also refreshes the derived color palette. Numeric values
  * that cannot be parsed leave the corresponding runtime setting unchanged.
  *
- * @param cache Configuration key-value pairs to apply.
+ * @param cache   Configuration key-value pairs.
+ * @param onlyKey If non-empty, apply only the effect of this key; if empty,
+ *                apply everything (startup, reset-all).
  */
-void applyConfigEffects(const std::map<std::string, std::string>& cache) {
-    applyThreadCapsAndHistoryLimits(cache);
+void applyConfigEffects(const std::map<std::string, std::string>& cache,
+                        const std::string& onlyKey = {}) {
+    auto want = [&](const char* k) {
+        return (onlyKey.empty() || onlyKey == k) && cache.count(k);
+    };
 
-    if (cache.count("mount_list"))        displayConfig::toggleFullListMount = (cache.at("mount_list") == "full");
-    if (cache.count("umount_list"))       displayConfig::toggleFullListUmount = (cache.at("umount_list") == "full");
-    if (cache.count("cp_mv_rm_list"))     displayConfig::toggleFullListCpMvRm = (cache.at("cp_mv_rm_list") == "full");
-    if (cache.count("write2usb_list"))    displayConfig::toggleFullListWrite2usb = (cache.at("write2usb_list") == "full");
-    if (cache.count("convert2iso_lists")) displayConfig::toggleFullListConvert2iso = (cache.at("convert2iso_lists") == "full");
-    if (cache.count("filenames_only"))    displayConfig::toggleNamesOnly = (cache.at("filenames_only") == "on");
+    // Keys handled explicitly below; anything else is assumed to belong to
+    // the thread/history group.
+    static const std::unordered_set<std::string> handledHere = {
+        "mount_list", "umount_list", "cp_mv_rm_list", "write2usb_list",
+        "convert2iso_lists", "filenames_only", "skin", "theme", "base",
+        "pagination", "live_filter_limit"
+    };
+    if (onlyKey.empty() || !handledHere.count(onlyKey))
+        applyThreadCapsAndHistoryLimits(cache);
 
-    if (cache.count("skin")) { skin = cache.at("skin"); color = getskin(); }
-    if (cache.count("theme")) { globalTheme = cache.at("theme"); }
+    if (want("mount_list"))        displayConfig::toggleFullListMount     = (cache.at("mount_list") == "full");
+    if (want("umount_list"))       displayConfig::toggleFullListUmount    = (cache.at("umount_list") == "full");
+    if (want("cp_mv_rm_list"))     displayConfig::toggleFullListCpMvRm    = (cache.at("cp_mv_rm_list") == "full");
+    if (want("write2usb_list"))    displayConfig::toggleFullListWrite2usb = (cache.at("write2usb_list") == "full");
+    if (want("convert2iso_lists")) displayConfig::toggleFullListConvert2iso = (cache.at("convert2iso_lists") == "full");
+    if (want("filenames_only"))    displayConfig::toggleNamesOnly         = (cache.at("filenames_only") == "on");
 
-    if (cache.count("base")) {
+    if (want("skin"))  { skin = cache.at("skin"); color = getskin(); }
+    if (want("theme")) { globalTheme = cache.at("theme"); }
+
+    if (want("base")) {
         UI::Palette::defaultColor = cache.at("base");
         UI::Palette::updateDefaultColors();
     }
 
-    if (cache.count("pagination")) {
+    if (want("pagination")) {
         try { GlobalState::ITEMS_PER_PAGE = std::stoul(cache.at("pagination")); } catch (...) {}
     }
-    if (cache.count("live_filter_limit")) {
+    if (want("live_filter_limit")) {
         try { GlobalState::LIVE_FILTER_LIMIT = std::stoul(cache.at("live_filter_limit")); } catch (...) {}
     }
 }
@@ -699,7 +714,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
         }
 
         ConfigCaches::g_configCache[key] = newVal;
-        applyConfigEffects(ConfigCaches::g_configCache);
+        applyConfigEffects(ConfigCaches::g_configCache, key);
 
         bool saved = flushCache(configPath);
 
