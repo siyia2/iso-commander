@@ -135,6 +135,15 @@ private:
 
 // --- Data Loading & List Display ---
 
+/// While an ISO select screen is active, projects its staged selection (held as
+/// paths) onto pendingIndices as source indices, merged into ranges, against the
+/// list as it is right now. Returns false when no select screen is active, so
+/// the caller manages its own pending state. Called by the ISO / mounted-ISO
+/// loaders right before they print.
+bool syncIsoPendingDisplay(std::vector<std::string>& pendingIndices,
+                           bool& hasPendingProcess,
+                           bool importRunning);
+
 /// Loads and displays the ISO list from the database / cache.
 bool loadAndDisplayIso(
     std::vector<std::string> &filteredFiles,
