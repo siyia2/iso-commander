@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <charconv>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdlib>
@@ -12,7 +13,9 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -65,13 +68,275 @@ inline void rewindToPromptRow() {
 
 } // namespace
 
+// ─── Pending selection (path-based) ──────────────────────────────────────────
+//
+// Staged ("pending") selections are stored as PATHS, not as index strings.
+// A path is stable across filter changes, filter clears, list refreshes and
+// re-sorts; an index is not. The index strings the UI shows
+// (RefreshState::pendingIndices, the "Pending Indices [P]" line) are only a
+// DISPLAY projection: loadAndDisplayIso / loadAndDisplayMountedISOs recompute
+// them from the paths (syncIsoPendingDisplay) against the final source list
+// right before every print, always as 1-based SOURCE indices, i.e. the same
+// numbers as the "n:m^" column, merged into ranges ("1-3 7 9-10").
+//
+//  - Staging ("3 5-9;"): bare numbers refer to what is on screen (the filtered
+//    view when a filter is active); a trailing '^' ("12^") refers to the
+//    source list directly. Each number is turned into a path immediately.
+//  - "P": the paths are resolved to source indices NOW, against the current
+//    source list, and the operation runs on the full source list. Paths that
+//    no longer exist are dropped.
+namespace {
+
+/// One parsed pending token: "N" or "A-B", with an optional trailing '^'.
+struct IndexToken {
+    size_t lo     = 0;
+    size_t hi     = 0;
+    bool   source = false;   // '^' suffix: indices refer to the source list
+};
+
+/// Parses "N", "A-B", "N^" or "A-B^" (1-based). Returns false for anything else.
+bool parseIndexToken(std::string_view tok, IndexToken& out) {
+    out = {};
+    if (!tok.empty() && tok.back() == '^') {
+        out.source = true;
+        tok.remove_suffix(1);
+    }
+    if (tok.empty()) return false;
+
+    const char* p = tok.data();
+    const char* e = p + tok.size();
+    size_t a = 0, b = 0;
+
+    auto r = std::from_chars(p, e, a);
+    if (r.ec != std::errc{} || a == 0) return false;
+    b = a;
+    if (r.ptr != e) {
+        if (*r.ptr != '-') return false;
+        r = std::from_chars(r.ptr + 1, e, b);
+        if (r.ec != std::errc{} || r.ptr != e || b == 0) return false;
+    }
+    if (a > b) std::swap(a, b);
+    out.lo = a;
+    out.hi = b;
+    return true;
+}
+
+/**
+ * @brief Maps staged paths to sorted, unique 1-based indices in @p source.
+ * @param prune If true, paths that are not in @p source are erased from
+ *              @p paths; otherwise @p paths is left untouched (display use,
+ *              where @p source may be momentarily stale).
+ */
+std::vector<size_t> resolveIndices(std::vector<std::string>& paths,
+                                   const std::vector<std::string>& source,
+                                   bool prune) {
+    std::unordered_map<std::string_view, size_t> indexOf;
+    indexOf.reserve(source.size());
+    for (size_t i = 0; i < source.size(); ++i)
+        indexOf.emplace(source[i], i + 1);            // first occurrence wins
+
+    std::vector<size_t> idx;
+    idx.reserve(paths.size());
+
+    if (prune) {
+        std::vector<std::string> kept;
+        kept.reserve(paths.size());
+        for (auto& p : paths) {
+            const auto it = indexOf.find(p);
+            if (it == indexOf.end()) continue;
+            idx.push_back(it->second);
+            kept.push_back(std::move(p));
+        }
+        paths = std::move(kept);
+    } else {
+        for (const auto& p : paths) {
+            const auto it = indexOf.find(p);
+            if (it != indexOf.end()) idx.push_back(it->second);
+        }
+    }
+
+    std::sort(idx.begin(), idx.end());
+    idx.erase(std::unique(idx.begin(), idx.end()), idx.end());
+    return idx;
+}
+
+/// {1,2,3,7,9,10} -> {"1-3","7","9-10"}
+std::vector<std::string> compressRuns(const std::vector<size_t>& idx) {
+    std::vector<std::string> out;
+    for (size_t i = 0; i < idx.size();) {
+        size_t j = i;
+        while (j + 1 < idx.size() && idx[j + 1] == idx[j] + 1) ++j;
+        out.push_back(i == j
+            ? std::to_string(idx[i])
+            : std::to_string(idx[i]) + "-" + std::to_string(idx[j]));
+        i = j + 1;
+    }
+    return out;
+}
+
+std::string joinTokens(const std::vector<std::string>& tokens) {
+    std::string s;
+    for (const auto& t : tokens) {
+        if (!s.empty()) s += ' ';
+        s += t;
+    }
+    return s;
+}
+
+/**
+ * @brief Stages semicolon-terminated selections ("3 5-9 12^;") as paths.
+ *
+ * Recognizes input containing a semicolon and no forward slash. Tokens before
+ * the first semicolon are expanded: bare numbers index @p viewList (what is on
+ * screen), numbers with a trailing '^' index @p sourceList. Out-of-range and
+ * non-numeric tokens are ignored. New paths are appended in the order given;
+ * paths already staged are not duplicated.
+ *
+ * @return true when the input is accepted as staging syntax (and the queue is
+ *         non-empty); false when it should go down the normal command path.
+ */
+bool stagePending(const std::string& inputString,
+                  std::vector<std::string>& paths,
+                  bool& hasPendingProcess,
+                  bool& needsClrScrn,
+                  const std::vector<std::string>& viewList,
+                  const std::vector<std::string>& sourceList) {
+    const size_t semi = inputString.find(';');
+    if (semi == std::string::npos || inputString.find('/') != std::string::npos)
+        return false;
+
+    std::istringstream iss(inputString.substr(0, semi));
+    std::unordered_set<std::string> seen(paths.begin(), paths.end());
+
+    std::string tok;
+    while (iss >> tok) {
+        IndexToken t;
+        if (!parseIndexToken(tok, t)) continue;
+
+        const std::vector<std::string>& list = t.source ? sourceList : viewList;
+        const size_t hi = std::min(t.hi, list.size());   // also bounds huge ranges
+        for (size_t n = t.lo; n <= hi; ++n) {
+            const std::string& path = list[n - 1];
+            if (seen.insert(path).second) paths.push_back(path);
+        }
+    }
+
+    if (paths.empty()) return false;
+    hasPendingProcess = true;
+    needsClrScrn = true;
+    return true;
+}
+
+/// Pending state of the ISO select screen. Main-thread only.
+struct IsoPending {
+    std::vector<std::string>        paths;
+    const std::vector<std::string>* source = nullptr;   // list the screen's source indices refer to
+};
+IsoPending g_isoPending;
+
+/// Owns g_isoPending for the lifetime of one selectForIsoFiles() call, so the
+/// loaders only treat pending as path-based while an ISO select screen is
+/// active (see syncIsoPendingDisplay).
+struct IsoPendingScope {
+    explicit IsoPendingScope(const std::vector<std::string>* source) {
+        g_isoPending.paths.clear();
+        g_isoPending.source = source;
+    }
+    ~IsoPendingScope() {
+        g_isoPending.paths.clear();
+        g_isoPending.source = nullptr;
+    }
+    IsoPendingScope(const IsoPendingScope&) = delete;
+    IsoPendingScope& operator=(const IsoPendingScope&) = delete;
+};
+
+} // namespace
+
+/**
+ * @brief Projects the staged ISO selection onto the display state
+ * (@p pendingIndices / @p hasPendingProcess) as 1-based SOURCE indices merged
+ * into ranges, for the "Pending Indices" line. Does not prune staged paths.
+ *
+ * Called by @c loadAndDisplayIso and @c loadAndDisplayMountedISOs right
+ * before they print (under @c updateListMutex), i.e. against the final,
+ * reloaded and sorted list. Every redraw path therefore shows correct
+ * numbers: loop redraws, resize repaints and asynchronous import refreshes.
+ *
+ * @param importRunning True while a background import is rebuilding the list;
+ *        the last good display is kept then.
+ * @return true if an ISO select screen owns the selection (the display state
+ *         is managed here); false if none is active, in which case the caller
+ *         handles its own pending state.
+ */
+bool syncIsoPendingDisplay(std::vector<std::string>& pendingIndices,
+                           bool& hasPendingProcess,
+                           bool importRunning) {
+    if (!g_isoPending.source) return false;
+    if (importRunning) return true;
+    // A momentarily empty source list right after an import is still being
+    // repopulated; keep the last good display. (Vanished paths are pruned by "P".)
+    if (g_isoPending.source->empty() && !g_isoPending.paths.empty()) return true;
+    pendingIndices =
+        compressRuns(resolveIndices(g_isoPending.paths, *g_isoPending.source, false));
+    hasPendingProcess = !pendingIndices.empty();
+    return true;
+}
+
+namespace {
+
+/// Implementation of processOperationForSelectedIsoFiles. When
+/// @p useSourceList is true the indices refer to the full source list even if
+/// a filter is active (used for "P", whose indices are source indices).
+void processOperationImpl(const std::string& inputString,
+                          bool& isFiltered,
+                          const std::vector<std::string>& filteredFiles,
+                          std::vector<std::string>& isoDirs,
+                          const std::string& operation,
+                          bool& umountMvRmBreak,
+                          bool& filterHistory,
+                          bool useSourceList) {
+
+    clearScrollBuffer();
+    bool verbose = false;
+
+    const bool isUnmount = (operation == "umount");
+    const std::vector<std::string>& sourceList =
+        isUnmount ? isoDirs : GlobalState::globalIsoFileList;
+    const std::vector<std::string>& activeList =
+        (isFiltered && !useSourceList) ? filteredFiles : sourceList;
+
+    if (operation == "mount" || isUnmount) {
+        if (isUnmount) umountMvRmBreak = true;
+        processInputForMountOrUmount(inputString, activeList, umountMvRmBreak, verbose, isUnmount);
+    } else if (operation == "write2usb") {
+        writeToUsb(inputString, activeList);
+    } else {
+        processInputForCpMvRm(inputString, activeList, operation, umountMvRmBreak, filterHistory, verbose);
+    }
+
+    handleSelectIsoFilesResults(operation, verbose, isFiltered, umountMvRmBreak);
+}
+
+/// Image caches the unfiltered list of a file type is restored from.
+const std::vector<std::string>* imageCacheFor(const std::string& fileType) {
+    if (fileType == "bin" || fileType == "img") return &GlobalState::binImgFilesCache;
+    if (fileType == "mdf") return &GlobalState::mdfMdsFilesCache;
+    if (fileType == "nrg") return &GlobalState::nrgFilesCache;
+    if (fileType == "chd") return &GlobalState::chdFilesCache;
+    if (fileType == "daa") return &GlobalState::daaGbiFilesCache;
+    return nullptr;
+}
+
+} // namespace
+
 /**
  * @brief Routes validated user input to the correct filesystem or mount
  * operation.
  *
  * Selects the active list (filtered files, global ISO files, or mounted
  * directories for unmount) and dispatches the input to the matching handler.
- * The caller manages list-view locking around the operation.
+ * The caller manages list-view locking around the operation. Indices in
+ * @p inputString refer to the filtered list when a filter is active.
  *
  * @param inputString      User input, typically indices or paths.
  * @param isFiltered       Updated if the operation invalidates the filter.
@@ -88,152 +353,9 @@ void processOperationForSelectedIsoFiles(const std::string& inputString,
                                          const std::string& operation,
                                          bool& umountMvRmBreak,
                                          bool& filterHistory) {
-
-    clearScrollBuffer();
-    bool verbose = false;
-    bool isUnmount = false;
-
-    if (operation == "mount" || operation == "umount") {
-        if (operation == "umount") isUnmount = true;
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles :
-                                                    (isUnmount ? isoDirs : GlobalState::globalIsoFileList);
-
-        if (operation == "umount") {
-            umountMvRmBreak = true;
-        }
-
-        processInputForMountOrUmount(inputString, activeList, umountMvRmBreak, verbose, isUnmount);
-    } else if (operation == "write2usb") {
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalState::globalIsoFileList;
-        writeToUsb(inputString, activeList);
-    } else {
-        const std::vector<std::string>& activeList = isFiltered ? filteredFiles : GlobalState::globalIsoFileList;
-        processInputForCpMvRm(inputString, activeList, operation, umountMvRmBreak, filterHistory, verbose);
-    }
-
-    handleSelectIsoFilesResults(operation, verbose, isFiltered, umountMvRmBreak);
+    processOperationImpl(inputString, isFiltered, filteredFiles, isoDirs, operation,
+                         umountMvRmBreak, filterHistory, /*useSourceList=*/false);
 }
-
-/**
- * @brief Parses and queues semicolon-delimited indices for batch processing.
- *
- * Recognizes input containing a semicolon and no forward slash, then appends
- * the tokens before the first semicolon to the pending queue. Existing and
- * newly supplied tokens are deduplicated; token validation occurs later when
- * the batch is dispatched.
- *
- * @param inputString           Raw Readline input.
- * @param[out] pendingIndices   Queue receiving unique tokens.
- * @param[out] hasPendingProcess Set when the queue is non-empty.
- * @param[out] needsClrScrn     Requests a redraw when the queue is updated.
- * @return true when the input is accepted as induction syntax; false when it
- *         should be handled by the normal command path.
- */
-bool handlePendingInduction(const std::string& inputString, std::vector<std::string>& pendingIndices, bool& hasPendingProcess, bool& needsClrScrn) {
-    if (inputString.find(';') == std::string::npos || inputString.find('/') != std::string::npos) {
-        return false;
-    }
-
-    std::string indicesInput = inputString.substr(0, inputString.find(';'));
-
-    while (!indicesInput.empty() && std::isspace(indicesInput.back())) {
-        indicesInput.pop_back();
-    }
-
-    if (!indicesInput.empty()) {
-        std::istringstream iss(indicesInput);
-        std::string token;
-        std::unordered_set<std::string> uniqueTokens;
-
-        for (const auto& index : pendingIndices) {
-            uniqueTokens.insert(index);
-        }
-
-        std::vector<std::string> newIndices;
-
-        while (iss >> token) {
-            if (uniqueTokens.find(token) == uniqueTokens.end()) {
-                newIndices.push_back(token);
-                uniqueTokens.insert(token);
-            }
-        }
-
-        pendingIndices.insert(pendingIndices.end(), newIndices.begin(), newIndices.end());
-
-        if (!pendingIndices.empty()) {
-            hasPendingProcess = true;
-            needsClrScrn = true;
-            return true;
-        }
-    }
-    return false;
-}
-
-
-/**
- * @brief Executes a batch operation by sanitizing and dispatching pending
- * indices.
- *
- * Handles the exact "P" command when a pending queue exists. For each token,
- * keeps only its leading numeric/range portion, joins the accepted portions
- * with spaces, and passes the result to the callback.
- *
- * @param inputString      User command; must be exactly "P".
- * @param pendingIndices   Staged tokens; not modified.
- * @param hasPendingProcess Whether a pending operation is recorded.
- * @param processBatch     Callback receiving the sanitized index string.
- * @return true if a non-empty batch was dispatched; false otherwise.
- */
-template <typename ProcessBatch>
-bool handlePendingProcess(const std::string& inputString,
-                          const std::vector<std::string>& pendingIndices,
-                          bool hasPendingProcess,
-                          ProcessBatch&& processBatch) {
-    if (inputString != "P" || !hasPendingProcess || pendingIndices.empty()) {
-        return false;
-    }
-
-    std::string combinedIndices;
-
-    for (const std::string& token : pendingIndices) {
-        if (token.empty() ||
-            !std::isdigit(static_cast<unsigned char>(token[0]))) {
-            continue;
-        }
-
-        size_t i = 0;
-
-        while (i < token.size() &&
-               std::isdigit(static_cast<unsigned char>(token[i]))) {
-            ++i;
-        }
-
-        while (i + 1 < token.size() &&
-               token[i] == '-' &&
-               std::isdigit(static_cast<unsigned char>(token[i + 1]))) {
-            ++i;
-
-            while (i < token.size() &&
-                   std::isdigit(static_cast<unsigned char>(token[i]))) {
-                ++i;
-            }
-        }
-
-        if (!combinedIndices.empty()) {
-            combinedIndices += ' ';
-        }
-
-        combinedIndices += token.substr(0, i);
-    }
-
-    if (combinedIndices.empty()) {
-        return false;
-    }
-
-    std::forward<ProcessBatch>(processBatch)(combinedIndices);
-    return true;
-}
-
 
 /**
  * @brief Background watcher that requests an ISO-list redraw after an import
@@ -253,6 +375,10 @@ bool handlePendingProcess(const std::string& inputString,
  * - **No direct Readline access:** only stores the target state and publishes
  *   @c PendingRefreshKind::IsoList; the redraw (including @c rl_on_new_line()
  *   and @c rl_redisplay()) happens later in @c checkPendingRefresh.
+ * - **Pending selection:** the watcher never touches the staged selection.
+ *   Staged paths survive the reload by construction; the index display is
+ *   recomputed by the loader on the main thread when it redraws (see
+ *   @c syncIsoPendingDisplay).
  * - **Indicator reset:** clears @c GlobalState::g_filteringIndicator so any
  *   active filter/sync status stops being displayed once the import/refresh
  *   flow finishes.
@@ -328,10 +454,16 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  *   import is running blocks the operation and sets
  *   @c GlobalState::g_filteringIndicator to @c true ("Filtering locked during
  *   sync") to notify the user.
- * - **Two-phase execution:** indices are staged into @c pendingIndices (a
- *   @c std::vector<std::string>) and executed in batch with the @c "P"
- *   command; @c "clr" discards the pending set. @c "P" with an empty pending
- *   set displays a warning and continues.
+ * - **Two-phase execution (path-based):** a selection typed with a trailing
+ *   semicolon ("3 5-9;") is staged as PATHS (@c g_isoPending). Bare numbers
+ *   are what is on screen (the filtered view when filtering); "n^" numbers are
+ *   source indices. The @c "P" command resolves the staged paths to source
+ *   indices at that moment, drops files that no longer exist, and runs the
+ *   operation against the full source list, so a selection staged under
+ *   different filters (or none) is always executed correctly. The
+ *   "Pending Indices" line shows the same source numbers as the "n:m^"
+ *   column, merged into ranges. @c "clr" discards the staged set; @c "P" with
+ *   nothing staged is a no-op.
  * - **Manual refresh:** pressing @c "R" (when not unmount, the ISO list is
  *   non-empty, and no import is running) spawns a background database import.
  *   Stale completed threads in @p backgroundThreads are joined and erased
@@ -401,6 +533,15 @@ void selectForIsoFiles(const std::string& operation,
     currentPage       = 0;
     originalPage      = 0;
 
+    const bool isUnmount = (operation == "umount");
+
+    // Staged selection starts empty on every entry; it is held as paths and
+    // projected into pendingIndices for display (see "Pending selection").
+    pendingIndices.clear();
+    IsoPendingScope pendingScope(isUnmount
+        ? static_cast<const std::vector<std::string>*>(&isoDirs)
+        : &GlobalState::globalIsoFileList);
+
     bool needsClrScrn  = true;
     bool filterHistory = false;
 
@@ -413,7 +554,6 @@ void selectForIsoFiles(const std::string& operation,
         operation == "umount"    ? UI::Palette::Yellow : UI::Palette::RL_BoldAlt
     );
 
-    const bool isUnmount = (operation == "umount");
     listSubtype = (operation == "mount") ? "mount" : (operation == "write2usb") ? "write2usb" : "cp_mv_rm";
 
     // --- RAII: isAtISOList state automatically managed ---
@@ -563,13 +703,14 @@ void selectForIsoFiles(const std::string& operation,
             }
         }
 
-        if (inputString == "P" && pendingIndices.empty()) {
+        if (inputString == "P" && g_isoPending.paths.empty()) {
             needsClrScrn = false;
             hasPendingProcess = false;
             continue;
         }
 
         if (inputString == "clr") {
+            g_isoPending.paths.clear();
             pendingIndices.clear();
             hasPendingProcess = false;
             needsClrScrn = true;
@@ -621,7 +762,16 @@ void selectForIsoFiles(const std::string& operation,
             continue;
         }
 
-        bool pendingHandled = handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn);
+        // Stage "3 5-9;" as paths. Bare numbers = what is on screen, "n^" = source index.
+        bool pendingHandled = false;
+        {
+            std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
+            const std::vector<std::string>& sourceList = *g_isoPending.source;
+            const std::vector<std::string>& viewList   = isFiltered ? filteredFiles : sourceList;
+            pendingHandled = stagePending(inputString, g_isoPending.paths,
+                                          hasPendingProcess, needsClrScrn,
+                                          viewList, sourceList);
+        }
         if (pendingHandled) continue;
 
         // --- RAII: atomic flag guard for the processing block ---
@@ -632,24 +782,27 @@ void selectForIsoFiles(const std::string& operation,
 
             needsClrScrn = true;
 
-            pendingExecuted = handlePendingProcess(
-                inputString,
-                pendingIndices,
-                hasPendingProcess,
-                [&](const std::string& combinedIndices) {
-                    processOperationForSelectedIsoFiles(
-                        combinedIndices,
-                        isFiltered,
-                        filteredFiles,
-                        isoDirs,
-                        operation,
-                        umountMvRmBreak,
-                        filterHistory);
-                });
-
-            if (!pendingExecuted) {
-                processOperationForSelectedIsoFiles(inputString, isFiltered, filteredFiles, isoDirs,
-                                                    operation, umountMvRmBreak, filterHistory);
+            if (inputString == "P") {
+                // Resolve staged paths to source indices NOW; drop vanished files.
+                std::string batch;
+                {
+                    std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
+                    batch = joinTokens(compressRuns(
+                        resolveIndices(g_isoPending.paths, *g_isoPending.source, true)));
+                }
+                pendingExecuted = true;
+                if (batch.empty()) {
+                    pendingIndices.clear();
+                    hasPendingProcess = false;
+                } else {
+                    processOperationImpl(batch, isFiltered, filteredFiles, isoDirs,
+                                         operation, umountMvRmBreak, filterHistory,
+                                         /*useSourceList=*/true);
+                }
+            } else {
+                processOperationImpl(inputString, isFiltered, filteredFiles, isoDirs,
+                                     operation, umountMvRmBreak, filterHistory,
+                                     /*useSourceList=*/false);
             }
         }
         // isAtISOList automatically restored here.
@@ -685,9 +838,12 @@ void selectForIsoFiles(const std::string& operation,
  *   for this file type and the original page) if a filter is active,
  *   otherwise resets the page and returns to the caller. The @c R key is
  *   unbound because this prompt has no manual refresh.
- * - **Two-phase execution:** indices are staged into @p pendingIndices and
- *   executed with @c "P" (or dispatched directly when the input is not batch
- *   syntax). Verbose output, when enabled, is printed after each dispatch.
+ * - **Two-phase execution (path-based):** "3 5-9;" is staged as paths. Bare
+ *   numbers are what is on screen, "n^" numbers are indices into the
+ *   unfiltered list. "P" resolves the paths to indices of the unfiltered list
+ *   and converts against it; an active filter stays in place. The pending line
+ *   shows the unfiltered-list numbers. Verbose output, when enabled, is printed after
+ *   each dispatch.
  *
  * @param fileType  "bin", "img", "mdf", "nrg", "chd", or "daa".
  * @param files     The image file list being filtered/selected; updated in
@@ -706,7 +862,8 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
 
-    std::vector<std::string> pendingIndices;
+    std::vector<std::string> pendingIndices;      // display projection only
+    std::vector<std::string> pendingPaths;        // the real staged selection
     bool hasPendingProcess = false;
 
     size_t currentPage = 0;
@@ -745,6 +902,30 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         fileExtensionWithOutDots = "FILES";
     }
 
+    // The unfiltered list for this file type (what ESC restores). While a
+    // filter is active, source indices ("n^") refer to this list.
+    const std::vector<std::string>* const cache = imageCacheFor(fileType);
+
+    // Source list: the cache while filtered, otherwise `files` itself.
+    auto sourceList = [&]() -> const std::vector<std::string>& {
+        return (isFiltered && cache) ? *cache : files;
+    };
+
+    // Recomputes the "Pending Indices" display from the staged paths.
+    auto syncPendingDisplay = [&] {
+        pendingIndices = compressRuns(resolveIndices(pendingPaths, sourceList(), false));
+        hasPendingProcess = !pendingIndices.empty();
+    };
+
+    // Same restore as ESC: back to the full list for this file type.
+    auto restoreUnfilteredList = [&] {
+        if (cache) files = *cache;
+        isFiltered = false;
+        filteringStack.clear();
+        currentPage = originalPage;
+        need2Sort = false;
+    };
+
     while (true) {
         clearGlobalVerboseSets();
         enable_ctrl_d();
@@ -760,6 +941,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         // Position the cursor on the prompt row (see the invariant note at the
         // top of this file).
         if (needsClrScrn) {
+            syncPendingDisplay();
             loadAndDisplayImageFiles(files, fileType, need2Sort, isFiltered, list,
                                      pendingIndices, hasPendingProcess, currentPage,
                                      state);
@@ -791,6 +973,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
         // resize from re-sorting the list.
         auto repaintList = [&] {
             bool sortNow = false;
+            syncPendingDisplay();
             loadAndDisplayImageFiles(files, fileType, sortNow, isFiltered, list,
                                      pendingIndices, hasPendingProcess, currentPage,
                                      state);
@@ -819,22 +1002,8 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             clearScrollBuffer();
             if (isFiltered) {
                 // Restore original unfiltered file list.
-                if (fileType == "bin" || fileType == "img") {
-                    files = GlobalState::binImgFilesCache;
-                } else if (fileType == "mdf") {
-                    files = GlobalState::mdfMdsFilesCache;
-                } else if (fileType == "nrg") {
-                    files = GlobalState::nrgFilesCache;
-                } else if (fileType == "chd") {
-                    files = GlobalState::chdFilesCache;
-                } else if (fileType == "daa") {
-                    files = GlobalState::daaGbiFilesCache;
-                }
+                restoreUnfilteredList();
                 needsClrScrn = true;
-                isFiltered = false;
-                filteringStack.clear();
-                currentPage = originalPage;
-                need2Sort = false;
                 continue;
             } else {
                 currentPage = 0;
@@ -843,13 +1012,14 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             }
         }
 
-        if (inputString == "P" && pendingIndices.empty()) {
+        if (inputString == "P" && pendingPaths.empty()) {
             hasPendingProcess = false;
             needsClrScrn = false;
             continue;
         }
 
         if (inputString == "clr") {
+            pendingPaths.clear();
             pendingIndices.clear();
             hasPendingProcess = false;
             needsClrScrn = true;
@@ -884,23 +1054,35 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 
         if (validCommand) continue;
 
-        if (handlePendingProcess(
-                inputString,
-                pendingIndices,
-                hasPendingProcess,
-                [&](const std::string& combinedIndices) {
-                    processInputForConversions(
-                        combinedIndices,
-                        files,
-                        fileType == "mdf",
-                        fileType == "nrg",
-                        fileType == "chd",
-                        fileType == "daa",
-                        verbose);
-                })) {
-            keybindingGuard.restore();
+        if (inputString == "P") {
+            // The staged selection is source indices of the FULL list, so P
+            // runs against it. processInputForConversions only reads the list,
+            // so while filtered we hand it a copy of the cache and leave the
+            // active filter (and `files`) untouched.
+            std::vector<std::string> fullList;
+            if (isFiltered && cache) fullList = *cache;
+            std::vector<std::string>& target = (isFiltered && cache) ? fullList : files;
 
+            const std::string batch = joinTokens(compressRuns(
+                resolveIndices(pendingPaths, target, true)));   // drops vanished files
             needsClrScrn = true;
+
+            if (batch.empty()) {
+                pendingIndices.clear();
+                hasPendingProcess = false;
+                continue;
+            }
+
+            processInputForConversions(
+                batch,
+                target,
+                fileType == "mdf",
+                fileType == "nrg",
+                fileType == "chd",
+                fileType == "daa",
+                verbose);
+
+            keybindingGuard.restore();
 
             if (verbose) {
                 verbosePrint(verboseSets.uniqueErrorTokenMessages,
@@ -921,7 +1103,9 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
             continue;
         }
         else if (inputString.find(';') != std::string::npos) {
-            if (handlePendingInduction(inputString, pendingIndices, hasPendingProcess, needsClrScrn)) {
+            // Bare numbers = what is on screen (`files`), "n^" = unfiltered list.
+            if (stagePending(inputString, pendingPaths, hasPendingProcess, needsClrScrn,
+                             files, sourceList())) {
                 continue;
             }
         }
