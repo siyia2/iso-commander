@@ -858,7 +858,11 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         prevStartupHook = nullptr;
         prefillText.clear();
 
-        if (!deviceInput || deviceInput.get()[0] == '\0') {
+        if (!deviceInput) {
+            return {};
+        }
+
+        if (deviceInput.get()[0] == '\0') {
             continue;
         }
 
