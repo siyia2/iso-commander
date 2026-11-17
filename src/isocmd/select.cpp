@@ -289,7 +289,7 @@ namespace {
 /// Implementation of processOperationForSelectedIsoFiles. When
 /// @p useSourceList is true the indices refer to the full source list even if
 /// a filter is active (used for "P", whose indices are source indices).
-void processOperationImpl(const std::string& inputString,
+void processOperation(const std::string& inputString,
                           bool& isFiltered,
                           const std::vector<std::string>& filteredFiles,
                           std::vector<std::string>& isoDirs,
@@ -769,12 +769,12 @@ void selectForIsoFiles(const std::string& operation,
                     pendingIndices.clear();
                     hasPendingProcess = false;
                 } else {
-                    processOperationImpl(batch, isFiltered, filteredFiles, isoDirs,
+                    processOperation(batch, isFiltered, filteredFiles, isoDirs,
                                          operation, umountMvRmBreak, filterHistory,
                                          /*useSourceList=*/true);
                 }
             } else {
-                processOperationImpl(inputString, isFiltered, filteredFiles, isoDirs,
+                processOperation(inputString, isFiltered, filteredFiles, isoDirs,
                                      operation, umountMvRmBreak, filterHistory,
                                      /*useSourceList=*/false);
             }
