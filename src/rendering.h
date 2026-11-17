@@ -350,49 +350,97 @@ private:
 using RlLine = std::unique_ptr<char, decltype(&std::free)>;
 
 /**
- * @brief @c readline() wrapped in a @ref ListResizeWatcher.
+ * @brief Wraps @c readline() with an optional @ref ListResizeWatcher and
+ *        temporary Tab-completion control.
  *
  * Runs @p repaint (on the calling thread, from Readline's idle hook) whenever
  * the terminal size changes while the prompt waits. The watcher is stopped
  * and the previous @c rl_event_hook restored before this returns.
  *
- * Readline's own SIGWINCH handling (@c rl_catch_sigwinch) is DISABLED for the
+ * Readline's own SIGWINCH handling (@c rl_catch_sigwinch) is disabled for the
  * watcher's lifetime and restored before this returns. The watcher already
  * redraws on resize; leaving Readline's built-in SIGWINCH handler enabled
  * makes it call @c rl_resize_terminal() -> @c rl_forced_update_display() ->
  * @c rl_redisplay_function() on the same event, racing the watcher's redraw
- * and painting the prompt twice (most visibly when the repaint callback does
- * direct terminal I/O that leaves Readline's internal cursor bookkeeping
- * stale, e.g. a full @c printList() repaint). The previous value is restored
- * on every exit path, including exceptions from the watcher constructor (the
- * @c SigwinchGuard RAII object below).
+ * and potentially painting the prompt twice. The previous value is restored
+ * on every exit path, including exceptions from the watcher constructor.
  *
- * @param prompt  Prompt passed to @c readline() (may contain \001/\002 markers).
- * @param repaint Repaint callback (see @ref ListResizeWatcher for the contract).
- *                Empty means a plain @c readline() with no watcher installed.
- * @return The line read (freed by the returned pointer), or null on EOF (Ctrl+D).
+ * Optionally disables Tab completion for the duration of the Readline call.
+ * When enabled, Tab does not invoke completion or display matching entries.
+ * The previous Tab key binding and @c rl_attempted_completion_function are
+ * saved and automatically restored afterward, leaving other Readline prompts
+ * unaffected.
+ *
+ * If @p repaint is empty, no resize watcher is installed, but Tab-completion
+ * control is still applied when requested.
+ *
+ * @param prompt               Prompt passed to @c readline() (may contain
+ *                             \001/\002 markers).
+ * @param repaint              Repaint callback (see @ref ListResizeWatcher
+ *                             for the contract). Empty means no resize watcher.
+ * @param disableTabCompletion Set to true to temporarily disable Tab completion;
+ *                             defaults to false.
+ *
+ * @return The line read (freed by the returned pointer), or null on EOF
+ *         (Ctrl+D).
  */
-inline RlLine readlineWithResize(const std::string& prompt,
-                                 ListResizeWatcher::Repaint repaint = nullptr) {
+inline RlLine readlineWithResize(
+    const std::string& prompt,
+    ListResizeWatcher::Repaint repaint = nullptr,
+    bool disableTabCompletion = false) {
     RlLine line(nullptr, &std::free);
+
+    // Save and restore the Tab binding and completion callbacks.
+    struct TabCompletionGuard {
+        Keymap keymap;
+        rl_command_func_t* tabBinding;
+        rl_completion_func_t* attemptedCompletion;
+
+        TabCompletionGuard()
+            : keymap(rl_get_keymap()),
+              tabBinding(rl_function_of_keyseq("\t", keymap, nullptr)),
+              attemptedCompletion(rl_attempted_completion_function) {}
+
+        ~TabCompletionGuard() {
+            rl_attempted_completion_function = attemptedCompletion;
+            rl_bind_key_in_map('\t', tabBinding, keymap);
+        }
+
+        TabCompletionGuard(const TabCompletionGuard&) = delete;
+        TabCompletionGuard& operator=(const TabCompletionGuard&) = delete;
+    };
+
+    std::unique_ptr<TabCompletionGuard> tabGuard;
+
+    if (disableTabCompletion) {
+        tabGuard = std::make_unique<TabCompletionGuard>();
+
+        rl_attempted_completion_function = nullptr;
+        rl_bind_key('\t', [](int, int) -> int {
+            return 0;
+        });
+    }
+
     if (!repaint) {
         line.reset(readline(prompt.c_str()));
         return line;
     }
 
-    // Suppress Readline's own SIGWINCH redraw for the watcher's lifetime so a
-    // resize triggers exactly one redraw (the watcher's). Restore on every
-    // exit path, including if the watcher constructor throws.
     struct SigwinchGuard {
         int saved;
-        SigwinchGuard() : saved(rl_catch_sigwinch) { rl_catch_sigwinch = 0; }
-        ~SigwinchGuard() { rl_catch_sigwinch = saved; }
-        SigwinchGuard(const SigwinchGuard&)            = delete;
+        SigwinchGuard() : saved(rl_catch_sigwinch) {
+            rl_catch_sigwinch = 0;
+        }
+        ~SigwinchGuard() {
+            rl_catch_sigwinch = saved;
+        }
+        SigwinchGuard(const SigwinchGuard&) = delete;
         SigwinchGuard& operator=(const SigwinchGuard&) = delete;
     } guard;
 
-    ListResizeWatcher watcher(std::move(repaint));   // stopped when this scope ends
+    ListResizeWatcher watcher(std::move(repaint));
     line.reset(readline(prompt.c_str()));
+
     return line;
 }
 
