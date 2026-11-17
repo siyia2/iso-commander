@@ -478,7 +478,7 @@ void processInputForConversions(const std::string& input,
         ? std::string(UI::Palette::BoldReset)
         : std::string(theme->muted);
 
-    std::string suffix = (totalTasks > 1 ? " tasks" : " task");
+    std::string suffix = (totalTasks > 1 ? "tasks" : "task");
     std::string operation;
     if (modeMdf)      operation = std::string(UI::Palette::Orange) + "mdf2iso" + std::string(color);
     else if (modeNrg) operation = std::string(UI::Palette::Orange) + "nrg2iso" + std::string(color);
