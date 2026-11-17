@@ -302,14 +302,24 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
         const std::string finalPrompt = promptPrefix + promptSuffix;
 
         // Resize repaint: the page, then any header line(s) the prompt carries
-        // before its last '\n' (empty for the delete prompt). The watcher then
-        // prints the newline and Readline redraws the last prompt line and the
-        // typed input. The page is not advanced and setupEnvironmentFn is not
-        // re-run.
+        // before its last '\n' (empty for the delete prompt). The watcher's contract
+        // is that this callback ends one line short of the prompt's input line; the
+        // watcher then prints the newline and Readline redraws the last prompt line
+        // and the typed input.
+        //
+        // The completion listing saves/restores an absolute cursor position
+        // (ESC[s / ESC[u), so it must run with the cursor ON the input line, exactly
+        // as in the normal path. We therefore step down onto that line first
+        // ("\n"), repaint the listing, then step back up ("\033[A") so the watcher's
+        // own '\n' lands correctly. If no listing is saved, the repaint is a no-op
+        // and the down/up pair cancels out.
+        //
+        // The page is not advanced and setupEnvironmentFn is not re-run.
         const auto repaint = [&] {
             drawPage(false);
-            std::cout << promptHeaderForRepaint(finalPrompt);
-            repaintCompletionListing();
+            std::cout << promptHeaderForRepaint(finalPrompt) << "\n";  // onto the input line, like the normal path
+            repaintCompletionListing();                                // saves/restores at the input line
+            std::cout << "\033[A";                                     // back up; the watcher prints the '\n'
         };
 
         RlLine input = readlineWithResize(

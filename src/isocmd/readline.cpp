@@ -31,6 +31,9 @@
 static int current_page = 0;
 static char last_common_prefix[1024] = "";
 
+// Defined below (after clear_screen_and_buffer); also declared in readline.h.
+int clear_list_and_screen(int, int);
+
 /**
  * @brief List of available special commands for completion.
  */
@@ -88,14 +91,16 @@ char** my_special_completion_entry(const char* text, int start, int end) {
 }
 
 /**
- * @brief Rebinds Esc to @c clear_screen_and_buffer while a completion list is shown.
+ * @brief Rebinds Esc to @c clear_list_and_screen while a completion list is shown.
  *
  * A first Esc after a completion list clears/repaints, and a second Esc
  * exits. This applies to every prompt that uses @c my_rl_complete, including
- * the Settings Editor's value prompt.
+ * the Settings Editor's value prompt. @c clear_list_and_screen drops the
+ * repaint snapshot before the screen is redrawn, so the Settings Editor's
+ * repaint callback cannot redraw the list that is being dismissed.
  */
 static void install_esc_hijack() {
-    rl_bind_keyseq("\\e", clear_screen_and_buffer);
+    rl_bind_keyseq("\\e", clear_list_and_screen);
 }
 
 /**
@@ -480,6 +485,10 @@ void renderCompletionListing(
  *
  * The listing is only repainted while the input line and cursor position
  * still match the state at which the completion list was displayed.
+ *
+ * @note The listing saves/restores an absolute cursor position
+ *       (ESC[s / ESC[u), so callers must invoke this with the cursor on the
+ *       prompt's input line (see the repaint callbacks).
  */
 void repaintCompletionListing() {
     if (!lastCompletion.valid)
@@ -741,8 +750,10 @@ char** completion_cb(const char* text, int start, int end) {
  * Clears the current page counter, the cached common prefix used to
  * detect the start of a new completion session, and the saved completion
  * repaint snapshot (@c lastCompletion). Called by @c completion_cb at the start
- * of each completion attempt (inline reset), and after a screen wipe via
- * @c clear_screen_and_buffer and @c my_rl_complete.
+ * of each completion attempt (inline reset), after a screen wipe via
+ * @c clear_screen_and_buffer and @c my_rl_complete, and at the top of the
+ * Settings Editor's per-setting loop so a snapshot from a previous prompt
+ * can never be repainted on a different screen.
  */
 void resetReadlinePagination() {
     current_page = 0;
@@ -796,6 +807,13 @@ int prevent_readline_keybindings(int, int) {
  * Readline is asked to redraw. Pagination state and the last completion
  * snapshot are then reset.
  *
+ * @note The snapshot is cleared only AFTER the repaint hook runs. A caller
+ *       that wants a visible completion list dismissed (Esc, or Ctrl+L in the
+ *       Settings Editor) must drop the snapshot first; use
+ *       @c clear_list_and_screen for that. @c my_rl_complete calls this
+ *       function directly on purpose, so a list shown together with an
+ *       inserted common prefix is still repainted by the hook.
+ *
  * When @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode is active, the
  * current input line is captured, Readline is forced to exit its loop, and the
  * completion mode flag is cleared so a subsequent loop iteration can restore
@@ -840,6 +858,29 @@ int clear_screen_and_buffer(int, int) {
 }
 
 /**
+ * @brief Clears the screen and dismisses any visible completion list.
+ *
+ * Drops the repaint snapshot first, then delegates to
+ * @c clear_screen_and_buffer. Without this, the Settings Editor's repaint
+ * callback (invoked by @c clear_screen_and_buffer via
+ * @c SettingsEditorRepaint::g_fn) would call @c repaintCompletionListing()
+ * while the snapshot is still valid and redraw the very list being dismissed.
+ *
+ * Bound to Esc while a list is shown (see @c install_esc_hijack) and to
+ * Ctrl+L in the Settings Editor's value prompt. The search prompt keeps
+ * @c clear_screen_and_buffer on Ctrl+L, since its repaint path never goes
+ * through @c g_fn.
+ *
+ * @param a Unused numeric argument, forwarded.
+ * @param b Unused invoking key, forwarded.
+ * @return Always 0.
+ */
+int clear_list_and_screen(int a, int b) {
+    lastCompletion.clear();
+    return clear_screen_and_buffer(a, b);
+}
+
+/**
  * @brief TAB-completion handler that extends @c rl_complete with pagination reset
  * and custom directory formatting.
  *
@@ -850,7 +891,7 @@ int clear_screen_and_buffer(int, int) {
  * scroll buffer.
  *
  * When a completion list is displayed, Esc is rebound to
- * @c clear_screen_and_buffer (see @c install_esc_hijack): the first Esc
+ * @c clear_list_and_screen (see @c install_esc_hijack): the first Esc
  * clears/repaints the list and restores the default binding, and a second Esc
  * exits. This applies to every prompt using this handler, including the
  * Settings Editor value prompt.

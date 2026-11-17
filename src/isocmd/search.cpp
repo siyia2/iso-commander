@@ -258,8 +258,9 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             const auto repaintPrompt = [&] {
                 SyncOutput sync;
                 clearScrollBuffer();
-                std::cout << promptHeaderForRepaint(prompt);
-                repaintCompletionListing();
+                std::cout << promptHeaderForRepaint(prompt) << "\n";  // now on the input line, like the normal path
+                repaintCompletionListing();                           // saves/restores at the input line
+                std::cout << "\033[A";                                // back to end of header; watcher prints the '\n'
             };
 
             std::string typedLine;
@@ -1057,8 +1058,9 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         const auto repaintPrompt = [&] {
             SyncOutput sync;
             clearScrollBuffer();
-            std::cout << promptHeaderForRepaint(prompt);
-            repaintCompletionListing();
+            std::cout << promptHeaderForRepaint(prompt) << "\n";  // now on the input line, like the normal path
+            repaintCompletionListing();                           // saves/restores at the input line
+            std::cout << "\033[A";                                // back to end of header; watcher prints the '\n'
         };
 
         // What the user typed on the prompt line, set right after readline

@@ -780,10 +780,27 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
 
     auto drawEdit = [&] {
         drawEditScreen(key, current, tc, entry, validValues, isNumeric, pos, total, pendingErrors);
+    };
+
+    // Resize / Ctrl+L repaint. The watcher's contract is that this callback
+    // ends one line short of the prompt's input line. The completion listing
+    // saves/restores an absolute cursor position (ESC[s / ESC[u), so it must
+    // run with the cursor ON the input line, exactly as in the normal path:
+    // step down onto it, repaint the listing, then step back up so the
+    // watcher's own '\n' lands correctly.
+    auto repaintEditOnResize = [&] {
+        drawEdit();
+        std::cout << "\n";
         repaintCompletionListing();
+        std::cout << "\033[A";
     };
 
     while (true) {
+        // Drop any completion snapshot / page state left over from a previous
+        // prompt (skipped setting, invalid value, PgUp/PgDn/g#), so a resize
+        // on this screen can never repaint another screen's list.
+        resetReadlinePagination();
+
         rl_bind_keyseq("\\e", exit_handler);
         if (total > 1) {
             rl_bind_keyseq("\\e[5~", pgup_handler);
@@ -794,7 +811,9 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
         rl_attempted_completion_function = isNumeric ? nullptr : setting_value_completion_entry;
         rl_completion_display_matches_hook = customListingsFunction;
         rl_bind_key('\t', isNumeric ? noop_tab_handler : my_rl_complete);
-        rl_bind_key('\f', clear_screen_and_buffer);
+        // Ctrl+L dismisses a visible completion list (drops the snapshot
+        // before the repaint callback runs) and repaints the screen.
+        rl_bind_key('\f', clear_list_and_screen);
 
         drawEdit();
         std::cout << "\n";
@@ -804,7 +823,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
             UI::Palette::idxGreen, tc.path, UI::Palette::Yellow, tc.path, tc.reset
         );
 
-        RlLine rawInput = readlineWithRepaint(prompt, drawEdit);
+        RlLine rawInput = readlineWithRepaint(prompt, repaintEditOnResize);
 
         armPendingInputRestore();
         rl_startup_hook = nullptr;
