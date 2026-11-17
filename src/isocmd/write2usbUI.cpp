@@ -560,8 +560,6 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 void helpMappings();
 void displayErrors();
 
-// Terminal rendering helpers are implemented in write2usbUIRendering.cpp.
-
 /**
  * @brief Interactive loop that collects and validates ISO-to-device mappings
  * from the user.
