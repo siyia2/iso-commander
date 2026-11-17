@@ -204,30 +204,139 @@ static void LzmaDec_Init(CLzmaDec *p) {
 #define kMatchMinLen           2
 
 /**
- * FIXED LZMA DECODER
+ * FIXED LZMA DECODER (Low CCN Refactor)
  * Supports volumes > 4GB and fixes Double-Free crashes.
  */
+
+static u32 lzma_decode_len(CLzmaDec *p, CLzmaProb *prob, u32 posState) {
+    u32 ttt, bound, sym;
+    CLzmaProb *pc = prob;
+
+    ttt = *pc;
+    bound = (p->range >> kNumBitModelTotalBits) * ttt;
+    if (p->code < bound) {
+        p->range = bound;
+        ttt += (kBitModelTotal - ttt) >> kNumMoveBits;
+        *pc = (CLzmaProb)ttt;
+        NORMALIZE;
+        pc = prob + 1 + (posState << kLenNumLowBits);
+        TREE_DECODE(pc, kLenNumLowSymbols, sym);
+        return sym;
+    }
+
+    p->range -= bound;
+    p->code -= bound;
+    ttt -= ttt >> kNumMoveBits;
+    *pc = (CLzmaProb)ttt;
+    NORMALIZE;
+
+    pc = prob + 1 + (kNumPosStatesMax << kLenNumLowBits);
+    ttt = *pc;
+    bound = (p->range >> kNumBitModelTotalBits) * ttt;
+    if (p->code < bound) {
+        p->range = bound;
+        ttt += (kBitModelTotal - ttt) >> kNumMoveBits;
+        *pc = (CLzmaProb)ttt;
+        NORMALIZE;
+        pc = prob + 1 + (kNumPosStatesMax << kLenNumLowBits) + 1 + (posState << kLenNumMidBits);
+        TREE_DECODE(pc, kLenNumMidSymbols, sym);
+        return kLenNumLowSymbols + sym;
+    }
+
+    p->range -= bound;
+    p->code -= bound;
+    ttt -= ttt >> kNumMoveBits;
+    *pc = (CLzmaProb)ttt;
+    NORMALIZE;
+
+    pc = prob + 1 + (kNumPosStatesMax << kLenNumLowBits) + 1 + (kNumPosStatesMax << kLenNumMidBits);
+    TREE_DECODE(pc, kLenNumHighSymbols, sym);
+    return kLenNumLowSymbols + kLenNumMidSymbols + sym;
+}
+
+static size_t lzma_decode_distance(CLzmaDec *p, CLzmaProb *probs, int len) {
+    u32 posSlot;
+    int numDirectBits;
+    u32 distance;
+    unsigned lenState = (unsigned)(len < kNumLenToBitModelTotal - 1 ? len : kNumLenToBitModelTotal - 1);
+    CLzmaProb *prob = probs + PosSlot + (lenState << 6);
+
+    TREE_DECODE(prob, 1 << 6, posSlot);
+
+    if (posSlot < 4) {
+        distance = posSlot;
+    } else {
+        numDirectBits = (int)(((posSlot >> 1) - 1));
+        distance = (2 | (posSlot & 1));
+        if (posSlot < 14) {
+            distance <<= numDirectBits;
+            prob = probs + SpecPos + distance - posSlot - 1;
+            u32 mask = 1;
+            distance += mask;
+            for (int i = numDirectBits - 1; i >= 4; i--) {
+                u32 tt2 = *(prob + (distance >> 1));
+                u32 bd = (p->range >> kNumBitModelTotalBits) * tt2;
+                if (p->code < bd) {
+                    p->range = bd;
+                    tt2 += (kBitModelTotal - tt2) >> kNumMoveBits;
+                    *(prob + (distance >> 1)) = (CLzmaProb)tt2;
+                    NORMALIZE;
+                } else {
+                    p->range -= bd;
+                    p->code -= bd;
+                    tt2 -= tt2 >> kNumMoveBits;
+                    *(prob + (distance >> 1)) = (CLzmaProb)tt2;
+                    NORMALIZE;
+                    distance |= mask;
+                }
+                mask <<= 1;
+                distance <<= 1;
+            }
+            prob = probs + Align;
+            distance <<= 4;
+            u32 sym2 = 1;
+            for (int i = 0; i < 4; i++) { TREE_GET_BIT(prob, sym2); }
+            distance |= sym2 & 0xF;
+        } else {
+            numDirectBits -= 4;
+            u32 directBitsResult = 0;
+            for (int i = numDirectBits - 1; i >= 0; i--) {
+                p->range >>= 1;
+                if (p->code >= p->range) {
+                    p->code -= p->range;
+                    directBitsResult |= (1 << i);
+                }
+                NORMALIZE;
+            }
+            distance = ((distance << numDirectBits) | directBitsResult) << 4;
+            prob = probs + Align;
+            u32 sym2 = 1;
+            for (int i = 0; i < 4; i++) { TREE_GET_BIT(prob, sym2); }
+            distance |= sym2 & 0xF;
+        }
+    }
+    return (size_t)distance + 1;
+}
+
 static size_t lzma_decode_full(CLzmaDec *p, const u8 *in, size_t insz, u8 *out, size_t outsz) {
     // Basic Initialization
-    p->dic        = out;
-    p->dicBufSize = outsz;
-    p->dicPos     = 0;
-    p->buf        = in;
-    p->code       = 0;
-    p->range      = 0xFFFFFFFF;
+    p->dic         = out;
+    p->dicBufSize  = outsz;
+    p->dicPos      = 0;
+    p->buf         = in;
+    p->code        = 0;
+    p->range       = 0xFFFFFFFF;
 
     // Load first 5 bytes
     for (int i = 0; i < 5; i++) p->code = (p->code << 8) | (*p->buf++);
     (void)insz;
 
     unsigned state = 0;
-    // Must be size_t. In a 4.5GB file, the distance back (rep) can exceed 2^32.
     size_t rep0 = 1, rep1 = 1, rep2 = 1, rep3 = 1;
     int len = 0;
     CLzmaProb *probs = p->probs;
 
     for (;;) {
-        // Safe check for buffer bounds
         if (p->dicPos >= p->dicBufSize) return p->dicPos;
 
         u32 posState = (u32)((size_t)p->dicPos & ((1 << p->pb) - 1));
@@ -250,7 +359,6 @@ static size_t lzma_decode_full(CLzmaDec *p, const u8 *in, size_t insz, u8 *out, 
 
             u32 symbol = 1;
             if (state >= 7) {
-                // Use size_t for dictionary offset math to prevent 4GB wraparound
                 size_t dicPos2 = (p->dicPos >= rep0) ? (p->dicPos - rep0) : (p->dicPos + p->dicBufSize - rep0);
                 u8 matchByte = p->dic[dicPos2];
                 do {
@@ -281,111 +389,35 @@ static size_t lzma_decode_full(CLzmaDec *p, const u8 *in, size_t insz, u8 *out, 
         prob = probs + IsRep + state;
         ttt = *prob;
         bound = (p->range >> kNumBitModelTotalBits) * ttt;
+
         if (p->code < bound) {
             p->range = bound;
             ttt += (kBitModelTotal - ttt) >> kNumMoveBits; *prob = (CLzmaProb)ttt;
             NORMALIZE;
 
             rep3 = rep2; rep2 = rep1; rep1 = rep0;
-            prob = probs + LenCoder;
-            // Length decoding logic...
-            {
-                CLzmaProb *pc = prob;
-                u32 sym;
-                ttt = *pc; bound = (p->range >> kNumBitModelTotalBits) * ttt;
-                if (p->code < bound) {
-                    p->range = bound; ttt += (kBitModelTotal-ttt)>>kNumMoveBits; *pc=(CLzmaProb)ttt; NORMALIZE;
-                    pc = prob + 1 + (posState << kLenNumLowBits);
-                    TREE_DECODE(pc, kLenNumLowSymbols, sym);
-                    len = sym;
-                } else {
-                    p->range -= bound; p->code -= bound; ttt -= ttt>>kNumMoveBits; *pc=(CLzmaProb)ttt; NORMALIZE;
-                    pc = prob + 1 + (kNumPosStatesMax << kLenNumLowBits);
-                    ttt = *pc; bound = (p->range>>kNumBitModelTotalBits)*ttt;
-                    if (p->code < bound) {
-                        p->range = bound; ttt+=(kBitModelTotal-ttt)>>kNumMoveBits; *pc=(CLzmaProb)ttt; NORMALIZE;
-                        pc = prob + 1 + (kNumPosStatesMax << kLenNumLowBits) + 1 + (posState << kLenNumMidBits);
-                        TREE_DECODE(pc, kLenNumMidSymbols, sym);
-                        len = kLenNumLowSymbols + sym;
-                    } else {
-                        p->range -= bound; p->code -= bound; ttt-=ttt>>kNumMoveBits; *pc=(CLzmaProb)ttt; NORMALIZE;
-                        pc = prob + 1 + (kNumPosStatesMax<<kLenNumLowBits) + 1 + (kNumPosStatesMax<<kLenNumMidBits);
-                        TREE_DECODE(pc, kLenNumHighSymbols, sym);
-                        len = kLenNumLowSymbols + kLenNumMidSymbols + sym;
-                    }
-                }
-            }
+            len = (int)lzma_decode_len(p, probs + LenCoder, posState);
             state = (state < 7) ? 7 : 10;
 
-            // Distance decoding logic...
-            {
-                u32 posSlot;
-                int numDirectBits;
-                u32 distance;
-                unsigned lenState = (unsigned)(len < kNumLenToBitModelTotal-1 ? len : kNumLenToBitModelTotal-1);
-                prob = probs + PosSlot + (lenState << 6);
-                TREE_DECODE(prob, 1 << 6, posSlot);
-
-                if (posSlot < 4) {
-                    distance = posSlot;
-                } else {
-                    numDirectBits = (int)(((posSlot >> 1) - 1));
-                    distance = (2 | (posSlot & 1));
-                    if (posSlot < 14) {
-                        distance <<= numDirectBits;
-                        prob = probs + SpecPos + distance - posSlot - 1;
-                        u32 mask = 1;
-                        distance += mask;
-                        for (int i = numDirectBits - 1; i >= 4; i--) {
-                            u32 tt2 = *(prob + (distance >> 1));
-                            u32 bd = (p->range>>kNumBitModelTotalBits)*tt2;
-                            if (p->code < bd) {
-                                p->range = bd; tt2+=(kBitModelTotal-tt2)>>kNumMoveBits; *(prob+(distance>>1))=(CLzmaProb)tt2; NORMALIZE;
-                                distance |= 0;
-                            } else {
-                                p->range -= bd; p->code -= bd; tt2-=tt2>>kNumMoveBits; *(prob+(distance>>1))=(CLzmaProb)tt2; NORMALIZE;
-                                distance |= mask;
-                            }
-                            mask <<= 1;
-                            distance <<= 1;
-                        }
-                        prob = probs + Align;
-                        distance <<= 4;
-                        u32 sym2 = 1;
-                        for (int i = 0; i < 4; i++) { TREE_GET_BIT(prob, sym2); }
-                        distance |= sym2 & 0xF;
-                    } else {
-                        numDirectBits -= 4;
-                        u32 directBitsResult = 0;
-                        for (int i = numDirectBits - 1; i >= 0; i--) {
-                            p->range >>= 1;
-                            if (p->code >= p->range) { p->code -= p->range; directBitsResult |= (1 << i); }
-                            NORMALIZE;
-                        }
-                        distance = ((distance << numDirectBits) | directBitsResult) << 4;
-                        prob = probs + Align;
-                        u32 sym2 = 1;
-                        for (int i = 0; i < 4; i++) { TREE_GET_BIT(prob, sym2); }
-                        distance |= sym2 & 0xF;
-                    }
-                }
-                rep0 = (size_t)distance + 1; // Cast to size_t
-                if (rep0 == 0) return p->dicPos;
-            }
+            rep0 = lzma_decode_distance(p, probs, len);
+            if (rep0 == 0) return p->dicPos;
         } else {
-            // Repetition handling...
             p->range -= bound; p->code -= bound;
-            ttt -= ttt>>kNumMoveBits; *prob=(CLzmaProb)ttt;
+            ttt -= ttt >> kNumMoveBits; *prob = (CLzmaProb)ttt;
             NORMALIZE;
 
             prob = probs + IsRepG0 + state;
-            ttt = *prob; bound = (p->range>>kNumBitModelTotalBits)*ttt;
+            ttt = *prob; bound = (p->range >> kNumBitModelTotalBits) * ttt;
+
             if (p->code < bound) {
-                p->range = bound; ttt+=(kBitModelTotal-ttt)>>kNumMoveBits; *prob=(CLzmaProb)ttt; NORMALIZE;
+                p->range = bound; ttt += (kBitModelTotal - ttt) >> kNumMoveBits; *prob = (CLzmaProb)ttt;
+                NORMALIZE;
                 prob = probs + IsRep0Long + (state << kNumPosBitsMax) + posState;
-                ttt = *prob; bound = (p->range>>kNumBitModelTotalBits)*ttt;
+                ttt = *prob; bound = (p->range >> kNumBitModelTotalBits) * ttt;
+
                 if (p->code < bound) {
-                    p->range = bound; ttt+=(kBitModelTotal-ttt)>>kNumMoveBits; *prob=(CLzmaProb)ttt; NORMALIZE;
+                    p->range = bound; ttt += (kBitModelTotal - ttt) >> kNumMoveBits; *prob = (CLzmaProb)ttt;
+                    NORMALIZE;
                     if (p->dicPos == 0 && p->checkDicSize == 0) return 0;
                     size_t srcPos = (p->dicPos >= rep0) ? (p->dicPos - rep0) : (p->dicPos + p->dicBufSize - rep0);
                     if (p->dicPos >= p->dicBufSize) return p->dicPos;
@@ -394,25 +426,32 @@ static size_t lzma_decode_full(CLzmaDec *p, const u8 *in, size_t insz, u8 *out, 
                     state = (state < 7) ? 9 : 11;
                     continue;
                 } else {
-                    p->range -= bound; p->code -= bound; ttt-=ttt>>kNumMoveBits; *prob=(CLzmaProb)ttt; NORMALIZE;
+                    p->range -= bound; p->code -= bound; ttt -= ttt >> kNumMoveBits; *prob = (CLzmaProb)ttt;
+                    NORMALIZE;
                 }
             } else {
                 size_t distance;
-                p->range -= bound; p->code -= bound; ttt-=ttt>>kNumMoveBits; *prob=(CLzmaProb)ttt; NORMALIZE;
+                p->range -= bound; p->code -= bound; ttt -= ttt >> kNumMoveBits; *prob = (CLzmaProb)ttt;
+                NORMALIZE;
                 prob = probs + IsRepG1 + state;
-                ttt = *prob; bound = (p->range>>kNumBitModelTotalBits)*ttt;
+                ttt = *prob; bound = (p->range >> kNumBitModelTotalBits) * ttt;
+
                 if (p->code < bound) {
-                    p->range = bound; ttt+=(kBitModelTotal-ttt)>>kNumMoveBits; *prob=(CLzmaProb)ttt; NORMALIZE;
+                    p->range = bound; ttt += (kBitModelTotal - ttt) >> kNumMoveBits; *prob = (CLzmaProb)ttt;
+                    NORMALIZE;
                     distance = rep1;
                 } else {
-                    p->range -= bound; p->code -= bound; ttt-=ttt>>kNumMoveBits; *prob=(CLzmaProb)ttt; NORMALIZE;
+                    p->range -= bound; p->code -= bound; ttt -= ttt >> kNumMoveBits; *prob = (CLzmaProb)ttt;
+                    NORMALIZE;
                     prob = probs + IsRepG2 + state;
-                    ttt = *prob; bound = (p->range>>kNumBitModelTotalBits)*ttt;
+                    ttt = *prob; bound = (p->range >> kNumBitModelTotalBits) * ttt;
                     if (p->code < bound) {
-                        p->range = bound; ttt+=(kBitModelTotal-ttt)>>kNumMoveBits; *prob=(CLzmaProb)ttt; NORMALIZE;
+                        p->range = bound; ttt += (kBitModelTotal - ttt) >> kNumMoveBits; *prob = (CLzmaProb)ttt;
+                        NORMALIZE;
                         distance = rep2;
                     } else {
-                        p->range -= bound; p->code -= bound; ttt-=ttt>>kNumMoveBits; *prob=(CLzmaProb)ttt; NORMALIZE;
+                        p->range -= bound; p->code -= bound; ttt -= ttt >> kNumMoveBits; *prob = (CLzmaProb)ttt;
+                        NORMALIZE;
                         distance = rep3;
                         rep3 = rep2;
                     }
@@ -422,33 +461,7 @@ static size_t lzma_decode_full(CLzmaDec *p, const u8 *in, size_t insz, u8 *out, 
                 rep0 = distance;
             }
 
-            prob = probs + RepLenCoder;
-            {
-                CLzmaProb *pc = prob;
-                u32 sym;
-                ttt = *pc; bound = (p->range>>kNumBitModelTotalBits)*ttt;
-                if (p->code < bound) {
-                    p->range = bound; ttt+=(kBitModelTotal-ttt)>>kNumMoveBits; *pc=(CLzmaProb)ttt; NORMALIZE;
-                    pc = prob + 1 + (posState << kLenNumLowBits);
-                    TREE_DECODE(pc, kLenNumLowSymbols, sym);
-                    len = sym;
-                } else {
-                    p->range -= bound; p->code -= bound; ttt-=ttt>>kNumMoveBits; *pc=(CLzmaProb)ttt; NORMALIZE;
-                    pc = prob + 1 + (kNumPosStatesMax << kLenNumLowBits);
-                    ttt = *pc; bound = (p->range>>kNumBitModelTotalBits)*ttt;
-                    if (p->code < bound) {
-                        p->range = bound; ttt+=(kBitModelTotal-ttt)>>kNumMoveBits; *pc=(CLzmaProb)ttt; NORMALIZE;
-                        pc = prob + 1 + (kNumPosStatesMax<<kLenNumLowBits) + 1 + (posState<<kLenNumMidBits);
-                        TREE_DECODE(pc, kLenNumMidSymbols, sym);
-                        len = kLenNumLowSymbols + sym;
-                    } else {
-                        p->range -= bound; p->code -= bound; ttt-=ttt>>kNumMoveBits; *pc=(CLzmaProb)ttt; NORMALIZE;
-                        pc = prob + 1 + (kNumPosStatesMax<<kLenNumLowBits) + 1 + (kNumPosStatesMax<<kLenNumMidBits);
-                        TREE_DECODE(pc, kLenNumHighSymbols, sym);
-                        len = kLenNumLowSymbols + kLenNumMidSymbols + sym;
-                    }
-                }
-            }
+            len = (int)lzma_decode_len(p, probs + RepLenCoder, posState);
             state = (state < 7) ? 8 : 11;
         }
 
@@ -458,9 +471,8 @@ static size_t lzma_decode_full(CLzmaDec *p, const u8 *in, size_t insz, u8 *out, 
         if (rep0 > p->dicPos + p->checkDicSize) return 0;
         while (len--) {
             if (p->dicPos >= p->dicBufSize) break;
-            // size_t calculation for huge buffers
             size_t srcPos = (p->dicPos >= rep0) ? (p->dicPos - rep0)
-                                              : (p->dicPos + p->dicBufSize - rep0);
+                                                : (p->dicPos + p->dicBufSize - rep0);
             p->dic[p->dicPos++] = p->dic[srcPos];
             p->processedPos++;
         }
