@@ -182,8 +182,8 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
             "   " + std::string(UI::Palette::BoldReset) + "• " + std::string(tc.keysBlue) + "'PgDn'|'PgUp'|'g#' " + std::string(UI::Palette::BoldReset) + ": Pagination Next|Previous|GoTo page"
         );
         printSection(tc, "\n4. Tips:",
-            "   • Indices^ refer to the original unfiltered list\n"
-            "   • Pending indices always refer to the source list\n"
+            "   • Indices^ always refer to the source list\n"
+            "   • Pending indices are always shown as source indices\n"
             "   • Filtering spans all pages and is incremental");
     };
 
