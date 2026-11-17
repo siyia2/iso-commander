@@ -574,8 +574,8 @@ static void showMountSummary(bool silentMode, bool showVerbose,
             std::cout << msg << UI::Palette::BoldReset << "\n";
 
         std::cout << "\nMount summary:\n"
-                  << "  Successful: " << completedTasks.load() << "\n"
-                  << "  Failed:     " << failedTasks.load()
+                  << " Successful: " << completedTasks.load() << "\n"
+                  << " Failed:     " << failedTasks.load()
                   << UI::Palette::Reset << "\n\n";
     }
 }
@@ -953,8 +953,8 @@ static int executeUnmounts(const std::unordered_set<std::string>& mountPoints,
             std::cout << msg << UI::Palette::BoldReset << "\n";
 
         std::cout << "\nUnmount summary:\n"
-                  << "  Successful: " << completedTasks.load() << "\n"
-                  << "  Failed:     " << failedTasks.load()
+                  << " Successful: " << completedTasks.load() << "\n"
+                  << " Failed:     " << failedTasks.load()
                   << UI::Palette::Reset << "\n\n";
     }
 
@@ -1282,8 +1282,8 @@ static int handleConvert(const ParsedArgs& args) {
             std::cout << msg << UI::Palette::BoldReset << "\n";
 
         std::cout << "\nConversion summary:\n"
-                  << "  Successful: " << completedTasks.load() << "\n"
-                  << "  Failed:     " << failedTasks.load()
+                  << " Successful: " << completedTasks.load() << "\n"
+                  << " Failed:     " << failedTasks.load()
                   << UI::Palette::Reset << "\n\n";
     }
 
