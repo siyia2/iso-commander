@@ -1,0 +1,1497 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// C++ Standard Library Headers
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <cctype>
+#include <cerrno>
+#include <condition_variable>
+#include <cstdint>
+#include <cstdlib>
+#include <cstddef>
+#include <cstring>
+#include <filesystem>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <random>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
+// C / System Headers
+#include <fcntl.h>
+#include <linux/fs.h>
+#include <spawn.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+// Third-Party Library Headers
+#include <libmount/libmount.h>
+#include <blkid/blkid.h>
+
+// Project Headers
+#include "../state.h"
+#include "../write2usbUI.h"
+#include "../write2usb.h"
+
+namespace fs = std::filesystem;
+
+/**
+ * @brief Runs an external command with stdout/stderr suppressed.
+ *
+ * Uses posix_spawn instead of fork()+exec() to avoid duplicating the
+ * calling process's threads, held locks, or memory state into the child.
+ * fork() in a multithreaded process only carries the calling thread
+ * forward — if another thread held e.g. glibc's malloc arena lock or a
+ * libmount/libblkid internal lock at the moment of fork(), the child can
+ * deadlock on its very first allocation before exec() ever replaces it.
+ * posix_spawn sidesteps this entirely since no such fork-without-exec
+ * window exists.
+ *
+ * @param args Argument vector where args[0] is the executable name.
+ * @return Exit code of the child process, or -1 on spawn/wait failure.
+ */
+int runCommand(const std::vector<std::string>& args) {
+    if (args.empty()) return -1;
+
+    std::vector<char*> argv;
+    argv.reserve(args.size() + 1);
+    for (const auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
+    argv.push_back(nullptr);
+
+    posix_spawn_file_actions_t fileActions;
+    if (posix_spawn_file_actions_init(&fileActions) != 0) return -1;
+
+    int devNull = open("/dev/null", O_WRONLY);
+    if (devNull < 0) {
+        posix_spawn_file_actions_destroy(&fileActions);
+        return -1;
+    }
+
+    posix_spawn_file_actions_adddup2(&fileActions, devNull, STDOUT_FILENO);
+    posix_spawn_file_actions_adddup2(&fileActions, devNull, STDERR_FILENO);
+    posix_spawn_file_actions_addclose(&fileActions, devNull);
+
+    // Fixed, trusted search path for privileged helper binaries — deliberately
+    // NOT the inherited `environ`, whose PATH could be attacker-influenced
+    // (e.g. via sudo/pkexec with preserved env, or a less-trusted parent).
+    // Covers the standard sbin/bin split across major distros (Debian/Ubuntu,
+    // Fedora/RHEL, Arch's merged-/usr layout) without hardcoding a single
+    // absolute binary path.
+    static char trustedPath[] =
+        "PATH=/usr/sbin:/usr/bin:/sbin:/bin";
+    char* const spawnEnv[] = { trustedPath, nullptr };
+
+    pid_t pid;
+    int rc = posix_spawnp(&pid, argv[0], &fileActions, nullptr,
+                            argv.data(), spawnEnv);
+
+    posix_spawn_file_actions_destroy(&fileActions);
+    close(devNull);
+
+    if (rc != 0) return -1;
+
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) return -1;
+    return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+}
+
+/**
+ * @brief Probes /sys/module to determine the best available write-capable
+ * NTFS kernel driver currently active on the host platform.
+ *
+ * Evaluates system capabilities via sysfs, ensuring compatibility with both
+ * dynamically loaded kernel modules (.ko) and drivers built directly into the
+ * kernel core. Uses a lazy-loading strategy: check for pre-initialized
+ * drivers first, and only run userspace modprobe for lower priority/fallback
+ * tiers if necessary.
+ *
+ * Following the modern NTFS driver overhaul in Linux 7.1+, this function
+ * prioritizes the heavily optimized "ntfs" driver rewrite, which entirely
+ * supersedes the legacy read-only engine. It falls back to Paragon's "ntfs3"
+ * driver if running on older kernels (like 5.15 through 6.x) where the
+ * modern remake is unavailable.
+ *
+ * @note Because modern Linux distributions frequently symlink userspace
+ * binaries or default to older FUSE wrappers, downstream mounting logic
+ * should pass the internal flag ("mount", "-i", "-t", driver, ...) when using
+ * the returned token. This bypasses userspace mount helpers and forces the
+ * VFS subsystem to invoke the designated kernel module directly.
+ *
+ * Driver priority tiering:
+ * 1. "ntfs"  via Kernel 7.1+ (modernized native read/write engine) — highest
+ *    priority.
+ * 2. "ntfs3" via Kernel 5.15+ (Paragon engine) — fallback.
+ *
+ * @return Token name of the detected NTFS kernel driver ("ntfs" or "ntfs3"),
+ *         or an empty string if no modern write-capable driver is available.
+ */
+std::string getBestNtfsDriver() {
+    if (std::filesystem::exists("/sys/module/ntfs")) {
+        return "ntfs";
+    }
+
+    runCommand({"modprobe", "ntfs"});
+    if (std::filesystem::exists("/sys/module/ntfs")) {
+        return "ntfs";
+    }
+
+    runCommand({"modprobe", "ntfs3"});
+    if (std::filesystem::exists("/sys/module/ntfs3")) {
+        return "ntfs3";
+    }
+
+    return {};
+}
+
+/**
+ * @brief Erase all filesystem/partition signatures on @p device.
+ *
+ * Equivalent to `wipefs -a <device>`. Uses libblkid's probe-and-wipe loop
+ * so no child process is spawned.
+ *
+ * @param device Block device path (e.g. "/dev/sdb").
+ * @return true on success (including the case where no signatures were
+ *         found).
+ */
+static bool wipeDeviceSignatures(const std::string& device)
+{
+    blkid_probe pr = blkid_new_probe_from_filename(device.c_str());
+    if (!pr) return false;
+
+    blkid_probe_enable_superblocks(pr, true);
+    blkid_probe_set_superblocks_flags(pr,
+        BLKID_SUBLKS_MAGIC | BLKID_SUBLKS_TYPE);
+
+    blkid_probe_enable_partitions(pr, true);
+    blkid_probe_set_partitions_flags(pr, BLKID_PARTS_MAGIC);
+
+    // Loop until no more signatures are found.
+    // blkid_do_probe() returns 0 while signatures remain, 1 when done.
+    while (blkid_do_probe(pr) == 0)
+        blkid_do_wipe(pr, false /* not dry-run */);
+
+    blkid_free_probe(pr);
+    return true;
+}
+
+/**
+ * @brief Mount @p src at @p target using libmnt_context.
+ *
+ * @param src     Source path or device (may be nullptr for bind/move mounts).
+ * @param target  Mount point (must already exist).
+ * @param options Comma-separated mount options string (e.g. "ro,loop").
+ *                Pass nullptr or "" for no extra options.
+ * @param fstype  Filesystem type override (e.g. "ntfs3").
+ *                Pass nullptr to let the kernel auto-detect.
+ * @param flags   Extra libmount context flags (e.g. MNT_MS_PROPAGATION).
+ *                Pass 0 for the common case.
+ * @return 0 on success, non-zero on failure.
+ */
+static int libMount(const char* src,
+                    const char* target,
+                    const char* options = nullptr,
+                    const char* fstype  = nullptr,
+                    int         flags   = 0)
+{
+    libmnt_context* ctx = mnt_new_context();
+    if (!ctx) return -1;
+
+    if (src)     mnt_context_set_source(ctx, src);
+    if (target)  mnt_context_set_target(ctx, target);
+    if (options && *options)
+                 mnt_context_append_options(ctx, options);
+    if (fstype && *fstype)
+                 mnt_context_set_fstype(ctx, fstype);
+    (void)flags; // reserved for caller convenience
+
+    int rc = mnt_context_mount(ctx);
+    mnt_free_context(ctx);
+    return rc;
+}
+
+/**
+ * @brief Performs a controlled unmount using a persistent libmount context.
+ *
+ * Handles the full lifecycle of an unmount. By reusing the context, it
+ * ensures flags like MNT_DETACH and LOOPDEL are applied consistently, even
+ * if an initial standard unmount fails.
+ *
+ * @param path The mount point or device path to unmount.
+ */
+void safeUmount(const char* path) {
+    libmnt_context* ctx = mnt_new_context();
+    if (!ctx) return;
+
+    mnt_context_set_target(ctx, path);
+    mnt_context_enable_loopdel(ctx, true);
+
+    // Cancellation: bypass a standard unmount and go straight to lazy
+    // detachment for immediate release.
+    if (GlobalState::g_operationCancelled.load()) {
+        mnt_context_enable_lazy(ctx, true);
+    }
+
+    // If the plain unmount reports the device is busy, force a lazy
+    // detachment and retry on the same context.
+    if (mnt_context_umount(ctx) != 0) {
+        mnt_context_enable_lazy(ctx, true);
+        mnt_context_umount(ctx);
+    }
+
+    mnt_free_context(ctx);
+}
+
+/**
+ * @brief Detects whether an ISO image is Windows installation media.
+ *
+ * Loop-mounts the ISO read-only into a temporary directory and checks for
+ * the co-presence of sources/boot.wim (Windows setup payload) and
+ * bootmgr / bootmgr.efi (Windows boot manager). Uses libmount instead of
+ * forking mount/umount processes.
+ *
+ * @param isoPath Absolute path to the ISO image.
+ * @return true if the ISO appears to be Windows installation media.
+ */
+bool isWindowsIso(const std::string& isoPath)
+{
+    char tmpDir[] = "/tmp/iso_probe_XXXXXX";
+    if (!mkdtemp(tmpDir)) return false;
+
+    auto cleanup = [&]() {
+        safeUmount(tmpDir);
+        rmdir(tmpDir);
+    };
+
+    if (libMount(isoPath.c_str(), tmpDir, "ro,loop") != 0) {
+        rmdir(tmpDir);
+        return false;
+    }
+
+    bool hasBootWim = fs::exists(std::string(tmpDir) + "/sources/boot.wim");
+    bool hasBootMgr = fs::exists(std::string(tmpDir) + "/bootmgr") ||
+                      fs::exists(std::string(tmpDir) + "/bootmgr.efi");
+    cleanup();
+    return hasBootWim && hasBootMgr;
+}
+
+/**
+ * @brief Sleeps for a randomized backoff interval, waking early on cancel.
+ *
+ * The delay is @p baseMs plus a uniformly random jitter of 0-100% of
+ * @p baseMs, so the result lies in [baseMs, 2 * baseMs]. Jitter keeps
+ * concurrent jobs that failed on the same shared resource (free loop device,
+ * busy udev) from retrying in lockstep and colliding again.
+ *
+ * The wait is split into 50 ms slices that poll the cancellation flag, so a
+ * cancel during the backoff is noticed within ~50 ms. On cancel the function
+ * returns early; callers detect the cancel at the top of their next loop
+ * iteration.
+ *
+ * Each thread has its own random generator, seeded from std::random_device,
+ * so concurrent jobs draw independent delays.
+ *
+ * @param baseMs Minimum delay in milliseconds (the jitter is added on top).
+ */
+static void sleepWithJitter(int baseMs)
+{
+    static thread_local std::mt19937 rng{std::random_device{}()};
+    const int total = baseMs + std::uniform_int_distribution<int>(0, baseMs)(rng);
+
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(total);
+    while (std::chrono::steady_clock::now() < end) {
+        if (GlobalState::g_operationCancelled.load()) return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+}
+
+/**
+ * @brief Runs an external command, retrying on failure.
+ *
+ * Retries absorb transient failures caused by other system activity (udev
+ * re-probing the disk, boot-time services holding the device), which
+ * typically clear within a second or two.
+ *
+ * Between attempts the delay grows linearly with the attempt number and is
+ * jittered (see sleepWithJitter): ~500-1000 ms after the first failure,
+ * ~1000-2000 ms after the second. Cancellation is checked before every
+ * attempt and during every backoff. The time each failed attempt itself
+ * takes is not included in these figures.
+ *
+ * @param args        Argument vector where args[0] is the executable name.
+ * @param attempts    Maximum number of attempts (default 3).
+ * @param baseDelayMs Base backoff in milliseconds, multiplied by the attempt
+ *                    number (default 500).
+ * @return 0 on success, -1 if cancelled, otherwise the exit code of the last
+ *         attempt.
+ */
+static int runCommandRetry(const std::vector<std::string>& args,
+                           int attempts    = 3,
+                           int baseDelayMs = 500)
+{
+    int rc = -1;
+    for (int i = 0; i < attempts; ++i) {
+        if (GlobalState::g_operationCancelled.load()) return -1;
+
+        rc = runCommand(args);
+        if (rc == 0) return 0;
+
+        if (i + 1 < attempts)
+            sleepWithJitter(baseDelayMs * (i + 1));
+    }
+    return rc;
+}
+
+/**
+ * @brief libMount() with the same retry and jittered backoff as
+ *        runCommandRetry().
+ *
+ * Mainly guards the ISO loop mount against transient failures such as
+ * loop-device contention with other boot-time services or concurrent jobs.
+ * Parameters match libMount(), plus the retry settings.
+ *
+ * @param attempts    Maximum number of attempts (default 3).
+ * @param baseDelayMs Base backoff in milliseconds, multiplied by the attempt
+ *                    number (default 500).
+ * @return 0 on success, -1 if cancelled, otherwise the return code of the
+ *         last mount attempt.
+ */
+static int libMountRetry(const char* src, const char* target,
+                         const char* options = nullptr,
+                         const char* fstype  = nullptr,
+                         int attempts    = 3,
+                         int baseDelayMs = 500)
+{
+    int rc = -1;
+    for (int i = 0; i < attempts; ++i) {
+        if (GlobalState::g_operationCancelled.load()) return -1;
+
+        rc = libMount(src, target, options, fstype);
+        if (rc == 0) return 0;
+
+        if (i + 1 < attempts)
+            sleepWithJitter(baseDelayMs * (i + 1));
+    }
+    return rc;
+}
+
+/**
+ * @brief Mounts an NTFS partition through a specific kernel driver, with
+ *        retry and jittered backoff.
+ *
+ * Builds a fresh libmnt_context on every attempt, so no state from a failed
+ * attempt carries over. Mount helpers are disabled so the VFS invokes the
+ * named kernel driver directly (see getBestNtfsDriver()).
+ *
+ * @param src         NTFS partition node (e.g. "/dev/sdb2").
+ * @param target      Existing mount point.
+ * @param fstype      Kernel driver token ("ntfs" or "ntfs3").
+ * @param attempts    Maximum number of attempts (default 3).
+ * @param baseDelayMs Base backoff in milliseconds (default 500).
+ * @return 0 on success, -1 if cancelled, otherwise the return code of the
+ *         last attempt.
+ */
+static int libMountNtfsRetry(const char* src, const char* target,
+                             const char* fstype,
+                             int attempts    = 3,
+                             int baseDelayMs = 500)
+{
+    int rc = -1;
+    for (int i = 0; i < attempts; ++i) {
+        if (GlobalState::g_operationCancelled.load()) return -1;
+
+        libmnt_context* ctx = mnt_new_context();
+        if (ctx) {
+            mnt_context_set_source(ctx, src);
+            mnt_context_set_target(ctx, target);
+            mnt_context_set_fstype(ctx, fstype);
+            mnt_context_append_options(ctx, "noatime");
+            mnt_context_disable_helpers(ctx, true);
+            rc = mnt_context_mount(ctx);
+            mnt_free_context(ctx);
+        } else {
+            rc = -1;
+        }
+        if (rc == 0) return 0;
+
+        if (i + 1 < attempts)
+            sleepWithJitter(baseDelayMs * (i + 1));
+    }
+    return rc;
+}
+
+/** Layout variants that drive partitioning and copy strategy. */
+enum class IsoType { WindowsInstall, FatOnly };
+
+/**
+ * @brief Classify a mounted ISO as a full Windows install or FAT-only boot
+ *        disk.
+ *
+ * Presence of sources/install.wim or sources/install.esd is the canonical
+ * indicator of a Windows install image. WinPE, Hiren's Boot CD, and other
+ * rescue disks lack these files and are treated as FatOnly.
+ *
+ * @param isoMnt Mount point of the loop-mounted ISO (read-only).
+ * @return WindowsInstall if an install payload is found, FatOnly otherwise.
+ */
+static IsoType detectIsoType(const std::string& isoMnt) {
+    return (fs::exists(isoMnt + "/sources/install.wim") ||
+            fs::exists(isoMnt + "/sources/install.esd"))
+               ? IsoType::WindowsInstall
+               : IsoType::FatOnly;
+}
+
+/**
+ * @brief Checks if a block device is accessible and ready for I/O
+ *        operations.
+ *
+ * Attempts to open the device node in read-only and non-blocking mode. This
+ * effectively tests if the kernel has fully registered the block device and
+ * that it is not currently locked or in an invalid state.
+ *
+ * @param path The filesystem path to the device node (e.g., "/dev/sdb1").
+ * @return true if the device can be opened successfully.
+ * @return false if the device does not exist, access is denied, or it is
+ *         busy.
+ */
+bool isDeviceReady(const std::string& path) {
+    int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK);
+    if (fd == -1) return false;
+    close(fd);
+    return true;
+}
+
+/**
+ * @brief Waits for a device node to appear and become ready within a
+ *        specified timeout.
+ *
+ * Performs an informed poll by checking for the existence of the device node
+ * and verifying its readiness via isDeviceReady(). Provides an
+ * init-agnostic alternative to `udevadm settle` or `udevadm wait`.
+ *
+ * @param path            The filesystem path to the device node to wait for.
+ * @param timeout_seconds The maximum duration to wait in seconds (default 30).
+ * @return true if the device node is found and is ready for use within the
+ *         timeout.
+ * @return false if the timeout is reached before the device is ready.
+ */
+bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
+    auto start = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - start < std::chrono::seconds(timeout_seconds)) {
+        if (fs::exists(path) && fs::is_block_file(path)) {
+            if (isDeviceReady(path)) return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    return false;
+}
+
+/**
+ * @brief Write a Windows-family ISO image to a block device using a hybrid
+ * I/O model.
+ *
+ * The ISO is loop-mounted read-only, the target device is wiped and
+ * repartitioned, and the ISO contents are copied file by file onto freshly
+ * formatted filesystems.
+ *
+ * Partitioning is chosen automatically by ISO type (see detectIsoType):
+ * - **WindowsInstall** — GPT with two partitions:
+ *    1. ESP, 1 MiB to 1025 MiB (1 GiB), FAT32, label WINBOOT. Holds the
+ *       top-level efi/ and boot/ folders and sources/boot.wim (matched
+ *       case-insensitively).
+ *    2. DATA, 1025 MiB to end of device, NTFS, label WINDATA. Holds
+ *       everything else, including files in the ISO root.
+ * - **FatOnly** (WinPE, Hiren's, rescue disks) — GPT with a single FAT32
+ *   partition (label WINPE) spanning 1 MiB to the end of the device. All
+ *   files go to this partition.
+ *
+ * Partition node names are derived as @c device + N (e.g. /dev/sdb1).
+ * Devices whose partition nodes need a @c p separator (/dev/nvme0n1,
+ * /dev/mmcblk0) are not supported. Each node is awaited with waitForDevice
+ * (30 s timeout) to ride out udev re-scan delays.
+ *
+ * @par Mounting
+ * - The ISO is mounted ro,loop; FAT32 with noatime; NTFS through the driver
+ *   chosen by getBestNtfsDriver, with noatime and mount helpers disabled.
+ *
+ * @par Symlinks
+ * - Symlinks found in the ISO walk are silently skipped, not copied and not
+ *   counted toward the byte total. This prevents a malicious ISO (Rock
+ *   Ridge/UDF) from using a link to read arbitrary host files and write them
+ *   to the device. Anything that exists in the ISO only as a symlink will be
+ *   absent from the result.
+ *
+ * @par I/O strategy per file
+ * - FAT32 destination files use unbuffered Direct I/O (O_DIRECT) to bypass
+ *   the Linux page cache. The final chunk is zero-padded to the configured
+ *   alignment before writing, then the file is ftruncate'd to its actual
+ *   source size. Padding is never counted as progress.
+ * - NTFS destination files use buffered I/O, copied using a manual
+ *   read/write loop. Files of at least FALLOCATE_MIN_SIZE (1 MiB) are
+ *   pre-allocated with posix_fallocate (its result is ignored). Smaller
+ *   files are not pre-allocated, since per-file allocation overhead dominates
+ *   for the thousands of small files in a Windows image.
+ * - Copy order is NTFS payload first, then ESP, so the bootloader only lands
+ *   after the data it references is already on disk. (FatOnly has no NTFS
+ *   pass.)
+ *
+ * @par Double buffering
+ * - Two aligned I/O buffers of the same size (4 MiB, see "Sector alignment")
+ *   are used as ping-pong slots. For a file larger than one buffer, a
+ *   short-lived reader thread fills one slot from the ISO while the calling
+ *   thread writes the other slot to the device, so ISO reads and device
+ *   writes overlap. The reader runs at most one slot ahead of the writer.
+ * - Files that fit in a single buffer are copied entirely on the calling
+ *   thread using the first buffer. Starting a thread per tiny file would
+ *   cost more than overlap could save, so there is no read/write overlap
+ *   across file boundaries.
+ * - The writer is the only thread that touches the destination file, file
+ *   offsets, and progress counters. The reader only reads from the ISO file
+ *   and publishes filled slots under a mutex.
+ * - On any writer failure or cancellation, the reader is told to stop and is
+ *   always joined before the file descriptors are closed. A read error or
+ *   cancellation in the reader fails the file after any already-published
+ *   slot has been written.
+ *
+ * @par Data integrity and short I/O
+ * - Short read() results mid-file are not treated as EOF: each read loop
+ *   accumulates data until the buffer is full or read() returns 0. EINTR is
+ *   retried on reads and writes.
+ * - A zero-byte write is treated as a hard failure rather than retried,
+ *   preventing an infinite loop if the destination stops making progress.
+ * - Writes use pwrite() with explicit file offsets. The offset advances only
+ *   after the current chunk has been written completely, allowing a chunk to
+ *   be retried from its original offset without relying on the descriptor's
+ *   implicit file position.
+ * - On the O_DIRECT path, a positive write result that is not a multiple of
+ *   the configured sector-size alignment triggers bounded recovery. The
+ *   current chunk is restarted from its original aligned file offset using
+ *   the chunk's original buffer and full aligned write length. Up to three
+ *   restart attempts are permitted per chunk. If recovery is exhausted, the
+ *   copy fails; buffered I/O is never used as a fallback.
+ * - Recovery retains a per-chunk high-water mark for progress accounting.
+ *   Rewriting a chunk therefore does not credit previously counted source
+ *   bytes again. Only actual source bytes are counted; alignment padding is
+ *   excluded.
+ * - Per-file byte counts are checked against the size reported by the ISO
+ *   walk. A source that yields fewer bytes than expected fails the operation.
+ *   On the FAT32/O_DIRECT path, this check runs before the final ftruncate,
+ *   so a short source is not masked by zero extension. On the NTFS path,
+ *   files of at least FALLOCATE_MIN_SIZE have already been pre-allocated to
+ *   their expected size, so a truncated source can leave a full-size,
+ *   partially unwritten file behind; smaller NTFS files are not pre-allocated
+ *   and are simply left short. Either way the operation still reports
+ *   failure.
+ * - Only too-short sources are detected. A source that grows after the ISO
+ *   walk is not flagged: FAT32 files are cut back to the walked size by the
+ *   final ftruncate, while NTFS files may end up larger than expected and the
+ *   progress counter may exceed the precomputed total.
+ * - On failure or cancellation, FAT32 destination files are truncated to
+ *   zero length. NTFS destination files are left as-is.
+ *
+ * @par Sector alignment
+ * - After formatting, each partition node is opened once and both logical
+ *   (BLKSSZGET) and physical (BLKPBSZGET) sector sizes are queried. The
+ *   larger of the two governs O_DIRECT padding and the alignment checks in
+ *   the copy loop. If the node cannot be opened, or an ioctl fails or returns
+ *   a non-positive value, 512 bytes is used for that value. There is no
+ *   retry on this open; a failure silently falls back to 512, which may not
+ *   satisfy the destination's direct-I/O requirements.
+ * - Each of the two I/O buffers is 4 MiB rounded down to a multiple of the
+ *   larger of the two partition sector sizes and is allocated with that
+ *   alignment (8 MiB total per job).
+ * - Correct O_DIRECT operation requires the buffer address, file offsets,
+ *   and write lengths to satisfy the destination filesystem's actual
+ *   direct-I/O alignment requirements. The configured sector-size alignment
+ *   is an approximation of those requirements, not a universal guarantee.
+ *   Where supported, statx() with STATX_DIOALIGN can provide the required
+ *   memory and offset alignment values.
+ * - For FatOnly, the unused NTFS sector size is fixed at 512 bytes.
+ *
+ * @par Concurrency
+ * - Setup steps run per device and concurrently across jobs. Each call uses
+ *   its own progressData slot, its own temporary mount directories, its own
+ *   pair of I/O buffers, its own monitor thread, and its own short-lived
+ *   reader threads for large files.
+ *
+ * @par Cancellation
+ * - Setup steps (ISO mount, wipe, partition, format, FAT/NTFS mount, ISO
+ *   walk) treat a concurrent user cancellation as a clean abort: a step that
+ *   errors out while g_operationCancelled is already set returns false
+ *   without setting the failed flag. Only genuine errors flip it. Exception:
+ *   failures of mkdtemp always set the failed flag, even if cancellation is
+ *   already in effect.
+ * - Cancellation is also checked between files and inside the per-file read
+ *   and write loops. A cancellation detected during copying aborts the
+ *   current operation; FAT32 destination files are truncated to zero length.
+ *
+ * @par Telemetry
+ * - Progress, speed, and byte accounting are handled by a dedicated
+ *   background thread, keeping timing logic out of the critical I/O path.
+ *   The thread polls every 500 ms. The copy loop credits newly reached
+ *   source-byte progress as writes advance, using a per-chunk high-water mark
+ *   so recovery retries do not double-count bytes.
+ * - Speed is recalculated at most once per second, using an exponential
+ *   moving average (alpha 0.3, or 0.6 while the instantaneous speed is below
+ *   10 MB/s). During stalled (zero-delta) polling, the last known speed is
+ *   held for up to 300 seconds before dropping to 0, since a single slow
+ *   write on throttled USB media can legitimately span many polling ticks.
+ *   The baseline timestamp is deliberately not reset during a stall, so the
+ *   first speed sample after a stall reflects the true elapsed time.
+ * - Reported progress is capped at 99% while copying. On success, speed is
+ *   replaced by the overall average (total bytes over time since the monitor
+ *   started, which excludes setup), progress is set to 100, and completed is
+ *   set.
+ *
+ * @par Flush and unmount strategy
+ * - Between the NTFS pass and the ESP pass (WindowsInstall only, and only if
+ *   not cancelled), syncfs is called on the NTFS mount so the buffered NTFS
+ *   backlog is on the device before the O_DIRECT ESP writes begin. Otherwise
+ *   background write-back of the NTFS data competes with the direct ESP
+ *   writes and slows the end of the copy. Its return value is not checked.
+ * - After all copies, and only if not cancelled, syncfs is called on the
+ *   NTFS mount and then the FAT32 mount to flush dirty pages at the
+ *   filesystem level. Its return value is not checked, so a flush error is
+ *   not reported here.
+ * - Unmounting is performed by safeUmount (via ScopedMount destructors),
+ *   which blocks until the kernel confirms all I/O is complete. The
+ *   ScopedMount objects live at function scope, so this happens when the
+ *   function returns in reverse declaration order (NTFS, FAT, ISO), i.e.
+ *   after the final progress accounting. completed is therefore set before
+ *   the unmounts finish, and an unmount failure cannot change the return
+ *   value. Callers that tell the user it is safe to remove the device should
+ *   not rely on completed alone.
+ *
+ * @par Cleanup strategy
+ * - All mount points and the I/O buffers are managed by RAII objects
+ *   (ScopedMount, AlignedBuffer). The progress thread is managed by
+ *   ThreadGuard, which stops and joins it on every return path. The per-file
+ *   reader thread is joined inside the copy routine on every path. Early
+ *   returns need no manual cleanup.
+ *
+ * @param isoPath       Path to the source ISO file.
+ * @param device        Target block device (e.g. /dev/sdb). Will be wiped.
+ * @param progressIndex Index into the shared progressData array for live
+ *                      progress, speed, and completion reporting.
+ * @param progressData  Reference to the operation-local progress data array
+ *                      used for live progress, speed, and completion
+ *                      reporting.
+ * @return true on success; false on any error, truncated source, or user
+ *         cancellation. On a genuine error the slot's failed flag is set; on
+ *         cancellation it is not.
+ */
+bool writeWindowsIsoToDevice(const std::string& isoPath,
+                             const std::string& device,
+                             size_t             progressIndex,
+                             std::vector<ProgressInfo>& progressData)
+{
+    auto fail = [&]() -> bool {
+        progressData[progressIndex].failed.store(true);
+        return false;
+    };
+
+    auto failUnlessCancelled = [&]() -> bool {
+        if (GlobalState::g_operationCancelled.load()) return false;
+        return fail();
+    };
+
+    char isoMntBuf[] = "/tmp/win_iso_XXXXXX";
+    if (!mkdtemp(isoMntBuf)) return fail();
+
+    // ScopedMount always removes the dir; setMounted() arms the safeUmount.
+    ScopedMount isoScope(isoMntBuf);
+
+    if (libMountRetry(isoPath.c_str(), isoMntBuf, "ro,loop") != 0) return failUnlessCancelled();
+    isoScope.setMounted();
+
+    const std::string isoMnt  = isoMntBuf;
+    const IsoType     isoType = detectIsoType(isoMnt);
+
+    if (!wipeDeviceSignatures(device)) return failUnlessCancelled();
+
+    int partResult = -1;
+    if (isoType == IsoType::WindowsInstall) {
+        partResult = runCommandRetry({"parted", "-s", device,
+                                      "mklabel", "gpt",
+                                      "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
+                                      "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
+                                      "set", "1", "esp",  "on",
+                                      "set", "1", "boot", "on"});
+    } else {
+        partResult = runCommandRetry({"parted", "-s", device,
+                                      "mklabel", "gpt",
+                                      "mkpart", "WINPE", "fat32", "1MiB", "100%",
+                                      "set", "1", "esp",  "on",
+                                      "set", "1", "boot", "on"});
+    }
+    if (partResult != 0) return failUnlessCancelled();
+
+    if (!waitForDevice(device)) return failUnlessCancelled();
+
+    auto derivePartition = [&](int n) -> std::string {
+        std::string target = device + std::to_string(n);
+        return waitForDevice(target, 30) ? target : std::string{};
+    };
+
+    const std::string fatPart  = derivePartition(1);
+    const std::string ntfsPart = (isoType == IsoType::WindowsInstall)
+                                     ? derivePartition(2)
+                                     : std::string{};
+
+    if (fatPart.empty()) return failUnlessCancelled();
+    if (isoType == IsoType::WindowsInstall && ntfsPart.empty()) return failUnlessCancelled();
+
+    if (runCommandRetry({"mkfs.fat", "-F", "32", "-n",
+                         (isoType == IsoType::WindowsInstall ? "WINBOOT" : "WINPE"),
+                         fatPart}) != 0) {
+        return failUnlessCancelled();
+    }
+
+    if (isoType == IsoType::WindowsInstall) {
+        if (runCommandRetry({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA",
+                             ntfsPart}) != 0) {
+            return failUnlessCancelled();
+        }
+    }
+
+    auto getBestSectorSize = [](const std::string& devNode) -> int {
+        int fd = open(devNode.c_str(), O_RDONLY);
+        if (fd < 0) return 512;
+        int logicalSize  = 512;
+        int physicalSize = 512;
+        if (ioctl(fd, BLKSSZGET,  &logicalSize)  < 0 || logicalSize  <= 0) logicalSize  = 512;
+        if (ioctl(fd, BLKPBSZGET, &physicalSize) < 0 || physicalSize <= 0) physicalSize = 512;
+        close(fd);
+        return std::max(logicalSize, physicalSize);
+    };
+
+    const int fatSectorSize  = getBestSectorSize(fatPart);
+    const int ntfsSectorSize = (isoType == IsoType::WindowsInstall)
+                                   ? getBestSectorSize(ntfsPart)
+                                   : 512;
+    if (GlobalState::g_operationCancelled.load()) return false;
+
+    char fatMntBuf[]  = "/tmp/win_fat_XXXXXX";
+    char ntfsMntBuf[] = "/tmp/win_ntfs_XXXXXX";
+
+    if (!mkdtemp(fatMntBuf)) return fail();
+    ScopedMount fatScope(fatMntBuf);
+
+    if (isoType == IsoType::WindowsInstall) {
+        if (!mkdtemp(ntfsMntBuf)) return fail();
+    }
+    ScopedMount ntfsScope(isoType == IsoType::WindowsInstall
+                              ? std::string(ntfsMntBuf)
+                              : std::string{});
+
+    const std::string fatMnt  = fatMntBuf;
+    const std::string ntfsMnt = ntfsMntBuf;
+
+    if (libMountRetry(fatPart.c_str(), fatMntBuf, "noatime") != 0) return failUnlessCancelled();
+    fatScope.setMounted();
+
+    if (isoType == IsoType::WindowsInstall) {
+        const std::string ntfsDriver = getBestNtfsDriver();
+        if (ntfsDriver.empty()) return failUnlessCancelled();
+
+        if (libMountNtfsRetry(ntfsPart.c_str(), ntfsMntBuf, ntfsDriver.c_str()) != 0)
+            return failUnlessCancelled();
+        ntfsScope.setMounted();
+    }
+
+    if (GlobalState::g_operationCancelled.load()) return false;
+
+    struct IsoEntry {
+        fs::path src;
+        fs::path dst;
+        uint64_t size;
+        bool     isDir;
+    };
+
+    std::vector<IsoEntry> ntfsEntries;
+    std::vector<IsoEntry> espEntries;
+    uint64_t totalBytes = 0;
+
+    const std::unordered_set<std::string> espTopFolders = { "efi", "boot" };
+    const std::string espBootWim = "sources/boot.wim";
+
+    auto belongsOnESP = [&](const fs::path& rel) -> bool {
+        if (isoType == IsoType::FatOnly) return true;
+
+        std::string top = rel.begin()->string();
+        std::transform(top.begin(), top.end(), top.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        if (espTopFolders.count(top) > 0) return true;
+
+        std::string relStr = rel.generic_string();
+        std::transform(relStr.begin(), relStr.end(), relStr.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        return relStr == espBootWim;
+    };
+
+    try {
+        for (const auto& entry : fs::recursive_directory_iterator(isoMnt)) {
+            // Reject symlinks outright — a malicious ISO (Rock Ridge/UDF)
+            // could embed a symlink pointing at an arbitrary host path (e.g.
+            // /etc/shadow). Following it here would read host files with this
+            // process's privileges and copy their contents onto the target
+            // device.
+            if (fs::is_symlink(entry.symlink_status())) {
+                continue;
+            }
+
+            const fs::path rel   = fs::relative(entry.path(), isoMnt);
+            const bool     toESP = belongsOnESP(rel);
+            const fs::path dest  = fs::path(toESP ? fatMnt : ntfsMnt) / rel;
+            const uint64_t sz    = entry.is_regular_file() ? entry.file_size() : 0;
+
+            totalBytes += sz;
+
+            IsoEntry e{ entry.path(), dest, sz, entry.is_directory() };
+            if (toESP) espEntries.push_back(std::move(e));
+            else       ntfsEntries.push_back(std::move(e));
+        }
+    } catch (...) {
+        if (!GlobalState::g_operationCancelled.load()) return fail();
+        return false;
+    }
+
+    if (totalBytes == 0 ) {
+        if (!GlobalState::g_operationCancelled.load()) {
+            return fail();
+        } else {
+            return false;
+        }
+    }
+
+    std::atomic<uint64_t> totalBytesWrittenAccumulator{0};
+    std::atomic<bool>     monitoringActive{true};
+    const auto startTime = std::chrono::high_resolution_clock::now();
+
+    std::thread progressMonitorThread([&, totalBytes, progressIndex]() {
+        auto     lastUpdate    = std::chrono::high_resolution_clock::now();
+        uint64_t lastWritten   = 0;
+        double   smoothedSpeed = 0.0;
+        bool     haveEstimate  = false;
+
+        auto     stallStart    = std::chrono::high_resolution_clock::now();
+        bool     stalled       = false;
+
+        // Higher alpha = more reactive to phase changes (NTFS -> ESP),
+        // lower = smoother.
+        constexpr double alpha = 0.3;
+        constexpr int MIN_UPDATE_INTERVAL_MS = 1000;
+        // Show 0 only after this many seconds of continuous stalling
+        constexpr int STALL_TIMEOUT_SECONDS = 300;
+
+        while (monitoringActive.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+            const auto now = std::chrono::high_resolution_clock::now();
+            const auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    now - lastUpdate).count();
+
+            const uint64_t currentWritten = totalBytesWrittenAccumulator.load();
+            progressData[progressIndex].bytesWritten.store(currentWritten);
+            progressData[progressIndex].progress.store(static_cast<int>(
+                std::min(99.0, (static_cast<double>(currentWritten) / totalBytes) * 100.0)));
+
+            const uint64_t deltaBytes = (currentWritten >= lastWritten)
+                                            ? (currentWritten - lastWritten)
+                                            : 0;
+
+            if (deltaBytes > 0 && ms >= MIN_UPDATE_INTERVAL_MS) {
+                stalled = false;
+
+                const double instantSpeed = (static_cast<double>(deltaBytes) /
+                                                (1024.0 * 1024.0)) / (ms / 1000.0);
+
+                double smoothingFactor = (instantSpeed < 10.0) ? 0.6 : alpha;
+
+                smoothedSpeed = haveEstimate
+                    ? (smoothingFactor * instantSpeed + (1.0 - smoothingFactor) * smoothedSpeed)
+                    : instantSpeed;
+                haveEstimate = true;
+                progressData[progressIndex].speed.store(smoothedSpeed);
+
+                lastWritten = currentWritten;
+                lastUpdate = now;
+            } else if (deltaBytes == 0 && ms >= MIN_UPDATE_INTERVAL_MS) {
+                // IMPORTANT: do NOT reset lastUpdate/lastWritten here. A long
+                // in-flight write (e.g. a throttled 4 MiB chunk on a slow USB
+                // NTFS target) can span many 500 ms polling ticks with
+                // deltaBytes == 0 the whole time. Resetting the baseline on
+                // every tick would make the eventual big delta land right
+                // after the last reset, understating elapsed time and
+                // artificially flooring the reported speed at roughly
+                // bufferSize / MIN_UPDATE_INTERVAL_MS (~4 MB/s). By leaving
+                // lastUpdate/lastWritten untouched, once real progress does
+                // land, ms reflects the true elapsed time since data last
+                // moved and the speed calculation above is accurate.
+                if (!stalled) {
+                    stalled = true;
+                    stallStart = now;
+                }
+
+                auto stallDuration = std::chrono::duration_cast<std::chrono::seconds>(
+                                        now - stallStart).count();
+
+                if (stallDuration >= STALL_TIMEOUT_SECONDS) {
+                    progressData[progressIndex].speed.store(0.0);
+                }
+            }
+        }
+    });
+
+    // Ensures the thread is always stopped and joined on any return path.
+    ThreadGuard threadGuard(progressMonitorThread, monitoringActive);
+
+    constexpr size_t DESIRED_BUFFER  = 4 * 1024 * 1024;
+    const int        maxSectorSize   = std::max(fatSectorSize, ntfsSectorSize);
+    const size_t     bufferSize      = (DESIRED_BUFFER / maxSectorSize) * maxSectorSize;
+
+    AlignedBuffer ioBufA(bufferSize, maxSectorSize);
+    AlignedBuffer ioBufB(bufferSize, maxSectorSize);
+    if (!ioBufA || !ioBufB) {
+        if (!GlobalState::g_operationCancelled.load()) return fail();
+        return false;
+    }
+
+    using BufPtr = decltype(ioBufA.data);
+    BufPtr slotData[2] = { ioBufA.data, ioBufB.data };
+
+    // NTFS files smaller than this are not pre-allocated: per-file
+    // posix_fallocate overhead dominates for small files (and ntfs-3g may
+    // implement it by writing zeros).
+    constexpr uint64_t FALLOCATE_MIN_SIZE = 1 * 1024 * 1024;
+
+    auto copyWithProgress = [&](const fs::path& src, const fs::path& dst,
+                                uint64_t fileSize, int sectorSize) -> bool {
+        const bool isNtfsDest = (isoType == IsoType::WindowsInstall) &&
+                                (dst.string().rfind(ntfsMnt, 0) == 0);
+        const bool useBufferedIO = isNtfsDest;
+
+        const int fd_in = open(src.c_str(), O_RDONLY);
+        if (fd_in < 0) return false;
+        posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
+
+        int outFlags = O_WRONLY | O_CREAT | O_TRUNC;
+        if (!useBufferedIO) outFlags |= O_DIRECT;
+
+        const int fd_out = open(dst.c_str(), outFlags, 0644);
+        if (fd_out < 0) {
+            close(fd_in);
+            return false;
+        }
+
+        if (useBufferedIO && fileSize >= FALLOCATE_MIN_SIZE)
+            posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
+
+        const size_t mask = static_cast<size_t>(sectorSize) - 1;
+
+        bool success = true;
+        uint64_t bytesCopiedTotal = 0;
+        uint64_t fileOffset = 0;
+
+        constexpr int MAX_UNALIGNED_RETRIES = 3;
+
+        // Fill `buf` with up to bufferSize bytes from the source. Short reads
+        // are accumulated; only EOF (read() == 0) ends a chunk early. Returns
+        // the byte count (0 = EOF), or -1 on error/cancellation.
+        auto fillBuffer = [&](BufPtr buf) -> ssize_t {
+            size_t total = 0;
+            while (total < bufferSize) {
+                if (GlobalState::g_operationCancelled.load()) return -1;
+
+                const ssize_t n = read(fd_in, buf + total, bufferSize - total);
+                if (n < 0) {
+                    if (errno == EINTR) continue;
+                    return -1;
+                }
+                if (n == 0) break;
+                total += static_cast<size_t>(n);
+            }
+            return static_cast<ssize_t>(total);
+        };
+
+        // Write one chunk (`bytes_read` source bytes in `buf`) at
+        // fileOffset. Only ever called from this (the writing) thread.
+        auto writeChunk = [&](BufPtr buf, ssize_t bytes_read) -> bool {
+            ssize_t writeLen = bytes_read;
+
+            if (!useBufferedIO) {
+                const ssize_t aligned =
+                    (bytes_read + static_cast<ssize_t>(mask)) &
+                    ~static_cast<ssize_t>(mask);
+
+                if (aligned > bytes_read) {
+                    memset(buf + bytes_read, 0,
+                           static_cast<size_t>(aligned - bytes_read));
+                }
+
+                writeLen = aligned;
+            }
+
+            ssize_t bytes_written = 0;
+
+            // Preserve the highest logical source-byte prefix credited for
+            // this chunk, even if an unaligned short write forces a restart.
+            uint64_t creditedHighWater = 0;
+            int unalignedRetries = 0;
+
+            while (bytes_written < writeLen) {
+                if (GlobalState::g_operationCancelled.load()) return false;
+
+                const off_t writeOffset =
+                    static_cast<off_t>(fileOffset) +
+                    static_cast<off_t>(bytes_written);
+
+                const ssize_t written = pwrite(
+                    fd_out,
+                    buf + bytes_written,
+                    static_cast<size_t>(writeLen - bytes_written),
+                    writeOffset);
+
+                if (written < 0) {
+                    if (errno == EINTR) continue;
+                    return false;
+                }
+
+                if (written == 0) {
+                    errno = EIO;
+                    return false;
+                }
+
+                // A positive unaligned O_DIRECT short write may leave part
+                // of the destination inconsistent. Restart the whole chunk
+                // from its original aligned offset, with the original buffer.
+                if (!useBufferedIO &&
+                    (static_cast<size_t>(written) %
+                     static_cast<size_t>(sectorSize)) != 0) {
+
+                    if (++unalignedRetries > MAX_UNALIGNED_RETRIES) {
+                        errno = EIO;
+                        return false;
+                    }
+
+                    // Do not reset creditedHighWater: already credited source
+                    // bytes must not be counted a second time.
+                    bytes_written = 0;
+                    continue;
+                }
+
+                bytes_written += written;
+
+                const uint64_t realBytesSoFar =
+                    static_cast<uint64_t>(
+                        std::min<ssize_t>(bytes_written, bytes_read));
+
+                if (realBytesSoFar > creditedHighWater) {
+                    const uint64_t delta = realBytesSoFar - creditedHighWater;
+
+                    totalBytesWrittenAccumulator.fetch_add(delta);
+                    bytesCopiedTotal += delta;
+                    creditedHighWater = realBytesSoFar;
+                }
+            }
+
+            // The next chunk starts after actual source bytes, not any
+            // padding added to the final O_DIRECT write.
+            fileOffset += static_cast<uint64_t>(bytes_read);
+            return true;
+        };
+
+        if (fileSize <= bufferSize) {
+            // Small file: single buffer, calling thread only.
+            while (true) {
+                const ssize_t n = fillBuffer(slotData[0]);
+                if (n < 0) { success = false; break; }
+                if (n == 0) break;
+                if (!writeChunk(slotData[0], n)) { success = false; break; }
+            }
+        } else {
+            // Large file: reader thread + ping-pong slots.
+            struct Slot {
+                ssize_t bytes = 0;
+                bool    full  = false;
+            };
+            Slot slots[2];
+
+            std::mutex              mtx;
+            std::condition_variable cv;
+            bool readerDone = false;
+            bool readFailed = false;
+            bool stopReader = false;
+
+            std::thread reader;
+            try {
+                reader = std::thread([&]() {
+                    for (size_t i = 0; ; ++i) {
+                        const size_t s = i & 1;
+
+                        {
+                            std::unique_lock<std::mutex> lk(mtx);
+                            cv.wait(lk, [&] { return !slots[s].full || stopReader; });
+                            if (stopReader) break;
+                        }
+
+                        const ssize_t n = fillBuffer(slotData[s]);
+
+                        bool finished = false;
+                        {
+                            std::lock_guard<std::mutex> lk(mtx);
+                            if (n < 0) {
+                                readFailed = true;
+                                finished   = true;
+                            } else if (n == 0) {
+                                finished = true;
+                            } else {
+                                slots[s].bytes = n;
+                                slots[s].full  = true;
+                            }
+                        }
+                        cv.notify_all();
+                        if (finished) break;
+                    }
+
+                    {
+                        std::lock_guard<std::mutex> lk(mtx);
+                        readerDone = true;
+                    }
+                    cv.notify_all();
+                });
+            } catch (...) {
+                success = false;
+            }
+
+            if (reader.joinable()) {
+                for (size_t i = 0; ; ++i) {
+                    const size_t s = i & 1;
+                    ssize_t n = 0;
+
+                    {
+                        std::unique_lock<std::mutex> lk(mtx);
+                        cv.wait(lk, [&] { return slots[s].full || readerDone; });
+                        // Slots are published in order, so if this one is not
+                        // full and the reader is done, there is no more data.
+                        if (!slots[s].full) break;
+                        n = slots[s].bytes;
+                    }
+
+                    if (!writeChunk(slotData[s], n)) {
+                        success = false;
+                        break;
+                    }
+
+                    {
+                        std::lock_guard<std::mutex> lk(mtx);
+                        slots[s].full = false;
+                    }
+                    cv.notify_all();
+                }
+
+                // Always stop and join the reader before closing the fds.
+                {
+                    std::lock_guard<std::mutex> lk(mtx);
+                    stopReader = true;
+                }
+                cv.notify_all();
+                reader.join();
+
+                if (readFailed) success = false;
+            }
+        }
+
+        // Detect a source shorter than fstat/ISO-walk reported. Check before
+        // ftruncate extends the file with zeros, which would mask truncation.
+        if (success && !GlobalState::g_operationCancelled.load() &&
+            bytesCopiedTotal < fileSize) {
+            success = false;
+        }
+
+        if (!useBufferedIO) {
+            if (GlobalState::g_operationCancelled.load()) {
+                [[maybe_unused]] const int r = ftruncate(fd_out, 0);
+            } else if (success) {
+                if (ftruncate(fd_out, static_cast<off_t>(fileSize)) != 0)
+                    success = false;
+            }
+
+            if (!success) {
+                [[maybe_unused]] const int r = ftruncate(fd_out, 0);
+            }
+        }
+
+        if (GlobalState::g_operationCancelled.load())
+            posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
+
+        posix_fadvise(fd_in, 0, 0, POSIX_FADV_DONTNEED);
+
+        close(fd_in);
+        close(fd_out);
+
+        return success && !GlobalState::g_operationCancelled.load();
+    };
+
+    auto processEntries = [&](const std::vector<IsoEntry>& entries) -> bool {
+        for (const auto& e : entries) {
+            if (GlobalState::g_operationCancelled.load()) return false;
+
+            if (e.isDir) {
+                fs::create_directories(e.dst);
+            } else {
+                fs::create_directories(e.dst.parent_path());
+
+                const bool toNtfs = (isoType == IsoType::WindowsInstall) &&
+                                    (e.dst.string().rfind(ntfsMnt, 0) == 0);
+                const int sectorSize = toNtfs ? ntfsSectorSize : fatSectorSize;
+
+                if (!copyWithProgress(e.src, e.dst, e.size, sectorSize)) {
+                    if (!GlobalState::g_operationCancelled.load()) {
+                        return fail();
+                    } else {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    };
+
+    if (!processEntries(ntfsEntries)) return false;
+
+    // Drain the NTFS write-back backlog before the O_DIRECT ESP pass starts.
+    // Buffered NTFS writes only land in the page cache, so without this the
+    // kernel keeps flushing the NTFS data in the background while the ESP
+    // pass writes directly to a different region of the same device. Two
+    // competing write streams make cheap flash crawl near the end of the
+    // copy. The return value is not checked: a flush error here is not
+    // reported (same as the final syncfs), and the unmount still blocks until
+    // all I/O completes.
+    if (isoType == IsoType::WindowsInstall &&
+        !GlobalState::g_operationCancelled.load()) {
+        const int ntfsFd = open(ntfsMnt.c_str(), O_RDONLY);
+        if (ntfsFd >= 0) { syncfs(ntfsFd); close(ntfsFd); }
+    }
+
+    if (!processEntries(espEntries))  return false;
+
+    if (!GlobalState::g_operationCancelled.load()) {
+        if (isoType == IsoType::WindowsInstall) {
+            const int ntfsFd = open(ntfsMnt.c_str(), O_RDONLY);
+            if (ntfsFd >= 0) { syncfs(ntfsFd); close(ntfsFd); }
+        }
+        const int fatFd = open(fatMnt.c_str(), O_RDONLY);
+        if (fatFd >= 0) { syncfs(fatFd); close(fatFd); }
+    }
+
+    threadGuard.stop();
+
+    // ScopedMount destructors for ntfsScope, fatScope, isoScope fire here
+    // in reverse declaration order: ntfs -> fat -> iso.
+
+    const auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::high_resolution_clock::now() - startTime);
+    const double seconds  = totalElapsed.count() / 1000.0;
+    const double avgSpeed = (seconds > 0.0)
+        ? (static_cast<double>(totalBytes) / (1024.0 * 1024.0)) / seconds
+        : 0.0;
+
+    progressData[progressIndex].speed.store(avgSpeed);
+    progressData[progressIndex].progress.store(100);
+    progressData[progressIndex].completed.store(true);
+    return true;
+}
+
+/**
+ * @brief Probes an ISO image to detect Windows 10/11 installation media.
+ *
+ * Maps up to the first 32 MB of the file into the process address space and
+ * performs a single-pass Aho-Corasick scan for Windows Boot Manager and WinPE
+ * payload signatures. The 32 MB window is sufficient because Windows ISO
+ * directory entries for bootmgr and boot.wim always appear within the first
+ * few MB of the image.
+ *
+ * @par Volume validation
+ * Requires a Primary Volume Descriptor (type 0x01, identifier "CD001") at
+ * sector 16. Pure-UDF images with "NSR02"/"NSR03" are also accepted; "BEA01"
+ * alone is not sufficient.
+ *
+ * @par Signature scan
+ * Searches simultaneously for "bootmgr[.efi]" and "boot.wim"
+ * case-insensitively across ASCII, UTF-16LE, and UTF-16BE in a single O(n)
+ * pass. UTF-16LE is the native encoding used by Windows for Joliet/UDF
+ * filenames. The automaton is built once on first call and reused across
+ * subsequent calls.
+ *
+ * @par Case folding
+ * A static 256-entry lookup table replaces std::tolower in the hot scan loop,
+ * avoiding locale machinery and branch overhead across the full mapping
+ * window.
+ *
+ * @par Early exit
+ * The scan terminates as soon as both signature groups are matched, without
+ * scanning the remainder of the window. On typical Windows ISOs both
+ * signatures appear within the first 2-3 MB, so up to ~29 MB of iteration is
+ * skipped in the common case.
+ *
+ * @param fd       Open, readable file descriptor positioned anywhere — the
+ *                 mapping is always made from offset 0. The caller retains
+ *                 ownership; this function does not close the descriptor.
+ * @param fileSize Size of the image in bytes, as returned by fstat. Used for
+ *                 the minimum-size guard and to clamp the mapping window.
+ * @return true if the volume header is valid and both "bootmgr[.efi]" and
+ *         "boot.wim" signatures are present within the mapped window.
+ *
+ * @note Does not modify the file; read-only mapping.
+ * @note The static Aho-Corasick automaton and case-folding table are both
+ *       thread-safe under C++11 and later (guaranteed by static-local
+ *       initialisation rules).
+ * @note MADV_WILLNEED is applied to the first 4 MB of the mapping to begin
+ *       faulting in pages immediately; MADV_SEQUENTIAL covers the remainder so
+ *       the prefetcher stays primed if a full scan is needed.
+ */
+bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
+
+    // Logical patterns: 0 = "boot.wim", 1 = "bootmgr.efi", 2 = "bootmgr"
+    // Variants: 0 = ASCII, 1 = UTF-16LE, 2 = UTF-16BE  -> bits 0-8
+    static const auto ac = [] {
+        struct Node {
+            std::array<int, 256> next{};
+            int fail{0};
+            uint32_t match{0};
+            Node() { next.fill(-1); }
+        };
+
+        std::vector<Node> nodes;
+        nodes.emplace_back();
+
+        auto addPattern = [&](std::string_view text, int logicalIndex, int variant) {
+            int cur = 0;
+            for (char raw : text) {
+                unsigned char c = static_cast<unsigned char>(std::tolower(raw));
+                uint8_t bytes[2];
+                int byteCount;
+                if (variant == 0) {
+                    bytes[0] = c;
+                    byteCount = 1;
+                } else if (variant == 1) {
+                    bytes[0] = c; bytes[1] = 0x00;
+                    byteCount = 2;
+                } else {
+                    bytes[0] = 0x00; bytes[1] = c;
+                    byteCount = 2;
+                }
+                for (int b = 0; b < byteCount; ++b) {
+                    int byte = bytes[b];
+                    if (nodes[cur].next[byte] == -1) {
+                        nodes[cur].next[byte] = static_cast<int>(nodes.size());
+                        nodes.emplace_back();
+                    }
+                    cur = nodes[cur].next[byte];
+                }
+            }
+            nodes[cur].match |= (1u << (logicalIndex * 3 + variant));
+        };
+
+        for (int v = 0; v < 3; ++v) {
+            addPattern("boot.wim",    0, v);
+            addPattern("bootmgr.efi", 1, v);
+            addPattern("bootmgr",     2, v);
+        }
+
+        // BFS to build failure links
+        std::queue<int> q;
+        for (int c = 0; c < 256; ++c) {
+            if (nodes[0].next[c] == -1) {
+                nodes[0].next[c] = 0;
+            } else {
+                nodes[nodes[0].next[c]].fail = 0;
+                q.push(nodes[0].next[c]);
+            }
+        }
+        while (!q.empty()) {
+            int u = q.front(); q.pop();
+            nodes[u].match |= nodes[nodes[u].fail].match;
+            for (int c = 0; c < 256; ++c) {
+                int v = nodes[u].next[c];
+                if (v == -1) {
+                    nodes[u].next[c] = nodes[nodes[u].fail].next[c];
+                } else {
+                    nodes[v].fail = nodes[nodes[u].fail].next[c];
+                    q.push(v);
+                }
+            }
+        }
+
+        return nodes;
+    }();
+
+    // Built once at program start; avoids locale machinery and branching on
+    // every byte of the 32 MiB scan window.
+    static const auto toLower = [] {
+        std::array<uint8_t, 256> t{};
+        for (int i = 0; i < 256; ++i)
+            t[i] = static_cast<uint8_t>(std::tolower(i));
+        return t;
+    }();
+
+    if (fileSize < 0x9000) return false;
+
+    const size_t mapSize = std::min(static_cast<size_t>(fileSize),
+                                    static_cast<size_t>(32 * 1024 * 1024));
+    char* addr = static_cast<char*>(
+        mmap(nullptr, mapSize, PROT_READ, MAP_PRIVATE, fd, 0));
+    if (addr == MAP_FAILED) return false;
+
+    // Hint the kernel to prefetch the first 4 MiB immediately — signatures
+    // almost always appear within the first 2-3 MiB of a Windows ISO, so
+    // WILLNEED on the head reduces time-to-first-match. SEQUENTIAL covers the
+    // remainder so readahead stays primed for the full scan if needed.
+    madvise(addr,                  4 * 1024 * 1024, MADV_WILLNEED);
+    madvise(addr, mapSize,                          MADV_SEQUENTIAL);
+
+    {
+        const uint8_t descType = static_cast<uint8_t>(addr[0x8000]);
+        std::string_view id(addr + 0x8001, 5);
+        const bool validIso = (descType == 0x01 && id == "CD001");
+        const bool validUdf = (id == "NSR02" || id == "NSR03");
+        if (!validIso && !validUdf) {
+            munmap(addr, mapSize);
+            return false;
+        }
+    }
+
+    // Early-exit masks: once both groups are matched there is no need to scan
+    // further. Saves up to ~30 MiB of iteration on typical ISOs where both
+    // signatures appear near the front of the directory area.
+    //
+    // boot.wim  matched in any variant: bits 0-2
+    // bootmgr   matched in any variant: bits 3-8
+    constexpr uint32_t MASK_BOOTWIM = 0b000000111u;
+    constexpr uint32_t MASK_BOOTMGR = 0b111111000u;
+    constexpr uint32_t MASK_ALL     = MASK_BOOTWIM | MASK_BOOTMGR;
+
+    uint32_t found = 0;
+    int cur = 0;
+    for (size_t i = 0; i < mapSize; ++i) {
+        cur    = ac[cur].next[toLower[static_cast<uint8_t>(addr[i])]];
+        found |= ac[cur].match;
+
+        if ((found & MASK_ALL) == MASK_ALL) break;
+    }
+
+    munmap(addr, mapSize);
+
+    return (found & MASK_BOOTWIM) != 0 &&
+           (found & MASK_BOOTMGR) != 0;
+}
