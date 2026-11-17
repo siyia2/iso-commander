@@ -665,7 +665,7 @@ void drawEditScreen(const std::string& key, const std::string& current,
  * @param newVal Reference to the working input value string.
  * @return @c std::optional<EditNav> Contains the resulting navigation direction if matched, or @c std::nullopt to stay on screen.
  */
-std::optional<EditNav> handleNavigationInput(const std::string_view& s, size_t pos, size_t total, std::string& newVal) {
+std::optional<EditNav> handleNavigationInput(const std::string_view& s, size_t pos, size_t total, const std::string& newVal) {
     if (s == "PgUp" || s == "PgDn") {
         RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
         if (s == "PgDn" && pos < total) return EditNav::Next;
@@ -808,19 +808,17 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
         armPendingInputRestore();
         rl_startup_hook = nullptr;
 
-        if (rawInput) {
-            std::string newVal = trim(rawInput.get());
-            auto navAction = handleNavigationInput(rawInput.get(), pos, total, newVal);
-            if (navAction.has_value()) {
-                if (*navAction == EditNav::Next || *navAction == EditNav::Prev || *navAction == EditNav::GoTo) {
-                    return *navAction;
-                }
-                continue;
-            }
-        }
-
         if (!rawInput || rawInput.get()[0] == 27) return EditNav::Abort;
-        std::string newVal = trim(rawInput.get());
+
+        const std::string newVal = trim(rawInput.get());
+
+        auto navAction = handleNavigationInput(rawInput.get(), pos, total, newVal);
+        if (navAction.has_value()) {
+            if (*navAction == EditNav::Next || *navAction == EditNav::Prev || *navAction == EditNav::GoTo) {
+                return *navAction;
+            }
+            continue;
+        }
 
         if (newVal.empty()) return EditNav::Advance;
 
