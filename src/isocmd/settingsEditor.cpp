@@ -691,21 +691,25 @@ std::optional<EditNav> handleNavigationInput(const std::string_view& s, size_t p
  * @brief Commits validation, cache updates, runtime effect application, and disk persistence for an accepted value.
  *
  * Stores the validated new configuration value into @c g_configCache, triggers immediate runtime application
- * via @c applyConfigEffects, attempts persistence via @c flushCache, and notifies the user of success or
+ * via @c applyConfigEffects, attempts persistence via @c flushCache, then refreshes @p tc via
+ * @c resolveOptionsTheme so subsequent redraws (through @p drawEditCallback) reflect any palette
+ * changes caused by the edit (e.g. @c theme, @c skin, @c base). Notifies the user of success or
  * memory-only fallback status. Also triggers specialized flag sorting logic when editing @c filenames_only.
  *
  * @tparam ThemeT Type representing the active UI theme color configuration.
  * @param configPath Configuration file path used to persist changes.
  * @param key Configuration setting key being updated.
  * @param newVal The validated new string value to store.
- * @param tc Theme color settings reference.
+ * @param tc In/out theme color configuration. Reassigned from @c resolveOptionsTheme after
+ *           @c applyConfigEffects runs, so callers' repaint lambdas that capture @p tc by
+ *           reference pick up the new palette on the first redraw (not the second).
  * @param current Reference to the current value variable, updated upon success.
  * @param drawEditCallback Lambda callback used to redraw the edit screen during confirmation prompts.
  * @return @c EditNav::Updated indicating successful update and completion for this setting item.
  */
 template <typename ThemeT>
 EditNav saveAndApplyConfigValue(const std::string& configPath, const std::string& key,
-                                const std::string& newVal, const ThemeT&,
+                                const std::string& newVal, ThemeT& tc,   // <-- by reference
                                 std::string& current, const std::function<void()>& drawEditCallback)
 {
     ConfigCaches::g_configCache[key] = newVal;
@@ -713,18 +717,19 @@ EditNav saveAndApplyConfigValue(const std::string& configPath, const std::string
 
     current = ConfigCaches::g_configCache.count(key) ? ConfigCaches::g_configCache[key] : "";
     bool saved = flushCache(configPath);
-    auto refreshedTc = resolveOptionsTheme();
+
+    tc = resolveOptionsTheme();   // <-- reassign the shared tc
 
     auto render = [&] {
         SyncOutput sync;
         drawEditCallback();
         if (saved) {
             std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n",
-                                     refreshedTc.path, refreshedTc.reset, configPath);
+                                     tc.path, tc.reset, configPath);
         } else {
-            std::cout << refreshedTc.warning << "\nWarning: " << refreshedTc.error
+            std::cout << tc.warning << "\nWarning: " << tc.error
                       << "Setting update is memory-only (Disk write failed)."
-                      << refreshedTc.reset << "\n";
+                      << tc.reset << "\n";
         }
     };
     pressEnterToContinueWithRepaint(render);
