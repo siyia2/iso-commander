@@ -38,6 +38,101 @@ bool fileExists(const std::string& fullPath) {
 
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname);
 
+namespace {
+
+/**
+ * @brief Represents the outcome of validating a target image file's accessibility.
+ */
+enum class ValidationResult {
+    Valid,    ///< File exists and can be opened for reading.
+    Missing,  ///< File does not exist on disk.
+    NoAccess  ///< File exists but cannot be opened (permission/access issue).
+};
+
+/**
+ * @brief Validates if an image file exists and is readable.
+ * @param inputPath The absolute or relative path to the image file.
+ * @return ValidationResult::Valid if accessible, ValidationResult::Missing if absent,
+ *         or ValidationResult::NoAccess if stream opening fails.
+ */
+ValidationResult validateImageFile(const std::string& inputPath) {
+    if (!std::filesystem::exists(inputPath)) {
+        return ValidationResult::Missing;
+    }
+    if (!std::ifstream(inputPath)) {
+        return ValidationResult::NoAccess;
+    }
+    return ValidationResult::Valid;
+}
+
+/**
+ * @brief Removes an invalid or missing image path from the appropriate global state cache.
+ * @param inputPath The path to remove from the cache.
+ * @param modeMdf Flag indicating MDF/MDS format mode.
+ * @param modeNrg Flag indicating NRG format mode.
+ * @param modeChd Flag indicating CHD format mode.
+ * @param modeDaa Flag indicating DAA/GBI format mode.
+ */
+void removeFromCache(const std::string& inputPath, bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa) {
+    std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
+    auto& cache = modeNrg ? GlobalState::nrgFilesCache :
+                  (modeMdf ? GlobalState::mdfMdsFilesCache :
+                   (modeChd ? GlobalState::chdFilesCache :
+                    (modeDaa ? GlobalState::daaGbiFilesCache : GlobalState::binImgFilesCache)));
+    cache.erase(std::remove(cache.begin(), cache.end(), inputPath), cache.end());
+}
+
+/**
+ * @brief Executes the appropriate conversion backend based on active format mode flags.
+ * @param modeMdf Flag for MDF/MDS format conversion.
+ * @param modeNrg Flag for NRG format conversion.
+ * @param modeChd Flag for CHD format conversion.
+ * @param modeDaa Flag for DAA/GBI format conversion.
+ * @param inputPath The source image file path.
+ * @param outputPath The target destination ISO file path.
+ * @param completedBytes Pointer to an atomic counter tracking total processed bytes.
+ * @return true if the backend conversion operation succeeds, false otherwise.
+ */
+bool runConversion(bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa,
+                   const std::string& inputPath, const std::string& outputPath,
+                   std::atomic<size_t>* completedBytes) {
+    if (modeMdf)      return convertMdfToIso(inputPath, outputPath, completedBytes);
+    if (modeNrg)      return convertNrgToIso(inputPath, outputPath, completedBytes);
+    if (modeChd)      return convertChdToIso(inputPath, outputPath, completedBytes);
+    if (modeDaa)      return convertDaaToIso(inputPath, outputPath, completedBytes);
+    return convertCcdToIso(inputPath, outputPath, completedBytes);
+}
+
+/**
+ * @brief Determines the file extension and maps it to a normalized upper-case image type string.
+ * @param fileNameOnly The filename string_view (including extension) to inspect.
+ * @return A string_view representing the recognized image type (e.g., "BIN", "NRG", "CHD"),
+ *         or "Image" as a fallback.
+ */
+std::string_view getFileType(std::string_view fileNameOnly) {
+    const size_t dotPos = fileNameOnly.find_last_of('.');
+    if (dotPos == std::string_view::npos) return "Image";
+
+    std::string_view ext = fileNameOnly.substr(dotPos + 1);
+    auto iequal = [](std::string_view a, const char* b) {
+        if (a.size() != std::strlen(b)) return false;
+        for (size_t i = 0; i < a.size(); ++i)
+            if (std::tolower(static_cast<unsigned char>(a[i])) != b[i]) return false;
+        return true;
+    };
+
+    if (iequal(ext, "bin")) return "BIN";
+    if (iequal(ext, "img")) return "IMG";
+    if (iequal(ext, "mdf")) return "MDF";
+    if (iequal(ext, "nrg")) return "NRG";
+    if (iequal(ext, "chd")) return "CHD";
+    if (iequal(ext, "daa")) return "DAA";
+    if (iequal(ext, "gbi")) return "GBI";
+    return "Image";
+}
+
+} // namespace
+
 /**
  * @brief Batch converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD, DAA, GBI) to ISO format.
  *
@@ -47,6 +142,17 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
  *
  * Also updates file ownership for outputs, removes invalid cache entries, and
  * collects successful output paths for later database indexing by the caller.
+ *
+ * @param imageFiles               Vector containing absolute or relative paths of source images.
+ * @param modeMdf                  True if converting MDF/MDS images.
+ * @param modeNrg                  True if converting NRG images.
+ * @param modeChd                  True if converting CHD images.
+ * @param modeDaa                  True if converting DAA/GBI images.
+ * @param completedBytes           Atomic counter to track cumulative processed bytes.
+ * @param completedTasks           Atomic counter to track successfully completed or skipped tasks.
+ * @param failedTasks              Atomic counter to track failed conversion tasks.
+ * @param successfulOutputPaths    Optional pointer to a vector storing successfully generated ISO paths.
+ * @param outPathsMutex            Optional pointer to a mutex guarding @p successfulOutputPaths.
  */
 void convertToISO(const std::vector<std::string>& imageFiles,
                   const bool& modeMdf,
@@ -91,45 +197,29 @@ void convertToISO(const std::vector<std::string>& imageFiles,
 
         auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
 
-        // Build displayPath without an intermediate std::string when possible
         std::string displayPath;
         if (!displayConfig::toggleNamesOnly) {
             displayPath.reserve(directory.size() + 1 + fileNameOnly.size());
             displayPath.append(directory).append("/").append(fileNameOnly);
         } else {
-            displayPath = fileNameOnly; // single assignment, no concat
+            displayPath = fileNameOnly;
         }
 
-        if (!fs::exists(inputPath)) {
+        ValidationResult valRes = validateImageFile(inputPath);
+        if (valRes != ValidationResult::Valid) {
             std::string msg;
-            msg.reserve(themes.missingLabel.size() * 2 + themes.errPath.size() +
-                        displayPath.size() + 32);
-            msg.append(themes.missingLabel).append("Convert2ISO: ")
-               .append(themes.errPath).append("'").append(displayPath).append("'")
-               .append(themes.missingLabel).append(": Failed → MissingFile.");
-            localFailedMsgs.push_back(std::move(msg));
-
-            {
-                std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
-                auto& cache = modeNrg ? GlobalState::nrgFilesCache :
-                              (modeMdf ? GlobalState::mdfMdsFilesCache :
-                               (modeChd ? GlobalState::chdFilesCache :
-                                (modeDaa ? GlobalState::daaGbiFilesCache : GlobalState::binImgFilesCache)));
-                cache.erase(std::remove(cache.begin(), cache.end(), inputPath), cache.end());
+            if (valRes == ValidationResult::Missing) {
+                msg.reserve(themes.missingLabel.size() * 2 + themes.errPath.size() + displayPath.size() + 32);
+                msg.append(themes.missingLabel).append("Convert2ISO: ")
+                   .append(themes.errPath).append("'").append(displayPath).append("'")
+                   .append(themes.missingLabel).append(": Failed → MissingFile.");
+                removeFromCache(inputPath, modeMdf, modeNrg, modeChd, modeDaa);
+            } else {
+                msg.reserve(themes.errLabel.size() * 2 + themes.errPath.size() + displayPath.size() + 48);
+                msg.append(themes.errLabel).append("Convert2ISO: ")
+                   .append(themes.errPath).append("'").append(displayPath).append("'")
+                   .append(themes.errLabel).append(": Failed → NoAccess.");
             }
-
-            failedTasks->fetch_add(1, std::memory_order_acq_rel);
-            if (localFailedMsgs.size() >= BATCH_SIZE) batchInsertMessages();
-            continue;
-        }
-
-        if (!std::ifstream(inputPath)) {  // avoid keeping file handle open longer than needed
-            std::string msg;
-            msg.reserve(themes.errLabel.size() * 2 + themes.errPath.size() +
-                        displayPath.size() + 48);
-            msg.append(themes.errLabel).append("Convert2ISO: ")
-               .append(themes.errPath).append("'").append(displayPath).append("'")
-               .append(themes.errLabel).append(": Failed → NoAccess.");
             localFailedMsgs.push_back(std::move(msg));
 
             failedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -137,7 +227,6 @@ void convertToISO(const std::vector<std::string>& imageFiles,
             continue;
         }
 
-        // Build outputPath in-place: replace extension with ".iso"
         std::string outputPath;
         {
             const size_t dotPos = inputPath.find_last_of('.');
@@ -149,8 +238,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
 
         if (fileExists(outputPath)) {
             std::string msg;
-            msg.reserve(themes.skipLabel.size() * 2 + themes.skipPath.size() +
-                        displayPath.size() + 32);
+            msg.reserve(themes.skipLabel.size() * 2 + themes.skipPath.size() + displayPath.size() + 32);
             msg.append(themes.skipLabel).append("Convert2ISO: ")
                .append(themes.skipPath).append("'").append(displayPath).append("'")
                .append(themes.skipLabel).append(": ISOalrExists → Skipped.");
@@ -163,47 +251,20 @@ void convertToISO(const std::vector<std::string>& imageFiles,
 
         if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) break;
 
-        bool conversionSuccess = false;
-        if (modeMdf)       conversionSuccess = convertMdfToIso(inputPath, outputPath, completedBytes);
-        else if (modeNrg)  conversionSuccess = convertNrgToIso(inputPath, outputPath, completedBytes);
-        else if (modeChd)  conversionSuccess = convertChdToIso(inputPath, outputPath, completedBytes);
-        else if (modeDaa)  conversionSuccess = convertDaaToIso(inputPath, outputPath, completedBytes);
-        else               conversionSuccess = convertCcdToIso(inputPath, outputPath, completedBytes);
+        bool conversionSuccess = runConversion(modeMdf, modeNrg, modeChd, modeDaa, inputPath, outputPath, completedBytes);
 
         if (conversionSuccess) {
             [[maybe_unused]] int ret = chown(outputPath.c_str(), real_uid, real_gid);
 
             if (successfulOutputPaths && outPathsMutex) {
                 std::lock_guard<std::mutex> lock(*outPathsMutex);
-                successfulOutputPaths->push_back(outputPath); // can't move; needed below
+                successfulOutputPaths->push_back(outputPath);
             }
 
-            // Determine file type from extension without copying the full filename
-            std::string_view fileType = "Image";
-            {
-                const size_t dotPos = fileNameOnly.find_last_of('.');
-                if (dotPos != std::string_view::npos) {
-                    std::string_view ext = std::string_view(fileNameOnly).substr(dotPos + 1);
-                    // Case-insensitive compare via known small set
-                    auto iequal = [](std::string_view a, const char* b) {
-                        if (a.size() != std::strlen(b)) return false;
-                        for (size_t i = 0; i < a.size(); ++i)
-                            if (std::tolower((unsigned char)a[i]) != b[i]) return false;
-                        return true;
-                    };
-                    if      (iequal(ext, "bin")) fileType = "BIN";
-                    else if (iequal(ext, "img")) fileType = "IMG";
-                    else if (iequal(ext, "mdf")) fileType = "MDF";
-                    else if (iequal(ext, "nrg")) fileType = "NRG";
-                    else if (iequal(ext, "chd")) fileType = "CHD";
-                    else if (iequal(ext, "daa")) fileType = "DAA";
-                    else if (iequal(ext, "gbi")) fileType = "GBI";
-                }
-            }
+            std::string_view fileType = getFileType(fileNameOnly);
 
             std::string msg;
-            msg.reserve(themes.okLabel.size() * 2 + themes.okPath.size() +
-                        outputPath.size() + fileType.size() + 16);
+            msg.reserve(themes.okLabel.size() * 2 + themes.okPath.size() + outputPath.size() + fileType.size() + 16);
             msg.append(themes.okLabel).append("Convert2ISO: ")
                .append(themes.okPath).append("'").append(outputPath).append("'")
                .append(themes.okLabel).append(": ").append(fileType).append(" → ISO.");
@@ -216,8 +277,7 @@ void convertToISO(const std::vector<std::string>& imageFiles,
 
             bool isCancelled = GlobalState::g_operationCancelled.load(std::memory_order_relaxed);
             std::string msg;
-            msg.reserve(themes.errLabel.size() * 2 + themes.errPath.size() +
-                        displayPath.size() + 24);
+            msg.reserve(themes.errLabel.size() * 2 + themes.errPath.size() + displayPath.size() + 24);
             msg.append(themes.errLabel).append("Convert2ISO: ")
                .append(themes.errPath).append("'").append(displayPath).append("'")
                .append(themes.errLabel).append(": ").append(isCancelled ? "Cancelled." : "Failed.");
