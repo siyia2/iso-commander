@@ -204,7 +204,7 @@ static void LzmaDec_Init(CLzmaDec *p) {
 #define kMatchMinLen           2
 
 /**
- * FIXED LZMA DECODER (Low CCN Refactor)
+ * FIXED LZMA DECODER
  * Supports volumes > 4GB and fixes Double-Free crashes.
  */
 
@@ -318,7 +318,44 @@ static size_t lzma_decode_distance(CLzmaDec *p, CLzmaProb *probs, int len) {
     return (size_t)distance + 1;
 }
 
-static size_t lzma_decode_full(CLzmaDec *p, const u8 *in, size_t insz, u8 *out, size_t outsz) {
+typedef enum {
+    LZMA_STEP_NEXT,   /* symbol fully handled, go to next loop iteration */
+    LZMA_STEP_MATCH,  /* a match must be copied (v->len / v->rep0 are set) */
+    LZMA_STEP_DONE    /* stop decoding and return v->result */
+} LzmaStep;
+
+typedef struct {
+    unsigned state;
+    size_t   rep0, rep1, rep2, rep3;
+    int      len;
+    size_t   result;
+} LzmaVars;
+
+/* Decode one adaptive bit (the update / normalize pattern repeated everywhere). */
+static unsigned lzma_decode_bit(CLzmaDec *p, CLzmaProb *prob) {
+    u32 ttt = *prob;
+    u32 bound = (p->range >> kNumBitModelTotalBits) * ttt;
+
+    if (p->code < bound) {
+        p->range = bound;
+        ttt += (kBitModelTotal - ttt) >> kNumMoveBits;
+        *prob = (CLzmaProb)ttt;
+        NORMALIZE;
+        return 0;
+    }
+    p->range -= bound; p->code -= bound;
+    ttt -= ttt >> kNumMoveBits; *prob = (CLzmaProb)ttt;
+    NORMALIZE;
+    return 1;
+}
+
+/* Position in the dictionary that is `rep0` bytes behind the write position. */
+static size_t lzma_dic_src(const CLzmaDec *p, size_t rep0) {
+    return (p->dicPos >= rep0) ? (p->dicPos - rep0)
+                               : (p->dicPos + p->dicBufSize - rep0);
+}
+
+static void lzma_init(CLzmaDec *p, const u8 *in, u8 *out, size_t outsz) {
     // Basic Initialization
     p->dic         = out;
     p->dicBufSize  = outsz;
@@ -329,153 +366,158 @@ static size_t lzma_decode_full(CLzmaDec *p, const u8 *in, size_t insz, u8 *out, 
 
     // Load first 5 bytes
     for (int i = 0; i < 5; i++) p->code = (p->code << 8) | (*p->buf++);
+}
+
+static CLzmaProb *lzma_literal_probs(CLzmaDec *p, CLzmaProb *probs) {
+    CLzmaProb *prob = probs + Literal;
+    if (p->processedPos != 0 || p->checkDicSize != 0) {
+        u8 prevByte = (p->dicPos == 0) ? 0 : p->dic[p->dicPos - 1];
+        prob += (LZMA_LIT_SIZE * (((p->processedPos & ((1 << p->lp) - 1)) << p->lc)
+                + (prevByte >> (8 - p->lc))));
+    }
+    return prob;
+}
+
+/* Literal decoding when the previous symbol was a match (uses the match byte). */
+static u32 lzma_decode_matched_literal(CLzmaDec *p, CLzmaProb *prob, u8 matchByte) {
+    u32 symbol = 1;
+
+    do {
+        u32 bit;
+        CLzmaProb *probLit;
+        matchByte <<= 1;
+        bit = matchByte & 0x100;
+        probLit = prob + 0x100 + bit + symbol;
+        GET_BIT2(probLit, symbol, bit = 0, bit = 0x100);
+        if ((matchByte & 0x100) != bit) {
+            while (symbol < 0x100) { GET_BIT(prob + symbol, symbol); }
+            break;
+        }
+    } while (symbol < 0x100);
+    return symbol;
+}
+
+static LzmaStep lzma_step_literal(CLzmaDec *p, CLzmaProb *probs, LzmaVars *v) {
+    CLzmaProb *prob = lzma_literal_probs(p, probs);
+    u32 symbol = 1;
+
+    if (v->state >= 7) {
+        u8 matchByte = p->dic[lzma_dic_src(p, v->rep0)];
+        symbol = lzma_decode_matched_literal(p, prob, matchByte);
+    }
+    while (symbol < 0x100) { GET_BIT(prob + symbol, symbol); }
+
+    p->dic[p->dicPos++] = (u8)symbol;
+    p->processedPos++;
+    v->state = (v->state < 4) ? 0 : (v->state < 10) ? v->state - 3 : v->state - 6;
+    return LZMA_STEP_NEXT;
+}
+
+/* IsRep == 0: a normal match with a freshly decoded distance. */
+static LzmaStep lzma_step_simple_match(CLzmaDec *p, CLzmaProb *probs, LzmaVars *v, u32 posState) {
+    v->rep3 = v->rep2; v->rep2 = v->rep1; v->rep1 = v->rep0;
+    v->len = (int)lzma_decode_len(p, probs + LenCoder, posState);
+    v->state = (v->state < 7) ? 7 : 10;
+
+    v->rep0 = lzma_decode_distance(p, probs, v->len);
+    if (v->rep0 == 0) {
+        v->result = p->dicPos;
+        return LZMA_STEP_DONE;
+    }
+    return LZMA_STEP_MATCH;
+}
+
+/* IsRepG0 == 0 and IsRep0Long == 0: single byte copied from rep0. */
+static LzmaStep lzma_step_short_rep(CLzmaDec *p, LzmaVars *v) {
+    if (p->dicPos == 0 && p->checkDicSize == 0) {
+        v->result = 0;
+        return LZMA_STEP_DONE;
+    }
+    size_t srcPos = lzma_dic_src(p, v->rep0);
+    if (p->dicPos >= p->dicBufSize) {
+        v->result = p->dicPos;
+        return LZMA_STEP_DONE;
+    }
+    p->dic[p->dicPos++] = p->dic[srcPos];
+    p->processedPos++;
+    v->state = (v->state < 7) ? 9 : 11;
+    return LZMA_STEP_NEXT;
+}
+
+/* IsRepG0 == 1: choose rep1 / rep2 / rep3 and rotate the rep history. */
+static void lzma_select_rep_distance(CLzmaDec *p, CLzmaProb *probs, LzmaVars *v) {
+    size_t distance;
+
+    if (lzma_decode_bit(p, probs + IsRepG1 + v->state) == 0) {
+        distance = v->rep1;
+    } else {
+        if (lzma_decode_bit(p, probs + IsRepG2 + v->state) == 0) {
+            distance = v->rep2;
+        } else {
+            distance = v->rep3;
+            v->rep3 = v->rep2;
+        }
+        v->rep2 = v->rep1;
+    }
+    v->rep1 = v->rep0;
+    v->rep0 = distance;
+}
+
+/* IsRep == 1: repeated match. */
+static LzmaStep lzma_step_rep_match(CLzmaDec *p, CLzmaProb *probs, LzmaVars *v, u32 posState) {
+    if (lzma_decode_bit(p, probs + IsRepG0 + v->state) == 0) {
+        CLzmaProb *prob = probs + IsRep0Long + (v->state << kNumPosBitsMax) + posState;
+        if (lzma_decode_bit(p, prob) == 0)
+            return lzma_step_short_rep(p, v);
+    } else {
+        lzma_select_rep_distance(p, probs, v);
+    }
+
+    v->len = (int)lzma_decode_len(p, probs + RepLenCoder, posState);
+    v->state = (v->state < 7) ? 8 : 11;
+    return LZMA_STEP_MATCH;
+}
+
+/* Copies the match; returns 0 if the distance is invalid. */
+static int lzma_copy_match(CLzmaDec *p, size_t rep0, int len) {
+    // FINAL MATCH COPY
+    if (rep0 > p->dicPos + p->checkDicSize) return 0;
+    while (len--) {
+        if (p->dicPos >= p->dicBufSize) break;
+        size_t srcPos = lzma_dic_src(p, rep0);
+        p->dic[p->dicPos++] = p->dic[srcPos];
+        p->processedPos++;
+    }
+    return 1;
+}
+
+static size_t lzma_decode_full(CLzmaDec *p, const u8 *in, size_t insz, u8 *out, size_t outsz) {
+    lzma_init(p, in, out, outsz);
     (void)insz;
 
-    unsigned state = 0;
-    size_t rep0 = 1, rep1 = 1, rep2 = 1, rep3 = 1;
-    int len = 0;
+    LzmaVars v = { 0, 1, 1, 1, 1, 0, 0 };
     CLzmaProb *probs = p->probs;
 
     for (;;) {
         if (p->dicPos >= p->dicBufSize) return p->dicPos;
 
         u32 posState = (u32)((size_t)p->dicPos & ((1 << p->pb) - 1));
-        CLzmaProb *prob = probs + IsMatch + (state << kNumPosBitsMax) + posState;
-        u32 ttt = *prob;
-        u32 bound = (p->range >> kNumBitModelTotalBits) * ttt;
+        CLzmaProb *prob = probs + IsMatch + (v.state << kNumPosBitsMax) + posState;
 
-        if (p->code < bound) {
-            p->range = bound;
-            ttt += (kBitModelTotal - ttt) >> kNumMoveBits;
-            *prob = (CLzmaProb)ttt;
-            NORMALIZE;
-
-            prob = probs + Literal;
-            if (p->processedPos != 0 || p->checkDicSize != 0) {
-                u8 prevByte = (p->dicPos == 0) ? 0 : p->dic[p->dicPos - 1];
-                prob += (LZMA_LIT_SIZE * (((p->processedPos & ((1 << p->lp) - 1)) << p->lc)
-                        + (prevByte >> (8 - p->lc))));
-            }
-
-            u32 symbol = 1;
-            if (state >= 7) {
-                size_t dicPos2 = (p->dicPos >= rep0) ? (p->dicPos - rep0) : (p->dicPos + p->dicBufSize - rep0);
-                u8 matchByte = p->dic[dicPos2];
-                do {
-                    u32 bit;
-                    CLzmaProb *probLit;
-                    matchByte <<= 1;
-                    bit = matchByte & 0x100;
-                    probLit = prob + 0x100 + bit + symbol;
-                    GET_BIT2(probLit, symbol, bit = 0, bit = 0x100);
-                    if ((matchByte & 0x100) != bit) {
-                        while (symbol < 0x100) { GET_BIT(prob + symbol, symbol); }
-                        break;
-                    }
-                } while (symbol < 0x100);
-            }
-            while (symbol < 0x100) { GET_BIT(prob + symbol, symbol); }
-
-            p->dic[p->dicPos++] = (u8)symbol;
-            p->processedPos++;
-            state = (state < 4) ? 0 : (state < 10) ? state - 3 : state - 6;
-            continue;
-        }
-
-        p->range -= bound; p->code -= bound;
-        ttt -= ttt >> kNumMoveBits; *prob = (CLzmaProb)ttt;
-        NORMALIZE;
-
-        prob = probs + IsRep + state;
-        ttt = *prob;
-        bound = (p->range >> kNumBitModelTotalBits) * ttt;
-
-        if (p->code < bound) {
-            p->range = bound;
-            ttt += (kBitModelTotal - ttt) >> kNumMoveBits; *prob = (CLzmaProb)ttt;
-            NORMALIZE;
-
-            rep3 = rep2; rep2 = rep1; rep1 = rep0;
-            len = (int)lzma_decode_len(p, probs + LenCoder, posState);
-            state = (state < 7) ? 7 : 10;
-
-            rep0 = lzma_decode_distance(p, probs, len);
-            if (rep0 == 0) return p->dicPos;
+        LzmaStep step;
+        if (lzma_decode_bit(p, prob) == 0) {
+            step = lzma_step_literal(p, probs, &v);
+        } else if (lzma_decode_bit(p, probs + IsRep + v.state) == 0) {
+            step = lzma_step_simple_match(p, probs, &v, posState);
         } else {
-            p->range -= bound; p->code -= bound;
-            ttt -= ttt >> kNumMoveBits; *prob = (CLzmaProb)ttt;
-            NORMALIZE;
-
-            prob = probs + IsRepG0 + state;
-            ttt = *prob; bound = (p->range >> kNumBitModelTotalBits) * ttt;
-
-            if (p->code < bound) {
-                p->range = bound; ttt += (kBitModelTotal - ttt) >> kNumMoveBits; *prob = (CLzmaProb)ttt;
-                NORMALIZE;
-                prob = probs + IsRep0Long + (state << kNumPosBitsMax) + posState;
-                ttt = *prob; bound = (p->range >> kNumBitModelTotalBits) * ttt;
-
-                if (p->code < bound) {
-                    p->range = bound; ttt += (kBitModelTotal - ttt) >> kNumMoveBits; *prob = (CLzmaProb)ttt;
-                    NORMALIZE;
-                    if (p->dicPos == 0 && p->checkDicSize == 0) return 0;
-                    size_t srcPos = (p->dicPos >= rep0) ? (p->dicPos - rep0) : (p->dicPos + p->dicBufSize - rep0);
-                    if (p->dicPos >= p->dicBufSize) return p->dicPos;
-                    p->dic[p->dicPos++] = p->dic[srcPos];
-                    p->processedPos++;
-                    state = (state < 7) ? 9 : 11;
-                    continue;
-                } else {
-                    p->range -= bound; p->code -= bound; ttt -= ttt >> kNumMoveBits; *prob = (CLzmaProb)ttt;
-                    NORMALIZE;
-                }
-            } else {
-                size_t distance;
-                p->range -= bound; p->code -= bound; ttt -= ttt >> kNumMoveBits; *prob = (CLzmaProb)ttt;
-                NORMALIZE;
-                prob = probs + IsRepG1 + state;
-                ttt = *prob; bound = (p->range >> kNumBitModelTotalBits) * ttt;
-
-                if (p->code < bound) {
-                    p->range = bound; ttt += (kBitModelTotal - ttt) >> kNumMoveBits; *prob = (CLzmaProb)ttt;
-                    NORMALIZE;
-                    distance = rep1;
-                } else {
-                    p->range -= bound; p->code -= bound; ttt -= ttt >> kNumMoveBits; *prob = (CLzmaProb)ttt;
-                    NORMALIZE;
-                    prob = probs + IsRepG2 + state;
-                    ttt = *prob; bound = (p->range >> kNumBitModelTotalBits) * ttt;
-                    if (p->code < bound) {
-                        p->range = bound; ttt += (kBitModelTotal - ttt) >> kNumMoveBits; *prob = (CLzmaProb)ttt;
-                        NORMALIZE;
-                        distance = rep2;
-                    } else {
-                        p->range -= bound; p->code -= bound; ttt -= ttt >> kNumMoveBits; *prob = (CLzmaProb)ttt;
-                        NORMALIZE;
-                        distance = rep3;
-                        rep3 = rep2;
-                    }
-                    rep2 = rep1;
-                }
-                rep1 = rep0;
-                rep0 = distance;
-            }
-
-            len = (int)lzma_decode_len(p, probs + RepLenCoder, posState);
-            state = (state < 7) ? 8 : 11;
+            step = lzma_step_rep_match(p, probs, &v, posState);
         }
 
-        len += kMatchMinLen;
+        if (step == LZMA_STEP_DONE) return v.result;
+        if (step == LZMA_STEP_NEXT) continue;
 
-        // FINAL MATCH COPY
-        if (rep0 > p->dicPos + p->checkDicSize) return 0;
-        while (len--) {
-            if (p->dicPos >= p->dicBufSize) break;
-            size_t srcPos = (p->dicPos >= rep0) ? (p->dicPos - rep0)
-                                                : (p->dicPos + p->dicBufSize - rep0);
-            p->dic[p->dicPos++] = p->dic[srcPos];
-            p->processedPos++;
-        }
+        v.len += kMatchMinLen;
+        if (!lzma_copy_match(p, v.rep0, v.len)) return 0;
     }
     return p->dicPos;
 }

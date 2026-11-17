@@ -164,6 +164,109 @@ size_t getTotalFileSize(const std::vector<std::string>& files) {
 void toLowerInPlace(std::string& str);
 
 /**
+ * @brief Estimates the uncompressed ISO size for a Compressed Hunks Data (CHD) image file.
+ *
+ * Opens the CHD header via libchdr, detects the sector geometry (2448, 2352, or 2048 bytes),
+ * and computes the total sector count multiplied by the standard 2048-byte user data size.
+ *
+ * @param file Absolute path to the CHD file.
+ * @return Estimated size in bytes of the resulting ISO, or 0 if opening/parsing fails.
+ */
+static size_t estimateChdBytes(const std::string& file) {
+    chd_file* rawChd = nullptr;
+    if (chd_open(file.c_str(), CHD_OPEN_READ, nullptr, &rawChd) != CHDERR_NONE || !rawChd) {
+        return 0;
+    }
+
+    size_t bytes = 0;
+    if (const chd_header* header = chd_get_header(rawChd)) {
+        uint32_t hunkSize = header->hunkbytes;
+        uint32_t rawSectorSize = 0;
+        if      (hunkSize % 2448 == 0) rawSectorSize = 2448;
+        else if (hunkSize % 2352 == 0) rawSectorSize = 2352;
+        else if (hunkSize % 2048 == 0) rawSectorSize = 2048;
+
+        if (rawSectorSize != 0) {
+            constexpr uint32_t userDataSize = 2048;
+            uint32_t sectorsPerHunk = hunkSize / rawSectorSize;
+            uint64_t totalSectors = static_cast<uint64_t>(header->totalhunks) * sectorsPerHunk;
+            bytes = totalSectors * userDataSize;
+        }
+    }
+    chd_close(rawChd);
+    return bytes;
+}
+
+/**
+ * @brief Estimates the output ISO size for a Nero Burning ROM (NRG) image file.
+ *
+ * Computes the size by reading the raw file length minus a fixed 300 KB
+ * (307,200 bytes) header/footer offset typical of NRG container formats.
+ *
+ * @param file Absolute path to the NRG file.
+ * @return Estimated size in bytes of the resulting ISO, or 0 if the file cannot be read.
+ */
+static size_t estimateNrgBytes(const std::string& file) {
+    std::ifstream nrg(file, std::ios::binary | std::ios::ate);
+    if (!nrg) return 0;
+    std::streampos pos = nrg.tellg();
+    if (pos <= 0) return 0;
+    size_t sz = static_cast<size_t>(pos);
+    return (sz > 307200) ? (sz - 307200) : 0;
+}
+
+/**
+ * @brief Estimates the output ISO size for a Media Descriptor Image (MDF/MDS) file.
+ *
+ * Detects sector geometry using @c MdfTypeInfo and calculates total sector count
+ * multiplied by the specific sector data payload size.
+ *
+ * @param file Absolute path to the MDF file.
+ * @return Estimated size in bytes of the resulting ISO, or 0 if geometry is undetectable.
+ */
+static size_t estimateMdfBytes(const std::string& file) {
+    std::ifstream mdf(file, std::ios::binary);
+    if (!mdf) return 0;
+    MdfTypeInfo info;
+    if (!info.determineMdfType(mdf)) return 0;
+    mdf.seekg(0, std::ios::end);
+    std::streampos pos = mdf.tellg();
+    if (pos < 0) return 0;
+    size_t fileSize = static_cast<size_t>(pos);
+    return (fileSize / info.sector_size) * info.sector_data;
+}
+
+/**
+ * @brief Estimates the output ISO size for a Direct Access Archive (DAA/GBI) image file.
+ *
+ * Delegates size resolution to the underlying @c getDaaIsoSize helper routine.
+ *
+ * @param file Absolute path to the DAA or GBI file.
+ * @return Uncompressed ISO size in bytes, or 0 if extraction fails.
+ */
+static size_t estimateDaaBytes(const std::string& file) {
+    uint64_t isoSize = getDaaIsoSize(file);
+    return (isoSize > 0) ? static_cast<size_t>(isoSize) : 0;
+}
+
+/**
+ * @brief Estimates the output ISO size for raw disc image formats (BIN, IMG, CCD).
+ *
+ * Computes total file sectors based on @c CcdSector geometry and scales them
+ * by standard @c DATA_SIZE bytes.
+ *
+ * @param file Absolute path to the raw image file.
+ * @return Estimated size in bytes of the resulting ISO, or 0 on read failure.
+ */
+static size_t estimateBinBytes(const std::string& file) {
+    std::ifstream ccd(file, std::ios::binary | std::ios::ate);
+    if (!ccd) return 0;
+    std::streampos pos = ccd.tellg();
+    if (pos <= 0) return 0;
+    return (static_cast<size_t>(pos) / sizeof(CcdSector)) * DATA_SIZE;
+}
+
+/**
  * @brief Calculate the total estimated output size in bytes for a batch of disc image conversions.
  *
  * Iterates over the provided file list and estimates the size of the resulting ISO for each file
@@ -193,67 +296,26 @@ size_t calculateTotalBytesForConversions(
     const bool modeChd, const bool modeDaa)
 {
     size_t totalBytes = 0;
+    const bool noModesActive = !modeMdf && !modeNrg && !modeChd && !modeDaa;
 
     for (const auto& file : filesToProcess) {
         std::string ext = file.substr(file.find_last_of(".") + 1);
         toLowerInPlace(ext);
 
         if (modeChd && ext == "chd") {
-            chd_file* rawChd = nullptr;
-            chd_error err = chd_open(file.c_str(), CHD_OPEN_READ, nullptr, &rawChd);
-            if (err == CHDERR_NONE && rawChd) {
-                const chd_header* header = chd_get_header(rawChd);
-                if (header) {
-                    uint32_t hunkSize = header->hunkbytes;
-                    uint32_t rawSectorSize = 0;
-                    if      (hunkSize % 2448 == 0) rawSectorSize = 2448;
-                    else if (hunkSize % 2352 == 0) rawSectorSize = 2352;
-                    else if (hunkSize % 2048 == 0) rawSectorSize = 2048;
-                    if (rawSectorSize != 0) {
-                        constexpr uint32_t userDataSize = 2048;
-                        uint32_t sectorsPerHunk = hunkSize / rawSectorSize;
-                        uint64_t totalSectors = static_cast<uint64_t>(header->totalhunks) * sectorsPerHunk;
-                        totalBytes += totalSectors * userDataSize;
-                    }
-                }
-                chd_close(rawChd);
-            }
+            totalBytes += estimateChdBytes(file);
         }
         else if (modeNrg && ext == "nrg") {
-            std::ifstream nrg(file, std::ios::binary | std::ios::ate);
-            if (nrg) {
-                std::streampos pos = nrg.tellg();
-                if (pos > 0) {
-                    size_t sz = static_cast<size_t>(pos);
-                    totalBytes += (sz > 307200) ? (sz - 307200) : 0;
-                }
-            }
+            totalBytes += estimateNrgBytes(file);
         }
         else if (modeMdf && ext == "mdf") {
-            std::ifstream mdf(file, std::ios::binary);
-            if (mdf) {
-                MdfTypeInfo info;
-                if (!info.determineMdfType(mdf)) continue;
-                mdf.seekg(0, std::ios::end);
-                std::streampos pos = mdf.tellg();
-                if (pos < 0) continue;
-                size_t fileSize = static_cast<size_t>(pos);
-                size_t sectors = fileSize / info.sector_size;
-                totalBytes += sectors * info.sector_data;
-            }
+            totalBytes += estimateMdfBytes(file);
         }
         else if (modeDaa && (ext == "daa" || ext == "gbi")) {
-            uint64_t isoSize = getDaaIsoSize(file);
-            if (isoSize > 0) totalBytes += isoSize;
+            totalBytes += estimateDaaBytes(file);
         }
-        else if (!modeMdf && !modeNrg && !modeChd && !modeDaa &&
-                 (ext == "bin" || ext == "img" || ext == "ccd")) {
-            std::ifstream ccd(file, std::ios::binary | std::ios::ate);
-            if (ccd) {
-                std::streampos pos = ccd.tellg();
-                if (pos > 0)
-                    totalBytes += (static_cast<size_t>(pos) / sizeof(CcdSector)) * DATA_SIZE;
-            }
+        else if (noModesActive && (ext == "bin" || ext == "img" || ext == "ccd")) {
+            totalBytes += estimateBinBytes(file);
         }
     }
 

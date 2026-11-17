@@ -377,46 +377,38 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
 // ─── Mount branch ───────────────────────────────────────────────────────────
 
 /**
- * @brief Mounts ISO files supplied as command-line arguments.
+ * @brief Verifies that the current process possesses root privileges.
  *
- * Validates the provided paths, recursively scans directories according
- * to the configured maximum depth, and collects unique ISO files.
- * Files are sorted for deterministic task ordering.
- *
- * Mounting is performed concurrently using the static thread pool,
- * respecting GlobalConcurrency::MOUNT_THREAD_CAP and the pool size.
- * Workers dynamically claim tasks from a shared atomic index and mount
- * one ISO at a time.
- *
- * Progress is shown through the progress-bar interface unless silent
- * mode is enabled. Mount operations have no byte-level progress, so the
- * bar is task-based: the "total" and the "completed" counter are both
- * expressed in number of ISO files. Detailed results and the operation
- * summary are displayed only when requested through the progress prompt.
- *
- * @param args Parsed command-line arguments, including input paths,
- *             maximum scan depth, and silent-mode settings.
- *
- * @return 0 if every ISO mounted successfully (or there was nothing to
- *         mount and no path errors occurred);
- *         1 if any mount failed, a path-validation error occurred,
- *         root privileges were missing, or the operation was cancelled.
+ * @return true if the effective user ID is 0 (root); false otherwise.
  */
-static int handleMount(const ParsedArgs& args) {
+static bool checkRootPrivileges() {
     if (geteuid() != 0) {
         errMsg("Root privileges required for mounting ISOs.");
-        return 1;
+        return false;
     }
+    return true;
+}
 
-    bool noScanDir = true;
-
-    std::unordered_set<std::string> isoFiles;
-    bool hasErrors = false;
-
+/**
+ * @brief Validates input paths and recursively scans directories for unique ISO files.
+ *
+ * Iterates through the input paths, verifying existence, regular file types, and valid
+ * ".iso" extensions, or recursively scanning directories according to the maximum depth constraint.
+ *
+ * @param args Parsed command-line arguments containing input paths and depth configuration.
+ * @param isoFiles Set storing unique, canonical paths of successfully discovered ISO files.
+ * @param hasErrors Reference flag set to true if any path validation or file error occurs.
+ * @param noScanDir Reference flag tracking whether a directory scan was initiated.
+ * @return true if the operation was cancelled by the user during scanning; false otherwise.
+ */
+static bool collectIsosAndValidatePaths(const ParsedArgs& args,
+                                       std::unordered_set<std::string>& isoFiles,
+                                       bool& hasErrors,
+                                       bool& noScanDir) {
     for (const auto& rawPath : args.paths) {
         if (GlobalState::g_operationCancelled.load()) {
             verboseWarn(args.silentMode, "Operation cancelled by user.");
-            return 1;
+            return true; // Cancelled
         }
 
         fs::path path(rawPath);
@@ -471,6 +463,161 @@ static int handleMount(const ParsedArgs& args) {
             hasErrors = true;
         }
     }
+    return false;
+}
+
+/**
+ * @brief Dispatches and executes ISO mount tasks concurrently across the static thread pool.
+ *
+ * Workers dynamically claim tasks from a shared atomic index to mount ISO files
+ * up to the configured concurrency cap and pool size limits.
+ *
+ * @param files Sorted list of canonical ISO file paths to process.
+ * @param silentMode Whether silent output mode is enabled.
+ * @param completedBytes Atomic counter tracking task progress for the progress bar.
+ * @param completedTasks Atomic counter tracking successful mount operations.
+ * @param failedTasks Atomic counter tracking failed mount operations.
+ * @return The final value of the atomic task index upon thread completion.
+ */
+static size_t runMountThreadPool(const std::vector<std::string>& files,
+                                 bool silentMode,
+                                 std::atomic<size_t>& completedBytes,
+                                 std::atomic<size_t>& completedTasks,
+                                 std::atomic<size_t>& failedTasks) {
+    ThreadPool& pool = getStaticThreadPool();
+    const size_t poolSize = pool.threadCount();
+    const size_t numThreads = std::min({
+        files.size(),
+        GlobalConcurrency::MOUNT_THREAD_CAP,
+        poolSize
+    });
+
+    std::atomic<size_t> nextTask{0};
+    std::vector<std::future<void>> futures;
+    futures.reserve(numThreads);
+
+    for (size_t t = 0; t < numThreads; ++t) {
+        futures.emplace_back(pool.enqueue(
+            [&files, &nextTask,
+             &completedBytes, &completedTasks, &failedTasks,
+             silentMode]() {
+                while (!GlobalState::g_operationCancelled.load()) {
+                    const size_t i = nextTask.fetch_add(1);
+
+                    if (i >= files.size())
+                        break;
+
+                    mountIsoFiles(std::vector<std::string>{files[i]},
+                                  &completedTasks, &failedTasks,
+                                  silentMode);
+
+                    completedBytes.fetch_add(1);
+                }
+            }));
+    }
+
+    for (auto& future : futures)
+        future.wait();
+
+    return nextTask.load();
+}
+
+/**
+ * @brief Processes any remaining unclaimed ISO files if the operation was cancelled mid-execution.
+ *
+ * Ensures cleanup handling for leftover tasks after the main worker pool and progress bar terminate.
+ *
+ * @param files Sorted list of all target ISO file paths.
+ * @param nextTaskVal The task index up to which workers successfully claimed tasks.
+ * @param completedTasks Atomic counter tracking successful mount operations.
+ * @param failedTasks Atomic counter tracking failed mount operations.
+ * @param silentMode Whether silent output mode is enabled.
+ */
+static void handleCancelledLeftovers(const std::vector<std::string>& files,
+                                     size_t nextTaskVal,
+                                     std::atomic<size_t>& completedTasks,
+                                     std::atomic<size_t>& failedTasks,
+                                     bool silentMode) {
+    if (GlobalState::g_operationCancelled.load()) {
+        const size_t first = std::min(nextTaskVal, files.size());
+        if (first < files.size())
+            mountIsoFiles(
+                std::vector<std::string>(files.begin() + first, files.end()),
+                &completedTasks, &failedTasks, silentMode);
+    }
+}
+
+/**
+ * @brief Displays detailed operation logs and the final execution summary.
+ *
+ * Outputs completed, skipped, and failed logs alongside the final success/failure counts
+ * if requested via the progress interface.
+ *
+ * @param silentMode Whether silent output mode is enabled.
+ * @param showVerbose Flag indicating whether the user requested detailed logs.
+ * @param completedTasks Atomic counter tracking successful mount operations.
+ * @param failedTasks Atomic counter tracking failed mount operations.
+ */
+static void showMountSummary(bool silentMode, bool showVerbose,
+                             std::atomic<size_t>& completedTasks,
+                             std::atomic<size_t>& failedTasks) {
+    if (!silentMode && showVerbose) {
+        SyncOutput sync;
+        clearScrollBuffer();
+        std::cout << "\n";
+
+        for (const auto& msg : verboseSets.operationCompleted)
+            std::cout << msg << UI::Palette::BoldReset << "\n";
+        for (const auto& msg : verboseSets.operationSkipped)
+            std::cout << msg << UI::Palette::BoldReset << "\n";
+        for (const auto& msg : verboseSets.operationFailed)
+            std::cout << msg << UI::Palette::BoldReset << "\n";
+
+        std::cout << "\nMount summary:\n"
+                  << "  Successful: " << completedTasks.load() << "\n"
+                  << "  Failed:     " << failedTasks.load()
+                  << UI::Palette::Reset << "\n\n";
+    }
+}
+
+/**
+ * @brief Mounts ISO files supplied as command-line arguments.
+ *
+ * Validates provided paths, recursively scans directories according
+ * to configured maximum depth limits, and collects unique ISO files.
+ * Files are sorted for deterministic task ordering.
+ *
+ * Mounting is performed concurrently using the static thread pool,
+ * respecting GlobalConcurrency::MOUNT_THREAD_CAP and pool bounds.
+ * Workers dynamically claim tasks from a shared atomic index and mount
+ * one ISO at a time.
+ *
+ * Progress is shown through the progress-bar interface unless silent
+ * mode is enabled. Mount operations have no byte-level progress, so the
+ * bar is task-based: both "total" and "completed" counters are expressed
+ * in number of ISO files. Detailed results and the operation summary
+ * are displayed only when requested through the progress prompt.
+ *
+ * @param args Parsed command-line arguments, including input paths,
+ *             maximum scan depth, and silent-mode settings.
+ *
+ * @return 0 if every ISO mounted successfully (or there was nothing to
+ *         mount and no path errors occurred);
+ *         1 if any mount failed, a path-validation error occurred,
+ *         root privileges were missing, or the operation was cancelled.
+ */
+static int handleMount(const ParsedArgs& args) {
+    if (!checkRootPrivileges()) {
+        return 1;
+    }
+
+    bool noScanDir = true;
+    std::unordered_set<std::string> isoFiles;
+    bool hasErrors = false;
+
+    if (collectIsosAndValidatePaths(args, isoFiles, hasErrors, noScanDir)) {
+        return 1;
+    }
 
     if (GlobalState::g_operationCancelled.load())
         verboseWarn(args.silentMode, "Mount operation cancelled by user.");
@@ -491,7 +638,6 @@ static int handleMount(const ParsedArgs& args) {
                 .append(isoFiles.size() == 1 ? "" : "s")
                 .append("; Attempting to mount...\n"));
 
-    // completedBytes is task-based here: it advances by one per ISO.
     std::atomic<size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
     std::atomic<bool> isComplete{false};
     bool showVerbose = false;
@@ -526,79 +672,16 @@ static int handleMount(const ParsedArgs& args) {
             coloredProcess, header);
     }
 
-    // Bound worker count by task count, configured cap, and pool size.
-    ThreadPool& pool = getStaticThreadPool();
-    const size_t poolSize = pool.threadCount();
-    const size_t numThreads = std::min({
-        totalTasks,
-        GlobalConcurrency::MOUNT_THREAD_CAP,
-        poolSize
-    });
-
-    std::atomic<size_t> nextTask{0};
-
-    std::vector<std::future<void>> futures;
-    futures.reserve(numThreads);
-
-    for (size_t t = 0; t < numThreads; ++t) {
-        futures.emplace_back(pool.enqueue(
-            [&files, &nextTask,
-             &completedBytes, &completedTasks, &failedTasks,
-             silentMode = args.silentMode]() {
-
-                // Stop claiming new items on Ctrl+C so the bar ends at once;
-                // unclaimed items are marked as cancelled after the bar.
-                while (!GlobalState::g_operationCancelled.load()) {
-                    const size_t i = nextTask.fetch_add(1);
-
-                    if (i >= files.size())
-                        break;
-
-                    mountIsoFiles(std::vector<std::string>{files[i]},
-                                  &completedTasks, &failedTasks,
-                                  silentMode);
-
-                    completedBytes.fetch_add(1);
-                }
-            }));
-    }
-
-    for (auto& future : futures)
-        future.wait();
+    size_t nextTaskVal = runMountThreadPool(files, args.silentMode, completedBytes, completedTasks, failedTasks);
 
     isComplete.store(true, std::memory_order_release);
 
     if (barThread.joinable())
         barThread.join();
 
-    // After a cancel, mark the items no worker claimed as cancelled. This
-    // runs after the bar has finished so they don't inflate its progress.
-    if (GlobalState::g_operationCancelled.load()) {
-        const size_t first = std::min(nextTask.load(), files.size());
-        if (first < files.size())
-            mountIsoFiles(
-                std::vector<std::string>(files.begin() + first, files.end()),
-                &completedTasks, &failedTasks, args.silentMode);
-    }
+    handleCancelledLeftovers(files, nextTaskVal, completedTasks, failedTasks, args.silentMode);
 
-    // Show detailed output only if requested through the progress prompt.
-    if (!args.silentMode && showVerbose) {
-        SyncOutput sync;
-        clearScrollBuffer();
-        std::cout << "\n";
-
-        for (const auto& msg : verboseSets.operationCompleted)
-            std::cout << msg << UI::Palette::BoldReset << "\n";
-        for (const auto& msg : verboseSets.operationSkipped)
-            std::cout << msg << UI::Palette::BoldReset << "\n";
-        for (const auto& msg : verboseSets.operationFailed)
-            std::cout << msg << UI::Palette::BoldReset << "\n";
-
-        std::cout << "\nMount summary:\n"
-                  << "  Successful: " << completedTasks.load() << "\n"
-                  << "  Failed:     " << failedTasks.load()
-                  << UI::Palette::Reset << "\n\n";
-    }   // ?2026l + flush — one atomic frame
+    showMountSummary(args.silentMode, showVerbose, completedTasks, failedTasks);
 
     return (failedTasks.load() == 0 &&
             !hasErrors &&
@@ -654,49 +737,35 @@ static void runUnmountWorkers(const std::vector<std::string>& paths,
 }
 
 /**
- * @brief Unmounts ISO mount points supplied as command-line arguments.
- *
- * Collects mount points from the specified paths or scans /mnt/ISOs
- * when no paths are provided or the "all" argument is specified.
- * Validates mount-point locations and rejects paths outside the
- * permitted /mnt/ISOs hierarchy. Mount points are sorted for
- * deterministic task ordering.
- *
- * Unmounting is performed concurrently using the static thread pool,
- * respecting GlobalConcurrency::UMOUNT_THREAD_CAP and the pool size.
- * Workers dynamically claim tasks from a shared atomic index and
- * unmount one mount point at a time.
- *
- * Progress is shown through the progress-bar interface unless silent
- * mode is enabled. Unmount operations have no byte-level progress, so
- * the bar is task-based: the "total" and the "completed" counter are
- * both expressed in number of mount points. Detailed results and the
- * operation summary are displayed only when requested through the
- * progress prompt.
- *
- * Attempts to remove the parent /mnt/ISOs directory after all workers
- * finish.
- *
- * @param args Parsed command-line arguments, including input paths
- *             and silent-mode settings.
- *
- * @return 0 if no unmount failures or path-validation errors occurred
- *         (including when there was nothing to unmount);
- *         1 if an unmount failed, a path-validation error occurred,
- *         root privileges were missing, or the operation was cancelled.
+ * @brief Holds the aggregated results and execution state from collecting and validating ISO mount points.
  */
-static int handleUmount(const ParsedArgs& args) {
-    if (geteuid() != 0) {
-        errMsg("Root privileges required for unmounting ISOs.");
-        return 1;
-    }
+struct CollectionResult {
+    std::unordered_set<std::string> mountPoints; ///< Set of validated, canonicalized absolute paths to target mount points.
+    bool hasErrors = false;                      ///< Flag indicating whether any path resolution or validation errors occurred.
+    bool cancelled = false;                      ///< Flag indicating if an asynchronous user cancellation signal was detected.
+    bool abortImmediately = false;               ///< Flag indicating whether to immediately abort execution without attempting unmounts.
+};
 
-    std::unordered_set<std::string> mountPoints;
-    bool hasErrors = false;
+/**
+ * @brief Collects, sanitizes, and validates ISO mount points based on command-line arguments or surface scans.
+ *
+ * @details This function examines the provided `ParsedArgs`:
+ * - If no paths or the `"all"` argument is specified, it performs a surface scan of `/mnt/ISOs`.
+ * - If specific paths are provided, it validates each path, enforcing that they strictly reside within
+ *   the permitted `/mnt/ISOs` directory hierarchy.
+ * - It monitors `GlobalState::g_operationCancelled` asynchronously during directory iterations to support
+ *   responsive user cancellation.
+ *
+ * @param[in] args Parsed command-line arguments containing target input paths and silent-mode configurations.
+ * @return CollectionResult A structure containing the validated set of mount points, error flags, and cancellation metadata.
+ *
+ * @throws fs::filesystem_error If underlying filesystem canonicalization or iteration fails unrecoverably.
+ */
+static CollectionResult collectMountPoints(const ParsedArgs& args) {
+    CollectionResult res;
 
     auto collectFromMnt = [&](const fs::path& mntPath) {
         disableInput();
-
         verboseInfo(args.silentMode,
                     std::string("Scanning ")
                     .append(mntPath.string())
@@ -708,11 +777,11 @@ static int handleUmount(const ParsedArgs& args) {
                     return;
 
                 if (entry.is_directory())
-                    mountPoints.insert(fs::canonical(entry.path()).string());
+                    res.mountPoints.insert(fs::canonical(entry.path()).string());
             }
         } catch (const fs::filesystem_error& e) {
             if (e.code() != std::errc::no_such_file_or_directory)
-                hasErrors = true;
+                res.hasErrors = true;
         }
     };
 
@@ -721,64 +790,89 @@ static int handleUmount(const ParsedArgs& args) {
 
     if (scanAllMnt) {
         collectFromMnt("/mnt/ISOs");
-
         if (GlobalState::g_operationCancelled.load()) {
             verboseWarn(args.silentMode, "Operation cancelled by user.");
-            return 1;
+            res.cancelled = true;
+            res.abortImmediately = true;
         }
-    } else {
-        for (const auto& rawPath : args.paths) {
-            if (GlobalState::g_operationCancelled.load()) {
-                verboseWarn(args.silentMode, "Operation cancelled by user.");
-                return 1;
-            }
+        return res;
+    }
 
-            fs::path path(rawPath);
+    for (const auto& rawPath : args.paths) {
+        if (GlobalState::g_operationCancelled.load()) {
+            verboseWarn(args.silentMode, "Operation cancelled by user.");
+            res.cancelled = true;
+            res.abortImmediately = true;
+            break;
+        }
 
-            try {
-                if (fs::exists(path) && fs::is_directory(path)) {
-                    const std::string canonical = fs::canonical(path).string();
+        fs::path path(rawPath);
+        try {
+            if (fs::exists(path) && fs::is_directory(path)) {
+                const std::string canonical = fs::canonical(path).string();
 
-                    if (canonical == "/mnt/ISOs") {
-                        collectFromMnt(path);
-                    } else if (canonical.rfind("/mnt/ISOs/", 0) == 0) {
-                        mountPoints.insert(canonical);
-                    } else {
-                        warnMsg(args.silentMode,
-                                "is not allowed. Only /mnt/ISOs or /mnt/ISOs/isoFolder are valid.",
-                                rawPath);
-                        hasErrors = true;
-                    }
+                if (canonical == "/mnt/ISOs") {
+                    collectFromMnt(path);
+                } else if (canonical.rfind("/mnt/ISOs/", 0) == 0) {
+                    res.mountPoints.insert(canonical);
                 } else {
-                    fs::path candidate = path.is_relative()
-                        ? fs::path("/mnt/ISOs") / path.filename()
-                        : path;
-
-                    if (fs::exists(candidate) && fs::is_directory(candidate)) {
-                        mountPoints.insert(fs::canonical(candidate).string());
-                    } else {
-                        warnMsg(args.silentMode,
-                                "does not exist or is not a valid mount point, skipping.",
-                                rawPath);
-                        hasErrors = true;
-                    }
+                    warnMsg(args.silentMode,
+                            "is not allowed. Only /mnt/ISOs or /mnt/ISOs/isoFolder are valid.",
+                            rawPath);
+                    res.hasErrors = true;
                 }
-            } catch (const fs::filesystem_error& e) {
-                warnMsg(args.silentMode,
-                        std::string("Error processing path: ") + e.what(), rawPath);
-                hasErrors = true;
+            } else {
+                fs::path candidate = path.is_relative()
+                    ? fs::path("/mnt/ISOs") / path.filename()
+                    : path;
+
+                if (fs::exists(candidate) && fs::is_directory(candidate)) {
+                    res.mountPoints.insert(fs::canonical(candidate).string());
+                } else {
+                    warnMsg(args.silentMode,
+                            "does not exist or is not a valid mount point, skipping.",
+                            rawPath);
+                    res.hasErrors = true;
+                }
             }
+        } catch (const fs::filesystem_error& e) {
+            warnMsg(args.silentMode,
+                    std::string("Error processing path: ") + e.what(), rawPath);
+            res.hasErrors = true;
         }
     }
 
-    if (GlobalState::g_operationCancelled.load())
+    if (GlobalState::g_operationCancelled.load() && !res.cancelled) {
         verboseWarn(args.silentMode, "Umount operation cancelled by user.");
+        res.cancelled = true;
+    }
 
+    return res;
+}
+
+/**
+ * @brief Executes concurrent unmounting of collected ISO mount points with real-time progress reporting.
+ *
+ * @details This function orchestrates the unmount lifecycle:
+ * - Sorts the target mount point paths alphabetically for deterministic execution order.
+ * - Spawns and manages a dedicated progress bar reporting thread (unless running in silent mode).
+ * - Dispatches worker threads via `runUnmountWorkers` to claim tasks from a shared atomic index.
+ * - Handles post-cancellation catch-up tasks for any unclaimed mount points.
+ * - Performs cleanup of the parent `/mnt/ISOs` directory upon worker completion.
+ * - Renders detailed operation success/failure summaries if verbose mode was requested.
+ *
+ * @param[in] mountPoints Unordered set of canonicalized absolute mount point paths to be unmounted.
+ * @param[in] args        Parsed command-line arguments controlling verbosity and silent settings.
+ * @param[in] hasErrors   Flag indicating whether path validation errors were encountered prior to execution.
+ * @return int Returns `0` if all tasks succeed without errors or cancellation; returns `1` otherwise.
+ */
+static int executeUnmounts(const std::unordered_set<std::string>& mountPoints,
+                            const ParsedArgs& args,
+                            bool hasErrors) {
     if (mountPoints.empty()) {
         if (GlobalState::g_operationCancelled.load())
             return 1;
-        verboseWarn(args.silentMode,
-                    "No ISO mount points found to unmount.");
+        verboseWarn(args.silentMode, "No ISO mount points found to unmount.");
         return hasErrors ? 1 : 0;
     }
 
@@ -866,6 +960,33 @@ static int handleUmount(const ParsedArgs& args) {
 
     return (failedTasks.load() == 0 && !hasErrors &&
             !GlobalState::g_operationCancelled.load()) ? 0 : 1;
+}
+
+/**
+ * @brief Top-level control handler for unmounting ISO mount points supplied via command-line arguments.
+ *
+ * @details Performs necessary privilege verification (`geteuid() == 0`), delegates path collection
+ * and boundary validation to `collectMountPoints()`, and hands off validated targets to `executeUnmounts()`
+ * for concurrent processing.
+ *
+ * @param[in] args Parsed command-line arguments structure containing input paths and execution flags.
+ * @return int Exit status code:
+ *             - `0` on complete success (including when no targets were found and no errors occurred).
+ *             - `1` if root privileges are missing, path validation fails, unmount operations error out,
+ *               or the task is cancelled by the user.
+ */
+static int handleUmount(const ParsedArgs& args) {
+    if (geteuid() != 0) {
+        errMsg("Root privileges required for unmounting ISOs.");
+        return 1;
+    }
+
+    CollectionResult res = collectMountPoints(args);
+    if (res.abortImmediately) {
+        return 1;
+    }
+
+    return executeUnmounts(res.mountPoints, args, res.hasErrors);
 }
 
 // ─── Convert branch (c2iso) ─────────────────────────────────────────────────────
@@ -1175,55 +1296,67 @@ static int handleConvert(const ParsedArgs& args) {
 // ─── Write-to-USB branch (w2usb) ────────────────────────────────────────────
 
 /**
- * @brief Non-interactive ISO -> USB writer.
+ * @brief Validates root privileges and partitions command-line arguments into ISOs and devices.
  *
- * Arguments starting with /dev/ are target devices; all others are ISOs.
- * One ISO is written to every device; otherwise ISO and device counts must
- * match and are paired in argument order.
+ * Checks that the current process has root privileges (`geteuid() == 0`) and separates
+ * input paths starting with `/dev/` into device arguments and all other paths into ISO arguments.
+ * Validates that at least one ISO and one target device are specified, and enforces
+ * that either a single ISO is used for all devices or counts match one-to-one.
  *
- * Every validation error is collected and reported (using the same theme as
- * the interactive write2usb UI) before any device is touched. Per device,
- * this includes the checks in @ref WriteValidation::checkDevice, among them
- * rejecting a device that is still flushing data from an earlier write, and
- * the ISO capacity check in @ref WriteValidation::checkCapacity.
- *
- * With --silent, the live progress UI is skipped.
- *
- * @param args Parsed command-line arguments (target devices, ISO paths and
- *             the silent flag).
- * @return 0 if every write completed; 1 on validation failure, write
- *         failure, or cancellation.
+ * @param args Parsed command-line arguments containing paths and execution flags.
+ * @param wt The active write theme configuration for styling error messages.
+ * @param[out] isoArgs Output vector populated with extracted ISO file paths.
+ * @param[out] devArgs Output vector populated with extracted target device paths.
+ * @return true if all prerequisite and argument count checks pass; false otherwise.
  */
-static int handleWriteUsb(const ParsedArgs& args) {
+static bool validatePrerequisitesAndArgs(const ParsedArgs& args, const WriteTheme& wt,
+                                       std::vector<std::string>& isoArgs,
+                                       std::vector<std::string>& devArgs) {
     using namespace WriteValidation;
-    const WriteTheme wt = getWriteTheme();
 
     if (geteuid() != 0) {
         printValidationErrors(wt, {plainErr(wt, "Root privileges are required")});
-        return 1;
+        return false;
     }
 
-    std::vector<std::string> isoArgs, devArgs;
-    for (const auto& a : args.paths)
+    for (const auto& a : args.paths) {
         (a.rfind("/dev/", 0) == 0 ? devArgs : isoArgs).push_back(a);
+    }
 
     if (isoArgs.empty()) {
         printValidationErrors(wt, {plainErr(wt, "No ISO files specified")});
-        return 1;
+        return false;
     }
     if (devArgs.empty()) {
         printValidationErrors(wt, {plainErr(wt, "No target devices specified")});
-        return 1;
+        return false;
     }
     if (isoArgs.size() != 1 && isoArgs.size() != devArgs.size()) {
         printValidationErrors(wt, {plainErr(wt,
             "Got " + std::to_string(isoArgs.size()) + " ISOs and " +
             std::to_string(devArgs.size()) +
             " devices; use 1 ISO for all devices, or one device per ISO")});
-        return 1;
+        return false;
     }
+    return true;
+}
 
-    std::vector<std::string> errors;
+/**
+ * @brief Validates a collection of ISO file paths and populates their metadata.
+ *
+ * Iterates through raw ISO path arguments, verifying that each entry points to a
+ * valid regular file with a `.iso` extension, is non-empty, and is readable.
+ * Successfully validated files are converted into structured `IsoInfo` objects.
+ *
+ * @param isoArgs Vector of raw ISO file path strings from command-line arguments.
+ * @param wt The active write theme configuration for styling error messages.
+ * @param[out] errors Collection accumulating formatted validation error strings.
+ * @return std::vector<IsoInfo> A vector containing metadata for all successfully validated ISOs.
+ */
+static std::vector<IsoInfo> validateIsos(const std::vector<std::string>& isoArgs,
+                                          const WriteTheme& wt,
+                                          std::vector<std::string>& errors) {
+    using namespace WriteValidation;
 
     std::vector<IsoInfo> isos;
     for (const auto& raw : isoArgs) {
@@ -1249,9 +1382,28 @@ static int handleWriteUsb(const ParsedArgs& args) {
         isos.push_back(IsoInfo{full, fs::path(full).filename().string(), size,
                                formatFileSize(size), isos.size() + 1});
     }
+    return isos;
+}
 
-    std::vector<std::string> devices;
-    std::vector<uint64_t> deviceSizes;
+/**
+ * @brief Validates target storage devices for write operations.
+ *
+ * Resolves canonical device paths, checks for duplicate device entries in the argument list,
+ * and delegates device-specific checks (such as active flushing states) via
+ * @ref WriteValidation::checkDevice.
+ *
+ * @param devArgs Vector of raw target device path strings.
+ * @param wt The active write theme configuration for styling error messages.
+ * @param[out] errors Collection accumulating formatted validation error strings.
+ * @param[out] devices Output vector populated with validated canonical device paths.
+ * @param[out] deviceSizes Output vector populated with the capacities (in bytes) of validated devices.
+ */
+static void validateDevices(const std::vector<std::string>& devArgs,
+                            const WriteTheme& wt,
+                            std::vector<std::string>& errors,
+                            std::vector<std::string>& devices,
+                            std::vector<uint64_t>& deviceSizes) {
+    using namespace WriteValidation;
     std::unordered_set<std::string> seen;
     for (const auto& raw : devArgs) {
         std::error_code ec;
@@ -1270,6 +1422,88 @@ static int handleWriteUsb(const ParsedArgs& args) {
         devices.push_back(dev);
         deviceSizes.push_back(size);
     }
+}
+
+/**
+ * @brief Executes write operations in either interactive mode or silent asynchronous threads.
+ *
+ * If silent mode is disabled, delegates execution to the interactive UI writer.
+ * If silent mode is enabled, disables standard input and dispatches parallel tasks
+ * to the static thread pool, managing futures and tracking completion/failure statuses.
+ *
+ * @param silentMode Flag indicating whether to skip the live progress UI.
+ * @param pairsPtr Shared pointer containing paired ISO metadata and target device paths.
+ * @param progressDataPtr Shared pointer to the progress state tracking vector.
+ * @param pool Reference to the static thread pool used for concurrent writes.
+ */
+static void executeWriteOperations(bool silentMode,
+                                    std::shared_ptr<std::vector<std::pair<IsoInfo, std::string>>> pairsPtr,
+                                    std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr,
+                                    ThreadPool& pool) {
+    if (!silentMode) {
+        performWriteOperation(*pairsPtr);
+        return;
+    }
+
+    disableInput();
+
+    std::vector<std::future<void>> futures;
+    futures.reserve(pairsPtr->size());
+
+    for (size_t i = 0; i < pairsPtr->size(); ++i) {
+        futures.emplace_back(pool.enqueue(
+            [pairsPtr, progressDataPtr, i]() {
+                const auto& [iso, device] = (*pairsPtr)[i];
+
+                const bool success = writeIsoToDevice(
+                    iso.path, device, i, *progressDataPtr);
+
+                auto& progress = (*progressDataPtr)[i];
+
+                if (success) {
+                    progress.completed.store(true);
+                } else if (!GlobalState::g_operationCancelled.load()) {
+                    progress.failed.store(true);
+                }
+            }));
+    }
+
+    for (auto& future : futures) {
+        if (future.valid())
+            future.wait();
+    }
+}
+
+/**
+ * @brief Non-interactive ISO -> USB writer orchestration function.
+ *
+ * Arguments starting with `/dev/` are treated as target devices; all others are treated as ISOs.
+ * A single ISO can be written to multiple devices, or ISO and device counts must match
+ * and are paired in argument order.
+ *
+ * Every validation error is collected and reported (using the write2usb UI theme) before
+ * any hardware is touched. Per device, this includes checks in @ref WriteValidation::checkDevice
+ * (such as rejecting devices still flushing data) and capacity checks in @ref WriteValidation::checkCapacity.
+ *
+ * @param args Parsed command-line arguments containing target devices, ISO paths, and execution flags.
+ * @return int Returns `0` if all write operations completed successfully; `1` on validation failure,
+ *             write failure, thread pool capacity overflow, or user cancellation.
+ */
+static int handleWriteUsb(const ParsedArgs& args) {
+    using namespace WriteValidation;
+    const WriteTheme wt = getWriteTheme();
+
+    std::vector<std::string> isoArgs, devArgs;
+    if (!validatePrerequisitesAndArgs(args, wt, isoArgs, devArgs)) {
+        return 1;
+    }
+
+    std::vector<std::string> errors;
+    std::vector<IsoInfo> isos = validateIsos(isoArgs, wt, errors);
+
+    std::vector<std::string> devices;
+    std::vector<uint64_t> deviceSizes;
+    validateDevices(devArgs, wt, errors, devices, deviceSizes);
 
     if (errors.empty()) {
         for (size_t d = 0; d < devices.size(); ++d) {
@@ -1299,10 +1533,7 @@ static int handleWriteUsb(const ParsedArgs& args) {
         return 1;
     }
 
-    auto pairsPtr =
-        std::make_shared<std::vector<std::pair<IsoInfo, std::string>>>(
-            std::move(pairs));
-
+    auto pairsPtr = std::make_shared<std::vector<std::pair<IsoInfo, std::string>>>(std::move(pairs));
     auto progressDataPtr = std::make_shared<std::vector<ProgressInfo>>();
     progressDataPtr->reserve(pairsPtr->size());
 
@@ -1311,37 +1542,7 @@ static int handleWriteUsb(const ParsedArgs& args) {
             ProgressInfo{iso.filename, device, iso.sizeStr, iso.path});
     }
 
-    if (!args.silentMode) {
-        performWriteOperation(*pairsPtr);
-    } else {
-        disableInput();
-
-        std::vector<std::future<void>> futures;
-        futures.reserve(pairsPtr->size());
-
-        for (size_t i = 0; i < pairsPtr->size(); ++i) {
-            futures.emplace_back(pool.enqueue(
-                [pairsPtr, progressDataPtr, i]() {
-                    const auto& [iso, device] = (*pairsPtr)[i];
-
-                    const bool success = writeIsoToDevice(
-                        iso.path, device, i, *progressDataPtr);
-
-                    auto& progress = (*progressDataPtr)[i];
-
-                    if (success) {
-                        progress.completed.store(true);
-                    } else if (!GlobalState::g_operationCancelled.load()) {
-                        progress.failed.store(true);
-                    }
-                }));
-        }
-
-        for (auto& future : futures) {
-            if (future.valid())
-                future.wait();
-        }
-    }
+    executeWriteOperations(args.silentMode, pairsPtr, progressDataPtr, pool);
 
     g_drainingManager.joinAll();
 
