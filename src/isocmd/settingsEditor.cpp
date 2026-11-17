@@ -820,6 +820,13 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
             continue;
         }
 
+        // A g#-shaped token that wasn't a valid target: stay in the loop silently.
+        // Do not fall through to value validation.
+        if (total > 1 && newVal.size() >= 2 && newVal[0] == 'g' &&
+            std::isdigit(static_cast<unsigned char>(newVal[1]))) {
+            continue;
+        }
+
         if (newVal.empty()) return EditNav::Advance;
 
         if (entry->validate && !entry->validate(newVal)) {
