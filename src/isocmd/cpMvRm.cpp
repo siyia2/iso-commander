@@ -120,8 +120,13 @@ static std::string validateLinuxPath(const std::string& path) {
     return "";
 }
 
-std::string handlePaginatedDisplay(const std::vector<std::string>& entries, const std::string& promptPrefix,
-const std::string& promptSuffix, const std::function<void()>& setupEnvironmentFn, bool& isPageTurnm, size_t& currentPage);
+std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
+                                   const std::string& promptPrefix,
+                                   const std::string& promptSuffix,
+                                   const std::function<void()>& setupEnvironmentFn,
+                                   bool& isPageTurn,
+                                   size_t& currentPage,
+                                   bool disableTabCompletion = false);
 
 /**
  * @brief Orchestrates user confirmation for permanent file deletion.
@@ -147,7 +152,9 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
                            bool& umountMvRmBreak,
                            bool& abortDel) {
     PendingReadlineTextClearGuard pendingTextGuard;
+
     rl_attempted_completion_function = nullptr;
+
     reset_custom_keybindingsForRm();
     rl_bind_keyseq("\\e", exit_handler);
     const CpMvRmColors colors = getCpMvRmColors();
@@ -183,7 +190,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
         {
             RlFormFeedGuard ffGuard; // restores '\f' → prevent_readline_keybindings on scope exit
             userInput = handlePaginatedDisplay(
-                entries, promptPrefix, promptSuffix, setupEnv, isPageTurn, currentPage
+                entries, promptPrefix, promptSuffix, setupEnv, isPageTurn, currentPage, true
             );
         }
         if (userInput == "EOF_SIGNAL") {
@@ -307,7 +314,7 @@ bool& overwriteExisting) {
                 RlStartupHookGuard hookGuard;
 
                 userInput = handlePaginatedDisplay(
-                    entries, promptPrefix, promptSuffix, setupEnv, isPageTurn, currentPage
+                    entries, promptPrefix, promptSuffix, setupEnv, isPageTurn, currentPage, false
                 );
             } // ← rl_bind_key resets and rl_startup_hook = nullptr fire here
 

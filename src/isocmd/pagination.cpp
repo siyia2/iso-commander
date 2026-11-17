@@ -212,28 +212,36 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
 
 /**
  * @brief Paginated display loop used by secondary prompts (e.g. confirming
- * files for Copy/Move).
+ * files for Copy/Move/Delete).
  *
  * Draws the current page, reads a line, and handles in-loop navigation
  * ('PgDn' / 'PgUp' / 'g<num>'); anything else is returned to the caller.
  *
- * @param entries            Pre-formatted strings to display.
- * @param promptPrefix       Text prepended to the prompt string.
- * @param promptSuffix       Text appended to the prompt string.
- * @param setupEnvironmentFn Callback to refresh the environment (e.g. re-print
- *                           static headers).
- * @param isPageTurn         Set to true when the last input was a pagination
- *                           command, false otherwise.
- * @param currentPage        Current page index (0-based). Persists across calls
- *                           to avoid resetting on re-entry.
+ * Optionally disables Readline Tab completion for the duration of input,
+ * preventing completion matches from being displayed. The previous Tab
+ * binding and completion callback are restored automatically afterward.
+ *
+ * @param entries              Pre-formatted strings to display.
+ * @param promptPrefix         Text prepended to the prompt string.
+ * @param promptSuffix         Text appended to the prompt string.
+ * @param setupEnvironmentFn   Callback to refresh the environment (e.g. re-print
+ *                             static headers).
+ * @param isPageTurn           Set to true when the last input was a pagination
+ *                             command, false otherwise.
+ * @param currentPage          Current page index (0-based). Persists across calls
+ *                             to avoid resetting on re-entry.
+ * @param disableTabCompletion Set to true to disable Tab completion temporarily;
+ *                             defaults to false.
+ *
  * @return The user's non-navigation input string, or "EOF_SIGNAL" on Ctrl+D.
  */
 std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
-                                  const std::string& promptPrefix,
-                                  const std::string& promptSuffix,
-                                  const std::function<void()>& setupEnvironmentFn,
-                                  bool& isPageTurn,
-                                  size_t& currentPage) {
+                                   const std::string& promptPrefix,
+                                   const std::string& promptSuffix,
+                                   const std::function<void()>& setupEnvironmentFn,
+                                   bool& isPageTurn,
+                                   size_t& currentPage,
+                                   bool disableTabCompletion = false) {
 
     const PrintListTheme c = getListColors();
 
@@ -302,7 +310,9 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
             std::cout << promptHeaderForRepaint(finalPrompt);
         };
 
-        RlLine input = readlineWithResize(finalPrompt, repaint);
+        RlLine input = readlineWithResize(
+            finalPrompt, repaint, disableTabCompletion
+        );
 
         if (!input.get()) return "EOF_SIGNAL";
 
