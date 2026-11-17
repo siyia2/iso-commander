@@ -17,6 +17,7 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 // Third-Party Library Headers
@@ -229,13 +230,6 @@ bool stagePending(const std::string& inputString,
     return true;
 }
 
-/// Pending state of the ISO select screen. Main-thread only.
-struct IsoPending {
-    std::vector<std::string>        paths;
-    const std::vector<std::string>* source = nullptr;   // list the screen's source indices refer to
-};
-IsoPending g_isoPending;
-
 /// Owns g_isoPending for the lifetime of one selectForIsoFiles() call, so the
 /// loaders only treat pending as path-based while an ISO select screen is
 /// active (see syncIsoPendingDisplay).
@@ -264,8 +258,10 @@ struct IsoPendingScope {
  * reloaded and sorted list. Every redraw path therefore shows correct
  * numbers: loop redraws, resize repaints and asynchronous import refreshes.
  *
- * @param importRunning True while a background import is rebuilding the list;
- *        the last good display is kept then.
+ * @param pendingIndices    Receives the 1-based source indices compressed into ranges for display.
+ * @param hasPendingProcess Set to true if there are active pending selections, otherwise false.
+ * @param importRunning     True while a background import is rebuilding the list;
+ *                          the last good display is kept then.
  * @return true if an ISO select screen owns the selection (the display state
  *         is managed here); false if none is active, in which case the caller
  *         handles its own pending state.
@@ -293,6 +289,7 @@ void processOperation(const std::string& inputString,
                           bool& isFiltered,
                           const std::vector<std::string>& filteredFiles,
                           std::vector<std::string>& isoDirs,
+                          std::vector<std::string>& pendingIndices,
                           const std::string& operation,
                           bool& umountMvRmBreak,
                           bool& filterHistory,
@@ -311,7 +308,7 @@ void processOperation(const std::string& inputString,
         if (isUnmount) umountMvRmBreak = true;
         processInputForMountOrUmount(inputString, activeList, umountMvRmBreak, verbose, isUnmount);
     } else if (operation == "write2usb") {
-        writeToUsb(inputString, activeList);
+        writeToUsb(inputString, activeList, pendingIndices);
     } else {
         processInputForCpMvRm(inputString, activeList, operation, umountMvRmBreak, filterHistory, verbose);
     }
@@ -387,6 +384,377 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
     GlobalState::g_filteringIndicator.store(false);
 }
 
+// ─── selectForIsoFiles: loop state and input handlers ────────────────────────
+//
+// The body of the selectForIsoFiles event loop is split into small steps that
+// live in SelectSession. Each input handler either declines the input
+// (LoopAction::Proceed) or consumes it and tells the loop what to do next
+// (Continue / Break / Return). The handlers are tried in a fixed order that is
+// the same order as the original if-chain.
+namespace {
+
+enum class LoopAction { Proceed, Continue, Break, Return };
+
+struct SelectSession {
+    const std::string&              operation;
+    std::atomic<bool>&              isAtISOList;
+    std::vector<std::thread>&       backgroundThreads;
+    std::shared_ptr<RefreshState>   refreshState;
+    std::vector<std::string>&       isoDirs;
+    ReadlineKeybindingGuard&        keybindingGuard;
+    const bool                      isUnmount;
+    const std::string               operationColor;
+
+    // Aliases into RefreshState (same objects the original used).
+    std::vector<std::string>& filteredFiles;
+    std::vector<std::string>& pendingIndices;
+    bool&                     isFiltered;
+    bool&                     hasPendingProcess;
+    bool&                     umountMvRmBreak;
+    std::string&              listSubtype;
+    size_t&                   currentPage;
+    size_t&                   originalPage;
+
+    bool needsClrScrn  = true;
+    bool filterHistory = false;
+
+    SelectSession(const std::string& op,
+                  std::atomic<bool>& atList,
+                  std::vector<std::thread>& threads,
+                  std::shared_ptr<RefreshState> state,
+                  std::vector<std::string>& dirs,
+                  ReadlineKeybindingGuard& guard)
+        : operation(op),
+          isAtISOList(atList),
+          backgroundThreads(threads),
+          refreshState(std::move(state)),
+          isoDirs(dirs),
+          keybindingGuard(guard),
+          isUnmount(op == "umount"),
+          operationColor(pickOperationColor(op)),
+          filteredFiles(refreshState->filteredFiles),
+          pendingIndices(refreshState->pendingIndices),
+          isFiltered(refreshState->isFiltered),
+          hasPendingProcess(refreshState->hasPendingProcess),
+          umountMvRmBreak(refreshState->umountMvRmBreak),
+          listSubtype(refreshState->listSubtype),
+          currentPage(refreshState->currentPage),
+          originalPage(refreshState->originalPage) {
+
+        filteredFiles.reserve(1000);
+        isFiltered        = false;
+        hasPendingProcess = false;
+        umountMvRmBreak   = false;
+        currentPage       = 0;
+        originalPage      = 0;
+
+        // Staged selection starts empty on every entry; it is held as paths
+        // and projected into pendingIndices for display.
+        pendingIndices.clear();
+
+        listSubtype = (op == "mount")     ? "mount"
+                    : (op == "write2usb") ? "write2usb"
+                                          : "cp_mv_rm";
+    }
+
+    static std::string pickOperationColor(const std::string& op) {
+        return std::string(
+            op == "rm"        ? UI::Palette::Red    :
+            op == "cp"        ? UI::Palette::Green  :
+            op == "mv"        ? UI::Palette::Yellow :
+            op == "mount"     ? UI::Palette::Green  :
+            op == "write2usb" ? UI::Palette::Yellow :
+            op == "umount"    ? UI::Palette::Yellow : UI::Palette::RL_BoldAlt
+        );
+    }
+
+    // ----- helpers shared by several steps ---------------------------------
+
+    bool isFilterCommand(const std::string& input) const {
+        return !input.empty() && input[0] == '/';
+    }
+
+    // Drops every active filter and goes back to the page we were on before.
+    void clearFilter() {
+        isFiltered = false;
+        filteringStack.clear();
+        currentPage = originalPage;
+        needsClrScrn = true;
+    }
+
+    // Draws the list for the current mode. Returns false if display failed.
+    bool drawList() {
+        if (!isUnmount) {
+            return loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak,
+                                     pendingIndices, hasPendingProcess, currentPage,
+                                     originalPage, refreshState);
+        }
+        return loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak,
+                                         pendingIndices, hasPendingProcess, currentPage,
+                                         originalPage, refreshState);
+    }
+
+    // Repaints the list on terminal resize while the prompt waits. Runs on the
+    // Readline thread (rl_event_hook); uses the same display step as the loop.
+    void repaintList() {
+        const bool savedBreak = umountMvRmBreak;
+        drawList();
+        umountMvRmBreak = savedBreak;
+    }
+
+    // ----- per-iteration steps ---------------------------------------------
+
+    void beginIteration() {
+        clearGlobalVerboseSets();
+        enable_ctrl_d();
+        setupSignalHandlerCancellations();
+        GlobalState::g_operationCancelled.store(false);
+        filterHistory = false;
+        clear_history();
+
+        if (!isFiltered) originalPage = currentPage;
+
+        if (!isUnmount) {
+            removeNonExistentPathsFromDatabase(GlobalState::globalIsoFileList);
+            isAtISOList.store(true);
+        }
+    }
+
+    // Puts the cursor on the prompt row (see the invariant note at the top of
+    // this file). Redraw: list, then one blank separator row. No redraw:
+    // single rewind from the row below the previous prompt.
+    // Returns false if the display failed.
+    bool showListOrRewind() {
+        if (!needsClrScrn) {
+            rewindToPromptRow();
+            return true;
+        }
+        if (!drawList()) return false;
+        std::cout << "\n";
+        umountMvRmBreak = false;
+        return true;
+    }
+
+    void startWatcherIfNeeded() {
+        if (isUnmount || !refreshState->isImportRunning.load()) return;
+
+        bool watcherExpected = false;
+        if (!refreshState->isWatcherRunning.compare_exchange_strong(watcherExpected, true))
+            return;
+
+        std::thread([&atList = isAtISOList, state = refreshState]() {
+            refreshListAfterAutoUpdate(atList, state);
+            state->isWatcherRunning.store(false);
+        }).detach();
+    }
+
+    void bindPromptKeys() {
+        setup_custom_keybindingsForSelect();
+
+        // Unbind unused hotkeys for the umount prompt.
+        if (isUnmount) {
+            rl_bind_keyseq("R", rl_insert);
+            rl_bind_keyseq("*", rl_insert);
+        }
+    }
+
+    // Single-line prompt: the blank separator row above it is printed by the
+    // display step, not by a leading "\n" in the prompt.
+    std::string buildPrompt(const ReadlineAndPromptTheme& pt) const {
+        const std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
+        return prefix +
+               std::string(UI::Palette::RL_idxGreen) + "IDX" +
+               pt.primary + " ↵ for " + "\001" +
+               operationColor + "\002" + operation +
+               pt.primary + ", ? for help: " +
+               pt.reset;
+    }
+
+    // Ctrl-D / EOF on the prompt: clear any filter state; the caller then
+    // leaves the loop.
+    void onEndOfInput() {
+        if (isFiltered) clearFilter();
+    }
+
+    // ----- input handlers (tried in this order) ----------------------------
+
+    LoopAction ignoreInput(const std::string& input) {
+        const bool ignored =
+            input.empty() ||
+            input[0] == ';' ||
+            input.find(";;") != std::string::npos ||
+            (input[0] == 'R' && refreshState->isImportRunning.load());
+        if (!ignored) return LoopAction::Proceed;
+        needsClrScrn = false;
+        return LoopAction::Continue;
+    }
+
+    LoopAction manualRefresh(const std::string& input) {
+        const bool canRefresh = input == "R" && !isUnmount &&
+                                !GlobalState::globalIsoFileList.empty() &&
+                                !refreshState->isImportRunning.load();
+        if (!canRefresh) return LoopAction::Proceed;
+
+        backgroundThreads.erase(
+            std::remove_if(backgroundThreads.begin(), backgroundThreads.end(),
+                [](std::thread& t) {
+                    if (t.joinable()) { t.join(); return true; }
+                    return false;
+                }),
+            backgroundThreads.end());
+
+        needsClrScrn = true;
+        refreshState->isImportRunning.store(true);
+        backgroundThreads.emplace_back([state = refreshState] {
+            backgroundDatabaseImport(state);
+            state->isWatcherRunning.store(false);
+        });
+        return LoopAction::Continue;
+    }
+
+    LoopAction escape(const std::string& input) {
+        if (input != "\x1b") return LoopAction::Proceed;
+        if (isFiltered) {
+            clearFilter();
+            return LoopAction::Continue;
+        }
+        currentPage = 0;
+        return LoopAction::Return;
+    }
+
+    // "P" with nothing staged, and "clr".
+    LoopAction stagedCommands(const std::string& input) {
+        if (input == "P" && g_isoPending.paths.empty()) {
+            needsClrScrn = false;
+            hasPendingProcess = false;
+            return LoopAction::Continue;
+        }
+        if (input == "clr") {
+            g_isoPending.paths.clear();
+            pendingIndices.clear();
+            hasPendingProcess = false;
+            needsClrScrn = true;
+            return LoopAction::Continue;
+        }
+        return LoopAction::Proceed;
+    }
+
+    size_t countPages() {
+        std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
+        const std::vector<std::string>& currentList =
+            isFiltered ? filteredFiles
+                       : (isUnmount ? isoDirs : GlobalState::globalIsoFileList);
+        if (GlobalState::ITEMS_PER_PAGE == 0) return 0;
+        return (currentList.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE;
+    }
+
+    LoopAction pagination(const std::string& input) {
+        size_t totalPages = countPages();
+        bool need2Sort = false;
+        const bool handled = processPaginationHelpAndDisplay(
+            input, totalPages, currentPage, isFiltered, needsClrScrn,
+            operation, need2Sort, &isAtISOList, filteredFiles);
+        return handled ? LoopAction::Continue : LoopAction::Proceed;
+    }
+
+    LoopAction filtering(const std::string& input) {
+        if (!isFilterCommand(input)) return LoopAction::Proceed;
+
+        if (refreshState->isImportRunning.load()) {
+            // Filtering is locked while a background import is running.
+            GlobalState::g_filteringIndicator.store(true);
+            needsClrScrn = true;
+            return LoopAction::Continue;
+        }
+
+        bool handled = false;
+        {
+            std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
+            handled = handleFilteringForISO(input, filteredFiles, isFiltered, needsClrScrn,
+                                            filterHistory, operation, operationColor, isoDirs,
+                                            isUnmount, currentPage, refreshState,
+                                            [this] { repaintList(); });
+        }
+        if (!handled) return LoopAction::Proceed;
+
+        GlobalState::g_filteringIndicator.store(false);
+        keybindingGuard.restore();
+        return LoopAction::Continue;
+    }
+
+    // Stage "3 5-9;" as paths. Bare numbers = what is on screen, "n^" = source index.
+    LoopAction stageSelection(const std::string& input) {
+        std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
+        const std::vector<std::string>& sourceList = *g_isoPending.source;
+        const std::vector<std::string>& viewList   = isFiltered ? filteredFiles : sourceList;
+        const bool staged = stagePending(input, g_isoPending.paths, hasPendingProcess,
+                                         needsClrScrn, viewList, sourceList);
+        return staged ? LoopAction::Continue : LoopAction::Proceed;
+    }
+
+    // Resolves staged paths to source indices NOW and drops vanished files.
+    std::string resolveStagedBatch() {
+        std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
+        return joinTokens(compressRuns(
+            resolveIndices(g_isoPending.paths, *g_isoPending.source, true)));
+    }
+
+    void runPending() {
+        const std::string batch = resolveStagedBatch();
+        if (batch.empty()) {
+            pendingIndices.clear();
+            hasPendingProcess = false;
+            return;
+        }
+        processOperation(batch, isFiltered, filteredFiles, isoDirs, pendingIndices,
+                         operation, umountMvRmBreak, filterHistory,
+                         /*useSourceList=*/true);
+    }
+
+    void runDirect(const std::string& input) {
+        processOperation(input, isFiltered, filteredFiles, isoDirs, pendingIndices,
+                         operation, umountMvRmBreak, filterHistory,
+                         /*useSourceList=*/false);
+    }
+
+    void execute(const std::string& input) {
+        // --- RAII: atomic flag guards for the processing block ---
+        AtomicFlagGuard processingGuard(isAtISOList, false);
+        AtomicFlagGuard filteringGuard(GlobalState::g_filteringIndicator, true);
+
+        needsClrScrn = true;
+
+        if (input == "P") runPending();
+        else              runDirect(input);
+    }
+
+    // ----- dispatcher ------------------------------------------------------
+
+    LoopAction dispatch(const std::string& input) {
+        using Handler = LoopAction (SelectSession::*)(const std::string&);
+        static const Handler handlers[] = {
+            &SelectSession::ignoreInput,
+            &SelectSession::manualRefresh,
+            &SelectSession::escape,
+            &SelectSession::stagedCommands,
+            &SelectSession::pagination,
+            &SelectSession::filtering,
+            &SelectSession::stageSelection,
+        };
+
+        for (Handler h : handlers) {
+            const LoopAction action = (this->*h)(input);
+            if (action != LoopAction::Proceed) return action;
+        }
+
+        execute(input);              // isAtISOList / indicator restored on return
+        keybindingGuard.restore();
+        return LoopAction::Continue;
+    }
+};
+
+} // namespace
+
 /**
  * @brief Interactive TUI for batch ISO operations (mount, umount, cp, mv, rm,
  * write2usb).
@@ -458,6 +826,9 @@ void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
  *   lambda is passed to the filter handler for the case where the live preview
  *   is off. (Image select repaints with a throwaway sort flag, so a resize
  *   never re-sorts the list.)
+ * - **Structure:** the loop body is delegated to @c SelectSession, whose input
+ *   handlers are tried in a fixed order (ignore, manual refresh, ESC, staged
+ *   commands, pagination/help, filtering, staging, execute).
  *
  * @param operation         Target action ("mount", "umount", "cp", "mv", "rm",
  *                          or "write2usb"). Determines list source, colour
@@ -491,300 +862,347 @@ void selectForIsoFiles(const std::string& operation,
 
     if (!refreshState) refreshState = std::make_shared<RefreshState>();
 
-    std::vector<std::string>& filteredFiles = refreshState->filteredFiles;
-    std::vector<std::string>& pendingIndices = refreshState->pendingIndices;
-    bool& isFiltered                         = refreshState->isFiltered;
-    bool& hasPendingProcess                  = refreshState->hasPendingProcess;
-    bool& umountMvRmBreak                    = refreshState->umountMvRmBreak;
-    std::string& listSubtype                 = refreshState->listSubtype;
-    size_t& currentPage                      = refreshState->currentPage;
-    size_t& originalPage                     = refreshState->originalPage;
+    SelectSession s(operation, isAtISOList, backgroundThreads, refreshState,
+                    isoDirs, keybindingGuard);
 
-    filteredFiles.reserve(1000);
-    isFiltered        = false;
-    hasPendingProcess = false;
-    umountMvRmBreak   = false;
-    currentPage       = 0;
-    originalPage      = 0;
-
-    const bool isUnmount = (operation == "umount");
-
-    // Staged selection starts empty on every entry; it is held as paths and
-    // projected into pendingIndices for display (see "Pending selection").
-    pendingIndices.clear();
-    IsoPendingScope pendingScope(isUnmount
+    IsoPendingScope pendingScope(s.isUnmount
         ? static_cast<const std::vector<std::string>*>(&isoDirs)
         : &GlobalState::globalIsoFileList);
 
-    bool needsClrScrn  = true;
-    bool filterHistory = false;
-
-    std::string operationColor = std::string(
-        operation == "rm"        ? UI::Palette::Red    :
-        operation == "cp"        ? UI::Palette::Green  :
-        operation == "mv"        ? UI::Palette::Yellow :
-        operation == "mount"     ? UI::Palette::Green  :
-        operation == "write2usb" ? UI::Palette::Yellow :
-        operation == "umount"    ? UI::Palette::Yellow : UI::Palette::RL_BoldAlt
-    );
-
-    listSubtype = (operation == "mount") ? "mount" : (operation == "write2usb") ? "write2usb" : "cp_mv_rm";
-
     // --- RAII: isAtISOList state automatically managed ---
-    IsoListStateGuard isoListGuard(isAtISOList, [&isUnmount]() { return isUnmount; });
+    IsoListStateGuard isoListGuard(isAtISOList, [&s]() { return s.isUnmount; });
 
     while (true) {
-        clearGlobalVerboseSets();
-        enable_ctrl_d();
-        setupSignalHandlerCancellations();
-        GlobalState::g_operationCancelled.store(false);
-        filterHistory = false;
-        clear_history();
+        s.beginIteration();
 
-        if (!isFiltered) originalPage = currentPage;
+        if (!s.showListOrRewind()) break;
 
-        if (!isUnmount) {
-            removeNonExistentPathsFromDatabase(GlobalState::globalIsoFileList);
-            isAtISOList.store(true);
-        }
-
-        // Position the cursor on the prompt row (see the invariant note at the
-        // top of this file). Redraw: list, then one blank separator row.
-        // No redraw: single rewind from the row below the previous prompt.
-        if (needsClrScrn) {
-            if (!isUnmount) {
-                if (!loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState))
-                    break;
-            } else {
-                if (!loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak, pendingIndices, hasPendingProcess, currentPage, originalPage, refreshState))
-                    break;
-            }
-            std::cout << "\n";
-            umountMvRmBreak = false;
-        } else {
-            rewindToPromptRow();
-        }
-
-        if (refreshState->isImportRunning.load() && !isUnmount) {
-            bool watcherExpected = false;
-            if (refreshState->isWatcherRunning.compare_exchange_strong(watcherExpected, true)) {
-                std::thread([&isAtISOList, refreshState]() {
-                    refreshListAfterAutoUpdate(isAtISOList, refreshState);
-                    refreshState->isWatcherRunning.store(false);
-                }).detach();
-            }
-        }
+        s.startWatcherIfNeeded();
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
-
-        setup_custom_keybindingsForSelect();
-
-        // Unbind unused hotkeys for the umount prompt.
-        if (isUnmount) {
-            rl_bind_keyseq("R", rl_insert);
-            rl_bind_keyseq("*", rl_insert);
-        }
-
-        std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
-
-        // Single-line prompt: the blank separator row above it is printed by
-        // the display step, not by a leading "\n" in the prompt.
-        std::string prompt =
-            prefix +
-            std::string(UI::Palette::RL_idxGreen) + "IDX" +
-            pt.primary + " ↵ for " + "\001" +
-            operationColor + "\002" + operation +
-            pt.primary + ", ? for help: " +
-            pt.reset;
-
-        // Repaints the list on terminal resize while the prompt waits. Runs on
-        // the Readline thread (rl_event_hook); uses the same display step as
-        // above.
-        auto repaintList = [&] {
-            const bool savedBreak = umountMvRmBreak;
-            if (!isUnmount)
-                loadAndDisplayIso(filteredFiles, isFiltered, listSubtype, umountMvRmBreak,
-                                  pendingIndices, hasPendingProcess, currentPage, originalPage,
-                                  refreshState);
-            else
-                loadAndDisplayMountedISOs(isoDirs, filteredFiles, isFiltered, umountMvRmBreak,
-                                          pendingIndices, hasPendingProcess, currentPage, originalPage,
-                                          refreshState);
-            umountMvRmBreak = savedBreak;
-        };
+        s.bindPromptKeys();
+        const std::string prompt = s.buildPrompt(pt);
 
         armPendingInputRestore();
-        RlLine rawInput = readlineWithResize(prompt, repaintList);
+        RlLine rawInput = readlineWithResize(prompt, [&s] { s.repaintList(); });
         rl_startup_hook = nullptr;
 
         if (!rawInput) {
-            if (isFiltered) {
-            isFiltered = false;
-            filteringStack.clear();
-            currentPage = originalPage;
-            needsClrScrn = true;
+            s.onEndOfInput();
             break;
-            } else {
-                break;
-            }
         }
 
-        std::string inputString(rawInput.get());
+        const std::string inputString(rawInput.get());
 
-        if (inputString[0] == ';' || inputString.find(";;") != std::string::npos) {
-            needsClrScrn = false;
-            continue;
-        }
-
-        if (rawInput.get()[0] == '\0') {
-            needsClrScrn = false;
-            continue;
-        }
-
-        if (inputString[0] == 'R' && refreshState->isImportRunning.load()) {
-            needsClrScrn = false;
-            continue;
-        }
-
-        if (inputString == "R" && !isUnmount && !GlobalState::globalIsoFileList.empty() && !refreshState->isImportRunning.load()) {
-            backgroundThreads.erase(
-                std::remove_if(backgroundThreads.begin(), backgroundThreads.end(),
-                    [](std::thread& t) {
-                        if (t.joinable()) { t.join(); return true; }
-                        return false;
-                    }),
-                backgroundThreads.end()
-            );
-            needsClrScrn = true;
-            refreshState->isImportRunning.store(true);
-            backgroundThreads.emplace_back([refreshState] {
-                backgroundDatabaseImport(refreshState);
-                refreshState->isWatcherRunning.store(false);
-            });
-            continue;
-        }
-
-        if (inputString == "\x1b") {
-            if (isFiltered) {
-                isFiltered = false;
-                filteringStack.clear();
-                currentPage = originalPage;
-                needsClrScrn = true;
-                continue;
-            } else {
-                currentPage = 0;
-                return;
-            }
-        }
-
-        if (inputString == "P" && g_isoPending.paths.empty()) {
-            needsClrScrn = false;
-            hasPendingProcess = false;
-            continue;
-        }
-
-        if (inputString == "clr") {
-            g_isoPending.paths.clear();
-            pendingIndices.clear();
-            hasPendingProcess = false;
-            needsClrScrn = true;
-            continue;
-        }
-
-        size_t totalPages = 0;
-        {
-            std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
-            const std::vector<std::string>& currentList = isFiltered ? filteredFiles : (isUnmount ? isoDirs : GlobalState::globalIsoFileList);
-            totalPages = (GlobalState::ITEMS_PER_PAGE != 0) ? ((currentList.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE) : 0;
-        }
-        bool need2Sort = false;
-
-        bool validCommand = processPaginationHelpAndDisplay(
-            inputString,
-            totalPages,
-            currentPage,
-            isFiltered,
-            needsClrScrn,
-            operation,
-            need2Sort,
-            &isAtISOList,
-            filteredFiles
-        );
-
-        if (validCommand) continue;
-
-        // --- RAII: lock guard automatically releases on scope exit ---
-        bool filteringHandled = false;
-        {
-            if ((inputString == "/" || (!inputString.empty() && inputString[0] == '/')) && !refreshState->isImportRunning.load()) {
-                std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
-                if (handleFilteringForISO(inputString, filteredFiles, isFiltered, needsClrScrn,
-                                          filterHistory, operation, operationColor, isoDirs, isUnmount, currentPage,
-                                          refreshState, repaintList)) {
-                    GlobalState::g_filteringIndicator.store(false);
-                    filteringHandled = true;
-                }
-            } else if ((inputString == "/" || (!inputString.empty() && inputString[0] == '/')) && refreshState->isImportRunning.load()) {
-                GlobalState::g_filteringIndicator.store(true);
-                needsClrScrn = true;
-                continue;
-            }
-        }
-
-        if (filteringHandled) {
-            keybindingGuard.restore();
-            continue;
-        }
-
-        // Stage "3 5-9;" as paths. Bare numbers = what is on screen, "n^" = source index.
-        bool pendingHandled = false;
-        {
-            std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
-            const std::vector<std::string>& sourceList = *g_isoPending.source;
-            const std::vector<std::string>& viewList   = isFiltered ? filteredFiles : sourceList;
-            pendingHandled = stagePending(inputString, g_isoPending.paths,
-                                          hasPendingProcess, needsClrScrn,
-                                          viewList, sourceList);
-        }
-        if (pendingHandled) continue;
-
-        // --- RAII: atomic flag guard for the processing block ---
-        bool pendingExecuted = false;
-        {
-            AtomicFlagGuard processingGuard(isAtISOList, false);
-            AtomicFlagGuard filteringGuard(GlobalState::g_filteringIndicator, true);
-
-            needsClrScrn = true;
-
-            if (inputString == "P") {
-                // Resolve staged paths to source indices NOW; drop vanished files.
-                std::string batch;
-                {
-                    std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
-                    batch = joinTokens(compressRuns(
-                        resolveIndices(g_isoPending.paths, *g_isoPending.source, true)));
-                }
-                pendingExecuted = true;
-                if (batch.empty()) {
-                    pendingIndices.clear();
-                    hasPendingProcess = false;
-                } else {
-                    processOperation(batch, isFiltered, filteredFiles, isoDirs,
-                                         operation, umountMvRmBreak, filterHistory,
-                                         /*useSourceList=*/true);
-                }
-            } else {
-                processOperation(inputString, isFiltered, filteredFiles, isoDirs,
-                                     operation, umountMvRmBreak, filterHistory,
-                                     /*useSourceList=*/false);
-            }
-        }
-        // isAtISOList automatically restored here.
-        keybindingGuard.restore();
-        if (pendingExecuted) continue;
+        const LoopAction action = s.dispatch(inputString);
+        if (action == LoopAction::Break)  break;
+        if (action == LoopAction::Return) return;
     }
     // Keybinding guard destructor automatically calls reset_custom_keybindingsForSelect().
 }
+
+// ─── selectForImageFiles: loop state and input handlers ──────────────────────
+//
+// Same idea as SelectSession: the event-loop body is split into small steps,
+// and the input handlers are tried in the same order as the original if-chain.
+// LoopAction is shared with SelectSession.
+namespace {
+
+/// Conversion operation name for a file type ("" for an unknown type).
+std::string operationForFileType(const std::string& fileType) {
+    if (fileType == "bin" || fileType == "img") return "ccd2iso";
+    if (fileType == "mdf") return "mdf2iso";
+    if (fileType == "nrg") return "nrg2iso";
+    if (fileType == "chd") return "chd2iso";
+    if (fileType == "daa") return "daa2iso";
+    return "";
+}
+
+struct ImageSession {
+    const std::string&              fileType;
+    std::vector<std::string>&       files;
+    bool&                           list;
+    std::shared_ptr<RefreshState>   state;
+    ReadlineKeybindingGuard&        keybindingGuard;
+
+    const std::string               operation;
+    const bool                      isMdf;
+    const bool                      isNrg;
+    const bool                      isChd;
+    const bool                      isDaa;
+
+    // The unfiltered list for this file type (what ESC restores). While a
+    // filter is active, source indices ("n^") refer to this list.
+    const std::vector<std::string>* const cache;
+
+    std::vector<std::string> pendingIndices;   // display projection only
+    std::vector<std::string> pendingPaths;     // the real staged selection
+    bool   hasPendingProcess = false;
+
+    size_t currentPage  = 0;
+    size_t originalPage = 0;
+
+    bool isFiltered    = false;
+    bool needsClrScrn  = true;
+    bool filterHistory = false;
+    bool need2Sort     = true;
+    bool verbose       = false;   // reset at the top of every iteration
+
+    ImageSession(const std::string& type,
+                 std::vector<std::string>& fileList,
+                 bool& listFlag,
+                 std::shared_ptr<RefreshState> refreshState,
+                 ReadlineKeybindingGuard& guard)
+        : fileType(type),
+          files(fileList),
+          list(listFlag),
+          state(std::move(refreshState)),
+          keybindingGuard(guard),
+          operation(operationForFileType(type)),
+          isMdf(type == "mdf"),
+          isNrg(type == "nrg"),
+          isChd(type == "chd"),
+          isDaa(type == "daa"),
+          cache(imageCacheFor(type)) {}
+
+    // ----- helpers ---------------------------------------------------------
+
+    // Source list: the cache while filtered, otherwise `files` itself.
+    const std::vector<std::string>& sourceList() const {
+        return (isFiltered && cache) ? *cache : files;
+    }
+
+    bool isFilterCommand(const std::string& input) const {
+        return !input.empty() && input[0] == '/';
+    }
+
+    // Recomputes the "Pending Indices" display from the staged paths.
+    void syncPendingDisplay() {
+        pendingIndices = compressRuns(resolveIndices(pendingPaths, sourceList(), false));
+        hasPendingProcess = !pendingIndices.empty();
+    }
+
+    // Same restore as ESC: back to the full list for this file type.
+    void restoreUnfilteredList() {
+        if (cache) files = *cache;
+        isFiltered = false;
+        filteringStack.clear();
+        currentPage = originalPage;
+        need2Sort = false;
+    }
+
+    // Repaints the list on terminal resize. A throwaway sort flag keeps a
+    // resize from re-sorting the list.
+    void repaintList() {
+        bool sortNow = false;
+        syncPendingDisplay();
+        loadAndDisplayImageFiles(files, fileType, sortNow, isFiltered, list,
+                                 pendingIndices, hasPendingProcess, currentPage,
+                                 state);
+    }
+
+    void printVerboseResults() const {
+        verbosePrint(verboseSets.uniqueErrorTokenMessages,
+                     verboseSets.operationCompleted,
+                     verboseSets.operationSkipped,
+                     verboseSets.operationFailed, 3);
+    }
+
+    void convert(const std::string& input, std::vector<std::string>& target) {
+        processInputForConversions(input, target, isMdf, isNrg, isChd, isDaa, verbose);
+    }
+
+    // ----- per-iteration steps ---------------------------------------------
+
+    void beginIteration() {
+        clearGlobalVerboseSets();
+        enable_ctrl_d();
+        setupSignalHandlerCancellations();
+
+        GlobalState::g_operationCancelled.store(false);
+        verbose = false;
+
+        if (!isFiltered) originalPage = currentPage;
+
+        clear_history();
+    }
+
+    // Puts the cursor on the prompt row (see the invariant note at the top of
+    // this file).
+    void showListOrRewind() {
+        if (!needsClrScrn) {
+            rewindToPromptRow();
+            return;
+        }
+        syncPendingDisplay();
+        loadAndDisplayImageFiles(files, fileType, need2Sort, isFiltered, list,
+                                 pendingIndices, hasPendingProcess, currentPage,
+                                 state);
+        std::cout << "\n";
+    }
+
+    void bindPromptKeys() {
+        setup_custom_keybindingsForSelect();
+
+        // Unused in convert2iso prompts.
+        rl_bind_keyseq("R", rl_insert);
+    }
+
+    // Single-line prompt; the blank separator row is printed by the display step.
+    std::string buildPrompt(const ReadlineAndPromptTheme& pt) const {
+        const std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
+        return prefix +
+               std::string(UI::Palette::RL_idxGreen) + "IDX" +
+               pt.primary   + " ↵ for " +
+               pt.highlight + operation +
+               pt.primary   + ", ? for help: " +
+               pt.reset;
+    }
+
+    // Ctrl-D / EOF on the prompt: clear any filter state; the caller then
+    // leaves the loop.
+    void onEndOfInput() {
+        if (!isFiltered) return;
+        needsClrScrn = true;
+        isFiltered = false;
+        filteringStack.clear();
+        currentPage = originalPage;
+        need2Sort = false;
+    }
+
+    // ----- input handlers (tried in this order) ----------------------------
+
+    LoopAction escape(const std::string& input) {
+        if (input != "\x1b") return LoopAction::Proceed;
+        clearScrollBuffer();
+        if (isFiltered) {
+            // Restore original unfiltered file list.
+            restoreUnfilteredList();
+            needsClrScrn = true;
+            return LoopAction::Continue;
+        }
+        currentPage = 0;
+        need2Sort = false;
+        return LoopAction::Return;
+    }
+
+    // "P" with nothing staged, and "clr".
+    LoopAction stagedCommands(const std::string& input) {
+        if (input == "P" && pendingPaths.empty()) {
+            hasPendingProcess = false;
+            needsClrScrn = false;
+            return LoopAction::Continue;
+        }
+        if (input == "clr") {
+            pendingPaths.clear();
+            pendingIndices.clear();
+            hasPendingProcess = false;
+            needsClrScrn = true;
+            return LoopAction::Continue;
+        }
+        return LoopAction::Proceed;
+    }
+
+    LoopAction ignoreInput(const std::string& input) {
+        const bool ignored = input.empty() ||
+                             input[0] == ';' ||
+                             input.find(";;") != std::string::npos;
+        if (!ignored) return LoopAction::Proceed;
+        needsClrScrn = false;
+        return LoopAction::Continue;
+    }
+
+    LoopAction pagination(const std::string& input) {
+        size_t totalPages = (GlobalState::ITEMS_PER_PAGE != 0)
+            ? ((files.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE)
+            : 0;
+
+        const bool handled = processPaginationHelpAndDisplay(
+            input, totalPages, currentPage, isFiltered, needsClrScrn,
+            operation, need2Sort, nullptr, files);
+        return handled ? LoopAction::Continue : LoopAction::Proceed;
+    }
+
+    // "P": the staged selection is source indices of the FULL list, so it runs
+    // against it. processInputForConversions only reads the list, so while
+    // filtered we hand it a copy of the cache and leave the active filter (and
+    // `files`) untouched.
+    LoopAction runStaged(const std::string& input) {
+        if (input != "P") return LoopAction::Proceed;
+
+        const bool useCache = isFiltered && cache;
+        std::vector<std::string> fullList;
+        if (useCache) fullList = *cache;
+        std::vector<std::string>& target = useCache ? fullList : files;
+
+        const std::string batch = joinTokens(compressRuns(
+            resolveIndices(pendingPaths, target, true)));   // drops vanished files
+        needsClrScrn = true;
+
+        if (batch.empty()) {
+            pendingIndices.clear();
+            hasPendingProcess = false;
+            return LoopAction::Continue;
+        }
+
+        convert(batch, target);
+        keybindingGuard.restore();
+        if (verbose) printVerboseResults();
+        return LoopAction::Continue;
+    }
+
+    LoopAction filtering(const std::string& input) {
+        if (!isFilterCommand(input)) return LoopAction::Proceed;
+        handleFilteringConvert2ISO(input, files, operation, isFiltered,
+                                   needsClrScrn, filterHistory, need2Sort, currentPage,
+                                   pendingIndices, hasPendingProcess, state,
+                                   [this] { repaintList(); });
+        keybindingGuard.restore();
+        return LoopAction::Continue;
+    }
+
+    // Input containing ';' is always staging syntax: if it is not accepted the
+    // iteration simply ends. Bare numbers = what is on screen (`files`),
+    // "n^" = unfiltered list.
+    LoopAction stageSelection(const std::string& input) {
+        if (input.find(';') == std::string::npos) return LoopAction::Proceed;
+        stagePending(input, pendingPaths, hasPendingProcess, needsClrScrn,
+                     files, sourceList());
+        return LoopAction::Continue;
+    }
+
+    void convertDirect(const std::string& input) {
+        convert(input, files);
+        needsClrScrn = true;
+        if (verbose) printVerboseResults();
+        keybindingGuard.restore();
+    }
+
+    // ----- dispatcher ------------------------------------------------------
+
+    LoopAction dispatch(const std::string& input) {
+        using Handler = LoopAction (ImageSession::*)(const std::string&);
+        static const Handler handlers[] = {
+            &ImageSession::escape,
+            &ImageSession::stagedCommands,
+            &ImageSession::ignoreInput,
+            &ImageSession::pagination,
+            &ImageSession::runStaged,
+            &ImageSession::filtering,
+            &ImageSession::stageSelection,
+        };
+
+        for (Handler h : handlers) {
+            const LoopAction action = (this->*h)(input);
+            if (action != LoopAction::Proceed) return action;
+        }
+
+        convertDirect(input);
+        return LoopAction::Continue;
+    }
+};
+
+} // namespace
 
 /**
  * @brief Interactive TUI for selecting disc images to convert to ISO.
@@ -794,10 +1212,9 @@ void selectForIsoFiles(const std::string& operation,
  * same Readline event loop as @c selectForIsoFiles, but over the image cache
  * for the requested @p fileType, with the matching operation name.
  *
- * - **File type mapping:** @p fileType selects the extension(s), the display
- *   name, and the conversion operation (@c "ccd2iso", @c "mdf2iso",
- *   @c "nrg2iso", @c "chd2iso", @c "daa2iso"); "bin" and "img" both map to
- *   the BIN/IMG conversion.
+ * - **File type mapping:** @p fileType selects the conversion operation
+ *   (@c "ccd2iso", @c "mdf2iso", @c "nrg2iso", @c "chd2iso", @c "daa2iso");
+ *   "bin" and "img" both map to the BIN/IMG conversion.
  * - **RAII keybindings:** @c ReadlineKeybindingGuard installs select-mode
  *   bindings on construction and resets them on destruction, so cleanup runs
  *   on every exit path.
@@ -818,6 +1235,9 @@ void selectForIsoFiles(const std::string& operation,
  *   and converts against it; an active filter stays in place. The pending line
  *   shows the unfiltered-list numbers. Verbose output, when enabled, is printed after
  *   each dispatch.
+ * - **Structure:** the loop body is delegated to @c ImageSession, whose input
+ *   handlers are tried in a fixed order (ESC, staged commands, ignored input,
+ *   pagination/help, "P", filtering, staging, direct conversion).
  *
  * @param fileType  "bin", "img", "mdf", "nrg", "chd", or "daa".
  * @param files     The image file list being filtered/selected; updated in
@@ -836,270 +1256,30 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
     rl_bind_key('\f', prevent_readline_keybindings);
     rl_bind_key('\t', prevent_readline_keybindings);
 
-    std::vector<std::string> pendingIndices;      // display projection only
-    std::vector<std::string> pendingPaths;        // the real staged selection
-    bool hasPendingProcess = false;
-
-    size_t currentPage = 0;
-    size_t originalPage = currentPage;
-
-    bool isFiltered = false;
-    bool needsClrScrn = true;
-    bool filterHistory = false;
-    bool need2Sort = true;
-
-    std::string fileExtension;
-    std::string fileExtensionWithOutDots;
-    std::string operation;
-    if (fileType == "bin" || fileType == "img") {
-        fileExtension = ".bin/.img";
-        operation = "ccd2iso";
-        fileExtensionWithOutDots = "BIN/IMG";
-    } else if (fileType == "mdf") {
-        fileExtension = ".mdf";
-        fileExtensionWithOutDots = "MDF";
-        operation = "mdf2iso";
-    } else if (fileType == "nrg") {
-        fileExtension = ".nrg";
-        fileExtensionWithOutDots = "NRG";
-        operation = "nrg2iso";
-    } else if (fileType == "chd") {
-        fileExtension = ".chd";
-        fileExtensionWithOutDots = "CHD";
-        operation = "chd2iso";
-    } else if (fileType == "daa") {
-        fileExtension = ".daa/.gbi";
-        fileExtensionWithOutDots = "DAA/GBI";
-        operation = "daa2iso";
-    } else {
-        fileExtension = "";
-        fileExtensionWithOutDots = "FILES";
-    }
-
-    // The unfiltered list for this file type (what ESC restores). While a
-    // filter is active, source indices ("n^") refer to this list.
-    const std::vector<std::string>* const cache = imageCacheFor(fileType);
-
-    // Source list: the cache while filtered, otherwise `files` itself.
-    auto sourceList = [&]() -> const std::vector<std::string>& {
-        return (isFiltered && cache) ? *cache : files;
-    };
-
-    // Recomputes the "Pending Indices" display from the staged paths.
-    auto syncPendingDisplay = [&] {
-        pendingIndices = compressRuns(resolveIndices(pendingPaths, sourceList(), false));
-        hasPendingProcess = !pendingIndices.empty();
-    };
-
-    // Same restore as ESC: back to the full list for this file type.
-    auto restoreUnfilteredList = [&] {
-        if (cache) files = *cache;
-        isFiltered = false;
-        filteringStack.clear();
-        currentPage = originalPage;
-        need2Sort = false;
-    };
+    ImageSession s(fileType, files, list, state, keybindingGuard);
 
     while (true) {
-        clearGlobalVerboseSets();
-        enable_ctrl_d();
-        setupSignalHandlerCancellations();
-
-        GlobalState::g_operationCancelled.store(false);
-        bool verbose = false;
-
-        if (!isFiltered) originalPage = currentPage;
-
-        clear_history();
-
-        // Position the cursor on the prompt row (see the invariant note at the
-        // top of this file).
-        if (needsClrScrn) {
-            syncPendingDisplay();
-            loadAndDisplayImageFiles(files, fileType, need2Sort, isFiltered, list,
-                                     pendingIndices, hasPendingProcess, currentPage,
-                                     state);
-            std::cout << "\n";
-        } else {
-            rewindToPromptRow();
-        }
+        s.beginIteration();
+        s.showListOrRewind();
 
         const ReadlineAndPromptTheme pt = getPromptTheme();
-
-        setup_custom_keybindingsForSelect();
-
-        // Unused in convert2iso prompts.
-        rl_bind_keyseq("R", rl_insert);
-
-        std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
-
-        // Single-line prompt; the blank separator row is printed by the
-        // display step above.
-        std::string prompt =
-            prefix +
-            std::string(UI::Palette::RL_idxGreen) + "IDX" +
-            pt.primary   + " ↵ for " +
-            pt.highlight + operation +
-            pt.primary   + ", ? for help: " +
-            pt.reset;
-
-        // Repaints the list on terminal resize. A throwaway sort flag keeps a
-        // resize from re-sorting the list.
-        auto repaintList = [&] {
-            bool sortNow = false;
-            syncPendingDisplay();
-            loadAndDisplayImageFiles(files, fileType, sortNow, isFiltered, list,
-                                     pendingIndices, hasPendingProcess, currentPage,
-                                     state);
-        };
+        s.bindPromptKeys();
+        const std::string prompt = s.buildPrompt(pt);
 
         armPendingInputRestore();
-        RlLine rawInput = readlineWithResize(prompt, repaintList);
+        RlLine rawInput = readlineWithResize(prompt, [&s] { s.repaintList(); });
         rl_startup_hook = nullptr;
 
         if (!rawInput) {
-            if (isFiltered) {
-                needsClrScrn = true;
-                isFiltered = false;
-                filteringStack.clear();
-                currentPage = originalPage;
-                need2Sort = false;
-                break;
-            } else {
-                break;
-            }
+            s.onEndOfInput();
+            break;
         }
 
-        std::string inputString(rawInput.get());
+        const std::string inputString(rawInput.get());
 
-        if (inputString == "\x1b") {
-            clearScrollBuffer();
-            if (isFiltered) {
-                // Restore original unfiltered file list.
-                restoreUnfilteredList();
-                needsClrScrn = true;
-                continue;
-            } else {
-                currentPage = 0;
-                need2Sort = false;
-                return;
-            }
-        }
-
-        if (inputString == "P" && pendingPaths.empty()) {
-            hasPendingProcess = false;
-            needsClrScrn = false;
-            continue;
-        }
-
-        if (inputString == "clr") {
-            pendingPaths.clear();
-            pendingIndices.clear();
-            hasPendingProcess = false;
-            needsClrScrn = true;
-            continue;
-        }
-
-        if (inputString[0] == ';' || inputString.find(";;") != std::string::npos) {
-            needsClrScrn = false;
-            continue;
-        }
-
-        if (rawInput.get()[0] == '\0') {
-            needsClrScrn = false;
-            continue;
-        }
-
-        size_t totalPages = (GlobalState::ITEMS_PER_PAGE != 0)
-            ? ((files.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE)
-            : 0;
-
-        bool validCommand = processPaginationHelpAndDisplay(
-            inputString,
-            totalPages,
-            currentPage,
-            isFiltered,
-            needsClrScrn,
-            operation,
-            need2Sort,
-            nullptr,
-            files
-        );
-
-        if (validCommand) continue;
-
-        if (inputString == "P") {
-            // The staged selection is source indices of the FULL list, so P
-            // runs against it. processInputForConversions only reads the list,
-            // so while filtered we hand it a copy of the cache and leave the
-            // active filter (and `files`) untouched.
-            std::vector<std::string> fullList;
-            if (isFiltered && cache) fullList = *cache;
-            std::vector<std::string>& target = (isFiltered && cache) ? fullList : files;
-
-            const std::string batch = joinTokens(compressRuns(
-                resolveIndices(pendingPaths, target, true)));   // drops vanished files
-            needsClrScrn = true;
-
-            if (batch.empty()) {
-                pendingIndices.clear();
-                hasPendingProcess = false;
-                continue;
-            }
-
-            processInputForConversions(
-                batch,
-                target,
-                fileType == "mdf",
-                fileType == "nrg",
-                fileType == "chd",
-                fileType == "daa",
-                verbose);
-
-            keybindingGuard.restore();
-
-            if (verbose) {
-                verbosePrint(verboseSets.uniqueErrorTokenMessages,
-                             verboseSets.operationCompleted,
-                             verboseSets.operationSkipped,
-                             verboseSets.operationFailed, 3);
-            }
-
-            continue;
-        }
-
-        if (inputString == "/" || (!inputString.empty() && inputString[0] == '/')) {
-            handleFilteringConvert2ISO(inputString, files, operation, isFiltered,
-                                       needsClrScrn, filterHistory, need2Sort, currentPage,
-                                       pendingIndices, hasPendingProcess, state,
-                                       repaintList);
-            keybindingGuard.restore();
-            continue;
-        }
-        else if (inputString.find(';') != std::string::npos) {
-            // Bare numbers = what is on screen (`files`), "n^" = unfiltered list.
-            if (stagePending(inputString, pendingPaths, hasPendingProcess, needsClrScrn,
-                             files, sourceList())) {
-                continue;
-            }
-        }
-        else {
-            processInputForConversions(inputString, files,
-                                       (fileType == "mdf"),
-                                       (fileType == "nrg"),
-                                       (fileType == "chd"),
-                                       (fileType == "daa"),
-                                       verbose);
-            needsClrScrn = true;
-            if (verbose) {
-                verbosePrint(verboseSets.uniqueErrorTokenMessages,
-                            verboseSets.operationCompleted,
-                            verboseSets.operationSkipped,
-                            verboseSets.operationFailed, 3);
-                needsClrScrn = true;
-            }
-            keybindingGuard.restore();
-        }
+        const LoopAction action = s.dispatch(inputString);
+        if (action == LoopAction::Break)  break;
+        if (action == LoopAction::Return) return;
     }
     // Keybinding guard destructor automatically calls reset_custom_keybindingsForSelect().
 }
