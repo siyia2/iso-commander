@@ -9,6 +9,7 @@
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -283,15 +284,134 @@ bool isDeviceMounted(const std::string&);
  */
 std::string getDriveName(const std::string&);
 
+// --- Write theme forward declaration (used by WriteScreen + WriteValidation) ---
+
+namespace UI { struct WriteTheme; }
+
+// --- UTF-8 / ANSI-escape width helpers (defined in write2usbUIRendering.cpp) ---
+
+/**
+ * @brief Number of UTF-8 code points in @p s (continuation bytes ignored).
+ *
+ * Counts every byte that is not a UTF-8 continuation byte (0b10xxxxxx),
+ * so a multi-byte code point counts once. ANSI escapes are NOT skipped:
+ * use @ref visibleWidth for strings that may contain them.
+ */
+size_t utf8Width(const std::string& s);
+
+/**
+ * @brief Visible width of a string that may contain ANSI CSI escapes.
+ *
+ * Like utf8Width, but skips ANSI CSI sequences (ESC [ … final byte in
+ * 0x40..0x7E), which the terminal interprets rather than renders. The
+ * escapes count as 0 columns; every other UTF-8 code point counts as 1.
+ */
+size_t visibleWidth(const std::string& s);
+
+/**
+ * @brief Cuts a string to at most @p maxCols visible columns.
+ *
+ * ANSI CSI escape sequences are copied through untouched and do not count
+ * toward the budget. UTF-8 multi-byte sequences are never split: a code
+ * point that would cross the limit is dropped whole.
+ */
+std::string clipToWidth(const std::string& s, size_t maxCols);
+
+/**
+ * @brief Shortens an ISO filename to fit a column budget, keeping ".iso".
+ *
+ * If @p name already fits in @p maxCols columns it is returned unchanged.
+ * Otherwise a trailing ".iso" extension (case-insensitive) is separated off,
+ * the stem is cut to fit, and the result is reconstructed as "stem….iso".
+ * Truncation walks whole UTF-8 code points, so a multi-byte sequence is
+ * never split.
+ */
+std::string truncateIsoName(const std::string& name, size_t maxCols);
+
 /**
  * @brief Live progress/result screen for a write2usb operation.
  *
  * Opaque handle returned by @ref performWriteOperation. It owns the keeper
  * thread that keeps the screen laid out correctly on terminal resize, and it
  * must stay alive until the caller has finished waiting for the user. The
- * destructor stops and joins that thread. Defined in write2usbUI.cpp.
+ * destructor stops and joins that thread. Defined in
+ * write2usbUIRendering.cpp.
  */
 class WriteScreen;
+
+// --- Opaque WriteScreen interface (defined in write2usbUIRendering.cpp) ---
+//
+// WriteScreen is forward-declared above; these free functions are the only
+// way to drive it. All are no-ops / safe to call on a stopped screen.
+
+/**
+ * @brief Constructs a WriteScreen from the shared per-task progress vector,
+ *        the shared WriteSync state and the active write theme.
+ *
+ * The screen captures shared_ptr copies of both shared objects, so it never
+ * refers to the stack of the function that created it.
+ */
+std::shared_ptr<WriteScreen> createWriteScreen(
+        std::shared_ptr<std::vector<ProgressInfo>> progressData,
+        std::shared_ptr<WriteSync> sync,
+        UI::WriteTheme theme);
+
+/** @brief Prints the header and starts the keeper / relay threads. */
+void startWriteScreen(WriteScreen& screen);
+
+/** @brief Switches to the result screen and paints it. Call once. */
+void finishWriteScreen(WriteScreen& screen);
+
+/**
+ * @brief True if Ctrl+C is relayed into the shared condition variable, so a
+ *        waiter on it is woken immediately on cancellation (no timed recheck).
+ */
+bool writeScreenCancelWakeable(const WriteScreen& screen);
+
+/**
+ * @brief Registers the program's "press Enter" prompt so that a terminal
+ *        resize triggers repaintWriteScreen() instead of the keeper's own
+ *        repaint path.
+ */
+void setWriteScreenPrompt(WriteScreen& screen, std::string prompt);
+
+/**
+ * @brief Re-emits the result screen at the current terminal width. Called by
+ *        the pressEnterTo*WithRepaint() machinery on resize.
+ */
+void repaintWriteScreen(WriteScreen& screen);
+
+/** @brief Stops and joins the keeper and relay threads. Safe to call twice. */
+void stopWriteScreen(WriteScreen& screen);
+
+/**
+ * @brief Watches terminal resizes while the write confirmation prompt is active.
+ *
+ * The implementation and its signal/self-pipe state are kept in
+ * write2usbUIRendering.cpp. The painter callback redraws the prompt for the
+ * supplied terminal width and returns the widths of the rendered lines.
+ */
+class ConfirmResizeWatcher {
+public:
+    using Painter = std::function<std::vector<size_t>(size_t cols)>;
+
+    ConfirmResizeWatcher(Painter paint, size_t drawnCols,
+                         std::vector<size_t> drawnWidths,
+                         const std::string& promptText);
+
+    ~ConfirmResizeWatcher();
+
+    ConfirmResizeWatcher(const ConfirmResizeWatcher&) = delete;
+    ConfirmResizeWatcher& operator=(const ConfirmResizeWatcher&) = delete;
+    ConfirmResizeWatcher(ConfirmResizeWatcher&&) = delete;
+    ConfirmResizeWatcher& operator=(ConfirmResizeWatcher&&) = delete;
+
+    void stop();
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
 
 /**
  * Writes the given (ISO, device) pairs concurrently on the thread pool,
@@ -320,8 +440,6 @@ std::string formatSpeed(double mbPerSec);
 uint64_t getBlockDeviceSize(const std::string& device);
 
 // --- Shared validation helpers (defined in the same .cpp as validateDevices) ---
-
-namespace UI { struct WriteTheme; }
 
 /**
  * @namespace WriteValidation
