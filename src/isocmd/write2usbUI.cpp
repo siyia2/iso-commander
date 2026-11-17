@@ -51,6 +51,7 @@
 #include "../rendering.h"
 #include "../pausePrompts.h"
 #include "../readline.h"
+#include "../select.h"
 #include "../sort.h"
 #include "../state.h"
 #include "../stringManipulation.h"
@@ -571,7 +572,9 @@ void displayErrors();
  *
  * Readline tab-completion is configured for both ISO indices and device
  * paths. "?" triggers the help screen. After a valid mapping is entered, a
- * destructive-write warning is shown and must be confirmed with y/Y.
+ * destructive-write warning is shown and must be confirmed with y/Y. Upon
+ * confirmation, both display pending indices and persistent staged paths
+ * are cleared.
  *
  * @par Typed input: reprint and pre-fill
  * The mapping line the user typed is kept in a std::string copy and used in
@@ -633,12 +636,13 @@ void displayErrors();
  *                draining in the background; cannot be written to until
  *                draining finishes.
  *
- * @param selectedIsos ISOs chosen by the user for writing.
+ * @param selectedIsos   ISOs chosen by the user for writing.
+ * @param pendingIndices Staged selection display tokens to be cleared upon confirmation.
  * @return Validated (IsoInfo, device) pairs ready for
  *         performWriteOperation, or an empty vector if the user aborted or
  *         if the number of selected ISOs exceeds the thread pool size.
  */
-std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos) {
+std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos, std::vector<std::string>& pendingIndices) {
     PendingReadlineTextClearGuard pendingTextGuard;
     const WriteTheme wt = getWriteTheme();
 
@@ -1002,6 +1006,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         if (ans == "y" || ans == "Y") {
             setupSignalHandlerCancellations();
             GlobalState::g_operationCancelled.store(false);
+            g_isoPending.paths.clear();
+            pendingIndices.clear();
             return validPairs;
         } else {
             rl_bind_keyseq("?", help_handler);
@@ -1331,16 +1337,18 @@ std::shared_ptr<WriteScreen> performWriteOperation(
  * 2. Resolves filesystem metadata (size, name) for each selected ISO,
  *    skipping any files that are inaccessible or no longer present.
  * 3. Prompts the user for target device mappings via collectDeviceMappings.
- * 4. Executes the flashing process via performWriteOperation, which returns
+ * 4. Clears staged pending indices and paths upon successful confirmation.
+ * 5. Executes the flashing process via performWriteOperation, which returns
  *    the live WriteScreen.
- * 5. Keeps that screen alive while waiting for the user to press Enter, so
+ * 6. Keeps that screen alive while waiting for the user to press Enter, so
  *    the result screen still re-truncates and re-wraps when the terminal is
  *    resized, then stops it.
  *
- * @param input    Raw selection string from the main menu (e.g. "1 3-5").
- * @param isoFiles Full ordered list of available ISO paths.
+ * @param input          Raw selection string from the main menu (e.g. "1 3-5").
+ * @param isoFiles       Full ordered list of available ISO paths.
+ * @param pendingIndices Staged selection display tokens to be cleared on confirmation.
  */
-void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles) {
+void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles, std::vector<std::string>& pendingIndices) {
     clearScrollBuffer();
     std::unordered_set<int> indicesToProcess;
 
@@ -1372,7 +1380,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
         return;
     }
 
-    auto validPairs = collectDeviceMappings(selectedIsos);
+    auto validPairs = collectDeviceMappings(selectedIsos, pendingIndices);
     if (validPairs.empty()) {
         return;
     }
