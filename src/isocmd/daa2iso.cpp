@@ -884,6 +884,297 @@ static bool daa_fail(DaaContext &ctx) {
 //  Public API
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * @brief Validates the DAA file signature and version information.
+ *
+ * @param daa Reference to the header structure read from the file.
+ * @param ctx Reference to the active DAA context.
+ * @throws DaaError If the signature is unknown, a multi-volume file is selected, or the version is unsupported.
+ */
+void validateDaaHeader(const daa_t &daa, DaaContext &ctx) {
+    if (!strncmp((char*)daa.sign, "DAA", 16) || !strncmp((char*)daa.sign, "\xb8\xbd\xb6", 3))
+        ctx.daagbi = TYPE_DAA;
+    else if (!strncmp((char*)daa.sign, "GBI", 16))
+        ctx.daagbi = TYPE_GBI;
+    else {
+        if (!strncmp((char*)daa.sign, "DAA VOL", 16) || !strncmp((char*)daa.sign, "GBI VOL", 16))
+            throw DaaError("must choose the first DAA file, not a volume");
+        throw DaaError("unknown DAA signature");
+    }
+
+    if ((daa.version != 0x100 && daa.version != 0x110) || daa.b1 != 1)
+        throw DaaError("unsupported DAA version");
+}
+
+/**
+ * @brief Configures the swapped bit type lookup array based on version parameters.
+ *
+ * @param ctx Reference to the active DAA context.
+ * @param ver110_btype The compression bit type identifier from version 1.10 metadata.
+ */
+void setupBtype(DaaContext &ctx, int ver110_btype) {
+    switch (ver110_btype) {
+        case 0: ctx.swapped_btype[0]=0; ctx.swapped_btype[1]=1; ctx.swapped_btype[2]=2; break;
+        case 1: ctx.swapped_btype[0]=1; ctx.swapped_btype[1]=2; ctx.swapped_btype[2]=0; break;
+        case 2: ctx.swapped_btype[0]=0; ctx.swapped_btype[1]=2; ctx.swapped_btype[2]=1; break;
+        case 3: ctx.swapped_btype[0]=1; ctx.swapped_btype[1]=0; ctx.swapped_btype[2]=2; break;
+    }
+}
+
+/**
+ * @brief Sets up version-specific structures, headers, memory buffers, and allocation properties.
+ *
+ * @param ctx Reference to the active DAA context.
+ * @param daa Reference to the header structure.
+ * @param daas Output parameter for total number of data chunks.
+ * @param daas_mem Output parameter for memory size of the index table.
+ * @param bitsize Output parameter for bit size configuration.
+ * @param bittype Output parameter for bit type configuration.
+ * @param daa_dataz Output parameter for compressed index table size if applicable.
+ * @param dolame Output parameter flag indicating if LAME filtering is active.
+ * @param dolzma Output parameter flag indicating if LZMA properties are active.
+ * @param dolamebits Output parameter flag indicating LZMA bit adjustments.
+ * @param lzma_filter Output parameter for LZMA filter flags.
+ * @return void* Pointer to the allocated memory buffer for index data.
+ * @throws DaaError If memory allocation fails or LZMA property allocation fails.
+ */
+void* setupVersionData(DaaContext &ctx, daa_t &daa, u32 &daas, u32 &daas_mem, u32 &bitsize, u32 &bittype, u32 &daa_dataz, int &dolame, int &dolzma, int &dolamebits, int &lzma_filter) {
+    int ver110_btype = 0;
+
+    if (daa.version == 0x100) {
+        daas_mem = daa.data_offset - daa.size_offset;
+        daa_data_t *daa_data = (daa_data_t*)malloc(daas_mem + 16);
+        if (!daa_data) throw DaaError("out of memory (daa_data)");
+        daas = daas_mem / 3;
+        setupBtype(ctx, ver110_btype);
+        return daa_data;
+    } else {
+        u32 ver110_y = daa.chunksize;
+        daa.data_offset &= 0xffffff;
+        daa.chunksize = (daa.chunksize & 0xfff) << 14;
+
+        bittype = daa.hdata[5] & 7;
+        bitsize = daa.hdata[5] >> 3;
+        if (bitsize) bitsize += 10;
+        if (!bitsize) {
+            u32 len = daa.chunksize;
+            for (bitsize = 0; len > (unsigned)bittype; bitsize++, len >>= 1);
+        }
+        daas_mem = daa.data_offset - daa.size_offset;
+
+        u32 bits_per_entry = (u32)(bittype + bitsize);
+        if (bits_per_entry == 0) throw DaaError("invalid header bits");
+        daas = (u32)(((u64)daas_mem << 3) / bits_per_entry);
+
+        if (ver110_y & 0x4000) {
+            daas_mem += 0x10000;
+            daa_dataz = *(u32*)(daa.hdata + 1);
+            swap32_if_be(&daa_dataz, ctx.endian);
+        }
+
+        daa_data_t *daa_data = (daa_data_t*)malloc(daas_mem + 16);
+        if (!daa_data) throw DaaError("out of memory (daa_data v110)");
+        memset(daa_data, 0, daas_mem + 16);
+
+        dolamebits = (ver110_y & 0x20000) ? 1 : 0;
+        dolame     = (ver110_y & 0x8000000) ? 1 : 0;
+        dolzma     = (ver110_y & 0x100000) ? 1 : 0;
+
+        ver110_btype = (ver110_y >> 0x17) & 3;
+        if (ctx.daagbi == TYPE_GBI) ver110_btype ^= 1;
+
+        if (dolzma) {
+            lzma_filter = daa.hdata[6];
+            if (LzmaDec_Allocate(&ctx.lzma, daa.hdata + 7, LZMA_PROPS_SIZE, &g_Alloc) != SZ_OK)
+                throw DaaError("LZMA property allocation failed");
+        }
+
+        setupBtype(ctx, ver110_btype);
+        return daa_data;
+    }
+}
+
+/**
+ * @brief Parses and validates metadata records prior to the primary data offset.
+ *
+ * @param ctx Reference to the active DAA context.
+ * @param daa Reference to the header structure.
+ * @throws DaaError If a password-protected DAA format is encountered or file seeking fails.
+ */
+void processPreDataRecords(DaaContext &ctx, const daa_t &daa) {
+    while ((u64)ftell(ctx.fdi) < daa.size_offset) {
+        u32 rec_type, rec_len;
+        ctx_read(ctx, &rec_type, 4); swap32_if_be(&rec_type, ctx.endian);
+        ctx_read(ctx, &rec_len,  4); swap32_if_be(&rec_len,  ctx.endian);
+        if (rec_type == 1) ctx.multi = 1;
+        else if (rec_type == 3) throw DaaError("password-protected DAA not supported");
+        if (fseek(ctx.fdi, rec_len - 8, SEEK_CUR)) throw DaaError("fseek on pre-data record");
+    }
+}
+
+/**
+ * @brief Detects multi-part DAA files and configures corresponding file paths/naming handles.
+ *
+ * @param ctx Reference to the active DAA context.
+ * @param inputFile Path string of the primary input file.
+ * @param daa Reference to the header structure.
+ */
+void setupMultiPartFiles(DaaContext &ctx, const std::string &inputFile, const daa_t &daa) {
+    fseek(ctx.fdi, 0, SEEK_END);
+    u64 tot = (u64)ftell(ctx.fdi);
+    if (ctx.multi || (tot != daa.daasize)) {
+        u8 *p;
+        const char *fi = inputFile.c_str();
+        if      (find_ext((u8*)fi,"001.daa")) { ctx.multi=1; ctx.multinum=2; p=(u8*)fi+strlen(fi)-7; }
+        else if (find_ext((u8*)fi,"01.daa"))  { ctx.multi=2; ctx.multinum=2; p=(u8*)fi+strlen(fi)-6; }
+        else {
+            ctx.multi=3; ctx.multinum=0;
+            p=(u8*)strrchr(fi,'.');
+            if (!p) p=(u8*)fi+strlen(fi);
+        }
+        size_t plen = (u8*)p - (u8*)fi;
+        ctx.multi_filename = (char*)malloc(plen + 32);
+        memcpy(ctx.multi_filename, fi, plen);
+        ctx.multi_filename[plen] = '\0';
+    }
+}
+
+/**
+ * @brief Reads and uncompresses the image chunk index table from the file input stream.
+ *
+ * @param ctx Reference to the active DAA context.
+ * @param daa_data Pointer to the data buffer to populate.
+ * @param daas_mem Allocated memory size for index data.
+ * @param daa_dataz Compressed size of the index data, if compressed.
+ * @param daas Reference to total chunks count to be updated.
+ * @param bittype Bit type parameter used for calculating entry layouts.
+ * @param bitsize Bit size parameter used for calculating entry layouts.
+ * @throws DaaError If index table decompression fails.
+ */
+void readAndDecompressIndexTable(DaaContext &ctx, void *daa_data, u32 daas_mem, u32 daa_dataz, u32 &daas, u32 bittype, u32 bitsize) {
+    if (daa_dataz) {
+        ctx_alloc(&ctx.in, daa_dataz, &ctx.insz);
+        ctx_read(ctx, ctx.in, daa_dataz);
+        size_t destLen = daas_mem;
+        if (tinf_uncompress(ctx.tinf, (u8*)daa_data, &destLen, ctx.in, daa_dataz, ctx.swapped_btype) != TINF_OK)
+            throw DaaError("failed to decompress index table");
+        u32 bits_per_entry = (u32)(bittype + bitsize);
+        daas = (u32)(((u64)destLen << 3) / bits_per_entry);
+    } else {
+        ctx_read(ctx, daa_data, daas_mem);
+    }
+}
+
+/**
+ * @brief Applies vendor-specific scrambling or scrambling filters (e.g., GBI/PowerISO Lame modifications).
+ *
+ * @param ctx Reference to the active DAA context.
+ * @param daa Reference to the header structure.
+ * @param daa_data Pointer to the index data buffer.
+ * @param daas_mem Size of the index data memory buffer.
+ * @param dolame Flag specifying whether PowerISO Lame transformation is requested.
+ */
+void applyLameFilters(DaaContext &ctx, const daa_t &daa, void *daa_data, u32 daas_mem, int dolame) {
+    if (ctx.daagbi == TYPE_GBI) gburner_lame((u8*)daa_data, daas_mem, daa.crc & 0xff);
+    if (dolame) poweriso_lame((u8*)daa_data, daas_mem, daa.isosize);
+}
+
+/**
+ * @brief Iterates over all disk chunks, performs decompression (LZMA, Inflate, or uncompressed), and writes output data.
+ *
+ * @param ctx Reference to the active DAA context.
+ * @param daa Reference to the header structure.
+ * @param daa_data Pointer to the index table data.
+ * @param daas Total number of chunks.
+ * @param bitsize Bit size configuration value.
+ * @param bittype Bit type configuration value.
+ * @param dolamebits Flag indicating specific bit extraction offsets.
+ * @param lzma_filter Filter flag for specialized post-processing on decompressed output.
+ * @throws DaaError If cancellation occurs, length checks fail, decompression fails, or file operations error out.
+ */
+void processAllChunks(DaaContext &ctx, const daa_t &daa, void *daa_data, u32 daas, u32 bitsize, u32 bittype, int dolamebits, int lzma_filter) {
+    ctx_alloc(&ctx.out_buf, daa.chunksize, &ctx.outsz);
+    u64 tot = 0;
+    u32 last_chunk = daas - 1;
+    int bitpos = 0;
+    int ztype = 1;
+    daa_data_t *pdata = (daa_data_t*)daa_data;
+
+    for (u32 i = 0; i < daas; i++) {
+        if (GlobalState::g_operationCancelled.load()) {
+            free(daa_data);
+            throw DaaError("Operation cancelled");
+        }
+
+        u32 len;
+        if (daa.version == 0x100) {
+            len = ((u32)pdata[i].n1<<16) | pdata[i].n2 | ((u32)pdata[i].n3<<8);
+            ztype = (len >= daa.chunksize) ? -1 : 1;
+        } else {
+            len = daa2iso_read_bits(bitsize, (u8*)daa_data, bitpos, dolamebits, 0, ctx.powerisuxn);
+            bitpos += bitsize;
+            len += LZMA_PROPS_SIZE;
+            ztype = (int)daa2iso_read_bits(bittype, (u8*)daa_data, bitpos, dolamebits, 1, ctx.powerisuxn);
+            bitpos += bittype;
+            if (len >= daa.chunksize) ztype = -1;
+        }
+
+        if (len > 0x1000000) throw DaaError("excessive chunk length");
+
+        ctx_alloc(&ctx.in, len, &ctx.insz);
+        ctx_read(ctx, ctx.in, len);
+
+        u32 outlen;
+        switch (ztype) {
+            case -1:
+                outlen = (len < daa.chunksize) ? len : daa.chunksize;
+                memcpy(ctx.out_buf, ctx.in, outlen);
+                break;
+            case 0:
+                LzmaDec_Init(&ctx.lzma);
+                outlen = lzma_decode_full(&ctx.lzma, ctx.in, len, ctx.out_buf, ctx.outsz);
+                if (outlen == 0) throw DaaError("LZMA decompression failed");
+                if (lzma_filter) poweriso_is_shit(ctx.out_buf, (int)outlen);
+                break;
+            case 1: {
+                size_t destLen = ctx.outsz;
+                if (tinf_uncompress(ctx.tinf, ctx.out_buf, &destLen, ctx.in, len, ctx.swapped_btype) != TINF_OK)
+                    throw DaaError("INFLATE decompression failed");
+                outlen = destLen;
+                break;
+            }
+            default:
+                throw DaaError("unknown compression type");
+        }
+
+        if (i == last_chunk) {
+            if ((tot + outlen) > daa.isosize)
+                outlen = (u32)(daa.isosize - tot);
+        } else {
+            if (outlen != daa.chunksize)
+                throw DaaError("chunk size mismatch");
+        }
+
+        if (fwrite(ctx.out_buf, 1, outlen, ctx.fdo) != outlen)
+            throw DaaError("write failed");
+
+        tot += outlen;
+        if (ctx.completedBytes)
+            ctx.completedBytes->fetch_add(outlen, std::memory_order_relaxed);
+    }
+
+    if (tot != daa.isosize) throw DaaError("output size mismatch");
+}
+
+/**
+ * @brief Converts a DAA/GBI format archive image file into a raw ISO image format.
+ *
+ * @param inputFile Path to the source DAA file.
+ * @param outputFile Path to the target ISO file being generated.
+ * @param completedBytes Atomic progress counter tracking processed output bytes.
+ * @return true If conversion completes successfully.
+ * @return false If initialization fails or the operation is cancelled.
+ */
 bool convertDaaToIso(const std::string &inputFile,
                      const std::string &outputFile,
                      std::atomic<size_t> *completedBytes)
@@ -891,10 +1182,9 @@ bool convertDaaToIso(const std::string &inputFile,
     if (GlobalState::g_operationCancelled.load()) return false;
 
     DaaContext ctx;
-    ctx.outputPath     = outputFile;
+    ctx.outputPath   = outputFile;
     ctx.completedBytes = completedBytes;
 
-    // Initialise per-instance state (replaces reset_bit_reader / tinf_init globals)
     ctx.powerisuxn = 0;
     tinf_init(ctx.tinf);
 
@@ -911,198 +1201,28 @@ bool convertDaaToIso(const std::string &inputFile,
         ctx_read(ctx, &daa, sizeof(daa));
         swap_daa_if_be(&daa, ctx.endian);
 
-        if (!strncmp((char*)daa.sign,"DAA",16) || !strncmp((char*)daa.sign,"\xb8\xbd\xb6",3))
-            ctx.daagbi = TYPE_DAA;
-        else if (!strncmp((char*)daa.sign,"GBI",16))
-            ctx.daagbi = TYPE_GBI;
-        else {
-            if (!strncmp((char*)daa.sign,"DAA VOL",16) || !strncmp((char*)daa.sign,"GBI VOL",16))
-                throw DaaError("must choose the first DAA file, not a volume");
-            throw DaaError("unknown DAA signature");
-        }
-
-        if ((daa.version != 0x100 && daa.version != 0x110) || daa.b1 != 1)
-            throw DaaError("unsupported DAA version");
+        validateDaaHeader(daa, ctx);
 
         LzmaDec_Construct(&ctx.lzma);
 
-        daa_data_t *daa_data = nullptr;
         u32 daas = 0, daas_mem = 0, daa_dataz = 0;
-        int ztype=1, bitpos=0, bitsize=0, bittype=0;
-        int dolame=0, dolzma=0, dolamebits=0, lzma_filter=0, ver110_btype=0;
-        u32 ver110_y = 0;
+        u32 bitsize = 0, bittype = 0;
+        int dolame = 0, dolzma = 0, dolamebits = 0, lzma_filter = 0;
 
-        if (daa.version == 0x100) {
-            daas_mem = daa.data_offset - daa.size_offset;
-            daa_data = (daa_data_t*)malloc(daas_mem + 16);
-            if (!daa_data) throw DaaError("out of memory (daa_data)");
-            daas = daas_mem / 3;
-        } else {
-            ver110_y = daa.chunksize;
-            daa.data_offset &= 0xffffff;
-            daa.chunksize    = (daa.chunksize & 0xfff) << 14;
+        void *daa_data = setupVersionData(ctx, daa, daas, daas_mem, bitsize, bittype,
+                                          daa_dataz, dolame, dolzma, dolamebits, lzma_filter);
 
-            bittype = daa.hdata[5] & 7;
-            bitsize = daa.hdata[5] >> 3;
-            if (bitsize) bitsize += 10;
-            if (!bitsize) {
-                u32 len = daa.chunksize;
-                for (bitsize=0; len>(unsigned)bittype; bitsize++, len>>=1);
-            }
-            daas_mem = daa.data_offset - daa.size_offset;
-
-            u32 bits_per_entry = (u32)(bittype + bitsize);
-            if (bits_per_entry == 0) throw DaaError("invalid header bits");
-            daas = (u32)(((u64)daas_mem << 3) / bits_per_entry);
-
-            if (ver110_y & 0x4000) {
-                daas_mem += 0x10000;
-                daa_dataz = *(u32*)(daa.hdata + 1);
-                swap32_if_be(&daa_dataz, ctx.endian);
-            }
-
-            daa_data = (daa_data_t*)malloc(daas_mem + 16);
-            if (!daa_data) throw DaaError("out of memory (daa_data v110)");
-            memset(daa_data, 0, daas_mem + 16);
-
-            dolamebits   = (ver110_y & 0x20000)   ? 1 : 0;
-            dolame       = (ver110_y & 0x8000000)  ? 1 : 0;
-            dolzma       = (ver110_y & 0x100000)   ? 1 : 0;
-
-            ver110_btype = (ver110_y >> 0x17) & 3;
-            if (ctx.daagbi == TYPE_GBI) ver110_btype ^= 1;
-
-            if (dolzma) {
-                lzma_filter = daa.hdata[6];
-                if (LzmaDec_Allocate(&ctx.lzma, daa.hdata + 7, LZMA_PROPS_SIZE, &g_Alloc) != SZ_OK)
-                    throw DaaError("LZMA property allocation failed");
-            }
-        }
-
-        switch (ver110_btype) {
-            case 0: ctx.swapped_btype[0]=0; ctx.swapped_btype[1]=1; ctx.swapped_btype[2]=2; break;
-            case 1: ctx.swapped_btype[0]=1; ctx.swapped_btype[1]=2; ctx.swapped_btype[2]=0; break;
-            case 2: ctx.swapped_btype[0]=0; ctx.swapped_btype[1]=2; ctx.swapped_btype[2]=1; break;
-            case 3: ctx.swapped_btype[0]=1; ctx.swapped_btype[1]=0; ctx.swapped_btype[2]=2; break;
-        }
-
-        while ((u64)ftell(ctx.fdi) < daa.size_offset) {
-            u32 rec_type, rec_len;
-            ctx_read(ctx, &rec_type, 4); swap32_if_be(&rec_type, ctx.endian);
-            ctx_read(ctx, &rec_len,  4); swap32_if_be(&rec_len,  ctx.endian);
-            if (rec_type == 1) ctx.multi = 1;
-            else if (rec_type == 3) throw DaaError("password-protected DAA not supported");
-            if (fseek(ctx.fdi, rec_len - 8, SEEK_CUR)) throw DaaError("fseek on pre-data record");
-        }
-
-        {
-            fseek(ctx.fdi, 0, SEEK_END);
-            u64 tot = (u64)ftell(ctx.fdi);
-            if (ctx.multi || (tot != daa.daasize)) {
-                u8 *p;
-                const char *fi = inputFile.c_str();
-                if      (find_ext((u8*)fi,"001.daa")) { ctx.multi=1; ctx.multinum=2; p=(u8*)fi+strlen(fi)-7; }
-                else if (find_ext((u8*)fi,"01.daa"))  { ctx.multi=2; ctx.multinum=2; p=(u8*)fi+strlen(fi)-6; }
-                else {
-                    ctx.multi=3; ctx.multinum=0;
-                    p=(u8*)strrchr(fi,'.');
-                    if (!p) p=(u8*)fi+strlen(fi);
-                }
-                size_t plen = (u8*)p - (u8*)fi;
-                // Replace plen + 16 with plen + 32 to be safe
-				ctx.multi_filename = (char*)malloc(plen + 32);
-				memcpy(ctx.multi_filename, fi, plen);
-				ctx.multi_filename[plen] = '\0';
-            }
-        }
+        processPreDataRecords(ctx, daa);
+        setupMultiPartFiles(ctx, inputFile, daa);
 
         if (fseek(ctx.fdi, daa.size_offset, SEEK_SET)) throw DaaError("fseek to size_offset");
 
-        if (daa_dataz) {
-            ctx_alloc(&ctx.in, daa_dataz, &ctx.insz);
-            ctx_read(ctx, ctx.in, daa_dataz);
-            size_t destLen = daas_mem;
-            if (tinf_uncompress(ctx.tinf, (u8*)daa_data, &destLen, ctx.in, daa_dataz, ctx.swapped_btype) != TINF_OK)
-                throw DaaError("failed to decompress index table");
-            u32 bits_per_entry = (u32)(bittype + bitsize);
-            daas = (u32)(((u64)destLen << 3) / bits_per_entry);
-        } else {
-            ctx_read(ctx, daa_data, daas_mem);
-        }
-
-        if (ctx.daagbi == TYPE_GBI) gburner_lame((u8*)daa_data, daas_mem, daa.crc & 0xff);
-        if (dolame)                  poweriso_lame((u8*)daa_data, daas_mem, daa.isosize);
+        readAndDecompressIndexTable(ctx, daa_data, daas_mem, daa_dataz, daas, bittype, bitsize);
+        applyLameFilters(ctx, daa, daa_data, daas_mem, dolame);
 
         if (fseek(ctx.fdi, daa.data_offset, SEEK_SET)) throw DaaError("fseek to data_offset");
 
-        ctx_alloc(&ctx.out_buf, daa.chunksize, &ctx.outsz);
-        u64  tot        = 0;
-        u32  last_chunk = daas - 1;
-
-        for (u32 i = 0; i < daas; i++) {
-            if (GlobalState::g_operationCancelled.load()) {
-                free(daa_data);
-                return daa_fail(ctx);
-            }
-
-            u32 len;
-            if (daa.version == 0x100) {
-                len   = ((u32)daa_data[i].n1<<16) | daa_data[i].n2 | ((u32)daa_data[i].n3<<8);
-                ztype = (len >= daa.chunksize) ? -1 : 1;
-            } else {
-                len   = daa2iso_read_bits(bitsize,(u8*)daa_data,bitpos,dolamebits,0,ctx.powerisuxn);
-                bitpos += bitsize;
-                len  += LZMA_PROPS_SIZE;
-                ztype = (int)daa2iso_read_bits(bittype,(u8*)daa_data,bitpos,dolamebits,1,ctx.powerisuxn);
-                bitpos += bittype;
-                if (len >= daa.chunksize) ztype = -1;
-            }
-
-            if (len > 0x1000000) throw DaaError("excessive chunk length");
-
-            ctx_alloc(&ctx.in, len, &ctx.insz);
-            ctx_read(ctx, ctx.in, len);
-
-            u32 outlen;
-            switch (ztype) {
-                case -1:
-                    outlen = (len < daa.chunksize) ? len : daa.chunksize;
-                    memcpy(ctx.out_buf, ctx.in, outlen);
-                    break;
-                case 0:
-                    LzmaDec_Init(&ctx.lzma);
-                    outlen = lzma_decode_full(&ctx.lzma, ctx.in, len, ctx.out_buf, ctx.outsz);
-                    if (outlen == 0) throw DaaError("LZMA decompression failed");
-                    if (lzma_filter) poweriso_is_shit(ctx.out_buf, (int)outlen);
-                    break;
-                case 1: {
-                    size_t destLen = ctx.outsz;
-                    if (tinf_uncompress(ctx.tinf, ctx.out_buf, &destLen, ctx.in, len, ctx.swapped_btype) != TINF_OK)
-                        throw DaaError("INFLATE decompression failed");
-                    outlen = destLen;
-                    break;
-                }
-                default:
-                    throw DaaError("unknown compression type");
-            }
-
-            if (i == last_chunk) {
-                if ((tot + outlen) > daa.isosize)
-                    outlen = (u32)(daa.isosize - tot);
-            } else {
-                if (outlen != daa.chunksize)
-                    throw DaaError("chunk size mismatch");
-            }
-
-            if (fwrite(ctx.out_buf, 1, outlen, ctx.fdo) != outlen)
-                throw DaaError("write failed");
-
-            tot += outlen;
-            if (completedBytes)
-                completedBytes->fetch_add(outlen, std::memory_order_relaxed);
-        }
-
-        if (tot != daa.isosize) throw DaaError("output size mismatch");
+        processAllChunks(ctx, daa, daa_data, daas, bitsize, bittype, dolamebits, lzma_filter);
 
         free(daa_data);
         fclose(ctx.fdo); ctx.fdo = nullptr;
