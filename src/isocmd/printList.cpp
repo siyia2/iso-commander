@@ -88,6 +88,228 @@ inline void appendNumPadded(std::string& out, std::size_t value, std::size_t wid
 }
 
 /**
+ * @brief Prepares the background sync indicator text if an import is running.
+ *
+ * Performs an atomic pre-check to avoid unnecessary filesystem syscalls when no import is active.
+ * Validates history file availability and formats the dim synchronization status string, including
+ * filtering lock warnings if active.
+ *
+ * @param isIsoMode True if the active view is ISO_FILES.
+ * @param noFilterResults True if the filter returned empty results.
+ * @param state Shared refresh state containing import running flags and synchronization primitives.
+ * @param disablePagination True if pagination is disabled for this view.
+ * @return std::string The formatted sync indicator string, or an empty string if no sync is required.
+ */
+std::string prepareSyncLine(bool isIsoMode, bool noFilterResults, std::shared_ptr<RefreshState>& state, bool disablePagination) {
+    const bool wantSync = isIsoMode && !noFilterResults && !GlobalState::globalIsoFileList.empty();
+    const bool maybeSyncing = wantSync && state->isImportRunning.load(std::memory_order_acquire);
+
+    if (!maybeSyncing) return "";
+
+    const bool historyOk = !isHistoryFileEmpty(GlobalState::historyFilePath)
+                           && fs::is_regular_file(GlobalState::historyFilePath);
+    std::string syncLine;
+    syncLine.reserve(192);
+    syncLine.append(UI::Palette::Dim);
+    if (historyOk) {
+        syncLine.append(disablePagination
+            ? "[↻ Syncing: NewISO → Restructure]\n\n"
+            : "\n\n[↻ Syncing: NewISO → Restructure]");
+        if (GlobalState::g_filteringIndicator) {
+            syncLine.append(disablePagination
+                ? "\033[1A\033[K[ℹ  Filtering locked during sync]\n\n"
+                : "\n[ℹ  Filtering locked during sync]");
+        }
+    } else {
+        syncLine.append(disablePagination
+            ? "[No FolderPath history — nothing to sync]\n\n"
+            : "\n\n[No FolderPath history — nothing to sync]");
+    }
+    syncLine.append(UI::Palette::BoldReset);
+    return syncLine;
+}
+
+/**
+ * @brief Appends pagination header information to the output frame buffer.
+ *
+ * Formats the current page, total pages, and item range statistics (e.g., "Page 1/3 (Items (1-50)/150)")
+ * using theme colors and appends it to the output string buffer.
+ *
+ * @param output Reference to the retained output string buffer.
+ * @param disablePagination Flag indicating whether pagination is bypassed.
+ * @param effectivePage Zero-based index of the current active page.
+ * @param totalPages Total number of available pages.
+ * @param startIndex 1-based index of the first item on the current page.
+ * @param endIndex 1-based index of the last item on the current page.
+ * @param totalItems Total number of items across all pages.
+ * @param c Theme color configuration structure (@c PrintListTheme).
+ * @return size_t The exact byte offset position in the buffer where the background sync indicator should be spliced.
+ */
+size_t appendHeader(std::string& output, bool disablePagination, size_t effectivePage, size_t totalPages,
+                    size_t startIndex, size_t endIndex, size_t totalItems, const PrintListTheme& c)
+{
+    if (!disablePagination) {
+        output.append(c.head).append("Page ");
+        output.append(c.accent);
+        appendNum(output, effectivePage + 1);
+        output.append(c.head).append("/").append(c.num);
+        appendNum(output, totalPages);
+        output.append(c.head).append(" (Items (").append(c.accent);
+        appendNum(output, startIndex + 1);
+        output.append("-");
+        appendNum(output, endIndex);
+        output.append(c.head).append(")/").append(c.num);
+        appendNum(output, totalItems);
+        output.append(c.head).append(")");
+
+        size_t syncInsertPos = output.size();
+        output.append(UI::Palette::BoldReset).append("\n\n");
+        return syncInsertPos;
+    } else {
+        size_t syncInsertPos = output.size();
+        return syncInsertPos;
+    }
+}
+
+/**
+ * @brief Renders and clips a single item row into the output buffer with uniform alignment.
+ *
+ * Handles row numbering, original index badge rendering (`n^`) when filters are active with dynamic padding,
+ * directory/filename splitting for file modes, path parsing for mounted ISO modes, and enforces terminal width
+ * constraints to prevent auto-wrapping. Directory paths are clipped from the left with an ellipsis (`…`) if needed.
+ *
+ * @param output Reference to the retained output string buffer.
+ * @param items Non-owning view collection of string items to display.
+ * @param i Current zero-based index of the item being rendered.
+ * @param maxDigits Maximum digit count used for right-aligning row sequence numbers.
+ * @param maxOrigDigits Maximum digit count across original index values for column padding alignment.
+ * @param origIdx Pointer to filtering original index mapping vector, or @c nullptr if no filter is active.
+ * @param origSize Size of the original index vector.
+ * @param isFileMode Flag indicating if the list represents file entries (ISO or image files).
+ * @param isIsoMode Flag indicating if the list represents ISO files specifically.
+ * @param isMountedMode Flag indicating if the list represents mounted ISO entries.
+ * @param listSubType Extension or sub-format string used for path splitting.
+ * @param showNamesOnly Configuration flag indicating whether parent directories should be hidden.
+ * @param showFullUmount Configuration flag indicating whether full unmount paths should be shown.
+ * @param usableCols Maximum usable columns per row (terminal width minus one free margin column).
+ * @param c Theme color configuration structure (@c PrintListTheme).
+ */
+void appendItemRow(std::string& output, const StringListView& items, size_t i, size_t maxDigits,
+                   size_t maxOrigDigits, const auto* origIdx, size_t origSize,
+                   bool isFileMode, bool isIsoMode, bool isMountedMode,
+                   const std::string& listSubType, bool showNamesOnly, bool showFullUmount,
+                   size_t usableCols, const PrintListTheme& c)
+{
+    const std::size_t rowStart = output.size();
+    const std::string_view seqColor = (i % 2 == 0) ? c.indexA : c.indexB;
+
+    output.append(seqColor);
+    appendNumPadded(output, i + 1, maxDigits);
+
+    if (origIdx && i < origSize) {
+        const std::size_t origVal = static_cast<std::size_t>((*origIdx)[i]) + 1;
+        output.append(":").append(UI::Palette::BoldReset).append(c.square);
+        appendNum(output, origVal);
+        output.append("^");
+        const std::size_t pad = maxOrigDigits - digitCount(origVal);
+        if (pad) output.append(pad, ' ');
+        output.append(" ").append(UI::Palette::BoldReset);
+    } else {
+        output.append(". ").append(UI::Palette::BoldReset);
+    }
+
+    const std::string& item = items[i];
+
+    if (isFileMode) {
+        auto [dir, fname] = extractDirectoryAndFilename(item, listSubType);
+        const std::string_view dirView{dir};
+        const std::string_view nameView{fname};
+
+        std::string_view dirShown = dirView;
+        bool dirCut = false;
+        bool dirDrop = showNamesOnly;
+        if (!showNamesOnly && usableCols > 0) {
+            const std::size_t prefixW = visibleWidthFrom(output, rowStart);
+            const std::size_t nameW = utf8Cols(nameView);
+            if (prefixW + utf8Cols(dirView) + 1 + nameW > usableCols) {
+                const std::size_t fixed = prefixW + 1 + nameW;
+                const std::size_t budget = usableCols > fixed ? usableCols - fixed : 0;
+                if (budget >= 2) {
+                    dirShown = tailColumns(dirView, budget - 1);
+                    dirCut = true;
+                } else {
+                    dirDrop = true;
+                }
+            }
+        }
+
+        if (!dirDrop) {
+            output.append(c.dir);
+            if (dirCut) output.append("\u2026");
+            output.append(dirShown).append(UI::Palette::BoldReset).append("/");
+        }
+        output.append(isIsoMode ? c.iso : c.img).append(nameView);
+    }
+    else if (isMountedMode) {
+        auto [dirPart, pathPart, hashPart] = parseMountPointComponents(item);
+        if (showFullUmount) {
+            output.append(c.mnt)
+                  .append(dirPart).append(UI::Palette::Reset).append(UI::Palette::BoldReset)
+                  .append(c.iso).append(pathPart)
+                  .append(c.square).append(hashPart);
+        } else {
+            output.append(c.iso).append(pathPart);
+        }
+    }
+
+    if (usableCols > 0) fitRowToWidth(output, rowStart, usableCols);
+
+    output.append(UI::Palette::Reset).append(UI::Palette::BoldReset).append("\n");
+}
+
+/**
+ * @brief Appends pagination footers and staged pending process queues to the output frame buffer.
+ *
+ * Appends multi-page navigation hints (@c [PgUp] Prev | [PgDn] Next | [g#] ↵ GoTo) when pagination is active,
+ * followed by a highlighted "Pending Indices [P]: ..." line listing staged file indices when processes are queued.
+ *
+ * @param output Reference to the retained output string buffer.
+ * @param disablePagination Flag indicating whether pagination is bypassed.
+ * @param effectivePage Zero-based index of the current active page.
+ * @param totalPages Total number of available pages.
+ * @param showPendingIndices Flag indicating whether pending indices should be displayed.
+ * @param hasPendingProcess Flag indicating whether a process action is currently staged.
+ * @param pendingIndices Vector containing string identifiers of staged indices.
+ * @param isImgMode Flag indicating if the list represents image files (used for color styling).
+ * @param c Theme color configuration structure (@c PrintListTheme).
+ */
+void appendFooterAndPending(std::string& output, bool disablePagination, size_t effectivePage,
+                            size_t totalPages, bool showPendingIndices, bool hasPendingProcess,
+                            const std::vector<std::string>& pendingIndices, bool isImgMode, const PrintListTheme& c)
+{
+    if (!disablePagination) {
+        output.append("\n").append(c.head);
+        if (effectivePage > 0) output.append("[PgUp] Prev | ");
+        if (effectivePage < totalPages - 1) output.append("[PgDn] Next | ");
+        output.append("[g#] ↵ GoTo").append(UI::Palette::BoldReset).append("\n");
+    }
+
+    if (showPendingIndices && hasPendingProcess && !pendingIndices.empty()) {
+        output.append("\n");
+        output.append(c.bracketBg).append("Pending Indices [")
+              .append(c.procText).append("P")
+              .append(UI::Palette::BoldReset).append(c.bracketBg).append("]: ");
+
+        output.append(!isImgMode ? c.iso : c.img);
+        for (size_t i = 0; i < pendingIndices.size(); ++i) {
+            output.append(pendingIndices[i]);
+            if (i < pendingIndices.size() - 1) output.push_back(' ');
+        }
+        output.append(UI::Palette::Reset).append(UI::Palette::BoldReset).append("\n");
+    }
+}
+
+/**
  * @brief Renders one page of an ISO, image, or mounted-ISO list to the terminal.
  *
  * The whole frame (optional clear, header, rows, footer, pending-indices line)
@@ -143,21 +365,21 @@ inline void appendNumPadded(std::string& out, std::size_t value, std::size_t wid
  * RefreshState::printMutex, so a background import finishing cannot leave a
  * stale "Syncing" indicator on screen.
  *
- * @param items              Non-owning view of the strings to display. No copies
- *                           are made; the underlying storage must outlive the call.
- * @param listType           List category: "ISO_FILES", "IMAGE_FILES" or "MOUNTED_ISOS".
- * @param listSubType        Extension / sub-format used to split directory and filename.
- * @param pendingIndices     Indices staged for processing (shown in the pending line).
- * @param hasPendingProcess  Whether a process action is staged.
- * @param currentPage        Requested zero-based page. It is clamped to the last
- *                           page for display; the caller's value is not modified.
- * @param state              Shared state providing printMutex and isImportRunning.
- * @param clearFirst         If true, clears screen and scrollback inside the same
- *                           synchronized frame, so clear and content appear
- *                           atomically (no blank flash). Default is declared in
- *                           the header.
- * @param showPendingIndices If true, appends the pending-indices line when a
- *                           process is staged. Default is declared in the header.
+ * @param items               Non-owning view of the strings to display. No copies
+ *                            are made; the underlying storage must outlive the call.
+ * @param listType            List category: "ISO_FILES", "IMAGE_FILES" or "MOUNTED_ISOS".
+ * @param listSubType         Extension / sub-format used to split directory and filename.
+ * @param pendingIndices      Indices staged for processing (shown in the pending line).
+ * @param hasPendingProcess   Whether a process action is staged.
+ * @param currentPage         Requested zero-based page. It is clamped to the last
+ *                            page for display; the caller's value is not modified.
+ * @param state               Shared state providing printMutex and isImportRunning.
+ * @param clearFirst          If true, clears screen and scrollback inside the same
+ *                            synchronized frame, so clear and content appear
+ *                            atomically (no blank flash). Default is declared in
+ *                            the header.
+ * @param showPendingIndices  If true, appends the pending-indices line when a
+ *                            process is staged. Default is declared in the header.
  */
 void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
@@ -173,8 +395,6 @@ void printList(const StringListView& items, const std::string& listType, const s
 
     const PrintListTheme c = getListColors();
 
-    // Columns available to an item row; 0 = unknown width, do not clip. The last
-    // column stays free so a full-width row cannot trigger the terminal's auto-wrap.
     const size_t termCols   = terminalColumns();
     const size_t usableCols = termCols > 1 ? termCols - 1 : 0;
 
@@ -193,37 +413,11 @@ void printList(const StringListView& items, const std::string& listType, const s
 
     const size_t maxDigits = digitCount(endIndex);
 
-    // --- Sync indicator (prepared BEFORE taking the print lock) ---
-    // The atomic is read here only as a cheap pre-check to avoid filesystem syscalls
-    // when no import is running. It is re-read under the lock below, which is the
-    // authoritative check.
-    const bool wantSync = isIsoMode && !noFilterResults && !GlobalState::globalIsoFileList.empty();
-    const bool maybeSyncing = wantSync && state->isImportRunning.load(std::memory_order_acquire);
+    // --- Sync indicator ---
+    std::string syncLine = prepareSyncLine(isIsoMode, noFilterResults, state, disablePagination);
+    const bool maybeSyncing = !syncLine.empty();
 
-    std::string syncLine;
-    if (maybeSyncing) {
-        const bool historyOk = !isHistoryFileEmpty(GlobalState::historyFilePath)
-                               && fs::is_regular_file(GlobalState::historyFilePath);
-        syncLine.reserve(192);
-        syncLine.append(UI::Palette::Dim);
-        if (historyOk) {
-            syncLine.append(disablePagination
-                ? "[↻ Syncing: NewISO → Restructure]\n\n"
-                : "\n\n[↻ Syncing: NewISO → Restructure]");
-            if (GlobalState::g_filteringIndicator) {
-                syncLine.append(disablePagination
-                    ? "\033[1A\033[K[ℹ  Filtering locked during sync]\n\n"
-                    : "\n[ℹ  Filtering locked during sync]");
-            }
-        } else {
-            syncLine.append(disablePagination
-                ? "[No FolderPath history — nothing to sync]\n\n"
-                : "\n\n[No FolderPath history — nothing to sync]");
-        }
-        syncLine.append(UI::Palette::BoldReset);
-    }
-
-    // --- Output buffer (per-list-type, capacity retained across calls) ---
+    // --- Output buffer ---
     const ListKind kind = isIsoMode ? ListKind::Iso
                         : isImgMode ? ListKind::Image
                                     : ListKind::Mounted;
@@ -242,44 +436,20 @@ void printList(const StringListView& items, const std::string& listType, const s
     if (clearFirst) output.append(kClearSeq);
     output += '\n';
 
-    // Single-buffer "No filter results" message (previously a separate locked write).
     if (noFilterResults) {
-        output.append(c.num); // warning color for empty items/filter match
+        output.append(c.num);
         output.append("No filter results");
         output.append(UI::Palette::Reset).append(UI::Palette::BoldReset);
         output += '\n';
     }
 
     // --- Header ---
-    size_t syncInsertPos = std::string::npos;
-    if (!disablePagination) {
-        output.append(c.head).append("Page ");
-        output.append(c.accent);
-        appendNum(output, effectivePage + 1);
-        output.append(c.head).append("/").append(c.num);
-        appendNum(output, totalPages);
-        output.append(c.head).append(" (Items (").append(c.accent);
-        appendNum(output, startIndex + 1);
-        output.append("-");
-        appendNum(output, endIndex);
-        output.append(c.head).append(")/").append(c.num);
-        appendNum(output, totalItems);
-        output.append(c.head).append(")");
-
-        syncInsertPos = output.size(); // mark insertion point before BoldReset+\n\n
-        output.append(UI::Palette::BoldReset).append("\n\n");
-    } else {
-        syncInsertPos = output.size(); // mark insertion point after leading \n
-    }
+    size_t syncInsertPos = appendHeader(output, disablePagination, effectivePage, totalPages, startIndex, endIndex, totalItems, c);
 
     // --- Hoisted per-frame lookups ---
     const auto* origIdx = filteringStack.empty() ? nullptr : &filteringStack.back().originalIndices;
     const size_t origSize = origIdx ? origIdx->size() : 0;
 
-    // Widest original-index field on this page (for uniform row prefix padding).
-    // Computed up front so every row on the page pads to the same width, keeping
-    // filenames aligned even when the displayed original indices have differing
-    // digit counts (e.g. 1 vs 29).
     std::size_t maxOrigDigits = 0;
     if (origIdx) {
         const std::size_t lim = std::min(endIndex, origSize);
@@ -291,112 +461,25 @@ void printList(const StringListView& items, const std::string& listType, const s
 
     // --- Main item loop ---
     for (size_t i = startIndex; i < endIndex; ++i) {
-        const std::size_t rowStart = output.size();   // start of this row, for width fitting
-        const std::string_view seqColor = (i % 2 == 0) ? c.indexA : c.indexB;
-
-        output.append(seqColor);
-        appendNumPadded(output, i + 1, maxDigits);
-
-        if (origIdx && i < origSize) {
-            const std::size_t origVal = static_cast<std::size_t>((*origIdx)[i]) + 1;
-            output.append(":").append(UI::Palette::BoldReset).append(c.square);
-            appendNum(output, origVal);                 // left-justified "n"
-            output.append("^");
-            // Pad after the '^' so the filename column is identical on every row.
-            const std::size_t pad = maxOrigDigits - digitCount(origVal);
-            if (pad) output.append(pad, ' ');
-            output.append(" ").append(UI::Palette::BoldReset);
-        } else {
-            output.append(". ").append(UI::Palette::BoldReset);
-        }
-
-        const std::string& item = items[i];
-
-        if (isFileMode) {
-            auto [dir, fname] = extractDirectoryAndFilename(item, listSubType);
-            const std::string_view dirView{dir};
-            const std::string_view nameView{fname};
-
-            // Shorten the directory (from its left) before anything else, so the
-            // filename stays complete whenever the terminal can hold it.
-            std::string_view dirShown = dirView;
-            bool dirCut  = false;
-            bool dirDrop = showNamesOnly;
-            if (!showNamesOnly && usableCols > 0) {
-                const std::size_t prefixW = visibleWidthFrom(output, rowStart);
-                const std::size_t nameW   = utf8Cols(nameView);
-                if (prefixW + utf8Cols(dirView) + 1 + nameW > usableCols) {
-                    const std::size_t fixed  = prefixW + 1 + nameW;               // prefix + "/" + name
-                    const std::size_t budget = usableCols > fixed ? usableCols - fixed : 0;
-                    if (budget >= 2) {                                           // "…" + at least 1 char
-                        dirShown = tailColumns(dirView, budget - 1);
-                        dirCut   = true;
-                    } else {
-                        dirDrop = true;
-                    }
-                }
-            }
-
-            if (!dirDrop) {
-                output.append(c.dir);
-                if (dirCut) output.append("\u2026");
-                output.append(dirShown).append(UI::Palette::BoldReset).append("/");
-            }
-            output.append(isIsoMode ? c.iso : c.img).append(nameView);
-        }
-        else if (isMountedMode) {
-            auto [dirPart, pathPart, hashPart] = parseMountPointComponents(item);
-            if (showFullUmount) {
-                output.append(c.mnt)
-                      .append(dirPart).append(UI::Palette::Reset).append(UI::Palette::BoldReset)
-                      .append(c.iso).append(pathPart)
-                      .append(c.square).append(hashPart);
-            } else {
-                output.append(c.iso).append(pathPart);
-            }
-        }
-
-        // Last line of defence: never let a row wrap.
-        if (usableCols > 0) fitRowToWidth(output, rowStart, usableCols);
-
-        output.append(UI::Palette::Reset).append(UI::Palette::BoldReset).append("\n");
+        appendItemRow(output, items, i, maxDigits, maxOrigDigits, origIdx, origSize,
+                      isFileMode, isIsoMode, isMountedMode, listSubType, showNamesOnly,
+                      showFullUmount, usableCols, c);
     }
 
-    // --- Footer ---
-    if (!disablePagination) {
-        output.append("\n").append(c.head);
-        if (effectivePage > 0) output.append("[PgUp] Prev | ");
-        if (effectivePage < totalPages - 1) output.append("[PgDn] Next | ");
-        output.append("[g#] ↵ GoTo").append(UI::Palette::BoldReset).append("\n");
-    }
-
-    // --- Pending processes ---
-    if (showPendingIndices && hasPendingProcess && !pendingIndices.empty()) {
-        output.append("\n");
-        output.append(c.bracketBg).append("Pending Indices [")
-              .append(c.procText).append("P")
-              .append(UI::Palette::BoldReset).append(c.bracketBg).append("]: ");
-
-        output.append(!isImgMode ? c.iso : c.img);
-        for (size_t i = 0; i < pendingIndices.size(); ++i) {
-            output.append(pendingIndices[i]);
-            if (i < pendingIndices.size() - 1) output.push_back(' ');
-        }
-        output.append(UI::Palette::Reset).append(UI::Palette::BoldReset).append("\n");
-    }
+    // --- Footer & Pending processes ---
+    appendFooterAndPending(output, disablePagination, effectivePage, totalPages,
+                           showPendingIndices, hasPendingProcess, pendingIndices, isImgMode, c);
 
     if (kUseSynchronizedOutput) output.append(kSyncEnd);
 
-    // --- Sync-safe print (minimal critical section) ---
+    // --- Sync-safe print ---
     {
         std::lock_guard<std::mutex> lk(state->printMutex);
 
-        // Authoritative read: guarantees we never show a stale "Syncing" indicator.
         const bool syncing = maybeSyncing
             && state->isImportRunning.load(std::memory_order_acquire);
 
         if (syncing) {
-            // Write in three segments instead of output.insert() (no memmove / realloc).
             std::cout.write(output.data(), static_cast<std::streamsize>(syncInsertPos));
             std::cout.write(syncLine.data(), static_cast<std::streamsize>(syncLine.size()));
             std::cout.write(output.data() + syncInsertPos,
@@ -405,12 +488,9 @@ void printList(const StringListView& items, const std::string& listType, const s
             std::cout.write(output.data(), static_cast<std::streamsize>(output.size()));
         }
 
-        // Single flush per frame, under the lock so no other thread touches the stream.
         std::cout.flush();
     }
 
-    // Don't let one huge render pin a large buffer for the life of the thread.
-    // Only this list type's buffer is released; the other buffers are untouched.
     if (output.capacity() > kMaxRetainedCapacity) {
         std::string().swap(output);
     }
