@@ -67,6 +67,131 @@ bool isValidDirectory(const std::string& path) {
 }
 
 /**
+ * @brief Handles special user commands such as help (?) and database statistics or clear commands.
+ *
+ * @param input The trimmed user input string.
+ * @param repaintCallerPrompt Callback function used to reprint the prompt and typed line.
+ * @return true if a command was recognized and handled (signaling the loop to continue),
+ *         false if the input is regular path data.
+ */
+static bool handleDatabaseCommands(const std::string& input, const std::function<void()>& repaintCallerPrompt) {
+    if (input == "?") {
+        bool isCpMv = false, import2ISO = true;
+        helpSearches(isCpMv, import2ISO, false);
+        return true;
+    }
+    if (input == "*stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter") {
+        std::string mutableInput = input; // Create a non-const copy for databaseSwitches
+        databaseSwitches(mutableInput, repaintCallerPrompt);
+        return true;
+    }
+    if (input.find_first_not_of(" \t\n\r") == std::string::npos) {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * @brief Parses semicolon-delimited directory paths from the input, validates,
+ *        normalizes, removes duplicates, and filters out parent-covered paths.
+ *
+ * @param input The raw trimmed input string containing semicolon-separated paths.
+ * @param validPaths Output vector that receives the sorted, unique, and filtered valid paths.
+ * @param invalidPaths Output set that collects any paths that failed validation.
+ * @return std::string The cleaned input string containing only successfully validated paths,
+ *         used for history tracking.
+ */
+static std::string parseAndFilterPaths(
+    const std::string& input,
+    std::vector<std::string>& validPaths,
+    std::unordered_set<std::string>& invalidPaths
+) {
+    std::istringstream iss(input);
+    std::string path;
+    std::unordered_set<std::string> uniqueNormalizedPaths;
+    std::string cleanedInput;
+
+    auto normalizePath = [](const std::string& p) {
+        std::string n = fs::path(p).lexically_normal().string();
+        if (n.size() > 1 && n.back() == '/')
+            n.pop_back();
+        return n;
+    };
+
+    while (std::getline(iss, path, ';')) {
+        path = trimWhitespace(path);
+        if (path.empty()) continue;
+        if (!isValidDirectory(path)) {
+            invalidPaths.insert(path);
+            continue;
+        }
+
+        if (!cleanedInput.empty()) cleanedInput += ';';
+        cleanedInput += path;
+
+        std::string normPath = normalizePath(path);
+        if (uniqueNormalizedPaths.insert(normPath).second) {
+            validPaths.push_back(normPath);
+        }
+    }
+
+    if (!cleanedInput.empty()) {
+        add_history(cleanedInput.c_str());
+    }
+
+    std::sort(validPaths.begin(), validPaths.end());
+
+    std::vector<std::string> filteredPaths;
+    for (const auto& p : validPaths) {
+        if (filteredPaths.empty() || !p.starts_with(filteredPaths.back() + "/")) {
+            filteredPaths.push_back(p);
+        }
+    }
+    validPaths = std::move(filteredPaths);
+    return cleanedInput;
+}
+
+/**
+ * @brief Dispatches and executes parallel directory scans across the static thread pool
+ *        for all validated paths.
+ *
+ * @param validPaths The filtered list of valid directory paths to traverse.
+ * @param maxDepth Maximum directory recursion depth (-1 for unlimited).
+ * @param promptFlag Passed to traverse() to control progress and error reporting.
+ * @param allIsoFiles Output vector collecting all discovered ISO files.
+ * @param uniqueErrorMessages Output set collecting unique traversal error messages.
+ * @param totalFiles Atomic counter tracking the total number of files processed.
+ */
+static void executeParallelTraversal(
+    const std::vector<std::string>& validPaths,
+    int maxDepth,
+    bool promptFlag,
+    std::vector<std::string>& allIsoFiles,
+    std::unordered_set<std::string>& uniqueErrorMessages,
+    std::atomic<size_t>& totalFiles
+) {
+    auto& pool = getStaticThreadPool();
+    std::vector<std::future<void>> futures;
+    std::mutex processMutex;
+    std::mutex traverseErrorMutex;
+    GlobalState::g_operationCancelled.store(false);
+
+    for (const auto& validPath : validPaths) {
+        futures.emplace_back(
+            pool.enqueue([path = validPath, &allIsoFiles, &uniqueErrorMessages, &totalFiles,
+                          &processMutex, &traverseErrorMutex, maxDepth, promptFlag]() {
+                traverse(path, allIsoFiles, uniqueErrorMessages, totalFiles,
+                         processMutex, traverseErrorMutex, maxDepth, promptFlag);
+            })
+        );
+    }
+
+    for (auto& future : futures) {
+        future.wait();
+    }
+}
+
+/**
  * @brief Prompts for directories and imports discovered ISO files into the database.
  *
  * Accepts semicolon-delimited directory paths, trims and validates each token,
@@ -117,7 +242,6 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
             loadHistory(filterHistory);
-
             RestoreReadlineBuffer();
 
             std::string prompt;
@@ -137,21 +261,12 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 std::cout << promptHeaderForRepaint(prompt);
             };
 
-            // What the user typed on the prompt line, set right after readline
-            // returns. Reprinted under the header so the repainted screen
-            // matches what they saw, followed by the verbose output.
             std::string typedLine;
 
-            // Header, then the typed line in `color` on its own line directly
-            // under the prompt, then a final newline so whatever prints next
-            // (verbose/error output) starts on a fresh line.
             const auto repaintCallerPrompt = [&] {
                 const std::string header = promptHeaderForRepaint(prompt);
                 std::cout << header;
 
-                // Make sure the typed line starts on a new line: find the last
-                // visible character of the header, skipping trailing ANSI SGR
-                // sequences (e.g. "\033[0m") and readline's \001/\002 markers.
                 size_t end = header.size();
                 while (end > 0) {
                     const char c = header[end - 1];
@@ -179,21 +294,9 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             rl_startup_hook = nullptr;
 
             std::string input = trimWhitespace(searchQuery.get());
-
             if (input == "\x1b") return;
 
-            if (input == "?") {
-                bool isCpMv = false, import2ISO = true;
-                helpSearches(isCpMv, import2ISO, false);
-                continue;
-            }
-
-            if (input == "*stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter") {
-                databaseSwitches(input, repaintCallerPrompt);
-                continue;
-            }
-
-            if (input.find_first_not_of(" \t\n\r") == std::string::npos) {
+            if (handleDatabaseCommands(input, repaintCallerPrompt)) {
                 continue;
             }
 
@@ -207,49 +310,8 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             disableInput();
 
             auto start_time = std::chrono::high_resolution_clock::now();
-            std::istringstream iss(input);
-            std::string path;
 
-            auto normalizePath = [](const std::string& p) {
-                std::string n = fs::path(p).lexically_normal().string();
-                if (n.size() > 1 && n.back() == '/')
-                    n.pop_back();
-                return n;
-            };
-
-            std::unordered_set<std::string> uniqueNormalizedPaths;
-            std::string cleanedInput;   // only the tokens that passed validation, as typed
-
-            while (std::getline(iss, path, ';')) {
-                path = trimWhitespace(path);
-                if (path.empty()) continue;
-                if (!isValidDirectory(path)) {
-                    invalidPaths.insert(path);
-                    continue;
-                }
-
-                if (!cleanedInput.empty()) cleanedInput += ';';
-                cleanedInput += path;
-
-                std::string normPath = normalizePath(path);
-                if (uniqueNormalizedPaths.insert(normPath).second) {
-                    validPaths.push_back(normPath);
-                }
-            }
-
-            if (!cleanedInput.empty()) {
-                add_history(cleanedInput.c_str());
-            }
-
-            std::sort(validPaths.begin(), validPaths.end());
-
-            std::vector<std::string> filteredPaths;
-            for (const auto& p : validPaths) {
-                if (filteredPaths.empty() || !p.starts_with(filteredPaths.back() + "/")) {
-                    filteredPaths.push_back(p);
-                }
-            }
-            validPaths = std::move(filteredPaths);
+            std::string cleanedInput = parseAndFilterPaths(input, validPaths, invalidPaths);
 
             if (validPaths.empty()) {
                 flushStdin();
@@ -264,27 +326,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 continue;
             }
 
-            {
-                auto& pool = getStaticThreadPool();
-                std::vector<std::future<void>> futures;
-                std::mutex processMutex;
-                std::mutex traverseErrorMutex;
-                GlobalState::g_operationCancelled.store(false);
-
-                for (const auto& validPath : validPaths) {
-                    futures.emplace_back(
-                        pool.enqueue([path = validPath, &allIsoFiles, &uniqueErrorMessages, &totalFiles,
-                                      &processMutex, &traverseErrorMutex, &maxDepth, &promptFlag]() {
-                            traverse(path, allIsoFiles, uniqueErrorMessages, totalFiles,
-                                     processMutex, traverseErrorMutex, maxDepth, promptFlag);
-                        })
-                    );
-                }
-
-                for (auto& future : futures) {
-                    future.wait();
-                }
-            }
+            executeParallelTraversal(validPaths, maxDepth, promptFlag, allIsoFiles, uniqueErrorMessages, totalFiles);
 
             flushStdin();
             restoreInput();
@@ -300,7 +342,8 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 saveHistory(filterHistory);
             }
 
-            saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths, uniqueErrorMessages, newISOFound, start_time, repaintCallerPrompt);
+            saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths,
+                                            uniqueErrorMessages, newISOFound, start_time, repaintCallerPrompt);
 
         } catch (const std::exception& e) {
             const VerboseAndDatabaseTheme dt = getDatabaseTheme();
