@@ -249,6 +249,189 @@ inline void onWriteInt(int sig, siginfo_t* info, void* ctx) {
 
 } // namespace write_screen_detail
 
+
+// ------------------------------------------------------------------------- //
+// Confirmation-prompt resize watcher                                        //
+// ------------------------------------------------------------------------- //
+
+namespace confirm_resize_detail {
+
+struct ResizeRepaintState {
+    size_t lastCols = 0;
+    std::function<std::vector<size_t>(size_t)> paint;
+    std::vector<size_t> lineWidths;
+    size_t promptWidth = 0;
+    int wakeRd = -1;
+};
+
+/// The confirmation prompt has one active watcher at a time.
+static ResizeRepaintState g_confirmResize;
+
+/// Write end of the self-pipe the SIGWINCH handler pokes. -1 = no watcher active.
+inline std::atomic<int> g_fd{-1};
+
+static_assert(std::atomic<int>::is_always_lock_free,
+              "g_fd must be lock-free to be read from a signal handler");
+
+inline struct sigaction g_prev {};
+inline bool g_installed = false;
+
+inline void onConfirmWinch(int sig, siginfo_t* info, void* ctx) {
+    const int savedErrno = errno;
+    const int fd = g_fd.load(std::memory_order_acquire);
+    if (fd >= 0) {
+        const char b = 1;
+        [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);
+    }
+    errno = savedErrno;
+
+    if (g_prev.sa_handler == SIG_DFL || g_prev.sa_handler == SIG_IGN) return;
+    if (g_prev.sa_flags & SA_SIGINFO) {
+        if (g_prev.sa_sigaction) g_prev.sa_sigaction(sig, info, ctx);
+    } else {
+        g_prev.sa_handler(sig);
+    }
+}
+
+static void confirmResizeRepaint(ResizeRepaintState& s) {
+    const TermSize sz = terminalSize();
+    const size_t cols = sz.cols;
+    const size_t rows = sz.rows;
+
+    if (cols == 0 || rows == 0 || cols == s.lastCols) return;
+    s.lastCols = cols;
+
+    rl_set_screen_size(static_cast<int>(rows), static_cast<int>(cols));
+
+    size_t warningRows = 0;
+    for (size_t w : s.lineWidths)
+        warningRows += std::max<size_t>(1, (w + cols - 1) / cols);
+
+    const size_t cursorCols = s.promptWidth + rl_point;
+    const size_t cursorLine = cursorCols / cols;
+    const size_t up = warningRows + cursorLine;
+
+    if (up >= rows) return;
+
+    SyncOutput sync;
+    s.lineWidths = s.paint(cols);
+    std::cout.flush();
+
+    rl_on_new_line();
+    rl_redisplay();
+}
+
+/// Readline's getc hook waits on stdin and the self-pipe, with no idle polling.
+static int confirmResizeGetc(FILE* stream) {
+    ResizeRepaintState& s = g_confirmResize;
+    const int inFd = fileno(stream);
+
+    for (;;) {
+        struct pollfd fds[2] = {
+            { inFd,     POLLIN, 0 },
+            { s.wakeRd, POLLIN, 0 },
+        };
+
+        if (::poll(fds, 2, -1) < 0) {
+            if (errno == EINTR) continue;
+            return rl_getc(stream);
+        }
+
+        if (fds[1].revents & POLLIN) {
+            char buf[64];
+            while (::read(s.wakeRd, buf, sizeof buf) > 0) {}
+            confirmResizeRepaint(s);
+        }
+
+        if (fds[0].revents & (POLLIN | POLLHUP | POLLERR))
+            return rl_getc(stream);
+    }
+}
+
+} // namespace confirm_resize_detail
+
+struct ConfirmResizeWatcher::Impl {
+    Impl(Painter paint, size_t drawnCols, std::vector<size_t> drawnWidths,
+         const std::string& promptText)
+        : state_(confirm_resize_detail::g_confirmResize) {
+        using namespace confirm_resize_detail;
+        assert(g_fd.load() < 0 && "only one ConfirmResizeWatcher may be active");
+
+        state_.paint       = std::move(paint);
+        state_.lineWidths  = std::move(drawnWidths);
+        state_.promptWidth = utf8Width(promptText);
+        state_.lastCols    = drawnCols;
+
+        int fds[2];
+        if (::pipe(fds) != 0) return;
+        for (int fd : fds) {
+            ::fcntl(fd, F_SETFD, FD_CLOEXEC);
+            ::fcntl(fd, F_SETFL, O_NONBLOCK);
+        }
+        wakeWr_       = fds[1];
+        state_.wakeRd = fds[0];
+        g_fd.store(wakeWr_, std::memory_order_release);
+
+        struct sigaction sa {};
+        sa.sa_sigaction = onConfirmWinch;
+        sa.sa_flags = SA_SIGINFO | SA_RESTART;
+        sigemptyset(&sa.sa_mask);
+        if (sigaction(SIGWINCH, &sa, &g_prev) != 0) {
+            closePipe();
+            return;
+        }
+        g_installed = true;
+
+        savedEventHook_  = rl_event_hook;
+        savedGetc_       = rl_getc_function;
+        rl_event_hook    = nullptr;
+        rl_getc_function = confirmResizeGetc;
+        active_ = true;
+    }
+
+    ~Impl() { stop(); }
+
+    void stop() {
+        using namespace confirm_resize_detail;
+        if (!active_) return;
+        active_ = false;
+
+        rl_getc_function = savedGetc_;
+        rl_event_hook    = savedEventHook_;
+
+        if (g_installed) {
+            sigaction(SIGWINCH, &g_prev, nullptr);
+            g_installed = false;
+        }
+        closePipe();
+    }
+
+    void closePipe() {
+        confirm_resize_detail::g_fd.store(-1, std::memory_order_release);
+        if (wakeWr_ >= 0)        { ::close(wakeWr_);       wakeWr_ = -1; }
+        if (state_.wakeRd >= 0)  { ::close(state_.wakeRd); state_.wakeRd = -1; }
+    }
+
+    confirm_resize_detail::ResizeRepaintState& state_;
+    bool active_ = false;
+    int wakeWr_ = -1;
+    rl_hook_func_t* savedEventHook_ = nullptr;
+    rl_getc_func_t* savedGetc_ = nullptr;
+};
+
+ConfirmResizeWatcher::ConfirmResizeWatcher(
+        Painter paint, size_t drawnCols, std::vector<size_t> drawnWidths,
+        const std::string& promptText)
+    : impl_(std::make_unique<Impl>(std::move(paint), drawnCols,
+                                   std::move(drawnWidths), promptText)) {}
+
+ConfirmResizeWatcher::~ConfirmResizeWatcher() = default;
+
+void ConfirmResizeWatcher::stop() {
+    if (impl_) impl_->stop();
+}
+
+
 /**
  * @brief Owns the live progress screen and keeps it correctly laid out.
  *
