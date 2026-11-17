@@ -150,6 +150,57 @@ struct ColumnLayout {
     int rows;
 };
 
+struct CompletionSnapshot {
+    std::vector<std::string> matches;
+    std::string line_buffer;
+
+    CompletionKind kind = CompletionKind::File;
+
+    int num_matches = 0;
+    int displayed_page = 0;
+    int base_len = 0;
+    int line_point = 0;
+
+    bool valid = false;
+
+    void clear() {
+        matches.clear();
+        line_buffer.clear();
+        num_matches = 0;
+        displayed_page = 0;
+        base_len = 0;
+        line_point = 0;
+        valid = false;
+    }
+
+    void capture(
+        char** source,
+        int count,
+        CompletionKind completion_kind,
+        int page,
+        int base_length) {
+
+        clear();
+
+        matches.reserve(count + 1);
+
+        for (int i = 0; i <= count; ++i)
+            matches.emplace_back(source[i] ? source[i] : "");
+
+        line_buffer = rl_line_buffer ? rl_line_buffer : "";
+        line_point = rl_point;
+
+        kind = completion_kind;
+        num_matches = count;
+        displayed_page = page;
+        base_len = base_length;
+
+        valid = true;
+    }
+};
+
+CompletionSnapshot lastCompletion;
+
 constexpr int kColumnSpacing = 4;
 constexpr int kMaxColumns = 4;
 constexpr int kProbeWidth = 1000;   // "unlimited" width used for the measuring pass
@@ -186,15 +237,27 @@ bool needsPagination(int num_matches) {
     return GlobalState::ITEMS_PER_PAGE > 0 && (size_t)num_matches > GlobalState::ITEMS_PER_PAGE;
 }
 
-PageInfo computePageInfo(int num_matches) {
+PageInfo computePageInfo(int num_matches, int page_index) {
     PageInfo page{1, 1, num_matches};
-    if (GlobalState::ITEMS_PER_PAGE <= 0) return page;
 
-    page.total_pages = ((size_t)num_matches + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE;
-    if (current_page >= page.total_pages) current_page = 0;
-    page.start_index = current_page * (int)GlobalState::ITEMS_PER_PAGE + 1;
+    if (GlobalState::ITEMS_PER_PAGE <= 0)
+        return page;
+
+    page.total_pages =
+        ((size_t)num_matches + GlobalState::ITEMS_PER_PAGE - 1) /
+        GlobalState::ITEMS_PER_PAGE;
+
+    if (page_index >= page.total_pages)
+        page_index = 0;
+
+    page.start_index =
+        page_index * (int)GlobalState::ITEMS_PER_PAGE + 1;
+
     int remaining = num_matches - (page.start_index - 1);
-    page.items_to_display = std::min(remaining, (int)GlobalState::ITEMS_PER_PAGE);
+
+    page.items_to_display =
+        std::min(remaining, (int)GlobalState::ITEMS_PER_PAGE);
+
     return page;
 }
 
@@ -208,21 +271,31 @@ void advancePage(int num_matches, int total_pages) {
 // Header / footer
 // ---------------------------------------------------------------------------
 
-void printHeader(CompletionKind kind, int total_pages, int num_matches, const ReadlineColors& rc) {
+void printHeader(
+    CompletionKind kind,
+    int total_pages,
+    int num_matches,
+    int page_index,
+    const ReadlineColors& rc) {
+
     if (num_matches <= 1) return;
 
     static const char* const kLabels[] = {
-        "CMD Completion Matches",     // Special
-        "Value Completion Matches",   // SettingValue
-        "Tab Completion Matches"      // File
+        "CMD Completion Matches",
+        "Value Completion Matches",
+        "Tab Completion Matches"
     };
+
     const char* label = kLabels[(int)kind];
 
     if (total_pages > 1) {
         printf("\n%s%s [page %d/%d%s]:%s\n\n",
-               rc.label, label, current_page + 1, total_pages, rc.label, rc.reset);
+               rc.label, label,
+               page_index + 1, total_pages,
+               rc.label, rc.reset);
     } else {
-        printf("\n%s%s:%s\n\n", rc.label, label, rc.reset);
+        printf("\n%s%s:%s\n\n",
+               rc.label, label, rc.reset);
     }
 }
 
@@ -354,7 +427,86 @@ void renderGrid(const std::vector<DisplayItem>& items, const ColumnLayout& layou
     }
 }
 
+void renderCompletionListing(
+    char** matches,
+    int num_matches,
+    CompletionKind kind,
+    int displayed_page,
+    int base_len) {
+
+    ReadlineColors rc = resolveReadlineTheme();
+
+    const PageInfo page =
+        computePageInfo(num_matches, displayed_page);
+
+    printf("\033[s\033[J\n");
+
+    printHeader(
+        kind,
+        page.total_pages,
+        num_matches,
+        displayed_page,
+        rc);
+
+    const FormatContext ctx{
+        kind,
+        rc,
+        UI::Palette::BoldReset.c_str(),
+        base_len
+    };
+
+    std::vector<DisplayItem> items =
+        formatPageItems(matches, page, ctx);
+
+    const ColumnLayout layout =
+        computeLayout(maxVisualLength(items), page.items_to_display);
+
+    refitItems(items, ctx, layout.column_width);
+
+    renderGrid(items, layout);
+    printFooter(page, num_matches, rc);
+
+    printf("\033[u");
+    fflush(stdout);
+}
+
 } // namespace
+
+/**
+ * @brief Repaints the last completion listing after a terminal resize.
+ *
+ * Uses an owned snapshot of the last displayed completion matches.
+ * Does not advance pagination or modify the current pagination state.
+ *
+ * The listing is only repainted while the input line and cursor position
+ * still match the state at which the completion list was displayed.
+ */
+void repaintCompletionListing() {
+    if (!lastCompletion.valid)
+        return;
+
+    const char* current_line =
+        rl_line_buffer ? rl_line_buffer : "";
+
+    if (lastCompletion.line_buffer != current_line ||
+        lastCompletion.line_point != rl_point) {
+        lastCompletion.clear();
+        return;
+    }
+
+    std::vector<char*> matches;
+    matches.reserve(lastCompletion.matches.size());
+
+    for (auto& match : lastCompletion.matches)
+        matches.push_back(match.data());
+
+    renderCompletionListing(
+        matches.data(),
+        lastCompletion.num_matches,
+        lastCompletion.kind,
+        lastCompletion.displayed_page,
+        lastCompletion.base_len);
+}
 
 /**
  * @brief Custom hook for GNU Readline to display completions with pagination and color themes.
@@ -374,38 +526,40 @@ void renderGrid(const std::vector<DisplayItem>& items, const ColumnLayout& layou
 void customListingsFunction(char **matches, int num_matches, int max_length) {
     (void)max_length;
 
-    // While a list is visible, the first Esc clears/repaints it and the
-    // second Esc exits (same behaviour on every prompt, Settings Editor included).
     list_shown_during_completion = true;
     install_esc_hijack();
 
-    ReadlineColors rc = resolveReadlineTheme();
     const CompletionKind kind = detectCompletionKind(matches, num_matches);
 
     updatePaginationState(matches[0]);
 
-    printf("\033[s\033[J\n"); // Save cursor and clear
+    const int displayed_page = current_page;
 
-    const PageInfo page = computePageInfo(num_matches);
-    printHeader(kind, page.total_pages, num_matches, rc);
-    advancePage(num_matches, page.total_pages);
+    const int base_len =
+        (kind == CompletionKind::File)
+            ? computeBaseLen(matches[1])
+            : 0;
 
-    const FormatContext ctx{
+    // Preserve the actual displayed matches and page for resize repainting.
+    lastCompletion.capture(
+        matches,
+        num_matches,
         kind,
-        rc,
-        UI::Palette::BoldReset.c_str(),
-        (kind == CompletionKind::File) ? computeBaseLen(matches[1]) : 0
-    };
+        displayed_page,
+        base_len);
 
-    // Measure with an effectively unlimited width, lay out columns, then re-fit.
-    std::vector<DisplayItem> items = formatPageItems(matches, page, ctx);
-    const ColumnLayout layout = computeLayout(maxVisualLength(items), page.items_to_display);
-    refitItems(items, ctx, layout.column_width);
+    renderCompletionListing(
+        matches,
+        num_matches,
+        kind,
+        displayed_page,
+        base_len);
 
-    renderGrid(items, layout);
-    printFooter(page, num_matches, rc);
+    // Preserve existing Tab-to-next-page behavior.
+    const PageInfo page =
+        computePageInfo(num_matches, displayed_page);
 
-    printf("\033[u");
+    advancePage(num_matches, page.total_pages);
 }
 
 CompleterData g_completerData = {nullptr, nullptr};
@@ -582,18 +736,18 @@ char** completion_cb(const char* text, int start, int end) {
 }
 
 /**
- * @brief Resets the completion-list pagination state.
+ * @brief Resets the completion-list pagination state and clears the saved repaint snapshot.
  *
- * Clears the current page counter and the cached common prefix used to
- * detect the start of a new completion session. Called by
- * @c completion_cb at the start of each completion attempt (inline reset),
- * and after a screen wipe via @c clear_screen_and_buffer and
- * @c my_rl_complete. Does not touch any Settings Editor flag — none exists in
- * this translation unit.
+ * Clears the current page counter, the cached common prefix used to
+ * detect the start of a new completion session, and the saved completion
+ * repaint snapshot (@c lastCompletion). Called by @c completion_cb at the start
+ * of each completion attempt (inline reset), and after a screen wipe via
+ * @c clear_screen_and_buffer and @c my_rl_complete.
  */
 void resetReadlinePagination() {
     current_page = 0;
     last_common_prefix[0] = '\0';
+    lastCompletion.clear();
 }
 
 /**
@@ -632,13 +786,15 @@ int prevent_readline_keybindings(int, int) {
 
 
 /**
- * @brief Clears the terminal screen, scrollback buffer, and resets pagination/UI state.
+ * @brief Clears the terminal screen, scrollback buffer, resets pagination/UI state,
+ *        and clears the saved completion repaint snapshot.
  *
  * If a Settings Editor body-repaint hook is installed
  * (@c SettingsEditorRepaint::g_fn), the editor's own draw lambda is invoked
  * instead of @c clearScrollBuffer so the header/value/description/footer are
  * repainted along with the prompt. Otherwise the scrollback is cleared and
- * Readline is asked to redraw. Pagination state is then reset.
+ * Readline is asked to redraw. Pagination state and the last completion
+ * snapshot are then reset.
  *
  * When @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode is active, the
  * current input line is captured, Readline is forced to exit its loop, and the
@@ -661,6 +817,7 @@ int clear_screen_and_buffer(int, int) {
 
     current_page = 0;
     last_common_prefix[0] = '\0';
+    lastCompletion.clear(); // Clear saved repaint snapshot on exit / completion clearing
 
     // Always restore the default Esc binding when clearing. If a completion
     // list is currently visible, my_rl_complete() re-installs the hijack

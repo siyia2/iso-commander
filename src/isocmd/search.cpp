@@ -259,6 +259,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 SyncOutput sync;
                 clearScrollBuffer();
                 std::cout << promptHeaderForRepaint(prompt);
+                repaintCompletionListing();
             };
 
             std::string typedLine;
@@ -1057,6 +1058,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
             SyncOutput sync;
             clearScrollBuffer();
             std::cout << promptHeaderForRepaint(prompt);
+            repaintCompletionListing();
         };
 
         // What the user typed on the prompt line, set right after readline

@@ -19,6 +19,7 @@
 #include "../display.h"
 #include "../filtering.h"
 #include "../inputHandling.h"
+#include "../readline.h"
 #include "../rendering.h"
 #include "../sort.h"
 #include "../state.h"
@@ -308,6 +309,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
         const auto repaint = [&] {
             drawPage(false);
             std::cout << promptHeaderForRepaint(finalPrompt);
+            repaintCompletionListing();
         };
 
         RlLine input = readlineWithResize(

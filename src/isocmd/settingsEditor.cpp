@@ -780,6 +780,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
 
     auto drawEdit = [&] {
         drawEditScreen(key, current, tc, entry, validValues, isNumeric, pos, total, pendingErrors);
+        repaintCompletionListing();
     };
 
     while (true) {
