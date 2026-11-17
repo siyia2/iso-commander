@@ -1134,19 +1134,50 @@ void applyLameFilters(DaaContext &ctx, const daa_t &daa, void *daa_data, u32 daa
 }
 
 /**
- * @brief Iterates over all disk chunks, performs decompression (LZMA, Inflate, or uncompressed), and writes output data.
+ * @brief Iterates over all disk chunks, performs decompression (LZMA, Inflate, or
+ *        uncompressed), and writes the resulting data to the output stream.
  *
- * @param ctx Reference to the active DAA context.
- * @param daa Reference to the header structure.
- * @param daa_data Pointer to the index table data.
- * @param daas Total number of chunks.
- * @param bitsize Bit size configuration value.
- * @param bittype Bit type configuration value.
- * @param dolamebits Flag indicating specific bit extraction offsets.
- * @param lzma_filter Filter flag for specialized post-processing on decompressed output.
- * @throws DaaError If cancellation occurs, length checks fail, decompression fails, or file operations error out.
+ * @details Processes each entry in the chunk index table. Chunk length and
+ *          compression type are decoded either from the legacy v1.00 three-byte
+ *          layout or from the v1.10 bit-packed layout. Each chunk is decompressed
+ *          according to its type and written to @p ctx.fdo. Progress is reported
+ *          through @p ctx.completedBytes when non-null.
+ *
+ *          Cancellation is signalled by returning @c false rather than throwing,
+ *          so that the caller can perform a silent bail-out without emitting an
+ *          error banner to stderr. The index buffer @p daa_data is freed before
+ *          returning @c false on cancellation; ownership is therefore transferred
+ *          to this function on that path.
+ *
+ * @param ctx          Reference to the active DAA context (holds file handles,
+ *                     output buffer, LZMA decoder, progress counter, etc.).
+ * @param daa          Reference to the parsed DAA header structure.
+ * @param daa_data     Pointer to the decoded chunk index table. Freed internally
+ *                     if the operation is cancelled.
+ * @param daas         Total number of chunks to process.
+ * @param bitsize      Bit-width of the length field in the v1.10 index layout.
+ * @param bittype      Bit-width of the compression-type field in the v1.10
+ *                     index layout.
+ * @param dolamebits   Flag selecting the alternate bit-extraction offset used by
+ *                     certain PowerISO-produced archives.
+ * @param lzma_filter  Flag indicating that the vendor-specific post-processing
+ *                     filter (@c poweriso_is_shit) must be applied to
+ *                     LZMA-decompressed output.
+ *
+ * @return @c true if every chunk was processed and the total output size matched
+ *         @c daa.isosize.
+ * @return @c false if the global cancellation flag was observed before the loop
+ *         completed; @p daa_data has been freed and no error message was emitted.
+ *
+ * @throws DaaError If a chunk length exceeds the hard limit, an unknown
+ *         compression type is encountered, decompression fails, a non-final
+ *         chunk does not match the expected chunk size, a write fails, or the
+ *         final output size does not match @c daa.isosize.
  */
-void processAllChunks(DaaContext &ctx, const daa_t &daa, void *daa_data, u32 daas, u32 bitsize, u32 bittype, int dolamebits, int lzma_filter) {
+bool processAllChunks(DaaContext &ctx, const daa_t &daa, void *daa_data,
+                      u32 daas, u32 bitsize, u32 bittype,
+                      int dolamebits, int lzma_filter)
+{
     ctx_alloc(&ctx.out_buf, daa.chunksize, &ctx.outsz);
     u64 tot = 0;
     u32 last_chunk = daas - 1;
@@ -1157,7 +1188,7 @@ void processAllChunks(DaaContext &ctx, const daa_t &daa, void *daa_data, u32 daa
     for (u32 i = 0; i < daas; i++) {
         if (GlobalState::g_operationCancelled.load()) {
             free(daa_data);
-            throw DaaError("Operation cancelled");
+            return false;            // silent cancel, no exception
         }
 
         u32 len;
@@ -1218,16 +1249,40 @@ void processAllChunks(DaaContext &ctx, const daa_t &daa, void *daa_data, u32 daa
     }
 
     if (tot != daa.isosize) throw DaaError("output size mismatch");
+    return true;
 }
 
 /**
- * @brief Converts a DAA/GBI format archive image file into a raw ISO image format.
+ * @brief Converts a DAA/GBI archive image file into a raw ISO image.
  *
- * @param inputFile Path to the source DAA file.
- * @param outputFile Path to the target ISO file being generated.
- * @param completedBytes Atomic progress counter tracking processed output bytes.
- * @return true If conversion completes successfully.
- * @return false If initialization fails or the operation is cancelled.
+ * @details Opens @p inputFile for reading and @p outputFile for writing,
+ *          validates the DAA/GBI header and version, decodes the chunk index
+ *          table (decompressing it if the v1.10 header indicates a compressed
+ *          index), applies any vendor-specific index scrambling filters, and
+ *          then decompresses every chunk to produce the reconstructed ISO image.
+ *
+ *          Cancellation is handled silently: if the global cancellation flag is
+ *          observed, the function returns @c false via @c daa_fail without
+ *          writing an error banner to stderr, preserving the terminal state of
+ *          any progress renderer driven by @p completedBytes.
+ *
+ * @param inputFile       Path to the source DAA (or GBI) file. Multi-part
+ *                        archives must be opened via their first volume.
+ * @param outputFile      Path to the destination ISO file. Truncated if it
+ *                        already exists.
+ * @param completedBytes  Optional pointer to an atomic counter that is
+ *                        incremented by the number of output bytes produced
+ *                        after each chunk. May be @c nullptr if progress
+ *                        reporting is not required.
+ *
+ * @return @c true if the conversion completed successfully and the output size
+ *         matched @c daa.isosize.
+ * @return @c false if the input could not be opened, the output could not be
+ *         created, the operation was cancelled, or a recoverable error was
+ *         reported through the @c DaaError handler.
+ *
+ * @throws Nothing. All @c DaaError exceptions are caught internally and
+ *         reported via @c fprintf(stderr, ...) before returning @c false.
  */
 bool convertDaaToIso(const std::string &inputFile,
                      const std::string &outputFile,
@@ -1236,7 +1291,7 @@ bool convertDaaToIso(const std::string &inputFile,
     if (GlobalState::g_operationCancelled.load()) return false;
 
     DaaContext ctx;
-    ctx.outputPath   = outputFile;
+    ctx.outputPath     = outputFile;
     ctx.completedBytes = completedBytes;
 
     ctx.powerisuxn = 0;
@@ -1276,7 +1331,13 @@ bool convertDaaToIso(const std::string &inputFile,
 
         if (fseek(ctx.fdi, daa.data_offset, SEEK_SET)) throw DaaError("fseek to data_offset");
 
-        processAllChunks(ctx, daa, daa_data, daas, bitsize, bittype, dolamebits, lzma_filter);
+        // Cancellation is signalled by processAllChunks returning false (with
+        // daa_data already freed). Mirror the original silent bail-out by
+        // skipping the error banner and returning daa_fail directly.
+        if (!processAllChunks(ctx, daa, daa_data, daas, bitsize, bittype,
+                              dolamebits, lzma_filter)) {
+            return daa_fail(ctx);
+        }
 
         free(daa_data);
         fclose(ctx.fdo); ctx.fdo = nullptr;
