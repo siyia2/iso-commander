@@ -608,6 +608,52 @@ static int handleMount(const ParsedArgs& args) {
 // ─── Umount branch ───────────────────────────────────────────────────────────
 
 /**
+ * @brief Executes concurrent unmount workers across sorted mount paths.
+ */
+static void runUnmountWorkers(const std::vector<std::string>& paths,
+                              bool silentMode,
+                              std::atomic<size_t>& completedBytes,
+                              std::atomic<size_t>& completedTasks,
+                              std::atomic<size_t>& failedTasks,
+                              std::atomic<size_t>& nextTask) {
+    ThreadPool& pool = getStaticThreadPool();
+    const size_t poolSize = pool.threadCount();
+    const size_t numThreads = std::min({
+        paths.size(),
+        GlobalConcurrency::UMOUNT_THREAD_CAP,
+        poolSize
+    });
+
+    std::vector<std::future<void>> futures;
+    futures.reserve(numThreads);
+
+    for (size_t t = 0; t < numThreads; ++t) {
+        futures.emplace_back(pool.enqueue(
+            [&paths, &nextTask,
+             &completedBytes, &completedTasks, &failedTasks,
+             silentMode]() {
+                // Stop claiming new items on Ctrl+C so the bar ends at once;
+                // unclaimed items are marked as cancelled after the bar.
+                while (!GlobalState::g_operationCancelled.load()) {
+                    const size_t i = nextTask.fetch_add(1);
+
+                    if (i >= paths.size())
+                        break;
+
+                    unmountISO(std::vector<std::string>{paths[i]},
+                               &completedTasks, &failedTasks,
+                               silentMode);
+
+                    completedBytes.fetch_add(1);
+                }
+            }));
+    }
+
+    for (auto& future : futures)
+        future.wait();
+}
+
+/**
  * @brief Unmounts ISO mount points supplied as command-line arguments.
  *
  * Collects mount points from the specified paths or scans /mnt/ISOs
@@ -743,7 +789,6 @@ static int handleUmount(const ParsedArgs& args) {
                 .append(mountPoints.size() == 1 ? "" : "s")
                 .append("; Attempting to unmount...\n"));
 
-    // completedBytes is task-based here: it advances by one per mount point.
     std::atomic<size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
     std::atomic<bool> isComplete{false};
     bool showVerbose = false;
@@ -778,45 +823,8 @@ static int handleUmount(const ParsedArgs& args) {
             coloredProcess, header);
     }
 
-    // Bound worker count by task count, configured cap, and pool size.
-    ThreadPool& pool = getStaticThreadPool();
-    const size_t poolSize = pool.threadCount();
-    const size_t numThreads = std::min({
-        totalTasks,
-        GlobalConcurrency::UMOUNT_THREAD_CAP,
-        poolSize
-    });
-
     std::atomic<size_t> nextTask{0};
-
-    std::vector<std::future<void>> futures;
-    futures.reserve(numThreads);
-
-    for (size_t t = 0; t < numThreads; ++t) {
-        futures.emplace_back(pool.enqueue(
-            [&paths, &nextTask,
-             &completedBytes, &completedTasks, &failedTasks,
-             silentMode = args.silentMode]() {
-
-                // Stop claiming new items on Ctrl+C so the bar ends at once;
-                // unclaimed items are marked as cancelled after the bar.
-                while (!GlobalState::g_operationCancelled.load()) {
-                    const size_t i = nextTask.fetch_add(1);
-
-                    if (i >= paths.size())
-                        break;
-
-                    unmountISO(std::vector<std::string>{paths[i]},
-                               &completedTasks, &failedTasks,
-                               silentMode);
-
-                    completedBytes.fetch_add(1);
-                }
-            }));
-    }
-
-    for (auto& future : futures)
-        future.wait();
+    runUnmountWorkers(paths, args.silentMode, completedBytes, completedTasks, failedTasks, nextTask);
 
     isComplete.store(true, std::memory_order_release);
 
@@ -824,7 +832,6 @@ static int handleUmount(const ParsedArgs& args) {
         barThread.join();
 
     // After a cancel, mark the mount points no worker claimed as cancelled.
-    // This runs after the bar has finished so they don't inflate its progress.
     if (GlobalState::g_operationCancelled.load()) {
         const size_t first = std::min(nextTask.load(), paths.size());
         if (first < paths.size())
@@ -855,7 +862,7 @@ static int handleUmount(const ParsedArgs& args) {
                   << "  Successful: " << completedTasks.load() << "\n"
                   << "  Failed:     " << failedTasks.load()
                   << UI::Palette::Reset << "\n\n";
-    }   // ?2026l + flush
+    }
 
     return (failedTasks.load() == 0 && !hasErrors &&
             !GlobalState::g_operationCancelled.load()) ? 0 : 1;
@@ -864,45 +871,28 @@ static int handleUmount(const ParsedArgs& args) {
 // ─── Convert branch (c2iso) ─────────────────────────────────────────────────────
 
 /**
- * @brief Converts supported disk images to ISO files.
- *
- * Validates the supplied file and directory paths, recursively scans
- * directories according to the configured maximum depth, and collects
- * unique supported images (BIN, IMG, CCD, MDF, NRG, CHD, DAA, and GBI).
- * Files are grouped by conversion backend and sorted for deterministic
- * task ordering.
- *
- * Calculates the estimated total output size and tracks byte-level
- * and task-level progress. Conversions are executed concurrently using
- * the static thread pool, respecting GlobalConcurrency::CONV_THREAD_CAP
- * and the pool size. Workers dynamically claim tasks from a shared
- * atomic index and dispatch each file to its appropriate backend.
- *
- * Tracks successful output paths and displays detailed operation
- * results when requested through the progress interface.
- *
- * @param args Parsed command-line arguments, including input paths,
- *             maximum scan depth, and silent-mode settings.
- *
- * @return 0 if all conversions completed without errors (including when
- *         no paths were given or no convertible images were found and no
- *         path errors occurred);
- *         1 if any conversion failed, path validation failed, or the
- *         operation was cancelled.
+ * @brief Represents a conversion task with its target file path and backend kind.
  */
-static int handleConvert(const ParsedArgs& args) {
+struct ConversionTask {
+    std::string path;
+    ImgKind kind;
+};
+
+/**
+ * @brief Collects and validates disk image paths from command-line arguments and directories.
+ */
+static bool collectAndValidateImages(const ParsedArgs& args,
+                                      std::unordered_set<std::string>& images,
+                                      bool& hasErrors) {
     if (args.paths.empty()) {
         verboseWarn(args.silentMode, "No files to c2iso.");
-        return 0;
+        return false;
     }
-
-    std::unordered_set<std::string> images;
-    bool hasErrors = false;
 
     for (const auto& rawPath : args.paths) {
         if (GlobalState::g_operationCancelled.load()) {
             verboseWarn(args.silentMode, "Operation cancelled by user.");
-            return 1;
+            return true; // Cancelled
         }
 
         fs::path path(rawPath);
@@ -953,9 +943,104 @@ static int handleConvert(const ParsedArgs& args) {
             hasErrors = true;
         }
     }
+    return false;
+}
+
+/**
+ * @brief Executes concurrent conversion workers across prepared tasks.
+ */
+static void runConvertWorkers(const std::vector<ConversionTask>& tasks,
+                              std::atomic<size_t>& completedBytes,
+                              std::atomic<size_t>& completedTasks,
+                              std::atomic<size_t>& failedTasks,
+                              std::vector<std::string>& successfulOutputs,
+                              std::mutex& outMutex) {
+    ThreadPool& pool = getStaticThreadPool();
+    const size_t poolSize = pool.threadCount();
+
+    const size_t numThreads = std::min({
+        tasks.size(),
+        GlobalConcurrency::CONV_THREAD_CAP,
+        poolSize
+    });
+
+    std::atomic<size_t> nextTask{0};
+
+    std::vector<std::future<void>> futures;
+    futures.reserve(numThreads);
+
+    for (size_t t = 0; t < numThreads; ++t) {
+        futures.emplace_back(pool.enqueue(
+            [&tasks, &nextTask,
+             &completedBytes, &completedTasks, &failedTasks,
+             &successfulOutputs, &outMutex]() {
+
+                while (!GlobalState::g_operationCancelled.load()) {
+                    const size_t i = nextTask.fetch_add(1);
+
+                    if (i >= tasks.size())
+                        break;
+
+                    const auto& task = tasks[i];
+
+                    const bool isMdf = task.kind == ImgKind::Mdf;
+                    const bool isNrg = task.kind == ImgKind::Nrg;
+                    const bool isChd = task.kind == ImgKind::Chd;
+                    const bool isDaa = task.kind == ImgKind::Daa;
+
+                    convertToISO(
+                        {task.path},
+                        isMdf, isNrg, isChd, isDaa,
+                        &completedBytes,
+                        &completedTasks,
+                        &failedTasks,
+                        &successfulOutputs,
+                        &outMutex);
+                }
+            }));
+    }
+
+    for (auto& future : futures)
+        future.wait();
+}
+
+/**
+ * @brief Converts supported disk images to ISO files.
+ *
+ * Validates the supplied file and directory paths, recursively scans
+ * directories according to the configured maximum depth, and collects
+ * unique supported images (BIN, IMG, CCD, MDF, NRG, CHD, DAA, and GBI).
+ * Files are grouped by conversion backend and sorted for deterministic
+ * task ordering.
+ *
+ * Calculates the estimated total output size and tracks byte-level
+ * and task-level progress. Conversions are executed concurrently using
+ * the static thread pool, respecting GlobalConcurrency::CONV_THREAD_CAP
+ * and the pool size. Workers dynamically claim tasks from a shared
+ * atomic index and dispatch each file to its appropriate backend.
+ *
+ * Tracks successful output paths and displays detailed operation
+ * results when requested through the progress interface.
+ *
+ * @param args Parsed command-line arguments, including input paths,
+ *             maximum scan depth, and silent-mode settings.
+ *
+ * @return 0 if all conversions completed without errors (including when
+ *         no paths were given or no convertible images were found and no
+ *         path errors occurred);
+ *         1 if any conversion failed, path validation failed, or the
+ *         operation was cancelled.
+ */
+static int handleConvert(const ParsedArgs& args) {
+    std::unordered_set<std::string> images;
+    bool hasErrors = false;
+
+    if (collectAndValidateImages(args, images, hasErrors)) {
+        return 1;
+    }
 
     if (GlobalState::g_operationCancelled.load())
-        verboseWarn(args.silentMode, "Conversion cancelled by user.");
+        verboseWarn(args.silentMode, "Operation cancelled by user.");
 
     if (images.empty()) {
         if (GlobalState::g_operationCancelled.load())
@@ -1038,12 +1123,6 @@ static int handleConvert(const ParsedArgs& args) {
             coloredProcess, header);
     }
 
-    // A task records its input path and the backend that must process it.
-    struct ConversionTask {
-        std::string path;
-        ImgKind kind;
-    };
-
     std::vector<ConversionTask> tasks;
     tasks.reserve(images.size());
 
@@ -1059,54 +1138,7 @@ static int handleConvert(const ParsedArgs& args) {
     appendTasks(chd,    ImgKind::Chd);
     appendTasks(daa,    ImgKind::Daa);
 
-    // Bound worker count by task count, configured cap, and pool size.
-    ThreadPool& pool = getStaticThreadPool();
-    const size_t poolSize = pool.threadCount();
-
-    const size_t numThreads = std::min({
-        tasks.size(),
-        GlobalConcurrency::CONV_THREAD_CAP,
-        poolSize
-    });
-
-    std::atomic<size_t> nextTask{0};
-
-    std::vector<std::future<void>> futures;
-    futures.reserve(numThreads);
-
-    for (size_t t = 0; t < numThreads; ++t) {
-        futures.emplace_back(pool.enqueue(
-            [&tasks, &nextTask,
-             &completedBytes, &completedTasks, &failedTasks,
-             &successfulOutputs, &outMutex]() {
-
-                while (!GlobalState::g_operationCancelled.load()) {
-                    const size_t i = nextTask.fetch_add(1);
-
-                    if (i >= tasks.size())
-                        break;
-
-                    const auto& task = tasks[i];
-
-                    const bool isMdf = task.kind == ImgKind::Mdf;
-                    const bool isNrg = task.kind == ImgKind::Nrg;
-                    const bool isChd = task.kind == ImgKind::Chd;
-                    const bool isDaa = task.kind == ImgKind::Daa;
-
-                    convertToISO(
-                        {task.path},
-                        isMdf, isNrg, isChd, isDaa,
-                        &completedBytes,
-                        &completedTasks,
-                        &failedTasks,
-                        &successfulOutputs,
-                        &outMutex);
-                }
-            }));
-    }
-
-    for (auto& future : futures)
-        future.wait();
+    runConvertWorkers(tasks, completedBytes, completedTasks, failedTasks, successfulOutputs, outMutex);
 
     isComplete.store(true, std::memory_order_release);
 
