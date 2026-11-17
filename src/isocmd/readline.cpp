@@ -31,9 +31,6 @@
 static int current_page = 0;
 static char last_common_prefix[1024] = "";
 
-// Defined below (after clear_screen_and_buffer); also declared in readline.h.
-int clear_list_and_screen(int, int);
-
 /**
  * @brief List of available special commands for completion.
  */
