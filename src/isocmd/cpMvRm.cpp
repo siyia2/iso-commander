@@ -188,6 +188,7 @@ bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
     while (true) {
         std::string userInput;
         {
+            RlKeyBindGuard     keyGuard; // disables tab completion on scope exit
             RlFormFeedGuard ffGuard; // restores '\f' → prevent_readline_keybindings on scope exit
             userInput = handlePaginatedDisplay(
                 entries, promptPrefix, promptSuffix, setupEnv, isPageTurn, currentPage, true
