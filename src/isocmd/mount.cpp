@@ -432,6 +432,378 @@ static std::string mountPointSuffix(const std::string& isoPath) {
     return out;
 }
 
+// ---------------------------------------------------------------------------
+// mountIsoFiles helpers
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// Frees a libmnt_context on scope exit.
+struct CtxGuard {
+    libmnt_context* c;
+    ~CtxGuard() { mnt_free_context(c); }
+};
+
+/// Frees a libmnt_table on scope exit.
+struct TableGuard {
+    libmnt_table* t;
+    ~TableGuard() { if (t) mnt_free_table(t); }
+};
+
+/// Frees a libmnt_iter on scope exit.
+struct IterGuard {
+    libmnt_iter* i;
+    ~IterGuard() { if (i) mnt_free_iter(i); }
+};
+
+/// Packs (st_dev, st_ino) into a single uint64_t key so the cache is correct
+/// across multiple filesystems (inodes are only unique per device).
+uint64_t makeInodeKey(const struct stat& st) {
+    return (static_cast<uint64_t>(st.st_dev) << 32) | st.st_ino;
+}
+
+/**
+ * @brief Resolves a loop device source (e.g. /dev/loop0) to the inode key of its
+ * backing file, via /sys/block/loopN/loop/backing_file.
+ *
+ * stat() on the backing path gives the stable inode regardless of any renames that
+ * happened since the mount. Returns false if @p src is not a loop device or the
+ * backing file cannot be resolved.
+ */
+bool loopBackingInodeKey(const char* src, uint64_t& key) {
+    unsigned int loopNum = 0;
+    if (std::sscanf(src, "/dev/loop%u", &loopNum) != 1) return false;
+
+    char backingPath[256];
+    const int written = snprintf(backingPath, sizeof(backingPath),
+                                 "/sys/block/loop%u/loop/backing_file", loopNum);
+    if (written <= 0 || static_cast<size_t>(written) >= sizeof(backingPath))
+        return false; // Path too long, skip this entry
+
+    std::ifstream f(backingPath);
+    if (!f.is_open()) return false;
+
+    std::string realPath;
+    if (!std::getline(f, realPath) || realPath.empty()) return false;
+
+    while (!realPath.empty() && (realPath.back() == '\n' || realPath.back() == '\r'))
+        realPath.pop_back();
+
+    struct stat backingSt{};
+    if (::stat(realPath.c_str(), &backingSt) != 0) return false;
+
+    key = makeInodeKey(backingSt);
+    return true;
+}
+
+/**
+ * @brief Inode key of the file behind a mount source.
+ *
+ * Block devices are resolved through sysfs when they are loop devices; any other
+ * source is a direct file mount and is stat()ed normally.
+ */
+bool mountSourceInodeKey(const char* src, uint64_t& key) {
+    struct stat st{};
+    if (::stat(src, &st) != 0) return false;
+
+    if (S_ISBLK(st.st_mode))
+        return loopBackingInodeKey(src, key);
+
+    key = makeInodeKey(st);
+    return true;
+}
+
+/**
+ * @brief Builds a cache of already-mounted source inodes so that a renamed ISO
+ * (same inode, different path) is recognised as already mounted.
+ *
+ * mnt_fs_get_source() returns the loop device (e.g. /dev/loop0) for ISO mounts,
+ * not the backing file path, so it is resolved through sysfs.
+ */
+std::unordered_set<uint64_t> buildMountedInodeCache() {
+    std::unordered_set<uint64_t> inodes;
+    libmnt_table* tbl = mnt_new_table_from_file("/proc/self/mountinfo");
+    if (!tbl) return inodes;
+    TableGuard tableGuard{tbl};
+
+    libmnt_iter* itr = mnt_new_iter(MNT_ITER_FORWARD);
+    if (!itr) return inodes;
+    IterGuard iterGuard{itr};
+
+    libmnt_fs* fs = nullptr;
+    while (mnt_table_next_fs(tbl, itr, &fs) == 0) {
+        const char* src = mnt_fs_get_source(fs);
+        if (!src) continue;
+
+        uint64_t key = 0;
+        if (mountSourceInodeKey(src, key))
+            inodes.insert(key);
+    }
+    return inodes;
+}
+
+/// Records "needsRoot" for every file and counts them all as failed.
+void failAllNeedsRoot(const std::vector<std::string>& isoFiles,
+                      std::atomic<size_t>* failedTasks,
+                      bool silentMode) {
+    if (!silentMode) {
+        VerbosityFormatter formatter;
+        std::vector<std::string> fails;
+        fails.reserve(isoFiles.size());
+        for (const auto& isoFile : isoFiles) {
+            auto [dir, file] = extractDirectoryAndFilename(isoFile, "mount");
+            fails.push_back(formatter.formatError(std::string(dir), std::string(file), "needsRoot"));
+        }
+        std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
+        verboseSets.operationFailed.insert(fails.begin(), fails.end());
+    }
+    failedTasks->fetch_add(isoFiles.size(), std::memory_order_relaxed);
+}
+
+void reportContextFailure(bool silentMode) {
+    if (silentMode) return;
+    std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
+    verboseSets.operationFailed.insert("\033[1;91mFailed to create mount context.\033[0m");
+}
+
+/// Kernel filesystem type needed for an image, and the error code to report if
+/// the kernel has no such driver. Both null for ISO 9660 / UDF (autodetected).
+struct FsDriver {
+    const char* fsType      = nullptr;
+    const char* missingCode = nullptr;
+};
+
+/// Makes sure the kernel module for @p kind is loaded (once per process per driver).
+FsDriver prepareDriver(ImageKind kind) {
+    switch (kind) {
+        case ImageKind::HfsPlus: {
+            static const bool hfsModuleReady = ensureFilesystemModule("hfsplus");
+            (void)hfsModuleReady;
+            return {"hfsplus", "needsHFSPlus"};
+        }
+        case ImageKind::Hfs: {
+            static const bool hfsClassicModuleReady = ensureFilesystemModule("hfs");
+            (void)hfsClassicModuleReady;
+            return {"hfs", "needsHFS"};
+        }
+        default:
+            return {};
+    }
+}
+
+/// Loop options: partitioned Apple images need offset/sizelimit so the kernel
+/// driver sees only the partition, not the partition table.
+std::string buildMountOptions(const ImageInfo& imgInfo) {
+    std::string opts = "loop,ro";
+    if (imgInfo.offset > 0)
+        opts += ",offset=" + std::to_string(static_cast<long long>(imgInfo.offset));
+    if (imgInfo.size > 0)
+        opts += ",sizelimit=" + std::to_string(static_cast<long long>(imgInfo.size));
+    return opts;
+}
+
+/// Creates the mount directory. Returns false if it cannot be used.
+bool prepareMountPointDir(const std::string& mountPoint) {
+    std::error_code ec;
+    fs::create_directories(mountPoint, ec);
+
+    if (ec && ec != std::errc::file_exists) return false;
+    return !(fs::exists(mountPoint) && !fs::is_directory(mountPoint));
+}
+
+/// "/mnt/ISOs/<stem>~<suffix>"
+std::string buildMountPoint(const std::string& isoFile) {
+    std::string mountPoint;
+    mountPoint.reserve(256); // Typical path length
+    mountPoint = "/mnt/ISOs/";
+    mountPoint += fs::path(isoFile).stem().string();
+    mountPoint += "~";
+    mountPoint += mountPointSuffix(isoFile);
+    return mountPoint;
+}
+
+/**
+ * @brief State of one mountIsoFiles() batch: the libmount context, the dedup
+ * caches, and the buffered verbose results (flushed to verboseSets in batches to
+ * limit contention on GlobalMutexes::globalSetsMutex).
+ */
+class MountBatch {
+public:
+    MountBatch(libmnt_context* context,
+               std::atomic<size_t>* completed,
+               std::atomic<size_t>* failed,
+               bool silent)
+        : ctx_(context),
+          completedTasks_(completed),
+          failedTasks_(failed),
+          silentMode_(silent),
+          mountPointCache_(buildMountPointCache()),
+          mountedInodes_(buildMountedInodeCache()) {
+        if (!silentMode_) {
+            tempCompleted_.reserve(kBatchSize);
+            tempSkipped_.reserve(kBatchSize);
+            tempFailed_.reserve(kBatchSize);
+        }
+    }
+
+    /// Mounts one image (or records why it was skipped / failed).
+    void process(const std::string& isoFile) {
+        struct stat isoStat{};
+        ImageInfo imgInfo;
+        if (const char* err = precheck(isoFile, isoStat, imgInfo)) {
+            recordFail(isoFile, err);
+            return;
+        }
+
+        const std::string mountPoint = buildMountPoint(isoFile);
+
+        if (isAlreadyMounted(mountPoint, isoStat)) {
+            recordSkip(isoFile, mountPoint);
+            return;
+        }
+
+        if (!prepareMountPointDir(mountPoint)) {
+            recordFail(isoFile, "mkdirFailed");
+            return;
+        }
+
+        const FsDriver driver = configureMount(isoFile, mountPoint, imgInfo);
+
+        if (mnt_context_mount(ctx_) == 0)
+            onMountSuccess(isoFile, mountPoint, isoStat);
+        else
+            onMountFailure(isoFile, mountPoint, driver);
+    }
+
+    void maybeFlush() {
+        if (!silentMode_ &&
+            (tempCompleted_.size() >= kBatchSize ||
+             tempSkipped_.size()   >= kBatchSize ||
+             tempFailed_.size()    >= kBatchSize)) {
+            flush();
+        }
+    }
+
+    void flush() {
+        if (silentMode_) return;
+        std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
+        verboseSets.operationCompleted.insert(tempCompleted_.begin(), tempCompleted_.end());
+        verboseSets.operationSkipped.insert(tempSkipped_.begin(), tempSkipped_.end());
+        verboseSets.operationFailed.insert(tempFailed_.begin(), tempFailed_.end());
+        tempCompleted_.clear();
+        tempSkipped_.clear();
+        tempFailed_.clear();
+    }
+
+private:
+    static constexpr size_t kBatchSize = 50;
+
+    // Cancellation, existence (single stat() also feeds the inode cache),
+    // regular-file check and image detection. Returns an error code, or nullptr.
+    const char* precheck(const std::string& isoFile, struct stat& isoStat, ImageInfo& imgInfo) const {
+        if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) return "cxl";
+        if (::stat(isoFile.c_str(), &isoStat) != 0) return "missingISO";
+        if (!S_ISREG(isoStat.st_mode)) return "badFS";
+
+        imgInfo = detectImage(isoFile, isoStat);
+        if (imgInfo.kind == ImageKind::None) return "badFS";
+        return nullptr;
+    }
+
+    // Path-based skip (file was not renamed), or inode-based skip (file was
+    // renamed after being mounted: the kernel tracks loop backing files by
+    // inode, so the original mount stays intact under a stale name-derived path).
+    bool isAlreadyMounted(const std::string& mountPoint, const struct stat& isoStat) const {
+        return mountPointCache_.count(mountPoint) ||
+               mountedInodes_.count(makeInodeKey(isoStat));
+    }
+
+    void recordFail(const std::string& isoFile, const char* reason) {
+        if (!silentMode_) {
+            auto [dir, file] = extractDirectoryAndFilename(isoFile, "mount");
+            tempFailed_.push_back(formatter_.formatError(std::string(dir), std::string(file), reason));
+        }
+        failedTasks_->fetch_add(1, std::memory_order_relaxed);
+    }
+
+    void recordSkip(const std::string& isoFile, const std::string& mountPoint) {
+        if (!silentMode_) {
+            auto [mntDir, mntName] = extractDirectoryAndFilename(mountPoint, "mount");
+            auto [isoDir, isoName] = extractDirectoryAndFilename(isoFile, "mount");
+            tempSkipped_.push_back(
+                formatter_.formatSkipped(std::string(isoDir), std::string(isoName),
+                                         std::string(mntDir), std::string(mntName)));
+        }
+        completedTasks_->fetch_add(1, std::memory_order_relaxed);
+    }
+
+    // Sets up the libmount context for this image and returns the driver info.
+    FsDriver configureMount(const std::string& isoFile, const std::string& mountPoint,
+                            const ImageInfo& imgInfo) {
+        const std::string mountOpts = buildMountOptions(imgInfo);
+
+        mnt_reset_context(ctx_);
+        mnt_context_set_source(ctx_, isoFile.c_str());
+        mnt_context_set_target(ctx_, mountPoint.c_str());
+        mnt_context_set_options(ctx_, mountOpts.c_str());
+
+        const FsDriver driver = prepareDriver(imgInfo.kind);
+        if (driver.fsType) {
+            mnt_context_set_fstype(ctx_, driver.fsType);
+        } else {
+            // Clear any fstype left over from a previous HFS/HFS+ iteration.
+            mnt_context_set_fstype(ctx_, nullptr);
+            mnt_context_set_fstype_pattern(ctx_, "udf,iso9660");
+        }
+        return driver;
+    }
+
+    void onMountSuccess(const std::string& isoFile, const std::string& mountPoint,
+                        const struct stat& isoStat) {
+        if (!silentMode_) {
+            auto [mntDir, mntName] = extractDirectoryAndFilename(mountPoint, "mount");
+            auto [isoDir, isoName] = extractDirectoryAndFilename(isoFile, "mount");
+            const char* rawFsType = mnt_context_get_fstype(ctx_);
+            const std::string fsType = rawFsType ? rawFsType : "unknown";
+            tempCompleted_.push_back(
+                formatter_.formatMountSuccess(std::string(isoDir), std::string(isoName),
+                                              std::string(mntDir), std::string(mntName), fsType));
+        }
+        mountPointCache_.emplace(mountPoint);
+        // Keep the inode cache consistent so subsequent entries in the same
+        // batch that share the same file are also skipped correctly.
+        mountedInodes_.insert(makeInodeKey(isoStat));
+        completedTasks_->fetch_add(1, std::memory_order_relaxed);
+    }
+
+    void onMountFailure(const std::string& isoFile, const std::string& mountPoint,
+                        const FsDriver& driver) {
+        // Tell "kernel has no driver for this filesystem" apart from "bad image".
+        // Checked only on failure, so the success path pays nothing for it.
+        const bool driverMissing = driver.fsType && !isFilesystemRegistered(driver.fsType);
+        recordFail(isoFile, driverMissing ? driver.missingCode : "badFS");
+
+        // Only remove the directory we just created if it is empty;
+        // a concurrent mount may have legitimately used it.
+        std::error_code ec;
+        if (fs::is_directory(mountPoint) && fs::is_empty(mountPoint))
+            fs::remove(mountPoint, ec);
+    }
+
+    libmnt_context*                ctx_;
+    std::atomic<size_t>*           completedTasks_;
+    std::atomic<size_t>*           failedTasks_;
+    const bool                     silentMode_;
+    VerbosityFormatter             formatter_;
+    std::unordered_set<std::string> mountPointCache_;
+    std::unordered_set<uint64_t>   mountedInodes_;
+    std::vector<std::string>       tempCompleted_;
+    std::vector<std::string>       tempSkipped_;
+    std::vector<std::string>       tempFailed_;
+};
+
+} // namespace
+
 /**
  * @brief Mounts a batch of disk images to unique directories under /mnt using loop devices.
  *
@@ -478,36 +850,17 @@ void mountIsoFiles(
     std::atomic<size_t>* failedTasks,
     bool silentMode)
 {
-    const bool hasRoot = (geteuid() == 0);
-
-    if (!hasRoot) {
-        if (!silentMode) {
-            VerbosityFormatter formatter;
-            std::vector<std::string> fails;
-            fails.reserve(isoFiles.size());
-            for (const auto& isoFile : isoFiles) {
-                auto [dir, file] = extractDirectoryAndFilename(isoFile, "mount");
-                fails.push_back(formatter.formatError(std::string(dir), std::string(file), "needsRoot"));
-            }
-            std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
-            verboseSets.operationFailed.insert(fails.begin(), fails.end());
-        }
-        failedTasks->fetch_add(isoFiles.size(), std::memory_order_relaxed);
+    if (geteuid() != 0) {
+        failAllNeedsRoot(isoFiles, failedTasks, silentMode);
         return;
     }
 
     libmnt_context* ctx = mnt_new_context();
     if (!ctx) {
-        if (!silentMode) {
-            std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
-            verboseSets.operationFailed.insert("\033[1;91mFailed to create mount context.\033[0m");
-        }
+        reportContextFailure(silentMode);
         return;
     }
-    struct CtxGuard {
-        libmnt_context* c;
-        ~CtxGuard() { mnt_free_context(c); }
-    } ctxGuard{ctx};
+    CtxGuard ctxGuard{ctx};
 
     // Ensure the base ISOs directory exists once, up front, so we don't
     // redundantly re-check/re-create it on every iteration of the loop below.
@@ -516,274 +869,11 @@ void mountIsoFiles(
         fs::create_directories("/mnt/ISOs", baseEc);
     }
 
-    // Pack (st_dev, st_ino) into a single uint64_t key so the cache is
-    // correct across multiple filesystems (inodes are only unique per device).
-    auto makeInodeKey = [](const struct stat& st) -> uint64_t {
-        return (static_cast<uint64_t>(st.st_dev) << 32) | st.st_ino;
-    };
-
-    // Build cache of already-mounted source inodes so that a renamed ISO
-    // (same inode, different path) is correctly recognised as already mounted.
-    // mnt_fs_get_source() returns the loop device (e.g. /dev/loop0) for ISO
-    // mounts, not the backing file path, so we resolve it through sysfs.
-    auto buildMountedInodeCache = [&makeInodeKey]() -> std::unordered_set<uint64_t> {
-        std::unordered_set<uint64_t> inodes;
-        libmnt_table* tbl = mnt_new_table_from_file("/proc/self/mountinfo");
-        if (!tbl) return inodes;
-
-        // RAII wrapper for libmount table
-        struct TableGuard {
-            libmnt_table* t;
-            ~TableGuard() { if (t) mnt_free_table(t); }
-        } tableGuard{tbl};
-
-        libmnt_iter* itr = mnt_new_iter(MNT_ITER_FORWARD);
-        if (!itr) return inodes;
-
-        // RAII wrapper for libmount iterator
-        struct IterGuard {
-            libmnt_iter* i;
-            ~IterGuard() { if (i) mnt_free_iter(i); }
-        } iterGuard{itr};
-
-        libmnt_fs* fs = nullptr;
-        while (mnt_table_next_fs(tbl, itr, &fs) == 0) {
-            const char* src = mnt_fs_get_source(fs);
-            if (!src) continue;
-
-            struct stat st{};
-            if (::stat(src, &st) != 0) continue;
-
-            if (S_ISBLK(st.st_mode)) {
-                // Block device — check if it is a loop device backed by a file.
-                // /sys/block/loopN/loop/backing_file contains the real path,
-                // and stat() on that path gives the stable inode regardless of
-                // any renames that have happened since the mount.
-                unsigned int loopNum = 0;
-                if (std::sscanf(src, "/dev/loop%u", &loopNum) == 1) {
-                    char backingPath[256];
-                    int written = snprintf(backingPath, sizeof(backingPath),
-                                          "/sys/block/loop%u/loop/backing_file", loopNum);
-                    if (written <= 0 || static_cast<size_t>(written) >= sizeof(backingPath)) {
-                        continue; // Path too long, skip this entry
-                    }
-
-                    std::ifstream f(backingPath);
-                    if (!f.is_open()) continue;
-
-                    std::string realPath;
-                    if (std::getline(f, realPath) && !realPath.empty()) {
-                        while (!realPath.empty() &&
-                               (realPath.back() == '\n' || realPath.back() == '\r'))
-                            realPath.pop_back();
-
-                        struct stat backingSt{};
-                        if (::stat(realPath.c_str(), &backingSt) == 0)
-                            inodes.insert(makeInodeKey(backingSt));
-                    }
-                }
-            } else {
-                // Direct file mount (no loop device) — stat it normally.
-                inodes.insert(makeInodeKey(st));
-            }
-        }
-        return inodes;
-    };
-
-    auto mountPointCache = buildMountPointCache();
-    auto mountedInodes   = buildMountedInodeCache();
-
-    std::vector<std::string> tempCompleted;
-    std::vector<std::string> tempSkipped;
-    std::vector<std::string> tempFailed;
-    VerbosityFormatter formatter;
-
-    constexpr size_t kBatchSize = 50;
-    if (!silentMode) {
-        tempCompleted.reserve(kBatchSize);
-        tempSkipped.reserve(kBatchSize);
-        tempFailed.reserve(kBatchSize);
-    }
-
-    auto flushBuffers = [&]() {
-        if (silentMode) return;
-        std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
-        verboseSets.operationCompleted.insert(tempCompleted.begin(), tempCompleted.end());
-        verboseSets.operationSkipped.insert(tempSkipped.begin(), tempSkipped.end());
-        verboseSets.operationFailed.insert(tempFailed.begin(), tempFailed.end());
-        tempCompleted.clear();
-        tempSkipped.clear();
-        tempFailed.clear();
-    };
-
-    auto maybeFlush = [&]() {
-        if (!silentMode &&
-            (tempCompleted.size() >= kBatchSize ||
-             tempSkipped.size()   >= kBatchSize ||
-             tempFailed.size()    >= kBatchSize)) {
-            flushBuffers();
-        }
-    };
-
-    auto recordFail = [&](const std::string& isoFile, const char* reason) {
-        if (!silentMode) {
-            auto [dir, file] = extractDirectoryAndFilename(isoFile, "mount");
-            tempFailed.push_back(formatter.formatError(std::string(dir), std::string(file), reason));
-        }
-        failedTasks->fetch_add(1, std::memory_order_relaxed);
-    };
-
-    // Pre-allocate string buffer for mount point construction
-    std::string mountPointBuffer;
-    mountPointBuffer.reserve(256); // Typical path length
+    MountBatch batch(ctx, completedTasks, failedTasks, silentMode);
 
     for (const auto& isoFile : isoFiles) {
-        if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
-            recordFail(isoFile, "cxl");
-            maybeFlush();
-            continue;
-        }
-
-        // Single stat() call for existence check, validation, and inode cache
-        struct stat isoStat{};
-        if (::stat(isoFile.c_str(), &isoStat) != 0) {
-            recordFail(isoFile, "missingISO");
-            maybeFlush();
-            continue;
-        }
-
-        // Check if it's a regular file
-        if (!S_ISREG(isoStat.st_mode)) {
-            recordFail(isoFile, "badFS");
-            maybeFlush();
-            continue;
-        }
-
-        // Detect the image format (ISO/UDF/HFS/HFS+, bare or partitioned)
-        const ImageInfo imgInfo = detectImage(isoFile, isoStat);
-        if (imgInfo.kind == ImageKind::None) {
-            recordFail(isoFile, "badFS");
-            maybeFlush();
-            continue;
-        }
-
-        // Construct mount point with minimal allocations
-        const fs::path isoPath(isoFile);
-        mountPointBuffer.clear();
-        mountPointBuffer = "/mnt/ISOs/";
-        mountPointBuffer += isoPath.stem().string();
-        mountPointBuffer += "~";
-        mountPointBuffer += mountPointSuffix(isoFile);
-        const std::string& mountPoint = mountPointBuffer;
-
-        auto [mntDir, mntName] = extractDirectoryAndFilename(mountPoint, "mount");
-        auto [isoDir, isoName] = extractDirectoryAndFilename(isoFile, "mount");
-
-        // --- path-based skip (file was not renamed) ---
-        if (mountPointCache.count(mountPoint)) {
-            if (!silentMode)
-                tempSkipped.push_back(
-                    formatter.formatSkipped(std::string(isoDir), std::string(isoName),
-                                            std::string(mntDir), std::string(mntName))
-                );
-            completedTasks->fetch_add(1, std::memory_order_relaxed);
-            maybeFlush();
-            continue;
-        }
-
-        // --- inode-based skip (file was renamed after being mounted) ---
-        // The kernel tracks loop-device backing files by inode, so a rename
-        // leaves the original mount intact but under a stale path in our
-        // name-derived mountPointCache.  Detect this by checking whether the
-        // file's (dev, inode) pair is already present in the live mount table.
-        if (mountedInodes.count(makeInodeKey(isoStat))) {
-            if (!silentMode)
-                tempSkipped.push_back(
-                    formatter.formatSkipped(std::string(isoDir), std::string(isoName),
-                                            std::string(mntDir), std::string(mntName))
-                );
-            completedTasks->fetch_add(1, std::memory_order_relaxed);
-            maybeFlush();
-            continue;
-        }
-
-        std::error_code ec;
-        fs::create_directories(mountPoint, ec);
-
-        if ((ec && ec != std::errc::file_exists) ||
-            (fs::exists(mountPoint) && !fs::is_directory(mountPoint))) {
-            recordFail(isoFile, "mkdirFailed");
-            maybeFlush();
-            continue;
-        }
-
-        // Loop options: partitioned Apple images need offset/sizelimit so the
-        // kernel driver sees only the partition, not the partition table.
-        std::string mountOpts = "loop,ro";
-        if (imgInfo.offset > 0)
-            mountOpts += ",offset=" + std::to_string(static_cast<long long>(imgInfo.offset));
-        if (imgInfo.size > 0)
-            mountOpts += ",sizelimit=" + std::to_string(static_cast<long long>(imgInfo.size));
-
-        mnt_reset_context(ctx);
-        mnt_context_set_source(ctx, isoFile.c_str());
-        mnt_context_set_target(ctx, mountPoint.c_str());
-        mnt_context_set_options(ctx, mountOpts.c_str());
-
-        const char* wantedFs = nullptr; // kernel fs type, used to diagnose a missing driver
-        const char* missingDriverCode = nullptr; // error code reported if that driver isn't registered
-        switch (imgInfo.kind) {
-            case ImageKind::HfsPlus: {
-                static const bool hfsModuleReady = ensureFilesystemModule("hfsplus");
-                (void)hfsModuleReady;
-                wantedFs = "hfsplus";
-                missingDriverCode = "needsHFSPlus";
-                mnt_context_set_fstype(ctx, wantedFs);
-                break;
-            }
-            case ImageKind::Hfs: {
-                static const bool hfsClassicModuleReady = ensureFilesystemModule("hfs");
-                (void)hfsClassicModuleReady;
-                wantedFs = "hfs";
-                missingDriverCode = "needsHFS";
-                mnt_context_set_fstype(ctx, wantedFs);
-                break;
-            }
-            default:
-                // Clear any fstype left over from a previous HFS/HFS+ iteration.
-                mnt_context_set_fstype(ctx, nullptr);
-                mnt_context_set_fstype_pattern(ctx, "udf,iso9660");
-                break;
-        }
-
-        const int ret = mnt_context_mount(ctx);
-
-        if (ret == 0) {
-            if (!silentMode) {
-                const char* rawFsType = mnt_context_get_fstype(ctx);
-                const std::string fsType = rawFsType ? rawFsType : "unknown";
-                tempCompleted.push_back(
-                    formatter.formatMountSuccess(std::string(isoDir), std::string(isoName),
-                                                 std::string(mntDir), std::string(mntName), fsType)
-                );
-            }
-            mountPointCache.emplace(mountPoint);
-            // Keep the inode cache consistent so subsequent entries in the
-            // same batch that share the same file are also skipped correctly.
-            mountedInodes.insert(makeInodeKey(isoStat));
-            completedTasks->fetch_add(1, std::memory_order_relaxed);
-        } else {
-            // Tell "kernel has no driver for this filesystem" apart from "bad image".
-            // Checked only on failure, so the success path pays nothing for it.
-            const bool driverMissing = wantedFs && !isFilesystemRegistered(wantedFs);
-            recordFail(isoFile, driverMissing ? missingDriverCode : "badFS");
-            // Only remove the directory we just created if it is empty;
-            // a concurrent mount may have legitimately used it.
-            if (fs::is_directory(mountPoint) && fs::is_empty(mountPoint))
-                fs::remove(mountPoint, ec);
-        }
-
-        maybeFlush();
+        batch.process(isoFile);
+        batch.maybeFlush();
     }
-    flushBuffers();
+    batch.flush();
 }
