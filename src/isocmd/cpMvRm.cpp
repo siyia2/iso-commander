@@ -279,6 +279,7 @@ bool& overwriteExisting) {
                 setupSignalHandlerCancellations();
 
                 RestoreReadlineBuffer();
+                rl_bind_keyseq("\\e", exit_handler);
 
                 if (!isCopy) umountMvRmBreak = true;
                 if (!isPageTurn) {
