@@ -332,34 +332,6 @@ const std::vector<std::string>* imageCacheFor(const std::string& fileType) {
 } // namespace
 
 /**
- * @brief Routes validated user input to the correct filesystem or mount
- * operation.
- *
- * Selects the active list (filtered files, global ISO files, or mounted
- * directories for unmount) and dispatches the input to the matching handler.
- * The caller manages list-view locking around the operation. Indices in
- * @p inputString refer to the filtered list when a filter is active.
- *
- * @param inputString      User input, typically indices or paths.
- * @param isFiltered       Updated if the operation invalidates the filter.
- * @param filteredFiles    Currently visible filtered subset.
- * @param isoDirs          Active mount points used by unmount.
- * @param operation        Operation to dispatch.
- * @param umountMvRmBreak  Requests a list refresh after destructive actions.
- * @param filterHistory    Readline search-history state updated by the handler.
- */
-void processOperationForSelectedIsoFiles(const std::string& inputString,
-                                         bool& isFiltered,
-                                         const std::vector<std::string>& filteredFiles,
-                                         std::vector<std::string>& isoDirs,
-                                         const std::string& operation,
-                                         bool& umountMvRmBreak,
-                                         bool& filterHistory) {
-    processOperationImpl(inputString, isFiltered, filteredFiles, isoDirs, operation,
-                         umountMvRmBreak, filterHistory, /*useSourceList=*/false);
-}
-
-/**
  * @brief Background watcher that requests an ISO-list redraw after an import
  * completes.
  *
