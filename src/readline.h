@@ -224,4 +224,10 @@ void beginSettingsValueCompletion(const std::string& key);
  */
 void endSettingsValueCompletion();
 
+/**
+ * @brief Repaints the last displayed completion listing after a terminal resize,
+ *        or clears the saved snapshot if the input buffer has changed.
+ */
+void repaintCompletionListing();
+
 #endif // READLINE_H
