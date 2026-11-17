@@ -61,6 +61,17 @@
 
 namespace fs = std::filesystem;
 
+/**
+ * @brief Returns the number of UTF-8 code points (characters) in a string.
+ *
+ * Counts bytes that are not UTF-8 continuation bytes (i.e., bytes where
+ * the top two bits are not 10, or `(c & 0xC0) != 0x80`). Assuming valid
+ * UTF-8 input, this gives the total number of characters, serving as an
+ * approximation of the string's display column width for standard text.
+ *
+ * @param s Input string containing UTF-8 encoded text.
+ * @return The number of UTF-8 code points in @p s.
+ */
 size_t utf8Width(const std::string& s) {
     size_t w = 0;
     for (unsigned char c : s)
