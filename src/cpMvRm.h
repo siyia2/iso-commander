@@ -33,14 +33,16 @@ struct RlFormFeedGuard {
 
 /**
  * @struct RlKeyBindGuard
- * @brief RAII guard to restore both '\f' and '\t' key bindings.
- * * Typically used around paginated display logic to ensure bindings are reverted
- * even on early returns or exceptions.
+ * @brief RAII guard that restores the '\f' and '\t' bindings and rebinds Esc to
+ *        @c exit_handler, undoing the Esc hijack left by a completion list.
+ *
+ * Fires only when the guarded call returns, not on in-loop page turns.
  */
 struct RlKeyBindGuard {
     ~RlKeyBindGuard() {
         rl_bind_key('\f', prevent_readline_keybindings);
         rl_bind_key('\t', prevent_readline_keybindings);
+        rl_bind_keyseq("\\e", exit_handler);
     }
 };
 
