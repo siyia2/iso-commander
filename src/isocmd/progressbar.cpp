@@ -408,8 +408,8 @@ int processingBarWidthFor(const std::string& operation) {
     if (operation.find("mount") != std::string::npos || operation.find("umount") != std::string::npos)
         return 46;
     if (operation.find("2iso") != std::string::npos)
-        return 48;
-    return 42;
+        return 47;
+    return 41;
 }
 
 /**
