@@ -17,6 +17,18 @@
 // Forward declaration of shared state
 struct RefreshState;
 
+// =================================================================
+// Global State & Data Structures
+// =================================================================
+
+/// Pending state of the ISO select screen. Main-thread only.
+struct IsoPending {
+    std::vector<std::string>        paths;
+    const std::vector<std::string>* source = nullptr;   // list the screen's source indices refer to
+};
+
+inline IsoPending g_isoPending;
+
 // ======================================================================
 // RAII Guards for Select Functions
 // ======================================================================
@@ -220,7 +232,8 @@ void processInputForConversions(
 /// Handles the write-to-USB flow for a user selection.
 void writeToUsb(
     const std::string &input,
-    const std::vector<std::string> &isoFiles
+    const std::vector<std::string> &isoFiles,
+    std::vector<std::string>& pendingIndices
 );
 
 
