@@ -915,7 +915,7 @@ private:
  *        and elapsed time.
  *
  * @par Terminal width
- * The bar width is configured per operation (42 / 46 / 48 columns while
+ * The bar width is configured per operation (41 / 46 / 47 columns while
  * running, 30 in the final layout) but is shrunk whenever the terminal
  * is too narrow for the widest line. The fit is computed from worst-case text
  * widths (3-digit percentage, task-count digits, a 5-character time,
