@@ -229,6 +229,13 @@ bool stagePending(const std::string& inputString,
     return true;
 }
 
+/// Pending state of the ISO select screen. Main-thread only.
+struct IsoPending {
+    std::vector<std::string>        paths;
+    const std::vector<std::string>* source = nullptr;   // list the screen's source indices refer to
+};
+IsoPending g_isoPending;
+
 /// Owns g_isoPending for the lifetime of one selectForIsoFiles() call, so the
 /// loaders only treat pending as path-based while an ISO select screen is
 /// active (see syncIsoPendingDisplay).
@@ -257,10 +264,8 @@ struct IsoPendingScope {
  * reloaded and sorted list. Every redraw path therefore shows correct
  * numbers: loop redraws, resize repaints and asynchronous import refreshes.
  *
- * @param pendingIndices    Receives the 1-based source indices compressed into ranges for display.
- * @param hasPendingProcess Set to true if there are active pending selections, otherwise false.
- * @param importRunning     True while a background import is rebuilding the list;
- *                          the last good display is kept then.
+ * @param importRunning True while a background import is rebuilding the list;
+ *        the last good display is kept then.
  * @return true if an ISO select screen owns the selection (the display state
  *         is managed here); false if none is active, in which case the caller
  *         handles its own pending state.
@@ -288,7 +293,6 @@ void processOperation(const std::string& inputString,
                           bool& isFiltered,
                           const std::vector<std::string>& filteredFiles,
                           std::vector<std::string>& isoDirs,
-                          std::vector<std::string>& pendingIndices,
                           const std::string& operation,
                           bool& umountMvRmBreak,
                           bool& filterHistory,
@@ -307,7 +311,7 @@ void processOperation(const std::string& inputString,
         if (isUnmount) umountMvRmBreak = true;
         processInputForMountOrUmount(inputString, activeList, umountMvRmBreak, verbose, isUnmount);
     } else if (operation == "write2usb") {
-        writeToUsb(inputString, activeList, pendingIndices);
+        writeToUsb(inputString, activeList);
     } else {
         processInputForCpMvRm(inputString, activeList, operation, umountMvRmBreak, filterHistory, verbose);
     }
@@ -765,12 +769,12 @@ void selectForIsoFiles(const std::string& operation,
                     pendingIndices.clear();
                     hasPendingProcess = false;
                 } else {
-                    processOperation(batch, isFiltered, filteredFiles, isoDirs, pendingIndices,
+                    processOperation(batch, isFiltered, filteredFiles, isoDirs,
                                          operation, umountMvRmBreak, filterHistory,
                                          /*useSourceList=*/true);
                 }
             } else {
-                processOperation(inputString, isFiltered, filteredFiles, isoDirs, pendingIndices,
+                processOperation(inputString, isFiltered, filteredFiles, isoDirs,
                                      operation, umountMvRmBreak, filterHistory,
                                      /*useSourceList=*/false);
             }
