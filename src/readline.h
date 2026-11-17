@@ -6,6 +6,7 @@
 // C++ Standard Library Headers
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 /**
@@ -25,6 +26,21 @@ char** completion_cb(const char* text, int start, int end);
 // Keybinding utility functions
 int prevent_readline_keybindings(int count, int key);
 int clear_screen_and_buffer(int count, int key);
+
+/**
+ * @brief Clears the screen and dismisses any visible completion list.
+ *
+ * Drops the saved completion-repaint snapshot first, then delegates to
+ * @c clear_screen_and_buffer. Use it (instead of @c clear_screen_and_buffer)
+ * wherever a visible completion list must disappear while a body-repaint hook
+ * (@c SettingsEditorRepaint::g_fn) is active: otherwise the hook's call to
+ * @c repaintCompletionListing() would redraw the list that is being dismissed.
+ *
+ * Bound to <kbd>Esc</kbd> while a completion list is shown, and to
+ * <kbd>Ctrl+L</kbd> on the Settings Editor's value prompt. The search prompt
+ * keeps @c clear_screen_and_buffer on <kbd>Ctrl+L</kbd>.
+ */
+int clear_list_and_screen(int count, int key);
 
 #ifdef __cplusplus
 }
@@ -101,24 +117,33 @@ char** setting_value_completion_entry(const char* text, int start, int end);
  * @brief Body-repaint hook for the Settings Editor's readline prompts.
  *
  * The completion subsystem's <kbd>Esc</kbd> / <kbd>Ctrl+L</kbd> path
- * (@c clear_screen_and_buffer) normally only clears the terminal and redraws
- * the readline prompt line. On the Settings Editor screens that is not enough:
- * the header, current value, description and navigation footer are printed by
- * the editor's own draw lambdas (passed to @c readlineWithResize as the resize
- * repaint callback), so a bare clear would leave only the "Value …" prompt
- * visible after dismissing a Tab completion list.
+ * (@c clear_screen_and_buffer, reached through @c clear_list_and_screen)
+ * normally only clears the terminal and redraws the readline prompt line. On
+ * the Settings Editor screens that is not enough: the header, current value,
+ * description and navigation footer are printed by the editor's own draw
+ * lambdas (passed to @c readlineWithRepaint, which also forwards them to
+ * @c readlineWithResize as the resize repaint callback), so a bare clear would
+ * leave only the "Value …" prompt visible after dismissing a Tab completion
+ * list.
  *
- * While a @c readlineWithResize call in the Settings Editor is active, the
+ * While a @c readlineWithRepaint call in the Settings Editor is active, the
  * draw lambda that was supplied as its repaint callback is stored in
- * @c g_fn. @c clear_screen_and_buffer and the editor's own Esc handler
- * (@c settingsEscHandler, file-local to settingsEditor.cpp) consult it before
- * clearing and — when set — use it to repaint the whole screen body instead of
- * just clearing.
+ * @c g_fn. @c clear_screen_and_buffer consults it before clearing and — when
+ * set — uses it to repaint the whole screen body instead of just clearing.
  *
- * The hook is installed and removed around each Settings Editor
- * @c readlineWithResize call by @c editSetting(), so it is only ever live on
+ * The hook is installed and removed around each Settings Editor prompt by
+ * @c readlineWithRepaint (settingsEditor.cpp), so it is only ever live on
  * those screens. Because the variable and accessors are @c inline, every
  * translation unit shares the same object without an out-of-line definition.
+ *
+ * @par Repaint callback contract
+ * The stored callback is the same one the resize watcher runs, so it must end
+ * ONE LINE SHORT of the prompt's input line (the caller of the hook prints the
+ * final '\n'). If it repaints the completion listing, it must first step onto
+ * the input line and back (see @c repaintCompletionListing). Because
+ * @c clear_screen_and_buffer clears the listing snapshot only after the hook
+ * returns, handlers that mean to dismiss a visible list must clear the
+ * snapshot first (@c clear_list_and_screen).
  */
 namespace SettingsEditorRepaint {
     /// @brief Active body-repaint callback; empty when no editor prompt is live.
@@ -177,13 +202,16 @@ void reset_custom_keybindingsForSearches(void);
  */
 
 /**
- * @brief Resets the completion-list pagination state.
+ * @brief Resets the completion-list pagination state and the repaint snapshot.
  *
- * Sets the current page back to 0 and clears the cached common prefix used to
- * detect the start of a new completion session. Invoked by @c completion_cb at
- * the beginning of each completion attempt, and after a screen wipe via
- * @c clear_screen_and_buffer and @c my_rl_complete. It does not touch any
- * Settings Editor state — no such flag exists in the completion TU.
+ * Sets the current page back to 0, clears the cached common prefix used to
+ * detect the start of a new completion session, and drops the saved
+ * completion-repaint snapshot. Invoked by @c completion_cb at the beginning of
+ * each completion attempt, after a screen wipe via @c clear_screen_and_buffer
+ * and @c my_rl_complete, and at the top of the Settings Editor's per-setting
+ * loop so a list from a previous prompt can never be repainted on a different
+ * screen. It does not touch any other Settings Editor state — no such flag
+ * exists in the completion TU.
  */
 void resetReadlinePagination();
 
@@ -227,6 +255,11 @@ void endSettingsValueCompletion();
 /**
  * @brief Repaints the last displayed completion listing after a terminal resize,
  *        or clears the saved snapshot if the input buffer has changed.
+ *
+ * The listing saves/restores an absolute cursor position (ESC[s / ESC[u), so
+ * call this with the cursor ON the prompt's input line. Repaint callbacks that
+ * end one line short of it (as the resize watcher requires) must step down
+ * with "\n" before the call and back up with "\033[A" after it.
  */
 void repaintCompletionListing();
 
