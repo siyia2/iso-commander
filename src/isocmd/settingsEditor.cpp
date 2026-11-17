@@ -469,9 +469,11 @@ void handleMainInput(SettingsScreen& screen, const std::string& input) {
  *   "No valid input provided" screen. Once a reset is requested, the screen
  *   is repainted without the main prompt line, and neither that line nor the
  *   confirmation line is re-echoed afterwards.
- * - **Clear handling:** <kbd>Ctrl+L</kbd> is routed through
- *   @c readlineWithRepaint, so it repaints the full settings body via
- *   @c SettingsScreen::draw instead of leaving a bare input prompt.
+ * - **Clear handling:** <kbd>Ctrl+L</kbd> is bound only on the per-setting
+ *   value prompt in @c editSetting, where it dismisses any completion list and
+ *   repaints the edit screen via @c readlineWithRepaint. The binding is
+ *   released when @c editSetting returns, so it is not active on the main
+ *   settings prompt or the reset confirmation.
  *
  * @param configPath Configuration file used to load and save settings.
  */
