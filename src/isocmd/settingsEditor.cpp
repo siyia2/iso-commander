@@ -546,8 +546,9 @@ struct NavBindGuard {
  * @brief RAII helper to clean up tab completion hooks and active settings on all exit paths.
  *
  * Resets global pointers like @c g_activeSettingValues, uninstalls custom completion functions,
- * restores standard listing hooks, and binds Tab back to a no-op handler to prevent fallback
- * filename completion behavior from triggering outside the settings editor.
+ * restores standard listing hooks, and binds Tab and Ctrl+L back to no-op handlers so the value
+ * prompt's bindings (filename completion fallback, @c clear_list_and_screen) cannot leak outside
+ * the settings editor.
  */
 struct CompletionGuard {
     ~CompletionGuard() {
@@ -555,6 +556,7 @@ struct CompletionGuard {
         rl_attempted_completion_function = nullptr;
         rl_completion_display_matches_hook = customListingsFunction;
         rl_bind_key('\t', noop_tab_handler);
+        rl_bind_key('\f', prevent_readline_keybindings);
     }
 };
 
