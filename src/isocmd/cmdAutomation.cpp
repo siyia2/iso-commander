@@ -216,161 +216,313 @@ struct ParsedArgs {
     int                      maxDepth   = -1;
 };
 
+
 /**
- * @brief Parse argv into a ParsedArgs structure.
+ * @brief Determines whether a string represents a supported action keyword.
  *
- * Grammar:
+ * @param action Argument to inspect.
+ * @return true if the argument is a recognized action keyword;
+ *         otherwise false.
+ */
+static bool isActionKeyword(const std::string& action) {
+    return action == "mount" || action == "umount" ||
+           action == "unmount" || action == "c2iso" ||
+           action == "w2usb";
+}
+
+/**
+ * @brief Determines whether an argument represents a supported option.
+ *
+ * Recognizes the "--silent" option and arguments beginning with "-d".
+ * Depth-option validation is performed separately.
+ *
+ * @param arg Argument to inspect.
+ * @return true if the argument is recognized as an option;
+ *         otherwise false.
+ */
+static bool isFlag(const std::string& arg) {
+    return arg == "--silent" || arg.rfind("-d", 0) == 0;
+}
+
+/**
+ * @brief Determines whether a path identifies a device under /dev.
+ *
+ * @param path Path to inspect.
+ * @return true if the path begins with "/dev/"; otherwise false.
+ */
+static bool isDevPath(std::string_view path) {
+    return path.rfind("/dev/", 0) == 0;
+}
+
+/**
+ * @brief Flushes any deferred warning formatting.
+ *
+ * Prints the terminal palette reset sequence followed by a newline
+ * when a warning has been captured, then clears the capture state.
+ *
+ * @param captureWarn Indicates whether deferred warning formatting
+ *                    needs to be flushed.
+ */
+static void flushDeferredWarn(bool& captureWarn) {
+    if (!captureWarn)
+        return;
+
+    std::cout << UI::Palette::Reset << "\n";
+    captureWarn = false;
+}
+
+/**
+ * @brief Applies an action keyword to the parsed arguments.
+ *
+ * Maps "c2iso" to the internal "convert" action and enables the
+ * conversion flag. Maps "w2usb" to the USB-writing action and enables
+ * its corresponding flag. Both "umount" and "unmount" map to "umount".
+ *
+ * @param action Recognized action keyword.
+ * @param out Parsed argument structure to update.
+ */
+static void applyAction(const std::string& action, ParsedArgs& out) {
+    if (action == "c2iso") {
+        out.convert = true;
+        out.action  = "convert";
+    } else if (action == "w2usb") {
+        out.writeUsb = true;
+        out.action   = "w2usb";
+    } else if (action == "mount") {
+        out.action = "mount";
+    } else {
+        out.action = "umount";
+    }
+}
+
+/**
+ * @brief Parses and applies a depth option.
+ *
+ * Depth options are ignored for w2usb and umount actions without
+ * parsing or validating their values. For other actions, the numeric
+ * suffix is parsed as an integer and assigned to @c maxDepth.
+ *
+ * Negative values produce a warning and select unlimited depth.
+ * Invalid or partially parsed values produce an error.
+ *
+ * @param arg Complete depth option, including its "-d" prefix.
+ * @param out Parsed argument structure to update.
+ * @param captureWarn Deferred warning-formatting state.
+ * @return true if the option is accepted or ignored; false if its
+ *         depth value is invalid.
+ */
+static bool parseDepthOption(
+    const std::string& arg,
+    ParsedArgs& out,
+    bool& captureWarn
+) {
+    if (out.writeUsb || out.action == "umount")
+        return true;
+
+    const std::string depthStr = arg.substr(2);
+
+    try {
+        size_t parsed = 0;
+        const int depth = std::stoi(depthStr, &parsed);
+
+        if (parsed != depthStr.size())
+            throw std::invalid_argument("invalid depth");
+
+        if (depth < 0) {
+            flushDeferredWarn(captureWarn);
+            warnMsg(out.silentMode,
+                    "Negative depth; using unlimited depth.", "");
+            out.maxDepth = -1;
+        } else {
+            out.maxDepth = depth;
+        }
+    } catch (const std::exception&) {
+        flushDeferredWarn(captureWarn);
+        errMsg("Invalid depth option: '" + arg + "'.");
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * @brief Processes a recognized command-line option.
+ *
+ * Enables silent mode for "--silent" or delegates depth-option
+ * processing to @ref parseDepthOption.
+ *
+ * @param arg Option to process.
+ * @param out Parsed argument structure to update.
+ * @param captureWarn Deferred warning-formatting state.
+ * @return true if the option was processed successfully; false if
+ *         depth-option validation failed.
+ */
+static bool handleFlag(
+    const std::string& arg,
+    ParsedArgs& out,
+    bool& captureWarn
+) {
+    if (arg == "--silent") {
+        out.silentMode = true;
+        return true;
+    }
+
+    return parseDepthOption(arg, out, captureWarn);
+}
+
+/**
+ * @brief Validates and appends a positional path argument.
+ *
+ * For w2usb operations, ISO paths must precede device paths.
+ * Once a device path has been encountered, subsequent non-device
+ * paths are rejected.
+ *
+ * @param arg Positional path argument.
+ * @param out Parsed argument structure to update.
+ * @param pathsStarted Indicates whether a positional argument has
+ *                     already been encountered.
+ * @param captureWarn Deferred warning-formatting state.
+ * @return true if the path was accepted; false if w2usb path ordering
+ *         was violated.
+ */
+static bool appendPath(
+    const std::string& arg,
+    ParsedArgs& out,
+    bool& pathsStarted,
+    bool& captureWarn
+) {
+    if (out.writeUsb && !out.paths.empty() &&
+        !isDevPath(arg) && isDevPath(out.paths.back())) {
+        flushDeferredWarn(captureWarn);
+        errMsg("w2usb: ISO paths must precede device paths.");
+        return false;
+    }
+
+    out.paths.push_back(arg);
+    pathsStarted = true;
+
+    return true;
+}
+
+/**
+ * @brief Validates and applies the initial command-line action.
+ *
+ * Ensures that the first argument is an action keyword rather than
+ * an option or an unknown value. Applies the recognized action and
+ * updates the action-seen state.
+ *
+ * @param arg First command-line argument to validate.
+ * @param out Parsed argument structure to update.
+ * @param actionSeen Indicates whether an action has been recognized.
+ * @param captureWarn Deferred warning-formatting state.
+ * @return true if the action was recognized; false otherwise.
+ */
+static bool parseInitialAction(
+    const std::string& arg,
+    ParsedArgs& out,
+    bool& actionSeen,
+    bool& captureWarn
+) {
+    if (isFlag(arg)) {
+        flushDeferredWarn(captureWarn);
+        errMsg("Option '" + arg +
+               "' must follow the action keyword.");
+        return false;
+    }
+
+    if (!isActionKeyword(arg)) {
+        flushDeferredWarn(captureWarn);
+        errMsg("Unknown action: '" + arg + "'.");
+        return false;
+    }
+
+    actionSeen = true;
+    applyAction(arg, out);
+
+    return true;
+}
+
+/**
+ * @brief Parses command-line arguments into a ParsedArgs structure.
+ *
+ * Expected grammar:
  *
  *     isocmd <action> [flags...] [paths...]
  *
- * The action keyword ("mount", "umount"/"unmount", "c2iso", "w2usb")
- * must be the first argument. Flags (--silent, -dN) may appear only
- * after the action keyword and before the first path. A flag before the
- * action, or a flag after any path, is an error.
+ * The action keyword must be the first argument. Recognized options
+ * may appear after the action but before the first positional path.
+ * Once positional arguments begin, subsequent options are rejected.
  *
- * "umount" and "unmount" both map to action "umount"; "c2iso" sets
- * @c convert and action "convert"; "w2usb" sets @c writeUsb and action
- * "w2usb". Every positional argument following the action keyword is
- * appended to @c paths.
+ * Supported actions:
+ * - @c mount
+ * - @c umount / @c unmount
+ * - @c c2iso
+ * - @c w2usb
  *
- * "--silent" sets @c silentMode. The "-dN" option sets @c maxDepth
- * for mount and c2iso. Negative depth values trigger
- * a warning and use unlimited depth; invalid depth values produce an
- * error. For w2usb and umount/unmount "-dN" options are ignored without parsing,
- * validation, or diagnostics.
+ * Supported options:
+ * - @c --silent enables silent mode.
+ * - @c -dN sets the maximum directory traversal depth for mount
+ *   and c2iso operations.
  *
- * For w2usb, ISO paths must precede device paths (/dev/...). Once a
- * device path is encountered, any subsequent non-device path is rejected
- * with a diagnostic.
+ * Negative depth values produce a warning and select unlimited depth.
+ * Invalid depth values produce an error. Depth options are ignored
+ * entirely for umount and w2usb operations.
  *
- * @return false on a missing or misplaced action keyword, an invalid
- *         depth value, a flag before the action, a flag after the first
- *         path, or (w2usb only) an ISO path after a device path.
- *         Returns true on success.
+ * For w2usb operations, ISO paths must precede device paths. Once a
+ * device path is encountered, subsequent non-device paths are rejected.
+ *
+ * @param argc Number of command-line arguments.
+ * @param argv Array of command-line argument strings.
+ * @param out Parsed argument structure to populate.
+ *
+ * @return true if parsing succeeds; false if the action is missing
+ *         or invalid, an option is misplaced, a depth value is invalid,
+ *         or w2usb path ordering is violated.
  */
 static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
     bool captureWarn  = false;
     bool actionSeen   = false;
     bool pathsStarted = false;
 
-    auto isActionKeyword = [](const std::string& a) {
-        return a == "mount" || a == "umount" || a == "unmount" ||
-               a == "c2iso" || a == "w2usb";
-    };
-
-    auto isFlag = [](const std::string& a) {
-        return a == "--silent" || a.rfind("-d", 0) == 0;
-    };
-
-    auto isDevPath = [](std::string_view p) {
-        return p.rfind("/dev/", 0) == 0;
-    };
-
-    auto applyAction = [&](const std::string& a) {
-        if (a == "c2iso") {
-            out.convert = true;
-            out.action  = "convert";
-        } else if (a == "w2usb") {
-            out.writeUsb = true;
-            out.action   = "w2usb";
-        } else if (a == "mount") {
-            out.action   = "mount";
-        } else { // umount / unmount
-            out.action   = "umount";
-        }
-    };
-
-    auto flushDeferredWarn = [&]() {
-        if (captureWarn) {
-            std::cout << UI::Palette::Reset << "\n";
-            captureWarn = false;
-        }
-    };
-
     for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
+        const std::string arg = argv[i];
 
         // 1. The action keyword must come first.
         if (!actionSeen) {
-            if (isFlag(arg)) {
-                flushDeferredWarn();
-                errMsg("Option '" + arg + "' must follow the action keyword.");
+            if (!parseInitialAction(
+                    arg, out, actionSeen, captureWarn))
                 return false;
-            }
 
-            if (!isActionKeyword(arg)) {
-                flushDeferredWarn();
-                errMsg("Unknown action: '" + arg + "'.");
-                return false;
-            }
-
-            actionSeen = true;
-            applyAction(arg);
             continue;
         }
 
         // 2. Flags must appear before the first path.
         if (isFlag(arg)) {
             if (pathsStarted) {
-                flushDeferredWarn();
-                errMsg("Option '" + arg + "' must precede all paths.");
+                flushDeferredWarn(captureWarn);
+                errMsg("Option '" + arg +
+                       "' must precede all paths.");
                 return false;
             }
 
-            if (arg == "--silent") {
-                out.silentMode = true;
-            } else if (arg.rfind("-d", 0) == 0) {
-                // w2usb and umount/unmount ignore -d options.
-                if (!out.writeUsb && out.action != "umount") {
-                    const std::string depthStr = arg.substr(2);
-
-                    try {
-                        size_t parsed = 0;
-                        const int depth = std::stoi(depthStr, &parsed);
-
-                        if (parsed != depthStr.size()) {
-                            throw std::invalid_argument("invalid depth");
-                        }
-
-                        if (depth < 0) {
-                            flushDeferredWarn();
-                            warnMsg(out.silentMode,
-                                    "Negative depth; using unlimited depth.", "");
-                            out.maxDepth = -1;
-                        } else {
-                            out.maxDepth = depth;
-                        }
-                    } catch (const std::exception&) {
-                        flushDeferredWarn();
-                        errMsg("Invalid depth option: '" + arg + "'.");
-                        return false;
-                    }
-                }
-            }
+            if (!handleFlag(arg, out, captureWarn))
+                return false;
 
             continue;
         }
 
         // 3. Everything else is a path.
-        //
-        // For w2usb, ISO paths must precede device paths.
-        if (out.writeUsb && pathsStarted &&
-            !isDevPath(arg) && isDevPath(out.paths.back())) {
-            flushDeferredWarn();
-            errMsg("w2usb: ISO paths must precede device paths.");
+        if (!appendPath(arg, out, pathsStarted, captureWarn))
             return false;
-        }
-
-        pathsStarted = true;
-        out.paths.push_back(arg);
     }
 
-    flushDeferredWarn();
+    flushDeferredWarn(captureWarn);
 
     if (!actionSeen) {
         errMsg("No action provided.");
         return false;
     }
+
     return true;
 }
 
@@ -1125,40 +1277,302 @@ static void runConvertWorkers(const std::vector<ConversionTask>& tasks,
         future.wait();
 }
 
+// ------------------------------------------------------------------------- //
+// Conversion helpers                                                        //
+// ------------------------------------------------------------------------- //
+
 /**
- * @brief Converts supported disk images to ISO files.
+ * @brief Groups supported disk images by conversion backend.
  *
- * Validates the supplied file and directory paths, recursively scans
- * directories according to the configured maximum depth, and collects
- * unique supported images (BIN, IMG, CCD, MDF, NRG, CHD, DAA, and GBI).
- * Files are grouped by conversion backend and sorted for deterministic
- * task ordering.
+ * Classifies each image according to its format, appends it to the
+ * corresponding backend collection, and sorts every collection
+ * alphabetically to ensure deterministic processing order.
  *
- * Calculates the estimated total output size and tracks byte-level
- * and task-level progress. Conversions are executed concurrently using
- * the static thread pool, respecting GlobalConcurrency::CONV_THREAD_CAP
- * and the pool size. Workers dynamically claim tasks from a shared
- * atomic index and dispatch each file to its appropriate backend.
+ * Images that do not match a supported conversion backend are ignored.
  *
- * Tracks successful output paths and displays detailed operation
- * results when requested through the progress interface.
+ * @param images Set of validated image paths to classify.
+ * @param binImg Receives BIN/IMG image paths.
+ * @param mdf    Receives MDF image paths.
+ * @param nrg    Receives NRG image paths.
+ * @param chd    Receives CHD image paths.
+ * @param daa    Receives DAA image paths.
+ */
+static void groupConversionImages(
+    const std::unordered_set<std::string>& images,
+    std::vector<std::string>& binImg,
+    std::vector<std::string>& mdf,
+    std::vector<std::string>& nrg,
+    std::vector<std::string>& chd,
+    std::vector<std::string>& daa) {
+
+    for (const auto& file : images) {
+        switch (classifyImage(file)) {
+            case ImgKind::BinImg: binImg.push_back(file); break;
+            case ImgKind::Mdf:    mdf.push_back(file); break;
+            case ImgKind::Nrg:    nrg.push_back(file); break;
+            case ImgKind::Chd:    chd.push_back(file); break;
+            case ImgKind::Daa:    daa.push_back(file); break;
+            default: break;
+        }
+    }
+
+    for (auto* files : {&binImg, &mdf, &nrg, &chd, &daa})
+        std::sort(files->begin(), files->end());
+}
+
+/**
+ * @brief Calculates the estimated total output size of conversion tasks.
  *
- * @param args Parsed command-line arguments, including input paths,
- *             maximum scan depth, and silent-mode settings.
+ * Uses the format-specific size estimation logic for each backend and
+ * accumulates the results to determine the total byte count required
+ * by the conversion progress display.
  *
- * @return 0 if all conversions completed without errors (including when
- *         no paths were given or no convertible images were found and no
- *         path errors occurred);
- *         1 if any conversion failed, path validation failed, or the
- *         operation was cancelled.
+ * Returns a minimum value of one byte when the estimated total is zero
+ * to prevent division-by-zero conditions in progress calculations.
+ *
+ * @param binImg BIN/IMG image paths.
+ * @param mdf    MDF image paths.
+ * @param nrg    NRG image paths.
+ * @param chd    CHD image paths.
+ * @param daa    DAA image paths.
+ *
+ * @return Estimated total output size in bytes, or 1 if the estimate
+ *         is zero.
+ */
+static size_t calculateConversionTotalBytes(
+    const std::vector<std::string>& binImg,
+    const std::vector<std::string>& mdf,
+    const std::vector<std::string>& nrg,
+    const std::vector<std::string>& chd,
+    const std::vector<std::string>& daa) {
+
+    size_t totalBytes = 0;
+
+    totalBytes += calculateTotalBytesForConversions(
+        binImg, false, false, false, false);
+    totalBytes += calculateTotalBytesForConversions(
+        mdf, true, false, false, false);
+    totalBytes += calculateTotalBytesForConversions(
+        nrg, false, true, false, false);
+    totalBytes += calculateTotalBytesForConversions(
+        chd, false, false, true, false);
+    totalBytes += calculateTotalBytesForConversions(
+        daa, false, false, false, true);
+
+    return totalBytes == 0 ? 1 : totalBytes;
+}
+
+/**
+ * @brief Initializes and starts the conversion progress display.
+ *
+ * Constructs the operation header, clears the terminal scroll buffer,
+ * and launches the progress-monitoring thread when silent mode is
+ * disabled.
+ *
+ * The progress thread monitors the supplied atomic counters and
+ * completion flag while updating the conversion progress display.
+ * The verbose-output flag is shared with the caller so that the
+ * progress interface can communicate whether detailed results
+ * should be displayed after conversion.
+ *
+ * In silent mode, no terminal output or background thread is created.
+ *
+ * @param args          Parsed command-line arguments controlling output.
+ * @param completedBytes Atomic counter tracking completed output bytes.
+ * @param totalBytes     Estimated total output size in bytes.
+ * @param completedTasks Atomic counter tracking successful conversions.
+ * @param failedTasks    Atomic counter tracking failed conversions.
+ * @param totalTasks     Total number of conversion tasks.
+ * @param isComplete     Atomic flag indicating completion of all workers.
+ * @param showVerbose    Shared flag indicating whether detailed results
+ *                       should be displayed.
+ *
+ * @return A joinable progress-monitoring thread when output is enabled,
+ *         or a non-joinable thread in silent mode.
+ */
+static std::thread startConversionProgress(
+    const ParsedArgs& args,
+    std::atomic<size_t>& completedBytes,
+    size_t totalBytes,
+    std::atomic<size_t>& completedTasks,
+    std::atomic<size_t>& failedTasks,
+    size_t totalTasks,
+    std::atomic<bool>& isComplete,
+    bool& showVerbose) {
+
+    if (args.silentMode)
+        return {};
+
+    const std::string coloredProcess =
+        std::string(UI::Palette::Orange) + "c2iso" +
+        std::string(UI::Palette::BoldReset);
+
+    std::ostringstream hdr;
+    hdr << "\n" << color << " Processing "
+        << (totalTasks == 1 ? "task for " : "tasks for ")
+        << UI::Palette::Orange << "c2iso" << color << "... ("
+        << UI::Palette::Red << "Ctrl+c"
+        << color << ":cancel)\n";
+
+    const std::string header = hdr.str();
+
+    clearScrollBuffer();
+    std::cout << header;
+
+    return std::thread(
+        displayProgressBarWithSize,
+        &completedBytes, totalBytes,
+        &completedTasks, &failedTasks, totalTasks,
+        &isComplete, &showVerbose,
+        coloredProcess, header);
+}
+
+/**
+ * @brief Constructs conversion tasks in deterministic processing order.
+ *
+ * Converts the format-specific image collections into a unified task
+ * list, preserving the established backend ordering and the alphabetical
+ * ordering of files within each backend.
+ *
+ * Reserves sufficient capacity before appending tasks to avoid
+ * unnecessary vector reallocations.
+ *
+ * @param binImg BIN/IMG image paths.
+ * @param mdf    MDF image paths.
+ * @param nrg    NRG image paths.
+ * @param chd    CHD image paths.
+ * @param daa    DAA image paths.
+ *
+ * @return A vector containing all conversion tasks in processing order.
+ */
+static std::vector<ConversionTask> buildConversionTasks(
+    const std::vector<std::string>& binImg,
+    const std::vector<std::string>& mdf,
+    const std::vector<std::string>& nrg,
+    const std::vector<std::string>& chd,
+    const std::vector<std::string>& daa) {
+
+    std::vector<ConversionTask> tasks;
+
+    const size_t totalTasks =
+        binImg.size() + mdf.size() + nrg.size() +
+        chd.size() + daa.size();
+
+    tasks.reserve(totalTasks);
+
+    auto appendTasks = [&](const std::vector<std::string>& files,
+                           ImgKind kind) {
+        for (const auto& file : files)
+            tasks.push_back({file, kind});
+    };
+
+    appendTasks(binImg, ImgKind::BinImg);
+    appendTasks(mdf,    ImgKind::Mdf);
+    appendTasks(nrg,    ImgKind::Nrg);
+    appendTasks(chd,    ImgKind::Chd);
+    appendTasks(daa,    ImgKind::Daa);
+
+    return tasks;
+}
+
+/**
+ * @brief Displays detailed results of the conversion operation.
+ *
+ * Outputs completed, skipped, and failed operation messages, followed
+ * by a summary of successful and failed conversions.
+ *
+ * Detailed output is displayed only when silent mode is disabled and
+ * the progress interface has explicitly requested verbose results.
+ *
+ * Synchronizes terminal output through SyncOutput to prevent
+ * interference with other terminal-writing components.
+ *
+ * @param silentMode     Whether terminal output is suppressed.
+ * @param showVerbose    Whether detailed operation results were requested.
+ * @param completedTasks Atomic counter containing successful conversions.
+ * @param failedTasks    Atomic counter containing failed conversions.
+ */
+static void displayConversionResults(
+    bool silentMode,
+    bool showVerbose,
+    const std::atomic<size_t>& completedTasks,
+    const std::atomic<size_t>& failedTasks) {
+
+    if (silentMode || !showVerbose)
+        return;
+
+    SyncOutput sync;
+    clearScrollBuffer();
+    std::cout << "\n";
+
+    for (const auto& msg : verboseSets.operationCompleted)
+        std::cout << msg << UI::Palette::BoldReset << "\n";
+
+    for (const auto& msg : verboseSets.operationSkipped)
+        std::cout << msg << UI::Palette::BoldReset << "\n";
+
+    for (const auto& msg : verboseSets.operationFailed)
+        std::cout << msg << UI::Palette::BoldReset << "\n";
+
+    std::cout << "\nConversion summary:\n"
+              << " Successful: " << completedTasks.load() << "\n"
+              << " Failed:     " << failedTasks.load()
+              << UI::Palette::Reset << "\n\n";
+}
+
+/**
+ * @brief Determines the final exit status of the conversion operation.
+ *
+ * Treats the operation as unsuccessful if any conversion failed,
+ * input-path validation reported errors, or cancellation was requested.
+ *
+ * @param failedTasks Number of failed conversion tasks.
+ * @param hasErrors   Whether input-path validation encountered errors.
+ * @param cancelled   Whether the operation was cancelled.
+ *
+ * @return 0 if the operation completed successfully; otherwise 1.
+ */
+static int getConversionExitStatus(
+    size_t failedTasks,
+    bool hasErrors,
+    bool cancelled) {
+
+    return (failedTasks == 0 && !hasErrors && !cancelled) ? 0 : 1;
+}
+
+// ------------------------------------------------------------------------- //
+// handleConvert                                                              //
+// ------------------------------------------------------------------------- //
+
+/**
+ * @brief Converts supported disk images into ISO files.
+ *
+ * Validates the supplied input paths, recursively discovers supported
+ * disk images according to the configured scan depth, and prepares
+ * conversion tasks grouped by their respective backends.
+ *
+ * Calculates the estimated total output size and initializes the
+ * progress display when silent mode is disabled. Conversion tasks
+ * are executed concurrently through the shared worker infrastructure,
+ * which manages task distribution, conversion progress, and failures.
+ *
+ * Waits for all conversion workers and the progress-monitoring thread
+ * to finish before optionally displaying detailed operation results.
+ *
+ * @param args Parsed command-line arguments containing input paths,
+ *             maximum scan depth, and output-mode settings.
+ *
+ * @return 0 if all conversions completed successfully, including when
+ *         no convertible images were found and no path errors occurred.
+ *         Returns 1 if input validation failed, any conversion failed,
+ *         or the operation was cancelled.
  */
 static int handleConvert(const ParsedArgs& args) {
     std::unordered_set<std::string> images;
     bool hasErrors = false;
 
-    if (collectAndValidateImages(args, images, hasErrors)) {
+    if (collectAndValidateImages(args, images, hasErrors))
         return 1;
-    }
 
     if (GlobalState::g_operationCancelled.load())
         verboseWarn(args.silentMode, "Operation cancelled by user.");
@@ -1166,27 +1580,18 @@ static int handleConvert(const ParsedArgs& args) {
     if (images.empty()) {
         if (GlobalState::g_operationCancelled.load())
             return 1;
+
         verboseWarn(args.silentMode,
                     "No convertible image files found.");
+
         return hasErrors ? 1 : 0;
     }
 
-    // Bucket by backend and sort for deterministic processing order.
+    // Group and sort images by conversion backend.
     std::vector<std::string> binImg, mdf, nrg, chd, daa;
 
-    for (const auto& f : images) {
-        switch (classifyImage(f)) {
-            case ImgKind::BinImg: binImg.push_back(f); break;
-            case ImgKind::Mdf:    mdf.push_back(f);    break;
-            case ImgKind::Nrg:    nrg.push_back(f);    break;
-            case ImgKind::Chd:    chd.push_back(f);    break;
-            case ImgKind::Daa:    daa.push_back(f);    break;
-            default: break;
-        }
-    }
-
-    for (auto* v : {&binImg, &mdf, &nrg, &chd, &daa})
-        std::sort(v->begin(), v->end());
+    groupConversionImages(
+        images, binImg, mdf, nrg, chd, daa);
 
     verboseInfo(args.silentMode,
                 std::string("Located ")
@@ -1202,95 +1607,49 @@ static int handleConvert(const ParsedArgs& args) {
     std::mutex outMutex;
     bool showVerbose = false;
 
-    // Calculate the total estimated output bytes for the progress bar.
-    size_t totalBytes = 0;
+    // Calculate estimated output size.
+    const size_t totalBytes = calculateConversionTotalBytes(
+        binImg, mdf, nrg, chd, daa);
 
-    totalBytes += calculateTotalBytesForConversions(
-        binImg, false, false, false, false);
-    totalBytes += calculateTotalBytesForConversions(
-        mdf, true, false, false, false);
-    totalBytes += calculateTotalBytesForConversions(
-        nrg, false, true, false, false);
-    totalBytes += calculateTotalBytesForConversions(
-        chd, false, false, true, false);
-    totalBytes += calculateTotalBytesForConversions(
-        daa, false, false, false, true);
+    // Start progress display.
+    std::thread barThread = startConversionProgress(
+        args,
+        completedBytes,
+        totalBytes,
+        completedTasks,
+        failedTasks,
+        images.size(),
+        isComplete,
+        showVerbose);
 
-    if (totalBytes == 0)
-        totalBytes = 1;
+    // Build and execute conversion tasks.
+    const auto tasks = buildConversionTasks(
+        binImg, mdf, nrg, chd, daa);
 
-    // Start the progress bar unless output is silent.
-    std::thread barThread;
-    const std::string coloredProcess =
-            std::string(UI::Palette::Orange) + "c2iso" + std::string(UI::Palette::BoldReset);
-
-    if (!args.silentMode) {
-        std::ostringstream hdr;
-        hdr << "\n" << color << " Processing "
-            << (images.size() == 1 ? "task for " : "tasks for ")
-            << UI::Palette::Orange << "c2iso" << color << "... ("
-            << UI::Palette::Red << "Ctrl+c"
-            << color << ":cancel)\n";
-        const std::string header = hdr.str();
-
-        clearScrollBuffer();
-        std::cout << header;
-
-        barThread = std::thread(
-            displayProgressBarWithSize,
-            &completedBytes, totalBytes,
-            &completedTasks, &failedTasks, images.size(),
-            &isComplete, &showVerbose,
-            coloredProcess, header);
-    }
-
-    std::vector<ConversionTask> tasks;
-    tasks.reserve(images.size());
-
-    auto appendTasks = [&](const std::vector<std::string>& files,
-                            ImgKind kind) {
-        for (const auto& file : files)
-            tasks.push_back({file, kind});
-    };
-
-    appendTasks(binImg, ImgKind::BinImg);
-    appendTasks(mdf,    ImgKind::Mdf);
-    appendTasks(nrg,    ImgKind::Nrg);
-    appendTasks(chd,    ImgKind::Chd);
-    appendTasks(daa,    ImgKind::Daa);
-
-    runConvertWorkers(tasks, completedBytes, completedTasks, failedTasks, successfulOutputs, outMutex);
+    runConvertWorkers(
+        tasks,
+        completedBytes,
+        completedTasks,
+        failedTasks,
+        successfulOutputs,
+        outMutex);
 
     isComplete.store(true, std::memory_order_release);
 
     if (barThread.joinable())
         barThread.join();
 
-    // Show detailed output only if requested through the progress prompt.
-    if (!args.silentMode && showVerbose) {
-        SyncOutput sync;
-        clearScrollBuffer();
-        std::cout << "\n";
+    // Display detailed results if requested.
+    displayConversionResults(
+        args.silentMode,
+        showVerbose,
+        completedTasks,
+        failedTasks);
 
-        for (const auto& msg : verboseSets.operationCompleted)
-            std::cout << msg << UI::Palette::BoldReset << "\n";
-
-        for (const auto& msg : verboseSets.operationSkipped)
-            std::cout << msg << UI::Palette::BoldReset << "\n";
-
-        for (const auto& msg : verboseSets.operationFailed)
-            std::cout << msg << UI::Palette::BoldReset << "\n";
-
-        std::cout << "\nConversion summary:\n"
-                  << " Successful: " << completedTasks.load() << "\n"
-                  << " Failed:     " << failedTasks.load()
-                  << UI::Palette::Reset << "\n\n";
-    }
-
-    // Non-zero on any failure so scripts can detect unsuccessful operations.
-    return (failedTasks.load() == 0 &&
-            !hasErrors &&
-            !GlobalState::g_operationCancelled.load()) ? 0 : 1;
+    return getConversionExitStatus(
+        failedTasks.load(),
+        hasErrors,
+        GlobalState::g_operationCancelled.load());
 }
 
 // ─── Write-to-USB branch (w2usb) ────────────────────────────────────────────
