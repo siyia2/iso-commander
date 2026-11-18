@@ -31,9 +31,10 @@ struct ConversionBatchData {
 /**
  * @brief Selects which disk-image conversion backend a job should use.
  *
- * Exactly one flag is expected to be set per conversion. When all flags are
- * @c false, the CCD backend is selected (mirroring the historical fallthrough
- * behavior of the internal `runConversion` dispatcher).
+ * Exactly one flag is expected to be set per conversion. If several are set,
+ * the dispatcher picks the first in the order MDF, NRG, CHD, DAA. When all
+ * flags are @c false, the CCD backend is selected (mirroring the historical
+ * fallthrough behavior of the internal `runConversion` dispatcher).
  *
  * @note This struct is intentionally dependency-free so it can be included
  *       from any translation unit without pulling in project globals.
@@ -46,23 +47,17 @@ struct ConversionMode {
 };
 
 /**
- * @brief A single source-to-destination conversion request.
- *
- * Holds the input image path and the target ISO path. Callers may leave
- * @ref outputPath empty and let the batch driver derive it (see
- * `deriveOutputPath`); if a non-empty value is supplied it is used verbatim.
- */
-struct ConversionJob {
-    std::string inputPath;  ///< Absolute or relative path to the source disk image.
-    std::string outputPath; ///< Target ISO path; empty means "derive from @ref inputPath".
-};
-
-/**
  * @brief Batch-converts disk images into ISO format.
+ *
+ * For each source path the ISO is written next to the source with the
+ * extension replaced by `.iso`. Missing or unreadable sources are recorded as
+ * failures, and jobs whose destination ISO already exists are skipped (counted
+ * as completed). Iteration stops early when the global cancellation flag is set.
  *
  * @param imageFiles Source image paths to convert.
  * @param mode       Selects the conversion backend.
  * @param batchData  Caller-owned counters and optional output collection.
+ *                   @c completedTasks and @c failedTasks must be non-null.
  */
 void convertToISO(
     const std::vector<std::string>& imageFiles,
@@ -73,7 +68,8 @@ void convertToISO(
  * @brief Converts a CCD/CUE-based image set into a plain ISO.
  *
  * @param ccdPath         Path to the source CCD (or associated cue/bin) descriptor.
- * @param isoPath         Destination ISO path. Any existing file is overwritten.
+ * @param isoPath         Destination ISO path. The backend itself overwrites an
+ *                        existing file; @ref convertToISO skips such jobs beforehand.
  * @param completedBytes  Optional atomic counter incremented by the number of
  *                        bytes processed; may be @c nullptr when progress
  *                        reporting is not required.
@@ -90,7 +86,8 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
  * @brief Converts a CHD (MAME Compressed Hunks of Data) image into a plain ISO.
  *
  * @param chdPath         Path to the source @c .chd file.
- * @param isoPath         Destination ISO path. Any existing file is overwritten.
+ * @param isoPath         Destination ISO path. The backend overwrites an existing file;
+ *                        @ref convertToISO skips such jobs beforehand.
  * @param completedBytes  Optional atomic counter incremented by the number of
  *                        bytes processed; may be @c nullptr.
  *
@@ -103,7 +100,8 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath, std
  * @brief Converts a DAA/GBI image into a plain ISO.
  *
  * @param inputFile       Path to the source @c .daa or @c .gbi file.
- * @param outputFile      Destination ISO path. Any existing file is overwritten.
+ * @param outputFile      Destination ISO path. The backend overwrites an existing file;
+ *                        @ref convertToISO skips such jobs beforehand.
  * @param completedBytes  Optional atomic counter incremented by the number of
  *                        bytes processed; may be @c nullptr.
  *
@@ -117,7 +115,8 @@ bool convertDaaToIso(const std::string &inputFile, const std::string &outputFile
  *
  * @param mdfPath         Path to the source @c .mdf media file; the sibling
  *                        @c .mds descriptor is located automatically.
- * @param isoPath         Destination ISO path. Any existing file is overwritten.
+ * @param isoPath         Destination ISO path. The backend overwrites an existing file;
+ *                        @ref convertToISO skips such jobs beforehand.
  * @param completedBytes  Optional atomic counter incremented by the number of
  *                        bytes processed; may be @c nullptr.
  *
@@ -130,7 +129,8 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
  * @brief Converts an NRG (Nero) image into a plain ISO.
  *
  * @param inputFile       Path to the source @c .nrg file.
- * @param outputFile      Destination ISO path. Any existing file is overwritten.
+ * @param outputFile      Destination ISO path. The backend overwrites an existing file;
+ *                        @ref convertToISO skips such jobs beforehand.
  * @param completedBytes  Optional atomic counter incremented by the number of
  *                        bytes processed; may be @c nullptr.
  *
