@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <format>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -764,16 +765,15 @@ private:
         *verbose_ = true;
     }
 
-    std::string makePrompt(const std::string& text) const {
-        return "\001" + std::string(color) + "\002" +
-               text +
-               "\001" + std::string(pc_.reset) + "\002";
+    std::string makePrompt(std::string_view text) const {
+        return std::format("\001{}\002{}\001{}\002", color, text, pc_.reset);
     }
 
     std::string promptFor(int cols) const {
-        static const std::string fullText  = "Display verbose output? (y/n): ";
-        static const std::string shortText = "Verbose? (y/n): ";
-        static const std::string tinyText  = "y/n: ";
+        using namespace std::string_view_literals;
+        static constexpr auto fullText  = "Display verbose output? (y/n): "sv;
+        static constexpr auto shortText = "Verbose? (y/n): "sv;
+        static constexpr auto tinyText  = "y/n: "sv;
 
         if (cols >= static_cast<int>(fullText.size())  + 2) return makePrompt(fullText);
         if (cols >= static_cast<int>(shortText.size()) + 2) return makePrompt(shortText);
