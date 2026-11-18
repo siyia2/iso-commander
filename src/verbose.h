@@ -66,56 +66,63 @@ void displayErrors();
 // --- Search & Discovery ---
 
 /**
- * Logs directory-specific errors found during a scan.
+ * @brief Inputs to a completed image-file search.
+ *
+ * Groups the values describing *what was searched* and *what was found*.
+ * `verboseImageSearchResults` reads these and (via `verboseFind`) clears
+ * the two error/path sets on completion, so the struct is passed by
+ * non-const reference.
+ *
+ * @warning The two `std::unordered_set` members are cleared by
+ *          `verboseImageSearchResults`. Treat the struct as
+ *          "consumed" after the call.
  */
-void verboseFind(
-    std::unordered_set<std::string>& invalidDirectoryPaths,
-    const std::vector<std::string>& directoryPaths,
-    std::unordered_set<std::string>& processedErrorsFind
-);
+struct ImageSearchRequest {
+    std::string fileExtension;                                    ///< Target format label (e.g. ".bin/.img").
+    std::unordered_set<std::string>& fileNames;                   ///< Files discovered this run.
+    std::unordered_set<std::string>& invalidDirectoryPaths;       ///< Invalid paths; cleared by the call.
+    std::unordered_set<std::string>& processedErrorsFind;         ///< Deduplicated traversal errors; cleared by the call.
+    const std::vector<std::string>& directoryPaths;               ///< Base directories traversed.
+    const std::vector<std::string>& files;                        ///< Current working cache.
+    bool newFilesFound;                                           ///< Whether the scan produced new files.
+    bool list;                                                    ///< Suppresses the "no new files" / "cache empty" branches.
+    int currentCacheOld;                                          ///< Cache count before this search.
+    const std::atomic<size_t>& totalFiles;                        ///< Aggregate regular-file count from findFiles().
+    std::chrono::high_resolution_clock::time_point start_time;    ///< Search start; used for elapsed time.
+};
 
 /**
  * Summarizes the results of an image file search operation.
  *
- * Prints the total number of files processed (@p totalFiles), the captured
- * verboseFind() output (invalid paths, traversal errors, interruption
- * message), the found/cached summary and the elapsed time.
+ * Prints the total number of files processed, the captured `verboseFind()`
+ * output (invalid paths, traversal errors, interruption message), the
+ * found/cached summary, and the elapsed time.
  *
- * The whole block is produced by an internal render lambda that clears the
- * screen and prints it. pressEnterToContinueWithRepaint() invokes the
- * lambda once at entry and again after clearing the screen on every
+ * The whole block is produced by an internal render lambda that clears
+ * the screen and prints it. `pressEnterToContinueWithRepaint()` invokes
+ * the lambda once at entry and again after clearing the screen on every
  * SIGWINCH, so a resize during the wait redraws the block from a known
- * top instead of leaving a stale frame. No ListResizeWatcher is
- * installed; the prompt owns resize handling.
+ * top. No `ListResizeWatcher` is installed; the prompt owns resize handling.
  *
- * If @p repaintCallerHeader is non-empty, the render lambda calls it
- * before printing the block. Use it to reprint the caller's prompt line
- * (the question the user just answered) so it survives a resize.
+ * If `repaintCallerHeader` is non-empty, the render lambda calls it before
+ * printing the block. Use it to reprint the caller's prompt line so it
+ * survives a resize.
  *
- * verboseFind() mutates its set arguments (clears them), so it runs once,
- * before the wait, with its std::cout/std::cerr writes redirected into an
- * ostringstream; the captured text is replayed by the render lambda.
+ * `verboseFind()` mutates its set arguments (clears them), so it runs once,
+ * before the wait, with its `std::cout`/`std::cerr` writes redirected into
+ * an `ostringstream`; the captured text is replayed by the render lambda.
  *
- * @param totalFiles           Aggregate count of regular files processed
- *                             by the scan, as filled in by findFiles().
- * @param repaintCallerHeader  Optional callback that reprints the caller's
- *                             screen header (e.g. the FolderPaths prompt
- *                             line) on a resize during the wait. When
- *                             empty, the block starts from a cleared
- *                             screen with no caller context.
+ * @param req                 Search inputs and in/out sets (see struct docs).
+ * @param repaintCallerHeader Optional callback that reprints the caller's
+ *                            screen header on a resize during the wait.
+ *                            When empty, the block starts from a cleared
+ *                            screen with no caller context.
+ *
+ * @warning `req.invalidDirectoryPaths` and `req.processedErrorsFind` are
+ *          cleared unconditionally before this function returns.
  */
 void verboseImageSearchResults(
-    const std::string& fileExtension,
-    std::unordered_set<std::string>& fileNames,
-    std::unordered_set<std::string>& invalidDirectoryPaths,
-    bool newFilesFound,
-    bool list,
-    int currentCacheOld,
-    const std::vector<std::string>& files,
-    const std::chrono::high_resolution_clock::time_point& start_time,
-    std::unordered_set<std::string>& processedErrorsFind,
-    const std::vector<std::string>& directoryPaths,
-    const std::atomic<size_t>& totalFiles,
+    ImageSearchRequest& req,
     const std::function<void()>& repaintCallerHeader = {}
 );
 
@@ -123,62 +130,51 @@ void verboseImageSearchResults(
 // --- Database ---
 
 /**
+ * @brief Inputs to a completed ISO database refresh.
+ *
+ * Bundles the scan outputs that `saveAndReportResultsForDatabase` needs to
+ * persist, reconcile, and report. `newISOFound` is passed by pointer to
+ * `saveToDatabase()` and may be mutated.
+ */
+struct DatabaseRefreshResult {
+    std::vector<std::string>& allIsoFiles;                     ///< Discovered ISO paths to be saved.
+    std::vector<std::string>& validPaths;                      ///< Base directories successfully traversed.
+    std::unordered_set<std::string>& invalidPaths;             ///< Directories skipped due to permissions or existence errors.
+    std::unordered_set<std::string>& uniqueErrorMessages;      ///< Deduplicated system-level I/O errors.
+    std::atomic<size_t>& totalFiles;                           ///< Atomic count of files scanned.
+    bool& newISOFound;                                         ///< On entry, whether the scan produced delta changes; may be mutated by the save step.
+    std::chrono::high_resolution_clock::time_point start_time; ///< Refresh origin timestamp; used for elapsed time.
+};
+
+/**
  * Finalizes an ISO database refresh: reports results and syncs global state.
  *
- * Last stage of the database update pipeline. Reconciles globalIsoFileList
- * with disk if @p newISOFound was set by the caller, persists the new list
- * via saveToDatabase(), computes the delta count, and prints a color-coded
- * outcome from one of five branches: Cancelled; save failed with files and
- * delta; no valid paths; files present but no delta (save not attempted or
- * failed); no ISOs found; or successful import with the delta count.
+ * Last stage of the database update pipeline. Reconciles
+ * `GlobalState::globalIsoFileList` with disk if `result.newISOFound` was
+ * set by the caller, persists the new list via `saveToDatabase()`, computes
+ * the delta count, and prints a color-coded outcome from one of five
+ * branches: Cancelled; save failed with files and delta; no valid paths;
+ * files present but no delta; no ISOs found; or successful import with the
+ * delta count.
  *
- * All one-shot side effects (loadFromDatabase, saveToDatabase, elapsed
+ * All one-shot side effects (`loadFromDatabase`, `saveToDatabase`, elapsed
  * time, delta count) run before the wait. Only the on-screen block is
  * produced by an internal render lambda, which clears the screen first and
- * then prints everything (including the "Total files processed" line the
- * live progress counter would otherwise leave behind). The caller must
- * therefore NOT print any part of the block itself — the lambda is the
- * sole producer of the screen. pressEnterToContinueWithRepaint() invokes
- * the lambda once at entry and again after clearing the screen on every
- * SIGWINCH, so a resize during the wait redraws the block from a known
- * top. No ListResizeWatcher is installed; the prompt owns resize handling.
+ * then prints everything. The caller must therefore NOT print any part of
+ * the block itself — the lambda is the sole producer of the screen.
  *
- * If @p repaintCallerHeader is non-empty, the render lambda calls it
- * before printing the block. Use it to reprint the caller's prompt line
- * (the question the user just answered) so it survives a resize. Both the
- * early-save path (all paths invalid) and the post-scan path in
- * refreshForDatabase() pass a callback.
+ * If `repaintCallerHeader` is non-empty, the render lambda calls it before
+ * printing the block. Both the early-save path (all paths invalid) and the
+ * post-scan path in `refreshForDatabase()` pass a callback.
  *
- * @param allIsoFiles          Discovered ISO paths to be saved.
- * @param totalFiles           Atomic count of files scanned; reprinted
- *                             after the screen clear, and gates the
- *                             zero-case line.
- * @param validPaths           Base directories successfully traversed;
- *                             empty triggers the "Lack of valid paths"
- *                             branch.
- * @param invalidPaths         Directories skipped due to permissions or
- *                             existence errors.
- * @param uniqueErrorMessages  Deduplicated system-level I/O errors.
- * @param newISOFound          On entry, whether the scan produced delta
- *                             changes (gates the loadFromDatabase call).
- *                             Passed by pointer to saveToDatabase, which
- *                             may modify it.
- * @param start_time           Timestamp of the refresh origin, used to
- *                             compute elapsed time.
- * @param repaintCallerHeader  Optional callback that reprints the caller's
- *                             screen header (e.g. the FolderPaths prompt
- *                             line) on a resize during the wait. When
- *                             empty, the block starts from a cleared
- *                             screen with no caller context.
+ * @param result              Refresh inputs and scan outputs (see struct docs).
+ * @param repaintCallerHeader Optional callback that reprints the caller's
+ *                            screen header on a resize during the wait.
+ *                            When empty, the block starts from a cleared
+ *                            screen with no caller context.
  */
 void saveAndReportResultsForDatabase(
-    std::vector<std::string>& allIsoFiles,
-    std::atomic<size_t>& totalFiles,
-    std::vector<std::string>& validPaths,
-    std::unordered_set<std::string>& invalidPaths,
-    std::unordered_set<std::string>& uniqueErrorMessages,
-    bool& newISOFound,
-    const std::chrono::high_resolution_clock::time_point& start_time,
+    DatabaseRefreshResult& result,
     const std::function<void()>& repaintCallerHeader = {}
 );
 
