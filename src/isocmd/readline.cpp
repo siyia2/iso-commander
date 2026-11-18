@@ -154,24 +154,20 @@ struct ColumnLayout {
 
 struct CompletionSnapshot {
     std::vector<std::string> matches;
-    std::string line_buffer;
 
     CompletionKind kind = CompletionKind::File;
 
     int num_matches = 0;
     int displayed_page = 0;
     int base_len = 0;
-    int line_point = 0;
 
     bool valid = false;
 
     void clear() {
         matches.clear();
-        line_buffer.clear();
         num_matches = 0;
         displayed_page = 0;
         base_len = 0;
-        line_point = 0;
         valid = false;
     }
 
@@ -188,9 +184,6 @@ struct CompletionSnapshot {
 
         for (int i = 0; i <= count; ++i)
             matches.emplace_back(source[i] ? source[i] : "");
-
-        line_buffer = rl_line_buffer ? rl_line_buffer : "";
-        line_point = rl_point;
 
         kind = completion_kind;
         num_matches = count;
@@ -480,25 +473,17 @@ void renderCompletionListing(
  * Uses an owned snapshot of the last displayed completion matches.
  * Does not advance pagination or modify the current pagination state.
  *
- * The listing is only repainted while the input line and cursor position
- * still match the state at which the completion list was displayed.
+ * The snapshot remains valid independently of subsequent input-buffer
+ * modifications or cursor movement. It is invalidated by a new completion
+ * attempt, an explicit screen clear, or a prompt-state reset.
  *
  * @note The listing saves/restores an absolute cursor position
- *       (ESC[s / ESC[u), so callers must invoke this with the cursor on the
+ *       (ESC[s / ESC[u]), so callers must invoke this with the cursor on the
  *       prompt's input line (see the repaint callbacks).
  */
 void repaintCompletionListing() {
     if (!lastCompletion.valid)
         return;
-
-    const char* current_line =
-        rl_line_buffer ? rl_line_buffer : "";
-
-    if (lastCompletion.line_buffer != current_line ||
-        lastCompletion.line_point != rl_point) {
-        lastCompletion.clear();
-        return;
-    }
 
     std::vector<char*> matches;
     matches.reserve(lastCompletion.matches.size());
