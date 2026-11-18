@@ -353,8 +353,8 @@ DisplayItem formatItem(const char* raw, const FormatContext& ctx, int width, int
 
     const char* relative = raw + ctx.base_len;
     if (isDirectory(raw))
-        return makeItem(raw, relative, rc.dir, "/", width - dir_shrink, rc);
-    return makeItem(raw, relative, rc.file, "", width, rc);
+        return makeItem(raw, relative, rc.file, "/", width - dir_shrink, rc);
+    return makeItem(raw, relative, rc.dir, "", width, rc);
 }
 
 std::vector<DisplayItem> formatPageItems(char** matches, const PageInfo& page, const FormatContext& ctx) {
