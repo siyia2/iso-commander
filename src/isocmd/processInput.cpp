@@ -391,7 +391,6 @@ void processInputForCpMvRm(const std::string& input,
         totalTasks *= destCount;
     }
 
-    const std::string& color = operationColor;
     std::ostringstream hdr;
     hdr << "\n" << color << " Processing "
         << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process
