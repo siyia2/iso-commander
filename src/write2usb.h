@@ -9,12 +9,10 @@
 #include <cstdlib>
 #include <string>
 #include <thread>
-#include <utility>
 #include <vector>
 
 // C / System Headers
 #include <sys/types.h>
-#include <unistd.h>
 
 // ------------------- Forward declarations -------------------
 
