@@ -1,3 +1,4 @@
+
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
@@ -128,6 +129,7 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
             if (!isFiltered) {
                 currentPage = originalPage;
             }
+
             sortFilesCaseInsensitive(GlobalState::globalIsoFileList);
 
             // Keep what is already shown; test only newly found ISOs.
@@ -152,12 +154,13 @@ size_t& currentPage, size_t& originalPage, std::shared_ptr<RefreshState> state) 
         const bool pendingTracked = syncIsoPendingDisplay(
             pendingIndices, hasPendingProcess,
             state && state->isImportRunning.load(std::memory_order_acquire));
+
         if (!pendingTracked && needToReload) {
             pendingIndices.clear();
             hasPendingProcess = false;
         }
 
-        // Use either the recently refreshed filteredFiles or the global master list
+        // Use either the recently refreshed filteredFiles or the global master list.
         printList(isFiltered ? filteredFiles : GlobalState::globalIsoFileList, "ISO_FILES", listSubType,
                   pendingIndices, hasPendingProcess, currentPage, state, true, true);
 
@@ -243,23 +246,27 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
     bool dirsChanged = false;
 
     if (stat(MOUNTED_ISO_PATH.c_str(), &currentDirStat) != 0) {
-        // MOUNTED_ISO_PATH missing or inaccessible — treat as empty
+        // MOUNTED_ISO_PATH missing or inaccessible — treat as empty.
         lastSortedDirs.clear();
         lastIsoCount = 0;
         lastDirStat = {};
     } else {
         metaChanged = (currentDirStat.st_mtime != lastDirStat.st_mtime ||
                        currentDirStat.st_nlink != lastDirStat.st_nlink);
+
         if (metaChanged) {
             std::vector<std::string> newIsoDirs;
             std::error_code ec;
+
             for (const auto& entry : std::filesystem::directory_iterator(MOUNTED_ISO_PATH, ec)) {
                 if (ec) break;
+
                 if (entry.is_directory()) {
                     auto filename = entry.path().filename().string();
                     newIsoDirs.push_back(entry.path().string());
                 }
             }
+
             sortFilesCaseInsensitive(newIsoDirs);
             lastDirStat = currentDirStat;
 
@@ -307,9 +314,9 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
         filteredFiles.clear();
     }
 
-    // Staged selection: project the paths onto the refreshed mount list (see
-    // loadAndDisplayIso for the untracked fallback).
+    // Staged selection: project the paths onto the refreshed mount list.
     const bool pendingTracked = syncIsoPendingDisplay(pendingIndices, hasPendingProcess, false);
+
     if (!pendingTracked && dirsChanged) {
         pendingIndices.clear();
         hasPendingProcess = false;
@@ -324,22 +331,18 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
  *
  * When not filtered and the format-specific cache is non-empty and differs
  * from the current view, the working list is replaced from that cache
- * (BIN/IMG, MDF, NRG, CHD, DAA/GBI) and a re-sort is requested.
+ * (BIN/IMG, MDF, NRG, CHD, DAA). GBI shares the DAA/GBI cache storage but
+ * retains its original behavior of not restoring from that cache here.
  *
  * If @p list is false, or a re-sort is pending (@c needSortingAfterflno), the
  * active list is sorted and the corresponding cache is sorted under its
- * format-specific mutex. The function then delegates rendering and
- * interaction to @c printList with @c listType "IMAGE_FILES" and
- * @c listSubType "convert2iso".
- *
- * @note @c fileType "daa" and "gbi" share @c daaGbiFilesCache; the sort
- *       branch matches @c "daa" only.
+ * format-specific mutex. The function then delegates to @c printList with
+ * @c listType "IMAGE_FILES" and @c listSubType "convert2iso".
  *
  * @param files              [in/out] Working file list; may be replaced
  *                           wholesale from a cache.
  * @param fileType           File extension type: "bin", "img", "mdf", "nrg",
- *                           "chd", or "daa" (the "daa" branch also backs
- *                           "gbi" via @c daaGbiFilesCache).
+ *                           "chd", "daa", or "gbi".
  * @param need2Sort          [in/out] Set to @c true when a cache replacement
  *                           requires a re-sort; cleared after sorting.
  * @param isFiltered         [in] When @c true, cache restoration is skipped.
@@ -354,27 +357,40 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,
                               std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::shared_ptr<RefreshState> state) {
 
-    // Helper structure and lookup to eliminate duplicated conditional branches
+    // Helper structure and lookup to eliminate duplicated conditional branches.
     struct CacheTarget {
         std::vector<std::string>* cache;
         std::mutex* mutex;
     };
 
     auto getCacheTarget = [&fileType]() -> CacheTarget {
-        if (fileType == "bin" || fileType == "img") return {&GlobalState::binImgFilesCache, &GlobalMutexes::binImgCacheMutex};
-        if (fileType == "mdf") return {&GlobalState::mdfMdsFilesCache, &GlobalMutexes::mdfMdsCacheMutex};
-        if (fileType == "nrg") return {&GlobalState::nrgFilesCache, &GlobalMutexes::nrgCacheMutex};
-        if (fileType == "chd") return {&GlobalState::chdFilesCache, &GlobalMutexes::chdCacheMutex};
-        if (fileType == "daa" || fileType == "gbi") return {&GlobalState::daaGbiFilesCache, &GlobalMutexes::daaGbiCacheMutex};
+        if (fileType == "bin" || fileType == "img")
+            return {&GlobalState::binImgFilesCache, &GlobalMutexes::binImgCacheMutex};
+
+        if (fileType == "mdf")
+            return {&GlobalState::mdfMdsFilesCache, &GlobalMutexes::mdfMdsCacheMutex};
+
+        if (fileType == "nrg")
+            return {&GlobalState::nrgFilesCache, &GlobalMutexes::nrgCacheMutex};
+
+        if (fileType == "chd")
+            return {&GlobalState::chdFilesCache, &GlobalMutexes::chdCacheMutex};
+
+        // Preserve the original behavior: only DAA restores and sorts
+        // the shared DAA/GBI cache in this function.
+        if (fileType == "daa")
+            return {&GlobalState::daaGbiFilesCache, &GlobalMutexes::daaGbiCacheMutex};
+
         return {nullptr, nullptr};
     };
 
-    CacheTarget target = getCacheTarget();
+    const CacheTarget target = getCacheTarget();
 
-    // Restore from cache if valid and not filtered
+    // Restore from cache if valid and not filtered.
     if (!isFiltered && target.cache && !target.cache->empty()) {
-        bool sizeMismatch = (target.cache->size() != files.size());
-        bool contentMismatch = sizeMismatch || !std::equal(target.cache->begin(), target.cache->end(), files.begin());
+        const bool sizeMismatch = target.cache->size() != files.size();
+        const bool contentMismatch = sizeMismatch ||
+            !std::equal(target.cache->begin(), target.cache->end(), files.begin());
 
         if (contentMismatch) {
             need2Sort = true;
@@ -382,15 +398,17 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
         }
     }
 
-    // Handle sorting if required
+    // Handle sorting if required.
     if (!list || (list && GlobalState::needSortingAfterflno)) {
         if (need2Sort) {
             sortFilesCaseInsensitive(files);
-            if (target.cache && target.mutex && (fileType != "gbi")) {
+
+            if (target.cache && target.mutex) {
                 std::lock_guard<std::mutex> lock(*target.mutex);
                 sortFilesCaseInsensitive(*target.cache);
             }
         }
+
         GlobalState::needSortingAfterflno = false;
         need2Sort = false;
     }
