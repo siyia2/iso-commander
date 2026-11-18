@@ -126,7 +126,7 @@ namespace {
      * @param disablePagination True if pagination is bypassed for the active view.
      * @return std::string      The formatted sync message string, or an empty string if no sync is required.
      */
-    std::string prepareSyncLine(bool isIsoMode, bool noFilterResults, std::shared_ptr<RefreshState>& state, bool disablePagination) {
+    std::string prepareSyncLine(bool isIsoMode, bool noFilterResults, const std::shared_ptr<RefreshState>& state, bool disablePagination) {
         const bool wantSync = isIsoMode && !noFilterResults && !GlobalState::globalIsoFileList.empty();
         const bool maybeSyncing = wantSync && state->isImportRunning.load(std::memory_order_acquire);
 
@@ -216,7 +216,7 @@ namespace {
         bool showNamesOnly;      /**< Configuration flag to hide parent directory paths. */
         bool showFullUmount;     /**< Configuration flag to display full unmount path details. */
         size_t usableCols;       /**< Maximum width in columns available for row rendering. */
-        PrintListTheme colors;   /**< Theme color palette configurations. */
+        const PrintListTheme& colors; /**< Theme palette (non-owning; must outlive the row config). */
     };
 
     /**
@@ -372,8 +372,6 @@ namespace {
         const bool isFileMode     = (isIsoMode || isImgMode);
         const bool showNamesOnly  = displayConfig::toggleNamesOnly;
         const bool showFullUmount = displayConfig::toggleFullListUmount;
-        const PrintListTheme colors = getListColors();
-
         const size_t termCols   = terminalColumns();
         const size_t usableCols = termCols > 1 ? termCols - 1 : 0;
 
@@ -381,7 +379,7 @@ namespace {
             (items.empty() && !GlobalState::globalIsoFileList.empty() && isIsoMode) ||
             (items.empty() && !isIsoMode);
 
-        return {isIsoMode, isImgMode, isMountedMode, isFileMode, showNamesOnly, showFullUmount, colors, usableCols, noFilterResults};
+        return {isIsoMode, isImgMode, isMountedMode, isFileMode, showNamesOnly, showFullUmount, getListColors(), usableCols, noFilterResults};
     }
 
     /**
@@ -482,7 +480,7 @@ namespace {
      * @param syncInsertPos Buffer byte offset where the sync line should be spliced if syncing is active.
      * @param maybeSyncing  Quick preliminary check flag indicating whether an import could be running.
      */
-    void flushOutput(std::shared_ptr<RefreshState> state, const std::string& output,
+    void flushOutput(const std::shared_ptr<RefreshState>& state, const std::string& output,
                      const std::string& syncLine, size_t syncInsertPos, bool maybeSyncing) {
         std::lock_guard<std::mutex> lk(state->printMutex);
 
