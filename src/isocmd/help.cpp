@@ -92,25 +92,25 @@ namespace {
         {}
     };
 
-/**
- * @brief Prints a themed section header followed by its body.
- *
- * The header is printed in the theme's section color (tc.head) followed by
- * UI::Palette::BoldReset and a newline. The body (if any) is printed verbatim
- * and followed by std::endl (flush); an empty body still emits one blank line
- * for spacing. Any coloring inside the body must be embedded by the caller —
- * this function does not apply theme colors to it. Spacing before the header
- * is controlled by the caller's @p head string (callers typically prefix it
- * with "\n").
- */
-void printSection(const ThemeColors& tc, std::string_view head, const std::string& body) {
-    std::cout << tc.head << head << UI::Palette::BoldReset << "\n";
-    if (!body.empty()) {
-        std::cout << body << std::endl;
-    } else {
-        std::cout << std::endl;
+    /**
+     * @brief Prints a themed section header followed by its body.
+     *
+     * The header is printed in the theme's section color (tc.head) followed by
+     * UI::Palette::BoldReset and a newline. The body (if any) is printed verbatim
+     * and followed by std::endl (flush); an empty body still emits one blank line
+     * for spacing. Any coloring inside the body must be embedded by the caller —
+     * this function does not apply theme colors to it. Spacing before the header
+     * is controlled by the caller's @p head string (callers typically prefix it
+     * with "\n").
+     */
+    void printSection(const ThemeColors& tc, std::string_view head, const std::string& body) {
+        std::cout << tc.head << head << UI::Palette::BoldReset << "\n";
+        if (!body.empty()) {
+            std::cout << body << std::endl;
+        } else {
+            std::cout << std::endl;
+        }
     }
-}
 
 } // namespace
 

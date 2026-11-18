@@ -896,237 +896,237 @@ static bool performCopyOperation(OperationContext& ctx,
 
 namespace {
 
-/**
- * @brief Parse a semicolon-separated list of destination directories.
- *
- * Splits @p userDestDir on ';' and normalizes each entry through
- * `fs::path(...).string()`. Empty entries produced by a trailing ';' are
- * preserved as-is (matching the original inline parsing behaviour).
- *
- * @param userDestDir Semicolon-separated destination directory string.
- *
- * @return Vector of normalized destination directory strings, in input order.
- *
- * @note An empty @p userDestDir yields an empty vector (no iterations).
- */
-std::vector<std::string> parseDestinationDirs(const std::string& userDestDir)
-{
-    std::vector<std::string> destDirs;
-    std::istringstream iss(userDestDir);
-    std::string destDir;
-    while (std::getline(iss, destDir, ';'))
-        destDirs.push_back(fs::path(destDir).string());
-    return destDirs;
-}
-
-/**
- * @brief Validate that a single (source, destination) pair is safe to copy/move.
- *
- * Applies the pre-dispatch checks previously inlined in
- * handleIsoFileOperation(), with the same reporting, except that an existing
- * destination is no longer deleted up front. Checks run in this order:
- *  1. Same-file check (source and destination resolve to the same path).
- *  2. Source-missing check (source disappeared mid-run).
- *  3. Destination-exists check: if the destination does not exist, the pair
- *     is ready. If it exists and @p overwriteExisting is false, a
- *     "file_exists" error is reported. If it exists and @p overwriteExisting
- *     is true, the pair is ready; the existing file is not touched here.
- *
- * @param ctx                Operation context used for error reporting.
- * @param srcPath            Absolute or relative source path.
- * @param destPath           Destination path (directory + filename).
- * @param srcDir             Source directory (for reporting).
- * @param srcFile            Source filename (for reporting).
- * @param destDirProcessed   Destination directory as provided (for reporting).
- * @param isMove             True for move operation.
- * @param isCopy             True for copy operation.
- * @param overwriteExisting  If true, an existing destination is allowed and
- *                           is replaced on success by the final rename in the
- *                           copy/move step (it is left intact if that step
- *                           fails or is cancelled).
- * @param validDestinations  In/out counter of destinations that passed the
- *                           same-file check (incremented here, as in the
- *                           original code, before source/destination checks).
- *
- * @return True if the operation may proceed to dispatch; false otherwise
- *         (a corresponding error message has already been reported).
- *
- * @note @p validDestinations is incremented for every non-same-file
- *       destination, even if a later check rejects it. This preserves the
- *       original multi-destination cleanup semantics.
- */
-bool isDestinationReadyForCopyMove(OperationContext& ctx,
-                                   const fs::path& srcPath,
-                                   const fs::path& destPath,
-                                   std::string_view srcDir,
-                                   std::string_view srcFile,
-                                   std::string_view destDirProcessed,
-                                   bool isMove,
-                                   bool isCopy,
-                                   bool overwriteExisting,
-                                   int& validDestinations)
-{
-    if (fs::absolute(srcPath) == fs::absolute(destPath)) {
-        std::string op = isMove ? "move" : "copy";
-        reportErrorCpMvRm(ctx, "same_file", srcDir, srcFile, "", "", op);
-        return false;
+    /**
+     * @brief Parse a semicolon-separated list of destination directories.
+     *
+     * Splits @p userDestDir on ';' and normalizes each entry through
+     * `fs::path(...).string()`. Empty entries produced by a trailing ';' are
+     * preserved as-is (matching the original inline parsing behaviour).
+     *
+     * @param userDestDir Semicolon-separated destination directory string.
+     *
+     * @return Vector of normalized destination directory strings, in input order.
+     *
+     * @note An empty @p userDestDir yields an empty vector (no iterations).
+     */
+    std::vector<std::string> parseDestinationDirs(const std::string& userDestDir)
+    {
+        std::vector<std::string> destDirs;
+        std::istringstream iss(userDestDir);
+        std::string destDir;
+        while (std::getline(iss, destDir, ';'))
+            destDirs.push_back(fs::path(destDir).string());
+        return destDirs;
     }
 
-    ++validDestinations;
+    /**
+     * @brief Validate that a single (source, destination) pair is safe to copy/move.
+     *
+     * Applies the pre-dispatch checks previously inlined in
+     * handleIsoFileOperation(), with the same reporting, except that an existing
+     * destination is no longer deleted up front. Checks run in this order:
+     *  1. Same-file check (source and destination resolve to the same path).
+     *  2. Source-missing check (source disappeared mid-run).
+     *  3. Destination-exists check: if the destination does not exist, the pair
+     *     is ready. If it exists and @p overwriteExisting is false, a
+     *     "file_exists" error is reported. If it exists and @p overwriteExisting
+     *     is true, the pair is ready; the existing file is not touched here.
+     *
+     * @param ctx                Operation context used for error reporting.
+     * @param srcPath            Absolute or relative source path.
+     * @param destPath           Destination path (directory + filename).
+     * @param srcDir             Source directory (for reporting).
+     * @param srcFile            Source filename (for reporting).
+     * @param destDirProcessed   Destination directory as provided (for reporting).
+     * @param isMove             True for move operation.
+     * @param isCopy             True for copy operation.
+     * @param overwriteExisting  If true, an existing destination is allowed and
+     *                           is replaced on success by the final rename in the
+     *                           copy/move step (it is left intact if that step
+     *                           fails or is cancelled).
+     * @param validDestinations  In/out counter of destinations that passed the
+     *                           same-file check (incremented here, as in the
+     *                           original code, before source/destination checks).
+     *
+     * @return True if the operation may proceed to dispatch; false otherwise
+     *         (a corresponding error message has already been reported).
+     *
+     * @note @p validDestinations is incremented for every non-same-file
+     *       destination, even if a later check rejects it. This preserves the
+     *       original multi-destination cleanup semantics.
+     */
+    bool isDestinationReadyForCopyMove(OperationContext& ctx,
+                                       const fs::path& srcPath,
+                                       const fs::path& destPath,
+                                       std::string_view srcDir,
+                                       std::string_view srcFile,
+                                       std::string_view destDirProcessed,
+                                       bool isMove,
+                                       bool isCopy,
+                                       bool overwriteExisting,
+                                       int& validDestinations)
+    {
+        if (fs::absolute(srcPath) == fs::absolute(destPath)) {
+            std::string op = isMove ? "move" : "copy";
+            reportErrorCpMvRm(ctx, "same_file", srcDir, srcFile, "", "", op);
+            return false;
+        }
 
-    if (!fs::exists(srcPath)) {
-        reportErrorCpMvRm(ctx, "source_missing", srcDir, srcFile, "", "", "");
-        return false;
-    }
+        ++validDestinations;
 
-    if (!fs::exists(destPath))
+        if (!fs::exists(srcPath)) {
+            reportErrorCpMvRm(ctx, "source_missing", srcDir, srcFile, "", "", "");
+            return false;
+        }
+
+        if (!fs::exists(destPath))
+            return true;
+
+        if (!overwriteExisting) {
+            std::string op = isCopy ? "copying" : "moving";
+            reportErrorCpMvRm(ctx, "file_exists", srcDir, srcFile,
+                              destDirProcessed, "", op);
+            return false;
+        }
+
+        // Overwrite: the existing file is replaced atomically by the rename at
+        // the end of the copy/move, so it survives if the copy fails.
         return true;
-
-    if (!overwriteExisting) {
-        std::string op = isCopy ? "copying" : "moving";
-        reportErrorCpMvRm(ctx, "file_exists", srcDir, srcFile,
-                          destDirProcessed, "", op);
-        return false;
     }
 
-    // Overwrite: the existing file is replaced atomically by the rename at
-    // the end of the copy/move, so it survives if the copy fails.
-    return true;
-}
-
-/**
- * @brief Validate and dispatch one copy/move operation for a single destination.
- *
- * Performs destination validation via isDestinationReadyForCopyMove(), then
- * dispatches to the appropriate operation function:
- *  - performMultiDestMoveOperation  — move with more than one destination.
- *  - performMoveOperation           — single-destination move.
- *  - performCopyOperation           — copy (any destination count).
- *
- * On success, and when @p successfulDestPaths and @p destPathsMutex are
- * non-null, the destination path is appended under the mutex.
- *
- * @param ctx                     Operation context used for dispatch/reporting.
- * @param srcPath                 Source path.
- * @param destPath                Destination path (directory + filename).
- * @param srcDir                  Source directory (for reporting).
- * @param srcFile                 Source filename (for reporting).
- * @param destDirProcessed        Destination directory as provided.
- * @param destFile                Destination filename (for reporting).
- * @param isMove                  True for move operation.
- * @param isCopy                  True for copy operation.
- * @param overwriteExisting       If true, replace an existing destination.
- * @param fileSize                Source size in bytes (single-dest move).
- * @param destDirCount            Number of destination directories.
- * @param completedBytes          Atomic byte-progress counter.
- * @param completedTasks          Atomic successful-operation counter.
- * @param successfulDestPaths     Optional vector collecting successful paths.
- * @param destPathsMutex          Optional mutex protecting @p successfulDestPaths.
- * @param atLeastOneCopySucceeded In/out flag set on multi-destination success.
- * @param validDestinations       In/out counter of valid destinations.
- *
- * @note For multi-destination moves, @p atLeastOneCopySucceeded is set
- *       (not merely @c success) so that the caller's source-removal logic
- *       matches the original semantics.
- * @note The success-path push is guarded by both the null checks and the
- *       mutex lock, exactly as in the original code.
- */
-void processCopyMoveDestination(OperationContext& ctx,
-                                const fs::path& srcPath,
-                                const fs::path& destPath,
-                                std::string_view srcDir,
-                                std::string_view srcFile,
-                                std::string_view destDirProcessed,
-                                std::string_view destFile,
-                                bool isMove,
-                                bool isCopy,
-                                bool overwriteExisting,
-                                size_t fileSize,
-                                size_t destDirCount,
-                                std::atomic<size_t>* completedBytes,
-                                std::atomic<size_t>* completedTasks,
-                                std::vector<std::string>* successfulDestPaths,
-                                std::mutex* destPathsMutex,
-                                bool& atLeastOneCopySucceeded,
-                                int& validDestinations)
-{
-    if (!isDestinationReadyForCopyMove(ctx, srcPath, destPath,
-                                       srcDir, srcFile, destDirProcessed,
-                                       isMove, isCopy, overwriteExisting,
-                                       validDestinations)) {
-        return;
-    }
-
-    bool success = false;
-
-    if (isMove && destDirCount > 1) {
-        success = performMultiDestMoveOperation(
-            ctx, srcPath, destPath, srcDir, srcFile,
-            destDirProcessed, destFile, completedBytes);
-
-        if (success)
-            atLeastOneCopySucceeded = true;
-    } else if (isMove) {
-        success = performMoveOperation(
-            ctx, srcPath, destPath, srcDir, srcFile,
-            destDirProcessed, destFile, fileSize,
-            completedBytes, completedTasks);
-    } else { // isCopy
-        success = performCopyOperation(
-            ctx, srcPath, destPath, srcDir, srcFile,
-            destDirProcessed, destFile, completedBytes);
-    }
-
-    if (success && successfulDestPaths && destPathsMutex) {
-        std::lock_guard<std::mutex> lock(*destPathsMutex);
-        successfulDestPaths->push_back(destPath.string());
-    }
-}
-
-/**
- * @brief Remove the source file after a multi-destination move.
- *
- * Removes @p srcPath only when all of the following hold:
- *  - the operation is a move (@p isMove),
- *  - there is more than one destination (@p destDirCount > 1),
- *  - at least one destination was valid (@p validDestinations > 0),
- *  - at least one copy succeeded (@p atLeastOneCopySucceeded).
- *
- * If the removal fails, a "remove_after_move" error is reported.
- *
- * @param ctx                     Operation context used for error reporting.
- * @param srcPath                 Source path to remove.
- * @param srcDir                  Source directory (for reporting).
- * @param srcFile                 Source filename (for reporting).
- * @param isMove                  True for move operation.
- * @param destDirCount            Number of destination directories.
- * @param validDestinations       Count of destinations that passed validation.
- * @param atLeastOneCopySucceeded Whether at least one destination copy succeeded.
- *
- * @note This intentionally does not remove the source if no copy succeeded,
- *       matching the documented "remove once at least one copy succeeds"
- *       contract.
- */
-void removeSourceAfterMultiDestMove(OperationContext& ctx,
+    /**
+     * @brief Validate and dispatch one copy/move operation for a single destination.
+     *
+     * Performs destination validation via isDestinationReadyForCopyMove(), then
+     * dispatches to the appropriate operation function:
+     *  - performMultiDestMoveOperation  — move with more than one destination.
+     *  - performMoveOperation           — single-destination move.
+     *  - performCopyOperation           — copy (any destination count).
+     *
+     * On success, and when @p successfulDestPaths and @p destPathsMutex are
+     * non-null, the destination path is appended under the mutex.
+     *
+     * @param ctx                     Operation context used for dispatch/reporting.
+     * @param srcPath                 Source path.
+     * @param destPath                Destination path (directory + filename).
+     * @param srcDir                  Source directory (for reporting).
+     * @param srcFile                 Source filename (for reporting).
+     * @param destDirProcessed        Destination directory as provided.
+     * @param destFile                Destination filename (for reporting).
+     * @param isMove                  True for move operation.
+     * @param isCopy                  True for copy operation.
+     * @param overwriteExisting       If true, replace an existing destination.
+     * @param fileSize                Source size in bytes (single-dest move).
+     * @param destDirCount            Number of destination directories.
+     * @param completedBytes          Atomic byte-progress counter.
+     * @param completedTasks          Atomic successful-operation counter.
+     * @param successfulDestPaths     Optional vector collecting successful paths.
+     * @param destPathsMutex          Optional mutex protecting @p successfulDestPaths.
+     * @param atLeastOneCopySucceeded In/out flag set on multi-destination success.
+     * @param validDestinations       In/out counter of valid destinations.
+     *
+     * @note For multi-destination moves, @p atLeastOneCopySucceeded is set
+     *       (not merely @c success) so that the caller's source-removal logic
+     *       matches the original semantics.
+     * @note The success-path push is guarded by both the null checks and the
+     *       mutex lock, exactly as in the original code.
+     */
+    void processCopyMoveDestination(OperationContext& ctx,
                                     const fs::path& srcPath,
+                                    const fs::path& destPath,
                                     std::string_view srcDir,
                                     std::string_view srcFile,
+                                    std::string_view destDirProcessed,
+                                    std::string_view destFile,
                                     bool isMove,
+                                    bool isCopy,
+                                    bool overwriteExisting,
+                                    size_t fileSize,
                                     size_t destDirCount,
-                                    int validDestinations,
-                                    bool atLeastOneCopySucceeded)
-{
-    if (!(isMove && destDirCount > 1 &&
-          validDestinations > 0 && atLeastOneCopySucceeded)) {
-        return;
+                                    std::atomic<size_t>* completedBytes,
+                                    std::atomic<size_t>* completedTasks,
+                                    std::vector<std::string>* successfulDestPaths,
+                                    std::mutex* destPathsMutex,
+                                    bool& atLeastOneCopySucceeded,
+                                    int& validDestinations)
+    {
+        if (!isDestinationReadyForCopyMove(ctx, srcPath, destPath,
+                                           srcDir, srcFile, destDirProcessed,
+                                           isMove, isCopy, overwriteExisting,
+                                           validDestinations)) {
+            return;
+        }
+
+        bool success = false;
+
+        if (isMove && destDirCount > 1) {
+            success = performMultiDestMoveOperation(
+                ctx, srcPath, destPath, srcDir, srcFile,
+                destDirProcessed, destFile, completedBytes);
+
+            if (success)
+                atLeastOneCopySucceeded = true;
+        } else if (isMove) {
+            success = performMoveOperation(
+                ctx, srcPath, destPath, srcDir, srcFile,
+                destDirProcessed, destFile, fileSize,
+                completedBytes, completedTasks);
+        } else { // isCopy
+            success = performCopyOperation(
+                ctx, srcPath, destPath, srcDir, srcFile,
+                destDirProcessed, destFile, completedBytes);
+        }
+
+        if (success && successfulDestPaths && destPathsMutex) {
+            std::lock_guard<std::mutex> lock(*destPathsMutex);
+            successfulDestPaths->push_back(destPath.string());
+        }
     }
 
-    std::error_code deleteEc;
-    if (!fs::remove(srcPath, deleteEc)) {
-        reportErrorCpMvRm(ctx, "remove_after_move", srcDir, srcFile, "",
-                          deleteEc.message(), "");
+    /**
+     * @brief Remove the source file after a multi-destination move.
+     *
+     * Removes @p srcPath only when all of the following hold:
+     *  - the operation is a move (@p isMove),
+     *  - there is more than one destination (@p destDirCount > 1),
+     *  - at least one destination was valid (@p validDestinations > 0),
+     *  - at least one copy succeeded (@p atLeastOneCopySucceeded).
+     *
+     * If the removal fails, a "remove_after_move" error is reported.
+     *
+     * @param ctx                     Operation context used for error reporting.
+     * @param srcPath                 Source path to remove.
+     * @param srcDir                  Source directory (for reporting).
+     * @param srcFile                 Source filename (for reporting).
+     * @param isMove                  True for move operation.
+     * @param destDirCount            Number of destination directories.
+     * @param validDestinations       Count of destinations that passed validation.
+     * @param atLeastOneCopySucceeded Whether at least one destination copy succeeded.
+     *
+     * @note This intentionally does not remove the source if no copy succeeded,
+     *       matching the documented "remove once at least one copy succeeds"
+     *       contract.
+     */
+    void removeSourceAfterMultiDestMove(OperationContext& ctx,
+                                        const fs::path& srcPath,
+                                        std::string_view srcDir,
+                                        std::string_view srcFile,
+                                        bool isMove,
+                                        size_t destDirCount,
+                                        int validDestinations,
+                                        bool atLeastOneCopySucceeded)
+    {
+        if (!(isMove && destDirCount > 1 &&
+              validDestinations > 0 && atLeastOneCopySucceeded)) {
+            return;
+        }
+
+        std::error_code deleteEc;
+        if (!fs::remove(srcPath, deleteEc)) {
+            reportErrorCpMvRm(ctx, "remove_after_move", srcDir, srcFile, "",
+                              deleteEc.message(), "");
+        }
     }
-}
 
 } // namespace
 
