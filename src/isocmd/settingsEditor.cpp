@@ -52,9 +52,12 @@
  * - @c GoTo:    "g#" was entered; jump to selected setting number # (see
  *               @c g_editGotoPos). A target equal to the current position is
  *               treated like an invalid target and simply redraws.
+ * - @c Handled: PgUp or PgDn was pressed at a boundary (first or last page);
+ *               the navigation input is consumed cleanly without changing position
+ *               or triggering an invalid input warning.
  * - @c Abort:   Esc or Ctrl+D; leave the whole multi-edit sequence.
  */
-enum class EditNav { Advance, Updated, Next, Prev, GoTo, Abort };
+enum class EditNav { Advance, Updated, Next, Prev, GoTo, Abort, Handled };
 
 // Target position (1-based, within the current selection) for EditNav::GoTo.
 static size_t g_editGotoPos = 0;
@@ -357,6 +360,9 @@ bool advanceSelection(EditNav r, std::vector<int>& ordered, size_t& i) {
             return false;
         case EditNav::Abort:
             return true;
+        case EditNav::Handled:
+            // Do nothing, boundary reached but input is consumed successfully
+            break;
     }
     return false;
 }
@@ -660,21 +666,27 @@ void drawEditScreen(const std::string& key, const std::string& current,
  * when page jumps occur and validates target bounds for explicit numeric `g#` jumps.
  *
  * @spec
- * - **PgUp / PgDn:** Evaluated when @p total > 1, returning @c EditNav::Next or @c EditNav::Prev.
+ * - **PgUp / PgDn:** Evaluated when @p total > 1, returning @c EditNav::Next, @c EditNav::Prev, or @c EditNav::Handled if at a boundary.
  * - **g# syntax:** Jumps to the specified #-th configuration setting index in the batch.
  *
  * @param s String view of the trimmed user input token.
  * @param pos Current 1-based setting index in the selection.
  * @param total Total number of settings in the selection batch.
  * @param newVal Reference to the working input value string.
- * @return @c std::optional<EditNav> Contains the resulting navigation direction if matched, or @c std::nullopt to stay on screen.
+ * @return @c std::optional<EditNav> Contains the resulting navigation state if matched/consumed, or @c std::nullopt to treat input as a regular config value.
  */
 static std::optional<EditNav> handleNavigationInput(const std::string_view& s, size_t pos, size_t total, const std::string& newVal) {
     if (s == "PgUp" || s == "PgDn") {
         RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
-        if (s == "PgDn" && pos < total) return EditNav::Next;
-        if (s == "PgUp" && pos > 1)     return EditNav::Prev;
-        return std::nullopt; // stay on screen
+
+        if (s == "PgDn") {
+            if (pos < total) return EditNav::Next;
+            return EditNav::Handled; // At last page: consume input
+        }
+        if (s == "PgUp") {
+            if (pos > 1) return EditNav::Prev;
+            return EditNav::Handled; // At first page: consume input
+        }
     }
 
     if (total > 1 && newVal.size() >= 2 && newVal[0] == 'g' &&
