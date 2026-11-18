@@ -188,246 +188,246 @@ static int noop_tab_handler(int, int) { return 0; }
 
 namespace {
 
-using ThemeColors = decltype(resolveOptionsTheme());
+    using ThemeColors = decltype(resolveOptionsTheme());
 
-// ---------------------------------------------------------------------------
-// Screen painting
-// ---------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------
+    // Screen painting
+    // ---------------------------------------------------------------------------
 
-// Single definition of the settings screen body (header + table + actions
-// line). Shared by the normal draw, the reset confirmation and the post-reset
-// repaint, so a resize reconstructs the whole screen.
-struct SettingsScreen {
-    const std::string& configPath;
-    ThemeColors tc;  // refreshed after a reset, so it lives with the screen
+    // Single definition of the settings screen body (header + table + actions
+    // line). Shared by the normal draw, the reset confirmation and the post-reset
+    // repaint, so a resize reconstructs the whole screen.
+    struct SettingsScreen {
+        const std::string& configPath;
+        ThemeColors tc;  // refreshed after a reset, so it lives with the screen
 
-    static std::string currentValue(const auto& entry) {
-        return ConfigCaches::g_configCache.count(entry.key)
-                   ? ConfigCaches::g_configCache[entry.key]
-                   : entry.defaultValue;
-    }
-
-    std::string_view rowColor(int index) const {
-        if (index == 1) return UI::Palette::BoldReset;
-        if (index == 2) return color;
-        return tc.data;
-    }
-
-    void paintRow(int index, const auto& entry) const {
-        if (!entry.section.empty()) {
-            std::cout << tc.accent << "\n--- " << entry.section << " ---\n" << tc.reset;
+        static std::string currentValue(const auto& entry) {
+            return ConfigCaches::g_configCache.count(entry.key)
+                       ? ConfigCaches::g_configCache[entry.key]
+                       : entry.defaultValue;
         }
-        std::string val = currentValue(entry);
-        std::cout << tc.warning << std::right << std::setw(2) << index << ". " << tc.reset
-                  << tc.label << std::left << std::setw(32) << entry.key << tc.reset
-                  << "= " << tc.reset
-                  << rowColor(index) << val << tc.reset << "\n";
-    }
 
-    void paintBody() const {
-        std::cout << "\n" << tc.accent << "=== Settings Editor ===\n\n" << tc.reset;
-        std::cout << tc.warning << "Config File: " << tc.reset << configPath << "\n";
-
-        int index = 1;
-        for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
-            paintRow(index++, entry);
+        std::string_view rowColor(int index) const {
+            if (index == 1) return UI::Palette::BoldReset;
+            if (index == 2) return color;
+            return tc.data;
         }
-        std::cout << "\n" << tc.accent << "Actions: " << tc.warning << "1-" << (index - 1)
-                  << tc.reset << " ↵ Edit | " << tc.warning << "r" << tc.reset << " Reset\n";
-    }
 
-    void draw() const {
-        SyncOutput sync;
-        clearScrollBuffer();
-        paintBody();
-    }
-};
+        void paintRow(int index, const auto& entry) const {
+            if (!entry.section.empty()) {
+                std::cout << tc.accent << "\n--- " << entry.section << " ---\n" << tc.reset;
+            }
+            std::string val = currentValue(entry);
+            std::cout << tc.warning << std::right << std::setw(2) << index << ". " << tc.reset
+                      << tc.label << std::left << std::setw(32) << entry.key << tc.reset
+                      << "= " << tc.reset
+                      << rowColor(index) << val << tc.reset << "\n";
+        }
 
-std::string buildMainPrompt(const ThemeColors& tc) {
-    return std::format(
-        "\n{}IDX\001{}\002 ↵ for {}editor\001{}\002, ? for help: \001{}\002",
-        UI::Palette::RL_idxGreen,
-        tc.path,
-        UI::Palette::RL_Yellow,
-        tc.path,
-        tc.reset
-    );
-}
+        void paintBody() const {
+            std::cout << "\n" << tc.accent << "=== Settings Editor ===\n\n" << tc.reset;
+            std::cout << tc.warning << "Config File: " << tc.reset << configPath << "\n";
 
-// ---------------------------------------------------------------------------
-// Reset flow
-// ---------------------------------------------------------------------------
+            int index = 1;
+            for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
+                paintRow(index++, entry);
+            }
+            std::cout << "\n" << tc.accent << "Actions: " << tc.warning << "1-" << (index - 1)
+                      << tc.reset << " ↵ Edit | " << tc.warning << "r" << tc.reset << " Reset\n";
+        }
 
-void paintResetStatus(const SettingsScreen& screen, bool saved) {
-    const auto& tc = screen.tc;
-    SyncOutput sync;
-    clearScrollBuffer();
-    screen.paintBody();
-    std::cout << color << "\nReset all settings to default? (y/n): \n" << UI::Palette::BoldReset;
-
-    std::cout << "\n" << tc.label << "[+] Defaults applied\n" << tc.reset;
-    if (saved) {
-        std::cout << tc.highlight << "[✔] Saved to disk\n" << tc.reset;
-    } else {
-        std::cout << tc.error << "[✗] Save failed\n" << tc.reset;
-    }
-}
-
-void applyDefaultsAndReport(SettingsScreen& screen) {
-    for (const auto& e : CONFIG_ORDERED_DEFAULTS) {
-        ConfigCaches::g_configCache[e.key] = e.defaultValue;
-    }
-    applyConfigEffects(ConfigCaches::g_configCache);
-    screen.tc = resolveOptionsTheme();
-
-    bool saved = false;
-    {
-        SyncOutput sync;
-        saved = flushCache(screen.configPath);
-    }
-
-    auto render = [&] { paintResetStatus(screen, saved); };
-    pressEnterToContinueWithRepaint(render);
-}
-
-bool isConfirmed(const std::string& answer) {
-    return answer == "y" || answer == "Y";
-}
-
-void handleReset(SettingsScreen& screen) {
-    reset_custom_keybindingsForSettingsEditor();
-    std::string confirmPrompt = std::format(
-        "\n\001{}\002Reset all settings to default? (y/n): \001{}\002",
-        color,
-        UI::Palette::BoldReset
-    );
-
-    auto drawSettings = [&] { screen.draw(); };
-
-    // Wipe the IDX prompt line now so the screen looks the same before and
-    // after a resize: settings body, then the y/n prompt directly beneath.
-    drawSettings();
-
-    armPendingInputRestore();
-    RlLine confirmInput = readlineWithRepaint(confirmPrompt, drawSettings);
-    rl_startup_hook = nullptr;
-
-    if (!confirmInput) return;
-    if (!isConfirmed(trim(confirmInput.get()))) return;
-    applyDefaultsAndReport(screen);
-}
-
-// ---------------------------------------------------------------------------
-// Selection / multi-edit flow
-// ---------------------------------------------------------------------------
-
-void reportNoValidInput(const ThemeColors& tc) {
-    auto render = [&] {
-        SyncOutput sync;
-        clearScrollBuffer();
-        std::cout << "\n" << tc.error << "No valid input provided"
-                  << tc.reset << "\n";
+        void draw() const {
+            SyncOutput sync;
+            clearScrollBuffer();
+            paintBody();
+        }
     };
-    pressEnterToContinueWithRepaint(render);
-}
 
-// Skipped and updated settings both leave the PgUp/PgDn/g# loop. The next
-// setting slides into index i, so don't increment; past the end, wrap to the
-// first pending setting. Returns true once nothing is left to edit.
-bool removeHandled(std::vector<int>& ordered, size_t& i) {
-    ordered.erase(ordered.begin() + static_cast<std::ptrdiff_t>(i));
-    if (ordered.empty()) return true;
-    if (i >= ordered.size()) i = 0;
-    return false;
-}
-
-// Applies one navigation result to the selection. Returns true when the loop
-// should end.
-bool advanceSelection(EditNav r, std::vector<int>& ordered, size_t& i) {
-    const size_t n = ordered.size();
-    switch (r) {
-        case EditNav::Advance:   // skipped: dropped just like an update
-        case EditNav::Updated:
-            return removeHandled(ordered, i);
-        case EditNav::Next:
-            if (i + 1 < n) ++i;
-            return false;
-        case EditNav::Prev:
-            if (i > 0) --i;
-            return false;
-        case EditNav::GoTo:
-            if (g_editGotoPos >= 1 && g_editGotoPos <= n) i = g_editGotoPos - 1;
-            return false;
-        case EditNav::Abort:
-            return true;
-        case EditNav::Handled:
-            // Do nothing, boundary reached but input is consumed successfully
-            break;
+    std::string buildMainPrompt(const ThemeColors& tc) {
+        return std::format(
+            "\n{}IDX\001{}\002 ↵ for {}editor\001{}\002, ? for help: \001{}\002",
+            UI::Palette::RL_idxGreen,
+            tc.path,
+            UI::Palette::RL_Yellow,
+            tc.path,
+            tc.reset
+        );
     }
-    return false;
-}
 
-void runMultiEdit(const std::string& configPath,
-                  std::vector<int> ordered,
-                  const std::vector<std::string>& inputErrors) {
-    const std::vector<std::string> noErrors;
-    size_t i = 0;
-    bool showErrors = true;          // token errors only on the first screen
-    bool done = false;
-    while (!done) {
-        // Recomputed every iteration: handled settings are erased from
-        // `ordered`, so the total shown in "(n/total)" and used for
-        // PgUp/PgDn/g# shrinks accordingly.
+    // ---------------------------------------------------------------------------
+    // Reset flow
+    // ---------------------------------------------------------------------------
+
+    void paintResetStatus(const SettingsScreen& screen, bool saved) {
+        const auto& tc = screen.tc;
+        SyncOutput sync;
+        clearScrollBuffer();
+        screen.paintBody();
+        std::cout << color << "\nReset all settings to default? (y/n): \n" << UI::Palette::BoldReset;
+
+        std::cout << "\n" << tc.label << "[+] Defaults applied\n" << tc.reset;
+        if (saved) {
+            std::cout << tc.highlight << "[✔] Saved to disk\n" << tc.reset;
+        } else {
+            std::cout << tc.error << "[✗] Save failed\n" << tc.reset;
+        }
+    }
+
+    void applyDefaultsAndReport(SettingsScreen& screen) {
+        for (const auto& e : CONFIG_ORDERED_DEFAULTS) {
+            ConfigCaches::g_configCache[e.key] = e.defaultValue;
+        }
+        applyConfigEffects(ConfigCaches::g_configCache);
+        screen.tc = resolveOptionsTheme();
+
+        bool saved = false;
+        {
+            SyncOutput sync;
+            saved = flushCache(screen.configPath);
+        }
+
+        auto render = [&] { paintResetStatus(screen, saved); };
+        pressEnterToContinueWithRepaint(render);
+    }
+
+    bool isConfirmed(const std::string& answer) {
+        return answer == "y" || answer == "Y";
+    }
+
+    void handleReset(SettingsScreen& screen) {
+        reset_custom_keybindingsForSettingsEditor();
+        std::string confirmPrompt = std::format(
+            "\n\001{}\002Reset all settings to default? (y/n): \001{}\002",
+            color,
+            UI::Palette::BoldReset
+        );
+
+        auto drawSettings = [&] { screen.draw(); };
+
+        // Wipe the IDX prompt line now so the screen looks the same before and
+        // after a resize: settings body, then the y/n prompt directly beneath.
+        drawSettings();
+
+        armPendingInputRestore();
+        RlLine confirmInput = readlineWithRepaint(confirmPrompt, drawSettings);
+        rl_startup_hook = nullptr;
+
+        if (!confirmInput) return;
+        if (!isConfirmed(trim(confirmInput.get()))) return;
+        applyDefaultsAndReport(screen);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Selection / multi-edit flow
+    // ---------------------------------------------------------------------------
+
+    void reportNoValidInput(const ThemeColors& tc) {
+        auto render = [&] {
+            SyncOutput sync;
+            clearScrollBuffer();
+            std::cout << "\n" << tc.error << "No valid input provided"
+                      << tc.reset << "\n";
+        };
+        pressEnterToContinueWithRepaint(render);
+    }
+
+    // Skipped and updated settings both leave the PgUp/PgDn/g# loop. The next
+    // setting slides into index i, so don't increment; past the end, wrap to the
+    // first pending setting. Returns true once nothing is left to edit.
+    bool removeHandled(std::vector<int>& ordered, size_t& i) {
+        ordered.erase(ordered.begin() + static_cast<std::ptrdiff_t>(i));
+        if (ordered.empty()) return true;
+        if (i >= ordered.size()) i = 0;
+        return false;
+    }
+
+    // Applies one navigation result to the selection. Returns true when the loop
+    // should end.
+    bool advanceSelection(EditNav r, std::vector<int>& ordered, size_t& i) {
         const size_t n = ordered.size();
-        EditNav r = editSetting(configPath,
-                                CONFIG_ORDERED_DEFAULTS[ordered[i] - 1].key,
-                                showErrors ? inputErrors : noErrors,
-                                i + 1, n);
-        showErrors = false;
-        done = advanceSelection(r, ordered, i);
-    }
-}
-
-void handleSelection(const SettingsScreen& screen, const std::string& input) {
-    std::vector<std::string> slots(CONFIG_ORDERED_DEFAULTS.size());
-    std::unordered_set<int> choices;
-
-    tokenizeInput(input, slots, choices);
-
-    // Snapshot of the token errors so they can be handed to editSetting
-    // and survive repaint callbacks.
-    const std::vector<std::string> inputErrors(
-        verboseSets.uniqueErrorTokenMessages.begin(),
-        verboseSets.uniqueErrorTokenMessages.end());
-
-    // Only errors, nothing valid to edit: report and return to the main prompt.
-    if (choices.empty()) {
-        if (!inputErrors.empty()) reportNoValidInput(screen.tc);
-        return;
+        switch (r) {
+            case EditNav::Advance:   // skipped: dropped just like an update
+            case EditNav::Updated:
+                return removeHandled(ordered, i);
+            case EditNav::Next:
+                if (i + 1 < n) ++i;
+                return false;
+            case EditNav::Prev:
+                if (i > 0) --i;
+                return false;
+            case EditNav::GoTo:
+                if (g_editGotoPos >= 1 && g_editGotoPos <= n) i = g_editGotoPos - 1;
+                return false;
+            case EditNav::Abort:
+                return true;
+            case EditNav::Handled:
+                // Do nothing, boundary reached but input is consumed successfully
+                break;
+        }
+        return false;
     }
 
-    // Valid choices exist: errors (if any) are shown above the first
-    // edit screen only.
-    std::vector<int> ordered(choices.begin(), choices.end());
-    std::sort(ordered.begin(), ordered.end());
-    runMultiEdit(screen.configPath, std::move(ordered), inputErrors);
-}
-
-// ---------------------------------------------------------------------------
-// Main-prompt dispatch
-// ---------------------------------------------------------------------------
-
-void handleMainInput(SettingsScreen& screen, const std::string& input) {
-    if (input == "?") {
-        helpSettingsEditor();
-        return;
+    void runMultiEdit(const std::string& configPath,
+                      std::vector<int> ordered,
+                      const std::vector<std::string>& inputErrors) {
+        const std::vector<std::string> noErrors;
+        size_t i = 0;
+        bool showErrors = true;          // token errors only on the first screen
+        bool done = false;
+        while (!done) {
+            // Recomputed every iteration: handled settings are erased from
+            // `ordered`, so the total shown in "(n/total)" and used for
+            // PgUp/PgDn/g# shrinks accordingly.
+            const size_t n = ordered.size();
+            EditNav r = editSetting(configPath,
+                                    CONFIG_ORDERED_DEFAULTS[ordered[i] - 1].key,
+                                    showErrors ? inputErrors : noErrors,
+                                    i + 1, n);
+            showErrors = false;
+            done = advanceSelection(r, ordered, i);
+        }
     }
-    if (input == "r" || input == "R") {
-        handleReset(screen);
-        return;
+
+    void handleSelection(const SettingsScreen& screen, const std::string& input) {
+        std::vector<std::string> slots(CONFIG_ORDERED_DEFAULTS.size());
+        std::unordered_set<int> choices;
+
+        tokenizeInput(input, slots, choices);
+
+        // Snapshot of the token errors so they can be handed to editSetting
+        // and survive repaint callbacks.
+        const std::vector<std::string> inputErrors(
+            verboseSets.uniqueErrorTokenMessages.begin(),
+            verboseSets.uniqueErrorTokenMessages.end());
+
+        // Only errors, nothing valid to edit: report and return to the main prompt.
+        if (choices.empty()) {
+            if (!inputErrors.empty()) reportNoValidInput(screen.tc);
+            return;
+        }
+
+        // Valid choices exist: errors (if any) are shown above the first
+        // edit screen only.
+        std::vector<int> ordered(choices.begin(), choices.end());
+        std::sort(ordered.begin(), ordered.end());
+        runMultiEdit(screen.configPath, std::move(ordered), inputErrors);
     }
-    handleSelection(screen, input);
-}
+
+    // ---------------------------------------------------------------------------
+    // Main-prompt dispatch
+    // ---------------------------------------------------------------------------
+
+    void handleMainInput(SettingsScreen& screen, const std::string& input) {
+        if (input == "?") {
+            helpSettingsEditor();
+            return;
+        }
+        if (input == "r" || input == "R") {
+            handleReset(screen);
+            return;
+        }
+        handleSelection(screen, input);
+    }
 
 }  // namespace
 
