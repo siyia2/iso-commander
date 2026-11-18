@@ -224,7 +224,7 @@ namespace {
         std::cout << '\n';
         std::cout.flush();
     }
-}
+} // namespace
 
 /**
  * @brief Waits for Enter, Esc or Ctrl+D after showing "\n<prompt>".

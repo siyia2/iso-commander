@@ -219,7 +219,7 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
  *
  * @return Number of new entries.
  */
-int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std::vector<std::string>& globalIsoFileList) {
+static int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std::vector<std::string>& globalIsoFileList) {
     std::unordered_set<std::string_view> globalSet;
     globalSet.reserve(globalIsoFileList.size());
 

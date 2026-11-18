@@ -366,7 +366,7 @@ const std::vector<std::string>* imageCacheFor(const std::string& fileType) {
  *                     @c GlobalState::g_pendingRefreshState until consumed by
  *                     @c checkPendingRefresh on the main thread.
  */
-void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
+static void refreshListAfterAutoUpdate(std::atomic<bool>& isAtISOList,
                                 std::shared_ptr<RefreshState> state) {
     {
         std::unique_lock<std::mutex> lock(state->importMutex);

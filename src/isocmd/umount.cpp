@@ -35,7 +35,7 @@ namespace fs = std::filesystem;
  * * @param path The absolute path to the directory.
  * @return True if the directory exists and contains no entries, false otherwise.
  */
-bool isDirectoryEmpty(const std::string& path) {
+static bool isDirectoryEmpty(const std::string& path) {
     if (!std::filesystem::exists(path)) {
         return false;
     }

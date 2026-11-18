@@ -60,7 +60,7 @@ namespace fs = std::filesystem;
  * @param args Argument vector where args[0] is the executable name.
  * @return Exit code of the child process, or -1 on spawn/wait failure.
  */
-int runCommand(const std::vector<std::string>& args) {
+static int runCommand(const std::vector<std::string>& args) {
     if (args.empty()) return -1;
 
     std::vector<char*> argv;
@@ -135,7 +135,7 @@ int runCommand(const std::vector<std::string>& args) {
  * @return Token name of the detected NTFS kernel driver ("ntfs" or "ntfs3"),
  *         or an empty string if no modern write-capable driver is available.
  */
-std::string getBestNtfsDriver() {
+static std::string getBestNtfsDriver() {
     if (std::filesystem::exists("/sys/module/ntfs")) {
         return "ntfs";
     }
@@ -228,7 +228,7 @@ static int libMount(const char* src,
  *
  * @param path The mount point or device path to unmount.
  */
-void safeUmount(const char* path) {
+static void safeUmount(const char* path) {
     libmnt_context* ctx = mnt_new_context();
     if (!ctx) return;
 
@@ -250,6 +250,37 @@ void safeUmount(const char* path) {
 
     mnt_free_context(ctx);
 }
+
+// ------------------- Windows ISO Writer RAII -------------------
+
+/**
+ * @struct ScopedMount
+ * @brief RAII wrapper to ensure automatic unmounting and directory removal.
+ *
+ * Manages the lifecycle of a mount point created via mkdtemp. On destruction:
+ * - If active (setMounted() was called), safeUmount is called first.
+ * - rmdir is always called if path is non-empty, cleaning up the temp dir
+ *   regardless of whether a mount succeeded.
+ *
+ * Non-copyable and non-movable — owns a unique kernel resource.
+ */
+struct ScopedMount {
+    std::string path;
+    bool active = false;
+    // Accepts an empty path to represent a "disabled" scope (no-op destructor).
+    explicit ScopedMount(std::string p) : path(std::move(p)) {}
+    ScopedMount(const ScopedMount&)            = delete;
+    ScopedMount& operator=(const ScopedMount&) = delete;
+    ScopedMount(ScopedMount&&)                 = delete;
+    ScopedMount& operator=(ScopedMount&&)      = delete;
+    // Call after a successful mount to arm the safeUmount on destruction.
+    void setMounted() { active = true; }
+    ~ScopedMount() {
+        if (path.empty()) return;
+        if (active) safeUmount(path.c_str());
+        rmdir(path.c_str());
+    }
+};
 
 /**
  * @brief Detects whether an ISO image is Windows installation media.

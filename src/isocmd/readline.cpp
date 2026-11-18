@@ -45,7 +45,7 @@ const char* special_cmds[] = {
  * @param state Readline state (0 for first call).
  * @return Allocated string of the match or NULL.
  */
-char* command_generator(const char* text, int state) {
+static char* command_generator(const char* text, int state) {
     static int list_index, len;
     if (!state) {
         list_index = 0;

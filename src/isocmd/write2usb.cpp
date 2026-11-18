@@ -50,7 +50,7 @@
  * @note Acceptance does not imply the image is bootable. The name is
  *       historical; isValidOpticalImage would describe it more accurately.
  */
-bool isValidIso9660(int fd) {
+static bool isValidIso9660(int fd) {
     for (int i = 0; i < 8; ++i) {
         uint8_t d[7];
         if (pread(fd, d, sizeof(d), 32768 + i * 2048) != sizeof(d)) return false;

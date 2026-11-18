@@ -57,16 +57,6 @@ namespace fs = std::filesystem;
  */
 
 /**
- * @brief Checks whether a path exists and refers to a directory.
- *
- * @param path Path to check.
- * @return true if @p path is an existing directory, false otherwise.
- */
-bool isValidDirectory(const std::string& path) {
-    return std::filesystem::is_directory(path);
-}
-
-/**
  * @brief Handles special user commands such as help (?) and database statistics or clear commands.
  *
  * @param input The trimmed user input string.
@@ -514,7 +504,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
  *                          typed line; invoked only on resize repaints, not on
  *                          the first draw.
  */
-void ramCacheList(std::vector<std::string>& files, bool& list, const std::string& fileExtension,
+static void ramCacheList(std::vector<std::string>& files, bool& list, const std::string& fileExtension,
                   const std::vector<std::string>& binImgFilesCache,
                   const std::vector<std::string>& mdfMdsFilesCache,
                   const std::vector<std::string>& nrgFilesCache,
@@ -589,7 +579,7 @@ void ramCacheList(std::vector<std::string>& files, bool& list, const std::string
  * @param modeDaa       Selects the DAA/GBI cache.
  * @param repaintHeader Optional callback that redraws the caller's prompt.
  */
-void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa,
+static void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa,
                    const std::function<void()>& repaintHeader) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
@@ -657,7 +647,7 @@ void toLowerInPlace(std::string& str);
  *
  * @return true if @p entry passes the active format filter.
  */
-bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg, const bool& blacklistChd, const bool& blacklistDaa) {
+static bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg, const bool& blacklistChd, const bool& blacklistDaa) {
     const std::string filenameLower = entry.filename().string();
     const std::string ext = entry.extension().string();
     std::string extLower = ext;
@@ -725,7 +715,7 @@ bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, con
  * @param totalFiles          Shared atomic count of regular files visited.
  * @return Newly discovered file paths from this directory.
  */
-std::unordered_set<std::string> processPaths(const std::string& path, const std::string& mode,
+static std::unordered_set<std::string> processPaths(const std::string& path, const std::string& mode,
                                             const std::function<void(const std::string&, const std::string&)>& callback,
                                             std::unordered_set<std::string>& processedErrorsFind,
                                             std::atomic<size_t>& totalFiles) {
@@ -952,7 +942,7 @@ static void updateCacheAndFinalize(std::vector<std::string>* currentCache,
  * @return A copy of the updated cache for @p mode; an empty vector for an
  *         unsupported mode.
  */
-std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
+static std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
                                    std::unordered_set<std::string>& fileNames,
                                    int& currentCacheOld, const std::string& mode,
                                    const std::function<void(const std::string&, const std::string&)>& callback,
@@ -998,7 +988,7 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
  *
  * @return true if @p input was handled, false otherwise.
  */
-bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
+static bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
                                                  bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa,
                                                  const std::string& fileExtension,
                                                  std::vector<std::string>& files,
@@ -1049,7 +1039,7 @@ struct FileTypeConfig {
  *
  * @return const std::unordered_map<std::string, FileTypeConfig>& Reference to the file type map.
  */
-const std::unordered_map<std::string, FileTypeConfig>& getFileTypeMap() {
+static const std::unordered_map<std::string, FileTypeConfig>& getFileTypeMap() {
     static const std::unordered_map<std::string, FileTypeConfig> fileTypeMap = {
         {"bin", {".bin/.img", "BIN/IMG"}},
         {"img", {".bin/.img", "BIN/IMG"}},
@@ -1068,7 +1058,7 @@ const std::unordered_map<std::string, FileTypeConfig>& getFileTypeMap() {
  * @param fileExtension The target file extension/category string (e.g., ".bin/.img").
  * @return std::string  The formatted and ANSI-coded readline prompt string.
  */
-std::string buildSearchPrompt(const VerboseAndDatabaseTheme& dt, const std::string& fileExtension) {
+static std::string buildSearchPrompt(const VerboseAndDatabaseTheme& dt, const std::string& fileExtension) {
     std::string prompt;
     prompt.reserve(512);
     prompt.append("\001").append(dt.green).append("\002FolderPaths")
@@ -1090,7 +1080,7 @@ std::string buildSearchPrompt(const VerboseAndDatabaseTheme& dt, const std::stri
  * @param typedLine   The exact string currently typed into the readline buffer by the user.
  * @param resetColor  The theme color reset code.
  */
-void printRepaintedCallerPrompt(const std::string& header, const std::string& typedLine, const std::string& resetColor) {
+static void printRepaintedCallerPrompt(const std::string& header, const std::string& typedLine, const std::string& resetColor) {
     std::cout << header;
 
     // Make sure the typed line starts on a new line: find the last
@@ -1117,7 +1107,7 @@ void printRepaintedCallerPrompt(const std::string& header, const std::string& ty
 /**
  * @brief Initializes signal handlers, completion hooks, keybindings, and history for each search iteration.
  */
-void initializeIterationState() {
+static void initializeIterationState() {
     enable_ctrl_d();
     setupSignalHandlerCancellations();
     rl_attempted_completion_function = my_special_completion_entry;
@@ -1137,7 +1127,7 @@ void initializeIterationState() {
  * @param invalidDirectoryPaths Output set containing paths that failed validation.
  * @param cleanedInput          Output string containing only valid semicolon-joined paths for history insertion.
  */
-void parseAndValidateDirectories(
+static void parseAndValidateDirectories(
     const std::string& inputSearch,
     std::vector<std::string>& directoryPaths,
     std::unordered_set<std::string>& invalidDirectoryPaths,

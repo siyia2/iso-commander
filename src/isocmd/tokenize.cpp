@@ -24,7 +24,7 @@
  * @param str The string to check.
  * @return True if the string starts with '0'.
  */
-bool startsWithZero(const std::string& str) {
+static bool startsWithZero(const std::string& str) {
     return !str.empty() && str[0] == '0';
 }
 
@@ -33,7 +33,7 @@ bool startsWithZero(const std::string& str) {
  * @param str The string to check.
  * @return True if the string is non-empty and all characters are digits.
  */
-bool isNumeric(const std::string& str) {
+static bool isNumeric(const std::string& str) {
     return !str.empty() && std::all_of(str.begin(), str.end(), [](unsigned char c) {
         return std::isdigit(c);
     });

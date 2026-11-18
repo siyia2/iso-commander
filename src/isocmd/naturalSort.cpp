@@ -110,7 +110,7 @@ int compareAlphaSequence(std::string_view a, std::string_view b, size_t& i, size
     return 0;
 }
 
-} // namespace
+} // namespace sort
 
 /**
  * @brief Compares two strings using case-insensitive natural ordering.

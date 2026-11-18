@@ -945,7 +945,7 @@ static bool daa_fail(DaaContext &ctx) {
  * @param ctx Reference to the active DAA context.
  * @throws DaaError If the signature is unknown, a multi-volume file is selected, or the version is unsupported.
  */
-void validateDaaHeader(const daa_t &daa, DaaContext &ctx) {
+static void validateDaaHeader(const daa_t &daa, DaaContext &ctx) {
     if (!strncmp((char*)daa.sign, "DAA", 16) || !strncmp((char*)daa.sign, "\xb8\xbd\xb6", 3))
         ctx.daagbi = TYPE_DAA;
     else if (!strncmp((char*)daa.sign, "GBI", 16))
@@ -966,7 +966,7 @@ void validateDaaHeader(const daa_t &daa, DaaContext &ctx) {
  * @param ctx Reference to the active DAA context.
  * @param ver110_btype The compression bit type identifier from version 1.10 metadata.
  */
-void setupBtype(DaaContext &ctx, int ver110_btype) {
+static void setupBtype(DaaContext &ctx, int ver110_btype) {
     switch (ver110_btype) {
         case 0: ctx.swapped_btype[0]=0; ctx.swapped_btype[1]=1; ctx.swapped_btype[2]=2; break;
         case 1: ctx.swapped_btype[0]=1; ctx.swapped_btype[1]=2; ctx.swapped_btype[2]=0; break;
@@ -992,7 +992,7 @@ void setupBtype(DaaContext &ctx, int ver110_btype) {
  * @return void* Pointer to the allocated memory buffer for index data.
  * @throws DaaError If memory allocation fails or LZMA property allocation fails.
  */
-void* setupVersionData(DaaContext &ctx, daa_t &daa, u32 &daas, u32 &daas_mem, u32 &bitsize, u32 &bittype, u32 &daa_dataz, int &dolame, int &dolzma, int &dolamebits, int &lzma_filter) {
+static void* setupVersionData(DaaContext &ctx, daa_t &daa, u32 &daas, u32 &daas_mem, u32 &bitsize, u32 &bittype, u32 &daa_dataz, int &dolame, int &dolzma, int &dolamebits, int &lzma_filter) {
     int ver110_btype = 0;
 
     if (daa.version == 0x100) {
@@ -1055,7 +1055,7 @@ void* setupVersionData(DaaContext &ctx, daa_t &daa, u32 &daas, u32 &daas_mem, u3
  * @param daa Reference to the header structure.
  * @throws DaaError If a password-protected DAA format is encountered or file seeking fails.
  */
-void processPreDataRecords(DaaContext &ctx, const daa_t &daa) {
+static void processPreDataRecords(DaaContext &ctx, const daa_t &daa) {
     while ((u64)ftell(ctx.fdi) < daa.size_offset) {
         u32 rec_type, rec_len;
         ctx_read(ctx, &rec_type, 4); swap32_if_be(&rec_type, ctx.endian);
@@ -1073,7 +1073,7 @@ void processPreDataRecords(DaaContext &ctx, const daa_t &daa) {
  * @param inputFile Path string of the primary input file.
  * @param daa Reference to the header structure.
  */
-void setupMultiPartFiles(DaaContext &ctx, const std::string &inputFile, const daa_t &daa) {
+static void setupMultiPartFiles(DaaContext &ctx, const std::string &inputFile, const daa_t &daa) {
     fseek(ctx.fdi, 0, SEEK_END);
     u64 tot = (u64)ftell(ctx.fdi);
     if (ctx.multi || (tot != daa.daasize)) {
@@ -1105,7 +1105,7 @@ void setupMultiPartFiles(DaaContext &ctx, const std::string &inputFile, const da
  * @param bitsize Bit size parameter used for calculating entry layouts.
  * @throws DaaError If index table decompression fails.
  */
-void readAndDecompressIndexTable(DaaContext &ctx, void *daa_data, u32 daas_mem, u32 daa_dataz, u32 &daas, u32 bittype, u32 bitsize) {
+static void readAndDecompressIndexTable(DaaContext &ctx, void *daa_data, u32 daas_mem, u32 daa_dataz, u32 &daas, u32 bittype, u32 bitsize) {
     if (daa_dataz) {
         ctx_alloc(&ctx.in, daa_dataz, &ctx.insz);
         ctx_read(ctx, ctx.in, daa_dataz);
@@ -1128,7 +1128,7 @@ void readAndDecompressIndexTable(DaaContext &ctx, void *daa_data, u32 daas_mem, 
  * @param daas_mem Size of the index data memory buffer.
  * @param dolame Flag specifying whether PowerISO Lame transformation is requested.
  */
-void applyLameFilters(DaaContext &ctx, const daa_t &daa, void *daa_data, u32 daas_mem, int dolame) {
+static void applyLameFilters(DaaContext &ctx, const daa_t &daa, void *daa_data, u32 daas_mem, int dolame) {
     if (ctx.daagbi == TYPE_GBI) gburner_lame((u8*)daa_data, daas_mem, daa.crc & 0xff);
     if (dolame) poweriso_lame((u8*)daa_data, daas_mem, daa.isosize);
 }
@@ -1174,7 +1174,7 @@ void applyLameFilters(DaaContext &ctx, const daa_t &daa, void *daa_data, u32 daa
  *         chunk does not match the expected chunk size, a write fails, or the
  *         final output size does not match @c daa.isosize.
  */
-bool processAllChunks(DaaContext &ctx, const daa_t &daa, void *daa_data,
+static bool processAllChunks(DaaContext &ctx, const daa_t &daa, void *daa_data,
                       u32 daas, u32 bitsize, u32 bittype,
                       int dolamebits, int lzma_filter)
 {

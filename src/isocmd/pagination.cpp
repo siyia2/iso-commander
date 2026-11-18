@@ -224,7 +224,7 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
  * @param c                   Color theme configuration for list output.
  * @param withErrors          True to display error messages before the list, false otherwise.
  */
-void drawPaginatedPage(const std::vector<std::string>& entries,
+static void drawPaginatedPage(const std::vector<std::string>& entries,
                        size_t currentPage,
                        bool disablePagination,
                        size_t totalPages,
@@ -281,7 +281,7 @@ void drawPaginatedPage(const std::vector<std::string>& entries,
  * @return true        If a navigation command was successfully recognized and handled.
  * @return false       If the input is not a recognized navigation command.
  */
-bool handleNavigation(const std::string& userInput,
+static bool handleNavigation(const std::string& userInput,
                       size_t totalPages,
                       size_t& currentPage,
                       bool& isPageTurn) {

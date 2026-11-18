@@ -174,7 +174,7 @@ void processInputForMountOrUmount(const std::string& input, const std::vector<st
  * @param isDelete         True for deletion (skips name-collision grouping).
  * @return A vector of chunks, where each chunk is a vector of indices.
  */
-std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered_set<int>& processedIndices, const std::vector<std::string>& isoFiles, unsigned int numThreads, bool isDelete)
+static std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered_set<int>& processedIndices, const std::vector<std::string>& isoFiles, unsigned int numThreads, bool isDelete)
 {
     std::vector<int> processedIndicesVector(processedIndices.begin(), processedIndices.end());
     std::vector<std::vector<int>> indexChunks;

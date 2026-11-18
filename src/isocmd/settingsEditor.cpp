@@ -669,7 +669,7 @@ void drawEditScreen(const std::string& key, const std::string& current,
  * @param newVal Reference to the working input value string.
  * @return @c std::optional<EditNav> Contains the resulting navigation direction if matched, or @c std::nullopt to stay on screen.
  */
-std::optional<EditNav> handleNavigationInput(const std::string_view& s, size_t pos, size_t total, const std::string& newVal) {
+static std::optional<EditNav> handleNavigationInput(const std::string_view& s, size_t pos, size_t total, const std::string& newVal) {
     if (s == "PgUp" || s == "PgDn") {
         RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
         if (s == "PgDn" && pos < total) return EditNav::Next;

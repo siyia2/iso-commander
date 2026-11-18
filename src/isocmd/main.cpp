@@ -43,269 +43,269 @@ namespace fs = std::filesystem;
  *
  * @param version The semantic version string (e.g. "6.3.5").
  */
-void printVersionNumber(const std::string& version) {
+static void printVersionNumber(const std::string& version) {
     std::cout << UI::Palette::BoldReset << "Iso Commander v" << version << UI::Palette::Reset << "\n";
 }
 
 namespace {
 
-/**
- * @brief Checks and dispatches non-interactive command-line modes or version information.
- *
- * Evaluates command-line arguments to handle utility requests such as version queries
- * (`--version`, `-v`) or delegated operations (`mount`, `umount`, `c2iso`, `w2usb`).
- *
- * @param argc Number of command-line arguments.
- * @param argv Array of null-terminated argument strings.
- * @return std::optional<int> Exit code if a CLI mode was handled, or
- *  std::nullopt to fall back to interactive mode.
- */
-std::optional<int> tryExecuteCliMode(int argc, char *argv[]) {
-    const std::string arg1 = (argc >= 2) ? argv[1] : "";
+    /**
+     * @brief Checks and dispatches non-interactive command-line modes or version information.
+     *
+     * Evaluates command-line arguments to handle utility requests such as version queries
+     * (`--version`, `-v`) or delegated operations (`mount`, `umount`, `c2iso`, `w2usb`).
+     *
+     * @param argc Number of command-line arguments.
+     * @param argv Array of null-terminated argument strings.
+     * @return std::optional<int> Exit code if a CLI mode was handled, or
+     *  std::nullopt to fall back to interactive mode.
+     */
+    std::optional<int> tryExecuteCliMode(int argc, char *argv[]) {
+        const std::string arg1 = (argc >= 2) ? argv[1] : "";
 
-    if (argc == 2 && (arg1 == "--version" || arg1 == "-v")) {
-        printVersionNumber("8.0.0");
-        return 0;
+        if (argc == 2 && (arg1 == "--version" || arg1 == "-v")) {
+            printVersionNumber("8.0.0");
+            return 0;
+        }
+        if (argc >= 3 || (argc == 2 && (arg1 == "umount" || arg1 == "unmount" ||
+                                        arg1 == "mount"  || arg1 == "c2iso" ||
+                                        arg1 == "w2usb"))) {
+            return handleMountUmountConvertWriteCommands(argc, argv);
+        }
+        return std::nullopt; // interactive mode
     }
-    if (argc >= 3 || (argc == 2 && (arg1 == "umount" || arg1 == "unmount" ||
-                                    arg1 == "mount"  || arg1 == "c2iso" ||
-                                    arg1 == "w2usb"))) {
-        return handleMountUmountConvertWriteCommands(argc, argv);
+
+    /**
+     * @brief Initializes application state flags, collection reserves, Readline behavior, and signal handlers.
+     *
+     * Configures non-interactive state flags, allocates generous vector capacities for caches,
+     * sets up custom Readline completers, key bindings, event hooks, and ignores SIGINT while handling SIGTERM.
+     */
+    void initializeEnvironment() {
+        GlobalState::isNonInteractive.store(false);
+
+        // Generous reserves for future lists.
+        GlobalState::globalIsoFileList.reserve(1000);
+        GlobalState::binImgFilesCache.reserve(1000);
+        GlobalState::mdfMdsFilesCache.reserve(1000);
+        GlobalState::nrgFilesCache.reserve(1000);
+        GlobalState::chdFilesCache.reserve(1000);
+        GlobalState::daaGbiFilesCache.reserve(1000);
+
+        setupReadlineToIgnoreCtrlC();
+
+        // Readline completion behavior.
+        rl_completer_word_break_characters = ";";
+        rl_completion_display_matches_hook = customListingsFunction;
+
+        // Esc as universal exit handler; PgUp/PgDn as history navigation.
+        rl_variable_bind("keyseq-timeout", "10");
+        rl_bind_keyseq("\\e", exit_handler);
+        rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+        rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+
+        // Signal Handling
+        signal(SIGINT, SIG_IGN);
+        signal(SIGTERM, signalHandler);
+
+        paginationSet(GlobalState::configPath);
+        liveFilteringSet(GlobalState::configPath);
+
+        // Readline refresh hook for pending UI refreshes.
+        rl_event_hook = checkPendingRefresh;
     }
-    return std::nullopt; // interactive mode
-}
 
-/**
- * @brief Initializes application state flags, collection reserves, Readline behavior, and signal handlers.
- *
- * Configures non-interactive state flags, allocates generous vector capacities for caches,
- * sets up custom Readline completers, key bindings, event hooks, and ignores SIGINT while handling SIGTERM.
- */
-void initializeEnvironment() {
-    GlobalState::isNonInteractive.store(false);
-
-    // Generous reserves for future lists.
-    GlobalState::globalIsoFileList.reserve(1000);
-    GlobalState::binImgFilesCache.reserve(1000);
-    GlobalState::mdfMdsFilesCache.reserve(1000);
-    GlobalState::nrgFilesCache.reserve(1000);
-    GlobalState::chdFilesCache.reserve(1000);
-    GlobalState::daaGbiFilesCache.reserve(1000);
-
-    setupReadlineToIgnoreCtrlC();
-
-    // Readline completion behavior.
-    rl_completer_word_break_characters = ";";
-    rl_completion_display_matches_hook = customListingsFunction;
-
-    // Esc as universal exit handler; PgUp/PgDn as history navigation.
-    rl_variable_bind("keyseq-timeout", "10");
-    rl_bind_keyseq("\\e", exit_handler);
-    rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
-    rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
-
-    // Signal Handling
-    signal(SIGINT, SIG_IGN);
-    signal(SIGTERM, signalHandler);
-
-    paginationSet(GlobalState::configPath);
-    liveFilteringSet(GlobalState::configPath);
-
-    // Readline refresh hook for pending UI refreshes.
-    rl_event_hook = checkPendingRefresh;
-}
-
-/**
- * @brief Acquires an exclusive single-instance advisory lock on the lock file.
- *
- * Attempts to place an exclusive write lock on `/tmp/isocmd.lock`. On failure, prints
- * a descriptive error hint suggesting stale lock cleanup.
- *
- * @param lockFd Reference to the integer storing the opened file descriptor handle.
- * @param c The list theme color palette used for formatted error messages.
- * @param lockFile Path to the lock file.
- * @return bool true if the lock was acquired successfully, false otherwise.
- */
-bool acquireSingleInstanceLock(int& lockFd, const PrintListTheme& c, const char* lockFile) {
-    lockFd = open(lockFile, O_CREAT | O_RDWR, 0666);
-    struct flock fl = { F_WRLCK, SEEK_SET, 0, 0, 0 };
-    if (fcntl(lockFd, F_SETLK, &fl) == -1) {
-        std::cerr << c.indexA << "error: " << c.num
-                  << "failed to setup transaction (unable to lock database)\n  "
-                  << UI::Palette::BoldReset << "if you're sure isocmd isn't already running, you can remove '/tmp/isocmd.lock'\n"
-                  << UI::Palette::Reset;
-        close(lockFd);
-        return false;
+    /**
+     * @brief Acquires an exclusive single-instance advisory lock on the lock file.
+     *
+     * Attempts to place an exclusive write lock on `/tmp/isocmd.lock`. On failure, prints
+     * a descriptive error hint suggesting stale lock cleanup.
+     *
+     * @param lockFd Reference to the integer storing the opened file descriptor handle.
+     * @param c The list theme color palette used for formatted error messages.
+     * @param lockFile Path to the lock file.
+     * @return bool true if the lock was acquired successfully, false otherwise.
+     */
+    bool acquireSingleInstanceLock(int& lockFd, const PrintListTheme& c, const char* lockFile) {
+        lockFd = open(lockFile, O_CREAT | O_RDWR, 0666);
+        struct flock fl = { F_WRLCK, SEEK_SET, 0, 0, 0 };
+        if (fcntl(lockFd, F_SETLK, &fl) == -1) {
+            std::cerr << c.indexA << "error: " << c.num
+                      << "failed to setup transaction (unable to lock database)\n  "
+                      << UI::Palette::BoldReset << "if you're sure isocmd isn't already running, you can remove '/tmp/isocmd.lock'\n"
+                      << UI::Palette::Reset;
+            close(lockFd);
+            return false;
+        }
+        return true;
     }
-    return true;
-}
 
-/**
- * @brief Conditionally launches the background database import thread.
- *
- * Starts background database synchronization if auto-updates are enabled and valid history paths exist.
- *
- * @param search Atomic boolean tracking whether user config updates require searching.
- * @param importState Shared pointer managing background refresh state coordination.
- * @param backgroundThreads Vector tracking active background worker threads.
- */
-void initializeBackgroundImport(std::atomic<bool>& search,
-                                std::shared_ptr<RefreshState>& importState,
-                                std::vector<std::thread>& backgroundThreads) {
-    if (search.load() && (!(isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath)))) {
-        importState->isImportRunning.store(true);
-        backgroundThreads.emplace_back([importState, &search] {
-            backgroundDatabaseImport(importState);
-            search.store(false);
-        });
+    /**
+     * @brief Conditionally launches the background database import thread.
+     *
+     * Starts background database synchronization if auto-updates are enabled and valid history paths exist.
+     *
+     * @param search Atomic boolean tracking whether user config updates require searching.
+     * @param importState Shared pointer managing background refresh state coordination.
+     * @param backgroundThreads Vector tracking active background worker threads.
+     */
+    void initializeBackgroundImport(std::atomic<bool>& search,
+                                    std::shared_ptr<RefreshState>& importState,
+                                    std::vector<std::thread>& backgroundThreads) {
+        if (search.load() && (!(isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath)))) {
+            importState->isImportRunning.store(true);
+            backgroundThreads.emplace_back([importState, &search] {
+                backgroundDatabaseImport(importState);
+                search.store(false);
+            });
+        }
     }
-}
 
-/**
- * @brief Evaluates and generates the status line string for background operations.
- *
- * Checks background auto-update progress or missing folder configurations, generating
- * appropriate status messages and spawning monitor threads when necessary.
- *
- * @param search Atomic flag indicating active configuration search/update states.
- * @param importState Shared pointer to the database refresh state.
- * @param messageActive Atomic flag indicating whether a status message is currently active.
- * @param stopMessage Atomic flag signaling background tasks to stop.
- * @param monitorThreadSpawned Atomic flag ensuring the monitoring thread is spawned only once.
- * @param isAtMain Atomic flag specifying whether the application is at the main menu.
- * @param backgroundThreads Vector storing background worker threads.
- * @param messagePrinted Reference to a flag ensuring one-time informational messages print only once.
- * @param statusLine Output string parameter receiving the formatted status line.
- */
-void updateStatusLine(std::atomic<bool>& search,
-                      std::shared_ptr<RefreshState>& importState,
-                      std::atomic<bool>& messageActive,
-                      std::atomic<bool>& stopMessage,
-                      std::atomic<bool>& monitorThreadSpawned,
-                      std::atomic<bool>& isAtMain,
-                      std::vector<std::thread>& backgroundThreads,
-                      bool& messagePrinted,
-                      std::string& statusLine) {
-    if (search.load() && !isHistoryFileEmpty(GlobalState::historyFilePath) &&
-        importState && importState->isImportRunning.load()) {
-        statusLine = std::string(UI::Palette::Dim) +
-                     "[Auto-Update: running in the background...]\n" +
-                     std::string(UI::Palette::Reset);
-        messageActive = true;
-        if (!monitorThreadSpawned.exchange(true))
-            backgroundThreads.emplace_back(monitorAndClearMessage,
+    /**
+     * @brief Evaluates and generates the status line string for background operations.
+     *
+     * Checks background auto-update progress or missing folder configurations, generating
+     * appropriate status messages and spawning monitor threads when necessary.
+     *
+     * @param search Atomic flag indicating active configuration search/update states.
+     * @param importState Shared pointer to the database refresh state.
+     * @param messageActive Atomic flag indicating whether a status message is currently active.
+     * @param stopMessage Atomic flag signaling background tasks to stop.
+     * @param monitorThreadSpawned Atomic flag ensuring the monitoring thread is spawned only once.
+     * @param isAtMain Atomic flag specifying whether the application is at the main menu.
+     * @param backgroundThreads Vector storing background worker threads.
+     * @param messagePrinted Reference to a flag ensuring one-time informational messages print only once.
+     * @param statusLine Output string parameter receiving the formatted status line.
+     */
+    void updateStatusLine(std::atomic<bool>& search,
+                          std::shared_ptr<RefreshState>& importState,
+                          std::atomic<bool>& messageActive,
+                          std::atomic<bool>& stopMessage,
+                          std::atomic<bool>& monitorThreadSpawned,
+                          std::atomic<bool>& isAtMain,
+                          std::vector<std::thread>& backgroundThreads,
+                          bool& messagePrinted,
+                          std::string& statusLine) {
+        if (search.load() && !isHistoryFileEmpty(GlobalState::historyFilePath) &&
+            importState && importState->isImportRunning.load()) {
+            statusLine = std::string(UI::Palette::Dim) +
+                         "[Auto-Update: running in the background...]\n" +
+                         std::string(UI::Palette::Reset);
+            messageActive = true;
+            if (!monitorThreadSpawned.exchange(true))
+                backgroundThreads.emplace_back(monitorAndClearMessage,
+                                               importState, std::ref(messageActive),
+                                               std::ref(stopMessage), std::ref(isAtMain));
+        } else if ((search.load() && !messagePrinted) &&
+                   (isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath))) {
+            statusLine = std::string(UI::Palette::Dim) +
+                         "[Auto-Update: no stored FolderPaths to scan...]\n" +
+                         std::string(UI::Palette::Reset);
+            messagePrinted = true;
+            messageActive = true;
+            backgroundThreads.emplace_back(clearMessageAfterTimeoutInMain, 4, std::ref(isAtMain),
                                            importState, std::ref(messageActive),
-                                           std::ref(stopMessage), std::ref(isAtMain));
-    } else if ((search.load() && !messagePrinted) &&
-               (isHistoryFileEmpty(GlobalState::historyFilePath) || !fs::is_regular_file(GlobalState::historyFilePath))) {
-        statusLine = std::string(UI::Palette::Dim) +
-                     "[Auto-Update: no stored FolderPaths to scan...]\n" +
-                     std::string(UI::Palette::Reset);
-        messagePrinted = true;
-        messageActive = true;
-        backgroundThreads.emplace_back(clearMessageAfterTimeoutInMain, 4, std::ref(isAtMain),
-                                       importState, std::ref(messageActive),
-                                       std::ref(stopMessage));
+                                           std::ref(stopMessage));
+        }
     }
-}
 
-/**
- * @brief Dispatches user selection from the main interactive menu options.
- *
- * Routes user choices (1 through 5) to appropriate submenus or control handlers:
- * - 1: ISO browsing and selection
- * - 2: Image selection for ISO conversion
- * - 3: Database filesystem refresh
- * - 4: Interactive configuration editor
- * - 5: Program exit
- *
- * @param choice String input representing the user's menu option.
- * @param exitProgram Reference flag set to true when choice 5 is selected.
- * @param isAtMain Reference to atomic flag tracking main menu state.
- * @param isAtISOList Reference to atomic flag tracking ISO list state.
- * @param importState Shared pointer to database refresh state.
- * @param backgroundThreads Vector storing background threads.
- */
-void dispatchMenuChoice(const std::string& choice,
-                        bool& exitProgram,
-                        std::atomic<bool>& isAtMain,
-                        std::atomic<bool>& isAtISOList,
-                        std::shared_ptr<RefreshState>& importState,
-                        std::vector<std::thread>& backgroundThreads) {
-    if (choice == "1") {
-        isAtMain.store(false);
-        isAtISOList.store(false);
-        submenu1(isAtISOList, importState, backgroundThreads);
-    } else if (choice.length() == 1) {
-        switch (choice[0]) {
-            case '2':
-                isAtMain.store(false);
-                isAtISOList.store(false);
-                submenu2(importState);
-                break;
-            case '3': {
-                isAtMain.store(false);
-                isAtISOList.store(false);
-                bool newISOFound = false;
-                refreshForDatabase(true, -1, false, newISOFound);
-                break;
+    /**
+     * @brief Dispatches user selection from the main interactive menu options.
+     *
+     * Routes user choices (1 through 5) to appropriate submenus or control handlers:
+     * - 1: ISO browsing and selection
+     * - 2: Image selection for ISO conversion
+     * - 3: Database filesystem refresh
+     * - 4: Interactive configuration editor
+     * - 5: Program exit
+     *
+     * @param choice String input representing the user's menu option.
+     * @param exitProgram Reference flag set to true when choice 5 is selected.
+     * @param isAtMain Reference to atomic flag tracking main menu state.
+     * @param isAtISOList Reference to atomic flag tracking ISO list state.
+     * @param importState Shared pointer to database refresh state.
+     * @param backgroundThreads Vector storing background threads.
+     */
+    void dispatchMenuChoice(const std::string& choice,
+                            bool& exitProgram,
+                            std::atomic<bool>& isAtMain,
+                            std::atomic<bool>& isAtISOList,
+                            std::shared_ptr<RefreshState>& importState,
+                            std::vector<std::thread>& backgroundThreads) {
+        if (choice == "1") {
+            isAtMain.store(false);
+            isAtISOList.store(false);
+            submenu1(isAtISOList, importState, backgroundThreads);
+        } else if (choice.length() == 1) {
+            switch (choice[0]) {
+                case '2':
+                    isAtMain.store(false);
+                    isAtISOList.store(false);
+                    submenu2(importState);
+                    break;
+                case '3': {
+                    isAtMain.store(false);
+                    isAtISOList.store(false);
+                    bool newISOFound = false;
+                    refreshForDatabase(true, -1, false, newISOFound);
+                    break;
+                }
+                case '4':
+                    isAtMain.store(false);
+                    isAtISOList.store(false);
+                    interactiveConfigEditor(GlobalState::configPath);
+                    break;
+                case '5':
+                    exitProgram = true;
+                    clearScrollBuffer();
+                    break;
+                default: break;
             }
-            case '4':
-                isAtMain.store(false);
-                isAtISOList.store(false);
-                interactiveConfigEditor(GlobalState::configPath);
-                break;
-            case '5':
-                exitProgram = true;
-                clearScrollBuffer();
-                break;
-            default: break;
-        }
-    }
-}
-
-/**
- * @brief Performs graceful cleanup and resource release upon application shutdown.
- *
- * Shuts down thread pools, signals background tasks to stop, notifies worker condition variables,
- * joins all active threads, flushes terminal formatting, and releases/unlinks the single-instance lock file.
- *
- * @param backgroundThreads Vector of background threads to join.
- * @param importState Shared pointer managing refresh state flags.
- * @param stopMessage Atomic flag signaling workers to terminate.
- * @param lockFd File descriptor handle for the advisory lock.
- * @param lockFile Path string to the lock file.
- */
-void cleanupAndExit(std::vector<std::thread>& backgroundThreads,
-                    std::shared_ptr<RefreshState>& importState,
-                    std::atomic<bool>& stopMessage,
-                    int lockFd,
-                    const char* lockFile) {
-    getStaticThreadPool().shutdown();
-
-    importState->stopImport = stopMessage = true;
-    GlobalState::g_operationCancelled.store(true, std::memory_order_release);
-
-    if (importState) {
-        importState->isImportRunning.store(false, std::memory_order_release);
-        {
-            std::lock_guard<std::mutex> lk(importState->workerMutex);
-            importState->workerCV.notify_all();
         }
     }
 
-    for (auto& t : backgroundThreads) {
-        if (t.joinable()) {
-            t.join();
+    /**
+     * @brief Performs graceful cleanup and resource release upon application shutdown.
+     *
+     * Shuts down thread pools, signals background tasks to stop, notifies worker condition variables,
+     * joins all active threads, flushes terminal formatting, and releases/unlinks the single-instance lock file.
+     *
+     * @param backgroundThreads Vector of background threads to join.
+     * @param importState Shared pointer managing refresh state flags.
+     * @param stopMessage Atomic flag signaling workers to terminate.
+     * @param lockFd File descriptor handle for the advisory lock.
+     * @param lockFile Path string to the lock file.
+     */
+    void cleanupAndExit(std::vector<std::thread>& backgroundThreads,
+                        std::shared_ptr<RefreshState>& importState,
+                        std::atomic<bool>& stopMessage,
+                        int lockFd,
+                        const char* lockFile) {
+        getStaticThreadPool().shutdown();
+
+        importState->stopImport = stopMessage = true;
+        GlobalState::g_operationCancelled.store(true, std::memory_order_release);
+
+        if (importState) {
+            importState->isImportRunning.store(false, std::memory_order_release);
+            {
+                std::lock_guard<std::mutex> lk(importState->workerMutex);
+                importState->workerCV.notify_all();
+            }
         }
+
+        for (auto& t : backgroundThreads) {
+            if (t.joinable()) {
+                t.join();
+            }
+        }
+
+        g_drainingManager.joinAll();
+
+        std::cout << UI::Palette::Reset << std::flush;
+        close(lockFd);
+        unlink(lockFile);
     }
-
-    g_drainingManager.joinAll();
-
-    std::cout << UI::Palette::Reset << std::flush;
-    close(lockFd);
-    unlink(lockFile);
-}
 
 } // namespace
 

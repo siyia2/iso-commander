@@ -47,7 +47,7 @@
  * @param isoFiles The full list of available ISO file paths.
  * @return A vector of formatted strings ready for console output.
  */
-std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>& indexChunks, const std::vector<std::string>& isoFiles) {
+static std::vector<std::string> generateIsoEntries(const std::vector<std::vector<int>>& indexChunks, const std::vector<std::string>& isoFiles) {
     std::vector<std::string> entries;
 
     const CpMvRmColors colors = getCpMvRmColors();
@@ -147,7 +147,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
  * @return True if the user confirmed with 'Y' or 'y', false on any other input,
  *         cancellation, or EOF.
  */
-bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
+static bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
                            std::vector<std::vector<int>>& indexChunks,
                            bool& umountMvRmBreak,
                            bool& abortDel) {
@@ -419,7 +419,7 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
  * @param errorDetail System error description; used by several branches.
  * @param operation   Operation label ("move", "copy", "moving", "copying").
  */
-void reportErrorCpMvRm(OperationContext& ctx,
+static void reportErrorCpMvRm(OperationContext& ctx,
                        std::string_view errorType,
                        std::string_view srcDir,
                        std::string_view srcFile,
@@ -522,7 +522,7 @@ void reportErrorCpMvRm(OperationContext& ctx,
  *                       error from the final rename.
  * @return True if the copy completed successfully, false if cancelled or failed.
  */
-bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst,
+static bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst,
                               std::atomic<size_t>* completedBytes,
                               std::error_code& ec) {
     const size_t bufferSize = 8 * 1024 * 1024;
@@ -682,7 +682,7 @@ static void logOperationResult(OperationContext& ctx,
  * @param completedTasks Atomic counter incremented on successful deletion.
  * @param failedTasks    Atomic counter incremented on failure or cancellation.
  */
-void performDeleteOperation(OperationContext& ctx,
+static void performDeleteOperation(OperationContext& ctx,
                             const fs::path& srcPath,
                             std::string_view srcDir, std::string_view srcFile,
                             size_t fileSize,
@@ -760,7 +760,7 @@ void performDeleteOperation(OperationContext& ctx,
  * @param completedTasks   Atomic counter incremented on successful move.
  * @return True if the move succeeded, false otherwise.
  */
-bool performMoveOperation(OperationContext& ctx,
+static bool performMoveOperation(OperationContext& ctx,
                           const fs::path& srcPath, const fs::path& destPath,
                           std::string_view srcDir, std::string_view srcFile,
                           std::string_view destDirProcessed, std::string_view destFile,
@@ -841,7 +841,7 @@ bool performMoveOperation(OperationContext& ctx,
  * @param completedBytes   Atomic counter tracking bytes copied.
  * @return True if the copy succeeded, false otherwise.
  */
-bool performMultiDestMoveOperation(OperationContext& ctx,
+static bool performMultiDestMoveOperation(OperationContext& ctx,
                                    const fs::path& srcPath, const fs::path& destPath,
                                    std::string_view srcDir, std::string_view srcFile,
                                    std::string_view destDirProcessed, std::string_view destFile,
@@ -874,7 +874,7 @@ bool performMultiDestMoveOperation(OperationContext& ctx,
  * @param completedBytes   Atomic counter tracking bytes copied.
  * @return True if the copy succeeded, false otherwise.
  */
-bool performCopyOperation(OperationContext& ctx,
+static bool performCopyOperation(OperationContext& ctx,
                           const fs::path& srcPath, const fs::path& destPath,
                           std::string_view srcDir, std::string_view srcFile,
                           std::string_view destDirProcessed, std::string_view destFile,

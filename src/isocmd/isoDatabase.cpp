@@ -244,7 +244,7 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
  * @return Number of non-empty lines, or -1 if the file cannot be opened
  *         (in which case an error is written to std::cerr)
  */
-int countNonEmptyLines(const std::string& filePath) {
+static int countNonEmptyLines(const std::string& filePath) {
     std::ifstream file(filePath);
     if (!file.is_open()) {
         std::cerr << "Unable to open file: " << filePath << std::endl;
@@ -279,111 +279,111 @@ std::string getHomeDirectory() {
 
 namespace {
 
-/**
- * @brief Ensures the database directory exists and is a valid directory.
- *
- * Checks if the directory exists. If not, attempts to create it along with any
- * necessary parent directories. Verifies that the resulting path is a valid directory.
- *
- * @param dir Const reference to the filesystem path of the database directory.
- * @return true  if the directory exists and is valid, or was successfully created.
- * @return false if creation failed or the path exists but is not a directory.
- */
-bool ensureDatabaseDirectory(const std::filesystem::path& dir) {
-    if (!std::filesystem::exists(dir) && !std::filesystem::create_directories(dir)) {
-        return false;
+    /**
+     * @brief Ensures the database directory exists and is a valid directory.
+     *
+     * Checks if the directory exists. If not, attempts to create it along with any
+     * necessary parent directories. Verifies that the resulting path is a valid directory.
+     *
+     * @param dir Const reference to the filesystem path of the database directory.
+     * @return true  if the directory exists and is valid, or was successfully created.
+     * @return false if creation failed or the path exists but is not a directory.
+     */
+    bool ensureDatabaseDirectory(const std::filesystem::path& dir) {
+        if (!std::filesystem::exists(dir) && !std::filesystem::create_directories(dir)) {
+            return false;
+        }
+        return std::filesystem::is_directory(dir);
     }
-    return std::filesystem::is_directory(dir);
-}
 
-/**
- * @brief Reads and parses existing ISO entries from the database file.
- *
- * Opens the database file in read-only mode, acquires a shared file lock (flock),
- * and reads all lines into a vector of strings, stripping any carriage return characters.
- *
- * @param cachePath Const reference to the full filesystem path of the database file.
- * @return A std::vector<std::string> containing the cached ISO paths, or empty if the file doesn't exist or is empty.
- */
-std::vector<std::string> readExistingCache(const std::filesystem::path& cachePath) {
-    std::vector<std::string> cache;
-    int fd = open(cachePath.c_str(), O_RDONLY);
-    if (fd == -1) return cache;
+    /**
+     * @brief Reads and parses existing ISO entries from the database file.
+     *
+     * Opens the database file in read-only mode, acquires a shared file lock (flock),
+     * and reads all lines into a vector of strings, stripping any carriage return characters.
+     *
+     * @param cachePath Const reference to the full filesystem path of the database file.
+     * @return A std::vector<std::string> containing the cached ISO paths, or empty if the file doesn't exist or is empty.
+     */
+    std::vector<std::string> readExistingCache(const std::filesystem::path& cachePath) {
+        std::vector<std::string> cache;
+        int fd = open(cachePath.c_str(), O_RDONLY);
+        if (fd == -1) return cache;
 
-    if (flock(fd, LOCK_SH) == 0) {
-        struct stat fileStat;
-        if (fstat(fd, &fileStat) == 0 && fileStat.st_size > 0) {
-            std::vector<char> buffer(fileStat.st_size);
-            ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
-            if (bytesRead > 0 && bytesRead <= fileStat.st_size) {
-                char* start = buffer.data();
-                char* end = buffer.data() + bytesRead;
-                while (start < end) {
-                    char* lineEnd = std::find(start, end, '\n');
-                    std::string line(start, lineEnd);
-                    if (!line.empty() && line.back() == '\r') {
-                        line.pop_back();
+        if (flock(fd, LOCK_SH) == 0) {
+            struct stat fileStat;
+            if (fstat(fd, &fileStat) == 0 && fileStat.st_size > 0) {
+                std::vector<char> buffer(fileStat.st_size);
+                ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
+                if (bytesRead > 0 && bytesRead <= fileStat.st_size) {
+                    char* start = buffer.data();
+                    char* end = buffer.data() + bytesRead;
+                    while (start < end) {
+                        char* lineEnd = std::find(start, end, '\n');
+                        std::string line(start, lineEnd);
+                        if (!line.empty() && line.back() == '\r') {
+                            line.pop_back();
+                        }
+                        if (!line.empty()) {
+                            cache.push_back(std::move(line));
+                        }
+                        start = (lineEnd < end) ? lineEnd + 1 : end;
                     }
-                    if (!line.empty()) {
-                        cache.push_back(std::move(line));
-                    }
-                    start = (lineEnd < end) ? lineEnd + 1 : end;
                 }
             }
+            flock(fd, LOCK_UN);
         }
-        flock(fd, LOCK_UN);
-    }
-    close(fd);
-    return cache;
-}
-
-/**
- * @brief Atomically writes the combined cache to disk using a temporary file and rename.
- *
- * Trims the cache to GlobalState::maxDatabaseSize if necessary, serializes entries
- * with newline separators, writes to a temporary file created via mkstemp with
- * permissions 0644, syncs to disk via fsync, and atomically renames it into place.
- *
- * @param cachePath Const reference to the destination cache file path.
- * @param cache     Reference to the vector of cache strings to be written and trimmed.
- * @return true  if all I/O, permission, and atomic rename operations succeed.
- * @return false if any I/O step fails (mkstemp, fchmod, write, fsync, or rename).
- */
-bool atomicWriteCache(const std::filesystem::path& cachePath, std::vector<std::string>& cache) {
-    if (cache.size() > GlobalState::maxDatabaseSize) {
-        cache.erase(cache.begin(), cache.begin() + (cache.size() - GlobalState::maxDatabaseSize));
+        close(fd);
+        return cache;
     }
 
-    std::string output;
-    output.reserve(cache.size() * 64);
-    for (const auto& entry : cache) {
-        output += entry;
-        output += '\n';
-    }
+    /**
+     * @brief Atomically writes the combined cache to disk using a temporary file and rename.
+     *
+     * Trims the cache to GlobalState::maxDatabaseSize if necessary, serializes entries
+     * with newline separators, writes to a temporary file created via mkstemp with
+     * permissions 0644, syncs to disk via fsync, and atomically renames it into place.
+     *
+     * @param cachePath Const reference to the destination cache file path.
+     * @param cache     Reference to the vector of cache strings to be written and trimmed.
+     * @return true  if all I/O, permission, and atomic rename operations succeed.
+     * @return false if any I/O step fails (mkstemp, fchmod, write, fsync, or rename).
+     */
+    bool atomicWriteCache(const std::filesystem::path& cachePath, std::vector<std::string>& cache) {
+        if (cache.size() > GlobalState::maxDatabaseSize) {
+            cache.erase(cache.begin(), cache.begin() + (cache.size() - GlobalState::maxDatabaseSize));
+        }
 
-    std::string tmpPath = (std::filesystem::path(GlobalState::databaseFilePath).parent_path() / "iso_commander_database_saved_XXXXXX").string();
-    int tmpFd = mkstemp(tmpPath.data());
-    if (tmpFd == -1) return false;
+        std::string output;
+        output.reserve(cache.size() * 64);
+        for (const auto& entry : cache) {
+            output += entry;
+            output += '\n';
+        }
 
-    auto cleanupTmp = [&]() {
+        std::string tmpPath = (std::filesystem::path(GlobalState::databaseFilePath).parent_path() / "iso_commander_database_saved_XXXXXX").string();
+        int tmpFd = mkstemp(tmpPath.data());
+        if (tmpFd == -1) return false;
+
+        auto cleanupTmp = [&]() {
+            close(tmpFd);
+            ::unlink(tmpPath.c_str());
+        };
+
+        if (fchmod(tmpFd, 0644) == -1 ||
+            ::write(tmpFd, output.data(), output.size()) != static_cast<ssize_t>(output.size()) ||
+            fsync(tmpFd) == -1) {
+            cleanupTmp();
+            return false;
+        }
+
         close(tmpFd);
-        ::unlink(tmpPath.c_str());
-    };
-
-    if (fchmod(tmpFd, 0644) == -1 ||
-        ::write(tmpFd, output.data(), output.size()) != static_cast<ssize_t>(output.size()) ||
-        fsync(tmpFd) == -1) {
-        cleanupTmp();
-        return false;
+        if (::rename(tmpPath.c_str(), cachePath.c_str()) == -1) {
+            ::unlink(tmpPath.c_str());
+            return false;
+        }
+        return true;
     }
-
-    close(tmpFd);
-    if (::rename(tmpPath.c_str(), cachePath.c_str()) == -1) {
-        ::unlink(tmpPath.c_str());
-        return false;
-    }
-    return true;
-}
 
 } // namespace
 
@@ -495,7 +495,7 @@ void updateDatabaseAfterOperations(const std::string& filePathsStr) {
  * @param paths Vector of semicolon-delimited path strings
  * @return Vector of reduced/optimized absolute path strings
  */
-std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string>& paths) {
+static std::vector<std::string> hierarchicalPathReduction(const std::vector<std::string>& paths) {
     std::map<std::string, std::vector<std::string>> pathGroups;
     std::vector<std::string> allPaths;
 
@@ -553,151 +553,151 @@ bool isValidDirectory(const std::string& path);
 
 namespace {
 
-/**
- * @brief Signals completion of the background import process.
- *
- * @details If cancellation was not requested via stopImport, introduces a 500ms
- *          delay before signaling. Updates the running status under printMutex
- *          to ensure thread-safe synchronization visibility, and notifies importCV.
- *
- * @param state Shared refresh state holding synchronization primitives and status flags.
- */
-void signalImportDone(const std::shared_ptr<RefreshState>& state) {
-    if (!state) return;
-    if (!state->stopImport.load()) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    /**
+     * @brief Signals completion of the background import process.
+     *
+     * @details If cancellation was not requested via stopImport, introduces a 500ms
+     *          delay before signaling. Updates the running status under printMutex
+     *          to ensure thread-safe synchronization visibility, and notifies importCV.
+     *
+     * @param state Shared refresh state holding synchronization primitives and status flags.
+     */
+    void signalImportDone(const std::shared_ptr<RefreshState>& state) {
+        if (!state) return;
+        if (!state->stopImport.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        }
+        {
+            std::lock_guard<std::mutex> lk(state->printMutex);
+            state->isImportRunning.store(false, std::memory_order_relaxed);
+        }
+        state->importCV.notify_all();
     }
-    {
-        std::lock_guard<std::mutex> lk(state->printMutex);
-        state->isImportRunning.store(false, std::memory_order_relaxed);
-    }
-    state->importCV.notify_all();
-}
 
-/**
- * @brief Parses semicolon-delimited absolute paths from the history file.
- *
- * @details Reads paths line by line, validating that they begin with '/' and
- *          normalizing trailing slashes. Deduplicates paths and periodically
- *          checks the stopImport flag for early cancellation.
- *
- * @param state Shared refresh state used to check for cancellation signals.
- * @param paths Output vector to populate with parsed and normalized absolute paths.
- * @return true If the history file was successfully read and parsed.
- * @return false If the file could not be opened or import was stopped.
- */
-bool parseHistoryFile(const std::shared_ptr<RefreshState>& state, std::vector<std::string>& paths) {
-    std::ifstream file(GlobalState::historyFilePath);
-    if (!file.is_open()) return false;
+    /**
+     * @brief Parses semicolon-delimited absolute paths from the history file.
+     *
+     * @details Reads paths line by line, validating that they begin with '/' and
+     *          normalizing trailing slashes. Deduplicates paths and periodically
+     *          checks the stopImport flag for early cancellation.
+     *
+     * @param state Shared refresh state used to check for cancellation signals.
+     * @param paths Output vector to populate with parsed and normalized absolute paths.
+     * @return true If the history file was successfully read and parsed.
+     * @return false If the file could not be opened or import was stopped.
+     */
+    bool parseHistoryFile(const std::shared_ptr<RefreshState>& state, std::vector<std::string>& paths) {
+        std::ifstream file(GlobalState::historyFilePath);
+        if (!file.is_open()) return false;
 
-    std::string line;
-    while (std::getline(file, line)) {
-        if (state->stopImport.load()) return false;
-        std::istringstream iss(line);
-        std::string path;
-        while (std::getline(iss, path, ';')) {
-            if (!path.empty() && path[0] == '/') {
-                if (path.back() != '/') path += '/';
-                if (std::find(paths.begin(), paths.end(), path) == paths.end()) {
-                    paths.push_back(path);
+        std::string line;
+        while (std::getline(file, line)) {
+            if (state->stopImport.load()) return false;
+            std::istringstream iss(line);
+            std::string path;
+            while (std::getline(iss, path, ';')) {
+                if (!path.empty() && path[0] == '/') {
+                    if (path.back() != '/') path += '/';
+                    if (std::find(paths.begin(), paths.end(), path) == paths.end()) {
+                        paths.push_back(path);
+                    }
                 }
             }
         }
+        return true;
     }
-    return true;
-}
 
-/**
- * @brief Cleans and removes redundant root paths.
- *
- * @details Removes the root path "/" from the collection if multiple paths
- *          are present, avoiding unnecessary exhaustive root-level scans.
- *
- * @param paths Vector of path strings to clean and reduce.
- */
-void cleanAndReducePaths(std::vector<std::string>& paths) {
-    if (paths.size() > 1) {
-        auto it = std::find(paths.begin(), paths.end(), "/");
-        if (it != paths.end()) paths.erase(it);
+    /**
+     * @brief Cleans and removes redundant root paths.
+     *
+     * @details Removes the root path "/" from the collection if multiple paths
+     *          are present, avoiding unnecessary exhaustive root-level scans.
+     *
+     * @param paths Vector of path strings to clean and reduce.
+     */
+    void cleanAndReducePaths(std::vector<std::string>& paths) {
+        if (paths.size() > 1) {
+            auto it = std::find(paths.begin(), paths.end(), "/");
+            if (it != paths.end()) paths.erase(it);
+        }
     }
-}
 
-/**
- * @brief Traverses directory paths in concurrent thread-pool-sized groups.
- *
- * @details Spawns worker threads up to the static thread pool count. Validates
- *          directories before processing, tracks active workers, handles thread
- *          construction safety, and supports mid-group cancellation via stopImport.
- *
- * @param finalPaths           Vector of hierarchical path reduction results to traverse.
- * @param state                Shared refresh state containing synchronization variables.
- * @param allIsoFiles          Output container accumulating discovered ISO file paths.
- * @param uniqueErrorMessages  Output container accumulating unique traversal errors.
- * @param totalFiles           Atomic counter tracking total discovered files.
- * @param processMutex         Mutex protecting shared collection writes during traversal.
- * @param traverseErrorMutex   Mutex protecting unique error message insertion.
- * @param localMaxDepth        Maximum recursion depth limit (-1 for unlimited).
- * @param localPromptFlag      Flag controlling internal prompt behavior during traversal.
- * @return true If traversal completed successfully for all groups.
- * @return false If execution was aborted early due to cancellation.
- */
-bool executeDirectoryTraversal(
-    const std::vector<std::string>& finalPaths,
-    const std::shared_ptr<RefreshState>& state,
-    std::vector<std::string>& allIsoFiles,
-    std::unordered_set<std::string>& uniqueErrorMessages,
-    std::atomic<size_t>& totalFiles,
-    std::mutex& processMutex,
-    std::mutex& traverseErrorMutex,
-    int localMaxDepth,
-    bool localPromptFlag
-) {
-    const size_t groupSize = std::max<size_t>(1, getStaticThreadPool().threadCount());
+    /**
+     * @brief Traverses directory paths in concurrent thread-pool-sized groups.
+     *
+     * @details Spawns worker threads up to the static thread pool count. Validates
+     *          directories before processing, tracks active workers, handles thread
+     *          construction safety, and supports mid-group cancellation via stopImport.
+     *
+     * @param finalPaths           Vector of hierarchical path reduction results to traverse.
+     * @param state                Shared refresh state containing synchronization variables.
+     * @param allIsoFiles          Output container accumulating discovered ISO file paths.
+     * @param uniqueErrorMessages  Output container accumulating unique traversal errors.
+     * @param totalFiles           Atomic counter tracking total discovered files.
+     * @param processMutex         Mutex protecting shared collection writes during traversal.
+     * @param traverseErrorMutex   Mutex protecting unique error message insertion.
+     * @param localMaxDepth        Maximum recursion depth limit (-1 for unlimited).
+     * @param localPromptFlag      Flag controlling internal prompt behavior during traversal.
+     * @return true If traversal completed successfully for all groups.
+     * @return false If execution was aborted early due to cancellation.
+     */
+    bool executeDirectoryTraversal(
+        const std::vector<std::string>& finalPaths,
+        const std::shared_ptr<RefreshState>& state,
+        std::vector<std::string>& allIsoFiles,
+        std::unordered_set<std::string>& uniqueErrorMessages,
+        std::atomic<size_t>& totalFiles,
+        std::mutex& processMutex,
+        std::mutex& traverseErrorMutex,
+        int localMaxDepth,
+        bool localPromptFlag
+    ) {
+        const size_t groupSize = std::max<size_t>(1, getStaticThreadPool().threadCount());
 
-    for (size_t i = 0; i < finalPaths.size(); i += groupSize) {
-        if (state->stopImport.load()) return false;
+        for (size_t i = 0; i < finalPaths.size(); i += groupSize) {
+            if (state->stopImport.load()) return false;
 
-        const size_t end = std::min(i + groupSize, finalPaths.size());
-        std::vector<std::thread> threads;
-        threads.reserve(end - i);
+            const size_t end = std::min(i + groupSize, finalPaths.size());
+            std::vector<std::thread> threads;
+            threads.reserve(end - i);
 
-        state->activeWorkers.store(0, std::memory_order_relaxed);
+            state->activeWorkers.store(0, std::memory_order_relaxed);
 
-        for (size_t j = i; j < end; ++j) {
-            if (state->stopImport.load()) break;
-            if (!isValidDirectory(finalPaths[j])) continue;
+            for (size_t j = i; j < end; ++j) {
+                if (state->stopImport.load()) break;
+                if (!isValidDirectory(finalPaths[j])) continue;
 
-            state->activeWorkers.fetch_add(1, std::memory_order_relaxed);
+                state->activeWorkers.fetch_add(1, std::memory_order_relaxed);
 
-            try {
-                threads.emplace_back([&, path = finalPaths[j]]() {
-                    traverse(path, allIsoFiles, uniqueErrorMessages,
-                             totalFiles, processMutex, traverseErrorMutex,
-                             localMaxDepth, localPromptFlag);
-                    if (state->activeWorkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-                        std::lock_guard<std::mutex> lk(state->workerMutex);
-                        state->workerCV.notify_all();
-                    }
+                try {
+                    threads.emplace_back([&, path = finalPaths[j]]() {
+                        traverse(path, allIsoFiles, uniqueErrorMessages,
+                                 totalFiles, processMutex, traverseErrorMutex,
+                                 localMaxDepth, localPromptFlag);
+                        if (state->activeWorkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                            std::lock_guard<std::mutex> lk(state->workerMutex);
+                            state->workerCV.notify_all();
+                        }
+                    });
+                } catch (...) {
+                    state->activeWorkers.fetch_sub(1, std::memory_order_relaxed);
+                }
+            }
+
+            if (!threads.empty()) {
+                std::unique_lock<std::mutex> lk(state->workerMutex);
+                state->workerCV.wait(lk, [&] {
+                    return state->activeWorkers.load(std::memory_order_acquire) == 0
+                        || state->stopImport.load();
                 });
-            } catch (...) {
-                state->activeWorkers.fetch_sub(1, std::memory_order_relaxed);
+            }
+
+            for (auto& t : threads) {
+                if (t.joinable()) t.join();
             }
         }
-
-        if (!threads.empty()) {
-            std::unique_lock<std::mutex> lk(state->workerMutex);
-            state->workerCV.wait(lk, [&] {
-                return state->activeWorkers.load(std::memory_order_acquire) == 0
-                    || state->stopImport.load();
-            });
-        }
-
-        for (auto& t : threads) {
-            if (t.joinable()) t.join();
-        }
+        return !state->stopImport.load();
     }
-    return !state->stopImport.load();
-}
 
 } // namespace
 

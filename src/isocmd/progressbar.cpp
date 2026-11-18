@@ -291,7 +291,7 @@ int oldf;
  * @param oldt Pointer to store original terminal settings.
  * @param oldf Pointer to store original file descriptor flags.
  */
-void disableInputForProgressBar(struct termios *oldt, int *oldf) {
+static void disableInputForProgressBar(struct termios *oldt, int *oldf) {
     struct termios newt;
 
     tcgetattr(STDIN_FILENO, oldt);
@@ -309,7 +309,7 @@ void disableInputForProgressBar(struct termios *oldt, int *oldf) {
  * @param oldt Pointer to original terminal settings.
  * @param oldf Original file descriptor flags.
  */
-void restoreInput(struct termios *oldt, int oldf) {
+static void restoreInput(struct termios *oldt, int oldf) {
     tcsetattr(STDIN_FILENO, TCSANOW, oldt);
     fcntl(STDIN_FILENO, F_SETFL, oldf);
 }
