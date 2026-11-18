@@ -749,6 +749,8 @@ static char** handle_device_completion(const char* text, int start, const std::s
 char** completion_cb(const char* text, int start, int end) {
     current_page = 0;
     last_common_prefix[0] = '\0';
+    lastCompletion.clear();
+
     rl_attempted_completion_over = 1;
 
     std::string current_word(rl_line_buffer + start, end - start);
@@ -854,7 +856,15 @@ int clear_screen_and_buffer(int, int) {
 
     current_page = 0;
     last_common_prefix[0] = '\0';
-    lastCompletion.clear(); // Clear saved repaint snapshot on exit / completion clearing
+
+    // Preserve the snapshot when my_rl_complete() is refreshing a listing
+    // after Readline inserted a common prefix. It is needed for future
+    // terminal-resize repaints.
+    //
+    // Ordinary screen clears invalidate the snapshot. Explicit dismissal
+    // clears it before reaching this function via clear_list_and_screen().
+    if (!list_shown_during_completion)
+        lastCompletion.clear();
 
     // Always restore the default Esc binding when clearing. If a completion
     // list is currently visible, my_rl_complete() re-installs the hijack
@@ -929,8 +939,11 @@ int my_rl_complete(int ignore, int invoking_key)
     (void)ignore;
     (void)invoking_key;
 
-    // Reset tracking for this keystroke.
+    // Reset tracking and invalidate any previous completion listing.
+    // customListingsFunction() will capture a fresh snapshot if this
+    // completion attempt actually displays a listing.
     list_shown_during_completion = false;
+    lastCompletion.clear();
 
     rl_completion_append_character = '\0';
 
