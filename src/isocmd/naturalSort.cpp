@@ -62,71 +62,90 @@
  * @note Character case folding is ASCII-only. Non-ASCII characters are compared
  *       according to their original byte values.
  */
+namespace {
+
+inline int compareNumericSequence(std::string_view a, std::string_view b, size_t& i, size_t& j) {
+    const size_t size_a = a.size();
+    const size_t size_b = b.size();
+    size_t start_a = i, start_b = j;
+
+    while (start_a < size_a && a[start_a] == '0')
+        ++start_a;
+
+    while (start_b < size_b && b[start_b] == '0')
+        ++start_b;
+
+    size_t end_a = start_a, end_b = start_b;
+
+    while (end_a < size_a && std::isdigit(static_cast<unsigned char>(a[end_a])))
+        ++end_a;
+
+    while (end_b < size_b && std::isdigit(static_cast<unsigned char>(b[end_b])))
+        ++end_b;
+
+    const size_t nz_len_a = end_a - start_a;
+    const size_t nz_len_b = end_b - start_b;
+
+    if (nz_len_a != nz_len_b)
+        return (nz_len_a < nz_len_b) ? -1 : 1;
+
+    for (size_t k = 0; k < nz_len_a; ++k) {
+        const char ca = a[start_a + k];
+        const char cb = b[start_b + k];
+
+        if (ca != cb)
+            return (ca < cb) ? -1 : 1;
+    }
+
+    const size_t zeros_a = start_a - i;
+    const size_t zeros_b = start_b - j;
+
+    if (zeros_a != zeros_b)
+        return (zeros_a < zeros_b) ? -1 : 1;
+
+    i = end_a;
+    j = end_b;
+    return 0;
+}
+
+inline int compareAlphaSequence(std::string_view a, std::string_view b, size_t& i, size_t& j) {
+    const char ca = static_cast<char>(
+        std::tolower(static_cast<unsigned char>(a[i])));
+
+    const char cb = static_cast<char>(
+        std::tolower(static_cast<unsigned char>(b[j])));
+
+    if (ca != cb)
+        return (ca < cb) ? -1 : 1;
+
+    if (a[i] != b[j])
+        return (a[i] < b[i]) ? -1 : 1;
+
+    ++i;
+    ++j;
+    return 0;
+}
+
+} // namespace
+
 int naturalCompare(std::string_view a, std::string_view b) {
     size_t i = 0, j = 0;
     const size_t size_a = a.size();
     const size_t size_b = b.size();
 
     while (i < size_a && j < size_b) {
-        if (std::isdigit(static_cast<unsigned char>(a[i])) &&
-            std::isdigit(static_cast<unsigned char>(b[j]))) {
+        const bool is_num_a = std::isdigit(static_cast<unsigned char>(a[i]));
+        const bool is_num_b = std::isdigit(static_cast<unsigned char>(b[j]));
 
-            size_t start_a = i, start_b = j;
-
-            while (start_a < size_a && a[start_a] == '0')
-                ++start_a;
-
-            while (start_b < size_b && b[start_b] == '0')
-                ++start_b;
-
-            size_t end_a = start_a, end_b = start_b;
-
-            while (end_a < size_a &&
-                   std::isdigit(static_cast<unsigned char>(a[end_a])))
-                ++end_a;
-
-            while (end_b < size_b &&
-                   std::isdigit(static_cast<unsigned char>(b[end_b])))
-                ++end_b;
-
-            const size_t nz_len_a = end_a - start_a;
-            const size_t nz_len_b = end_b - start_b;
-
-            if (nz_len_a != nz_len_b)
-                return (nz_len_a < nz_len_b) ? -1 : 1;
-
-            for (size_t k = 0; k < nz_len_a; ++k) {
-                const char ca = a[start_a + k];
-                const char cb = b[start_b + k];
-
-                if (ca != cb)
-                    return (ca < cb) ? -1 : 1;
-            }
-
-            const size_t zeros_a = start_a - i;
-            const size_t zeros_b = start_b - j;
-
-            if (zeros_a != zeros_b)
-                return (zeros_a < zeros_b) ? -1 : 1;
-
-            i = end_a;
-            j = end_b;
+        int res = 0;
+        if (is_num_a && is_num_b) {
+            res = compareNumericSequence(a, b, i, j);
         } else {
-            const char ca = static_cast<char>(
-                std::tolower(static_cast<unsigned char>(a[i])));
-
-            const char cb = static_cast<char>(
-                std::tolower(static_cast<unsigned char>(b[j])));
-
-            if (ca != cb)
-                return (ca < cb) ? -1 : 1;
-
-            if (a[i] != b[j])
-                return (a[i] < b[i]) ? -1 : 1;
-
-            ++i;
-            ++j;
+            res = compareAlphaSequence(a, b, i, j);
         }
+
+        if (res != 0)
+            return res;
     }
 
     if (i < size_a)
