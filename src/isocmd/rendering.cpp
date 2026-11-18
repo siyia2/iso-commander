@@ -150,36 +150,36 @@ struct ListResizeWatcher::Impl {
 
 namespace {
 
-/// Atomically set from the signal handler, cleared on the main thread.
-std::atomic<bool> g_winch{false};
+    /// Atomically set from the signal handler, cleared on the main thread.
+    std::atomic<bool> g_winch{false};
 
-/// Handler that was installed before ours; we forward to it so Readline's own
-/// SIGWINCH handling (rl_catch_sigwinch) keeps working.
-struct sigaction g_prevWinch {};
-bool             g_winchInstalled = false;
+    /// Handler that was installed before ours; we forward to it so Readline's own
+    /// SIGWINCH handling (rl_catch_sigwinch) keeps working.
+    struct sigaction g_prevWinch {};
+    bool             g_winchInstalled = false;
 
-/// Active watcher used by the Readline event hook. Accessed only on the
-/// thread running Readline; set during construction and cleared by stop().
-ListResizeWatcher::Impl* g_activeListWatcher = nullptr;
+    /// Active watcher used by the Readline event hook. Accessed only on the
+    /// thread running Readline; set during construction and cleared by stop().
+    ListResizeWatcher::Impl* g_activeListWatcher = nullptr;
 
-extern "C" void onWinch(int sig, siginfo_t* info, void* ctx) {
-    g_winch.store(true, std::memory_order_relaxed);
-    if (g_prevWinch.sa_handler == SIG_DFL || g_prevWinch.sa_handler == SIG_IGN) return;
-    if (g_prevWinch.sa_flags & SA_SIGINFO) {
-        if (g_prevWinch.sa_sigaction) g_prevWinch.sa_sigaction(sig, info, ctx);
-    } else {
-        g_prevWinch.sa_handler(sig);
+    extern "C" void onWinch(int sig, siginfo_t* info, void* ctx) {
+        g_winch.store(true, std::memory_order_relaxed);
+        if (g_prevWinch.sa_handler == SIG_DFL || g_prevWinch.sa_handler == SIG_IGN) return;
+        if (g_prevWinch.sa_flags & SA_SIGINFO) {
+            if (g_prevWinch.sa_sigaction) g_prevWinch.sa_sigaction(sig, info, ctx);
+        } else {
+            g_prevWinch.sa_handler(sig);
+        }
     }
-}
 
-/// Handles pending resize repainting, then invokes the hook that was installed
-/// before this watcher so other Readline event processing remains active.
-int listResizeHook() {
-    ListResizeWatcher::Impl* w = g_activeListWatcher;
-    if (!w) return 0;
-    w->tick();
-    return w->prevHook ? w->prevHook() : 0;
-}
+    /// Handles pending resize repainting, then invokes the hook that was installed
+    /// before this watcher so other Readline event processing remains active.
+    int listResizeHook() {
+        ListResizeWatcher::Impl* w = g_activeListWatcher;
+        if (!w) return 0;
+        w->tick();
+        return w->prevHook ? w->prevHook() : 0;
+    }
 
 } // namespace
 

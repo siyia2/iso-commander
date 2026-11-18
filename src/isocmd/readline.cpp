@@ -124,346 +124,346 @@ static bool list_shown_during_completion = false;
 
 namespace {
 
-enum class CompletionKind { Special = 0, SettingValue = 1, File = 2 };
+    enum class CompletionKind { Special = 0, SettingValue = 1, File = 2 };
 
-struct PageInfo {
-    int total_pages;
-    int start_index;
-    int items_to_display;
-};
-
-struct DisplayItem {
-    std::string display_text;   // truncated, colored string ready for printing
-    int visual_length;          // length without ANSI codes
-    const char* raw_match;      // original match
-};
-
-struct FormatContext {
-    CompletionKind kind;
-    const ReadlineColors& rc;
-    const char* base_color;     // dynamic color used for setting values
-    int base_len;               // length of the common directory part (file branch only)
-};
-
-struct ColumnLayout {
-    int column_width;
-    int num_columns;
-    int total_column_width;
-    int rows;
-};
-
-struct CompletionSnapshot {
-    std::vector<std::string> matches;
-
-    CompletionKind kind = CompletionKind::File;
-
-    int num_matches = 0;
-    int displayed_page = 0;
-    int base_len = 0;
-
-    bool valid = false;
-
-    void clear() {
-        matches.clear();
-        num_matches = 0;
-        displayed_page = 0;
-        base_len = 0;
-        valid = false;
-    }
-
-    void capture(
-        char** source,
-        int count,
-        CompletionKind completion_kind,
-        int page,
-        int base_length) {
-
-        clear();
-
-        matches.reserve(count + 1);
-
-        for (int i = 0; i <= count; ++i)
-            matches.emplace_back(source[i] ? source[i] : "");
-
-        kind = completion_kind;
-        num_matches = count;
-        displayed_page = page;
-        base_len = base_length;
-
-        valid = true;
-    }
-};
-
-CompletionSnapshot lastCompletion;
-
-constexpr int kColumnSpacing = 4;
-constexpr int kMaxColumns = 4;
-constexpr int kProbeWidth = 1000;   // "unlimited" width used for the measuring pass
-
-// ---------------------------------------------------------------------------
-// Completion kind / pagination
-// ---------------------------------------------------------------------------
-
-bool isSpecialPrefix(char c) {
-    return c != '\0' && strchr("!?*", c) != nullptr;
-}
-
-const char* specialColor(char c, const ReadlineColors& rc) {
-    if (!isSpecialPrefix(c)) return rc.reset;
-    return (c == '!') ? rc.warning : rc.accent;
-}
-
-CompletionKind detectCompletionKind(char** matches, int num_matches) {
-    if (num_matches > 0 && matches[1] && isSpecialPrefix(matches[1][0]))
-        return CompletionKind::Special;
-    if (g_activeSettingValues != nullptr && !g_activeSettingValues->empty())
-        return CompletionKind::SettingValue;
-    return CompletionKind::File;
-}
-
-void updatePaginationState(const char* current_prefix) {
-    if (strcmp(last_common_prefix, current_prefix) == 0) return;
-    current_page = 0;
-    strncpy(last_common_prefix, current_prefix, sizeof(last_common_prefix) - 1);
-    last_common_prefix[sizeof(last_common_prefix) - 1] = '\0';
-}
-
-bool needsPagination(int num_matches) {
-    return GlobalState::ITEMS_PER_PAGE > 0 && (size_t)num_matches > GlobalState::ITEMS_PER_PAGE;
-}
-
-PageInfo computePageInfo(int num_matches, int page_index) {
-    PageInfo page{1, 1, num_matches};
-
-    if (GlobalState::ITEMS_PER_PAGE <= 0)
-        return page;
-
-    page.total_pages =
-        ((size_t)num_matches + GlobalState::ITEMS_PER_PAGE - 1) /
-        GlobalState::ITEMS_PER_PAGE;
-
-    if (page_index >= page.total_pages)
-        page_index = 0;
-
-    page.start_index =
-        page_index * (int)GlobalState::ITEMS_PER_PAGE + 1;
-
-    int remaining = num_matches - (page.start_index - 1);
-
-    page.items_to_display =
-        std::min(remaining, (int)GlobalState::ITEMS_PER_PAGE);
-
-    return page;
-}
-
-void advancePage(int num_matches, int total_pages) {
-    if (!needsPagination(num_matches)) return;
-    current_page++;
-    if (current_page >= total_pages) current_page = 0;
-}
-
-// ---------------------------------------------------------------------------
-// Header / footer
-// ---------------------------------------------------------------------------
-
-void printHeader(
-    CompletionKind kind,
-    int total_pages,
-    int num_matches,
-    int page_index,
-    const ReadlineColors& rc) {
-
-    if (num_matches <= 1) return;
-
-    static const char* const kLabels[] = {
-        "CMD Completion Matches",
-        "Value Completion Matches",
-        "Tab Completion Matches"
+    struct PageInfo {
+        int total_pages;
+        int start_index;
+        int items_to_display;
     };
 
-    const char* label = kLabels[(int)kind];
+    struct DisplayItem {
+        std::string display_text;   // truncated, colored string ready for printing
+        int visual_length;          // length without ANSI codes
+        const char* raw_match;      // original match
+    };
 
-    if (total_pages > 1) {
-        printf("\n%s%s [page %d/%d%s]:%s\n\n",
-               rc.label, label,
-               page_index + 1, total_pages,
-               rc.label, rc.reset);
-    } else {
-        printf("\n%s%s:%s\n\n",
-               rc.label, label, rc.reset);
-    }
-}
+    struct FormatContext {
+        CompletionKind kind;
+        const ReadlineColors& rc;
+        const char* base_color;     // dynamic color used for setting values
+        int base_len;               // length of the common directory part (file branch only)
+    };
 
-void printFooter(const PageInfo& page, int num_matches, const ReadlineColors& rc) {
-    if (!needsPagination(num_matches)) return;
-    printf("\n%s[%d/%d matches — press %sTab%s for next page]%s\n",
-           rc.label, page.start_index + page.items_to_display - 1, num_matches,
-           rc.hint, rc.label, rc.reset);
-}
+    struct ColumnLayout {
+        int column_width;
+        int num_columns;
+        int total_column_width;
+        int rows;
+    };
 
-// ---------------------------------------------------------------------------
-// Item formatting
-// ---------------------------------------------------------------------------
+    struct CompletionSnapshot {
+        std::vector<std::string> matches;
 
-std::string smartTruncate(const char* str, int max_width) {
-    std::string result(str);
-    size_t len = result.length();
-    if (len <= (size_t)max_width) return result;
+        CompletionKind kind = CompletionKind::File;
 
-    // Try to preserve extension for files (harmless for other kinds)
-    size_t dot_pos = result.find_last_of('.');
-    if (dot_pos != std::string::npos && dot_pos > 0 && len - dot_pos <= 10) {
-        std::string ext = result.substr(dot_pos);
-        int prefix_len = std::max(3, max_width - (int)ext.length() - 3);
-        if (prefix_len >= 3) return result.substr(0, prefix_len) + "..." + ext;
-    }
-    int prefix_len = (max_width - 3) / 2;
-    int suffix_len = max_width - 3 - prefix_len;
-    return result.substr(0, prefix_len) + "..." + result.substr(len - suffix_len, suffix_len);
-}
+        int num_matches = 0;
+        int displayed_page = 0;
+        int base_len = 0;
 
-bool isDirectory(const char* path) {
-    struct stat path_stat;
-    return (stat(path, &path_stat) == 0) && S_ISDIR(path_stat.st_mode);
-}
+        bool valid = false;
 
-int computeBaseLen(const char* base_path) {
-    const char* last_slash = strrchr(base_path, '/');
-    return (last_slash != NULL) ? (int)(last_slash - base_path + 1) : 0;
-}
-
-DisplayItem makeItem(const char* raw, const char* text, const char* color,
-                     const char* suffix, int width, const ReadlineColors& rc) {
-    std::string truncated = smartTruncate(text, width);
-    int vis_len = (int)truncated.length() + (int)strlen(suffix);
-    std::string display = std::string(color) + truncated + suffix + rc.reset;
-    return {display, vis_len, raw};
-}
-
-// `width` is the maximum text width; directories get `dir_shrink` fewer
-// characters because of their trailing '/'.
-DisplayItem formatItem(const char* raw, const FormatContext& ctx, int width, int dir_shrink) {
-    const ReadlineColors& rc = ctx.rc;
-
-    if (ctx.kind == CompletionKind::Special)
-        return makeItem(raw, raw, specialColor(raw[0], rc), "", width, rc);
-
-    if (ctx.kind == CompletionKind::SettingValue)
-        return makeItem(raw, raw, ctx.base_color, "", width, rc);
-
-    const char* relative = raw + ctx.base_len;
-    if (isDirectory(raw))
-        return makeItem(raw, relative, rc.dir, "/", width - dir_shrink, rc);
-    return makeItem(raw, relative, rc.file, "", width, rc);
-}
-
-std::vector<DisplayItem> formatPageItems(char** matches, const PageInfo& page, const FormatContext& ctx) {
-    std::vector<DisplayItem> items;
-    items.reserve(page.items_to_display);
-    for (int i = 0; i < page.items_to_display; ++i)
-        items.push_back(formatItem(matches[page.start_index + i], ctx, kProbeWidth, 0));
-    return items;
-}
-
-size_t maxVisualLength(const std::vector<DisplayItem>& items) {
-    size_t max_len = 0;
-    for (const auto& item : items)
-        max_len = std::max(max_len, (size_t)item.visual_length);
-    return max_len;
-}
-
-void refitItems(std::vector<DisplayItem>& items, const FormatContext& ctx, int column_width) {
-    for (auto& item : items)
-        item = formatItem(item.raw_match, ctx, column_width, 1);
-}
-
-// ---------------------------------------------------------------------------
-// Layout / rendering
-// ---------------------------------------------------------------------------
-
-int fdColumns(int fd) {
-    struct winsize w = {};
-    return (ioctl(fd, TIOCGWINSZ, &w) == -1) ? 0 : w.ws_col;
-}
-
-int getTerminalWidth() {
-    int cols = fdColumns(STDOUT_FILENO);
-    if (cols == 0) cols = fdColumns(STDERR_FILENO);
-    return (cols == 0) ? 80 : cols;
-}
-
-ColumnLayout computeLayout(size_t max_item_length, int items_to_display) {
-    ColumnLayout layout;
-    layout.column_width = std::max(8, (int)max_item_length + 2);
-
-    int fit = std::max(1, (getTerminalWidth() + kColumnSpacing) / (layout.column_width + kColumnSpacing));
-    layout.num_columns = (items_to_display <= 4) ? 1 : std::min(fit, kMaxColumns);
-    layout.total_column_width = layout.column_width + kColumnSpacing;
-    layout.rows = (items_to_display + layout.num_columns - 1) / layout.num_columns;
-    return layout;
-}
-
-void printCell(const DisplayItem& item, bool pad, int total_column_width) {
-    printf("%s", item.display_text.c_str());
-    if (pad) printf("%*s", std::max(0, total_column_width - item.visual_length), "");
-}
-
-void renderGrid(const std::vector<DisplayItem>& items, const ColumnLayout& layout) {
-    const int count = (int)items.size();
-    for (int row = 0; row < layout.rows; row++) {
-        for (int col = 0; col < layout.num_columns; col++) {
-            int page_offset = row + col * layout.rows;
-            if (page_offset >= count) continue;
-            // Pad only when not in the last column and not the last item
-            bool pad = col < layout.num_columns - 1 && page_offset < count - 1;
-            printCell(items[page_offset], pad, layout.total_column_width);
+        void clear() {
+            matches.clear();
+            num_matches = 0;
+            displayed_page = 0;
+            base_len = 0;
+            valid = false;
         }
-        printf("\033[0m\n");
-    }
-}
 
-void renderCompletionListing(
-    char** matches,
-    int num_matches,
-    CompletionKind kind,
-    int displayed_page,
-    int base_len) {
+        void capture(
+            char** source,
+            int count,
+            CompletionKind completion_kind,
+            int page,
+            int base_length) {
 
-    ReadlineColors rc = resolveReadlineTheme();
+            clear();
 
-    const PageInfo page =
-        computePageInfo(num_matches, displayed_page);
+            matches.reserve(count + 1);
 
-    printf("\033[s\033[J\n");
+            for (int i = 0; i <= count; ++i)
+                matches.emplace_back(source[i] ? source[i] : "");
 
-    printHeader(
-        kind,
-        page.total_pages,
-        num_matches,
-        displayed_page,
-        rc);
+            kind = completion_kind;
+            num_matches = count;
+            displayed_page = page;
+            base_len = base_length;
 
-    const FormatContext ctx{
-        kind,
-        rc,
-        UI::Palette::BoldReset.c_str(),
-        base_len
+            valid = true;
+        }
     };
 
-    std::vector<DisplayItem> items =
-        formatPageItems(matches, page, ctx);
+    CompletionSnapshot lastCompletion;
 
-    const ColumnLayout layout =
-        computeLayout(maxVisualLength(items), page.items_to_display);
+    constexpr int kColumnSpacing = 4;
+    constexpr int kMaxColumns = 4;
+    constexpr int kProbeWidth = 1000;   // "unlimited" width used for the measuring pass
 
-    refitItems(items, ctx, layout.column_width);
+    // ---------------------------------------------------------------------------
+    // Completion kind / pagination
+    // ---------------------------------------------------------------------------
 
-    renderGrid(items, layout);
-    printFooter(page, num_matches, rc);
+    bool isSpecialPrefix(char c) {
+        return c != '\0' && strchr("!?*", c) != nullptr;
+    }
 
-    printf("\033[u");
-    fflush(stdout);
-}
+    const char* specialColor(char c, const ReadlineColors& rc) {
+        if (!isSpecialPrefix(c)) return rc.reset;
+        return (c == '!') ? rc.warning : rc.accent;
+    }
+
+    CompletionKind detectCompletionKind(char** matches, int num_matches) {
+        if (num_matches > 0 && matches[1] && isSpecialPrefix(matches[1][0]))
+            return CompletionKind::Special;
+        if (g_activeSettingValues != nullptr && !g_activeSettingValues->empty())
+            return CompletionKind::SettingValue;
+        return CompletionKind::File;
+    }
+
+    void updatePaginationState(const char* current_prefix) {
+        if (strcmp(last_common_prefix, current_prefix) == 0) return;
+        current_page = 0;
+        strncpy(last_common_prefix, current_prefix, sizeof(last_common_prefix) - 1);
+        last_common_prefix[sizeof(last_common_prefix) - 1] = '\0';
+    }
+
+    bool needsPagination(int num_matches) {
+        return GlobalState::ITEMS_PER_PAGE > 0 && (size_t)num_matches > GlobalState::ITEMS_PER_PAGE;
+    }
+
+    PageInfo computePageInfo(int num_matches, int page_index) {
+        PageInfo page{1, 1, num_matches};
+
+        if (GlobalState::ITEMS_PER_PAGE <= 0)
+            return page;
+
+        page.total_pages =
+            ((size_t)num_matches + GlobalState::ITEMS_PER_PAGE - 1) /
+            GlobalState::ITEMS_PER_PAGE;
+
+        if (page_index >= page.total_pages)
+            page_index = 0;
+
+        page.start_index =
+            page_index * (int)GlobalState::ITEMS_PER_PAGE + 1;
+
+        int remaining = num_matches - (page.start_index - 1);
+
+        page.items_to_display =
+            std::min(remaining, (int)GlobalState::ITEMS_PER_PAGE);
+
+        return page;
+    }
+
+    void advancePage(int num_matches, int total_pages) {
+        if (!needsPagination(num_matches)) return;
+        current_page++;
+        if (current_page >= total_pages) current_page = 0;
+    }
+
+    // ---------------------------------------------------------------------------
+    // Header / footer
+    // ---------------------------------------------------------------------------
+
+    void printHeader(
+        CompletionKind kind,
+        int total_pages,
+        int num_matches,
+        int page_index,
+        const ReadlineColors& rc) {
+
+        if (num_matches <= 1) return;
+
+        static const char* const kLabels[] = {
+            "CMD Completion Matches",
+            "Value Completion Matches",
+            "Tab Completion Matches"
+        };
+
+        const char* label = kLabels[(int)kind];
+
+        if (total_pages > 1) {
+            printf("\n%s%s [page %d/%d%s]:%s\n\n",
+                   rc.label, label,
+                   page_index + 1, total_pages,
+                   rc.label, rc.reset);
+        } else {
+            printf("\n%s%s:%s\n\n",
+                   rc.label, label, rc.reset);
+        }
+    }
+
+    void printFooter(const PageInfo& page, int num_matches, const ReadlineColors& rc) {
+        if (!needsPagination(num_matches)) return;
+        printf("\n%s[%d/%d matches — press %sTab%s for next page]%s\n",
+               rc.label, page.start_index + page.items_to_display - 1, num_matches,
+               rc.hint, rc.label, rc.reset);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Item formatting
+    // ---------------------------------------------------------------------------
+
+    std::string smartTruncate(const char* str, int max_width) {
+        std::string result(str);
+        size_t len = result.length();
+        if (len <= (size_t)max_width) return result;
+
+        // Try to preserve extension for files (harmless for other kinds)
+        size_t dot_pos = result.find_last_of('.');
+        if (dot_pos != std::string::npos && dot_pos > 0 && len - dot_pos <= 10) {
+            std::string ext = result.substr(dot_pos);
+            int prefix_len = std::max(3, max_width - (int)ext.length() - 3);
+            if (prefix_len >= 3) return result.substr(0, prefix_len) + "..." + ext;
+        }
+        int prefix_len = (max_width - 3) / 2;
+        int suffix_len = max_width - 3 - prefix_len;
+        return result.substr(0, prefix_len) + "..." + result.substr(len - suffix_len, suffix_len);
+    }
+
+    bool isDirectory(const char* path) {
+        struct stat path_stat;
+        return (stat(path, &path_stat) == 0) && S_ISDIR(path_stat.st_mode);
+    }
+
+    int computeBaseLen(const char* base_path) {
+        const char* last_slash = strrchr(base_path, '/');
+        return (last_slash != NULL) ? (int)(last_slash - base_path + 1) : 0;
+    }
+
+    DisplayItem makeItem(const char* raw, const char* text, const char* color,
+                         const char* suffix, int width, const ReadlineColors& rc) {
+        std::string truncated = smartTruncate(text, width);
+        int vis_len = (int)truncated.length() + (int)strlen(suffix);
+        std::string display = std::string(color) + truncated + suffix + rc.reset;
+        return {display, vis_len, raw};
+    }
+
+    // `width` is the maximum text width; directories get `dir_shrink` fewer
+    // characters because of their trailing '/'.
+    DisplayItem formatItem(const char* raw, const FormatContext& ctx, int width, int dir_shrink) {
+        const ReadlineColors& rc = ctx.rc;
+
+        if (ctx.kind == CompletionKind::Special)
+            return makeItem(raw, raw, specialColor(raw[0], rc), "", width, rc);
+
+        if (ctx.kind == CompletionKind::SettingValue)
+            return makeItem(raw, raw, ctx.base_color, "", width, rc);
+
+        const char* relative = raw + ctx.base_len;
+        if (isDirectory(raw))
+            return makeItem(raw, relative, rc.dir, "/", width - dir_shrink, rc);
+        return makeItem(raw, relative, rc.file, "", width, rc);
+    }
+
+    std::vector<DisplayItem> formatPageItems(char** matches, const PageInfo& page, const FormatContext& ctx) {
+        std::vector<DisplayItem> items;
+        items.reserve(page.items_to_display);
+        for (int i = 0; i < page.items_to_display; ++i)
+            items.push_back(formatItem(matches[page.start_index + i], ctx, kProbeWidth, 0));
+        return items;
+    }
+
+    size_t maxVisualLength(const std::vector<DisplayItem>& items) {
+        size_t max_len = 0;
+        for (const auto& item : items)
+            max_len = std::max(max_len, (size_t)item.visual_length);
+        return max_len;
+    }
+
+    void refitItems(std::vector<DisplayItem>& items, const FormatContext& ctx, int column_width) {
+        for (auto& item : items)
+            item = formatItem(item.raw_match, ctx, column_width, 1);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Layout / rendering
+    // ---------------------------------------------------------------------------
+
+    int fdColumns(int fd) {
+        struct winsize w = {};
+        return (ioctl(fd, TIOCGWINSZ, &w) == -1) ? 0 : w.ws_col;
+    }
+
+    int getTerminalWidth() {
+        int cols = fdColumns(STDOUT_FILENO);
+        if (cols == 0) cols = fdColumns(STDERR_FILENO);
+        return (cols == 0) ? 80 : cols;
+    }
+
+    ColumnLayout computeLayout(size_t max_item_length, int items_to_display) {
+        ColumnLayout layout;
+        layout.column_width = std::max(8, (int)max_item_length + 2);
+
+        int fit = std::max(1, (getTerminalWidth() + kColumnSpacing) / (layout.column_width + kColumnSpacing));
+        layout.num_columns = (items_to_display <= 4) ? 1 : std::min(fit, kMaxColumns);
+        layout.total_column_width = layout.column_width + kColumnSpacing;
+        layout.rows = (items_to_display + layout.num_columns - 1) / layout.num_columns;
+        return layout;
+    }
+
+    void printCell(const DisplayItem& item, bool pad, int total_column_width) {
+        printf("%s", item.display_text.c_str());
+        if (pad) printf("%*s", std::max(0, total_column_width - item.visual_length), "");
+    }
+
+    void renderGrid(const std::vector<DisplayItem>& items, const ColumnLayout& layout) {
+        const int count = (int)items.size();
+        for (int row = 0; row < layout.rows; row++) {
+            for (int col = 0; col < layout.num_columns; col++) {
+                int page_offset = row + col * layout.rows;
+                if (page_offset >= count) continue;
+                // Pad only when not in the last column and not the last item
+                bool pad = col < layout.num_columns - 1 && page_offset < count - 1;
+                printCell(items[page_offset], pad, layout.total_column_width);
+            }
+            printf("\033[0m\n");
+        }
+    }
+
+    void renderCompletionListing(
+        char** matches,
+        int num_matches,
+        CompletionKind kind,
+        int displayed_page,
+        int base_len) {
+
+        ReadlineColors rc = resolveReadlineTheme();
+
+        const PageInfo page =
+            computePageInfo(num_matches, displayed_page);
+
+        printf("\033[s\033[J\n");
+
+        printHeader(
+            kind,
+            page.total_pages,
+            num_matches,
+            displayed_page,
+            rc);
+
+        const FormatContext ctx{
+            kind,
+            rc,
+            UI::Palette::BoldReset.c_str(),
+            base_len
+        };
+
+        std::vector<DisplayItem> items =
+            formatPageItems(matches, page, ctx);
+
+        const ColumnLayout layout =
+            computeLayout(maxVisualLength(items), page.items_to_display);
+
+        refitItems(items, ctx, layout.column_width);
+
+        renderGrid(items, layout);
+        printFooter(page, num_matches, rc);
+
+        printf("\033[u");
+        fflush(stdout);
+    }
 
 } // namespace
 
