@@ -309,6 +309,173 @@ void appendFooterAndPending(std::string& output, bool disablePagination, size_t 
     }
 }
 
+namespace {
+
+/**
+ * @brief Configuration and display flags derived from the list type and global settings.
+ */
+struct ListConfig {
+    bool isIsoMode;         /**< True if the list represents ISO files. */
+    bool isImgMode;         /**< True if the list represents image files. */
+    bool isMountedMode;     /**< True if the list represents mounted ISOs. */
+    bool isFileMode;        /**< True if the list is either ISO or image files. */
+    bool showNamesOnly;     /**< Configuration toggle to show filenames only without paths. */
+    bool showFullUmount;    /**< Configuration toggle for full unmount listing options. */
+    PrintListTheme colors;  /**< Color palette associated with the list. */
+    size_t usableCols;      /**< Number of usable columns in the terminal (width - 1). */
+    bool noFilterResults;   /**< True if an active filter yields zero matching items. */
+};
+
+/**
+ * @brief Evaluates the current list type, configuration settings, and terminal dimensions.
+ *
+ * @param items      Non-owning view of the items to display.
+ * @param listType   Category string specifying the list kind ("ISO_FILES", "IMAGE_FILES", "MOUNTED_ISOS").
+ * @return ListConfig Populated configuration structure.
+ */
+ListConfig getListConfig(const StringListView& items, const std::string& listType) {
+    const bool isIsoMode      = (listType == "ISO_FILES");
+    const bool isImgMode      = (listType == "IMAGE_FILES");
+    const bool isMountedMode  = (listType == "MOUNTED_ISOS");
+    const bool isFileMode     = (isIsoMode || isImgMode);
+    const bool showNamesOnly  = displayConfig::toggleNamesOnly;
+    const bool showFullUmount = displayConfig::toggleFullListUmount;
+    const PrintListTheme colors = getListColors();
+
+    const size_t termCols   = terminalColumns();
+    const size_t usableCols = termCols > 1 ? termCols - 1 : 0;
+
+    const bool noFilterResults =
+        (items.empty() && !GlobalState::globalIsoFileList.empty() && isIsoMode) ||
+        (items.empty() && !isIsoMode);
+
+    return {isIsoMode, isImgMode, isMountedMode, isFileMode, showNamesOnly, showFullUmount, colors, usableCols, noFilterResults};
+}
+
+/**
+ * @brief Computed pagination boundaries and slice indices for the current frame.
+ */
+struct PaginationInfo {
+    bool disablePagination; /**< True if pagination is turned off or all items fit on one page. */
+    size_t totalPages;      /**< Total number of available pages. */
+    size_t effectivePage;   /**< Clamped zero-based active page index. */
+    size_t startIndex;      /**< Starting index of items for the current page. */
+    size_t endIndex;        /**< Ending index (exclusive) of items for the current page. */
+    size_t maxDigits;       /**< Number of digits required to format row item numbers. */
+};
+
+/**
+ * @brief Calculates pagination boundaries based on item count and global page constraints.
+ *
+ * @param items       Non-owning view of all list items.
+ * @param currentPage Requested zero-based page index.
+ * @return PaginationInfo Computed pagination metrics.
+ */
+PaginationInfo computePagination(const StringListView& items, size_t currentPage) {
+    const size_t totalItems = items.size();
+    const bool disablePagination = (GlobalState::ITEMS_PER_PAGE == 0 || totalItems <= GlobalState::ITEMS_PER_PAGE);
+    const size_t totalPages = disablePagination ? 1 : (totalItems + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE;
+
+    const size_t effectivePage = disablePagination ? 0 : (currentPage >= totalPages ? totalPages - 1 : currentPage);
+    const size_t startIndex = disablePagination ? 0 : (effectivePage * GlobalState::ITEMS_PER_PAGE);
+    const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + GlobalState::ITEMS_PER_PAGE, totalItems);
+    const size_t maxDigits = digitCount(endIndex);
+
+    return {disablePagination, totalPages, effectivePage, startIndex, endIndex, maxDigits};
+}
+
+/**
+ * @brief Reserves buffer capacity and appends initial frame formatting (synchronized output, clears, and filter notices).
+ *
+ * @param output          Retained string buffer for the current list kind.
+ * @param startIndex      Start index of items on the page.
+ * @param endIndex        End index of items on the page.
+ * @param items           Non-owning view of the list items.
+ * @param clearFirst      If true, appends screen clear sequence.
+ * @param noFilterResults If true, appends a "No filter results" notice.
+ * @param c               Theme color palette.
+ */
+void reserveAndBuildOutput(std::string& output, size_t startIndex, size_t endIndex,
+                           const StringListView& items, bool clearFirst, bool noFilterResults,
+                           const PrintListTheme& c) {
+    {
+        std::size_t estimate = 1024;
+        for (size_t i = startIndex; i < endIndex; ++i) {
+            estimate += items[i].size() + kPerRowOverhead;
+        }
+        if (output.capacity() < estimate) output.reserve(estimate);
+    }
+
+    if (kUseSynchronizedOutput) output.append(kSyncBegin);
+    if (clearFirst) output.append(kClearSeq);
+    output += '\n';
+
+    if (noFilterResults) {
+        output.append(c.num);
+        output.append("No filter results");
+        output.append(UI::Palette::Reset).append(UI::Palette::BoldReset);
+        output += '\n';
+    }
+}
+
+/**
+ * @brief Computes original index mappings and padding digit bounds when a filter is active.
+ *
+ * @param startIndex      Start index of items on the page.
+ * @param endIndex        End index of items on the page.
+ * @param outOrigIdx      [out] Pointer to the original indices vector if filtering is active.
+ * @param outOrigSize     [out] Size of the original indices collection.
+ * @param outMaxOrigDigits [out] Maximum digit count for padded original indices alignment.
+ */
+void computeOrigIndexInfo(size_t startIndex, size_t endIndex,
+                          const std::vector<unsigned long>** outOrigIdx, size_t* outOrigSize, size_t* outMaxOrigDigits) {
+    const auto* origIdx = filteringStack.empty() ? nullptr : &filteringStack.back().originalIndices;
+    const size_t origSize = origIdx ? origIdx->size() : 0;
+
+    std::size_t maxOrigDigits = 0;
+    if (origIdx) {
+        const std::size_t lim = std::min(endIndex, origSize);
+        for (std::size_t k = startIndex; k < lim; ++k) {
+            maxOrigDigits = std::max(maxOrigDigits,
+                digitCount(static_cast<std::size_t>((*origIdx)[k]) + 1));
+        }
+    }
+
+    *outOrigIdx = origIdx;
+    *outOrigSize = origSize;
+    *outMaxOrigDigits = maxOrigDigits;
+}
+
+/**
+ * @brief Atomically writes the built frame buffer to standard output under the print mutex lock.
+ *
+ * @param state         Shared application state containing the synchronization mutex and background import flag.
+ * @param output        The fully assembled frame string buffer.
+ * @param syncLine      Pre-formatted sync/import indicator string.
+ * @param syncInsertPos Buffer byte offset where the sync line should be spliced if syncing is active.
+ * @param maybeSyncing  Quick preliminary check flag indicating whether an import could be running.
+ */
+void flushOutput(std::shared_ptr<RefreshState> state, const std::string& output,
+                 const std::string& syncLine, size_t syncInsertPos, bool maybeSyncing) {
+    std::lock_guard<std::mutex> lk(state->printMutex);
+
+    const bool syncing = maybeSyncing
+        && state->isImportRunning.load(std::memory_order_acquire);
+
+    if (syncing) {
+        std::cout.write(output.data(), static_cast<std::streamsize>(syncInsertPos));
+        std::cout.write(syncLine.data(), static_cast<std::streamsize>(syncLine.size()));
+        std::cout.write(output.data() + syncInsertPos,
+                        static_cast<std::streamsize>(output.size() - syncInsertPos));
+    } else {
+        std::cout.write(output.data(), static_cast<std::streamsize>(output.size()));
+    }
+
+    std::cout.flush();
+}
+
+} // namespace
+
 /**
  * @brief Renders one page of an ISO, image, or mounted-ISO list to the terminal.
  *
@@ -385,111 +552,40 @@ void printList(const StringListView& items, const std::string& listType, const s
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
                size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst, bool showPendingIndices) {
 
-    // --- Flags & config ---
-    const bool isIsoMode      = (listType == "ISO_FILES");
-    const bool isImgMode      = (listType == "IMAGE_FILES");
-    const bool isMountedMode  = (listType == "MOUNTED_ISOS");
-    const bool isFileMode     = (isIsoMode || isImgMode);
-    const bool showNamesOnly  = displayConfig::toggleNamesOnly;
-    const bool showFullUmount = displayConfig::toggleFullListUmount;
+    const ListConfig cfg = getListConfig(items, listType);
+    const PaginationInfo page = computePagination(items, currentPage);
 
-    const PrintListTheme c = getListColors();
-
-    const size_t termCols   = terminalColumns();
-    const size_t usableCols = termCols > 1 ? termCols - 1 : 0;
-
-    const bool noFilterResults =
-        (items.empty() && !GlobalState::globalIsoFileList.empty() && isIsoMode) ||
-        (items.empty() && !isIsoMode);
-
-    // --- Pagination ---
-    const size_t totalItems = items.size();
-    const bool disablePagination = (GlobalState::ITEMS_PER_PAGE == 0 || totalItems <= GlobalState::ITEMS_PER_PAGE);
-    const size_t totalPages = disablePagination ? 1 : (totalItems + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE;
-
-    const size_t effectivePage = disablePagination ? 0 : (currentPage >= totalPages ? totalPages - 1 : currentPage);
-    const size_t startIndex = disablePagination ? 0 : (effectivePage * GlobalState::ITEMS_PER_PAGE);
-    const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + GlobalState::ITEMS_PER_PAGE, totalItems);
-
-    const size_t maxDigits = digitCount(endIndex);
-
-    // --- Sync indicator ---
-    std::string syncLine = prepareSyncLine(isIsoMode, noFilterResults, state, disablePagination);
+    std::string syncLine = prepareSyncLine(cfg.isIsoMode, cfg.noFilterResults, state, page.disablePagination);
     const bool maybeSyncing = !syncLine.empty();
 
-    // --- Output buffer ---
-    const ListKind kind = isIsoMode ? ListKind::Iso
-                        : isImgMode ? ListKind::Image
+    const ListKind kind = cfg.isIsoMode ? ListKind::Iso
+                        : cfg.isImgMode ? ListKind::Image
                                     : ListKind::Mounted;
     std::string& output = bufferFor(kind);
     output.clear();
 
-    {
-        std::size_t estimate = 1024;
-        for (size_t i = startIndex; i < endIndex; ++i) {
-            estimate += items[i].size() + kPerRowOverhead;
-        }
-        if (output.capacity() < estimate) output.reserve(estimate);
+    reserveAndBuildOutput(output, page.startIndex, page.endIndex, items, clearFirst, cfg.noFilterResults, cfg.colors);
+
+    size_t syncInsertPos = appendHeader(output, page.disablePagination, page.effectivePage, page.totalPages,
+                                        page.startIndex, page.endIndex, items.size(), cfg.colors);
+
+    const std::vector<unsigned long>* origIdx = nullptr;
+    size_t origSize = 0;
+    size_t maxOrigDigits = 0;
+    computeOrigIndexInfo(page.startIndex, page.endIndex, &origIdx, &origSize, &maxOrigDigits);
+
+    for (size_t i = page.startIndex; i < page.endIndex; ++i) {
+        appendItemRow(output, items, i, page.maxDigits, maxOrigDigits, origIdx, origSize,
+                      cfg.isFileMode, cfg.isIsoMode, cfg.isMountedMode, listSubType, cfg.showNamesOnly,
+                      cfg.showFullUmount, cfg.usableCols, cfg.colors);
     }
 
-    if (kUseSynchronizedOutput) output.append(kSyncBegin);
-    if (clearFirst) output.append(kClearSeq);
-    output += '\n';
-
-    if (noFilterResults) {
-        output.append(c.num);
-        output.append("No filter results");
-        output.append(UI::Palette::Reset).append(UI::Palette::BoldReset);
-        output += '\n';
-    }
-
-    // --- Header ---
-    size_t syncInsertPos = appendHeader(output, disablePagination, effectivePage, totalPages, startIndex, endIndex, totalItems, c);
-
-    // --- Hoisted per-frame lookups ---
-    const auto* origIdx = filteringStack.empty() ? nullptr : &filteringStack.back().originalIndices;
-    const size_t origSize = origIdx ? origIdx->size() : 0;
-
-    std::size_t maxOrigDigits = 0;
-    if (origIdx) {
-        const std::size_t lim = std::min(endIndex, origSize);
-        for (std::size_t k = startIndex; k < lim; ++k) {
-            maxOrigDigits = std::max(maxOrigDigits,
-                digitCount(static_cast<std::size_t>((*origIdx)[k]) + 1));
-        }
-    }
-
-    // --- Main item loop ---
-    for (size_t i = startIndex; i < endIndex; ++i) {
-        appendItemRow(output, items, i, maxDigits, maxOrigDigits, origIdx, origSize,
-                      isFileMode, isIsoMode, isMountedMode, listSubType, showNamesOnly,
-                      showFullUmount, usableCols, c);
-    }
-
-    // --- Footer & Pending processes ---
-    appendFooterAndPending(output, disablePagination, effectivePage, totalPages,
-                           showPendingIndices, hasPendingProcess, pendingIndices, isImgMode, c);
+    appendFooterAndPending(output, page.disablePagination, page.effectivePage, page.totalPages,
+                           showPendingIndices, hasPendingProcess, pendingIndices, cfg.isImgMode, cfg.colors);
 
     if (kUseSynchronizedOutput) output.append(kSyncEnd);
 
-    // --- Sync-safe print ---
-    {
-        std::lock_guard<std::mutex> lk(state->printMutex);
-
-        const bool syncing = maybeSyncing
-            && state->isImportRunning.load(std::memory_order_acquire);
-
-        if (syncing) {
-            std::cout.write(output.data(), static_cast<std::streamsize>(syncInsertPos));
-            std::cout.write(syncLine.data(), static_cast<std::streamsize>(syncLine.size()));
-            std::cout.write(output.data() + syncInsertPos,
-                            static_cast<std::streamsize>(output.size() - syncInsertPos));
-        } else {
-            std::cout.write(output.data(), static_cast<std::streamsize>(output.size()));
-        }
-
-        std::cout.flush();
-    }
+    flushOutput(state, output, syncLine, syncInsertPos, maybeSyncing);
 
     if (output.capacity() > kMaxRetainedCapacity) {
         std::string().swap(output);
