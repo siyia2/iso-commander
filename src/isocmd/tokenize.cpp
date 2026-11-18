@@ -6,7 +6,6 @@
 #include <charconv>
 #include <cstddef>
 #include <sstream>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -18,18 +17,10 @@
 #include "../verbose.h"
 
 /**
- * @brief Checks if a string has a leading zero.
- * @details Used to identify invalid numeric inputs where a leading zero might
- * imply octal or simply be an unsupported format for index selection.
- * @param str The string to check.
- * @return True if the string starts with '0'.
- */
-static bool startsWithZero(const std::string& str) {
-    return !str.empty() && str[0] == '0';
-}
-
-/**
  * @brief Validates if a string consists entirely of decimal digits.
+ * @details Used to route a token to the single-index path (as opposed to
+ * treating it as garbage). Leading zeros and overflow are still digits-only
+ * and are rejected later by parseIndex.
  * @param str The string to check.
  * @return True if the string is non-empty and all characters are digits.
  */
@@ -112,31 +103,23 @@ static void processRangeToken(const std::string& token,
 /**
  * @brief Parses and validates a single numeric index token and updates processed indices or error collections.
  *
+ * @details The token is expected to be digits-only (see isNumeric), so any
+ * parseIndex failure (leading zero, overflow) is reported as an invalid index.
+ *
  * @param token The raw numeric token string.
  * @param isoFiles The vector of available files for size validation.
  * @param processedIndices Set of successfully parsed unique indices.
- * @param invalidInputs Set storing inputs that failed conversion (e.g. invalid arguments).
- * @param invalidIndices Set storing indices that are out of bounds, lead with zero, or out of range.
+ * @param invalidIndices Set storing indices that are out of bounds, lead with zero, or overflow int.
  */
 static void processSingleToken(const std::string& token,
                                  const std::vector<std::string>& isoFiles,
                                  std::unordered_set<int>& processedIndices,
-                                 std::unordered_set<std::string>& invalidInputs,
                                  std::unordered_set<std::string>& invalidIndices) {
-    if (startsWithZero(token)) {
-        invalidIndices.insert(token);
-        return;
-    }
-    try {
-        int num = std::stoi(token);
-        if (num >= 1 && static_cast<size_t>(num) <= isoFiles.size()) {
-            processedIndices.insert(num);
-        } else {
-            invalidIndices.insert(token);
-        }
-    } catch (const std::invalid_argument&) {
-        invalidInputs.insert(token);
-    } catch (const std::out_of_range&) {
+    int num = 0;
+    if (parseIndex(token, num) == ParseResult::Ok &&
+        static_cast<size_t>(num) <= isoFiles.size()) {
+        processedIndices.insert(num);
+    } else {
         invalidIndices.insert(token);
     }
 }
@@ -198,7 +181,7 @@ void tokenizeInput(const std::string& input,
         if (dashPos != std::string::npos) {
             processRangeToken(token, isoFiles, processedIndices, invalidInputs, invalidRanges);
         } else if (isNumeric(token)) {
-            processSingleToken(token, isoFiles, processedIndices, invalidInputs, invalidIndices);
+            processSingleToken(token, isoFiles, processedIndices, invalidIndices);
         } else {
             invalidInputs.insert(token);
         }
