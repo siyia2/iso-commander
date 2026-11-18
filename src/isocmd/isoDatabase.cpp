@@ -431,6 +431,7 @@ namespace {
 
         return syncSuccess;
     }
+
 } // namespace
 
 /**
