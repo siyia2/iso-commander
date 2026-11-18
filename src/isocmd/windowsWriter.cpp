@@ -1117,281 +1117,262 @@ void syncMount(const std::string& mountPath) {
 
 } // namespace detail
 
+namespace {
+namespace win_iso_steps {
+
+using ProgressVec = std::vector<ProgressInfo>;
+using EntryVec    = std::vector<detail::IsoCopyEntry>;
+
+inline bool isCancelled() { return GlobalState::g_operationCancelled.load(); }
+
+// Centralises the "genuine error vs. user cancellation" failure policy.
+struct FailureReporter {
+    ProgressInfo& slot;
+
+    bool fail() const {
+        slot.failed.store(true);
+        return false;
+    }
+    bool failUnlessCancelled() const {
+        if (isCancelled()) return false;
+        return fail();
+    }
+};
+
+// Mounts the ISO read-only; arms the scope only on success.
+inline bool mountIso(const std::string& isoPath, const char* isoMntBuf,
+                     ScopedMount& isoScope)
+{
+    if (libMountRetry(isoPath.c_str(), isoMntBuf, "ro,loop") != 0) return false;
+    isoScope.setMounted();
+    return true;
+}
+
+// Wipe, partition, format and query sector sizes. Returns false on any step
+// failure or if cancellation is observed after the sector-size queries.
+inline bool prepareDevice(const std::string& device, IsoType isoType,
+                          std::string& fatPart, std::string& ntfsPart,
+                          int& fatSectorSize, int& ntfsSectorSize)
+{
+    if (!detail::setupPartitionedDevice(device, isoType, fatPart, ntfsPart))
+        return false;
+    if (!detail::formatTargetPartitions(fatPart, ntfsPart, isoType))
+        return false;
+
+    fatSectorSize  = detail::queryBestSectorSize(fatPart);
+    ntfsSectorSize = (isoType == IsoType::WindowsInstall)
+                         ? detail::queryBestSectorSize(ntfsPart) : 512;
+    return !isCancelled();
+}
+
+// The NTFS temp dir only exists for WindowsInstall images.
+inline bool makeNtfsDirIfNeeded(IsoType isoType, char* ntfsMntBuf)
+{
+    return isoType != IsoType::WindowsInstall || mkdtemp(ntfsMntBuf) != nullptr;
+}
+
+inline std::string ntfsScopePath(IsoType isoType, const char* ntfsMntBuf)
+{
+    return isoType == IsoType::WindowsInstall ? std::string(ntfsMntBuf)
+                                              : std::string{};
+}
+
+inline bool mountTargets(IsoType isoType, const std::string& fatPart,
+                         const std::string& ntfsPart, const std::string& fatMnt,
+                         const std::string& ntfsMnt, ScopedMount& fatScope,
+                         ScopedMount& ntfsScope)
+{
+    if (!detail::mountTargetFilesystems(isoType, fatPart, ntfsPart,
+                                        fatMnt, ntfsMnt, fatScope, ntfsScope))
+        return false;
+    return !isCancelled();
+}
+
+// Fails if enumeration fails or the ISO contributes no bytes.
+inline bool enumerateNonEmpty(const std::string& isoMnt, IsoType isoType,
+                              const std::string& fatMnt, const std::string& ntfsMnt,
+                              EntryVec& ntfsEntries, EntryVec& espEntries,
+                              uint64_t& totalBytes)
+{
+    if (!detail::enumerateIsoEntries(isoMnt, isoType, fatMnt, ntfsMnt,
+                                     ntfsEntries, espEntries, totalBytes))
+        return false;
+    return totalBytes != 0;
+}
+
+inline bool buffersValid(AlignedBuffer& a, AlignedBuffer& b) { return a && b; }
+
+// Drain the NTFS write-back backlog before the O_DIRECT ESP pass starts.
+// Buffered NTFS writes only land in the page cache, so without this the
+// kernel keeps flushing the NTFS data in the background while the ESP
+// pass writes directly to a different region of the same device. Two
+// competing write streams make cheap flash crawl near the end of the
+// copy. The return value is not checked: a flush error here is not
+// reported (same as the final syncfs), and the unmount still blocks until
+// all I/O completes.
+inline void flushNtfsBacklog(IsoType isoType, const std::string& ntfsMnt)
+{
+    if (isoType == IsoType::WindowsInstall && !isCancelled())
+        detail::syncMount(ntfsMnt);
+}
+
+inline void finalFlush(IsoType isoType, const std::string& ntfsMnt,
+                       const std::string& fatMnt)
+{
+    if (isCancelled()) return;
+    if (isoType == IsoType::WindowsInstall) detail::syncMount(ntfsMnt);
+    detail::syncMount(fatMnt);
+}
+
+// NTFS payload first, then ESP, so the bootloader only lands after the data
+// it references is already on disk. runPass copies one entry list.
+template <class RunPass>
+bool runCopyPasses(RunPass&& runPass, IsoType isoType,
+                   const std::string& ntfsMnt, const std::string& fatMnt,
+                   EntryVec& ntfsEntries, EntryVec& espEntries)
+{
+    if (!runPass(ntfsEntries)) return false;
+    flushNtfsBacklog(isoType, ntfsMnt);
+    if (!runPass(espEntries)) return false;
+    finalFlush(isoType, ntfsMnt, fatMnt);
+    return true;
+}
+
+inline double averageSpeedMBps(uint64_t totalBytes, double seconds)
+{
+    if (seconds <= 0.0) return 0.0;
+    return (static_cast<double>(totalBytes) / (1024.0 * 1024.0)) / seconds;
+}
+
+inline void reportSuccess(ProgressInfo& slot, double avgSpeed)
+{
+    slot.speed.store(avgSpeed);
+    slot.progress.store(100);
+    slot.completed.store(true);
+}
+
+} // namespace win_iso_steps
+} // namespace
+
 /**
- * @brief Write a Windows-family ISO image to a block device using a hybrid
- * I/O model.
+ * @brief Wipe a block device, repartition it, and write a Windows-family ISO
+ *        using a hybrid I/O model.
  *
- * The ISO is loop-mounted read-only, the target device is wiped and
- * repartitioned, and the ISO contents are copied file by file onto freshly
- * formatted filesystems.
+ * The ISO is loop-mounted read-only and copied file-by-file onto freshly
+ * formatted filesystems. Symlinks in the ISO are silently skipped to prevent
+ * path-traversal leaks.
  *
- * Partitioning is chosen automatically by ISO type (see detectIsoType):
- * - **WindowsInstall** — GPT with two partitions:
- *    1. ESP, 1 MiB to 1025 MiB (1 GiB), FAT32, label WINBOOT. Holds the
- *       top-level efi/ and boot/ folders and sources/boot.wim (matched
- *       case-insensitively).
- *    2. DATA, 1025 MiB to end of device, NTFS, label WINDATA. Holds
- *       everything else, including files in the ISO root.
- * - **FatOnly** (WinPE, Hiren's, rescue disks) — GPT with a single FAT32
- *   partition (label WINPE) spanning 1 MiB to the end of the device. All
- *   files go to this partition.
+ * @par Partitioning & Copy Order
+ * Chosen automatically via detectIsoType():
+ * - **WindowsInstall (GPT):**
+ *   1. **ESP** (1–1025 MiB, FAT32, label @c WINBOOT): holds @c efi/, @c boot/,
+ *      and @c sources/boot.wim (matched case-insensitively).
+ *   2. **DATA** (1025 MiB–end, NTFS, label @c WINDATA): holds everything else.
+ *   NTFS payload is copied before ESP so the bootloader lands after its data.
+ * - **FatOnly (GPT):** Single FAT32 partition (1 MiB–end, label @c WINPE) for
+ *   WinPE/rescue images; receives all files.
  *
- * Partition node names are derived as @c device + N (e.g. /dev/sdb1).
- * Devices whose partition nodes need a @c p separator (/dev/nvme0n1,
- * /dev/mmcblk0) are not supported. Each node is awaited with waitForDevice
- * (30 s timeout) to ride out udev re-scan delays.
+ * Partition nodes are expected as @c device + N (e.g., @c /dev/sdb1; @c p
+ * separators like @c nvme0n1p1 are unsupported) and awaited via waitForDevice()
+ * (30 s timeout).
  *
- * @par Mounting
- * - The ISO is mounted ro,loop; FAT32 with noatime; NTFS through the driver
- *   chosen by getBestNtfsDriver, with noatime and mount helpers disabled.
+ * @par I/O & Buffering
+ * - **FAT32 (O_DIRECT):** Bypasses page cache using two ping-pong buffers
+ *   (4 MiB rounded down to the max logical/physical sector size, fallback
+ *   512 B). Final chunks are zero-padded to sector alignment and trimmed via
+ *   @c ftruncate(). Unaligned positive writes trigger up to 3 chunk restarts
+ *   from the original offset (never falling back to buffered I/O).
+ * - **NTFS (Buffered):** Manual @c read()/pwrite() loop. Files >= 1 MiB are
+ *   pre-allocated with @c posix_fallocate().
+ * - **Double Buffering:** Files larger than one buffer spawn a reader thread
+ *   (at most one slot ahead of the calling writer thread); smaller files copy
+ *   synchronously on the calling thread.
+ * - **Integrity:** Short reads accumulate until full or EOF; @c EINTR is
+ *   retried; zero-byte writes fail immediately. Sources yielding fewer bytes
+ *   than reported by the ISO walk fail the operation. On failure or
+ *   cancellation, FAT32 destinations are truncated to 0 bytes; NTFS files are
+ *   left as-is.
  *
- * @par Symlinks
- * - Symlinks found in the ISO walk are silently skipped, not copied and not
- *   counted toward the byte total. This prevents a malicious ISO (Rock
- *   Ridge/UDF) from using a link to read arbitrary host files and write them
- *   to the device. Anything that exists in the ISO only as a symlink will be
- *   absent from the result.
- *
- * @par I/O strategy per file
- * - FAT32 destination files use unbuffered Direct I/O (O_DIRECT) to bypass
- *   the Linux page cache. The final chunk is zero-padded to the configured
- *   alignment before writing, then the file is ftruncate'd to its actual
- *   source size. Padding is never counted as progress.
- * - NTFS destination files use buffered I/O, copied using a manual
- *   read/write loop. Files of at least FALLOCATE_MIN_SIZE (1 MiB) are
- *   pre-allocated with posix_fallocate (its result is ignored). Smaller
- *   files are not pre-allocated, since per-file allocation overhead dominates
- *   for the thousands of small files in a Windows image.
- * - Copy order is NTFS payload first, then ESP, so the bootloader only lands
- *   after the data it references is already on disk. (FatOnly has no NTFS
- *   pass.)
- *
- * @par Double buffering
- * - Two aligned I/O buffers of the same size (4 MiB, see "Sector alignment")
- *   are used as ping-pong slots. For a file larger than one buffer, a
- *   short-lived reader thread fills one slot from the ISO while the calling
- *   thread writes the other slot to the device, so ISO reads and device
- *   writes overlap. The reader runs at most one slot ahead of the writer.
- * - Files that fit in a single buffer are copied entirely on the calling
- *   thread using the first buffer. Starting a thread per tiny file would
- *   cost more than overlap could save, so there is no read/write overlap
- *   across file boundaries.
- * - The writer is the only thread that touches the destination file, file
- *   offsets, and progress counters. The reader only reads from the ISO file
- *   and publishes filled slots under a mutex.
- * - On any writer failure or cancellation, the reader is told to stop and is
- *   always joined before the file descriptors are closed. A read error or
- *   cancellation in the reader fails the file after any already-published
- *   slot has been written.
- *
- * @par Data integrity and short I/O
- * - Short read() results mid-file are not treated as EOF: each read loop
- *   accumulates data until the buffer is full or read() returns 0. EINTR is
- *   retried on reads and writes.
- * - A zero-byte write is treated as a hard failure rather than retried,
- *   preventing an infinite loop if the destination stops making progress.
- * - Writes use pwrite() with explicit file offsets. The offset advances only
- *   after the current chunk has been written completely, allowing a chunk to
- *   be retried from its original offset without relying on the descriptor's
- *   implicit file position.
- * - On the O_DIRECT path, a positive write result that is not a multiple of
- *   the configured sector-size alignment triggers bounded recovery. The
- *   current chunk is restarted from its original aligned file offset using
- *   the chunk's original buffer and full aligned write length. Up to three
- *   restart attempts are permitted per chunk. If recovery is exhausted, the
- *   copy fails; buffered I/O is never used as a fallback.
- * - Recovery retains a per-chunk high-water mark for progress accounting.
- *   Rewriting a chunk therefore does not credit previously counted source
- *   bytes again. Only actual source bytes are counted; alignment padding is
- *   excluded.
- * - Per-file byte counts are checked against the size reported by the ISO
- *   walk. A source that yields fewer bytes than expected fails the operation.
- *   On the FAT32/O_DIRECT path, this check runs before the final ftruncate,
- *   so a short source is not masked by zero extension. On the NTFS path,
- *   files of at least FALLOCATE_MIN_SIZE have already been pre-allocated to
- *   their expected size, so a truncated source can leave a full-size,
- *   partially unwritten file behind; smaller NTFS files are not pre-allocated
- *   and are simply left short. Either way the operation still reports
- *   failure.
- * - Only too-short sources are detected. A source that grows after the ISO
- *   walk is not flagged: FAT32 files are cut back to the walked size by the
- *   final ftruncate, while NTFS files may end up larger than expected and the
- *   progress counter may exceed the precomputed total.
- * - On failure or cancellation, FAT32 destination files are truncated to
- *   zero length. NTFS destination files are left as-is.
- *
- * @par Sector alignment
- * - After formatting, each partition node is opened once and both logical
- *   (BLKSSZGET) and physical (BLKPBSZGET) sector sizes are queried. The
- *   larger of the two governs O_DIRECT padding and the alignment checks in
- *   the copy loop. If the node cannot be opened, or an ioctl fails or returns
- *   a non-positive value, 512 bytes is used for that value. There is no
- *   retry on this open; a failure silently falls back to 512, which may not
- *   satisfy the destination's direct-I/O requirements.
- * - Each of the two I/O buffers is 4 MiB rounded down to a multiple of the
- *   larger of the two partition sector sizes and is allocated with that
- *   alignment (8 MiB total per job).
- * - Correct O_DIRECT operation requires the buffer address, file offsets,
- *   and write lengths to satisfy the destination filesystem's actual
- *   direct-I/O alignment requirements. The configured sector-size alignment
- *   is an approximation of those requirements, not a universal guarantee.
- *   Where supported, statx() with STATX_DIOALIGN can provide the required
- *   memory and offset alignment values.
- * - For FatOnly, the unused NTFS sector size is fixed at 512 bytes.
- *
- * @par Concurrency
- * - Setup steps run per device and concurrently across jobs. Each call uses
- *   its own progressData slot, its own temporary mount directories, its own
- *   pair of I/O buffers, its own monitor thread, and its own short-lived
- *   reader threads for large files.
- *
- * @par Cancellation
- * - Setup steps (ISO mount, wipe, partition, format, FAT/NTFS mount, ISO
- *   walk) treat a concurrent user cancellation as a clean abort: a step that
- *   errors out while g_operationCancelled is already set returns false
- *   without setting the failed flag. Only genuine errors flip it. Exception:
- *   failures of mkdtemp always set the failed flag, even if cancellation is
- *   already in effect.
- * - Cancellation is also checked between files and inside the per-file read
- *   and write loops. A cancellation detected during copying aborts the
- *   current operation; FAT32 destination files are truncated to zero length.
- *
- * @par Telemetry
- * - Progress, speed, and byte accounting are handled by a dedicated
- *   background thread, keeping timing logic out of the critical I/O path.
- *   The thread polls every 500 ms. The copy loop credits newly reached
- *   source-byte progress as writes advance, using a per-chunk high-water mark
- *   so recovery retries do not double-count bytes.
- * - Speed is recalculated at most once per second, using an exponential
- *   moving average (alpha 0.3, or 0.6 while the instantaneous speed is below
- *   10 MB/s). During stalled (zero-delta) polling, the last known speed is
- *   held for up to 300 seconds before dropping to 0, since a single slow
- *   write on throttled USB media can legitimately span many polling ticks.
- *   The baseline timestamp is deliberately not reset during a stall, so the
- *   first speed sample after a stall reflects the true elapsed time.
- * - Reported progress is capped at 99% while copying. On success, speed is
- *   replaced by the overall average (total bytes over time since the monitor
- *   started, which excludes setup), progress is set to 100, and completed is
- *   set.
- *
- * @par Flush and unmount strategy
- * - Between the NTFS pass and the ESP pass (WindowsInstall only, and only if
- *   not cancelled), syncfs is called on the NTFS mount so the buffered NTFS
- *   backlog is on the device before the O_DIRECT ESP writes begin. Otherwise
- *   background write-back of the NTFS data competes with the direct ESP
- *   writes and slows the end of the copy. Its return value is not checked.
- * - After all copies, and only if not cancelled, syncfs is called on the
- *   NTFS mount and then the FAT32 mount to flush dirty pages at the
- *   filesystem level. Its return value is not checked, so a flush error is
- *   not reported here.
- * - Unmounting is performed by safeUmount (via ScopedMount destructors),
- *   which blocks until the kernel confirms all I/O is complete. The
- *   ScopedMount objects live at function scope, so this happens when the
- *   function returns in reverse declaration order (NTFS, FAT, ISO), i.e.
- *   after the final progress accounting. completed is therefore set before
- *   the unmounts finish, and an unmount failure cannot change the return
- *   value. Callers that tell the user it is safe to remove the device should
- *   not rely on completed alone.
- *
- * @par Cleanup strategy
- * - All mount points and the I/O buffers are managed by RAII objects
- *   (ScopedMount, AlignedBuffer). The progress thread is managed by
- *   ThreadGuard, which stops and joins it on every return path. The per-file
- *   reader thread is joined inside the copy routine on every path. Early
- *   returns need no manual cleanup.
+ * @par Lifecycle, Telemetry & Cleanup
+ * - **Concurrency & RAII:** Fully re-entrant per job. Mounts (@c ScopedMount),
+ *   buffers (@c AlignedBuffer), and threads (@c ThreadGuard) clean up
+ *   automatically on all return paths.
+ * - **Cancellation:** Aborts cleanly during setup or I/O loops without setting
+ *   the slot's @c failed flag (except @c mkdtemp() failures, which always set
+ *   @c failed).
+ * - **Telemetry:** A background thread polls every 500 ms and updates EMA
+ *   speed once per second (holding last speed up to 300 s during USB stalls).
+ *   Progress caps at 99% during copy and hits 100% upon completion.
+ * - **Flush & Unmount:** Calls @c syncfs() between NTFS and ESP passes and
+ *   before unmount. @c ScopedMount destructors block on @c safeUmount() as the
+ *   function returns—after @c completed is marked true—so callers must wait
+ *   for the function to return before advising device removal.
  *
  * @param isoPath       Path to the source ISO file.
- * @param device        Target block device (e.g. /dev/sdb). Will be wiped.
- * @param progressIndex Index into the shared progressData array for live
- *                      progress, speed, and completion reporting.
- * @param progressData  Reference to the operation-local progress data array
- *                      used for live progress, speed, and completion
- *                      reporting.
- * @return true on success; false on any error, truncated source, or user
- *         cancellation. On a genuine error the slot's failed flag is set; on
- *         cancellation it is not.
+ * @param device        Target block device (e.g., @c /dev/sdb). Will be wiped.
+ * @param progressIndex Index into @p progressData for live status reporting.
+ * @param progressData  Shared progress tracking array.
+ * @return @c true on success; @c false on error, truncated source, or user
+ *         cancellation (sets the slot's @c failed flag only on genuine errors).
  */
 bool writeWindowsIsoToDevice(const std::string& isoPath,
                              const std::string& device,
                              size_t             progressIndex,
                              std::vector<ProgressInfo>& progressData)
 {
-    auto fail = [&]() -> bool {
-        progressData[progressIndex].failed.store(true);
-        return false;
-    };
-    auto failUnlessCancelled = [&]() -> bool {
-        if (GlobalState::g_operationCancelled.load()) return false;
-        return fail();
-    };
+    namespace steps = win_iso_steps;
+
+    ProgressInfo& slot = progressData[progressIndex];
+    const steps::FailureReporter report{slot};
 
     char isoMntBuf[] = "/tmp/win_iso_XXXXXX";
-    if (!mkdtemp(isoMntBuf)) return fail();
+    if (!mkdtemp(isoMntBuf)) return report.fail();
 
     // ScopedMount always removes the dir; setMounted() arms the safeUmount.
     ScopedMount isoScope(isoMntBuf);
 
-    if (libMountRetry(isoPath.c_str(), isoMntBuf, "ro,loop") != 0)
-        return failUnlessCancelled();
-    isoScope.setMounted();
+    if (!steps::mountIso(isoPath, isoMntBuf, isoScope))
+        return report.failUnlessCancelled();
 
     const std::string isoMnt  = isoMntBuf;
     const IsoType     isoType = detectIsoType(isoMnt);
 
     std::string fatPart, ntfsPart;
-    if (!detail::setupPartitionedDevice(device, isoType, fatPart, ntfsPart))
-        return failUnlessCancelled();
-    if (!detail::formatTargetPartitions(fatPart, ntfsPart, isoType))
-        return failUnlessCancelled();
-
-    const int fatSectorSize  = detail::queryBestSectorSize(fatPart);
-    const int ntfsSectorSize = (isoType == IsoType::WindowsInstall)
-                                   ? detail::queryBestSectorSize(ntfsPart) : 512;
-    if (GlobalState::g_operationCancelled.load()) return false;
+    int fatSectorSize = 0, ntfsSectorSize = 512;
+    if (!steps::prepareDevice(device, isoType, fatPart, ntfsPart,
+                              fatSectorSize, ntfsSectorSize))
+        return report.failUnlessCancelled();
 
     char fatMntBuf[]  = "/tmp/win_fat_XXXXXX";
     char ntfsMntBuf[] = "/tmp/win_ntfs_XXXXXX";
 
-    if (!mkdtemp(fatMntBuf)) return fail();
+    if (!mkdtemp(fatMntBuf)) return report.fail();
     ScopedMount fatScope(fatMntBuf);
 
-    if (isoType == IsoType::WindowsInstall) {
-        if (!mkdtemp(ntfsMntBuf)) return fail();
-    }
-    ScopedMount ntfsScope(isoType == IsoType::WindowsInstall
-                              ? std::string(ntfsMntBuf)
-                              : std::string{});
+    if (!steps::makeNtfsDirIfNeeded(isoType, ntfsMntBuf)) return report.fail();
+    ScopedMount ntfsScope(steps::ntfsScopePath(isoType, ntfsMntBuf));
 
     const std::string fatMnt  = fatMntBuf;
     const std::string ntfsMnt = ntfsMntBuf;
 
-    if (!detail::mountTargetFilesystems(isoType, fatPart, ntfsPart,
-                                        fatMnt, ntfsMnt, fatScope, ntfsScope))
-        return failUnlessCancelled();
-
-    if (GlobalState::g_operationCancelled.load()) return false;
+    if (!steps::mountTargets(isoType, fatPart, ntfsPart,
+                             fatMnt, ntfsMnt, fatScope, ntfsScope))
+        return report.failUnlessCancelled();
 
     std::vector<detail::IsoCopyEntry> ntfsEntries, espEntries;
     uint64_t totalBytes = 0;
 
-    if (!detail::enumerateIsoEntries(isoMnt, isoType, fatMnt, ntfsMnt,
-                                     ntfsEntries, espEntries, totalBytes)) {
-        if (!GlobalState::g_operationCancelled.load()) return fail();
-        return false;
-    }
-
-    if (totalBytes == 0) {
-        if (!GlobalState::g_operationCancelled.load()) return fail();
-        return false;
-    }
+    if (!steps::enumerateNonEmpty(isoMnt, isoType, fatMnt, ntfsMnt,
+                                  ntfsEntries, espEntries, totalBytes))
+        return report.failUnlessCancelled();
 
     std::atomic<uint64_t> totalBytesWrittenAccumulator{0};
     std::atomic<bool>     monitoringActive{true};
     const auto startTime = std::chrono::high_resolution_clock::now();
 
-    std::thread progressMonitorThread([&, totalBytes, progressIndex]() {
+    std::thread progressMonitorThread([&, totalBytes]() {
         detail::runProgressMonitor(totalBytesWrittenAccumulator, monitoringActive,
-                                   totalBytes, progressData[progressIndex]);
+                                   totalBytes, slot);
     });
 
     // Ensures the thread is always stopped and joined on any return path.
@@ -1402,44 +1383,19 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
     AlignedBuffer ioBufA(bufferSize, maxSectorSize);
     AlignedBuffer ioBufB(bufferSize, maxSectorSize);
-    if (!ioBufA || !ioBufB) {
-        if (!GlobalState::g_operationCancelled.load()) return fail();
-        return false;
-    }
+    if (!steps::buffersValid(ioBufA, ioBufB))
+        return report.failUnlessCancelled();
 
-    if (!detail::processEntries(ntfsEntries, isoType, ntfsMnt,
-                                fatSectorSize, ntfsSectorSize,
-                                bufferSize, ioBufA.data, ioBufB.data,
-                                totalBytesWrittenAccumulator)) {
-        if (!GlobalState::g_operationCancelled.load()) return fail();
-        return false;
-    }
+    auto runPass = [&](std::vector<detail::IsoCopyEntry>& entries) {
+        return detail::processEntries(entries, isoType, ntfsMnt,
+                                      fatSectorSize, ntfsSectorSize,
+                                      bufferSize, ioBufA.data, ioBufB.data,
+                                      totalBytesWrittenAccumulator);
+    };
 
-    // Drain the NTFS write-back backlog before the O_DIRECT ESP pass starts.
-    // Buffered NTFS writes only land in the page cache, so without this the
-    // kernel keeps flushing the NTFS data in the background while the ESP
-    // pass writes directly to a different region of the same device. Two
-    // competing write streams make cheap flash crawl near the end of the
-    // copy. The return value is not checked: a flush error here is not
-    // reported (same as the final syncfs), and the unmount still blocks until
-    // all I/O completes.
-    if (isoType == IsoType::WindowsInstall &&
-        !GlobalState::g_operationCancelled.load()) {
-        detail::syncMount(ntfsMnt);
-    }
-
-    if (!detail::processEntries(espEntries, isoType, ntfsMnt,
-                                fatSectorSize, ntfsSectorSize,
-                                bufferSize, ioBufA.data, ioBufB.data,
-                                totalBytesWrittenAccumulator)) {
-        if (!GlobalState::g_operationCancelled.load()) return fail();
-        return false;
-    }
-
-    if (!GlobalState::g_operationCancelled.load()) {
-        if (isoType == IsoType::WindowsInstall) detail::syncMount(ntfsMnt);
-        detail::syncMount(fatMnt);
-    }
+    if (!steps::runCopyPasses(runPass, isoType, ntfsMnt, fatMnt,
+                              ntfsEntries, espEntries))
+        return report.failUnlessCancelled();
 
     threadGuard.stop();
 
@@ -1448,14 +1404,9 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
     const auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::high_resolution_clock::now() - startTime);
-    const double seconds  = totalElapsed.count() / 1000.0;
-    const double avgSpeed = (seconds > 0.0)
-        ? (static_cast<double>(totalBytes) / (1024.0 * 1024.0)) / seconds
-        : 0.0;
+    const double seconds = totalElapsed.count() / 1000.0;
 
-    progressData[progressIndex].speed.store(avgSpeed);
-    progressData[progressIndex].progress.store(100);
-    progressData[progressIndex].completed.store(true);
+    steps::reportSuccess(slot, steps::averageSpeedMBps(totalBytes, seconds));
     return true;
 }
 
