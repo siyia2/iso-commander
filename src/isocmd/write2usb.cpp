@@ -7,7 +7,6 @@
 #include <cerrno>
 #include <condition_variable>
 #include <cstdint>
-#include <cstdlib>
 #include <cstddef>
 #include <cstring>
 #include <deque>
