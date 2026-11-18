@@ -16,6 +16,16 @@
 // Forward declaration of shared state
 struct RefreshState;
 
+/**
+ * @brief Checks whether a path exists and refers to a directory.
+ *
+ * @param path Path to check.
+ * @return true if @p path is an existing directory, false otherwise.
+ */
+inline bool isValidDirectory(const std::string& path) {
+    return std::filesystem::is_directory(path);
+}
+
 // --- Filesystem Traversal ---
 
 /**

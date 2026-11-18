@@ -29,20 +29,6 @@
  */
 struct ProgressInfo;
 
-// ------------------- Mount helpers (windowsWriter.cpp) -------------------
-
-/**
- * @brief Performs a controlled unmount using a persistent libmount context.
- *
- * Enables loop-device auto-removal (LOOPDEL). If the plain unmount fails
- * (e.g. the target is busy), retries once with a lazy detach. If the
- * operation has been cancelled (GlobalState::g_operationCancelled), goes
- * straight to a lazy detach. Failures are not reported to the caller.
- *
- * @param path The mount point or device path to unmount.
- */
-void safeUmount(const char* path);
-
 // ------------------- Windows ISO writer (windowsWriter.cpp) -------------------
 
 /**
@@ -88,37 +74,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
                              const std::string& device,
                              size_t             progressIndex,
                              std::vector<ProgressInfo>& progressData);
-
-// ------------------- Windows ISO Writer RAII -------------------
-
-/**
- * @struct ScopedMount
- * @brief RAII wrapper to ensure automatic unmounting and directory removal.
- *
- * Manages the lifecycle of a mount point created via mkdtemp. On destruction:
- * - If active (setMounted() was called), safeUmount is called first.
- * - rmdir is always called if path is non-empty, cleaning up the temp dir
- *   regardless of whether a mount succeeded.
- *
- * Non-copyable and non-movable — owns a unique kernel resource.
- */
-struct ScopedMount {
-    std::string path;
-    bool active = false;
-    // Accepts an empty path to represent a "disabled" scope (no-op destructor).
-    explicit ScopedMount(std::string p) : path(std::move(p)) {}
-    ScopedMount(const ScopedMount&)            = delete;
-    ScopedMount& operator=(const ScopedMount&) = delete;
-    ScopedMount(ScopedMount&&)                 = delete;
-    ScopedMount& operator=(ScopedMount&&)      = delete;
-    // Call after a successful mount to arm the safeUmount on destruction.
-    void setMounted() { active = true; }
-    ~ScopedMount() {
-        if (path.empty()) return;
-        if (active) safeUmount(path.c_str());
-        rmdir(path.c_str());
-    }
-};
 
 /**
  * @struct AlignedBuffer
