@@ -209,8 +209,8 @@ static std::string constructDatabasePrompt(const VerboseAndDatabaseTheme& dt) {
  * @param filterHistory Whether to load and save readline history.
  * @param newISOFound Reference to flag indicating if new ISOs were found.
  * @param repaintCallerPrompt Callback that reprints the caller's prompt header and typed line. Forwarded to
- *  @c saveAndReportResultsForDatabase as @c repaintCallerHeader, so the question the user answered survives a
- *  SIGWINCH during the confirmation wait. Not invoked on the first draw.
+ * @c saveAndReportResultsForDatabase as @c repaintCallerHeader, so the question the user answered survives a
+ * SIGWINCH during the confirmation wait. Not invoked on the first draw.
  */
 static void processPathTraversalAndReporting(const std::string& input,
                                              bool promptFlag,
