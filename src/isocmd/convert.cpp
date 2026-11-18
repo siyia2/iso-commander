@@ -186,8 +186,8 @@ namespace {
      */
     void removeFromCache(const std::string& inputPath, const ConversionBatchContext& ctx) {
         std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
-        auto& cache = ctx.mode.nrg ? GlobalState::nrgFilesCache :
-                      (ctx.mode.mdf ? GlobalState::mdfMdsFilesCache :
+        auto& cache = ctx.mode.mdf ? GlobalState::mdfMdsFilesCache :
+                      (ctx.mode.nrg ? GlobalState::nrgFilesCache :
                        (ctx.mode.chd ? GlobalState::chdFilesCache :
                         (ctx.mode.daa ? GlobalState::daaGbiFilesCache : GlobalState::binImgFilesCache)));
         cache.erase(std::remove(cache.begin(), cache.end(), inputPath), cache.end());
