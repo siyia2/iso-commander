@@ -182,7 +182,8 @@ namespace {
      * @param ctx       Batch context providing the active `ConversionMode`.
      *
      * @note When multiple mode flags are set (which callers should not do),
-     *       the NRG cache wins, then MDF, CHD, DAA, and finally BIN/IMG.
+     *       the MDF cache wins, then NRG, CHD, DAA, and finally BIN/IMG
+     *       (same precedence as `runConversion`).
      */
     void removeFromCache(const std::string& inputPath, const ConversionBatchContext& ctx) {
         std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
@@ -423,7 +424,7 @@ namespace {
  *
  * Iterates over @p imageFiles, performing per-file validation (existence and
  * basic readability), skipping jobs whose destination ISO already exists,
- * dispatching to the backend selected by the `mode*` flags, and aggregating
+ * dispatching to the backend selected by @p mode, and aggregating
  * success/failure/skip messages in a thread-safe manner. Successful output
  * paths are optionally collected for downstream database indexing.
  *
@@ -432,24 +433,20 @@ namespace {
  * the batch returns promptly after flushing any buffered messages.
  *
  * @param imageFiles              Source image paths to convert.
- * @param modeMdf                 @c true selects the MDF/MDS backend.
- * @param modeNrg                 @c true selects the NRG backend.
- * @param modeChd                 @c true selects the CHD backend.
- * @param modeDaa                 @c true selects the DAA/GBI backend.
- *                                When all four mode flags are @c false, the
- *                                CCD backend is used.
- * @param completedBytes          Optional atomic counter incremented by bytes
- *                                processed; may be @c nullptr.
- * @param completedTasks          Atomic counter incremented per success or skip;
- *                                must be non-null.
- * @param failedTasks             Atomic counter incremented per failure; must
- *                                be non-null.
- * @param successfulOutputPaths   Optional sink for produced ISO paths. When
- *                                non-null, @p outPathsMutex must also be non-null.
- * @param outPathsMutex           Optional mutex guarding @p successfulOutputPaths.
+ * @param mode                    Selects the backend (MDF/MDS, NRG, CHD, DAA/GBI).
+ *                                When all flags are @c false, the CCD backend is used.
+ * @param batchData               Caller-owned counters and optional output collection:
+ *                                - @c completedBytes: optional; may be @c nullptr.
+ *                                - @c completedTasks: incremented per success or
+ *                                  skip; must be non-null.
+ *                                - @c failedTasks: incremented per failure; must
+ *                                  be non-null.
+ *                                - @c successfulOutputPaths: optional sink for
+ *                                  produced ISO paths; when non-null,
+ *                                  @c outPathsMutex must also be non-null.
+ *                                - @c outPathsMutex: guards @c successfulOutputPaths.
  *
- * @warning Each of @p completedTasks, @p failedTasks, and (if @p successfulOutputPaths
- *          is non-null) @p outPathsMutex must point to objects whose lifetime
+ * @warning Every pointer in @p batchData must reference objects whose lifetime
  *          exceeds this call. Null pointers for the required atomics are
  *          undefined behavior.
  *
