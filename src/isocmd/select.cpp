@@ -319,7 +319,7 @@ void processOperation(const std::string& inputString,
 
 /// Image caches the unfiltered list of a file type is restored from.
 const std::vector<std::string>* imageCacheFor(const std::string& fileType) {
-    if (fileType == "bin" || fileType == "img") return &GlobalState::binImgFilesCache;
+    if (fileType == "bin") return &GlobalState::binImgFilesCache;
     if (fileType == "mdf") return &GlobalState::mdfMdsFilesCache;
     if (fileType == "nrg") return &GlobalState::nrgFilesCache;
     if (fileType == "chd") return &GlobalState::chdFilesCache;
@@ -909,7 +909,7 @@ namespace {
 
 /// Conversion operation name for a file type ("" for an unknown type).
 std::string operationForFileType(const std::string& fileType) {
-    if (fileType == "bin" || fileType == "img") return "ccd2iso";
+    if (fileType == "bin") return "ccd2iso";
     if (fileType == "mdf") return "mdf2iso";
     if (fileType == "nrg") return "nrg2iso";
     if (fileType == "chd") return "chd2iso";
@@ -1212,7 +1212,6 @@ struct ImageSession {
  *
  * - **File type mapping:** @p fileType selects the conversion operation
  *   (@c "ccd2iso", @c "mdf2iso", @c "nrg2iso", @c "chd2iso", @c "daa2iso");
- *   "bin" and "img" both map to the BIN/IMG conversion.
  * - **RAII keybindings:** @c ReadlineKeybindingGuard installs select-mode
  *   bindings on construction and resets them on destruction, so cleanup runs
  *   on every exit path.
@@ -1237,7 +1236,7 @@ struct ImageSession {
  *   handlers are tried in a fixed order (ESC, staged commands, ignored input,
  *   pagination/help, "P", filtering, staging, direct conversion).
  *
- * @param fileType  "bin", "img", "mdf", "nrg", "chd", or "daa".
+ * @param fileType  "bin", "img", "mdf", "nrg", "chd", "daa", or "gbi".
  * @param files     The image file list being filtered/selected; updated in
  *                  place by filtering and by ESC-restore.
  * @param list      Toggled by the "ls" command (from the caller) to view the

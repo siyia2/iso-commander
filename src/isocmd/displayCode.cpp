@@ -364,7 +364,7 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
     };
 
     auto getCacheTarget = [&fileType]() -> CacheTarget {
-        if (fileType == "bin" || fileType == "img")
+        if (fileType == "bin")
             return {&GlobalState::binImgFilesCache, &GlobalMutexes::binImgCacheMutex};
 
         if (fileType == "mdf")
@@ -376,8 +376,6 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
         if (fileType == "chd")
             return {&GlobalState::chdFilesCache, &GlobalMutexes::chdCacheMutex};
 
-        // Preserve the original behavior: only DAA restores and sorts
-        // the shared DAA/GBI cache in this function.
         if (fileType == "daa")
             return {&GlobalState::daaGbiFilesCache, &GlobalMutexes::daaGbiCacheMutex};
 

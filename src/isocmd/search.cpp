@@ -813,7 +813,7 @@ static std::unordered_set<std::string> processPaths(const std::string& path, con
  * @return Pointer to the matched format cache vector, or nullptr if unsupported.
  */
 static std::vector<std::string>* getCacheForMode(const std::string& mode, int& currentCacheOld) {
-    if (mode == "bin" || mode == "img") {
+    if (mode == "bin") {
         currentCacheOld = GlobalState::binImgFilesCache.size();
         return &GlobalState::binImgFilesCache;
     } else if (mode == "mdf") {
@@ -951,7 +951,7 @@ static void updateCacheAndFinalize(std::vector<std::string>* currentCache,
  * @param fileNames           Receives discovered file paths.
  * @param currentCacheOld     Receives the cache size before additions.
  * @param mode                Format category ("bin"/"img", "mdf", "nrg",
- *                            "chd", or "daa").
+ *                            "chd", or "daa/gbi").
  * @param callback            Optional callback for each newly discovered file.
  * @param processedErrorsFind Receives scan errors and cancellation information.
  * @param totalFiles          Shared count of regular files visited by all tasks.
@@ -1058,7 +1058,6 @@ struct FileTypeConfig {
 static const std::unordered_map<std::string, FileTypeConfig>& getFileTypeMap() {
     static const std::unordered_map<std::string, FileTypeConfig> fileTypeMap = {
         {"bin", {".bin/.img", "BIN/IMG"}},
-        {"img", {".bin/.img", "BIN/IMG"}},
         {"mdf", {".mdf",      "MDF"    }},
         {"nrg", {".nrg",      "NRG"    }},
         {"chd", {".chd",      "CHD"    }},
@@ -1179,8 +1178,7 @@ static void parseAndValidateDirectories(
  * their entered text and order. If new files are found and the scan was not
  * cancelled, the user is taken to the file-selection interface.
  *
- * @param fileTypeChoice Format category: "bin", "img", "mdf", "nrg", "chd",
- *                       or "daa". "bin" and "img" use the same cache.
+ * @param fileTypeChoice Format category: "bin", "img", "mdf", "nrg", "chd", "daa", "gbi".
  * @param state          Shared refresh state forwarded to file selection.
  */
 void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shared_ptr<RefreshState> state) {
