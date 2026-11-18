@@ -806,13 +806,95 @@ static std::vector<size_t> renderConfirmRows(
 }
 
 /**
+ * @brief Renders error messages with the specified prompt, main input string, and theme styling.
+ *
+ * @param devicePrompt The current device input prompt string.
+ * @param mainInputString The raw input string entered by the user.
+ * @param errors Vector of error messages to display.
+ * @param wt The current write theme configuration.
+ * @param color Color formatting string for error bullets.
+ */
+static void renderErrorMessage(const std::string& devicePrompt,
+                               const std::string& mainInputString,
+                               const std::vector<std::string>& errors,
+                               const WriteTheme& wt,
+                               std::string_view color)
+{
+    SyncOutput sync;
+    clearScrollBuffer();
+    std::cout << promptHeaderForRepaint(devicePrompt);
+    std::cout << buildIdxPrompt(wt) << mainInputString << "\n";
+    std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
+    for (const auto& e : errors) {
+        std::cerr << color << " • " << e << "\n";
+    }
+}
+
+/**
+ * @brief Prompts the user to confirm the valid ISO-to-device mapping pairs.
+ *
+ * @param devicePrompt The current device input prompt string.
+ * @param mainInputString The raw input string entered by the user.
+ * @param warnRows Warning rows generated for the valid pairs.
+ * @param wt The current write theme configuration.
+ * @param color Color formatting string for confirmation prompt.
+ * @return true if the user confirmed with 'y' or 'Y', false otherwise.
+ */
+static bool confirmDeviceMappings(const std::string& devicePrompt,
+                                  const std::string& mainInputString,
+                                  const std::vector<WarnRow>& warnRows,
+                                  const WriteTheme& wt,
+                                  std::string_view color)
+{
+    const size_t drawnCols = terminalSize().cols;
+    std::vector<size_t> drawnWidths;
+    {
+        SyncOutput sync;
+        drawnWidths = renderConfirmRows(drawnCols, /*clearFirst=*/false, devicePrompt, mainInputString, warnRows, wt);
+    }
+
+    const std::string promptText = "Proceed? (y/n): ";
+    const std::string confirmPrompt =
+        "\001" + std::string(color) + "\002" + promptText + wt.rl_resetCol;
+
+    std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
+    {
+        ConfirmationModeGuard confirmGuard;
+        ConfirmResizeWatcher watcher(
+            [&](size_t cols) { return renderConfirmRows(cols, /*clearFirst=*/true, devicePrompt, mainInputString, warnRows, wt); },
+            drawnCols, drawnWidths, promptText);
+
+        confirmation.reset(readline(confirmPrompt.c_str()));
+        watcher.stop();
+    }
+
+    std::string ans;
+    if (confirmation) {
+        ans = confirmation.get();
+        while (!ans.empty() && std::isspace(static_cast<unsigned char>(ans.back()))) {
+            ans.pop_back();
+        }
+    }
+
+    return (ans == "y" || ans == "Y");
+}
+
+/**
  * @brief Interactive loop to collect, parse, validate, and confirm mappings between ISO images and USB storage targets.
+ *
+ * Manages the interactive terminal session using GNU Readline, displaying available ISOs and USB devices,
+ * parsing user mapping inputs, validating device permissions and constraints, displaying warnings, and prompting
+ * for final user confirmation before returning confirmed association pairs.
  *
  * @param selectedIsos Vector of selected ISO files designated for writing.
  * @param[out] pendingIndices Output container for tracking unassigned or pending index identifiers.
- * @return std::vector<std::pair<IsoInfo, std::string>> Vector of confirmed (ISO, Target Device) association pairs.
+ * @return std::vector<std::pair<IsoInfo, std::string>> Vector of confirmed (ISO, Target Device) association pairs,
+ *         or an empty vector if cancelled or stopped by thread pool limits.
  */
-std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::vector<IsoInfo>& selectedIsos, std::vector<std::string>& pendingIndices) {
+std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
+    const std::vector<IsoInfo>& selectedIsos,
+    std::vector<std::string>& pendingIndices)
+{
     PendingReadlineTextClearGuard pendingTextGuard;
     const WriteTheme wt = getWriteTheme();
     const bool noPermissions = (geteuid() != 0);
@@ -862,32 +944,19 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             return {};
         }
 
-        if (deviceInput.get()[0] == '\0') {
+        std::string mainInputString(deviceInput.get());
+        if (mainInputString.empty()) {
             continue;
         }
-
-        std::string mainInputString(deviceInput.get());
         if (mainInputString == "\x1b") {
             return {};
         }
-
         if (mainInputString == "?") {
             helpMappings();
             continue;
         }
 
-        if (deviceInput && *deviceInput) add_history(deviceInput.get());
-
-        auto renderErrors = [&](const std::vector<std::string>& errs) {
-            SyncOutput sync;
-            clearScrollBuffer();
-            std::cout << promptHeaderForRepaint(devicePrompt);
-            std::cout << buildIdxPrompt(wt) << mainInputString << "\n";
-            std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
-            for (const auto& e : errs) {
-                std::cerr << color << " • " << e << "\n";
-            }
-        };
+        add_history(deviceInput.get());
 
         std::vector<std::string> isoFilenames;
         isoFilenames.reserve(sortedIsos.size());
@@ -898,7 +967,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         std::vector<std::string> errors;
         auto deviceMap = parseDeviceMappings(deviceInput.get(), isoFilenames, errors);
         if (!errors.empty()) {
-            pressEnterToTryWithRepaint([&] { renderErrors(errors); });
+            pressEnterToTryWithRepaint([&] { renderErrorMessage(devicePrompt, mainInputString, errors, wt, color); });
             continue;
         }
 
@@ -909,9 +978,9 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
             disable_ctrl_d();
 
             if (noPermissions) {
-                pressEnterToContinueWithRepaint([&] { renderErrors(validationErrors); });
+                pressEnterToContinueWithRepaint([&] { renderErrorMessage(devicePrompt, mainInputString, validationErrors, wt, color); });
             } else {
-                pressEnterToTryWithRepaint([&] { renderErrors(validationErrors); });
+                pressEnterToTryWithRepaint([&] { renderErrorMessage(devicePrompt, mainInputString, validationErrors, wt, color); });
             }
             continue;
         }
@@ -922,36 +991,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(const std::ve
         }
 
         auto warnRows = buildWarnRows(validPairs);
-        const size_t drawnCols = terminalSize().cols;
-        std::vector<size_t> drawnWidths;
-        {
-            SyncOutput sync;
-            drawnWidths = renderConfirmRows(drawnCols, /*clearFirst=*/false, devicePrompt, mainInputString, warnRows, wt);
-        }
-
-        const std::string promptText = "Proceed? (y/n): ";
-        const std::string confirmPrompt =
-            "\001" + std::string(color) + "\002" + promptText + wt.rl_resetCol;
-
-        std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
-        {
-            ConfirmationModeGuard confirmGuard;
-            ConfirmResizeWatcher watcher(
-                [&](size_t cols) { return renderConfirmRows(cols, /*clearFirst=*/true, devicePrompt, mainInputString, warnRows, wt); },
-                drawnCols, drawnWidths, promptText);
-
-            confirmation.reset(readline(confirmPrompt.c_str()));
-            watcher.stop();
-        }
-
-        std::string ans;
-        if (confirmation) {
-            ans = confirmation.get();
-            while (!ans.empty() && std::isspace(static_cast<unsigned char>(ans.back())))
-                ans.pop_back();
-        }
-
-        if (ans == "y" || ans == "Y") {
+        if (confirmDeviceMappings(devicePrompt, mainInputString, warnRows, wt, color)) {
             setupSignalHandlerCancellations();
             GlobalState::g_operationCancelled.store(false);
             g_isoPending.paths.clear();

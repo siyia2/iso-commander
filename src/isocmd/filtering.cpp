@@ -177,6 +177,98 @@ static bool hasDanglingBackslash(const std::string& query) {
 }
 
 /**
+ * @brief Checks if a character is one of the escapable query delimiters or special characters.
+ * @param c The character to check.
+ * @return True if the character can be escaped by a backslash, false otherwise.
+ */
+static inline bool isEscapableChar(char c) {
+    return c == '&' || c == ';' || c == '!' || c == '\\';
+}
+
+/**
+ * @brief Finalizes the current search term, constructs its QueryToken with case sensitivity analysis,
+ *        and appends it to the active query group if non-empty.
+ * @param term The string buffer containing the current term.
+ * @param negate Reference to the negation flag for the current term.
+ * @param group Reference to the active QueryGroup being built.
+ */
+static void finishTerm(std::string& term, bool& negate, QueryGroup& group) {
+    const bool wasNegated = negate;
+    negate = false;    // reset even when the term is empty (a lone "!")
+    if (term.empty())
+        return;
+
+    QueryToken qt;
+    qt.original        = std::move(term);
+    qt.negated         = wasNegated;
+    qt.isCaseSensitive = std::any_of(
+        qt.original.begin(), qt.original.end(),
+        [](unsigned char c) { return std::isupper(c); });
+
+    if (!qt.isCaseSensitive) {
+        qt.lower = qt.original;
+        toLowerInPlace(qt.lower);
+    }
+
+    group.push_back(std::move(qt));
+    term.clear();
+}
+
+/**
+ * @brief Finalizes the current term and pushes the active query group into the collection if not empty.
+ * @param term The string buffer containing the current term.
+ * @param negate Reference to the negation flag.
+ * @param group Reference to the active QueryGroup.
+ * @param groups Reference to the vector of QueryGroups.
+ */
+static void finishGroup(std::string& term, bool& negate, QueryGroup& group, std::vector<QueryGroup>& groups) {
+    finishTerm(term, negate, group);
+    if (!group.empty()) {
+        groups.push_back(std::move(group));
+        group.clear();
+    }
+}
+
+/**
+ * @brief Processes a single character from the query string during parsing.
+ * @param query The full query string.
+ * @param i Current index in the query string (passed by reference to allow advancing past escaped characters).
+ * @param term The string buffer for the current term being accumulated.
+ * @param negate Reference to the term negation flag.
+ * @param sawOr Reference to the flag indicating if at least one unescaped ';' was encountered.
+ * @param group Reference to the active QueryGroup.
+ * @param groups Reference to the collection of QueryGroups.
+ */
+static void processQueryChar(const std::string& query, size_t& i,
+                             std::string& term, bool& negate, bool& sawOr,
+                             QueryGroup& group, std::vector<QueryGroup>& groups) {
+    const char c = query[i];
+
+    // A backslash with nothing after it is a dangling escape (mid-typing,
+    // or backspaced onto it). It has no delimiter to escape, so ignore it
+    // instead of searching for a literal '\'.
+    if (c == '\\' && i + 1 == query.size())
+        return;
+
+    // Backslash escapes only '&', ';', '!' and '\' itself. A backslash
+    // before any other character remains part of the search term.
+    if (c == '\\' && i + 1 < query.size() && isEscapableChar(query[i + 1])) {
+        term.push_back(query[++i]);
+    } else if (c == '&') {
+        finishTerm(term, negate, group);
+    } else if (c == ';') {
+        sawOr = true;
+        finishGroup(term, negate, group, groups);
+    } else if (c == '!' && term.empty() && !negate) {
+        // Unescaped '!' at the start of a term: negate it. Any later '!'
+        // in the same term (including a second leading one) is literal.
+        negate = true;
+    } else {
+        term.push_back(c);
+    }
+}
+
+/**
  * @brief Parses a query string into OR-ed groups of AND-ed terms.
  *
  * Grammar:
@@ -228,63 +320,8 @@ static std::vector<QueryGroup> buildQueryGroups(const std::string& query,
     bool sawOr  = false;   // at least one unescaped ';' has been seen
     term.reserve(query.size());
 
-    const auto finishTerm = [&]() {
-        const bool wasNegated = negate;
-        negate = false;    // reset even when the term is empty (a lone "!")
-        if (term.empty())
-            return;
-
-        QueryToken qt;
-        qt.original        = std::move(term);
-        qt.negated         = wasNegated;
-        qt.isCaseSensitive = std::any_of(
-            qt.original.begin(), qt.original.end(),
-            [](unsigned char c) { return std::isupper(c); });
-
-        if (!qt.isCaseSensitive) {
-            qt.lower = qt.original;
-            toLowerInPlace(qt.lower);
-        }
-
-        group.push_back(std::move(qt));
-        term.clear();
-    };
-
-    const auto finishGroup = [&]() {
-        finishTerm();
-        if (!group.empty()) {
-            groups.push_back(std::move(group));
-            group.clear();
-        }
-    };
-
     for (size_t i = 0; i < query.size(); ++i) {
-        const char c = query[i];
-
-        // A backslash with nothing after it is a dangling escape (mid-typing,
-        // or backspaced onto it). It has no delimiter to escape, so ignore it
-        // instead of searching for a literal '\'.
-        if (c == '\\' && i + 1 == query.size())
-            continue;
-
-        // Backslash escapes only '&', ';', '!' and '\' itself. A backslash
-        // before any other character remains part of the search term.
-        if (c == '\\' && i + 1 < query.size() &&
-            (query[i + 1] == '&' || query[i + 1] == ';' ||
-             query[i + 1] == '!' || query[i + 1] == '\\')) {
-            term.push_back(query[++i]);
-        } else if (c == '&') {
-            finishTerm();
-        } else if (c == ';') {
-            sawOr = true;
-            finishGroup();
-        } else if (c == '!' && term.empty() && !negate) {
-            // Unescaped '!' at the start of a term: negate it. Any later '!'
-            // in the same term (including a second leading one) is literal.
-            negate = true;
-        } else {
-            term.push_back(c);
-        }
+        processQueryChar(query, i, term, negate, sawOr, group, groups);
     }
 
     // The last OR-branch is still empty if nothing has accumulated since the
@@ -293,7 +330,7 @@ static std::vector<QueryGroup> buildQueryGroups(const std::string& query,
     if (trailingEmptyGroup)
         *trailingEmptyGroup = sawOr && group.empty() && term.empty() && !negate;
 
-    finishGroup();
+    finishGroup(term, negate, group, groups);
     return groups;
 }
 

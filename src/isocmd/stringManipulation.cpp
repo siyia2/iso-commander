@@ -26,14 +26,74 @@ void toLowerInPlace(std::string& str) {
 }
 
 /**
+ * @brief Checks whether the full path should be displayed based on the UI location and global configuration flags.
+ *
+ * @param location A string key representing the specific UI context.
+ * @return true if the full path should be displayed without shortening, false otherwise.
+ */
+static bool shouldShowFullPath(const std::string& location) {
+    return (displayConfig::toggleFullListMount && location == "mount") ||
+           (displayConfig::toggleFullListCpMvRm && location == "cp_mv_rm") ||
+           (displayConfig::toggleFullListConvert2iso && location == "convert2iso") ||
+           (displayConfig::toggleFullListWrite2usb && location == "write2usb");
+}
+
+/**
+ * @brief Shortens a directory path by truncating individual path components.
+ *
+ * @details Iterates through each component of the directory path and truncates it
+ *          at a maximum length of 16 characters or at the first special character
+ *          (' ', '-', '_', '.'), while preserving hidden files/directories.
+ *
+ * @param originalDir The original directory path string_view to shorten.
+ * @return std::string The processed and shortened directory string.
+ */
+static std::string shortenDirectory(std::string_view originalDir) {
+    std::string processedDir;
+    processedDir.reserve(originalDir.size());
+
+    size_t start = 0;
+    while (start < originalDir.size()) {
+        auto end = originalDir.find_first_of('/', start);
+        if (end == std::string_view::npos) {
+            end = originalDir.size();
+        }
+
+        std::string_view component = originalDir.substr(start, end - start);
+        size_t truncatePos = std::min<size_t>(16, component.size());
+
+        for (size_t i = 0; i < truncatePos; ++i) {
+            char c = component[i];
+            // Truncate at first special character
+            if (c == ' ' || c == '-' || c == '_' || c == '.') {
+                if (i == 0 && component.size() > 1) {
+                    continue; // Allow hidden files/directories starting with '.'
+                }
+                truncatePos = i;
+                break;
+            }
+        }
+
+        processedDir.append(component.substr(0, truncatePos));
+
+        if (end < originalDir.size()) {
+            processedDir.push_back('/');
+        }
+        start = end + 1;
+    }
+
+    return processedDir;
+}
+
+/**
  * @brief Decomposes a file path into a directory and filename, applying shortening logic to the directory.
  *
  * @details This function separates the filename from the directory path. Depending on the 'location'
- * and global configuration, the directory path is either returned as-is or processed through a
- * "shortening" algorithm that truncates path components at special characters or a maximum length.
+ *          and global configuration, the directory path is either returned as-is or processed through a
+ *          "shortening" algorithm that truncates path components at special characters or a maximum length.
  *
- * To optimize performance and avoid redundant string manipulations, the results of shortened
- * directories are stored in a global cache (GlobalCaches::transformationCache).
+ *          To optimize performance and avoid redundant string manipulations, the results of shortened
+ *          directories are stored in a global cache (GlobalCaches::transformationCache).
  *
  * @param path The full input path to process.
  * @param location A string key used to check if full-path display is toggled for specific UI contexts.
@@ -42,7 +102,7 @@ void toLowerInPlace(std::string& str) {
  *         - second: The original filename.
  *
  * @note The directory string_view points to memory owned either by the input 'path' (if unshortened)
- * or the 'GlobalCaches::transformationCache' (if shortened).
+ *       or the 'GlobalCaches::transformationCache' (if shortened).
  */
 std::pair<std::string_view, std::string_view> extractDirectoryAndFilename(std::string_view path, const std::string& location) {
     const auto lastSlashPos = path.find_last_of('/');
@@ -58,51 +118,18 @@ std::pair<std::string_view, std::string_view> extractDirectoryAndFilename(std::s
     const std::string_view originalDir = path.substr(0, lastSlashPos);
 
     // 2. Check for "Full Path" flags (no processing needed)
-    bool showFull = (displayConfig::toggleFullListMount && location == "mount") ||
-                    (displayConfig::toggleFullListCpMvRm && location == "cp_mv_rm") ||
-                    (displayConfig::toggleFullListConvert2iso && location == "convert2iso") ||
-                    (displayConfig::toggleFullListWrite2usb && location == "write2usb");
-
-    if (showFull) {
+    if (shouldShowFullPath(location)) {
         return {originalDir, filename};
     }
 
     // 3. Fast-Path: Transparent Cache Lookup
-    // find() now accepts string_view directly thanks to StringViewHash
     if (auto it = GlobalCaches::transformationCache.find(originalDir);
-             it != GlobalCaches::transformationCache.end()) {
+        it != GlobalCaches::transformationCache.end()) {
         return {std::string_view(it->second), filename};
     }
 
     // 4. Slow-Path: Process and Shorten (Executes once per unique directory)
-    std::string processedDir;
-    processedDir.reserve(originalDir.size());
-
-    size_t start = 0;
-    while (start < originalDir.size()) {
-        auto end = originalDir.find_first_of('/', start);
-        if (end == std::string_view::npos) end = originalDir.size();
-
-        std::string_view component = originalDir.substr(start, end - start);
-        size_t truncatePos = std::min<size_t>(16, component.size());
-
-        for (size_t i = 0; i < truncatePos; ++i) {
-            char c = component[i];
-            // Truncate at first special character
-            if (c == ' ' || c == '-' || c == '_' || c == '.') {
-                if (i == 0 && component.size() > 1) continue; // Allow hidden files
-                truncatePos = i;
-                break;
-            }
-        }
-
-        processedDir.append(component.substr(0, truncatePos));
-
-        if (end < originalDir.size()) {
-            processedDir.push_back('/');
-        }
-        start = end + 1;
-    }
+    std::string processedDir = shortenDirectory(originalDir);
 
     // 5. Store result in cache and return a view of it
     auto [it, inserted] = GlobalCaches::transformationCache.emplace(

@@ -899,6 +899,96 @@ struct CollectionResult {
 };
 
 /**
+ * @brief Checks if the global operation cancellation flag has been set.
+ *
+ * @param[in] args Parsed command-line arguments for silent mode configuration.
+ * @param[out] res Collection result structure to update cancellation metadata.
+ * @param[in] message Custom warning message to display if cancelled.
+ * @return true if the operation was cancelled, false otherwise.
+ */
+static bool checkCancellation(const ParsedArgs& args, CollectionResult& res, const char* message = "Operation cancelled by user.") {
+    if (GlobalState::g_operationCancelled.load()) {
+        verboseWarn(args.silentMode, message);
+        res.cancelled = true;
+        res.abortImmediately = true;
+        return true;
+    }
+    return false;
+}
+
+/**
+ * @brief Performs a surface scan of the specified mount directory to collect ISO mount points.
+ *
+ * @param[in] mntPath The directory path to scan.
+ * @param[in] args Parsed command-line arguments containing silent mode configuration.
+ * @param[out] res Collection result structure where discovered mount points and error flags are recorded.
+ */
+static void collectFromMnt(const fs::path& mntPath, const ParsedArgs& args, CollectionResult& res) {
+    disableInput();
+    verboseInfo(args.silentMode,
+                std::string("Scanning ")
+                .append(mntPath.string())
+                .append(" for ISO mount points (surface scan)..."));
+
+    try {
+        for (const auto& entry : fs::directory_iterator(mntPath)) {
+            if (GlobalState::g_operationCancelled.load())
+                return;
+
+            if (entry.is_directory())
+                res.mountPoints.insert(fs::canonical(entry.path()).string());
+        }
+    } catch (const fs::filesystem_error& e) {
+        if (e.code() != std::errc::no_such_file_or_directory)
+            res.hasErrors = true;
+    }
+}
+
+/**
+ * @brief Validates and processes a single user-specified input path.
+ *
+ * @param[in] rawPath The raw path string from command-line arguments.
+ * @param[in] args Parsed command-line arguments containing silent mode configuration.
+ * @param[out] res Collection result structure to update mount points and error flags.
+ */
+static void processUserPath(const std::string& rawPath, const ParsedArgs& args, CollectionResult& res) {
+    fs::path path(rawPath);
+    try {
+        if (fs::exists(path) && fs::is_directory(path)) {
+            const std::string canonical = fs::canonical(path).string();
+
+            if (canonical == "/mnt/ISOs") {
+                collectFromMnt(path, args, res);
+            } else if (canonical.rfind("/mnt/ISOs/", 0) == 0) {
+                res.mountPoints.insert(canonical);
+            } else {
+                warnMsg(args.silentMode,
+                        "is not allowed. Only /mnt/ISOs or /mnt/ISOs/isoFolder are valid.",
+                        rawPath);
+                res.hasErrors = true;
+            }
+        } else {
+            fs::path candidate = path.is_relative()
+                ? fs::path("/mnt/ISOs") / path.filename()
+                : path;
+
+            if (fs::exists(candidate) && fs::is_directory(candidate)) {
+                res.mountPoints.insert(fs::canonical(candidate).string());
+            } else {
+                warnMsg(args.silentMode,
+                        "does not exist or is not a valid mount point, skipping.",
+                        rawPath);
+                res.hasErrors = true;
+            }
+        }
+    } catch (const fs::filesystem_error& e) {
+        warnMsg(args.silentMode,
+                std::string("Error processing path: ") + e.what(), rawPath);
+        res.hasErrors = true;
+    }
+}
+
+/**
  * @brief Collects, sanitizes, and validates ISO mount points based on command-line arguments or surface scans.
  *
  * @details This function examines the provided `ParsedArgs`:
@@ -916,82 +1006,20 @@ struct CollectionResult {
 static CollectionResult collectMountPoints(const ParsedArgs& args) {
     CollectionResult res;
 
-    auto collectFromMnt = [&](const fs::path& mntPath) {
-        disableInput();
-        verboseInfo(args.silentMode,
-                    std::string("Scanning ")
-                    .append(mntPath.string())
-                    .append(" for ISO mount points (surface scan)..."));
-
-        try {
-            for (const auto& entry : fs::directory_iterator(mntPath)) {
-                if (GlobalState::g_operationCancelled.load())
-                    return;
-
-                if (entry.is_directory())
-                    res.mountPoints.insert(fs::canonical(entry.path()).string());
-            }
-        } catch (const fs::filesystem_error& e) {
-            if (e.code() != std::errc::no_such_file_or_directory)
-                res.hasErrors = true;
-        }
-    };
-
     const bool scanAllMnt = args.paths.empty() ||
         (args.paths.size() == 1 && args.paths[0] == "all");
 
     if (scanAllMnt) {
-        collectFromMnt("/mnt/ISOs");
-        if (GlobalState::g_operationCancelled.load()) {
-            verboseWarn(args.silentMode, "Operation cancelled by user.");
-            res.cancelled = true;
-            res.abortImmediately = true;
-        }
+        collectFromMnt("/mnt/ISOs", args, res);
+        checkCancellation(args, res);
         return res;
     }
 
     for (const auto& rawPath : args.paths) {
-        if (GlobalState::g_operationCancelled.load()) {
-            verboseWarn(args.silentMode, "Operation cancelled by user.");
-            res.cancelled = true;
-            res.abortImmediately = true;
+        if (checkCancellation(args, res)) {
             break;
         }
-
-        fs::path path(rawPath);
-        try {
-            if (fs::exists(path) && fs::is_directory(path)) {
-                const std::string canonical = fs::canonical(path).string();
-
-                if (canonical == "/mnt/ISOs") {
-                    collectFromMnt(path);
-                } else if (canonical.rfind("/mnt/ISOs/", 0) == 0) {
-                    res.mountPoints.insert(canonical);
-                } else {
-                    warnMsg(args.silentMode,
-                            "is not allowed. Only /mnt/ISOs or /mnt/ISOs/isoFolder are valid.",
-                            rawPath);
-                    res.hasErrors = true;
-                }
-            } else {
-                fs::path candidate = path.is_relative()
-                    ? fs::path("/mnt/ISOs") / path.filename()
-                    : path;
-
-                if (fs::exists(candidate) && fs::is_directory(candidate)) {
-                    res.mountPoints.insert(fs::canonical(candidate).string());
-                } else {
-                    warnMsg(args.silentMode,
-                            "does not exist or is not a valid mount point, skipping.",
-                            rawPath);
-                    res.hasErrors = true;
-                }
-            }
-        } catch (const fs::filesystem_error& e) {
-            warnMsg(args.silentMode,
-                    std::string("Error processing path: ") + e.what(), rawPath);
-            res.hasErrors = true;
-        }
+        processUserPath(rawPath, args, res);
     }
 
     if (GlobalState::g_operationCancelled.load() && !res.cancelled) {

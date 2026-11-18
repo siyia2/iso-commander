@@ -624,121 +624,143 @@ char** setting_value_completion_entry(const char* text, int /*start*/, int /*end
 }
 
 /**
+ * @brief Handles tab-completion for ISO images (numeric indices with '>' separator).
+ * @param text The partial text entered by the user.
+ * @param start Start index in the Readline line buffer.
+ * @param full_line The complete text of the Readline line buffer.
+ * @return Allocated array of string matches, or nullptr if no completions exist.
+ */
+static char** handle_iso_completion(const char* text, int start, const std::string& full_line) {
+    if (!g_completerData.sortedIsos) {
+        return nullptr;
+    }
+
+    std::vector<std::string> possible_completions;
+    size_t list_index = 0;
+    while (list_index < g_completerData.sortedIsos->size()) {
+        const std::string opt = std::to_string(++list_index) + ">";
+        if (opt.find(text) == 0) {
+            possible_completions.push_back(opt);
+        }
+    }
+
+    // Check if candidate completions are already present at the current word's position
+    bool all_present = true;
+    for (const auto& comp : possible_completions) {
+        if (full_line.compare(start, comp.size(), comp) != 0) {
+            all_present = false;
+            break;
+        }
+    }
+
+    if (all_present || possible_completions.empty()) {
+        return nullptr;
+    }
+
+    return rl_completion_matches(text, [](const char* text, int state) -> char* {
+        static size_t list_index;
+        if (!state) {
+            list_index = 0;
+            rl_completion_append_character = '\0';
+        }
+        while (list_index < g_completerData.sortedIsos->size()) {
+            const std::string opt = std::to_string(++list_index) + ">";
+            if (opt.find(text) == 0)
+                return strdup(opt.c_str());
+        }
+        return nullptr;
+    });
+}
+
+/**
+ * @brief Handles tab-completion for USB target devices following the '>' separator.
+ * @param text The partial text entered by the user.
+ * @param start Start index in the Readline line buffer.
+ * @param full_line The complete text of the Readline line buffer.
+ * @return Allocated array of string matches, or nullptr if no completions exist.
+ */
+static char** handle_device_completion(const char* text, int start, const std::string& full_line) {
+    if (!g_completerData.usbDevices) {
+        return nullptr;
+    }
+
+    std::string fullText(text);
+    size_t pos = fullText.find_last_of('>');
+    std::string prefix, deviceSubText;
+    if (pos != std::string::npos) {
+        prefix = fullText.substr(0, pos + 1);
+        deviceSubText = fullText.substr(pos + 1);
+    } else {
+        deviceSubText = fullText;
+    }
+
+    std::vector<std::string> possible_device_completions;
+    for (size_t i = 0; i < g_completerData.usbDevices->size(); i++) {
+        const std::string& dev = (*g_completerData.usbDevices)[i];
+        if (dev.find(deviceSubText) == 0) {
+            std::string completion = prefix + dev;
+            possible_device_completions.push_back(completion);
+        }
+    }
+
+    // Compare against line at current word's start position
+    bool all_present = true;
+    for (const auto& comp : possible_device_completions) {
+        if (full_line.compare(start, comp.size(), comp) != 0) {
+            all_present = false;
+            break;
+        }
+    }
+
+    if (all_present || possible_device_completions.empty()) {
+        return nullptr;
+    }
+
+    // Static variables to preserve exact lambda state/capture behavior
+    static std::string s_prefix;
+    static std::string s_deviceSubText;
+    s_prefix = prefix;
+    s_deviceSubText = deviceSubText;
+
+    rl_completion_append_character = '\0';
+    return rl_completion_matches(fullText.c_str(), [](const char* /*unused*/, int state) -> char* {
+        static size_t list_index;
+        if (!state) {
+            list_index = 0;
+        }
+        while (list_index < g_completerData.usbDevices->size()) {
+            const std::string& dev = (*g_completerData.usbDevices)[list_index++];
+            if (dev.find(s_deviceSubText) == 0) {
+                std::string completion = s_prefix + dev;
+                return strdup(completion.c_str());
+            }
+        }
+        return nullptr;
+    });
+}
+
+/**
  * @brief Callback for Readline to handle ISO-to-USB mapping completions.
- * @param text The partial text.
- * @param start Start index in line buffer.
- * @param end End index in line buffer.
- * @return Array of matches or nullptr.
+ * @param text The partial text currently being completed.
+ * @param start Start index of the current word in the line buffer.
+ * @param end End index of the current word in the line buffer.
+ * @return Array of matched completion strings or nullptr.
  */
 char** completion_cb(const char* text, int start, int end) {
     current_page = 0;
     last_common_prefix[0] = '\0';
-
     rl_attempted_completion_over = 1;
-    char** matches = nullptr;
+
     std::string current_word(rl_line_buffer + start, end - start);
+    std::string full_line(rl_line_buffer);
 
     bool is_device_completion = (current_word.find('>') != std::string::npos);
 
     if (!is_device_completion) {
-        if (g_completerData.sortedIsos) {
-            std::vector<std::string> possible_completions;
-            size_t list_index = 0;
-            while (list_index < g_completerData.sortedIsos->size()) {
-                const std::string opt = std::to_string(++list_index) + ">";
-                if (opt.find(text) == 0)
-                    possible_completions.push_back(opt);
-            }
-
-            // Check if the candidate completions are already present at the
-            // *current word's position* in the line (not just anywhere in
-            // the line, which could falsely match an earlier clause that
-            // happens to reuse the same numeric index).
-            bool all_present = true;
-            std::string full_line(rl_line_buffer);
-            for (const auto& comp : possible_completions) {
-                if (full_line.compare(start, comp.size(), comp) != 0) {
-                    all_present = false;
-                    break;
-                }
-            }
-
-            if (!all_present && !possible_completions.empty()) {
-                matches = rl_completion_matches(text, [](const char* text, int state) -> char* {
-                    static size_t list_index;
-                    if (!state) {
-                        list_index = 0;
-                        rl_completion_append_character = '\0';
-                    }
-                    while (list_index < g_completerData.sortedIsos->size()) {
-                        const std::string opt = std::to_string(++list_index) + ">";
-                        if (opt.find(text) == 0)
-                            return strdup(opt.c_str());
-                    }
-                    return (char*)nullptr;
-                });
-            }
-        }
+        return handle_iso_completion(text, start, full_line);
+    } else {
+        return handle_device_completion(text, start, full_line);
     }
-    else {
-        if (g_completerData.usbDevices) {
-            std::string fullText(text);
-            size_t pos = fullText.find_last_of('>');
-            std::string prefix, deviceSubText;
-            if (pos != std::string::npos) {
-                prefix = fullText.substr(0, pos + 1);
-                deviceSubText = fullText.substr(pos + 1);
-            } else {
-                deviceSubText = fullText;
-            }
-
-            std::vector<std::string> possible_device_completions;
-            for (size_t i = 0; i < g_completerData.usbDevices->size(); i++) {
-                const std::string& dev = (*g_completerData.usbDevices)[i];
-                if (dev.find(deviceSubText) == 0) {
-                    std::string completion = prefix + dev;
-                    possible_device_completions.push_back(completion);
-                }
-            }
-
-            // Compare against the line at the current word's
-            // start position rather than searching the whole line, so an
-            // identical prefix used in an earlier clause doesn't suppress
-            // completion for the current one.
-            bool all_present = true;
-            std::string full_line(rl_line_buffer);
-            for (const auto& comp : possible_device_completions) {
-                if (full_line.compare(start, comp.size(), comp) != 0) {
-                    all_present = false;
-                    break;
-                }
-            }
-
-            if (!all_present && !possible_device_completions.empty()) {
-                static std::string s_prefix;
-                static std::string s_deviceSubText;
-                s_prefix = prefix;
-                s_deviceSubText = deviceSubText;
-
-                rl_completion_append_character = '\0';
-                matches = rl_completion_matches(fullText.c_str(), [](const char* /*unused*/, int state) -> char* {
-                    static size_t list_index;
-                    if (!state) {
-                        list_index = 0;
-                    }
-                    while (list_index < g_completerData.usbDevices->size()) {
-                        const std::string& dev = (*g_completerData.usbDevices)[list_index++];
-                        if (dev.find(s_deviceSubText) == 0) {
-                            std::string completion = s_prefix + dev;
-                            return strdup(completion.c_str());
-                        }
-                    }
-                    return (char*)nullptr;
-                });
-            }
-        }
-    }
-    return matches;
 }
 
 /**

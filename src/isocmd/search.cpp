@@ -192,6 +192,88 @@ static void executeParallelTraversal(
 }
 
 /**
+ * @brief Constructs the prompt string for database directory scanning based on the current theme.
+ *
+ * @param dt The verbose and database theme configuration.
+ * @return Formatted prompt string with ANSI color codes.
+ */
+static std::string constructDatabasePrompt(const VerboseAndDatabaseTheme& dt) {
+    std::string prompt;
+    prompt.reserve(512);
+    prompt.append("\001").append(dt.green).append("\002FolderPaths")
+          .append("\001").append(dt.blue).append("\002 ↵ to scan for ")
+          .append(globalTheme == "mono" ? std::string("\001") + dt.orange + "\002.iso"
+                                        : std::string("\001") + dt.green + "\002.iso")
+          .append("\001").append(dt.blue).append("\002 entries and import into ")
+          .append("\001").append(dt.green).append("\002local")
+          .append("\001").append(dt.blue).append("\002 DB, ? for help:\n")
+          .append("\001").append(dt.reset).append("\002");
+    return prompt;
+}
+
+/**
+ * @brief Processes user input paths, executes parallel traversal, saves history, and reports results.
+ *
+ * @param input Cleaned and trimmed user input string.
+ * @param promptFlag Passed to traverse() to control progress and error reporting.
+ * @param maxDepth Maximum directory recursion depth (-1 for unlimited).
+ * @param filterHistory Whether to load and save readline history.
+ * @param newISOFound Reference to flag indicating if new ISOs were found.
+ * @param repaintCallerPrompt Callback function to repaint the caller prompt.
+ */
+static void processPathTraversalAndReporting(const std::string& input,
+                                             bool promptFlag,
+                                             int maxDepth,
+                                             bool filterHistory,
+                                             bool& newISOFound,
+                                             const std::function<void()>& repaintCallerPrompt) {
+    std::vector<std::string> validPaths;
+    std::unordered_set<std::string> invalidPaths;
+    std::unordered_set<std::string> uniqueErrorMessages;
+    std::vector<std::string> allIsoFiles;
+    std::atomic<size_t> totalFiles{0};
+
+    std::cout << "\033[3H\033[J\n";
+    disableInput();
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    std::string cleanedInput = parseAndFilterPaths(input, validPaths, invalidPaths);
+
+    if (validPaths.empty()) {
+        flushStdin();
+        restoreInput();
+        resetReadlinePagination();
+        if (!invalidPaths.empty()) {
+            GlobalState::g_operationCancelled.store(false);
+            saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths,
+                                            uniqueErrorMessages, newISOFound, start_time,
+                                            repaintCallerPrompt);
+        }
+        return;
+    }
+
+    executeParallelTraversal(validPaths, maxDepth, promptFlag, allIsoFiles, uniqueErrorMessages, totalFiles);
+
+    flushStdin();
+    restoreInput();
+    resetReadlinePagination();
+
+    std::cout << "\r" << color << "Total files processed: " << totalFiles;
+
+    if (!invalidPaths.empty() || !validPaths.empty()) {
+        std::cout << "\n";
+    }
+
+    if (!validPaths.empty() && !input.empty()) {
+        saveHistory(filterHistory);
+    }
+
+    saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths,
+                                    uniqueErrorMessages, newISOFound, start_time, repaintCallerPrompt);
+}
+
+/**
  * @brief Prompts for directories and imports discovered ISO files into the database.
  *
  * Accepts semicolon-delimited directory paths, trims and validates each token,
@@ -244,16 +326,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
             loadHistory(filterHistory);
             RestoreReadlineBuffer();
 
-            std::string prompt;
-            prompt.reserve(512);
-            prompt.append("\001").append(dt.green).append("\002FolderPaths")
-                  .append("\001").append(dt.blue).append("\002 ↵ to scan for ")
-                  .append(globalTheme == "mono" ? std::string("\001") + dt.orange + "\002.iso"
-                                                : std::string("\001") + dt.green + "\002.iso")
-                  .append("\001").append(dt.blue).append("\002 entries and import into ")
-                  .append("\001").append(dt.green).append("\002local")
-                  .append("\001").append(dt.blue).append("\002 DB, ? for help:\n")
-                  .append("\001").append(dt.reset).append("\002");
+            const std::string prompt = constructDatabasePrompt(dt);
 
             const auto repaintPrompt = [&] {
                 SyncOutput sync;
@@ -302,50 +375,7 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
                 continue;
             }
 
-            std::vector<std::string> validPaths;
-            std::unordered_set<std::string> invalidPaths;
-            std::unordered_set<std::string> uniqueErrorMessages;
-            std::vector<std::string> allIsoFiles;
-            std::atomic<size_t> totalFiles{0};
-
-            std::cout << "\033[3H\033[J\n";
-            disableInput();
-
-            auto start_time = std::chrono::high_resolution_clock::now();
-
-            std::string cleanedInput = parseAndFilterPaths(input, validPaths, invalidPaths);
-
-            if (validPaths.empty()) {
-                flushStdin();
-                restoreInput();
-                resetReadlinePagination();
-                if (!invalidPaths.empty()) {
-                    GlobalState::g_operationCancelled.store(false);
-                    saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths,
-                                                    uniqueErrorMessages, newISOFound, start_time,
-                                                    repaintCallerPrompt);
-                }
-                continue;
-            }
-
-            executeParallelTraversal(validPaths, maxDepth, promptFlag, allIsoFiles, uniqueErrorMessages, totalFiles);
-
-            flushStdin();
-            restoreInput();
-            resetReadlinePagination();
-
-            std::cout << "\r" << color << "Total files processed: " << totalFiles;
-
-            if (!invalidPaths.empty() || !validPaths.empty()) {
-                std::cout << "\n";
-            }
-
-            if (!validPaths.empty() && !input.empty()) {
-                saveHistory(filterHistory);
-            }
-
-            saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths,
-                                            uniqueErrorMessages, newISOFound, start_time, repaintCallerPrompt);
+            processPathTraversalAndReporting(input, promptFlag, maxDepth, filterHistory, newISOFound, repaintCallerPrompt);
 
         } catch (const std::exception& e) {
             const VerboseAndDatabaseTheme dt = getDatabaseTheme();
@@ -770,6 +800,135 @@ std::unordered_set<std::string> processPaths(const std::string& path, const std:
 }
 
 /**
+ * @brief Retrieves the corresponding global cache pointer and populates the previous cache size.
+ *
+ * @param mode             Format category ("bin"/"img", "mdf", "nrg", "chd", or "daa").
+ * @param currentCacheOld  Receives the size of the cache prior to new additions.
+ * @return Pointer to the matched format cache vector, or nullptr if unsupported.
+ */
+static std::vector<std::string>* getCacheForMode(const std::string& mode, int& currentCacheOld) {
+    if (mode == "bin" || mode == "img") {
+        currentCacheOld = GlobalState::binImgFilesCache.size();
+        return &GlobalState::binImgFilesCache;
+    } else if (mode == "mdf") {
+        currentCacheOld = GlobalState::mdfMdsFilesCache.size();
+        return &GlobalState::mdfMdsFilesCache;
+    } else if (mode == "nrg") {
+        currentCacheOld = GlobalState::nrgFilesCache.size();
+        return &GlobalState::nrgFilesCache;
+    } else if (mode == "chd") {
+        currentCacheOld = GlobalState::chdFilesCache.size();
+        return &GlobalState::chdFilesCache;
+    } else if (mode == "daa") {
+        currentCacheOld = GlobalState::daaGbiFilesCache.size();
+        return &GlobalState::daaGbiFilesCache;
+    }
+    return nullptr;
+}
+
+/**
+ * @brief Lexically normalizes, deduplicates, and filters nested input paths.
+ *
+ * @param inputPaths Raw list of directory paths to process.
+ * @return Filtered vector of unique, non-redundant paths.
+ */
+static std::vector<std::string> normalizeAndFilterPaths(const std::vector<std::string>& inputPaths) {
+    auto normalizePath = [](const std::string& p) {
+        std::string n = fs::path(p).lexically_normal().string();
+        if (n.size() > 1 && n.back() == '/')
+            n.pop_back();
+        return n;
+    };
+
+    std::unordered_set<std::string> uniqueNormalizedPaths;
+    std::vector<std::string> normalizedPaths;
+
+    for (const auto& originalPath : inputPaths) {
+        std::string norm = normalizePath(originalPath);
+        if (uniqueNormalizedPaths.insert(norm).second) {
+            normalizedPaths.push_back(norm);
+        }
+    }
+
+    std::sort(normalizedPaths.begin(), normalizedPaths.end());
+
+    std::vector<std::string> filteredPaths;
+    for (const auto& p : normalizedPaths) {
+        if (filteredPaths.empty() || !p.starts_with(filteredPaths.back() + "/")) {
+            filteredPaths.push_back(p);
+        }
+    }
+    return filteredPaths;
+}
+
+/**
+ * @brief Submits path scanning tasks to the static thread pool and collects results.
+ *
+ * @param filteredPaths       Optimized list of paths to scan.
+ * @param mode                Format category being scanned.
+ * @param callback            Optional file-discovery callback.
+ * @param processedErrorsFind Scan error collection.
+ * @param totalFiles          Atomic counter for total visited files.
+ * @param fileNames           Output set receiving discovered file paths.
+ */
+static void scanPathsParallel(const std::vector<std::string>& filteredPaths,
+                              const std::string& mode,
+                              const std::function<void(const std::string&, const std::string&)>& callback,
+                              std::unordered_set<std::string>& processedErrorsFind,
+                              std::atomic<size_t>& totalFiles,
+                              std::unordered_set<std::string>& fileNames) {
+    auto& pool = getStaticThreadPool();
+    std::vector<std::future<std::unordered_set<std::string>>> threadFutures;
+
+    for (const auto& path : filteredPaths) {
+        std::string pathCopy = path;
+        threadFutures.push_back(pool.enqueue(
+            [path = std::move(pathCopy), &mode, &callback, &processedErrorsFind, &totalFiles]()
+                -> std::unordered_set<std::string> {
+                return processPaths(path, mode, callback, processedErrorsFind, totalFiles);
+            }));
+    }
+
+    for (auto& future : threadFutures) {
+        if (future.valid()) {
+            future.wait();
+        }
+    }
+
+    for (auto& future : threadFutures) {
+        if (future.valid()) {
+            std::unordered_set<std::string> threadResult = future.get();
+            fileNames.insert(threadResult.begin(), threadResult.end());
+        }
+    }
+}
+
+/**
+ * @brief Merges newly discovered files into the cache, flushes input, and restores states.
+ *
+ * @param currentCache Target cache vector to update.
+ * @param fileNames    Aggregated set of discovered files.
+ */
+static void updateCacheAndFinalize(std::vector<std::string>* currentCache,
+                                  const std::unordered_set<std::string>& fileNames) {
+    std::unordered_set<std::string> currentCacheSet(currentCache->begin(), currentCache->end());
+    std::vector<std::string> newFiles;
+
+    for (const auto& fileName : fileNames) {
+        if (currentCacheSet.insert(fileName).second) {
+            newFiles.push_back(fileName);
+        }
+    }
+
+    if (!newFiles.empty()) {
+        currentCache->insert(currentCache->end(), newFiles.begin(), newFiles.end());
+    }
+
+    flushStdin();
+    restoreInput();
+}
+
+/**
  * @brief Scans multiple directories and merges discovered files into a RAM cache.
  *
  * Lexically normalizes and deduplicates the input paths, then removes paths
@@ -801,109 +960,29 @@ std::vector<std::string> findFiles(const std::vector<std::string>& inputPaths,
                                    std::atomic<size_t>& totalFiles) {
     setupSignalHandlerCancellations();
     GlobalState::g_operationCancelled.store(false);
-
     disableInput();
 
-    std::vector<std::string>* currentCache = nullptr;
-    if (mode == "bin" || mode == "img") {
-        currentCacheOld = GlobalState::binImgFilesCache.size();
-        currentCache = &GlobalState::binImgFilesCache;
-    } else if (mode == "mdf") {
-        currentCacheOld = GlobalState::mdfMdsFilesCache.size();
-        currentCache = &GlobalState::mdfMdsFilesCache;
-    } else if (mode == "nrg") {
-        currentCacheOld = GlobalState::nrgFilesCache.size();
-        currentCache = &GlobalState::nrgFilesCache;
-    } else if (mode == "chd") {
-        currentCacheOld = GlobalState::chdFilesCache.size();
-        currentCache = &GlobalState::chdFilesCache;
-    } else if (mode == "daa") {
-        currentCacheOld = GlobalState::daaGbiFilesCache.size();
-        currentCache = &GlobalState::daaGbiFilesCache;
-    } else {
+    std::vector<std::string>* currentCache = getCacheForMode(mode, currentCacheOld);
+    if (!currentCache) {
         restoreInput();
         return {};
     }
 
-    auto normalizePath = [](const std::string& p) {
-        std::string n = fs::path(p).lexically_normal().string();
-        if (n.size() > 1 && n.back() == '/')
-            n.pop_back();
-        return n;
-    };
-
-    std::unordered_set<std::string> uniqueNormalizedPaths;
-    std::vector<std::string> normalizedPaths;
-
-    for (const auto& originalPath : inputPaths) {
-        std::string norm = normalizePath(originalPath);
-        if (uniqueNormalizedPaths.insert(norm).second) {
-            normalizedPaths.push_back(norm);
-        }
-    }
-
-    std::sort(normalizedPaths.begin(), normalizedPaths.end());
-
-    std::vector<std::string> filteredPaths;
-    for (const auto& p : normalizedPaths) {
-        if (filteredPaths.empty() || !p.starts_with(filteredPaths.back() + "/")) {
-            filteredPaths.push_back(p);
-        }
-    }
-
+    std::vector<std::string> filteredPaths = normalizeAndFilterPaths(inputPaths);
     if (filteredPaths.empty()) {
         flushStdin();
         restoreInput();
         return *currentCache;
     }
 
-    std::vector<std::future<std::unordered_set<std::string>>> threadFutures;
-
-    {
-        auto& pool = getStaticThreadPool();
-
-        for (const auto& path : filteredPaths) {
-            std::string pathCopy = path;
-
-            threadFutures.push_back(pool.enqueue(
-                [path = std::move(pathCopy), &mode, &callback, &processedErrorsFind, &totalFiles]()
-                    -> std::unordered_set<std::string> {
-                    return processPaths(path, mode, callback, processedErrorsFind, totalFiles);
-                }));
-        }
-
-        for (auto& future : threadFutures) {
-            if (future.valid()) future.wait();
-        }
-
-        for (auto& future : threadFutures) {
-            if (future.valid()) {
-                std::unordered_set<std::string> threadResult = future.get();
-                fileNames.insert(threadResult.begin(), threadResult.end());
-            }
-        }
-    }
+    scanPathsParallel(filteredPaths, mode, callback, processedErrorsFind, totalFiles, fileNames);
 
     {
         std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
         std::cout << "\r" << color << "Total files processed: " << totalFiles.load() << std::flush;
     }
 
-    std::unordered_set<std::string> currentCacheSet(currentCache->begin(), currentCache->end());
-    std::vector<std::string> newFiles;
-
-    for (const auto& fileName : fileNames) {
-        if (currentCacheSet.insert(fileName).second) {
-            newFiles.push_back(fileName);
-        }
-    }
-
-    if (!newFiles.empty()) {
-        currentCache->insert(currentCache->end(), newFiles.begin(), newFiles.end());
-    }
-
-    flushStdin();
-    restoreInput();
+    updateCacheAndFinalize(currentCache, fileNames);
 
     return *currentCache;
 }

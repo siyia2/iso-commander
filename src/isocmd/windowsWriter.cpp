@@ -1409,6 +1409,166 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     return true;
 }
 
+#include <array>
+#include <vector>
+#include <string_view>
+#include <queue>
+#include <algorithm>
+#include <cstdint>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+/**
+ * @brief Represents a node in the Aho-Corasick automaton trie.
+ */
+struct AcNode {
+    std::array<int, 256> next{};
+    int fail{0};
+    uint32_t match{0};
+    AcNode() { next.fill(-1); }
+};
+
+/**
+ * @brief Builds and returns the static Aho-Corasick automaton for Windows ISO signatures.
+ *
+ * Searches simultaneously for "boot.wim", "bootmgr.efi", and "bootmgr" case-insensitively
+ * across ASCII, UTF-16LE, and UTF-16BE encodings in a single O(n) pass.
+ *
+ * @return const std::vector<AcNode>& Reference to the immutable automaton node collection.
+ */
+static const std::vector<AcNode>& getAhoCorasickAutomaton() {
+    static const auto nodes = [] {
+        std::vector<AcNode> trie;
+        trie.emplace_back();
+
+        auto addPattern = [&](std::string_view text, int logicalIndex, int variant) {
+            int cur = 0;
+            for (char raw : text) {
+                unsigned char c = static_cast<unsigned char>(std::tolower(raw));
+                uint8_t bytes[2];
+                int byteCount;
+                if (variant == 0) {
+                    bytes[0] = c;
+                    byteCount = 1;
+                } else if (variant == 1) {
+                    bytes[0] = c; bytes[1] = 0x00;
+                    byteCount = 2;
+                } else {
+                    bytes[0] = 0x00; bytes[1] = c;
+                    byteCount = 2;
+                }
+                for (int b = 0; b < byteCount; ++b) {
+                    int byte = bytes[b];
+                    if (trie[cur].next[byte] == -1) {
+                        trie[cur].next[byte] = static_cast<int>(trie.size());
+                        trie.emplace_back();
+                    }
+                    cur = trie[cur].next[byte];
+                }
+            }
+            trie[cur].match |= (1u << (logicalIndex * 3 + variant));
+        };
+
+        for (int v = 0; v < 3; ++v) {
+            addPattern("boot.wim",    0, v);
+            addPattern("bootmgr.efi", 1, v);
+            addPattern("bootmgr",     2, v);
+        }
+
+        // BFS to build failure links
+        std::queue<int> q;
+        for (int c = 0; c < 256; ++c) {
+            if (trie[0].next[c] == -1) {
+                trie[0].next[c] = 0;
+            } else {
+                trie[trie[0].next[c]].fail = 0;
+                q.push(trie[0].next[c]);
+            }
+        }
+        while (!q.empty()) {
+            int u = q.front(); q.pop();
+            trie[u].match |= trie[trie[u].fail].match;
+            for (int c = 0; c < 256; ++c) {
+                int v = trie[u].next[c];
+                if (v == -1) {
+                    trie[u].next[c] = trie[trie[u].fail].next[c];
+                } else {
+                    trie[v].fail = trie[trie[u].fail].next[c];
+                    q.push(v);
+                }
+            }
+        }
+
+        return trie;
+    }();
+    return nodes;
+}
+
+/**
+ * @brief Returns a static 256-entry case-folding lookup table.
+ *
+ * Replaces std::tolower in the hot scan loop to avoid locale machinery
+ * and branch overhead across the full mapping window.
+ *
+ * @return const std::array<uint8_t, 256>& Reference to the lookup table.
+ */
+static const std::array<uint8_t, 256>& getToLowerTable() {
+    static const auto table = [] {
+        std::array<uint8_t, 256> t{};
+        for (int i = 0; i < 256; ++i)
+            t[i] = static_cast<uint8_t>(std::tolower(i));
+        return t;
+    }();
+    return table;
+}
+
+/**
+ * @brief Validates the volume headers of the mapped ISO image.
+ *
+ * Checks for a Primary Volume Descriptor (type 0x01, identifier "CD001") at sector 16,
+ * or pure-UDF identifiers ("NSR02" / "NSR03").
+ *
+ * @param addr    Pointer to the mapped file memory window.
+ * @param mapSize Size of the mapped window in bytes.
+ * @return true if the volume header is valid; false otherwise.
+ */
+static bool isValidVolumeHeader(const char* addr, size_t mapSize) {
+    if (mapSize < 0x8006) return false;
+    const uint8_t descType = static_cast<uint8_t>(addr[0x8000]);
+    std::string_view id(addr + 0x8001, 5);
+    const bool validIso = (descType == 0x01 && id == "CD001");
+    const bool validUdf = (id == "NSR02" || id == "NSR03");
+    return validIso || validUdf;
+}
+
+/**
+ * @brief Scans the mapped memory window using the Aho-Corasick automaton with early exit.
+ *
+ * @param addr    Pointer to the mapped file memory window.
+ * @param mapSize Size of the mapped window in bytes.
+ * @return uint32_t Bitmask representing the matched signature groups.
+ */
+static uint32_t scanForSignatures(const char* addr, size_t mapSize) {
+    const auto& ac = getAhoCorasickAutomaton();
+    const auto& toLower = getToLowerTable();
+
+    constexpr uint32_t MASK_BOOTWIM = 0b000000111u;
+    constexpr uint32_t MASK_BOOTMGR = 0b111111000u;
+    constexpr uint32_t MASK_ALL     = MASK_BOOTWIM | MASK_BOOTMGR;
+
+    uint32_t found = 0;
+    int cur = 0;
+    for (size_t i = 0; i < mapSize; ++i) {
+        cur    = ac[cur].next[toLower[static_cast<uint8_t>(addr[i])]];
+        found |= ac[cur].match;
+
+        if ((found & MASK_ALL) == MASK_ALL) break;
+    }
+
+    return found;
+}
+
 /**
  * @brief Probes an ISO image to detect Windows 10/11 installation media.
  *
@@ -1458,90 +1618,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
  *       the prefetcher stays primed if a full scan is needed.
  */
 bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
-
-    // Logical patterns: 0 = "boot.wim", 1 = "bootmgr.efi", 2 = "bootmgr"
-    // Variants: 0 = ASCII, 1 = UTF-16LE, 2 = UTF-16BE  -> bits 0-8
-    static const auto ac = [] {
-        struct Node {
-            std::array<int, 256> next{};
-            int fail{0};
-            uint32_t match{0};
-            Node() { next.fill(-1); }
-        };
-
-        std::vector<Node> nodes;
-        nodes.emplace_back();
-
-        auto addPattern = [&](std::string_view text, int logicalIndex, int variant) {
-            int cur = 0;
-            for (char raw : text) {
-                unsigned char c = static_cast<unsigned char>(std::tolower(raw));
-                uint8_t bytes[2];
-                int byteCount;
-                if (variant == 0) {
-                    bytes[0] = c;
-                    byteCount = 1;
-                } else if (variant == 1) {
-                    bytes[0] = c; bytes[1] = 0x00;
-                    byteCount = 2;
-                } else {
-                    bytes[0] = 0x00; bytes[1] = c;
-                    byteCount = 2;
-                }
-                for (int b = 0; b < byteCount; ++b) {
-                    int byte = bytes[b];
-                    if (nodes[cur].next[byte] == -1) {
-                        nodes[cur].next[byte] = static_cast<int>(nodes.size());
-                        nodes.emplace_back();
-                    }
-                    cur = nodes[cur].next[byte];
-                }
-            }
-            nodes[cur].match |= (1u << (logicalIndex * 3 + variant));
-        };
-
-        for (int v = 0; v < 3; ++v) {
-            addPattern("boot.wim",    0, v);
-            addPattern("bootmgr.efi", 1, v);
-            addPattern("bootmgr",     2, v);
-        }
-
-        // BFS to build failure links
-        std::queue<int> q;
-        for (int c = 0; c < 256; ++c) {
-            if (nodes[0].next[c] == -1) {
-                nodes[0].next[c] = 0;
-            } else {
-                nodes[nodes[0].next[c]].fail = 0;
-                q.push(nodes[0].next[c]);
-            }
-        }
-        while (!q.empty()) {
-            int u = q.front(); q.pop();
-            nodes[u].match |= nodes[nodes[u].fail].match;
-            for (int c = 0; c < 256; ++c) {
-                int v = nodes[u].next[c];
-                if (v == -1) {
-                    nodes[u].next[c] = nodes[nodes[u].fail].next[c];
-                } else {
-                    nodes[v].fail = nodes[nodes[u].fail].next[c];
-                    q.push(v);
-                }
-            }
-        }
-
-        return nodes;
-    }();
-
-    // Built once at program start; avoids locale machinery and branching on
-    // every byte of the 32 MiB scan window.
-    static const auto toLower = [] {
-        std::array<uint8_t, 256> t{};
-        for (int i = 0; i < 256; ++i)
-            t[i] = static_cast<uint8_t>(std::tolower(i));
-        return t;
-    }();
-
     if (fileSize < 0x9000) return false;
 
     const size_t mapSize = std::min(static_cast<size_t>(fileSize),
@@ -1550,44 +1626,21 @@ bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
         mmap(nullptr, mapSize, PROT_READ, MAP_PRIVATE, fd, 0));
     if (addr == MAP_FAILED) return false;
 
-    // Hint the kernel to prefetch the first 4 MiB immediately — signatures
-    // almost always appear within the first 2-3 MiB of a Windows ISO, so
-    // WILLNEED on the head reduces time-to-first-match. SEQUENTIAL covers the
-    // remainder so readahead stays primed for the full scan if needed.
+    // Hint the kernel to prefetch the first 4 MiB immediately
     madvise(addr,                  4 * 1024 * 1024, MADV_WILLNEED);
     madvise(addr, mapSize,                          MADV_SEQUENTIAL);
 
-    {
-        const uint8_t descType = static_cast<uint8_t>(addr[0x8000]);
-        std::string_view id(addr + 0x8001, 5);
-        const bool validIso = (descType == 0x01 && id == "CD001");
-        const bool validUdf = (id == "NSR02" || id == "NSR03");
-        if (!validIso && !validUdf) {
-            munmap(addr, mapSize);
-            return false;
-        }
+    if (!isValidVolumeHeader(addr, mapSize)) {
+        munmap(addr, mapSize);
+        return false;
     }
 
-    // Early-exit masks: once both groups are matched there is no need to scan
-    // further. Saves up to ~30 MiB of iteration on typical ISOs where both
-    // signatures appear near the front of the directory area.
-    //
-    // boot.wim  matched in any variant: bits 0-2
-    // bootmgr   matched in any variant: bits 3-8
-    constexpr uint32_t MASK_BOOTWIM = 0b000000111u;
-    constexpr uint32_t MASK_BOOTMGR = 0b111111000u;
-    constexpr uint32_t MASK_ALL     = MASK_BOOTWIM | MASK_BOOTMGR;
-
-    uint32_t found = 0;
-    int cur = 0;
-    for (size_t i = 0; i < mapSize; ++i) {
-        cur    = ac[cur].next[toLower[static_cast<uint8_t>(addr[i])]];
-        found |= ac[cur].match;
-
-        if ((found & MASK_ALL) == MASK_ALL) break;
-    }
+    const uint32_t found = scanForSignatures(addr, mapSize);
 
     munmap(addr, mapSize);
+
+    constexpr uint32_t MASK_BOOTWIM = 0b000000111u;
+    constexpr uint32_t MASK_BOOTMGR = 0b111111000u;
 
     return (found & MASK_BOOTWIM) != 0 &&
            (found & MASK_BOOTMGR) != 0;

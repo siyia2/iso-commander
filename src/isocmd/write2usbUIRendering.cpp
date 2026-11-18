@@ -804,6 +804,35 @@ private:
         return h.str();
     }
 
+    // Add these to your class private declarations:
+    void handleActivePhase(bool completion, std::chrono::steady_clock::time_point& lastDraw) {
+        const auto size = terminalSize();
+        if (size.cols == 0 || size.rows == 0) {
+            lastDraw = std::chrono::steady_clock::now();            // size unknown: skip, don't spin
+            return;
+        }
+        const bool sizeChanged = hasDrawn_ &&
+            (size.cols != lastCols_ || size.rows != lastRows_);
+        const bool pulse = (std::chrono::steady_clock::now() - lastDraw) >= kPulse;
+        if (sizeChanged || completion || pulse) {
+            renderLocked(size, sizeChanged);
+            lastDraw = std::chrono::steady_clock::now();
+        }
+    }
+
+    void handleFinishedPhaseResize(bool resizeEvt) {
+        if (!((resizeEvt || pollFallback_) && promptText_.empty())) {
+            return;
+        }
+        // Finished and no prompt registered: the keeper owns resize
+        // repaints. With a prompt, the resize hook calls repaint().
+        const auto size = terminalSize();
+        if (size.cols != 0 && size.rows != 0 &&
+            hasDrawn_ && (size.cols != lastCols_ || size.rows != lastRows_)) {
+            renderLocked(size, true);
+        }
+    }
+
     void keeperLoop() {
         using clock = std::chrono::steady_clock;
         clock::time_point lastDraw{};
@@ -811,6 +840,7 @@ private:
 
         while (!stop_.load(std::memory_order_acquire)) {
             bool finishedPhase = false;
+
             {
                 std::lock_guard<std::mutex> rl(renderMutex_);
 
@@ -821,25 +851,9 @@ private:
                 finishedPhase = (phase_ == Phase::Finished);
 
                 if (!finishedPhase) {
-                    const auto size = terminalSize();
-                    if (size.cols == 0 || size.rows == 0) {
-                        lastDraw = clock::now();            // size unknown: skip, don't spin
-                    } else {
-                        const bool sizeChanged = hasDrawn_ &&
-                            (size.cols != lastCols_ || size.rows != lastRows_);
-                        const bool pulse = (clock::now() - lastDraw) >= kPulse;
-                        if (sizeChanged || completion || pulse) {
-                            renderLocked(size, sizeChanged);
-                            lastDraw = clock::now();
-                        }
-                    }
-                } else if ((resizeEvt || pollFallback_) && promptText_.empty()) {
-                    // Finished and no prompt registered: the keeper owns resize
-                    // repaints. With a prompt, the resize hook calls repaint().
-                    const auto size = terminalSize();
-                    if (size.cols != 0 && size.rows != 0 &&
-                        hasDrawn_ && (size.cols != lastCols_ || size.rows != lastRows_))
-                        renderLocked(size, true);
+                    handleActivePhase(completion, lastDraw);
+                } else {
+                    handleFinishedPhaseResize(resizeEvt);
                 }
             }
 
@@ -871,6 +885,86 @@ private:
         const bool resized = hasDrawn_ &&
             (size.cols != lastCols_ || size.rows != lastRows_);
         renderLocked(size, resized);
+    }
+
+    std::string buildHeaderFrame(bool finished, bool resized, size_t cols, size_t rows) {
+        std::string frame;
+        frame += "\033[?2026h";
+        if (finished || resized) {
+            // The result screen is always painted from scratch, and a resized
+            // running screen is too: after a resize the terminal may have
+            // reflowed or scrolled old content into scrollback, and cursor-up
+            // cannot move above the visible screen.
+            frame += "\033[H\033[2J\033[3J";   // home, clear screen, clear scrollback
+            frame += headerText(finished);
+        } else {
+            // Same size as last frame: move up over the previous rows (accounting
+            // for any wrapping) and clear to the end of the screen. Relative
+            // movement is used instead of \033[s / \033[u because a saved absolute
+            // cursor position goes stale when the terminal re-wraps.
+            size_t up = 0;
+            for (size_t w : lastRowWidths_)
+                up += std::max<size_t>(1, (w + cols - 1) / cols);
+            if (up > 0) frame += "\033[" + std::to_string(up) + "A";
+            frame += "\r\033[J";
+        }
+        lastCols_ = cols;
+        lastRows_ = rows;
+        hasDrawn_ = true;
+        return frame;
+    }
+
+    std::string buildRowString(size_t i, const std::string& shortFile, const std::string& speedStr,
+                               size_t maxFilenameWidth, size_t maxSpeedWidth, size_t usableCols) {
+        const auto& prog = progressData_[i];
+
+        std::string paddedFilename = shortFile;
+        paddedFilename.append(maxFilenameWidth - utf8Width(shortFile), ' ');
+
+        const std::string paddedDevice = padRight(prog.device, maxDeviceLen_);
+
+        const std::string& name = rowShortNames_[i];
+        const std::string namePad(maxNameWidth_ - utf8Width(name), ' ');
+
+        // Half-block bar: BAR_WIDTH cells, BAR_STEPS steps (10% each).
+        // Each cell is empty (░), half (▄) or full (▇). Both filled glyphs
+        // are bottom-aligned and stop short of the cell top, so bars on
+        // consecutive rows never touch.
+        int pct = std::clamp(prog.progress.load(), 0, 100);
+        int steps = (pct * BAR_STEPS) / 100;
+        int full  = steps / 2;
+        bool half = (steps % 2) != 0;
+
+        std::string bar, empty;
+        for (int j = 0; j < full; ++j) bar += "▇";
+        if (half)                      bar += "▄";
+        for (int j = 0; j < BAR_WIDTH - full - (half ? 1 : 0); ++j) empty += "░";
+
+        std::ostringstream row;
+        row << wt_.fileCol << paddedFilename
+            << color << " → " << wt_.deviceCol << paddedDevice
+            << color << " " << wt_.infoLabel << "<" << name << ">" << namePad
+            << color << " ["
+            << bar << wt_.speedCol << empty
+            << color << "] ";
+
+        bool isCompleted = prog.completed.load();
+
+        if (isCompleted)                                    row << wt_.colorSuccess << "DONE ";
+        else if (prog.failed.load())                        row << wt_.colorFailure << "FAIL ";
+        else if (GlobalState::g_operationCancelled.load())  row << wt_.colorWarning << "CXL  ";
+        else {
+            std::string pctStr = std::to_string(pct) + "%";
+            pctStr.resize(5, ' ');
+            row << color << pctStr;
+        }
+
+        const std::string speedPad(maxSpeedWidth - utf8Width(speedStr), ' ');
+        row << color << speedStr << (isCompleted ? " (avg)" : speedPad);
+
+        // Last line of defense: if the terminal is too narrow even for the
+        // truncated row, cut the row instead of letting it wrap.
+        return clipToWidth(row.str(), usableCols);
     }
 
     // Builds the whole frame in one string and writes it once (less flicker).
@@ -914,85 +1008,13 @@ private:
             maxFilenameWidth = std::max(maxFilenameWidth, utf8Width(shortFiles.back()));
         }
 
-        std::string frame;
-        frame += "\033[?2026h";
-        if (finished || resized) {
-            // The result screen is always painted from scratch, and a resized
-            // running screen is too: after a resize the terminal may have
-            // reflowed or scrolled old content into scrollback, and cursor-up
-            // cannot move above the visible screen.
-            frame += "\033[H\033[2J\033[3J";   // home, clear screen, clear scrollback
-            frame += headerText(finished);
-        } else {
-            // Same size as last frame: move up over the previous rows (accounting
-            // for any wrapping) and clear to the end of the screen. Relative
-            // movement is used instead of \033[s / \033[u because a saved absolute
-            // cursor position goes stale when the terminal re-wraps.
-            size_t up = 0;
-            for (size_t w : lastRowWidths_)
-                up += std::max<size_t>(1, (w + cols - 1) / cols);
-            if (up > 0) frame += "\033[" + std::to_string(up) + "A";
-            frame += "\r\033[J";
-        }
-        lastCols_ = cols;
-        lastRows_ = rows;
-        hasDrawn_ = true;
+        std::string frame = buildHeaderFrame(finished, resized, cols, rows);
         lastRowWidths_.clear();
         lastRowWidths_.reserve(progressData_.size());
 
         for (size_t i = 0; i < progressData_.size(); ++i) {
-            const auto& prog = progressData_[i];
-
-            const std::string& fname = shortFiles[i];
-            std::string paddedFilename = fname;
-            paddedFilename.append(maxFilenameWidth - utf8Width(fname), ' ');
-
-            const std::string paddedDevice = padRight(prog.device, maxDeviceLen_);
-
-            const std::string& name = rowShortNames_[i];
-            const std::string namePad(maxNameWidth_ - utf8Width(name), ' ');
-
-            // Half-block bar: BAR_WIDTH cells, BAR_STEPS steps (10% each).
-            // Each cell is empty (░), half (▄) or full (▇). Both filled glyphs
-            // are bottom-aligned and stop short of the cell top, so bars on
-            // consecutive rows never touch.
-            int pct = std::clamp(prog.progress.load(), 0, 100);
-            int steps = (pct * BAR_STEPS) / 100;
-            int full  = steps / 2;
-            bool half = (steps % 2) != 0;
-
-            std::string bar, empty;
-            for (int j = 0; j < full; ++j) bar += "▇";
-            if (half)                      bar += "▄";
-            for (int j = 0; j < BAR_WIDTH - full - (half ? 1 : 0); ++j) empty += "░";
-
-            std::ostringstream row;
-            row << wt_.fileCol << paddedFilename
-                << color << " → " << wt_.deviceCol << paddedDevice
-                << color << " " << wt_.infoLabel << "<" << name << ">" << namePad
-                << color << " ["
-                << bar << wt_.speedCol << empty
-                << color << "] ";
-
-            bool isCompleted = prog.completed.load();
-
-            if (isCompleted)                                    row << wt_.colorSuccess << "DONE ";
-            else if (prog.failed.load())                        row << wt_.colorFailure << "FAIL ";
-            else if (GlobalState::g_operationCancelled.load())  row << wt_.colorWarning << "CXL  ";
-            else {
-                std::string pctStr = std::to_string(pct) + "%";
-                pctStr.resize(5, ' ');
-                row << color << pctStr;
-            }
-
-            const std::string& speedStr = speedStrs[i];
-            const std::string speedPad(maxSpeedWidth - utf8Width(speedStr), ' ');
-
-            row << color << speedStr << (isCompleted ? " (avg)" : speedPad);
-
-            // Last line of defense: if the terminal is too narrow even for the
-            // truncated row, cut the row instead of letting it wrap.
-            const std::string line = clipToWidth(row.str(), usableCols);
+            const std::string line = buildRowString(i, shortFiles[i], speedStrs[i],
+                                                    maxFilenameWidth, maxSpeedWidth, usableCols);
             lastRowWidths_.push_back(std::min(visibleWidth(line), usableCols));
             frame += line;
             frame += "\033[0m\n";

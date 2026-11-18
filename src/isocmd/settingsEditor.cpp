@@ -746,6 +746,71 @@ EditNav saveAndApplyConfigValue(const std::string& configPath, const std::string
 }
 
 /**
+ * @brief Resolves the current configuration value from cache or falls back to the default value.
+ *
+ * @param key Configuration key being edited.
+ * @param entry Configuration entry metadata.
+ * @return The resolved current value string.
+ */
+static std::string resolveSettingCurrent(const std::string& key, const ConfigEntry* entry) {
+    auto it = ConfigCaches::g_configCache.find(key);
+    if (it != ConfigCaches::g_configCache.end()) {
+        return it->second;
+    }
+    return entry->defaultValue;
+}
+
+/**
+ * @brief Configures readline keybindings and global completion hooks for the settings editor.
+ *
+ * @param total Number of settings in the batch (enables page up/down bindings if greater than one).
+ * @param isNumeric Flag indicating if the entry is numeric (disables tab completion).
+ * @param validValues Non-const vector of valid choices for completion display.
+ */
+static void setupSettingReadline(size_t total, bool isNumeric, std::vector<std::string>& validValues) {
+    reset_custom_keybindingsForSettingsEditor();
+
+    g_activeSettingValues = validValues.empty() ? nullptr : &validValues;
+    rl_attempted_completion_function = isNumeric ? nullptr : setting_value_completion_entry;
+    rl_completion_display_matches_hook = customListingsFunction;
+    rl_bind_key('\t', isNumeric ? noop_tab_handler : my_rl_complete);
+    rl_bind_key('\f', clear_list_and_screen);
+
+    rl_bind_keyseq("\\e", exit_handler);
+    if (total > 1) {
+        rl_bind_keyseq("\\e[5~", pgup_handler);
+        rl_bind_keyseq("\\e[6~", pgdn_handler);
+    }
+}
+
+/**
+ * @brief Validates a proposed configuration value against the entry's validation rules.
+ *
+ * @tparam ThemeType Type of the theme object.
+ * @param entry Configuration entry containing the validation function.
+ * @param newVal Trimmed new value entered by the user.
+ * @param tc Current options theme colors.
+ * @param drawEdit Lambda function to redraw the edit screen on validation error.
+ * @return true if validation succeeded or no validator exists, false if validation failed.
+ */
+template <typename ThemeType>
+static bool validateSettingValue(const ConfigEntry* entry, const std::string& newVal,
+                                 const ThemeType& tc, const std::function<void()>& drawEdit) {
+    if (!entry->validate || entry->validate(newVal)) {
+        return true;
+    }
+
+    auto render = [&] {
+        SyncOutput sync;
+        drawEdit();
+        std::cout << "\n" << tc.error << "Invalid value: "
+                  << tc.warning << "'" << newVal << "'" << tc.reset << "\n";
+    };
+    pressEnterToTryWithRepaint(render);
+    return false;
+}
+
+/**
  * @brief Interactively edits one configuration setting with full tab completion, validation, and multi-selection navigation support.
  *
  * Displays the current value, description, and valid-value guidance. Invalid input returns to the prompt;
@@ -768,30 +833,21 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
     const ConfigEntry* entry = findConfigEntry(key);
     if (!entry) return EditNav::Advance;
 
-    reset_custom_keybindingsForSettingsEditor();
-
     const bool isNumeric = entry->numeric;
-    std::vector<std::string> validValues;
-    if (entry->values) validValues = *entry->values;
+    std::vector<std::string> validValues = entry->values ? *entry->values : std::vector<std::string>{};
 
     NavBindGuard navGuard{ total > 1 };
     CompletionGuard completionGuard;
     CompleteModeGuard completeModeGuard;
     RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 0;
 
-    std::string current = ConfigCaches::g_configCache.count(key) ? ConfigCaches::g_configCache[key] : entry->defaultValue;
+    std::string current = resolveSettingCurrent(key, entry);
     std::vector<std::string> pendingErrors = inputErrors;
 
     auto drawEdit = [&] {
         drawEditScreen(key, current, tc, entry, validValues, isNumeric, pos, total, pendingErrors);
     };
 
-    // Resize / Ctrl+L repaint. The watcher's contract is that this callback
-    // ends one line short of the prompt's input line. The completion listing
-    // saves/restores an absolute cursor position (ESC[s / ESC[u), so it must
-    // run with the cursor ON the input line, exactly as in the normal path:
-    // step down onto it, repaint the listing, then step back up so the
-    // watcher's own '\n' lands correctly.
     auto repaintEditOnResize = [&] {
         drawEdit();
         std::cout << "\n";
@@ -800,24 +856,8 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
     };
 
     while (true) {
-        // Drop any completion snapshot / page state left over from a previous
-        // prompt (skipped setting, invalid value, PgUp/PgDn/g#), so a resize
-        // on this screen can never repaint another screen's list.
         resetReadlinePagination();
-
-        rl_bind_keyseq("\\e", exit_handler);
-        if (total > 1) {
-            rl_bind_keyseq("\\e[5~", pgup_handler);
-            rl_bind_keyseq("\\e[6~", pgdn_handler);
-        }
-
-        g_activeSettingValues = validValues.empty() ? nullptr : &validValues;
-        rl_attempted_completion_function = isNumeric ? nullptr : setting_value_completion_entry;
-        rl_completion_display_matches_hook = customListingsFunction;
-        rl_bind_key('\t', isNumeric ? noop_tab_handler : my_rl_complete);
-        // Ctrl+L dismisses a visible completion list (drops the snapshot
-        // before the repaint callback runs) and repaints the screen.
-        rl_bind_key('\f', clear_list_and_screen);
+        setupSettingReadline(total, isNumeric, validValues);
 
         drawEdit();
         std::cout << "\n";
@@ -844,8 +884,6 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
             continue;
         }
 
-        // A g#-shaped token that wasn't a valid target: stay in the loop silently.
-        // Do not fall through to value validation.
         if (total > 1 && newVal.size() >= 2 && newVal[0] == 'g' &&
             std::isdigit(static_cast<unsigned char>(newVal[1]))) {
             continue;
@@ -853,14 +891,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
 
         if (newVal.empty()) return EditNav::Advance;
 
-        if (entry->validate && !entry->validate(newVal)) {
-            auto render = [&] {
-                SyncOutput sync;
-                drawEdit();
-                std::cout << "\n" << tc.error << "Invalid value: "
-                          << tc.warning << "'" << newVal << "'" << tc.reset << "\n";
-            };
-            pressEnterToTryWithRepaint(render);
+        if (!validateSettingValue(entry, newVal, tc, drawEdit)) {
             continue;
         }
 
