@@ -2,7 +2,6 @@
 
 // C++ Standard Library Headers
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <chrono>
 #include <cctype>
@@ -11,14 +10,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <cstddef>
 #include <cstring>
 #include <filesystem>
 #include <mutex>
-#include <queue>
 #include <random>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <unordered_set>
 #include <utility>
@@ -29,7 +25,6 @@
 #include <linux/fs.h>
 #include <spawn.h>
 #include <sys/ioctl.h>
-#include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -1436,231 +1431,4 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
     steps::reportSuccess(slot, steps::averageSpeedMBps(totalBytes, seconds));
     return true;
-}
-
-/**
- * @brief Represents a node in the Aho-Corasick automaton trie.
- */
-struct AcNode {
-    std::array<int, 256> next{};
-    int fail{0};
-    uint32_t match{0};
-    AcNode() { next.fill(-1); }
-};
-
-/**
- * @brief Builds and returns the static Aho-Corasick automaton for Windows ISO signatures.
- *
- * Searches simultaneously for "boot.wim", "bootmgr.efi", and "bootmgr" case-insensitively
- * across ASCII, UTF-16LE, and UTF-16BE encodings in a single O(n) pass.
- *
- * @return const std::vector<AcNode>& Reference to the immutable automaton node collection.
- */
-static const std::vector<AcNode>& getAhoCorasickAutomaton() {
-    static const auto nodes = [] {
-        std::vector<AcNode> trie;
-        trie.emplace_back();
-
-        auto addPattern = [&](std::string_view text, int logicalIndex, int variant) {
-            int cur = 0;
-            for (char raw : text) {
-                unsigned char c = static_cast<unsigned char>(std::tolower(raw));
-                uint8_t bytes[2];
-                int byteCount;
-                if (variant == 0) {
-                    bytes[0] = c;
-                    byteCount = 1;
-                } else if (variant == 1) {
-                    bytes[0] = c; bytes[1] = 0x00;
-                    byteCount = 2;
-                } else {
-                    bytes[0] = 0x00; bytes[1] = c;
-                    byteCount = 2;
-                }
-                for (int b = 0; b < byteCount; ++b) {
-                    int byte = bytes[b];
-                    if (trie[cur].next[byte] == -1) {
-                        trie[cur].next[byte] = static_cast<int>(trie.size());
-                        trie.emplace_back();
-                    }
-                    cur = trie[cur].next[byte];
-                }
-            }
-            trie[cur].match |= (1u << (logicalIndex * 3 + variant));
-        };
-
-        for (int v = 0; v < 3; ++v) {
-            addPattern("boot.wim",    0, v);
-            addPattern("bootmgr.efi", 1, v);
-            addPattern("bootmgr",     2, v);
-        }
-
-        // BFS to build failure links
-        std::queue<int> q;
-        for (int c = 0; c < 256; ++c) {
-            if (trie[0].next[c] == -1) {
-                trie[0].next[c] = 0;
-            } else {
-                trie[trie[0].next[c]].fail = 0;
-                q.push(trie[0].next[c]);
-            }
-        }
-        while (!q.empty()) {
-            int u = q.front(); q.pop();
-            trie[u].match |= trie[trie[u].fail].match;
-            for (int c = 0; c < 256; ++c) {
-                int v = trie[u].next[c];
-                if (v == -1) {
-                    trie[u].next[c] = trie[trie[u].fail].next[c];
-                } else {
-                    trie[v].fail = trie[trie[u].fail].next[c];
-                    q.push(v);
-                }
-            }
-        }
-
-        return trie;
-    }();
-    return nodes;
-}
-
-/**
- * @brief Returns a static 256-entry case-folding lookup table.
- *
- * Replaces std::tolower in the hot scan loop to avoid locale machinery
- * and branch overhead across the full mapping window.
- *
- * @return const std::array<uint8_t, 256>& Reference to the lookup table.
- */
-static const std::array<uint8_t, 256>& getToLowerTable() {
-    static const auto table = [] {
-        std::array<uint8_t, 256> t{};
-        for (int i = 0; i < 256; ++i)
-            t[i] = static_cast<uint8_t>(std::tolower(i));
-        return t;
-    }();
-    return table;
-}
-
-/**
- * @brief Validates the volume headers of the mapped ISO image.
- *
- * Checks for a Primary Volume Descriptor (type 0x01, identifier "CD001") at sector 16,
- * or pure-UDF identifiers ("NSR02" / "NSR03").
- *
- * @param addr    Pointer to the mapped file memory window.
- * @param mapSize Size of the mapped window in bytes.
- * @return true if the volume header is valid; false otherwise.
- */
-static bool isValidVolumeHeader(const char* addr, size_t mapSize) {
-    if (mapSize < 0x8006) return false;
-    const uint8_t descType = static_cast<uint8_t>(addr[0x8000]);
-    std::string_view id(addr + 0x8001, 5);
-    const bool validIso = (descType == 0x01 && id == "CD001");
-    const bool validUdf = (id == "NSR02" || id == "NSR03");
-    return validIso || validUdf;
-}
-
-/**
- * @brief Scans the mapped memory window using the Aho-Corasick automaton with early exit.
- *
- * @param addr    Pointer to the mapped file memory window.
- * @param mapSize Size of the mapped window in bytes.
- * @return uint32_t Bitmask representing the matched signature groups.
- */
-static uint32_t scanForSignatures(const char* addr, size_t mapSize) {
-    const auto& ac = getAhoCorasickAutomaton();
-    const auto& toLower = getToLowerTable();
-
-    constexpr uint32_t MASK_BOOTWIM = 0b000000111u;
-    constexpr uint32_t MASK_BOOTMGR = 0b111111000u;
-    constexpr uint32_t MASK_ALL     = MASK_BOOTWIM | MASK_BOOTMGR;
-
-    uint32_t found = 0;
-    int cur = 0;
-    for (size_t i = 0; i < mapSize; ++i) {
-        cur    = ac[cur].next[toLower[static_cast<uint8_t>(addr[i])]];
-        found |= ac[cur].match;
-
-        if ((found & MASK_ALL) == MASK_ALL) break;
-    }
-
-    return found;
-}
-
-/**
- * @brief Probes an ISO image to detect Windows 10/11 installation media.
- *
- * Maps up to the first 32 MB of the file into the process address space and
- * performs a single-pass Aho-Corasick scan for Windows Boot Manager and WinPE
- * payload signatures. The 32 MB window is sufficient because Windows ISO
- * directory entries for bootmgr and boot.wim always appear within the first
- * few MB of the image.
- *
- * @par Volume validation
- * Requires a Primary Volume Descriptor (type 0x01, identifier "CD001") at
- * sector 16. Pure-UDF images with "NSR02"/"NSR03" are also accepted; "BEA01"
- * alone is not sufficient.
- *
- * @par Signature scan
- * Searches simultaneously for "bootmgr[.efi]" and "boot.wim"
- * case-insensitively across ASCII, UTF-16LE, and UTF-16BE in a single O(n)
- * pass. UTF-16LE is the native encoding used by Windows for Joliet/UDF
- * filenames. The automaton is built once on first call and reused across
- * subsequent calls.
- *
- * @par Case folding
- * A static 256-entry lookup table replaces std::tolower in the hot scan loop,
- * avoiding locale machinery and branch overhead across the full mapping
- * window.
- *
- * @par Early exit
- * The scan terminates as soon as both signature groups are matched, without
- * scanning the remainder of the window. On typical Windows ISOs both
- * signatures appear within the first 2-3 MB, so up to ~29 MB of iteration is
- * skipped in the common case.
- *
- * @param fd       Open, readable file descriptor positioned anywhere — the
- *                 mapping is always made from offset 0. The caller retains
- *                 ownership; this function does not close the descriptor.
- * @param fileSize Size of the image in bytes, as returned by fstat. Used for
- *                 the minimum-size guard and to clamp the mapping window.
- * @return true if the volume header is valid and both "bootmgr[.efi]" and
- *         "boot.wim" signatures are present within the mapped window.
- *
- * @note Does not modify the file; read-only mapping.
- * @note The static Aho-Corasick automaton and case-folding table are both
- *       thread-safe under C++11 and later (guaranteed by static-local
- *       initialisation rules).
- * @note MADV_WILLNEED is applied to the first 4 MB of the mapping to begin
- *       faulting in pages immediately; MADV_SEQUENTIAL covers the remainder so
- *       the prefetcher stays primed if a full scan is needed.
- */
-bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
-    if (fileSize < 0x9000) return false;
-
-    const size_t mapSize = std::min(static_cast<size_t>(fileSize),
-                                    static_cast<size_t>(32 * 1024 * 1024));
-    char* addr = static_cast<char*>(
-        mmap(nullptr, mapSize, PROT_READ, MAP_PRIVATE, fd, 0));
-    if (addr == MAP_FAILED) return false;
-
-    // Hint the kernel to prefetch the first 4 MiB immediately
-    madvise(addr,                  4 * 1024 * 1024, MADV_WILLNEED);
-    madvise(addr, mapSize,                          MADV_SEQUENTIAL);
-
-    if (!isValidVolumeHeader(addr, mapSize)) {
-        munmap(addr, mapSize);
-        return false;
-    }
-
-    const uint32_t found = scanForSignatures(addr, mapSize);
-
-    munmap(addr, mapSize);
-
-    constexpr uint32_t MASK_BOOTWIM = 0b000000111u;
-    constexpr uint32_t MASK_BOOTMGR = 0b111111000u;
-
-    return (found & MASK_BOOTWIM) != 0 &&
-           (found & MASK_BOOTMGR) != 0;
 }
