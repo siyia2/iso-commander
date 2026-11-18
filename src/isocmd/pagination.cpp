@@ -272,44 +272,52 @@ static void drawPaginatedPage(const std::vector<std::string>& entries,
  * @brief Parses and executes navigation commands such as page turns or direct jumps.
  *
  * Recognizes inputs like "PgUp", "PgDn", or page jump commands matching "g<num>".
- * Updates the current page reference and page-turn flag if a valid navigation command is processed.
+ * Updates the current page reference and page-turn flag if a valid page change
+ * is possible. Recognized navigation commands are consumed even when they
+ * cannot change the current page.
  *
  * @param userInput    The trimmed string input provided by the user.
  * @param totalPages   Total number of valid pages available.
  * @param currentPage  Reference to the current page index (modified if navigation succeeds).
- * @param isPageTurn   Reference to the page-turn flag (set to true if navigation succeeds).
- * @return true        If a navigation command was successfully recognized and handled.
+ * @param isPageTurn   Reference to the page-turn flag (set to true if the page changes).
+ * @return true        If the input is a recognized navigation command.
  * @return false       If the input is not a recognized navigation command.
  */
 static bool handleNavigation(const std::string& userInput,
-                      size_t totalPages,
-                      size_t& currentPage,
-                      bool& isPageTurn) {
+                             size_t totalPages,
+                             size_t& currentPage,
+                             bool& isPageTurn) {
     if (userInput.empty()) return false;
 
-    if (userInput.size() >= 2 && userInput[0] == 'g' && std::isdigit(userInput[1])) {
+    if (userInput.size() >= 2 &&
+        userInput[0] == 'g' &&
+        std::isdigit(static_cast<unsigned char>(userInput[1]))) {
         try {
-            size_t requestedPage = std::stoul(userInput.substr(1));
+            const size_t requestedPage = std::stoul(userInput.substr(1));
+
             if (requestedPage >= 1 && requestedPage <= totalPages) {
                 currentPage = requestedPage - 1;
                 isPageTurn = true;
-                return true;
             }
         } catch (...) {}
+
+        return true;
     }
     else if (userInput == "PgDn") {
-        if (currentPage < totalPages - 1) {
-            currentPage++;
+        if (totalPages > 0 && currentPage < totalPages - 1) {
+            ++currentPage;
             isPageTurn = true;
-            return true;
         }
+
+        return true;
     }
     else if (userInput == "PgUp") {
         if (currentPage > 0) {
-            currentPage--;
+            --currentPage;
             isPageTurn = true;
-            return true;
         }
+
+        return true;
     }
 
     return false;
