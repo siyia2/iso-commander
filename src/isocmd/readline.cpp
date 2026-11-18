@@ -910,14 +910,15 @@ int clear_list_and_screen(int a, int b) {
 }
 
 /**
- * @brief TAB-completion handler that extends @c rl_complete with pagination reset
- * and custom directory formatting.
+ * @brief TAB-completion handler that extends @c rl_complete with pagination
+ * reset, custom directory formatting, and completion-list state management.
  *
  * Delegates to @c rl_complete_internal('?') on double-TAB (list matches)
  * or @c rl_complete_internal('!') on single TAB (insert/complete). After
  * completion, if the result is a directory, it ensures a trailing slash is
- * appended. If the cursor position or line buffer changed, it clears the
- * scroll buffer.
+ * appended. When the input changes, it clears the scroll buffer. It also
+ * dismisses any previously displayed completion listing when a new completion
+ * attempt does not display a listing, even if the input remains unchanged.
  *
  * When a completion list is displayed, Esc is rebound to
  * @c clear_list_and_screen (see @c install_esc_hijack): the first Esc
@@ -927,10 +928,10 @@ int clear_list_and_screen(int a, int b) {
  *
  * When @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode is 1, it saves the
  * completed text to @c g_rl_pending_text, clears the input buffer, and sets
- * @c rl_done to exit readline, allowing the next loop iteration to restore the
- * text.
+ * @c rl_done to exit readline, allowing the next loop iteration to restore
+ * the text.
  *
- * @param ignore      Numeric argument (unused).
+ * @param ignore       Numeric argument (unused).
  * @param invoking_key Triggering key (unused).
  * @return Return value of @c rl_complete_internal.
  */
@@ -939,15 +940,16 @@ int my_rl_complete(int ignore, int invoking_key)
     (void)ignore;
     (void)invoking_key;
 
-    // Reset tracking and invalidate any previous completion listing.
-    // customListingsFunction() will capture a fresh snapshot if this
-    // completion attempt actually displays a listing.
+    const bool had_previous_listing = lastCompletion.valid;
+
+    // Start a fresh completion attempt.
     list_shown_during_completion = false;
     lastCompletion.clear();
+    restore_esc_default();
 
     rl_completion_append_character = '\0';
 
-    int old_point = rl_point;
+    const int old_point = rl_point;
     char *old_text = rl_copy_text(0, rl_end);
 
     int ret;
@@ -958,25 +960,31 @@ int my_rl_complete(int ignore, int invoking_key)
 
     char *new_text = rl_copy_text(0, rl_end);
 
-    if (rl_point != old_point || strcmp(old_text, new_text) != 0) {
+    const bool input_changed =
+        rl_point != old_point || strcmp(old_text, new_text) != 0;
 
-        struct stat st;
-        if (stat(new_text, &st) == 0 && S_ISDIR(st.st_mode)) {
-            size_t len = strlen(new_text);
-            if (len > 0 && new_text[len - 1] != '/') {
-                rl_point = len;
-                rl_insert_text("/");
+    // Redraw when completion changes the input, or when a previous
+    // listing was dismissed by an attempt that produced no new listing.
+    if (input_changed ||
+        (had_previous_listing && !list_shown_during_completion)) {
+
+        if (input_changed) {
+            struct stat st;
+            if (stat(new_text, &st) == 0 && S_ISDIR(st.st_mode)) {
+                const size_t len = strlen(new_text);
+                if (len > 0 && new_text[len - 1] != '/') {
+                    rl_point = static_cast<int>(len);
+                    rl_insert_text("/");
+                }
             }
         }
 
         clear_screen_and_buffer(0, 0);
 
-        // clear_screen_and_buffer() restored the default Esc binding. If a
-        // completion list was just displayed, re-install the hijack so the
-        // first Esc clears the list and the second exits.
-        if (list_shown_during_completion) {
+        // The redraw restores the default Esc binding. Reinstate the
+        // completion-list binding only if this attempt displayed a list.
+        if (list_shown_during_completion)
             install_esc_hijack();
-        }
 
         if (RetainAndRestoreReadlineBuffer::g_rl_complete_mode == 1) {
             RetainAndRestoreReadlineBuffer::g_rl_pending_text = new_text;
