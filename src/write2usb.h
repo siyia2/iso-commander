@@ -11,9 +11,6 @@
 #include <thread>
 #include <vector>
 
-// C / System Headers
-#include <sys/types.h>
-
 // ------------------- Forward declarations -------------------
 
 /**
@@ -28,22 +25,6 @@
 struct ProgressInfo;
 
 // ------------------- Windows ISO writer (windowsWriter.cpp) -------------------
-
-/**
- * @brief Probes an ISO image to detect Windows installation media.
- *
- * Validates the volume descriptor (ISO 9660 PVD or UDF NSR02/NSR03), then
- * scans up to the first 32 MB of the image, via a read-only mmap, for
- * "bootmgr[.efi]" and "boot.wim" signatures (ASCII, UTF-16LE and UTF-16BE,
- * case-insensitive) using a single-pass Aho-Corasick automaton.
- *
- * @param fd       Open, readable descriptor for the image. Not closed by this
- *                 function; the mapping is always made from offset 0.
- * @param fileSize Size of the image in bytes (from fstat).
- * @return true if the volume header is valid and both signature groups are
- *         found; false otherwise (including mmap failure or tiny files).
- */
-bool isWindowsIsoInitialCheck(int fd, off_t fileSize);
 
 /**
  * @brief Writes a Windows-family ISO to a block device by partitioning,
