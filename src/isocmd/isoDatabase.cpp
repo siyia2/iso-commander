@@ -338,53 +338,99 @@ namespace {
     }
 
     /**
-     * @brief Atomically writes the combined cache to disk using a temporary file and rename.
+     * @brief Atomically replaces the database cache using a temporary file and rename.
      *
      * Trims the cache to GlobalState::maxDatabaseSize if necessary, serializes entries
-     * with newline separators, writes to a temporary file created via mkstemp with
-     * permissions 0644, syncs to disk via fsync, and atomically renames it into place.
+     * with newline separators, and writes them to a uniquely created temporary file
+     * in the destination directory using mkstemp with permissions 0644.
+     *
+     * Handles partial writes and EINTR, synchronizes the temporary file with fsync,
+     * checks close errors, and atomically replaces the destination using rename.
+     * Finally, synchronizes the parent directory to improve crash durability.
      *
      * @param cachePath Const reference to the destination cache file path.
-     * @param cache     Reference to the vector of cache strings to be written and trimmed.
-     * @return true  if all I/O, permission, and atomic rename operations succeed.
-     * @return false if any I/O step fails (mkstemp, fchmod, write, fsync, or rename).
+     * @param cache     Reference to the cache strings to be written and trimmed.
+     * @return true  if the replacement and parent-directory synchronization succeed.
+     * @return false if any operation fails. Note that a parent-directory
+     *               synchronization failure occurs after rename, so the replacement
+     *               may already have succeeded despite a false return value.
      */
-    bool atomicWriteCache(const std::filesystem::path& cachePath, std::vector<std::string>& cache) {
+    bool atomicWriteCache(const std::filesystem::path& cachePath,
+                          std::vector<std::string>& cache) {
         if (cache.size() > GlobalState::maxDatabaseSize) {
-            cache.erase(cache.begin(), cache.begin() + (cache.size() - GlobalState::maxDatabaseSize));
+            cache.erase(cache.begin(),
+                        cache.begin() + (cache.size() - GlobalState::maxDatabaseSize));
         }
 
         std::string output;
         output.reserve(cache.size() * 64);
+
         for (const auto& entry : cache) {
             output += entry;
             output += '\n';
         }
 
-        std::string tmpPath = (std::filesystem::path(GlobalState::databaseFilePath).parent_path() / "iso_commander_database_saved_XXXXXX").string();
+        const std::filesystem::path parentPath = cachePath.parent_path();
+
+        std::string tmpPath =
+            (parentPath / "iso_commander_database_saved_XXXXXX").string();
+
         int tmpFd = mkstemp(tmpPath.data());
         if (tmpFd == -1) return false;
 
         auto cleanupTmp = [&]() {
-            close(tmpFd);
-            ::unlink(tmpPath.c_str());
+            if (tmpFd != -1) {
+                close(tmpFd);
+                tmpFd = -1;
+            }
+            unlink(tmpPath.c_str());
         };
 
-        if (fchmod(tmpFd, 0644) == -1 ||
-            ::write(tmpFd, output.data(), output.size()) != static_cast<ssize_t>(output.size()) ||
-            fsync(tmpFd) == -1) {
+        if (fchmod(tmpFd, 0644) == -1) {
             cleanupTmp();
             return false;
         }
 
-        close(tmpFd);
-        if (::rename(tmpPath.c_str(), cachePath.c_str()) == -1) {
-            ::unlink(tmpPath.c_str());
+        size_t written = 0;
+        while (written < output.size()) {
+            ssize_t n = write(tmpFd, output.data() + written,
+                              output.size() - written);
+
+            if (n == -1 && errno == EINTR) continue;
+
+            if (n <= 0) {
+                cleanupTmp();
+                return false;
+            }
+
+            written += static_cast<size_t>(n);
+        }
+
+        if (fsync(tmpFd) == -1) {
+            cleanupTmp();
             return false;
         }
-        return true;
-    }
 
+        if (close(tmpFd) == -1) {
+            tmpFd = -1;
+            unlink(tmpPath.c_str());
+            return false;
+        }
+        tmpFd = -1;
+
+        if (rename(tmpPath.c_str(), cachePath.c_str()) == -1) {
+            unlink(tmpPath.c_str());
+            return false;
+        }
+
+        int dirFd = open(parentPath.c_str(), O_RDONLY | O_DIRECTORY);
+        if (dirFd == -1) return false;
+
+        bool syncSuccess = fsync(dirFd) == 0;
+        close(dirFd);
+
+        return syncSuccess;
+    }
 } // namespace
 
 /**
