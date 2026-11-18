@@ -53,18 +53,20 @@ constexpr std::size_t kPerRowOverhead = 96;
 /// render.
 constexpr std::size_t kMaxRetainedCapacity = 4u << 20; // 4 MiB
 
+namespace {
+
 /// Which list a frame is being rendered for. Each kind owns its own retained buffer.
 enum class ListKind : std::size_t { Iso, Image, Mounted, Count };
 
 /// One retained thread_local buffer per list type, so rendering one list type
 /// never grows, shrinks, or reallocates the buffer used by another.
-inline std::string& bufferFor(ListKind kind) {
+std::string& bufferFor(ListKind kind) {
     static thread_local std::array<std::string, static_cast<std::size_t>(ListKind::Count)> buffers;
     return buffers[static_cast<std::size_t>(kind)];
 }
 
 /// Number of decimal digits in value (value 0 -> 1 digit).
-inline std::size_t digitCount(std::size_t value) noexcept {
+std::size_t digitCount(std::size_t value) noexcept {
     std::size_t d = 1;
     while (value >= 10) { value /= 10; ++d; }
     return d;
@@ -72,14 +74,14 @@ inline std::size_t digitCount(std::size_t value) noexcept {
 
 /// Formats value into a stack buffer and appends it to out (no heap allocation,
 /// no shared state).
-inline void appendNum(std::string& out, std::size_t value) {
+void appendNum(std::string& out, std::size_t value) {
     char buf[20]; // enough for a 64-bit unsigned integer
     const auto res = std::to_chars(buf, buf + sizeof(buf), value);
     out.append(buf, static_cast<std::size_t>(res.ptr - buf));
 }
 
 /// Like appendNum, but right-aligns the number to the given width using spaces.
-inline void appendNumPadded(std::string& out, std::size_t value, std::size_t width) {
+void appendNumPadded(std::string& out, std::size_t value, std::size_t width) {
     char buf[20];
     const auto res = std::to_chars(buf, buf + sizeof(buf), value);
     const std::size_t len = static_cast<std::size_t>(res.ptr - buf);
@@ -308,8 +310,6 @@ void appendFooterAndPending(std::string& output, bool disablePagination, size_t 
         output.append(UI::Palette::Reset).append(UI::Palette::BoldReset).append("\n");
     }
 }
-
-namespace {
 
 /**
  * @brief Configuration and display flags derived from the list type and global settings.
