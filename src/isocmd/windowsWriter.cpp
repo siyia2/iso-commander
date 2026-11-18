@@ -1120,7 +1120,6 @@ void syncMount(const std::string& mountPath) {
 namespace {
 namespace win_iso_steps {
 
-using ProgressVec = std::vector<ProgressInfo>;
 using EntryVec    = std::vector<detail::IsoCopyEntry>;
 
 inline bool isCancelled() { return GlobalState::g_operationCancelled.load(); }
