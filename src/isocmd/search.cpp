@@ -958,6 +958,129 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
 }
 
 /**
+ * @brief Configuration structure representing a disc-image file type and its extension.
+ */
+struct FileTypeConfig {
+    std::string extension;
+    std::string name;
+};
+
+/**
+ * @brief Retrieves the static configuration map for supported disc-image file types.
+ *
+ * @return const std::unordered_map<std::string, FileTypeConfig>& Reference to the file type map.
+ */
+const std::unordered_map<std::string, FileTypeConfig>& getFileTypeMap() {
+    static const std::unordered_map<std::string, FileTypeConfig> fileTypeMap = {
+        {"bin", {".bin/.img", "BIN/IMG"}},
+        {"img", {".bin/.img", "BIN/IMG"}},
+        {"mdf", {".mdf",      "MDF"    }},
+        {"nrg", {".nrg",      "NRG"    }},
+        {"chd", {".chd",      "CHD"    }},
+        {"daa", {".daa/.gbi", "DAA/GBI"}}
+    };
+    return fileTypeMap;
+}
+
+/**
+ * @brief Constructs the colored terminal input prompt for directory selection.
+ *
+ * @param dt            The active verbose and database theme styling colors.
+ * @param fileExtension The target file extension/category string (e.g., ".bin/.img").
+ * @return std::string  The formatted and ANSI-coded readline prompt string.
+ */
+std::string buildSearchPrompt(const VerboseAndDatabaseTheme& dt, const std::string& fileExtension) {
+    std::string prompt;
+    prompt.reserve(512);
+    prompt.append("\001").append(dt.green).append("\002FolderPaths")
+          .append("\001").append(dt.blue).append("\002 ↵ to scan for \001")
+          .append("\001").append(dt.orange).append("\002").append(fileExtension)
+          .append("\001").append(dt.blue).append("\002 entries and cache in \001")
+          .append("\001").append(dt.yellow).append("\002RAM\001")
+          .append("\001").append(dt.blue).append("\002, ? for help:\n\001")
+          .append(dt.reset).append("\002");
+    return prompt;
+}
+
+/**
+ * @brief Reprints the prompt header and the user's previously typed line during screen repaints or terminal resizes.
+ *
+ * Strips out trailing ANSI codes and marker characters cleanly to ensure output starts on a fresh line.
+ *
+ * @param header      The formatted prompt header string.
+ * @param typedLine   The exact string currently typed into the readline buffer by the user.
+ * @param resetColor  The theme color reset code.
+ */
+void printRepaintedCallerPrompt(const std::string& header, const std::string& typedLine, const std::string& resetColor) {
+    std::cout << header;
+
+    // Make sure the typed line starts on a new line: find the last
+    // visible character of the header, skipping trailing ANSI SGR
+    // sequences (e.g. "\033[0m") and readline's \001/\002 markers.
+    size_t end = header.size();
+    while (end > 0) {
+        const char c = header[end - 1];
+        if (c == '\001' || c == '\002') { --end; continue; }
+        if (c == 'm') {
+            const size_t esc = header.rfind('\033', end - 1);
+            if (esc != std::string::npos && esc + 1 < end && header[esc + 1] == '[') {
+                end = esc;
+                continue;
+            }
+        }
+        break;
+    }
+    if (end == 0 || header[end - 1] != '\n') std::cout << "\n";
+
+    std::cout << UI::Palette::BoldReset << typedLine << resetColor << "\n";
+}
+
+/**
+ * @brief Initializes signal handlers, completion hooks, keybindings, and history for each search iteration.
+ */
+void initializeIterationState() {
+    enable_ctrl_d();
+    setupSignalHandlerCancellations();
+    rl_attempted_completion_function = my_special_completion_entry;
+    setup_custom_keybindingsForSearches();
+    GlobalState::g_operationCancelled.store(false);
+    clearScrollBuffer();
+    bool filterHistory = false;
+    loadHistory(filterHistory);
+    RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 1;
+}
+
+/**
+ * @brief Tokenizes, deduplicates, and validates semicolon-delimited directory search paths.
+ *
+ * @param inputSearch           The raw semicolon-separated input string entered by the user.
+ * @param directoryPaths        Output vector populated with valid validated directory paths.
+ * @param invalidDirectoryPaths Output set containing paths that failed validation.
+ * @param cleanedInput          Output string containing only valid semicolon-joined paths for history insertion.
+ */
+void parseAndValidateDirectories(
+    const std::string& inputSearch,
+    std::vector<std::string>& directoryPaths,
+    std::unordered_set<std::string>& invalidDirectoryPaths,
+    std::string& cleanedInput
+) {
+    std::istringstream ss(inputSearch);
+    std::string path;
+    std::unordered_set<std::string> uniquePaths;
+    while (std::getline(ss, path, ';')) {
+        if (!path.empty() && uniquePaths.insert(path).second) {
+            if (isValidDirectory(path)) {
+                directoryPaths.push_back(path);
+                if (!cleanedInput.empty()) cleanedInput += ';';
+                cleanedInput += path;
+            } else {
+                invalidDirectoryPaths.insert(path);
+            }
+        }
+    }
+}
+
+/**
  * @brief Runs the interactive search and caching workflow for disc-image files.
  *
  * Prompts for semicolon-delimited directory paths, skips empty and exact
@@ -970,16 +1093,6 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
  * their entered text and order. If new files are found and the scan was not
  * cancelled, the user is taken to the file-selection interface.
  *
- * @par Repaint
- * The line the user typed is kept as a std::string copy. Whenever the screen
- * is repainted after the prompt (the results report from
- * verboseImageSearchResults(), the output of special commands, or a terminal
- * resize while waiting), the prompt header is re-printed, followed by the
- * typed line in the theme color on its own line directly under it, so the
- * verbose output below always starts on a fresh line and the question the
- * user answered stays visible. The typed line is not restored into the next
- * prompt, which always starts empty.
- *
  * @param fileTypeChoice Format category: "bin", "img", "mdf", "nrg", "chd",
  *                       or "daa". "bin" and "img" use the same cache.
  * @param state          Shared refresh state forwarded to file selection.
@@ -987,23 +1100,11 @@ bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input,
 void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shared_ptr<RefreshState> state) {
     PendingReadlineTextClearGuard pendingTextGuard;
 
-    struct FileTypeConfig {
-        std::string extension;
-        std::string name;
-    };
-
-    static const std::unordered_map<std::string, FileTypeConfig> fileTypeMap = {
-        {"bin", {".bin/.img", "BIN/IMG"}},
-        {"img", {".bin/.img", "BIN/IMG"}},
-        {"mdf", {".mdf",      "MDF"    }},
-        {"nrg", {".nrg",      "NRG"    }},
-        {"chd", {".chd",      "CHD"    }},
-        {"daa", {".daa/.gbi", "DAA/GBI"}}
-    };
-
+    const auto& fileTypeMap = getFileTypeMap();
     const auto configIt = fileTypeMap.find(fileTypeChoice);
+    const VerboseAndDatabaseTheme dt = getDatabaseTheme();
+
     if (configIt == fileTypeMap.end()) {
-        const VerboseAndDatabaseTheme dt = getDatabaseTheme();
         std::cout << dt.red << "Invalid file type choice. Supported types: BIN/IMG, MDF, NRG, CHD, DAA" << dt.reset << "\n";
         return;
     }
@@ -1018,84 +1119,31 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
     std::vector<std::string> files;
     files.reserve(1000);
 
-    auto initIterationState = [&]() {
-        enable_ctrl_d();
-        setupSignalHandlerCancellations();
-        rl_attempted_completion_function = my_special_completion_entry;
-        setup_custom_keybindingsForSearches();
-        GlobalState::g_operationCancelled.store(false);
-        clearScrollBuffer();
-        bool filterHistory = false;
-        loadHistory(filterHistory);
-        RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 1;
-    };
-
     while (true) {
         int currentCacheOld = 0;
         std::vector<std::string> directoryPaths;
-        std::unordered_set<std::string> uniquePaths, processedErrors, processedErrorsFind;
-        std::unordered_set<std::string> invalidDirectoryPaths, fileNames;
+        std::unordered_set<std::string> invalidDirectoryPaths, processedErrorsFind;
         std::atomic<size_t> totalFiles{0};
+        std::string cleanedInput;
         bool filterHistory = false;
 
-        initIterationState();
+        initializeIterationState();
         SearchReadlineGuard guard;
-
         RestoreReadlineBuffer();
 
-        const VerboseAndDatabaseTheme dt = getDatabaseTheme();
-
-        std::string prompt;
-        prompt.reserve(512);
-        prompt.append("\001").append(dt.green).append("\002FolderPaths")
-              .append("\001").append(dt.blue).append("\002 ↵ to scan for \001")
-              .append("\001").append(dt.orange).append("\002").append(fileExtension)
-              .append("\001").append(dt.blue).append("\002 entries and cache in \001")
-              .append("\001").append(dt.yellow).append("\002RAM\001")
-              .append("\001").append(dt.blue).append("\002, ? for help:\n\001")
-              .append(dt.reset).append("\002");
+        const std::string prompt = buildSearchPrompt(dt, fileExtension);
 
         const auto repaintPrompt = [&] {
             SyncOutput sync;
             clearScrollBuffer();
-            std::cout << promptHeaderForRepaint(prompt) << "\n";  // now on the input line, like the normal path
-            repaintCompletionListing();                           // saves/restores at the input line
-            std::cout << "\033[A";                                // back to end of header; watcher prints the '\n'
+            std::cout << promptHeaderForRepaint(prompt) << "\n";
+            repaintCompletionListing();
+            std::cout << "\033[A";
         };
 
-        // What the user typed on the prompt line, set right after readline
-        // returns. Reprinted under the header so the repainted screen matches
-        // what they saw, followed by the verbose output.
         std::string typedLine;
-
-        // Reprints the FolderPaths prompt on a resize during the
-        // verboseImageSearchResults wait (and for special commands): header,
-        // then the typed line in `color` on its own line directly under the
-        // prompt, then a final newline so whatever prints next starts on a
-        // fresh line.
         const auto repaintCallerPrompt = [&] {
-            const std::string header = promptHeaderForRepaint(prompt);
-            std::cout << header;
-
-            // Make sure the typed line starts on a new line: find the last
-            // visible character of the header, skipping trailing ANSI SGR
-            // sequences (e.g. "\033[0m") and readline's \001/\002 markers.
-            size_t end = header.size();
-            while (end > 0) {
-                const char c = header[end - 1];
-                if (c == '\001' || c == '\002') { --end; continue; }
-                if (c == 'm') {
-                    const size_t esc = header.rfind('\033', end - 1);
-                    if (esc != std::string::npos && esc + 1 < end && header[esc + 1] == '[') {
-                        end = esc;
-                        continue;
-                    }
-                }
-                break;
-            }
-            if (end == 0 || header[end - 1] != '\n') std::cout << "\n";
-
-            std::cout << UI::Palette::BoldReset << typedLine << dt.reset << "\n";
+            printRepaintedCallerPrompt(promptHeaderForRepaint(prompt), typedLine, dt.reset);
         };
 
         RlLine searchQuery = readlineWithResize(prompt, repaintPrompt);
@@ -1107,15 +1155,10 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         rl_startup_hook = nullptr;
 
         const std::string inputSearch = trimWhitespace(searchQuery.get());
-
         if (inputSearch == "\x1b") return;
-
-        if (inputSearch.find_first_not_of(" \t\n\r") == std::string::npos) {
-            continue;
-        }
+        if (inputSearch.find_first_not_of(" \t\n\r") == std::string::npos) continue;
 
         bool list = false;
-
         if (dispatchSpecialCommandForBinImgMdfNrgSearch(inputSearch, modeMdf, modeNrg, modeChd, modeDaa,
                                    fileExtension, files, fileType, list, state,
                                    repaintCallerPrompt))
@@ -1123,24 +1166,12 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 
         std::cout << " \n\033[3H\033[J\n";
 
-        std::istringstream ss(inputSearch);
-        std::string path;
-        std::string cleanedInput;
-        while (std::getline(ss, path, ';')) {
-            if (!path.empty() && uniquePaths.insert(path).second) {
-                if (isValidDirectory(path)) {
-                    directoryPaths.push_back(path);
-                    if (!cleanedInput.empty()) cleanedInput += ';';
-                    cleanedInput += path;
-                } else {
-                    invalidDirectoryPaths.insert(path);
-                }
-            }
-        }
+        parseAndValidateDirectories(inputSearch, directoryPaths, invalidDirectoryPaths, cleanedInput);
 
         bool newFilesFound = false;
         const auto start_time = std::chrono::high_resolution_clock::now();
 
+        std::unordered_set<std::string> fileNames;
         files = findFiles(directoryPaths, fileNames, currentCacheOld, fileType,
                           [&](const std::string&, const std::string&) { newFilesFound = true; },
                           processedErrorsFind, totalFiles);
