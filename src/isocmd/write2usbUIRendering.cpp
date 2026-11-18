@@ -662,7 +662,6 @@ private:
         return h.str();
     }
 
-    // Add these to your class private declarations:
     void handleActivePhase(bool completion, std::chrono::steady_clock::time_point& lastDraw) {
         const auto size = terminalSize();
         if (size.cols == 0 || size.rows == 0) {
