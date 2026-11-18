@@ -1157,10 +1157,6 @@ struct ConversionTask {
 static bool collectAndValidateImages(const ParsedArgs& args,
                                       std::unordered_set<std::string>& images,
                                       bool& hasErrors) {
-    if (args.paths.empty()) {
-        verboseWarn(args.silentMode, "No files to c2iso.");
-        return false;
-    }
 
     for (const auto& rawPath : args.paths) {
         if (GlobalState::g_operationCancelled.load()) {
@@ -1547,9 +1543,10 @@ static int getConversionExitStatus(
 /**
  * @brief Converts supported disk images into ISO files.
  *
- * Validates the supplied input paths, recursively discovers supported
- * disk images according to the configured scan depth, and prepares
- * conversion tasks grouped by their respective backends.
+ * Returns immediately with a notice if no paths were supplied.
+ * Otherwise validates the supplied input paths, recursively discovers
+ * supported disk images according to the configured scan depth, and
+ * prepares conversion tasks grouped by their respective backends.
  *
  * Calculates the estimated total output size and initializes the
  * progress display when silent mode is disabled. Conversion tasks
@@ -1560,22 +1557,28 @@ static int getConversionExitStatus(
  * to finish before optionally displaying detailed operation results.
  *
  * @param args Parsed command-line arguments containing input paths,
- *             maximum scan depth, and output-mode settings.
+ *             maximum scan depth, and silent-mode settings.
  *
- * @return 0 if all conversions completed successfully, including when
- *         no convertible images were found and no path errors occurred.
- *         Returns 1 if input validation failed, any conversion failed,
- *         or the operation was cancelled.
+ * @return 0 if all conversions completed successfully, or if no paths
+ *         were given, or if no convertible images were found and no
+ *         path errors occurred.
+ *         Returns 1 if any input path was invalid, any conversion
+ *         failed, or the operation was cancelled.
  */
 static int handleConvert(const ParsedArgs& args) {
     std::unordered_set<std::string> images;
     bool hasErrors = false;
 
+    if (args.paths.empty()) {
+        verboseWarn(args.silentMode, "No files to c2iso.");
+        return 0;
+    }
+
     if (collectAndValidateImages(args, images, hasErrors))
         return 1;
 
     if (GlobalState::g_operationCancelled.load())
-        verboseWarn(args.silentMode, "Operation cancelled by user.");
+        verboseWarn(args.silentMode, "Conversion cancelled by user.");
 
     if (images.empty()) {
         if (GlobalState::g_operationCancelled.load())
