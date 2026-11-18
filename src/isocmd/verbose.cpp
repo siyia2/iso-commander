@@ -381,98 +381,62 @@ void renderDatabaseRefreshReport(size_t totalProcessed,
  * @brief Finalizes an ISO database refresh: reports results and syncs global
  * state.
  *
- * Last stage of the database update pipeline. Computes elapsed time, logs
- * errors, persists the new list, and refreshes the UI cache.
+ * See the header declaration for the full behavioral contract; this
+ * definition documents only implementation-level sequencing.
  *
- * - **Signal guarding:** SIGINT is ignored and Ctrl+D disabled at entry;
- *   neither is restored before return.
- * - **Cache sync:** if @p newISOFound is true on entry, calls
- *   loadFromDatabase to reconcile globalIsoFileList with disk before any
- *   output is produced.
- * - **Persistence:** calls saveToDatabase (passing &newISOFound, which may be
- *   mutated) unless GlobalState::g_operationCancelled is set.
- * - **User feedback:** prints elapsed time, then a color-coded outcome from
- *   one of five branches: Cancelled; save failed with files and delta; no
- *   valid paths; files present but no delta (save not attempted or failed);
- *   no ISOs found; or successful import with the delta count from
- *   countDifferentEntries.
- * - **Total files processed:** the results screen clears the terminal, which
- *   wipes the live progress counter, so the final count is reprinted at the
- *   top whenever at least one valid path was scanned. When @p validPaths is
- *   empty nothing was scanned: the invalid-path block emits its own
- *   "Total files processed: 0" line instead.
- * - **Invalid path / error reporting:** printed before the save step. When
- *   @p totalFiles is zero and @p validPaths is empty, also emits a "Total
- *   files processed: 0" line before the invalid-path list. Invalid paths are
- *   stored uncolored; the red color is applied here.
- * - **Resize:** the one-shot side effects (load, save, elapsed time, delta
- *   count) run before the wait; only the printing is replayed by the render
- *   lambda handed to pressEnterToContinueWithRepaint(). The prompt owns
- *   SIGWINCH: on each resize it clears the screen with
- *   "\033[H\033[2J\033[3J" (the third parameter drops the scrollback the
- *   previous frame was pushed into on VTE-based terminals), calls render,
- *   then reprints the prompt line. No ListResizeWatcher is installed here —
- *   it would race the prompt's own handler and cannot fire during
- *   pressEnterToImpl's raw read anyway. If @p repaintCallerHeader is
- *   non-empty, render calls it before printing the block, so the caller's
- *   screen header (e.g. the "FolderPaths ..." prompt line the user just
- *   answered) survives a resize; otherwise the block starts from a cleared
- *   screen with no caller context.
+ * Sequencing:
+ *   1. Ignore SIGINT and disable Ctrl+D (never restored).
+ *   2. If `result.newISOFound`, reconcile `GlobalState::globalIsoFileList`
+ *      via `loadFromDatabase`.
+ *   3. Call `saveToDatabase(result.allIsoFiles, &result.newISOFound)` unless
+ *      cancelled. The save may mutate `result.newISOFound`.
+ *   4. Capture elapsed time from `result.start_time`.
+ *   5. Compute `deltaCount` only on a successful save with `newISOFound`.
+ *   6. Snapshot `totalProcessed` / `hasValidPaths` / `hasIsoFiles`.
+ *   7. Hand a render lambda to `pressEnterToContinueWithRepaint`. The
+ *      lambda is the sole producer of on-screen output; the caller must not
+ *      print the block itself.
  *
- * @param allIsoFiles         Discovered ISO paths to be saved.
- * @param totalFiles          Atomic count of files scanned; reprinted after
- *                            the screen clear, and gates the zero-case line.
- * @param validPaths          Base directories successfully traversed; empty
- *                            triggers the "Lack of valid paths" branch.
- * @param invalidPaths        Directories skipped due to permissions or
- *                            existence errors.
- * @param uniqueErrorMessages Deduplicated system-level I/O errors.
- * @param newISOFound         On entry, whether the scan produced delta changes
- *                            (gates the loadFromDatabase call). Passed by
- *                            pointer to saveToDatabase, which may modify it.
- * @param start_time          Timestamp of the refresh origin, used to compute
- *                            elapsed time.
+ * @param result              Refresh inputs and scan outputs (see struct docs).
  * @param repaintCallerHeader Optional callback that reprints the caller's
- *                            screen header (e.g. the FolderPaths prompt line)
- *                            on a resize during the wait. When empty, the
- *                            block starts from a cleared screen with no
- *                            caller context.
+ *                            screen header on a resize during the wait.
+ *                            When empty, the block starts from a cleared
+ *                            screen with no caller context.
  */
-void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std::atomic<size_t>& totalFiles,
-                                    std::vector<std::string>& validPaths, std::unordered_set<std::string>& invalidPaths,
-                                    std::unordered_set<std::string>& uniqueErrorMessages, bool& newISOFound,
-                                    const std::chrono::high_resolution_clock::time_point& start_time,
+void saveAndReportResultsForDatabase(DatabaseRefreshResult& result,
                                     const std::function<void()>& repaintCallerHeader) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
-    if (newISOFound) loadFromDatabase(GlobalState::globalIsoFileList);
+    if (result.newISOFound) loadFromDatabase(GlobalState::globalIsoFileList);
 
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
-    const bool saveSuccess = GlobalState::g_operationCancelled ? false : saveToDatabase(allIsoFiles, &newISOFound);
+    const bool saveSuccess = GlobalState::g_operationCancelled
+                                 ? false
+                                 : saveToDatabase(result.allIsoFiles, &result.newISOFound);
     const auto end_time = std::chrono::high_resolution_clock::now();
-    const double total_elapsed = std::chrono::duration<double>(end_time - start_time).count();
+    const double total_elapsed = std::chrono::duration<double>(end_time - result.start_time).count();
 
     const int deltaCount =
-        (!allIsoFiles.empty() && saveSuccess && newISOFound)
-            ? countDifferentEntries(allIsoFiles, GlobalState::globalIsoFileList)
+        (!result.allIsoFiles.empty() && saveSuccess && result.newISOFound)
+            ? countDifferentEntries(result.allIsoFiles, GlobalState::globalIsoFileList)
             : 0;
 
-    const size_t totalProcessed = totalFiles.load();
-    const bool hasValidPaths = !validPaths.empty();
-    const bool hasIsoFiles = !allIsoFiles.empty();
+    const size_t totalProcessed = result.totalFiles.load();
+    const bool hasValidPaths = !result.validPaths.empty();
+    const bool hasIsoFiles = !result.allIsoFiles.empty();
 
     pressEnterToContinueWithRepaint([&] {
         renderDatabaseRefreshReport(totalProcessed,
                                     hasValidPaths,
                                     hasIsoFiles,
-                                    newISOFound,
+                                    result.newISOFound,
                                     saveSuccess,
                                     deltaCount,
                                     total_elapsed,
-                                    invalidPaths,
-                                    uniqueErrorMessages,
+                                    result.invalidPaths,
+                                    result.uniqueErrorMessages,
                                     vt,
                                     repaintCallerHeader);
     });
@@ -543,87 +507,43 @@ void verboseFind(std::unordered_set<std::string>& invalidDirectoryPaths, const s
  * @brief Renders a color-coded summary of image discovery results and cache
  * deltas.
  *
- * Captures end_time immediately on entry, then prints, in order:
- * -# the "Total files processed" line (only when at least one valid directory
- *    was scanned; with no valid directories verboseFind prints its own
- *    "Total files processed: 0" line),
- * -# the captured verboseFind output (invalid paths omitted from search,
- *    traversal errors, and the "search interrupted by user" message),
- * -# one of three result branches, each gated on
- *    !GlobalState::g_operationCancelled.load():
- *    - **Files found** (!fileNames.empty()): found vs @p currentCacheOld.
- *    - **No new files, cache non-empty** (!newFilesFound && !files.empty() &&
- *      !list): 0 found vs files.size() with an "ls ↵" hint.
- *    - **Cache empty** (files.empty() && !list): 0 found and 0 cached.
- * -# the elapsed time.
+ * See the header declaration for the full behavioral contract; this
+ * definition documents only implementation-level sequencing.
  *
- * Steps 1, 2 and 4 are unconditional, so a cancelled search still shows the
- * counter, the interruption message and the elapsed time.
+ * Sequencing:
+ *   1. Ignore SIGINT and disable Ctrl+D (never restored).
+ *   2. Capture whether any valid directory was scanned.
+ *   3. Run `verboseFind` exactly once with stdout/stderr redirected into an
+ *      `ostringstream`, since it clears its set arguments and we need to
+ *      replay its text on resize.
+ *   4. Trim one leading newline when the captured text begins with "\n\n\n".
+ *   5. Snapshot `totalProcessed`, the elapsed time, and the captured text.
+ *   6. Hand a render lambda to `pressEnterToContinueWithRepaint`. The lambda
+ *      calls `repaintCallerHeader` first when set, then writes the block.
  *
- * **Resize:** verboseFind mutates its set arguments (clears them), so it runs
- * exactly once, before the wait, with its std::cout/std::cerr writes
- * redirected into an ostringstream. The captured text, the file count and the
- * elapsed time are replayed by the render lambda on resize. The prompt is
- * drawn by pressEnterToContinueWithRepaint(render), which owns SIGWINCH:
- * on each resize it clears the screen with "\033[H\033[2J\033[3J" (the third
- * parameter also drops the scrollback the previous frame was pushed into on
- * VTE-based terminals), calls render, then reprints the prompt line. No
- * ListResizeWatcher is installed here — it would race the prompt's own
- * handler and cannot fire during pressEnterToImpl's raw read anyway. If
- * @p repaintCallerHeader is non-empty, render calls it before printing the
- * block, so the caller's screen header (the "FolderPaths ..." prompt line
- * the user just answered) survives a resize; otherwise the block starts
- * from a cleared screen with no caller context.
+ * @param req                 Search inputs and in/out sets (see struct docs).
+ * @param repaintCallerHeader Optional callback that reprints the caller's
+ *                            screen header on a resize during the wait.
+ *                            When empty, the block starts from a cleared
+ *                            screen with no caller context.
  *
- * @param fileExtension         Target format label (e.g. ".bin/.img").
- * @param fileNames             Files discovered this run; not modified.
- * @param invalidDirectoryPaths Passed to verboseFind (cleared there).
- * @param newFilesFound         Gates the "no new files" branch; distinct from
- *                              @p fileNames being non-empty.
- * @param list                  Suppresses the second and third branches when
- *                              true; does not suppress the first.
- * @param currentCacheOld       Cache count before this search; shown with
- *                              @p fileNames.size() in the first branch.
- * @param files                 Current working cache; used for branch
- *                              selection and display.
- * @param start_time            Search start; elapsed is computed against
- *                              end_time captured at entry.
- * @param processedErrorsFind   Passed to verboseFind (cleared there).
- * @param directoryPaths        Passed to verboseFind for the
- *                              "Total files processed: 0" gate check; also
- *                              decides whether the real count is printed here.
- * @param totalFiles            Aggregate number of regular files processed by
- *                              the scan, filled in by findFiles.
- * @param repaintCallerHeader   Optional callback that reprints the caller's
- *                              screen header (e.g. the FolderPaths prompt
- *                              line) on a resize during the wait. When empty,
- *                              the block starts from a cleared screen with no
- *                              caller context.
+ * @warning `req.invalidDirectoryPaths` and `req.processedErrorsFind` are
+ *          cleared unconditionally before this function returns.
  */
-void verboseImageSearchResults(const std::string& fileExtension,
-                          std::unordered_set<std::string>& fileNames,
-                          std::unordered_set<std::string>& invalidDirectoryPaths,
-                          bool newFilesFound,
-                          bool list,
-                          int currentCacheOld,
-                          const std::vector<std::string>& files,
-                          const std::chrono::high_resolution_clock::time_point& start_time,
-                          std::unordered_set<std::string>& processedErrorsFind,
-                          const std::vector<std::string>& directoryPaths,
-                          const std::atomic<size_t>& totalFiles,
-                          const std::function<void()>& repaintCallerHeader) {
+void verboseImageSearchResults(ImageSearchRequest& req,
+                               const std::function<void()>& repaintCallerHeader) {
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();
 
     const VerboseAndDatabaseTheme vt = getVerboseTheme();
 
-    const bool hadDirectories = !directoryPaths.empty();
+    const bool hadDirectories = !req.directoryPaths.empty();
 
     std::ostringstream verboseFindBuf;
     {
         std::streambuf* oldOut = std::cout.rdbuf(verboseFindBuf.rdbuf());
         std::streambuf* oldErr = std::cerr.rdbuf(verboseFindBuf.rdbuf());
-        verboseFind(invalidDirectoryPaths, directoryPaths, processedErrorsFind);
+        verboseFind(req.invalidDirectoryPaths, req.directoryPaths, req.processedErrorsFind);
         std::cout.rdbuf(oldOut);
         std::cerr.rdbuf(oldErr);
     }
@@ -635,11 +555,11 @@ void verboseImageSearchResults(const std::string& fileExtension,
 
     const bool hasFindContent = verboseFindOutput.size() > 1;
 
-    const size_t totalProcessed = totalFiles.load();
+    const size_t totalProcessed = req.totalFiles.load();
 
     const auto end_time = std::chrono::high_resolution_clock::now();
     const double total_elapsed_time =
-        std::chrono::duration<double>(end_time - start_time).count();
+        std::chrono::duration<double>(end_time - req.start_time).count();
 
     auto render = [&] {
         SyncOutput sync;
@@ -658,33 +578,33 @@ void verboseImageSearchResults(const std::string& fileExtension,
 
         std::cout << verboseFindOutput;
 
-        if (!fileNames.empty() && !GlobalState::g_operationCancelled.load()) {
+        if (!req.fileNames.empty() && !GlobalState::g_operationCancelled.load()) {
             std::cout << (hasFindContent ? "\n\n" : "\n")
-                      << vt.green << fileNames.size() << " "
-                      << vt.orange << "{" << fileExtension << "} "
+                      << vt.green << req.fileNames.size() << " "
+                      << vt.orange << "{" << req.fileExtension << "} "
                       << vt.green << "files found" << vt.yellow << "\n"
-                      << currentCacheOld << " "
-                      << vt.orange << "{" << fileExtension << "} "
+                      << req.currentCacheOld << " "
+                      << vt.orange << "{" << req.fileExtension << "} "
                       << vt.yellow << "cached entries" << vt.reset << vt.bold << "\n\n";
         }
 
-        if (!newFilesFound && !files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
+        if (!req.newFilesFound && !req.files.empty() && !req.list && !GlobalState::g_operationCancelled.load()) {
             std::cout << (hasFindContent ? "\n\n" : "\n")
                       << vt.red << "0 "
-                      << vt.orange << "{" << fileExtension << "} "
+                      << vt.orange << "{" << req.fileExtension << "} "
                       << vt.red << "files found " << vt.yellow << "\n"
-                      << files.size() << " "
-                      << vt.orange << "{" << fileExtension << "} "
+                      << req.files.size() << " "
+                      << vt.orange << "{" << req.fileExtension << "} "
                       << vt.yellow << "cached entries | "
                       << vt.blue << "ls "
                       << vt.yellow << "↵ to list" << vt.reset << vt.bold << "\n\n";
         }
 
-        if (files.empty() && !list && !GlobalState::g_operationCancelled.load()) {
+        if (req.files.empty() && !req.list && !GlobalState::g_operationCancelled.load()) {
             std::cout << (hasFindContent ? "\n\n" : "\n")
-                      << vt.red << "0" << vt.orange << " {" << fileExtension << "} "
+                      << vt.red << "0" << vt.orange << " {" << req.fileExtension << "} "
                       << vt.red << "files found\n"
-                      << vt.yellow << "0" << vt.orange << " {" << fileExtension << "} "
+                      << vt.yellow << "0" << vt.orange << " {" << req.fileExtension << "} "
                       << vt.yellow << "cached entries\n"
                       << vt.reset << vt.bold << "\n";
         }

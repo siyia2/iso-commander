@@ -61,7 +61,8 @@ namespace fs = std::filesystem;
  * @brief Handles special user commands such as help (?) and database statistics or clear commands.
  *
  * @param input The trimmed user input string.
- * @param repaintCallerPrompt Callback function used to reprint the prompt and typed line.
+ * @param repaintCallerPrompt Passed through to @c databaseSwitches; invoked on resize
+ * repaints of the statistics/clear confirmation screens.
  * @return true if a command was recognized and handled (signaling the loop to continue),
  *         false if the input is regular path data.
  */
@@ -207,7 +208,9 @@ static std::string constructDatabasePrompt(const VerboseAndDatabaseTheme& dt) {
  * @param maxDepth Maximum directory recursion depth (-1 for unlimited).
  * @param filterHistory Whether to load and save readline history.
  * @param newISOFound Reference to flag indicating if new ISOs were found.
- * @param repaintCallerPrompt Callback function to repaint the caller prompt.
+ * @param repaintCallerPrompt Callback that reprints the caller's prompt header and typed line. Forwarded to
+ *  @c saveAndReportResultsForDatabase as @c repaintCallerHeader, so the question the user answered survives a
+ *  SIGWINCH during the confirmation wait. Not invoked on the first draw.
  */
 static void processPathTraversalAndReporting(const std::string& input,
                                              bool promptFlag,
@@ -234,9 +237,16 @@ static void processPathTraversalAndReporting(const std::string& input,
         resetReadlinePagination();
         if (!invalidPaths.empty()) {
             GlobalState::g_operationCancelled.store(false);
-            saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths,
-                                            uniqueErrorMessages, newISOFound, start_time,
-                                            repaintCallerPrompt);
+            DatabaseRefreshResult refreshResult{
+                .allIsoFiles          = allIsoFiles,
+                .validPaths           = validPaths,
+                .invalidPaths         = invalidPaths,
+                .uniqueErrorMessages  = uniqueErrorMessages,
+                .totalFiles           = totalFiles,
+                .newISOFound          = newISOFound,
+                .start_time           = start_time,
+            };
+            saveAndReportResultsForDatabase(refreshResult, repaintCallerPrompt);
         }
         return;
     }
@@ -257,8 +267,16 @@ static void processPathTraversalAndReporting(const std::string& input,
         saveHistory(filterHistory);
     }
 
-    saveAndReportResultsForDatabase(allIsoFiles, totalFiles, validPaths, invalidPaths,
-                                    uniqueErrorMessages, newISOFound, start_time, repaintCallerPrompt);
+    DatabaseRefreshResult refreshResult{
+        .allIsoFiles         = allIsoFiles,
+        .validPaths          = validPaths,
+        .invalidPaths        = invalidPaths,
+        .uniqueErrorMessages = uniqueErrorMessages,
+        .totalFiles          = totalFiles,
+        .newISOFound         = newISOFound,
+        .start_time          = start_time,
+    };
+    saveAndReportResultsForDatabase(refreshResult, repaintCallerPrompt);
 }
 
 /**
@@ -1254,10 +1272,20 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
                       << dt.reset << std::endl;
         }
 
-        verboseImageSearchResults(fileExtension, fileNames, invalidDirectoryPaths,
-                             newFilesFound, list, currentCacheOld, files,
-                             start_time, processedErrorsFind, directoryPaths, totalFiles,
-                             repaintCallerPrompt);
+        ImageSearchRequest req{
+            .fileExtension         = fileExtension,
+            .fileNames             = fileNames,
+            .invalidDirectoryPaths = invalidDirectoryPaths,
+            .processedErrorsFind   = processedErrorsFind,
+            .directoryPaths        = directoryPaths,
+            .files                 = files,
+            .newFilesFound         = newFilesFound,
+            .list                  = list,
+            .currentCacheOld       = currentCacheOld,
+            .totalFiles            = totalFiles,
+            .start_time            = start_time,
+        };
+        verboseImageSearchResults(req, repaintCallerPrompt);
 
         if (!newFilesFound) continue;
 
