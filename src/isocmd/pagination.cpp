@@ -36,117 +36,117 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
 
 namespace {
 
-/**
- * @brief Handles 'PgDn' (next page) and 'PgUp' (previous page) navigation commands.
- *
- * @param command The input command string from the user.
- * @param totalPages The total number of available pages.
- * @param currentPage Reference to the current page index, updated if navigation occurs.
- * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
- * @return true if the command was a pagination command and successfully handled; false otherwise.
- */
-bool handlePaginationCommand(const std::string& command, size_t totalPages, size_t& currentPage, bool& needsClrScrn) {
-    if (command == "PgDn") {
-        if (totalPages > 0 && currentPage < totalPages - 1)
-            currentPage++;
-        needsClrScrn = true;
-        return true;
-    }
-    if (command == "PgUp") {
-        if (currentPage > 0)
-            currentPage--;
-        needsClrScrn = true;
-        return true;
-    }
-    return false;
-}
-
-/**
- * @brief Handles 'g<num>' direct page-jump commands.
- *
- * @param command The input command string from the user.
- * @param totalPages The total number of available pages.
- * @param currentPage Reference to the current page index, updated if jump is valid.
- * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
- * @return true if the command matched the go-to pattern and was handled; false otherwise.
- */
-bool handleGoToCommand(const std::string& command, size_t totalPages, size_t& currentPage, bool& needsClrScrn) {
-    if (command.size() >= 2 && command[0] == 'g' && std::isdigit(command[1])) {
-        try {
-            int pageNum = std::stoi(command.substr(1)) - 1;
-            if (totalPages > 0 && pageNum >= 0 && pageNum < static_cast<int>(totalPages)) {
-                currentPage = pageNum;
-                needsClrScrn = true;
-            }
-        } catch (...) {}
-        return true;
-    }
-    return false;
-}
-
-/**
- * @brief Handles the '?' help command, updating ISO list state and triggering help selections.
- *
- * @param isUnmount Flag indicating whether the current operation is 'umount'.
- * @param isMount Flag indicating whether the current operation is 'mount'.
- * @param isAtISOList Pointer to an atomic boolean tracking ISO list position state.
- * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
- */
-void handleHelpCommand(bool isUnmount, bool isMount, std::atomic<bool>* isAtISOList, bool& needsClrScrn) {
-    bool isAtISOListForHelp = isAtISOList ? isAtISOList->load() : false;
-    if (isAtISOList) isAtISOList->store(false);
-    helpSelections(isAtISOListForHelp, isUnmount, isMount);
-    GlobalState::g_filteringIndicator.store(false);
-    needsClrScrn = true;
-}
-
-/**
- * @brief Handles the '*' filename-only toggle command and refreshes sorting/filtering indices.
- *
- * @param isUnmount Flag indicating whether the current operation is 'umount' (disables toggle).
- * @param isFiltered Flag indicating if the current file list is filtered.
- * @param isConversion Flag indicating if the current operation is an ISO conversion.
- * @param need2Sort Reference to a flag indicating whether sorting needs to be re-run.
- * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
- * @param filteredFiles Reference to the vector storing filtered files.
- */
-void handleToggleNamesCommand(bool isUnmount, bool isFiltered, bool isConversion, bool& need2Sort, bool& needsClrScrn, std::vector<std::string>& filteredFiles) {
-    if (!isUnmount) {
-        displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
-        sortAfterFilenamesOnlyFlag();
-
-        if (isFiltered && !filteringStack.empty()) {
-            refreshFilteredSourceIndices(
-                GlobalState::globalIsoFileList,
-                filteringStack,
-                filteredFiles
-            );
+    /**
+     * @brief Handles 'PgDn' (next page) and 'PgUp' (previous page) navigation commands.
+     *
+     * @param command The input command string from the user.
+     * @param totalPages The total number of available pages.
+     * @param currentPage Reference to the current page index, updated if navigation occurs.
+     * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
+     * @return true if the command was a pagination command and successfully handled; false otherwise.
+     */
+    bool handlePaginationCommand(const std::string& command, size_t totalPages, size_t& currentPage, bool& needsClrScrn) {
+        if (command == "PgDn") {
+            if (totalPages > 0 && currentPage < totalPages - 1)
+                currentPage++;
+            needsClrScrn = true;
+            return true;
         }
+        if (command == "PgUp") {
+            if (currentPage > 0)
+                currentPage--;
+            needsClrScrn = true;
+            return true;
+        }
+        return false;
     }
 
-    if (isConversion) {
-        need2Sort = true;
+    /**
+     * @brief Handles 'g<num>' direct page-jump commands.
+     *
+     * @param command The input command string from the user.
+     * @param totalPages The total number of available pages.
+     * @param currentPage Reference to the current page index, updated if jump is valid.
+     * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
+     * @return true if the command matched the go-to pattern and was handled; false otherwise.
+     */
+    bool handleGoToCommand(const std::string& command, size_t totalPages, size_t& currentPage, bool& needsClrScrn) {
+        if (command.size() >= 2 && command[0] == 'g' && std::isdigit(command[1])) {
+            try {
+                int pageNum = std::stoi(command.substr(1)) - 1;
+                if (totalPages > 0 && pageNum >= 0 && pageNum < static_cast<int>(totalPages)) {
+                    currentPage = pageNum;
+                    needsClrScrn = true;
+                }
+            } catch (...) {}
+            return true;
+        }
+        return false;
     }
-    needsClrScrn = true;
-}
 
-/**
- * @brief Handles the '~' full-path display toggle command based on the active operation context.
- *
- * @param isMount Flag indicating whether the current operation is 'mount'.
- * @param isUnmount Flag indicating whether the current operation is 'umount'.
- * @param isWrite Flag indicating whether the current operation is 'write2usb'.
- * @param isConversion Flag indicating whether the current operation is an ISO conversion.
- * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
- */
-void handleToggleFullListCommand(bool isMount, bool isUnmount, bool isWrite, bool isConversion, bool& needsClrScrn) {
-    if      (isMount      && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListMount       = !displayConfig::toggleFullListMount;
-    else if (isUnmount)                                       displayConfig::toggleFullListUmount      = !displayConfig::toggleFullListUmount;
-    else if (isWrite      && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListWrite2usb   = !displayConfig::toggleFullListWrite2usb;
-    else if (isConversion && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListConvert2iso = !displayConfig::toggleFullListConvert2iso;
-    else if               (!displayConfig::toggleNamesOnly)   displayConfig::toggleFullListCpMvRm      = !displayConfig::toggleFullListCpMvRm;
-    needsClrScrn = true;
-}
+    /**
+     * @brief Handles the '?' help command, updating ISO list state and triggering help selections.
+     *
+     * @param isUnmount Flag indicating whether the current operation is 'umount'.
+     * @param isMount Flag indicating whether the current operation is 'mount'.
+     * @param isAtISOList Pointer to an atomic boolean tracking ISO list position state.
+     * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
+     */
+    void handleHelpCommand(bool isUnmount, bool isMount, std::atomic<bool>* isAtISOList, bool& needsClrScrn) {
+        bool isAtISOListForHelp = isAtISOList ? isAtISOList->load() : false;
+        if (isAtISOList) isAtISOList->store(false);
+        helpSelections(isAtISOListForHelp, isUnmount, isMount);
+        GlobalState::g_filteringIndicator.store(false);
+        needsClrScrn = true;
+    }
+
+    /**
+     * @brief Handles the '*' filename-only toggle command and refreshes sorting/filtering indices.
+     *
+     * @param isUnmount Flag indicating whether the current operation is 'umount' (disables toggle).
+     * @param isFiltered Flag indicating if the current file list is filtered.
+     * @param isConversion Flag indicating if the current operation is an ISO conversion.
+     * @param need2Sort Reference to a flag indicating whether sorting needs to be re-run.
+     * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
+     * @param filteredFiles Reference to the vector storing filtered files.
+     */
+    void handleToggleNamesCommand(bool isUnmount, bool isFiltered, bool isConversion, bool& need2Sort, bool& needsClrScrn, std::vector<std::string>& filteredFiles) {
+        if (!isUnmount) {
+            displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
+            sortAfterFilenamesOnlyFlag();
+
+            if (isFiltered && !filteringStack.empty()) {
+                refreshFilteredSourceIndices(
+                    GlobalState::globalIsoFileList,
+                    filteringStack,
+                    filteredFiles
+                );
+            }
+        }
+
+        if (isConversion) {
+            need2Sort = true;
+        }
+        needsClrScrn = true;
+    }
+
+    /**
+     * @brief Handles the '~' full-path display toggle command based on the active operation context.
+     *
+     * @param isMount Flag indicating whether the current operation is 'mount'.
+     * @param isUnmount Flag indicating whether the current operation is 'umount'.
+     * @param isWrite Flag indicating whether the current operation is 'write2usb'.
+     * @param isConversion Flag indicating whether the current operation is an ISO conversion.
+     * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
+     */
+    void handleToggleFullListCommand(bool isMount, bool isUnmount, bool isWrite, bool isConversion, bool& needsClrScrn) {
+        if      (isMount      && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListMount       = !displayConfig::toggleFullListMount;
+        else if (isUnmount)                                       displayConfig::toggleFullListUmount      = !displayConfig::toggleFullListUmount;
+        else if (isWrite      && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListWrite2usb   = !displayConfig::toggleFullListWrite2usb;
+        else if (isConversion && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListConvert2iso = !displayConfig::toggleFullListConvert2iso;
+        else if               (!displayConfig::toggleNamesOnly)   displayConfig::toggleFullListCpMvRm      = !displayConfig::toggleFullListCpMvRm;
+        needsClrScrn = true;
+    }
 
 } // namespace
 

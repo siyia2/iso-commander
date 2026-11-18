@@ -224,6 +224,7 @@ namespace {
         std::cout << '\n';
         std::cout.flush();
     }
+
 } // namespace
 
 /**
