@@ -1345,7 +1345,7 @@ bool convertDaaToIso(const std::string &inputFile,
         return true;
 
     } catch (const DaaError &e) {
-        fprintf(stderr, "\nError: %s\n", e.msg);
+        //fprintf(stderr, "\nError: %s\n", e.msg);
         return daa_fail(ctx);
     }
 }
