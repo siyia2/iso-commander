@@ -591,13 +591,14 @@ struct WarnRow {
  * @return std::string Formatted ANSI-colored prompt string.
  */
 static std::string buildIdxPrompt(const WriteTheme& wt) {
-    std::ostringstream s;
-    s << "\n" << UI::Palette::RL_idxGreen << "IDX>DEVICE"
-      << wt.rl_primaryCol << " ↵ for "
-      << UI::Palette::RL_Yellow << "write2usb"
-      << wt.rl_primaryCol << ", ? for help: "
-      << wt.rl_resetCol;
-    return s.str();
+    return std::format(
+        "\n{}IDX>DEVICE{} ↵ for {}write2usb{}, ? for help: {}",
+        UI::Palette::RL_idxGreen,
+        wt.rl_primaryCol,
+        UI::Palette::RL_Yellow,
+        wt.rl_primaryCol,
+        wt.rl_resetCol
+    );
 }
 
 /**
@@ -855,7 +856,7 @@ static bool confirmDeviceMappings(const std::string& devicePrompt,
 
     const std::string promptText = "Proceed? (y/n): ";
     const std::string confirmPrompt =
-        "\001" + std::string(color) + "\002" + promptText + wt.rl_resetCol;
+        std::format("\001{}\002{}{}", color, promptText, wt.rl_resetCol);
 
     std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
     {

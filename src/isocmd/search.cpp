@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <functional>
 #include <future>
 #include <iostream>
@@ -188,16 +189,14 @@ static void executeParallelTraversal(
  * @return Formatted prompt string with ANSI color codes.
  */
 static std::string constructDatabasePrompt(const VerboseAndDatabaseTheme& dt) {
-    std::string prompt;
-    prompt.reserve(512);
-    prompt.append("\001").append(dt.green).append("\002FolderPaths")
-          .append("\001").append(dt.blue).append("\002 ↵ to scan for ")
-          .append(dt.green + "\002.iso")
-          .append("\001").append(dt.blue).append("\002 entries and import into ")
-          .append("\001").append(dt.green).append("\002local")
-          .append("\001").append(dt.blue).append("\002 DB, ? for help:\n")
-          .append("\001").append(dt.reset).append("\002");
-    return prompt;
+    return std::format(
+        "\001{0}\002FolderPaths\001{1}\002 ↵ to scan for {0}\002.iso"
+        "\001{1}\002 entries and import into \001{0}\002local"
+        "\001{1}\002 DB, ? for help:\n\001{2}\002",
+        dt.green, // {0}
+        dt.blue,  // {1}
+        dt.reset  // {2}
+    );
 }
 
 /**
@@ -1058,16 +1057,17 @@ static const std::unordered_map<std::string, FileTypeConfig>& getFileTypeMap() {
  * @return std::string  The formatted and ANSI-coded readline prompt string.
  */
 static std::string buildSearchPrompt(const VerboseAndDatabaseTheme& dt, const std::string& fileExtension) {
-    std::string prompt;
-    prompt.reserve(512);
-    prompt.append("\001").append(dt.green).append("\002FolderPaths")
-          .append("\001").append(dt.blue).append("\002 ↵ to scan for \001")
-          .append("\001").append(dt.orange).append("\002").append(fileExtension)
-          .append("\001").append(dt.blue).append("\002 entries and cache in \001")
-          .append("\001").append(dt.yellow).append("\002RAM\001")
-          .append("\001").append(dt.blue).append("\002, ? for help:\n\001")
-          .append(dt.reset).append("\002");
-    return prompt;
+    return std::format(
+        "\001{0}\002FolderPaths\001{1}\002 ↵ to scan for \001{2}\002{3}"
+        "\001{1}\002 entries and cache in \001{4}\002RAM\001{1}"
+        "\002, ? for help:\n\001{5}\002",
+        dt.green,      // {0}
+        dt.blue,       // {1}
+        dt.orange,     // {2}
+        fileExtension, // {3}
+        dt.yellow,     // {4}
+        dt.reset       // {5}
+    );
 }
 
 /**

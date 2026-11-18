@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdlib>
+#include <format>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -558,16 +559,14 @@ struct SelectSession {
         }
     }
 
-    // Single-line prompt: the blank separator row above it is printed by the
-    // display step, not by a leading "\n" in the prompt.
     std::string buildPrompt(const ReadlineAndPromptTheme& pt) const {
-        const std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
-        return prefix +
-               std::string(UI::Palette::RL_idxGreen) + "IDX" +
-               pt.primary + " ↵ for " + "\001" +
-               operationColor + "\002" + operation +
-               pt.primary + ", ? for help: " +
-               pt.reset;
+        return std::format("{0}IDX{1} ↵ for \001{2}\002{3}{1}, ? for help: {4}",
+            UI::Palette::RL_idxGreen,
+            pt.primary,
+            operationColor,
+            operation,
+            pt.reset
+        );
     }
 
     // Ctrl-D / EOF on the prompt: clear any filter state; the caller then
@@ -1048,15 +1047,14 @@ struct ImageSession {
         rl_bind_keyseq("R", rl_insert);
     }
 
-    // Single-line prompt; the blank separator row is printed by the display step.
     std::string buildPrompt(const ReadlineAndPromptTheme& pt) const {
-        const std::string prefix = isFiltered ? (pt.filter + "F⊳ ") : "";
-        return prefix +
-               std::string(UI::Palette::RL_idxGreen) + "IDX" +
-               pt.primary   + " ↵ for " +
-               pt.highlight + operation +
-               pt.primary   + ", ? for help: " +
-               pt.reset;
+        return std::format("{0}IDX{1} ↵ for {2}{3}{1}, ? for help: {4}",
+            UI::Palette::RL_idxGreen,
+            pt.primary,
+            pt.highlight,
+            operation,
+            pt.reset
+        );
     }
 
     // Ctrl-D / EOF on the prompt: clear any filter state; the caller then

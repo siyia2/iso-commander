@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <format>
 #include <functional>
 #include <future>
 #include <iostream>
@@ -1635,9 +1636,7 @@ static bool runSharedFilterFlow(const std::string& inputString, const FilterCall
 
     const ReadlineAndPromptTheme ft = getFilterTheme("", false);
     // Single-line prompt; runFilterLoop positions the cursor on the prompt row.
-    const std::string prompt =
-        ft.filter  + "Filter: " +
-        ft.reset;
+    const std::string prompt = std::format("{}Filter: {}", ft.filter, ft.reset);
 
     FilterContext ctx {
         *cfg.files,

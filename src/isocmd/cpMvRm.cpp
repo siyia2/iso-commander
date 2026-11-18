@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstddef>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <functional>
 #include <mutex>
@@ -164,14 +165,16 @@ static bool handleDeleteOperation(const std::vector<std::string>& isoFiles,
     std::string reset = "\001" + std::string(UI::Palette::BoldReset) + "\002";
     std::vector<std::string> entries = generateIsoEntries(indexChunks, isoFiles);
     sortFilesCaseInsensitive(entries);
+
     std::string promptPrefix = "\n";
-    std::string promptSuffix =
-        blue + "The selected " +
-        green + "ISO" +
-        blue + " will be " +
-        red + "*PERMANENTLY DELETED*" +
-        blue + ". Proceed? (y/n): " +
-        reset;
+    std::string promptSuffix = std::format(
+        "{0}The selected {1}ISO{0} will be {2}*PERMANENTLY DELETED*{0}. Proceed? (y/n): {3}",
+        blue,           // {0}
+        green,          // {1}
+        red,            // {2}
+        reset           // {3}
+    );
+
     bool isPageTurn = false;
     auto setupEnv = [&]() {
         RestoreReadlineBuffer();
@@ -296,14 +299,14 @@ bool& overwriteExisting) {
             std::string reset = "\001" + std::string(UI::Palette::BoldReset) + "\002";
 
             std::string promptPrefix = "\n";
-            std::string promptSuffix =
-                green + "FolderPaths" +
-                blue + " ↵ for selected " +
-                green + "ISO" +
-                blue + " to be " +
-                operationColor + operationDescription +
-                blue + " into, ? for help:\n" +
-                reset;
+            std::string promptSuffix = std::format(
+                "{0}FolderPaths{1} ↵ for selected {0}ISO{1} to be {2}{3}{1} into, ? for help:\n{4}",
+                green,                 // {0}
+                blue,                  // {1}
+                operationColor,        // {2}
+                operationDescription,  // {3}
+                reset                  // {4}
+            );
 
             // Guard scoped around handlePaginatedDisplay: the two rl_bind_key
             // resets in its destructor always fire, even if the call exits via
