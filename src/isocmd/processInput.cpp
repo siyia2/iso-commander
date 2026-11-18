@@ -23,6 +23,7 @@
 
 // Project Headers
 #include "../concurrency.h"
+#include "../convert.h"
 #include "../inputHandling.h"
 #include "../rendering.h"
 #include "../mount.h"
@@ -559,18 +560,32 @@ void processInputForConversions(const std::string& input,
     std::vector<std::future<void>> futures;
     futures.reserve(numThreads);
 
+    const ConversionMode mode{
+        .mdf = modeMdf,
+        .nrg = modeNrg,
+        .chd = modeChd,
+        .daa = modeDaa
+    };
+
+    const ConversionBatchData batchData{
+        .completedBytes = &completedBytes,
+        .completedTasks = &completedTasks,
+        .failedTasks = &failedTasks,
+        .successfulOutputPaths = &successfulOutputPaths,
+        .outPathsMutex = &outPathsMutex
+    };
+
     for (size_t t = 0; t < numThreads; ++t) {
         futures.emplace_back(pool.enqueue(
-            [&fileList, &indices, &nextIndex, modeMdf, modeNrg, modeChd, modeDaa,
-             &completedBytes, &completedTasks, &failedTasks,
-             &successfulOutputPaths, &outPathsMutex]() {
+            [&fileList, &indices, &nextIndex, mode, batchData]() {
                 while (true) {
                     const size_t i = nextIndex.fetch_add(1);
                     if (i >= indices.size()) break;
-                    convertToISO({fileList[indices[i] - 1]},
-                                 modeMdf, modeNrg, modeChd, modeDaa,
-                                 &completedBytes, &completedTasks, &failedTasks,
-                                 &successfulOutputPaths, &outPathsMutex);
+
+                    convertToISO(
+                        {fileList[indices[i] - 1]},
+                        mode,
+                        batchData);
                 }
             }));
     }

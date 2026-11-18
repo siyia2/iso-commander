@@ -20,6 +20,7 @@
 
 // Project Headers
 #include "../concurrency.h"
+#include "../convert.h"
 #include "../inputHandling.h"
 #include "../mount.h"
 #include "../rendering.h"
@@ -34,16 +35,10 @@ namespace fs = std::filesystem;
 
 // --- Function Declarations ---
 
-void convertToISO(const std::vector<std::string>& imageFiles,
-                  const bool& modeMdf,
-                  const bool& modeNrg,
-                  const bool& modeChd,
-                  const bool& modeDaa,
-                  std::atomic<size_t>* completedBytes,
-                  std::atomic<size_t>* completedTasks,
-                  std::atomic<size_t>* failedTasks,
-                  std::vector<std::string>* successfulOutputPaths,
-                  std::mutex* outPathsMutex);
+void convertToISO(
+    const std::vector<std::string>& imageFiles,
+    const ConversionMode& mode,
+    const ConversionBatchData& batchData);
 
 size_t calculateTotalBytesForConversions(const std::vector<std::string>& filesToProcess,
                                          const bool modeMdf, const bool modeNrg,
@@ -1280,19 +1275,22 @@ static void runConvertWorkers(const std::vector<ConversionTask>& tasks,
 
                     const auto& task = tasks[i];
 
-                    const bool isMdf = task.kind == ImgKind::Mdf;
-                    const bool isNrg = task.kind == ImgKind::Nrg;
-                    const bool isChd = task.kind == ImgKind::Chd;
-                    const bool isDaa = task.kind == ImgKind::Daa;
+                    const ConversionMode mode{
+                        .mdf = task.kind == ImgKind::Mdf,
+                        .nrg = task.kind == ImgKind::Nrg,
+                        .chd = task.kind == ImgKind::Chd,
+                        .daa = task.kind == ImgKind::Daa
+                    };
 
-                    convertToISO(
-                        {task.path},
-                        isMdf, isNrg, isChd, isDaa,
-                        &completedBytes,
-                        &completedTasks,
-                        &failedTasks,
-                        &successfulOutputs,
-                        &outMutex);
+                    const ConversionBatchData batchData{
+                        .completedBytes = &completedBytes,
+                        .completedTasks = &completedTasks,
+                        .failedTasks = &failedTasks,
+                        .successfulOutputPaths = &successfulOutputs,
+                        .outPathsMutex = &outMutex
+                    };
+
+                    convertToISO({task.path}, mode, batchData);
                 }
             }));
     }

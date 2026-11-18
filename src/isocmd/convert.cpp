@@ -457,29 +457,23 @@ namespace {
  *       counters/mutex semantics are respected; the global verbose sets are
  *       internally locked.
  */
-void convertToISO(const std::vector<std::string>& imageFiles,
-                  const bool& modeMdf,
-                  const bool& modeNrg,
-                  const bool& modeChd,
-                  const bool& modeDaa,
-                  std::atomic<size_t>* completedBytes,
-                  std::atomic<size_t>* completedTasks,
-                  std::atomic<size_t>* failedTasks,
-                  std::vector<std::string>* successfulOutputPaths,
-                  std::mutex* outPathsMutex) {
+void convertToISO(
+    const std::vector<std::string>& imageFiles,
+    const ConversionMode& mode,
+    const ConversionBatchData& batchData) {
 
     ConversionBatchContext ctx;
     ctx.themes = getConversionThemeStrings();
-    ctx.mode   = ConversionMode{ modeMdf, modeNrg, modeChd, modeDaa };
+    ctx.mode = mode;
 
     std::string real_username, real_groupname;
     getRealUserId(ctx.real_uid, ctx.real_gid, real_username, real_groupname);
 
-    ctx.completedBytes        = completedBytes;
-    ctx.completedTasks        = completedTasks;
-    ctx.failedTasks           = failedTasks;
-    ctx.successfulOutputPaths = successfulOutputPaths;
-    ctx.outPathsMutex         = outPathsMutex;
+    ctx.completedBytes        = batchData.completedBytes;
+    ctx.completedTasks        = batchData.completedTasks;
+    ctx.failedTasks           = batchData.failedTasks;
+    ctx.successfulOutputPaths = batchData.successfulOutputPaths;
+    ctx.outPathsMutex         = batchData.outPathsMutex;
     ctx.batchSize             = 50;
 
     for (const std::string& inputPath : imageFiles) {
