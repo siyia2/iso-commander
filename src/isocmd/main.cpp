@@ -9,6 +9,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -56,9 +57,10 @@ namespace {
  *
  * @param argc Number of command-line arguments.
  * @param argv Array of null-terminated argument strings.
- * @return int Exit code if a CLI mode was handled, or -1 to signal falling back to interactive mode.
+ * @return std::optional<int> Exit code if a CLI mode was handled, or
+ *  std::nullopt to fall back to interactive mode.
  */
-int tryExecuteCliMode(int argc, char *argv[]) {
+std::optional<int> tryExecuteCliMode(int argc, char *argv[]) {
     const std::string arg1 = (argc >= 2) ? argv[1] : "";
 
     if (argc == 2 && (arg1 == "--version" || arg1 == "-v")) {
@@ -70,7 +72,7 @@ int tryExecuteCliMode(int argc, char *argv[]) {
                                     arg1 == "w2usb"))) {
         return handleMountUmountConvertWriteCommands(argc, argv);
     }
-    return -1; // -1 indicates interactive mode should proceed
+    return std::nullopt; // interactive mode
 }
 
 /**
@@ -338,9 +340,8 @@ int main(int argc, char *argv[]) {
     std::map<std::string, std::string> config = readUserConfigLists(GlobalState::configPath);
 
     // --- Version & Utility Command Dispatch ---
-    int cliExitCode = tryExecuteCliMode(argc, argv);
-    if (cliExitCode != -1) {
-        return cliExitCode;
+    if (auto cliExitCode = tryExecuteCliMode(argc, argv)) {
+        return *cliExitCode;
     }
 
     /// @name Application State Flags
