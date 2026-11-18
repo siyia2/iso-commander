@@ -58,29 +58,53 @@ namespace {
 /// Which list a frame is being rendered for. Each kind owns its own retained buffer.
 enum class ListKind : std::size_t { Iso, Image, Mounted, Count };
 
-/// One retained thread_local buffer per list type, so rendering one list type
-/// never grows, shrinks, or reallocates the buffer used by another.
+/**
+ * @brief Retrieves a thread-local retained string buffer specific to the given list kind.
+ *
+ * Each list kind owns its independent buffer, ensuring rendering one list type
+ * never grows, shrinks, or reallocates the buffer used by another.
+ *
+ * @param kind The category of the list (@c ListKind).
+ * @return std::string& Reference to the retained thread-local buffer.
+ */
 std::string& bufferFor(ListKind kind) {
     static thread_local std::array<std::string, static_cast<std::size_t>(ListKind::Count)> buffers;
     return buffers[static_cast<std::size_t>(kind)];
 }
 
-/// Number of decimal digits in value (value 0 -> 1 digit).
+/**
+ * @brief Computes the number of decimal digits required to represent a value.
+ *
+ * @param value Unsigned numeric value.
+ * @return std::size_t The digit count (value 0 evaluates to 1 digit).
+ */
 std::size_t digitCount(std::size_t value) noexcept {
     std::size_t d = 1;
     while (value >= 10) { value /= 10; ++d; }
     return d;
 }
 
-/// Formats value into a stack buffer and appends it to out (no heap allocation,
-/// no shared state).
+/**
+ * @brief Formats an integer value into a stack buffer and appends it to the output string.
+ *
+ * Performs fast conversion without heap allocation or shared state tracking.
+ *
+ * @param out   Reference to the destination string buffer.
+ * @param value The numeric value to append.
+ */
 void appendNum(std::string& out, std::size_t value) {
     char buf[20]; // enough for a 64-bit unsigned integer
     const auto res = std::to_chars(buf, buf + sizeof(buf), value);
     out.append(buf, static_cast<std::size_t>(res.ptr - buf));
 }
 
-/// Like appendNum, but right-aligns the number to the given width using spaces.
+/**
+ * @brief Formats an integer value with right-alignment padding into the output string.
+ *
+ * @param out   Reference to the destination string buffer.
+ * @param value The numeric value to append.
+ * @param width The target formatting column width.
+ */
 void appendNumPadded(std::string& out, std::size_t value, std::size_t width) {
     char buf[20];
     const auto res = std::to_chars(buf, buf + sizeof(buf), value);
@@ -90,17 +114,17 @@ void appendNumPadded(std::string& out, std::size_t value, std::size_t width) {
 }
 
 /**
- * @brief Prepares the background sync indicator text if an import is running.
+ * @brief Prepares the background synchronization indicator text if a database import is active.
  *
- * Performs an atomic pre-check to avoid unnecessary filesystem syscalls when no import is active.
+ * Performs an atomic pre-check to bypass unnecessary filesystem syscalls when imports are inactive.
  * Validates history file availability and formats the dim synchronization status string, including
- * filtering lock warnings if active.
+ * filtering lock notices if applicable.
  *
- * @param isIsoMode True if the active view is ISO_FILES.
- * @param noFilterResults True if the filter returned empty results.
- * @param state Shared refresh state containing import running flags and synchronization primitives.
- * @param disablePagination True if pagination is disabled for this view.
- * @return std::string The formatted sync indicator string, or an empty string if no sync is required.
+ * @param isIsoMode         True if the active view mode is ISO_FILES.
+ * @param noFilterResults   True if the active filter yielded empty results.
+ * @param state             Shared refresh state containing import flags and synchronization mutexes.
+ * @param disablePagination True if pagination is bypassed for the active view.
+ * @return std::string      The formatted sync message string, or an empty string if no sync is required.
  */
 std::string prepareSyncLine(bool isIsoMode, bool noFilterResults, std::shared_ptr<RefreshState>& state, bool disablePagination) {
     const bool wantSync = isIsoMode && !noFilterResults && !GlobalState::globalIsoFileList.empty();
@@ -134,18 +158,18 @@ std::string prepareSyncLine(bool isIsoMode, bool noFilterResults, std::shared_pt
 /**
  * @brief Appends pagination header information to the output frame buffer.
  *
- * Formats the current page, total pages, and item range statistics (e.g., "Page 1/3 (Items (1-50)/150)")
+ * Formats the current page, total pages, and visible item range statistics (e.g., "Page 1/3 (Items (1-50)/150)")
  * using theme colors and appends it to the output string buffer.
  *
- * @param output Reference to the retained output string buffer.
+ * @param output            Reference to the retained output string buffer.
  * @param disablePagination Flag indicating whether pagination is bypassed.
- * @param effectivePage Zero-based index of the current active page.
- * @param totalPages Total number of available pages.
- * @param startIndex 1-based index of the first item on the current page.
- * @param endIndex 1-based index of the last item on the current page.
- * @param totalItems Total number of items across all pages.
- * @param c Theme color configuration structure (@c PrintListTheme).
- * @return size_t The exact byte offset position in the buffer where the background sync indicator should be spliced.
+ * @param effectivePage     Zero-based index of the current active page.
+ * @param totalPages        Total number of available pages.
+ * @param startIndex        1-based index of the first item on the current page.
+ * @param endIndex          1-based index of the last item on the current page.
+ * @param totalItems        Total number of items across all pages.
+ * @param c                 Theme color configuration structure (@c PrintListTheme).
+ * @return size_t           The exact byte offset position in the buffer where the sync line can be spliced.
  */
 size_t appendHeader(std::string& output, bool disablePagination, size_t effectivePage, size_t totalPages,
                     size_t startIndex, size_t endIndex, size_t totalItems, const PrintListTheme& c)
@@ -174,46 +198,57 @@ size_t appendHeader(std::string& output, bool disablePagination, size_t effectiv
 }
 
 /**
+ * @brief Bundles filtering index mappings, collection sizes, and dynamic padding constraints.
+ */
+struct PrintFilterContext {
+    const std::vector<unsigned long>* origIdx; /**< Pointer to original index mapping vector, or nullptr. */
+    size_t origSize;                           /**< Total size of the original index vector. */
+    size_t maxOrigDigits;                      /**< Maximum digit length across active original indices for alignment. */
+};
+
+/**
+ * @brief Bundles list mode flags, path layout toggles, sizing constraints, and color themes.
+ */
+struct RowConfig {
+    bool isFileMode;         /**< True if the item list represents file entries. */
+    bool isIsoMode;          /**< True if the item list represents ISO file entries. */
+    bool isMountedMode;      /**< True if the item list represents mounted ISO entries. */
+    bool showNamesOnly;      /**< Configuration flag to hide parent directory paths. */
+    bool showFullUmount;     /**< Configuration flag to display full unmount path details. */
+    size_t usableCols;       /**< Maximum width in columns available for row rendering. */
+    PrintListTheme colors;   /**< Theme color palette configurations. */
+};
+
+/**
  * @brief Renders and clips a single item row into the output buffer with uniform alignment.
  *
  * Handles row numbering, original index badge rendering (`n^`) when filters are active with dynamic padding,
  * directory/filename splitting for file modes, path parsing for mounted ISO modes, and enforces terminal width
- * constraints to prevent auto-wrapping. Directory paths are clipped from the left with an ellipsis (`…`) if needed.
+ * bounds to prevent line auto-wrapping. Directory paths are clipped from the left with an ellipsis (`…`) if needed.
  *
- * @param output Reference to the retained output string buffer.
- * @param items Non-owning view collection of string items to display.
- * @param i Current zero-based index of the item being rendered.
- * @param maxDigits Maximum digit count used for right-aligning row sequence numbers.
- * @param maxOrigDigits Maximum digit count across original index values for column padding alignment.
- * @param origIdx Pointer to filtering original index mapping vector, or @c nullptr if no filter is active.
- * @param origSize Size of the original index vector.
- * @param isFileMode Flag indicating if the list represents file entries (ISO or image files).
- * @param isIsoMode Flag indicating if the list represents ISO files specifically.
- * @param isMountedMode Flag indicating if the list represents mounted ISO entries.
+ * @param output      Reference to the retained output string buffer.
+ * @param items       Non-owning view collection of string items to display.
+ * @param i           Current zero-based index of the item being rendered.
+ * @param maxDigits   Maximum digit count used for right-aligning row sequence numbers.
+ * @param filterCtx   Filtering context structure containing index mappings and padding constraints.
  * @param listSubType Extension or sub-format string used for path splitting.
- * @param showNamesOnly Configuration flag indicating whether parent directories should be hidden.
- * @param showFullUmount Configuration flag indicating whether full unmount paths should be shown.
- * @param usableCols Maximum usable columns per row (terminal width minus one free margin column).
- * @param c Theme color configuration structure (@c PrintListTheme).
+ * @param cfg         Row configuration flags, view constraints, and color definitions (@c RowConfig).
  */
 void appendItemRow(std::string& output, const StringListView& items, size_t i, size_t maxDigits,
-                   size_t maxOrigDigits, const auto* origIdx, size_t origSize,
-                   bool isFileMode, bool isIsoMode, bool isMountedMode,
-                   const std::string& listSubType, bool showNamesOnly, bool showFullUmount,
-                   size_t usableCols, const PrintListTheme& c)
+                   const PrintFilterContext& filterCtx, const std::string& listSubType, const RowConfig& cfg)
 {
     const std::size_t rowStart = output.size();
-    const std::string_view seqColor = (i % 2 == 0) ? c.indexA : c.indexB;
+    const std::string_view seqColor = (i % 2 == 0) ? cfg.colors.indexA : cfg.colors.indexB;
 
     output.append(seqColor);
     appendNumPadded(output, i + 1, maxDigits);
 
-    if (origIdx && i < origSize) {
-        const std::size_t origVal = static_cast<std::size_t>((*origIdx)[i]) + 1;
-        output.append(":").append(UI::Palette::BoldReset).append(c.square);
+    if (filterCtx.origIdx && i < filterCtx.origSize) {
+        const std::size_t origVal = static_cast<std::size_t>((*filterCtx.origIdx)[i]) + 1;
+        output.append(":").append(UI::Palette::BoldReset).append(cfg.colors.square);
         appendNum(output, origVal);
         output.append("^");
-        const std::size_t pad = maxOrigDigits - digitCount(origVal);
+        const std::size_t pad = filterCtx.maxOrigDigits - digitCount(origVal);
         if (pad) output.append(pad, ' ');
         output.append(" ").append(UI::Palette::BoldReset);
     } else {
@@ -222,20 +257,20 @@ void appendItemRow(std::string& output, const StringListView& items, size_t i, s
 
     const std::string& item = items[i];
 
-    if (isFileMode) {
+    if (cfg.isFileMode) {
         auto [dir, fname] = extractDirectoryAndFilename(item, listSubType);
         const std::string_view dirView{dir};
         const std::string_view nameView{fname};
 
         std::string_view dirShown = dirView;
         bool dirCut = false;
-        bool dirDrop = showNamesOnly;
-        if (!showNamesOnly && usableCols > 0) {
+        bool dirDrop = cfg.showNamesOnly;
+        if (!cfg.showNamesOnly && cfg.usableCols > 0) {
             const std::size_t prefixW = visibleWidthFrom(output, rowStart);
             const std::size_t nameW = utf8Cols(nameView);
-            if (prefixW + utf8Cols(dirView) + 1 + nameW > usableCols) {
+            if (prefixW + utf8Cols(dirView) + 1 + nameW > cfg.usableCols) {
                 const std::size_t fixed = prefixW + 1 + nameW;
-                const std::size_t budget = usableCols > fixed ? usableCols - fixed : 0;
+                const std::size_t budget = cfg.usableCols > fixed ? cfg.usableCols - fixed : 0;
                 if (budget >= 2) {
                     dirShown = tailColumns(dirView, budget - 1);
                     dirCut = true;
@@ -246,25 +281,25 @@ void appendItemRow(std::string& output, const StringListView& items, size_t i, s
         }
 
         if (!dirDrop) {
-            output.append(c.dir);
+            output.append(cfg.colors.dir);
             if (dirCut) output.append("\u2026");
             output.append(dirShown).append(UI::Palette::BoldReset).append("/");
         }
-        output.append(isIsoMode ? c.iso : c.img).append(nameView);
+        output.append(cfg.isIsoMode ? cfg.colors.iso : cfg.colors.img).append(nameView);
     }
-    else if (isMountedMode) {
+    else if (cfg.isMountedMode) {
         auto [dirPart, pathPart, hashPart] = parseMountPointComponents(item);
-        if (showFullUmount) {
-            output.append(c.mnt)
+        if (cfg.showFullUmount) {
+            output.append(cfg.colors.mnt)
                   .append(dirPart).append(UI::Palette::Reset).append(UI::Palette::BoldReset)
-                  .append(c.iso).append(pathPart)
-                  .append(c.square).append(hashPart);
+                  .append(cfg.colors.iso).append(pathPart)
+                  .append(cfg.colors.square).append(hashPart);
         } else {
-            output.append(c.iso).append(pathPart);
+            output.append(cfg.colors.iso).append(pathPart);
         }
     }
 
-    if (usableCols > 0) fitRowToWidth(output, rowStart, usableCols);
+    if (cfg.usableCols > 0) fitRowToWidth(output, rowStart, cfg.usableCols);
 
     output.append(UI::Palette::Reset).append(UI::Palette::BoldReset).append("\n");
 }
@@ -272,18 +307,15 @@ void appendItemRow(std::string& output, const StringListView& items, size_t i, s
 /**
  * @brief Appends pagination footers and staged pending process queues to the output frame buffer.
  *
- * Appends multi-page navigation hints (@c [PgUp] Prev | [PgDn] Next | [g#] ↵ GoTo) when pagination is active,
- * followed by a highlighted "Pending Indices [P]: ..." line listing staged file indices when processes are queued.
- *
- * @param output Reference to the retained output string buffer.
- * @param disablePagination Flag indicating whether pagination is bypassed.
- * @param effectivePage Zero-based index of the current active page.
- * @param totalPages Total number of available pages.
+ * @param output             Reference to the retained output string buffer.
+ * @param disablePagination  Flag indicating whether pagination is bypassed.
+ * @param effectivePage      Zero-based index of the current active page.
+ * @param totalPages         Total number of available pages.
  * @param showPendingIndices Flag indicating whether pending indices should be displayed.
- * @param hasPendingProcess Flag indicating whether a process action is currently staged.
- * @param pendingIndices Vector containing string identifiers of staged indices.
- * @param isImgMode Flag indicating if the list represents image files (used for color styling).
- * @param c Theme color configuration structure (@c PrintListTheme).
+ * @param hasPendingProcess  Flag indicating whether a process action is currently staged.
+ * @param pendingIndices     Vector containing string identifiers of staged indices.
+ * @param isImgMode          Flag indicating if the list represents image files (used for color styling).
+ * @param c                  Theme color configuration structure (@c PrintListTheme).
  */
 void appendFooterAndPending(std::string& output, bool disablePagination, size_t effectivePage,
                             size_t totalPages, bool showPendingIndices, bool hasPendingProcess,
@@ -329,8 +361,8 @@ struct ListConfig {
 /**
  * @brief Evaluates the current list type, configuration settings, and terminal dimensions.
  *
- * @param items      Non-owning view of the items to display.
- * @param listType   Category string specifying the list kind ("ISO_FILES", "IMAGE_FILES", "MOUNTED_ISOS").
+ * @param items    Non-owning view of the items to display.
+ * @param listType Category string specifying the list kind ("ISO_FILES", "IMAGE_FILES", "MOUNTED_ISOS").
  * @return ListConfig Populated configuration structure.
  */
 ListConfig getListConfig(const StringListView& items, const std::string& listType) {
@@ -421,14 +453,11 @@ void reserveAndBuildOutput(std::string& output, size_t startIndex, size_t endInd
 /**
  * @brief Computes original index mappings and padding digit bounds when a filter is active.
  *
- * @param startIndex      Start index of items on the page.
- * @param endIndex        End index of items on the page.
- * @param outOrigIdx      [out] Pointer to the original indices vector if filtering is active.
- * @param outOrigSize     [out] Size of the original indices collection.
- * @param outMaxOrigDigits [out] Maximum digit count for padded original indices alignment.
+ * @param startIndex Start index of items on the page.
+ * @param endIndex   End index of items on the page.
+ * @return PrintFilterContext Populated print filter context structure.
  */
-void computeOrigIndexInfo(size_t startIndex, size_t endIndex,
-                          const std::vector<unsigned long>** outOrigIdx, size_t* outOrigSize, size_t* outMaxOrigDigits) {
+PrintFilterContext computePrintFilterContext(size_t startIndex, size_t endIndex) {
     const auto* origIdx = filteringStack.empty() ? nullptr : &filteringStack.back().originalIndices;
     const size_t origSize = origIdx ? origIdx->size() : 0;
 
@@ -441,9 +470,7 @@ void computeOrigIndexInfo(size_t startIndex, size_t endIndex,
         }
     }
 
-    *outOrigIdx = origIdx;
-    *outOrigSize = origSize;
-    *outMaxOrigDigits = maxOrigDigits;
+    return {origIdx, origSize, maxOrigDigits};
 }
 
 /**
@@ -569,15 +596,11 @@ void printList(const StringListView& items, const std::string& listType, const s
     size_t syncInsertPos = appendHeader(output, page.disablePagination, page.effectivePage, page.totalPages,
                                         page.startIndex, page.endIndex, items.size(), cfg.colors);
 
-    const std::vector<unsigned long>* origIdx = nullptr;
-    size_t origSize = 0;
-    size_t maxOrigDigits = 0;
-    computeOrigIndexInfo(page.startIndex, page.endIndex, &origIdx, &origSize, &maxOrigDigits);
+    const PrintFilterContext filterCtx = computePrintFilterContext(page.startIndex, page.endIndex);
+    const RowConfig rowCfg{cfg.isFileMode, cfg.isIsoMode, cfg.isMountedMode, cfg.showNamesOnly, cfg.showFullUmount, cfg.usableCols, cfg.colors};
 
     for (size_t i = page.startIndex; i < page.endIndex; ++i) {
-        appendItemRow(output, items, i, page.maxDigits, maxOrigDigits, origIdx, origSize,
-                      cfg.isFileMode, cfg.isIsoMode, cfg.isMountedMode, listSubType, cfg.showNamesOnly,
-                      cfg.showFullUmount, cfg.usableCols, cfg.colors);
+        appendItemRow(output, items, i, page.maxDigits, filterCtx, listSubType, rowCfg);
     }
 
     appendFooterAndPending(output, page.disablePagination, page.effectivePage, page.totalPages,
