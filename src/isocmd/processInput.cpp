@@ -221,38 +221,121 @@ std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::unordered
 }
 
 /**
- * @brief Handles bulk copy, move, or remove operations with threading and
- *        progress visualization.
+ * @brief Calculates the total byte size of all files contained within the index chunks.
  *
- * Orchestrates the lifecycle of filesystem operations (cp, mv, rm) on selected
- * image files, from user confirmation and destination selection through
- * multi-threaded execution and database synchronization.
+ * Iterates through each chunk of file indices, queries the filesystem using `stat`,
+ * and accumulates the file sizes for progress tracking.
+ *
+ * @param indexChunks Vector of index chunks grouping the file indices to process.
+ * @param isoFiles    Master list of files used for index resolution.
+ * @return size_t     Total size in bytes of all targeted files.
+ */
+static size_t calculateTotalBytes(const std::vector<std::vector<int>>& indexChunks,
+                                  const std::vector<std::string>& isoFiles) {
+    size_t totalBytes = 0;
+    for (const auto& chunk : indexChunks) {
+        for (int idx : chunk) {
+            struct ::stat st;
+            if (::stat(isoFiles[idx - 1].c_str(), &st) == 0)
+                totalBytes += st.st_size;
+        }
+    }
+    return totalBytes;
+}
+
+/**
+ * @brief Generates a color-coded process string for terminal progress display.
+ *
+ * Associates specific ANSI color codes from the UI palette depending on whether
+ * the operation is a deletion, move, or copy.
+ *
+ * @param process  Operation type string ("cp", "mv", or "rm").
+ * @param isDelete Flag indicating if the operation is a deletion.
+ * @param isMove   Flag indicating if the operation is a move.
+ * @param isCopy   Flag indicating if the operation is a copy.
+ * @return std::string Formatted and colored process string.
+ */
+static std::string getColoredProcess(const std::string& process, bool isDelete, bool isMove, bool isCopy) {
+    if (isDelete) return std::string(UI::Palette::Red)    + process + std::string(UI::Palette::BoldReset);
+    if (isMove)   return std::string(UI::Palette::Yellow) + process + std::string(UI::Palette::BoldReset);
+    if (isCopy)   return std::string(UI::Palette::Green)  + process + std::string(UI::Palette::BoldReset);
+    return process;
+}
+
+/**
+ * @brief Enqueues file operation tasks into the static thread pool and waits for completion.
+ *
+ * Maps file indices to their actual file paths, packages them into chunks, and dispatches
+ * them asynchronously to the thread pool worker threads while updating atomic counters.
+ *
+ * @param pool                Reference to the static thread pool instance.
+ * @param indexChunks         Grouped index chunks of files to process.
+ * @param isoFiles            Master list of file paths.
+ * @param userDestDir         Target destination directory path(s).
+ * @param isMove              Flag indicating a move operation.
+ * @param isCopy              Flag indicating a copy operation.
+ * @param isDelete            Flag indicating a delete operation.
+ * @param overwriteExisting   Flag specifying whether to overwrite existing destination files.
+ * @param completedBytes      Atomic counter tracking total bytes processed.
+ * @param completedTasks      Atomic counter tracking successfully completed tasks.
+ * @param failedTasks         Atomic counter tracking failed tasks.
+ * @param successfulDestPaths Output vector collecting successfully handled destination paths.
+ * @param destPathsMutex      Mutex protecting concurrent writes to @p successfulDestPaths.
+ */
+static void executeFileOperations(ThreadPool& pool,
+                                  const std::vector<std::vector<int>>& indexChunks,
+                                  const std::vector<std::string>& isoFiles,
+                                  const std::string& userDestDir,
+                                  bool isMove, bool isCopy, bool isDelete,
+                                  bool overwriteExisting,
+                                  std::atomic<size_t>& completedBytes,
+                                  std::atomic<size_t>& completedTasks,
+                                  std::atomic<size_t>& failedTasks,
+                                  std::vector<std::string>& successfulDestPaths,
+                                  std::mutex& destPathsMutex) {
+    std::vector<std::future<void>> futures;
+    futures.reserve(indexChunks.size());
+
+    for (const auto& chunk : indexChunks) {
+        futures.emplace_back(pool.enqueue([chunk = std::move(chunk), &isoFiles,
+                                           &userDestDir, isMove, isCopy, isDelete,
+                                           &completedBytes, &completedTasks, &failedTasks,
+                                           &overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
+            std::vector<std::string> isoFilesInChunk;
+            isoFilesInChunk.reserve(chunk.size());
+            for (int idx : chunk)
+                isoFilesInChunk.push_back(isoFiles[idx - 1]);
+            handleIsoFileOperation(isoFilesInChunk, isoFiles,
+                                   userDestDir, isMove, isCopy, isDelete,
+                                   &completedBytes, &completedTasks, &failedTasks,
+                                   overwriteExisting, &successfulDestPaths, &destPathsMutex);
+        }));
+    }
+
+    for (auto& future : futures)
+        future.wait();
+}
+
+/**
+ * @brief Handles bulk copy, move, or remove operations with threading and progress visualization.
+ *
+ * Orchestrates the lifecycle of filesystem operations (`cp`, `mv`, `rm`) on selected
+ * image files, from user confirmation and destination selection through multi-threaded
+ * execution and database synchronization.
  *
  * @par Workflow
- * 1. **Input parsing:** tokenizes the user string to map selections onto the
- *    master ISO list.
- * 2. **Pre-processing & validation:** determines the thread cap based on
- *    operation type (RM_THREAD_CAP vs CPMV_THREAD_CAP) and calls
- *    userDestDirCpMv() for destination selection or delete confirmation.
- * 3. **Progress estimation:** computes total byte size and task count. For
- *    copies/moves to multiple destinations both are scaled by the destination
- *    count so the progress bar reflects the true workload.
- * 4. **Execution:** spawns a dedicated thread for the live progress bar and
- *    distributes file chunks into the static thread pool for parallel
- *    execution via handleIsoFileOperation().
- * 5. **Post-processing & cleanup:** disables signal handlers, joins the
- *    progress thread, and — if any file was moved or copied — triggers a
- *    synchronous database update for the affected output paths before
- *    returning.
+ * 1. **Input parsing:** Tokenizes the user string to map selections onto the master ISO list.
+ * 2. **Pre-processing & validation:** Determines thread caps and triggers destination selection/confirmation.
+ * 3. **Progress estimation:** Computes total byte size and task counts, scaling by destination count if needed.
+ * 4. **Execution:** Spawns a progress bar thread and distributes workloads into the thread pool.
+ * 5. **Post-processing & cleanup:** Cleans up signals, joins threads, and triggers database sync if required.
  *
- * @param input         Raw user input string (indices, ranges, or keywords).
- * @param isoFiles      Master list of files used for index mapping.
- * @param process       Operation type string: "cp", "mv", or "rm".
- * @param[out] umountMvRmBreak Set to false if no tasks were successfully
- *                    processed.
- * @param filterHistory Indicates if the current file list is a filtered view.
- * @param verbose       Toggle for detailed per-file progress output; also
- *                      receives the user's answer to the verbose prompt.
+ * @param[in]  input           Raw user input string (indices, ranges, or keywords).
+ * @param[in]  isoFiles        Master list of files used for index mapping.
+ * @param[in]  process         Operation type string: "cp", "mv", or "rm".
+ * @param[out] umountMvRmBreak Set to false if no tasks were successfully processed.
+ * @param[in,out] filterHistory Indicates if the current file list is a filtered view.
+ * @param[out] verbose         Toggle for detailed per-file progress output; receives user prompt answers.
  */
 void processInputForCpMvRm(const std::string& input,
 						   const std::vector<std::string>& isoFiles,
@@ -261,26 +344,20 @@ void processInputForCpMvRm(const std::string& input,
 						   bool& verbose) {
     setupSignalHandlerCancellations();
 
-    std::vector<std::string> successfulDestPaths;
-    std::mutex destPathsMutex;
-
-    bool overwriteExisting = false;
-    std::string userDestDir;
-    std::unordered_set<int> processedIndices;
-
     bool isDelete = (process == "rm");
     bool isMove   = (process == "mv");
     bool isCopy   = (process == "cp");
 
-    std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
-    std::string operationColor = std::string(isDelete ? UI::Palette::Red : (isCopy ? UI::Palette::Green : UI::Palette::Yellow));
-
+    std::unordered_set<int> processedIndices;
     tokenizeInput(input, isoFiles, processedIndices);
 
     if (processedIndices.empty()) {
         umountMvRmBreak = false;
         return;
     }
+
+    std::string operationDescription = isDelete ? "*PERMANENTLY DELETED*" : (isMove ? "*MOVED*" : "*COPIED*");
+    std::string operationColor = std::string(isDelete ? UI::Palette::Red : (isCopy ? UI::Palette::Green : UI::Palette::Yellow));
 
     ThreadPool& pool = getStaticThreadPool();
     const size_t poolSize = pool.threadCount();
@@ -289,6 +366,8 @@ void processInputForCpMvRm(const std::string& input,
 
     std::vector<std::vector<int>> indexChunks = groupFilesIntoChunksForCpMvRm(processedIndices, isoFiles, numThreads, isDelete);
 
+    bool overwriteExisting = false;
+    std::string userDestDir;
     bool abortDel = false;
     std::string processedUserDestDir = userDestDirCpMv(isoFiles, indexChunks, userDestDir,
                                                        operationColor, operationDescription, umountMvRmBreak,
@@ -296,22 +375,14 @@ void processInputForCpMvRm(const std::string& input,
 
     GlobalState::g_operationCancelled.store(false);
 
-    if ((processedUserDestDir == "" && (isCopy || isMove)) || abortDel) {
+    if ((processedUserDestDir.empty() && (isCopy || isMove)) || abortDel) {
         verboseSets.uniqueErrorTokenMessages.clear();
         return;
     }
     verboseSets.uniqueErrorTokenMessages.clear();
     clearScrollBuffer();
 
-    size_t totalBytes = 0;
-	for (const auto& chunk : indexChunks) {
-		for (int idx : chunk) {
-			struct ::stat st;
-			if (::stat(isoFiles[idx - 1].c_str(), &st) == 0)
-				totalBytes += st.st_size;
-		}
-	}
-
+    size_t totalBytes = calculateTotalBytes(indexChunks, isoFiles);
     size_t totalTasks = processedIndices.size();
 
     if (isCopy || isMove) {
@@ -320,11 +391,7 @@ void processInputForCpMvRm(const std::string& input,
         totalTasks *= destCount;
     }
 
-    const MainTheme* theme = getActiveTheme();
-    const bool isOrig = (globalTheme == "original");
-
-    std::string colorMuted = isOrig ? std::string(UI::Palette::BoldReset) : std::string(theme->muted);
-
+    const std::string& color = operationColor;
     std::ostringstream hdr;
     hdr << "\n" << color << " Processing "
         << (totalTasks > 1 ? "tasks" : "task") << " for " << operationColor << process
@@ -334,11 +401,7 @@ void processInputForCpMvRm(const std::string& input,
     const std::string header = hdr.str();
     std::cout << header;
 
-    std::string coloredProcess =
-        isDelete ? std::string(UI::Palette::Red)    + process + std::string(UI::Palette::BoldReset) :
-        isMove   ? std::string(UI::Palette::Yellow) + process + std::string(UI::Palette::BoldReset) :
-        isCopy   ? std::string(UI::Palette::Green)  + process + std::string(UI::Palette::BoldReset) :
-        process;
+    std::string coloredProcess = getColoredProcess(process, isDelete, isMove, isCopy);
 
     std::atomic<size_t> completedBytes(0);
     std::atomic<size_t> completedTasks(0);
@@ -348,29 +411,15 @@ void processInputForCpMvRm(const std::string& input,
     std::thread progressThread(displayProgressBarWithSize, &completedBytes,
                                totalBytes, &completedTasks, &failedTasks,
                                totalTasks, &isProcessingComplete, &verbose,
-                               std::string(coloredProcess), header);
+                               coloredProcess, header);
 
-    std::vector<std::future<void>> futures;
-    futures.reserve(indexChunks.size());
+    std::vector<std::string> successfulDestPaths;
+    std::mutex destPathsMutex;
 
-   for (const auto& chunk : indexChunks) {
-		futures.emplace_back(pool.enqueue([chunk = std::move(chunk), &isoFiles,
-										   &userDestDir, isMove, isCopy, isDelete,
-										   &completedBytes, &completedTasks, &failedTasks,
-										   &overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
-			std::vector<std::string> isoFilesInChunk;
-			isoFilesInChunk.reserve(chunk.size());
-			for (int idx : chunk)
-				isoFilesInChunk.push_back(isoFiles[idx - 1]);
-			handleIsoFileOperation(isoFilesInChunk, isoFiles,
-								   userDestDir, isMove, isCopy, isDelete,
-								   &completedBytes, &completedTasks, &failedTasks,
-								   overwriteExisting, &successfulDestPaths, &destPathsMutex);
-		}));
-	}
-
-    for (auto& future : futures)
-        future.wait();
+    executeFileOperations(pool, indexChunks, isoFiles, userDestDir,
+                          isMove, isCopy, isDelete, overwriteExisting,
+                          completedBytes, completedTasks, failedTasks,
+                          successfulDestPaths, destPathsMutex);
 
     if (completedTasks == 0) umountMvRmBreak = false;
     isProcessingComplete.store(true);
