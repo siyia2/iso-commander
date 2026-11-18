@@ -102,22 +102,28 @@ static size_t checkPathsParallel(const std::vector<std::string>& cache, std::vec
  * to guarantee read consistency.
  *
  * @param[in]  dbPath       File system path to the target database file.
- * @param[in]  cache        Full list of paths originally loaded from the database.
+ * @param[in,out] cache     Full list of paths originally loaded from the database.
+ *                          Surviving entries are moved out of it, so its contents
+ *                          are unspecified on return.
  * @param[in]  pathExists   Vector flags denoting which cache items survived.
+ * @param[in]  survivingCount Number of set flags in pathExists (used to reserve).
  * @param[out] retained     Vector populated exclusively with the surviving path entries.
  * @return true             If the temp file creation, writing, syncing, and atomic rename succeed.
  * @return false            If any I/O, permissions, or system call fails.
  */
 static bool writeAndRenameDatabase(const std::string& dbPath,
-                                   const std::vector<std::string>& cache,
+                                   std::vector<std::string>& cache,
                                    const std::vector<int>& pathExists,
+                                   size_t survivingCount,
                                    std::vector<std::string>& retained)
 {
+    retained.clear();
+    retained.reserve(survivingCount);
     size_t totalBufferSize = 0;
     for (size_t i = 0; i < cache.size(); ++i) {
         if (pathExists[i]) {
             totalBufferSize += cache[i].size() + 1;
-            retained.push_back(cache[i]);
+            retained.push_back(std::move(cache[i]));
         }
     }
 
@@ -214,7 +220,8 @@ void removeNonExistentPathsFromDatabase(std::vector<std::string>& globalIsoFileL
 
         if (existingCount == cache.size()) return;
 
-        if (!writeAndRenameDatabase(GlobalState::databaseFilePath, cache, pathExists, retained)) {
+        if (!writeAndRenameDatabase(GlobalState::databaseFilePath, cache, pathExists,
+                                    existingCount, retained)) {
             return;
         }
 
