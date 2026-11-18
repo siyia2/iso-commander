@@ -663,11 +663,11 @@ void drawEditScreen(const std::string& key, const std::string& current,
  * @brief Evaluates multi-selection navigation input tokens such as Page Up, Page Down, or GoTo commands.
  *
  * Parses readline inputs to check if the user triggered batch navigation. Clears pending text buffers
- * when page jumps occur and validates target bounds for explicit numeric `g#` jumps.
+ * when navigation keys are pressed and validates target bounds for explicit numeric `g#` jumps.
  *
  * @spec
- * - **PgUp / PgDn:** Evaluated when @p total > 1, returning @c EditNav::Next, @c EditNav::Prev, or @c EditNav::Handled if at a boundary.
- * - **g# syntax:** Jumps to the specified #-th configuration setting index in the batch.
+ * - **PgUp / PgDn:** Returns @c EditNav::Next, @c EditNav::Prev, or @c EditNav::Handled if at a boundary or single-page mode.
+ * - **g# syntax:** Jumps to the specified #-th configuration setting index in the batch, or returns @c EditNav::Handled if out of bounds or pagination is disabled.
  *
  * @param s String view of the trimmed user input token.
  * @param pos Current 1-based setting index in the selection.
@@ -681,16 +681,18 @@ static std::optional<EditNav> handleNavigationInput(const std::string_view& s, s
 
         if (s == "PgDn") {
             if (pos < total) return EditNav::Next;
-            return EditNav::Handled; // At last page: consume input
+            return EditNav::Handled; // At last page or single page: consume input
         }
         if (s == "PgUp") {
             if (pos > 1) return EditNav::Prev;
-            return EditNav::Handled; // At first page: consume input
+            return EditNav::Handled; // At first page or single page: consume input
         }
     }
 
-    if (total > 1 && newVal.size() >= 2 && newVal[0] == 'g' &&
+    // Check g# regardless of whether total > 1 so single-page mode also consumes it
+    if (newVal.size() >= 2 && newVal[0] == 'g' &&
         std::isdigit(static_cast<unsigned char>(newVal[1]))) {
+        RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
         try {
             size_t target = std::stoul(newVal.substr(1));
             if (target >= 1 && target <= total && target != pos) {
@@ -698,7 +700,7 @@ static std::optional<EditNav> handleNavigationInput(const std::string_view& s, s
                 return EditNav::GoTo;
             }
         } catch (...) {}
-        return std::nullopt; // invalid target, stay on screen
+        return EditNav::Handled; // Invalid target or pagination disabled: consume input
     }
     return std::nullopt;
 }
