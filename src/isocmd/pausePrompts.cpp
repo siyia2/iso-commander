@@ -16,6 +16,9 @@
 #include <termios.h>
 #include <unistd.h>
 
+// Third-Party Library Headers
+#include <readline/readline.h>
+
 // Project Headers
 #include "../inputHandling.h"
 #include "../rendering.h"
