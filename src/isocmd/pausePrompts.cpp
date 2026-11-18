@@ -59,16 +59,22 @@ namespace {
         struct termios saved{};
         bool active = false;
 
-        TerminalGuard() {
-            if (tcgetattr(STDIN_FILENO, &saved) == 0) {
-                struct termios raw = saved;
-                raw.c_lflag &= ~(ICANON | ECHO);
-                raw.c_cc[VMIN]  = 1;
-                raw.c_cc[VTIME] = 0;
-                if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == 0) {
-                    active = true;
-                }
-            }
+        TerminalGuard() = default;
+
+        bool activate() {
+            if (tcgetattr(STDIN_FILENO, &saved) < 0)
+                return false;
+
+            struct termios raw = saved;
+            raw.c_lflag &= ~(ICANON | ECHO);
+            raw.c_cc[VMIN]  = 1;
+            raw.c_cc[VTIME] = 0;
+
+            if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) < 0)
+                return false;
+
+            active = true;
+            return true;
         }
 
         ~TerminalGuard() {
@@ -87,36 +93,42 @@ namespace {
     struct SigwinchGuard {
         struct sigaction old_sa{};
         sigset_t old_mask{};
-        bool active = false;
+        bool mask_active = false;
+        bool action_active = false;
 
-        explicit SigwinchGuard(void (*handler)(int)) {
+        SigwinchGuard() = default;
+
+        bool activate(void (*handler)(int)) {
             sigset_t block;
             sigemptyset(&block);
             sigaddset(&block, SIGWINCH);
 
             if (sigprocmask(SIG_BLOCK, &block, &old_mask) < 0)
-                return;
+                return false;
+
+            mask_active = true;
 
             struct sigaction sa{};
             sa.sa_handler = handler;
             sigemptyset(&sa.sa_mask);
-            sa.sa_flags = 0; // No SA_RESTART: ppoll() must return EINTR.
+            sa.sa_flags = 0;
 
-            if (sigaction(SIGWINCH, &sa, &old_sa) < 0) {
-                sigprocmask(SIG_SETMASK, &old_mask, nullptr);
-                return;
-            }
-            active = true;
+            if (sigaction(SIGWINCH, &sa, &old_sa) < 0)
+                return false;
+
+            action_active = true;
+            return true;
         }
 
         ~SigwinchGuard() {
-            if (active) {
+            if (action_active)
                 sigaction(SIGWINCH, &old_sa, nullptr);
+
+            if (mask_active)
                 sigprocmask(SIG_SETMASK, &old_mask, nullptr);
-            }
         }
 
-        bool ok() const { return active; }
+        bool ok() const { return action_active; }
         sigset_t getOldMask() const { return old_mask; }
     };
 
@@ -138,16 +150,17 @@ namespace {
         enable_ctrl_d();
         recoverCoutIfNeeded();
 
-        SigwinchGuard sigGuard(handle_winch);
-        if (!sigGuard.ok())
+        SigwinchGuard sigGuard;
+        TerminalGuard termGuard;
+
+        if (!termGuard.activate())
+            return;
+
+        if (!sigGuard.activate(handle_winch))
             return;
 
         // SIGWINCH is now blocked, so resetting the flag is race-free.
         g_winch = 0;
-
-        TerminalGuard termGuard;
-        if (!termGuard.ok())
-            return;
 
         sigset_t wait_mask = sigGuard.getOldMask();
         sigdelset(&wait_mask, SIGWINCH);
