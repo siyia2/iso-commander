@@ -6,7 +6,27 @@
 // C++ Standard Library Headers
 #include <atomic>
 #include <cstddef>
+#include <mutex>
 #include <string>
+#include <vector>
+
+/**
+ * @brief Shared dependencies and output collection for a conversion batch.
+ *
+ * Supplies caller-owned counters and optional successful-output collection.
+ * All pointed-to objects must outlive the conversion batch.
+ *
+ * @note When @ref successfulOutputPaths is non-null, @ref outPathsMutex
+ *       must also be non-null.
+ */
+struct ConversionBatchData {
+    std::atomic<size_t>* completedBytes = nullptr;
+    std::atomic<size_t>* completedTasks = nullptr;
+    std::atomic<size_t>* failedTasks = nullptr;
+
+    std::vector<std::string>* successfulOutputPaths = nullptr;
+    std::mutex* outPathsMutex = nullptr;
+};
 
 /**
  * @brief Selects which disk-image conversion backend a job should use.
@@ -36,6 +56,18 @@ struct ConversionJob {
     std::string inputPath;  ///< Absolute or relative path to the source disk image.
     std::string outputPath; ///< Target ISO path; empty means "derive from @ref inputPath".
 };
+
+/**
+ * @brief Batch-converts disk images into ISO format.
+ *
+ * @param imageFiles Source image paths to convert.
+ * @param mode       Selects the conversion backend.
+ * @param batchData  Caller-owned counters and optional output collection.
+ */
+void convertToISO(
+    const std::vector<std::string>& imageFiles,
+    const ConversionMode& mode,
+    const ConversionBatchData& batchData);
 
 /**
  * @brief Converts a CCD/CUE-based image set into a plain ISO.

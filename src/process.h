@@ -32,22 +32,6 @@ void handleIsoFileOperation(
 );
 
 /**
- * Converts various disk image formats (MDF, NRG, CHD, DAA) to standard ISO format.
- */
-void convertToISO(
-    const std::vector<std::string>& imageFiles,
-    const bool& modeMdf,
-    const bool& modeNrg,
-    const bool& modeChd,
-    const bool& modeDaa,
-    std::atomic<size_t>* completedBytes,
-    std::atomic<size_t>* completedTasks,
-    std::atomic<size_t>* failedTasks,
-    std::vector<std::string>* successfulOutputPaths,
-    std::mutex* outPathsMutex
-);
-
-/**
  * Finalizes the database state after a batch of file operations is completed.
  */
 void updateDatabaseAfterOperations(
