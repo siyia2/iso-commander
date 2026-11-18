@@ -497,9 +497,18 @@ void reportErrorCpMvRm(OperationContext& ctx,
  *        cancellation support.
  *
  * Uses an 8 MiB buffered stream approach to transfer data between two paths.
+ * Data is written to a temporary file (@p dst plus a ".part" suffix) and
+ * renamed over @p dst only after every byte has been written and the stream
+ * has been flushed and closed successfully. The destination is therefore
+ * never touched until the copy is complete: if @p dst already exists it is
+ * replaced atomically by the rename, and it is left intact on failure or
+ * cancellation.
+ *
  * An atomic counter is updated incrementally so the UI can display progress.
- * The operation can be aborted at any time via GlobalState::g_operationCancelled;
- * if cancelled, the partially‑written destination file is removed.
+ * The operation can be aborted at any time via GlobalState::g_operationCancelled.
+ * On cancellation or any failure after the temporary file was created, the
+ * temporary file is removed. Its cleanup uses a separate error code, so the
+ * failure reason stored in @p ec is preserved.
  *
  * @param src            Source file path.
  * @param dst            Destination file path.
@@ -508,8 +517,9 @@ void reportErrorCpMvRm(OperationContext& ctx,
  * @param ec             Error code object to capture system failures.
  *                       Set to operation_canceled on user abort,
  *                       no_such_file_or_directory if the source is missing,
- *                       permission_denied if the destination cannot be opened,
- *                       or io_error on write failures.
+ *                       permission_denied if the temporary file cannot be
+ *                       opened, io_error on write or flush failures, or the
+ *                       error from the final rename.
  * @return True if the copy completed successfully, false if cancelled or failed.
  */
 bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst,
@@ -526,11 +536,24 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst,
         return false;
     }
 
-    std::ofstream output(dst, std::ios::binary);
+    // Write to a temp file so a failed or cancelled copy never leaves a
+    // partial file at dst, and never touches an existing dst until success.
+    fs::path tmp = dst;
+    tmp += ".part";
+
+    std::ofstream output(tmp, std::ios::binary);
     if (!output) {
         ec = std::make_error_code(std::errc::permission_denied);
         return false;
     }
+
+    // Closes and removes the temp file; uses its own error_code so the
+    // caller's ec (operation_canceled / io_error) is never overwritten.
+    auto discardTemp = [&]() {
+        output.close();
+        std::error_code rmEc;
+        fs::remove(tmp, rmEc);
+    };
 
     while (!GlobalState::g_operationCancelled.load()) {
         input.read(buffer.data(), buffer.size());
@@ -540,6 +563,7 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst,
         output.write(buffer.data(), bytesRead);
         if (!output) {
             ec = std::make_error_code(std::errc::io_error);
+            discardTemp();
             return false;
         }
 
@@ -548,8 +572,22 @@ bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst,
 
     if (GlobalState::g_operationCancelled.load()) {
         ec = std::make_error_code(std::errc::operation_canceled);
-        output.close();
-        fs::remove(dst, ec);
+        discardTemp();
+        return false;
+    }
+
+    output.close();                       // flush; catches deferred write errors
+    if (!output) {
+        ec = std::make_error_code(std::errc::io_error);
+        discardTemp();
+        return false;
+    }
+
+    std::error_code renameEc;
+    fs::rename(tmp, dst, renameEc);       // atomically replaces dst if it exists
+    if (renameEc) {
+        ec = renameEc;
+        discardTemp();
         return false;
     }
 
@@ -882,11 +920,14 @@ std::vector<std::string> parseDestinationDirs(const std::string& userDestDir)
  * @brief Validate that a single (source, destination) pair is safe to copy/move.
  *
  * Applies the pre-dispatch checks previously inlined in
- * handleIsoFileOperation(), in the same order and with the same reporting:
+ * handleIsoFileOperation(), with the same reporting, except that an existing
+ * destination is no longer deleted up front. Checks run in this order:
  *  1. Same-file check (source and destination resolve to the same path).
  *  2. Source-missing check (source disappeared mid-run).
- *  3. Non-overwrite file-exists check.
- *  4. Overwrite removal (only when @p overwriteExisting is true).
+ *  3. Destination-exists check: if the destination does not exist, the pair
+ *     is ready. If it exists and @p overwriteExisting is false, a
+ *     "file_exists" error is reported. If it exists and @p overwriteExisting
+ *     is true, the pair is ready; the existing file is not touched here.
  *
  * @param ctx                Operation context used for error reporting.
  * @param srcPath            Absolute or relative source path.
@@ -896,16 +937,19 @@ std::vector<std::string> parseDestinationDirs(const std::string& userDestDir)
  * @param destDirProcessed   Destination directory as provided (for reporting).
  * @param isMove             True for move operation.
  * @param isCopy             True for copy operation.
- * @param overwriteExisting  If true, an existing destination is removed.
+ * @param overwriteExisting  If true, an existing destination is allowed and
+ *                           is replaced on success by the final rename in the
+ *                           copy/move step (it is left intact if that step
+ *                           fails or is cancelled).
  * @param validDestinations  In/out counter of destinations that passed the
  *                           same-file check (incremented here, as in the
- *                           original code, before source/overwrite checks).
+ *                           original code, before source/destination checks).
  *
  * @return True if the operation may proceed to dispatch; false otherwise
  *         (a corresponding error message has already been reported).
  *
  * @note @p validDestinations is incremented for every non-same-file
- *       destination, even if a later check rejects it — this preserves the
+ *       destination, even if a later check rejects it. This preserves the
  *       original multi-destination cleanup semantics.
  */
 bool isDestinationReadyForCopyMove(OperationContext& ctx,
@@ -942,13 +986,8 @@ bool isDestinationReadyForCopyMove(OperationContext& ctx,
         return false;
     }
 
-    std::error_code ec;
-    if (!fs::remove(destPath, ec)) {
-        reportErrorCpMvRm(ctx, "overwrite_failed", "", "",
-                          destDirProcessed, ec.message(), "");
-        return false;
-    }
-
+    // Overwrite: the existing file is replaced atomically by the rename at
+    // the end of the copy/move, so it survives if the copy fails.
     return true;
 }
 
