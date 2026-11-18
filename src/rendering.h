@@ -13,14 +13,10 @@
 #include <memory>
 #include <string>
 #include <string_view>
-#include <utility>
 
 // C / System Headers
 #include <sys/ioctl.h>
 #include <unistd.h>
-
-// Third-Party Library Headers
-#include <readline/readline.h>
 
 namespace {
     /// Synchronized-output (DEC mode 2026) control sequences, kept as named
