@@ -21,50 +21,21 @@
 #include "../state.h"
 #include "../threadpool.h"
 
-/**
- * @brief Compares two strings using case-insensitive natural ordering.
- *
- * Compares the supplied string views using a human-friendly "natural" ordering,
- * where embedded numeric sequences are compared according to their numeric value
- * rather than lexicographically.
- *
- * For example:
- * @code
- * "file2.txt"  < "file10.txt"
- * "file9.txt"  < "file10.txt"
- * @endcode
- *
- * Alphabetic characters are compared case-insensitively. When two characters
- * compare equal after ASCII case folding but differ in case, the original
- * character case is retained as a deferred tie-breaker. This ensures that
- * strings which are otherwise identical under case-insensitive comparison still
- * have a deterministic ordering.
- *
- * Numeric sequences are compared by their number of significant digits and then
- * by their digit contents. Leading zeros are ignored when determining numeric
- * value, but are retained as a deferred tie-breaker. Consequently, numerically
- * equivalent values are ordered according to their number of leading zeros:
- *
- * @code
- * "007" < "07" < "7"
- * @endcode
- *
- * The comparison operates directly on std::string_view objects and does not
- * allocate memory or construct temporary strings.
- *
- * @param a First string view to compare.
- * @param b Second string view to compare.
- *
- * @return A negative value if @p a sorts before @p b.
- * @return A positive value if @p a sorts after @p b.
- * @return 0 if @p a and @p b are equivalent according to all comparison rules.
- *
- * @note Character case folding is ASCII-only. Non-ASCII characters are compared
- *       according to their original byte values.
- */
 namespace {
 
-inline int compareNumericSequence(std::string_view a, std::string_view b, size_t& i, size_t& j) {
+/**
+ * @brief Compares numeric sequences within two string views with natural ordering.
+ *
+ * Strips and counts leading zeros, compares the significant digit lengths and contents,
+ * and uses the count of leading zeros as a deferred tie-breaker.
+ *
+ * @param[in]     a First string view being compared.
+ * @param[in]     b Second string view being compared.
+ * @param[in,out] i Current index position in string view @p a, advanced past the numeric sequence.
+ * @param[in,out] j Current index position in string view @p b, advanced past the numeric sequence.
+ * @return        A negative value if @p a sorts before @p b, positive if after, or 0 if equivalent.
+ */
+int compareNumericSequence(std::string_view a, std::string_view b, size_t& i, size_t& j) {
     const size_t size_a = a.size();
     const size_t size_b = b.size();
     size_t start_a = i, start_b = j;
@@ -108,7 +79,20 @@ inline int compareNumericSequence(std::string_view a, std::string_view b, size_t
     return 0;
 }
 
-inline int compareAlphaSequence(std::string_view a, std::string_view b, size_t& i, size_t& j) {
+/**
+ * @brief Compares alphabetic characters with case-insensitive and case tie-breaking rules.
+ *
+ * Performs an ASCII case-folded comparison of the characters at the current indices.
+ * If characters match case-insensitively but differ in case, the original case is
+ * used as a deterministic tie-breaker.
+ *
+ * @param[in]     a First string view being compared.
+ * @param[in]     b Second string view being compared.
+ * @param[in,out] i Current index position in string view @p a, advanced by 1 on success.
+ * @param[in,out] j Current index position in string view @p b, advanced by 1 on success.
+ * @return        A negative value if @p a sorts before @p b, positive if after, or 0 if equivalent.
+ */
+int compareAlphaSequence(std::string_view a, std::string_view b, size_t& i, size_t& j) {
     const char ca = static_cast<char>(
         std::tolower(static_cast<unsigned char>(a[i])));
 
@@ -119,7 +103,7 @@ inline int compareAlphaSequence(std::string_view a, std::string_view b, size_t& 
         return (ca < cb) ? -1 : 1;
 
     if (a[i] != b[j])
-        return (a[i] < b[i]) ? -1 : 1;
+        return (a[i] < b[j]) ? -1 : 1;
 
     ++i;
     ++j;
@@ -128,6 +112,47 @@ inline int compareAlphaSequence(std::string_view a, std::string_view b, size_t& 
 
 } // namespace
 
+/**
+ * @brief Compares two strings using case-insensitive natural ordering.
+ *
+ * Compares the supplied string views using a human-friendly "natural" ordering,
+ * where embedded numeric sequences are compared according to their numeric value
+ * rather than lexicographically.
+ *
+ * For example:
+ * @code
+ * "file2.txt"  < "file10.txt"
+ * "file9.txt"  < "file10.txt"
+ * @endcode
+ *
+ * Alphabetic characters are compared case-insensitively. When two characters
+ * compare equal after ASCII case folding but differ in case, the original
+ * character case is retained as a deferred tie-breaker. This ensures that
+ * strings which are otherwise identical under case-insensitive comparison still
+ * have a deterministic ordering.
+ *
+ * Numeric sequences are compared by their number of significant digits and then
+ * by their digit contents. Leading zeros are ignored when determining numeric
+ * value, but are retained as a deferred tie-breaker. Consequently, numerically
+ * equivalent values are ordered according to their number of leading zeros:
+ *
+ * @code
+ * "007" < "07" < "7"
+ * @endcode
+ *
+ * The comparison operates directly on std::string_view objects and does not
+ * allocate memory or construct temporary strings.
+ *
+ * @param a First string view to compare.
+ * @param b Second string view to compare.
+ *
+ * @return A negative value if @p a sorts before @p b.
+ * @return A positive value if @p a sorts after @p b.
+ * @return 0 if @p a and @p b are equivalent according to all comparison rules.
+ *
+ * @note Character case folding is ASCII-only. Non-ASCII characters are compared
+ *       according to their original byte values.
+ */
 int naturalCompare(std::string_view a, std::string_view b) {
     size_t i = 0, j = 0;
     const size_t size_a = a.size();
