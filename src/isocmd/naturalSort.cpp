@@ -23,92 +23,92 @@
 
 namespace {
 
-/**
- * @brief Compares numeric sequences within two string views with natural ordering.
- *
- * Strips and counts leading zeros, compares the significant digit lengths and contents,
- * and uses the count of leading zeros as a deferred tie-breaker.
- *
- * @param[in]     a First string view being compared.
- * @param[in]     b Second string view being compared.
- * @param[in,out] i Current index position in string view @p a, advanced past the numeric sequence.
- * @param[in,out] j Current index position in string view @p b, advanced past the numeric sequence.
- * @return        A negative value if @p a sorts before @p b, positive if after, or 0 if equivalent.
- */
-int compareNumericSequence(std::string_view a, std::string_view b, size_t& i, size_t& j) {
-    const size_t size_a = a.size();
-    const size_t size_b = b.size();
-    size_t start_a = i, start_b = j;
+    /**
+     * @brief Compares numeric sequences within two string views with natural ordering.
+     *
+     * Strips and counts leading zeros, compares the significant digit lengths and contents,
+     * and uses the count of leading zeros as a deferred tie-breaker.
+     *
+     * @param[in]     a First string view being compared.
+     * @param[in]     b Second string view being compared.
+     * @param[in,out] i Current index position in string view @p a, advanced past the numeric sequence.
+     * @param[in,out] j Current index position in string view @p b, advanced past the numeric sequence.
+     * @return        A negative value if @p a sorts before @p b, positive if after, or 0 if equivalent.
+     */
+    int compareNumericSequence(std::string_view a, std::string_view b, size_t& i, size_t& j) {
+        const size_t size_a = a.size();
+        const size_t size_b = b.size();
+        size_t start_a = i, start_b = j;
 
-    while (start_a < size_a && a[start_a] == '0')
-        ++start_a;
+        while (start_a < size_a && a[start_a] == '0')
+            ++start_a;
 
-    while (start_b < size_b && b[start_b] == '0')
-        ++start_b;
+        while (start_b < size_b && b[start_b] == '0')
+            ++start_b;
 
-    size_t end_a = start_a, end_b = start_b;
+        size_t end_a = start_a, end_b = start_b;
 
-    while (end_a < size_a && std::isdigit(static_cast<unsigned char>(a[end_a])))
-        ++end_a;
+        while (end_a < size_a && std::isdigit(static_cast<unsigned char>(a[end_a])))
+            ++end_a;
 
-    while (end_b < size_b && std::isdigit(static_cast<unsigned char>(b[end_b])))
-        ++end_b;
+        while (end_b < size_b && std::isdigit(static_cast<unsigned char>(b[end_b])))
+            ++end_b;
 
-    const size_t nz_len_a = end_a - start_a;
-    const size_t nz_len_b = end_b - start_b;
+        const size_t nz_len_a = end_a - start_a;
+        const size_t nz_len_b = end_b - start_b;
 
-    if (nz_len_a != nz_len_b)
-        return (nz_len_a < nz_len_b) ? -1 : 1;
+        if (nz_len_a != nz_len_b)
+            return (nz_len_a < nz_len_b) ? -1 : 1;
 
-    for (size_t k = 0; k < nz_len_a; ++k) {
-        const char ca = a[start_a + k];
-        const char cb = b[start_b + k];
+        for (size_t k = 0; k < nz_len_a; ++k) {
+            const char ca = a[start_a + k];
+            const char cb = b[start_b + k];
+
+            if (ca != cb)
+                return (ca < cb) ? -1 : 1;
+        }
+
+        const size_t zeros_a = start_a - i;
+        const size_t zeros_b = start_b - j;
+
+        if (zeros_a != zeros_b)
+            return (zeros_a < zeros_b) ? -1 : 1;
+
+        i = end_a;
+        j = end_b;
+        return 0;
+    }
+
+    /**
+     * @brief Compares alphabetic characters with case-insensitive and case tie-breaking rules.
+     *
+     * Performs an ASCII case-folded comparison of the characters at the current indices.
+     * If characters match case-insensitively but differ in case, the original case is
+     * used as a deterministic tie-breaker.
+     *
+     * @param[in]     a First string view being compared.
+     * @param[in]     b Second string view being compared.
+     * @param[in,out] i Current index position in string view @p a, advanced by 1 on success.
+     * @param[in,out] j Current index position in string view @p b, advanced by 1 on success.
+     * @return        A negative value if @p a sorts before @p b, positive if after, or 0 if equivalent.
+     */
+    int compareAlphaSequence(std::string_view a, std::string_view b, size_t& i, size_t& j) {
+        const char ca = static_cast<char>(
+            std::tolower(static_cast<unsigned char>(a[i])));
+
+        const char cb = static_cast<char>(
+            std::tolower(static_cast<unsigned char>(b[j])));
 
         if (ca != cb)
             return (ca < cb) ? -1 : 1;
+
+        if (a[i] != b[j])
+            return (a[i] < b[j]) ? -1 : 1;
+
+        ++i;
+        ++j;
+        return 0;
     }
-
-    const size_t zeros_a = start_a - i;
-    const size_t zeros_b = start_b - j;
-
-    if (zeros_a != zeros_b)
-        return (zeros_a < zeros_b) ? -1 : 1;
-
-    i = end_a;
-    j = end_b;
-    return 0;
-}
-
-/**
- * @brief Compares alphabetic characters with case-insensitive and case tie-breaking rules.
- *
- * Performs an ASCII case-folded comparison of the characters at the current indices.
- * If characters match case-insensitively but differ in case, the original case is
- * used as a deterministic tie-breaker.
- *
- * @param[in]     a First string view being compared.
- * @param[in]     b Second string view being compared.
- * @param[in,out] i Current index position in string view @p a, advanced by 1 on success.
- * @param[in,out] j Current index position in string view @p b, advanced by 1 on success.
- * @return        A negative value if @p a sorts before @p b, positive if after, or 0 if equivalent.
- */
-int compareAlphaSequence(std::string_view a, std::string_view b, size_t& i, size_t& j) {
-    const char ca = static_cast<char>(
-        std::tolower(static_cast<unsigned char>(a[i])));
-
-    const char cb = static_cast<char>(
-        std::tolower(static_cast<unsigned char>(b[j])));
-
-    if (ca != cb)
-        return (ca < cb) ? -1 : 1;
-
-    if (a[i] != b[j])
-        return (a[i] < b[j]) ? -1 : 1;
-
-    ++i;
-    ++j;
-    return 0;
-}
 
 } // namespace
 
