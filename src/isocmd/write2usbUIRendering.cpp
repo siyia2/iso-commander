@@ -63,58 +63,58 @@ namespace fs = std::filesystem;
 
 namespace write_screen_detail {
 
-/// Write end of the self-pipe the SIGWINCH handler pokes. -1 = no watcher active.
-inline std::atomic<int> g_fd{-1};
+    /// Write end of the self-pipe the SIGWINCH handler pokes. -1 = no watcher active.
+    inline std::atomic<int> g_fd{-1};
 
-/// Handler that was installed before ours; forwarded to so Readline's own
-/// SIGWINCH handling (rl_catch_sigwinch) keeps working.
-inline struct sigaction g_prev {};
-inline bool             g_installed = false;
+    /// Handler that was installed before ours; forwarded to so Readline's own
+    /// SIGWINCH handling (rl_catch_sigwinch) keeps working.
+    inline struct sigaction g_prev {};
+    inline bool             g_installed = false;
 
-static_assert(std::atomic<int>::is_always_lock_free,
-              "g_fd must be lock-free to be read from a signal handler");
+    static_assert(std::atomic<int>::is_always_lock_free,
+                  "g_fd must be lock-free to be read from a signal handler");
 
-inline void onWriteWinch(int sig, siginfo_t* info, void* ctx) {
-    const int savedErrno = errno;
-    const int fd = g_fd.load(std::memory_order_acquire);
-    if (fd >= 0) {
-        const char b = 'w';
-        [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);   // async-signal-safe; non-blocking
-    }
-    errno = savedErrno;
+    inline void onWriteWinch(int sig, siginfo_t* info, void* ctx) {
+        const int savedErrno = errno;
+        const int fd = g_fd.load(std::memory_order_acquire);
+        if (fd >= 0) {
+            const char b = 'w';
+            [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);   // async-signal-safe; non-blocking
+        }
+        errno = savedErrno;
 
-    if (g_prev.sa_handler == SIG_DFL || g_prev.sa_handler == SIG_IGN) return;
-    if (g_prev.sa_flags & SA_SIGINFO) {
-        if (g_prev.sa_sigaction) g_prev.sa_sigaction(sig, info, ctx);
-    } else {
-        g_prev.sa_handler(sig);
-    }
-}
-
-/// SIGINT handler that was installed before ours (the program's cancellation
-/// handler, which sets g_operationCancelled). Always called first.
-inline struct sigaction g_prevInt {};
-inline bool             g_intInstalled = false;
-
-/// Chained SIGINT handler. Forwards to the cancellation handler FIRST, so
-/// g_operationCancelled is already set when the relay thread wakes the
-/// waiters, then pokes the same self-pipe as SIGWINCH (byte 'c').
-inline void onWriteInt(int sig, siginfo_t* info, void* ctx) {
-    const int savedErrno = errno;
-
-    if (g_prevInt.sa_flags & SA_SIGINFO) {
-        if (g_prevInt.sa_sigaction) g_prevInt.sa_sigaction(sig, info, ctx);
-    } else if (g_prevInt.sa_handler != SIG_DFL && g_prevInt.sa_handler != SIG_IGN) {
-        g_prevInt.sa_handler(sig);
+        if (g_prev.sa_handler == SIG_DFL || g_prev.sa_handler == SIG_IGN) return;
+        if (g_prev.sa_flags & SA_SIGINFO) {
+            if (g_prev.sa_sigaction) g_prev.sa_sigaction(sig, info, ctx);
+        } else {
+            g_prev.sa_handler(sig);
+        }
     }
 
-    const int fd = g_fd.load(std::memory_order_acquire);
-    if (fd >= 0) {
-        const char b = 'c';
-        [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);   // async-signal-safe; non-blocking
+    /// SIGINT handler that was installed before ours (the program's cancellation
+    /// handler, which sets g_operationCancelled). Always called first.
+    inline struct sigaction g_prevInt {};
+    inline bool             g_intInstalled = false;
+
+    /// Chained SIGINT handler. Forwards to the cancellation handler FIRST, so
+    /// g_operationCancelled is already set when the relay thread wakes the
+    /// waiters, then pokes the same self-pipe as SIGWINCH (byte 'c').
+    inline void onWriteInt(int sig, siginfo_t* info, void* ctx) {
+        const int savedErrno = errno;
+
+        if (g_prevInt.sa_flags & SA_SIGINFO) {
+            if (g_prevInt.sa_sigaction) g_prevInt.sa_sigaction(sig, info, ctx);
+        } else if (g_prevInt.sa_handler != SIG_DFL && g_prevInt.sa_handler != SIG_IGN) {
+            g_prevInt.sa_handler(sig);
+        }
+
+        const int fd = g_fd.load(std::memory_order_acquire);
+        if (fd >= 0) {
+            const char b = 'c';
+            [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);   // async-signal-safe; non-blocking
+        }
+        errno = savedErrno;
     }
-    errno = savedErrno;
-}
 
 } // namespace write_screen_detail
 
@@ -125,97 +125,97 @@ inline void onWriteInt(int sig, siginfo_t* info, void* ctx) {
 
 namespace confirm_resize_detail {
 
-struct ResizeRepaintState {
-    size_t lastCols = 0;
-    std::function<std::vector<size_t>(size_t)> paint;
-    std::vector<size_t> lineWidths;
-    size_t promptWidth = 0;
-    int wakeRd = -1;
-};
+    struct ResizeRepaintState {
+        size_t lastCols = 0;
+        std::function<std::vector<size_t>(size_t)> paint;
+        std::vector<size_t> lineWidths;
+        size_t promptWidth = 0;
+        int wakeRd = -1;
+    };
 
-/// The confirmation prompt has one active watcher at a time.
-static ResizeRepaintState g_confirmResize;
+    /// The confirmation prompt has one active watcher at a time.
+    static ResizeRepaintState g_confirmResize;
 
-/// Write end of the self-pipe the SIGWINCH handler pokes. -1 = no watcher active.
-inline std::atomic<int> g_fd{-1};
+    /// Write end of the self-pipe the SIGWINCH handler pokes. -1 = no watcher active.
+    inline std::atomic<int> g_fd{-1};
 
-static_assert(std::atomic<int>::is_always_lock_free,
-              "g_fd must be lock-free to be read from a signal handler");
+    static_assert(std::atomic<int>::is_always_lock_free,
+                  "g_fd must be lock-free to be read from a signal handler");
 
-inline struct sigaction g_prev {};
-inline bool g_installed = false;
+    inline struct sigaction g_prev {};
+    inline bool g_installed = false;
 
-inline void onConfirmWinch(int sig, siginfo_t* info, void* ctx) {
-    const int savedErrno = errno;
-    const int fd = g_fd.load(std::memory_order_acquire);
-    if (fd >= 0) {
-        const char b = 1;
-        [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);
-    }
-    errno = savedErrno;
-
-    if (g_prev.sa_handler == SIG_DFL || g_prev.sa_handler == SIG_IGN) return;
-    if (g_prev.sa_flags & SA_SIGINFO) {
-        if (g_prev.sa_sigaction) g_prev.sa_sigaction(sig, info, ctx);
-    } else {
-        g_prev.sa_handler(sig);
-    }
-}
-
-static void confirmResizeRepaint(ResizeRepaintState& s) {
-    const TermSize sz = terminalSize();
-    const size_t cols = sz.cols;
-    const size_t rows = sz.rows;
-
-    if (cols == 0 || rows == 0 || cols == s.lastCols) return;
-    s.lastCols = cols;
-
-    rl_set_screen_size(static_cast<int>(rows), static_cast<int>(cols));
-
-    size_t warningRows = 0;
-    for (size_t w : s.lineWidths)
-        warningRows += std::max<size_t>(1, (w + cols - 1) / cols);
-
-    const size_t cursorCols = s.promptWidth + rl_point;
-    const size_t cursorLine = cursorCols / cols;
-    const size_t up = warningRows + cursorLine;
-
-    if (up >= rows) return;
-
-    SyncOutput sync;
-    s.lineWidths = s.paint(cols);
-    std::cout.flush();
-
-    rl_on_new_line();
-    rl_redisplay();
-}
-
-/// Readline's getc hook waits on stdin and the self-pipe, with no idle polling.
-static int confirmResizeGetc(FILE* stream) {
-    ResizeRepaintState& s = g_confirmResize;
-    const int inFd = fileno(stream);
-
-    for (;;) {
-        struct pollfd fds[2] = {
-            { inFd,     POLLIN, 0 },
-            { s.wakeRd, POLLIN, 0 },
-        };
-
-        if (::poll(fds, 2, -1) < 0) {
-            if (errno == EINTR) continue;
-            return rl_getc(stream);
+    inline void onConfirmWinch(int sig, siginfo_t* info, void* ctx) {
+        const int savedErrno = errno;
+        const int fd = g_fd.load(std::memory_order_acquire);
+        if (fd >= 0) {
+            const char b = 1;
+            [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);
         }
+        errno = savedErrno;
 
-        if (fds[1].revents & POLLIN) {
-            char buf[64];
-            while (::read(s.wakeRd, buf, sizeof buf) > 0) {}
-            confirmResizeRepaint(s);
+        if (g_prev.sa_handler == SIG_DFL || g_prev.sa_handler == SIG_IGN) return;
+        if (g_prev.sa_flags & SA_SIGINFO) {
+            if (g_prev.sa_sigaction) g_prev.sa_sigaction(sig, info, ctx);
+        } else {
+            g_prev.sa_handler(sig);
         }
-
-        if (fds[0].revents & (POLLIN | POLLHUP | POLLERR))
-            return rl_getc(stream);
     }
-}
+
+    static void confirmResizeRepaint(ResizeRepaintState& s) {
+        const TermSize sz = terminalSize();
+        const size_t cols = sz.cols;
+        const size_t rows = sz.rows;
+
+        if (cols == 0 || rows == 0 || cols == s.lastCols) return;
+        s.lastCols = cols;
+
+        rl_set_screen_size(static_cast<int>(rows), static_cast<int>(cols));
+
+        size_t warningRows = 0;
+        for (size_t w : s.lineWidths)
+            warningRows += std::max<size_t>(1, (w + cols - 1) / cols);
+
+        const size_t cursorCols = s.promptWidth + rl_point;
+        const size_t cursorLine = cursorCols / cols;
+        const size_t up = warningRows + cursorLine;
+
+        if (up >= rows) return;
+
+        SyncOutput sync;
+        s.lineWidths = s.paint(cols);
+        std::cout.flush();
+
+        rl_on_new_line();
+        rl_redisplay();
+    }
+
+    /// Readline's getc hook waits on stdin and the self-pipe, with no idle polling.
+    static int confirmResizeGetc(FILE* stream) {
+        ResizeRepaintState& s = g_confirmResize;
+        const int inFd = fileno(stream);
+
+        for (;;) {
+            struct pollfd fds[2] = {
+                { inFd,     POLLIN, 0 },
+                { s.wakeRd, POLLIN, 0 },
+            };
+
+            if (::poll(fds, 2, -1) < 0) {
+                if (errno == EINTR) continue;
+                return rl_getc(stream);
+            }
+
+            if (fds[1].revents & POLLIN) {
+                char buf[64];
+                while (::read(s.wakeRd, buf, sizeof buf) > 0) {}
+                confirmResizeRepaint(s);
+            }
+
+            if (fds[0].revents & (POLLIN | POLLHUP | POLLERR))
+                return rl_getc(stream);
+        }
+    }
 
 } // namespace confirm_resize_detail
 
