@@ -237,6 +237,146 @@ int countDifferentEntries(const std::vector<std::string>& allIsoFiles, const std
     return count;
 }
 
+namespace {
+
+/**
+ * @brief Prints skipped invalid search paths with color-coded styling.
+ *
+ * Handles printing the "Total files processed: 0" line if no files were
+ * scanned and no valid paths were present, followed by the formatted
+ * list of invalid directories.
+ *
+ * @param invalidPaths     Directories skipped due to permissions or existence errors.
+ * @param totalProcessed   Atomic count of files successfully scanned.
+ * @param hasValidPaths    Flag indicating whether valid base directories existed.
+ * @param vt               Theme structure providing color codes.
+ */
+void printInvalidPathsReport(const std::unordered_set<std::string>& invalidPaths,
+                             size_t totalProcessed,
+                             bool hasValidPaths,
+                             const VerboseAndDatabaseTheme& vt) {
+    if (invalidPaths.empty()) return;
+
+    if (totalProcessed == 0 && !hasValidPaths) {
+        std::cout << "\r" << color << "Total files processed: 0\n" << std::flush;
+    }
+    std::cout << "\n" << color << "Invalid paths omitted from search: " << vt.red;
+    for (auto it = invalidPaths.begin(); it != invalidPaths.end();) {
+        std::cout << "'" << *it << "'" << (++it != invalidPaths.end() ? " " : "");
+    }
+    std::cout << color << "\n";
+}
+
+/**
+ * @brief Prints deduplicated system-level I/O error messages.
+ *
+ * @param uniqueErrorMessages Deduplicated system-level I/O errors encountered during scanning.
+ */
+void printUniqueErrorMessages(const std::unordered_set<std::string>& uniqueErrorMessages) {
+    if (uniqueErrorMessages.empty()) return;
+
+    for (const auto& error : uniqueErrorMessages) {
+        std::cout << error;
+    }
+    std::cout << "\n";
+}
+
+/**
+ * @brief Evaluates state and prints the color-coded outcome of the database refresh.
+ *
+ * Evaluates the outcome across the mutually exclusive status branches (Cancelled,
+ * database access failure, lack of valid paths, no new ISO found, no ISO found,
+ * or successful import with delta count).
+ *
+ * @param isCancelled   Flag indicating whether the global operation was cancelled.
+ * @param hasIsoFiles   Flag indicating whether the discovered ISO file list is non-empty.
+ * @param hasValidPaths Flag indicating whether valid base directories were traversed.
+ * @param newISOFound   Flag indicating whether the scan produced delta changes.
+ * @param saveSuccess   Flag indicating whether the database persistence step succeeded.
+ * @param deltaCount    Number of newly imported ISO entries.
+ * @param vt            Theme structure providing color codes.
+ */
+void printDatabaseRefreshOutcome(bool isCancelled,
+                                 bool hasIsoFiles,
+                                 bool hasValidPaths,
+                                 bool newISOFound,
+                                 bool saveSuccess,
+                                 int deltaCount,
+                                 const VerboseAndDatabaseTheme& vt) {
+    if (isCancelled) {
+        std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "Cancelled" << vt.green << "]" << vt.bold << "\n";
+    } else if (hasIsoFiles && newISOFound && !saveSuccess) {
+        std::cout << "\n" << vt.red << "Database Refresh failed: [" << vt.yellow << "Unable to access the database file" << vt.red << "]" << vt.bold << "\n";
+    } else if (!hasValidPaths) {
+        std::cout << "\n" << vt.red << "Database refresh failed: [" << vt.yellow << "Lack of valid paths" << vt.red << "]" << vt.bold << "\n";
+    } else if (hasIsoFiles && !newISOFound && !saveSuccess) {
+        std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No new ISO found" << vt.green << "]" << vt.bold << "\n";
+    } else if (!hasIsoFiles) {
+        std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No ISO found" << vt.green << "]" << vt.bold << "\n";
+    } else if (hasIsoFiles && saveSuccess && newISOFound) {
+        std::cout << "\n" << vt.green << "Database Refresh: [" << vt.magenta << deltaCount << " ISO imported" << vt.green << "]" << vt.bold << "\n";
+    }
+}
+
+/**
+ * @brief Renders the complete final results screen block.
+ *
+ * Handles screen clearing, buffer management, header repainting on resize,
+ * processing metrics, error/invalid path reporting, and status outcome printing.
+ *
+ * @param totalProcessed       Final count of scanned files.
+ * @param hasValidPaths        Flag indicating whether valid base directories existed.
+ * @param hasIsoFiles          Flag indicating whether discovered ISO list is non-empty.
+ * @param newISOFound          Flag indicating whether new ISO changes were detected.
+ * @param saveSuccess          Flag indicating database save operation success status.
+ * @param deltaCount           Count of different entries imported.
+ * @param totalElapsed         Total elapsed time in seconds.
+ * @param invalidPaths         Unordered set of invalid skipped paths.
+ * @param uniqueErrorMessages  Unordered set of deduplicated error messages.
+ * @param vt                   Theme structure providing color codes.
+ * @param repaintCallerHeader  Optional callback to reprint caller screen header on resize.
+ */
+void renderDatabaseRefreshReport(size_t totalProcessed,
+                                 bool hasValidPaths,
+                                 bool hasIsoFiles,
+                                 bool newISOFound,
+                                 bool saveSuccess,
+                                 int deltaCount,
+                                 double totalElapsed,
+                                 const std::unordered_set<std::string>& invalidPaths,
+                                 const std::unordered_set<std::string>& uniqueErrorMessages,
+                                 const VerboseAndDatabaseTheme& vt,
+                                 const std::function<void()>& repaintCallerHeader) {
+    SyncOutput sync;
+    clearScrollBuffer();
+
+    if (repaintCallerHeader) {
+        repaintCallerHeader();
+    }
+
+    std::cout << "\n";
+
+    if (hasValidPaths) {
+        std::cout << "\r" << color << "Total files processed: " << totalProcessed << "\n";
+    }
+
+    printInvalidPathsReport(invalidPaths, totalProcessed, hasValidPaths, vt);
+    printUniqueErrorMessages(uniqueErrorMessages);
+
+    std::cout << color << "\nTime Elapsed: " << std::fixed << std::setprecision(1)
+              << totalElapsed << "s\n";
+
+    printDatabaseRefreshOutcome(GlobalState::g_operationCancelled,
+                                hasIsoFiles,
+                                hasValidPaths,
+                                newISOFound,
+                                saveSuccess,
+                                deltaCount,
+                                vt);
+}
+
+} // namespace
+
 /**
  * @brief Finalizes an ISO database refresh: reports results and syncs global
  * state.
@@ -320,67 +460,22 @@ void saveAndReportResultsForDatabase(std::vector<std::string>& allIsoFiles, std:
             : 0;
 
     const size_t totalProcessed = totalFiles.load();
+    const bool hasValidPaths = !validPaths.empty();
+    const bool hasIsoFiles = !allIsoFiles.empty();
 
-    auto render = [&] {
-        SyncOutput sync;
-        clearScrollBuffer();
-
-        // Reprint the caller's screen header (e.g. the FolderPaths prompt
-        // line) before the block, so a resize during the confirmation wait
-        // doesn't lose the question the user just answered. The callback is
-        // optional; when empty, the block starts from a cleared screen.
-        if (repaintCallerHeader) {
-            repaintCallerHeader();
-        }
-
-        std::cout << "\n";
-
-        if (!validPaths.empty()) {
-            std::cout << "\r" << color << "Total files processed: " << totalProcessed << "\n";
-        }
-
-        auto printInvalidPaths = [&]() {
-            if (invalidPaths.empty()) return;
-            if (totalProcessed == 0 && validPaths.empty()) {
-                std::cout << "\r" << color << "Total files processed: 0\n" << std::flush;
-            }
-            std::cout << "\n" << color << "Invalid paths omitted from search: " << vt.red;
-            for (auto it = invalidPaths.begin(); it != invalidPaths.end();) {
-                std::cout << "'" << *it << "'" << (++it != invalidPaths.end() ? " " : "");
-            }
-            std::cout << color << "\n";
-        };
-
-        auto printErrorMessages = [&]() {
-            if (uniqueErrorMessages.empty()) return;
-            for (const auto& error : uniqueErrorMessages) std::cout << error;
-            std::cout << "\n";
-        };
-
-        if ((!uniqueErrorMessages.empty() || !invalidPaths.empty())) {
-            printInvalidPaths();
-            printErrorMessages();
-        }
-
-        std::cout << color << "\nTime Elapsed: " << std::fixed << std::setprecision(1)
-                  << total_elapsed << "s\n";
-
-        if (GlobalState::g_operationCancelled) {
-            std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "Cancelled" << vt.green << "]" << vt.bold << "\n";
-        } else if (!allIsoFiles.empty() && newISOFound && !saveSuccess) {
-            std::cout << "\n" << vt.red << "Database Refresh failed: [" << vt.yellow << "Unable to access the database file" << vt.red << "]" << vt.bold << "\n";
-        } else if (validPaths.empty()) {
-            std::cout << "\n" << vt.red << "Database refresh failed: [" << vt.yellow << "Lack of valid paths" << vt.red << "]" << vt.bold << "\n";
-        } else if (!allIsoFiles.empty() && !newISOFound && !saveSuccess) {
-            std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No new ISO found" << vt.green << "]" << vt.bold << "\n";
-        } else if (allIsoFiles.empty()) {
-            std::cout << "\n" << vt.green << "Database Refresh: [" << vt.yellow << "No ISO found" << vt.green << "]" << vt.bold << "\n";
-        } else if (!allIsoFiles.empty() && saveSuccess && newISOFound) {
-            std::cout << "\n" << vt.green << "Database Refresh: [" << vt.magenta << deltaCount << " ISO imported" << vt.green << "]" << vt.bold << "\n";
-        }
-    };
-
-    pressEnterToContinueWithRepaint(render);
+    pressEnterToContinueWithRepaint([&] {
+        renderDatabaseRefreshReport(totalProcessed,
+                                    hasValidPaths,
+                                    hasIsoFiles,
+                                    newISOFound,
+                                    saveSuccess,
+                                    deltaCount,
+                                    total_elapsed,
+                                    invalidPaths,
+                                    uniqueErrorMessages,
+                                    vt,
+                                    repaintCallerHeader);
+    });
 }
 
 /**
