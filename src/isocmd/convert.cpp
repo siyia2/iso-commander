@@ -28,32 +28,138 @@
 #include "../themes.h"
 
 /**
- * @brief Checks if a file exists at the specified path.
- * @param fullPath The absolute or relative path to the file.
- * @return true if the file exists, false otherwise.
+ * @brief Checks whether a filesystem entry exists at the given path.
+ *
+ * @param fullPath Absolute or relative path to inspect.
+ * @return @c true if the path exists (file, directory, or symlink target);
+ *         @c false otherwise.
+ *
+ * @note This is a thin wrapper over `std::filesystem::exists` kept for
+ *       call-site readability.
  */
 static bool fileExists(const std::string& fullPath) {
     return std::filesystem::exists(fullPath);
 }
 
+/**
+ * @brief Resolves the real (effective-at-login) user and group identity.
+ *
+ * Implemented in another translation unit; declared here so the batch driver
+ * can stamp produced ISO files with the invoking user's ownership rather than
+ * the daemon's.
+ *
+ * @param[out] real_uid         Receives the real user ID.
+ * @param[out] real_gid         Receives the real group ID.
+ * @param[out] real_username    Receives the real user name, when available.
+ * @param[out] real_groupname   Receives the real group name, when available.
+ */
 void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username, std::string& real_groupname);
 
 namespace {
 
     /**
-     * @brief Represents the outcome of validating a target image file's accessibility.
+     * @brief Outcome of validating a source image file before conversion.
      */
     enum class ValidationResult {
         Valid,    ///< File exists and can be opened for reading.
-        Missing,  ///< File does not exist on disk.
-        NoAccess  ///< File exists but cannot be opened (permission/access issue).
+        Missing,  ///< No filesystem entry at the requested path.
+        NoAccess  ///< Entry exists but could not be opened (permissions, I/O error).
     };
 
     /**
-     * @brief Validates if an image file exists and is readable.
-     * @param inputPath The absolute or relative path to the image file.
-     * @return ValidationResult::Valid if accessible, ValidationResult::Missing if absent,
-     *         or ValidationResult::NoAccess if stream opening fails.
+     * @brief Per-batch state shared by every file in a `convertToISO()` run.
+     *
+     * Aggregates configuration, atomic counters, optional output collection,
+     * and the message-batching machinery so that helper functions need only a
+     * single context argument instead of a dozen positional parameters.
+     *
+     * Kept in an anonymous namespace because it depends on project globals
+     * (`verboseSets`, `GlobalMutexes`, `GlobalState`) and would otherwise
+     * leak into the public `convert.h` header.
+     *
+     * @warning The atomic-counter pointers and `outPathsMutex` must outlive
+     *          this context. The batch driver guarantees that by holding them
+     *          as caller-supplied parameters for the duration of the run.
+     */
+    struct ConversionBatchContext {
+        // Configuration
+        ConversionThemeStrings themes; ///< Localized label/path strings used in log messages.
+        ConversionMode mode;           ///< Which backend to invoke for each job.
+
+        // File ownership
+        uid_t real_uid = 0; ///< Real UID applied to produced ISO files via `chown`.
+        gid_t real_gid = 0; ///< Real GID applied to produced ISO files via `chown`.
+
+        // Atomic counters
+        std::atomic<size_t>* completedBytes = nullptr; ///< Incremented by bytes processed (may be null).
+        std::atomic<size_t>* completedTasks = nullptr; ///< Incremented per success or skip (must be non-null).
+        std::atomic<size_t>* failedTasks    = nullptr; ///< Incremented per failure (must be non-null).
+
+        // Optional output collection
+        std::vector<std::string>* successfulOutputPaths = nullptr; ///< Optional sink for produced ISO paths.
+        std::mutex* outPathsMutex = nullptr;                       ///< Guards @ref successfulOutputPaths when set.
+
+        // Message batching
+        std::vector<std::string> localSuccessMsgs; ///< Buffered success lines awaiting flush.
+        std::vector<std::string> localFailedMsgs;  ///< Buffered failure lines awaiting flush.
+        std::vector<std::string> localSkippedMsgs; ///< Buffered skip lines awaiting flush.
+        size_t batchSize = 50;                     ///< Flush threshold per message class.
+
+        /**
+         * @brief Flushes all buffered messages into the shared verbose sets.
+         *
+         * Takes `GlobalMutexes::globalSetsMutex` once and inserts every
+         * pending message, then clears the local buffers. Safe to call at
+         * any time; a no-op when all buffers are empty.
+         */
+        void flushMessages() {
+            std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
+            if (!localSuccessMsgs.empty()) {
+                verboseSets.operationCompleted.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
+                localSuccessMsgs.clear();
+            }
+            if (!localFailedMsgs.empty()) {
+                verboseSets.operationFailed.insert(localFailedMsgs.begin(), localFailedMsgs.end());
+                localFailedMsgs.clear();
+            }
+            if (!localSkippedMsgs.empty()) {
+                verboseSets.operationSkipped.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
+                localSkippedMsgs.clear();
+            }
+        }
+
+        /**
+         * @brief Flushes all buffers when the supplied class has reached the batch threshold.
+         *
+         * @param msgs The just-appended message class (must be one of the
+         *             @c local*Msgs members).
+         */
+        void flushIfFull(const std::vector<std::string>& msgs) {
+            if (msgs.size() >= batchSize) flushMessages();
+        }
+    };
+
+    /**
+     * @brief Per-file scratch data: source/target paths plus display strings.
+     *
+     * Lifetime is exactly one loop iteration. `fileNameOnly` is stored as an
+     * owned `std::string` so views taken from `inputPath` remain valid for the
+     * duration of the iteration.
+     */
+    struct ConversionFileContext {
+        std::string inputPath;    ///< Source image path (as supplied by the caller).
+        std::string outputPath;   ///< Derived or supplied destination ISO path.
+        std::string displayPath;  ///< Formatted path used in user-facing messages.
+        std::string fileNameOnly; ///< Basename including extension; used for type detection.
+    };
+
+    /**
+     * @brief Validates that a source image exists and is readable.
+     *
+     * @param inputPath Absolute or relative path to the candidate image file.
+     * @return `ValidationResult::Valid` when the file exists and can be opened
+     *         for reading; `ValidationResult::Missing` when no entry exists;
+     *         `ValidationResult::NoAccess` when the stream cannot be opened.
      */
     ValidationResult validateImageFile(const std::string& inputPath) {
         if (!std::filesystem::exists(inputPath)) {
@@ -66,48 +172,59 @@ namespace {
     }
 
     /**
-     * @brief Removes an invalid or missing image path from the appropriate global state cache.
-     * @param inputPath The path to remove from the cache.
-     * @param modeMdf Flag indicating MDF/MDS format mode.
-     * @param modeNrg Flag indicating NRG format mode.
-     * @param modeChd Flag indicating CHD format mode.
-     * @param modeDaa Flag indicating DAA/GBI format mode.
+     * @brief Removes an invalid or missing image path from the active format cache.
+     *
+     * Selects the cache matching the batch's active mode flag and erases all
+     * occurrences of @p inputPath. Locking is handled internally via
+     * `GlobalMutexes::globalSetsMutex`.
+     *
+     * @param inputPath Path to erase from the cache.
+     * @param ctx       Batch context providing the active `ConversionMode`.
+     *
+     * @note When multiple mode flags are set (which callers should not do),
+     *       the NRG cache wins, then MDF, CHD, DAA, and finally BIN/IMG.
      */
-    void removeFromCache(const std::string& inputPath, bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa) {
+    void removeFromCache(const std::string& inputPath, const ConversionBatchContext& ctx) {
         std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
-        auto& cache = modeNrg ? GlobalState::nrgFilesCache :
-                      (modeMdf ? GlobalState::mdfMdsFilesCache :
-                       (modeChd ? GlobalState::chdFilesCache :
-                        (modeDaa ? GlobalState::daaGbiFilesCache : GlobalState::binImgFilesCache)));
+        auto& cache = ctx.mode.nrg ? GlobalState::nrgFilesCache :
+                      (ctx.mode.mdf ? GlobalState::mdfMdsFilesCache :
+                       (ctx.mode.chd ? GlobalState::chdFilesCache :
+                        (ctx.mode.daa ? GlobalState::daaGbiFilesCache : GlobalState::binImgFilesCache)));
         cache.erase(std::remove(cache.begin(), cache.end(), inputPath), cache.end());
     }
 
     /**
-     * @brief Executes the appropriate conversion backend based on active format mode flags.
-     * @param modeMdf Flag for MDF/MDS format conversion.
-     * @param modeNrg Flag for NRG format conversion.
-     * @param modeChd Flag for CHD format conversion.
-     * @param modeDaa Flag for DAA/GBI format conversion.
-     * @param inputPath The source image file path.
-     * @param outputPath The target destination ISO file path.
-     * @param completedBytes Pointer to an atomic counter tracking total processed bytes.
-     * @return true if the backend conversion operation succeeds, false otherwise.
+     * @brief Dispatches a single conversion to the backend selected by the batch mode.
+     *
+     * @param file Per-file paths (input and output) to convert.
+     * @param ctx  Batch context supplying mode flags and the completed-bytes counter.
+     * @return @c true when the selected backend reports success; @c false otherwise.
+     *
+     * @note Falls through to the CCD backend when no mode flag is set, matching
+     *       the historical behavior of the pre-refactor dispatcher.
      */
-    bool runConversion(bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa,
-                       const std::string& inputPath, const std::string& outputPath,
-                       std::atomic<size_t>* completedBytes) {
-        if (modeMdf)      return convertMdfToIso(inputPath, outputPath, completedBytes);
-        if (modeNrg)      return convertNrgToIso(inputPath, outputPath, completedBytes);
-        if (modeChd)      return convertChdToIso(inputPath, outputPath, completedBytes);
-        if (modeDaa)      return convertDaaToIso(inputPath, outputPath, completedBytes);
-        return convertCcdToIso(inputPath, outputPath, completedBytes);
+    bool runConversion(const ConversionFileContext& file, const ConversionBatchContext& ctx) {
+        const auto& mode = ctx.mode;
+        if (mode.mdf) return convertMdfToIso(file.inputPath, file.outputPath, ctx.completedBytes);
+        if (mode.nrg) return convertNrgToIso(file.inputPath, file.outputPath, ctx.completedBytes);
+        if (mode.chd) return convertChdToIso(file.inputPath, file.outputPath, ctx.completedBytes);
+        if (mode.daa) return convertDaaToIso(file.inputPath, file.outputPath, ctx.completedBytes);
+        return convertCcdToIso(file.inputPath, file.outputPath, ctx.completedBytes);
     }
 
     /**
-     * @brief Determines the file extension and maps it to a normalized upper-case image type string.
-     * @param fileNameOnly The filename string_view (including extension) to inspect.
-     * @return A string_view representing the recognized image type (e.g., "BIN", "NRG", "CHD"),
-     *         or "Image" as a fallback.
+     * @brief Maps a filename's extension to a normalized upper-case image type.
+     *
+     * The comparison is ASCII case-insensitive and uses fixed-length checks so
+     * the caller does not pay for temporary string construction.
+     *
+     * @param fileNameOnly Filename (including extension) to inspect.
+     * @return A `std::string_view` naming the type (`"BIN"`, `"IMG"`, `"MDF"`,
+     *         `"NRG"`, `"CHD"`, `"DAA"`, `"GBI"`), or `"Image"` when the
+     *         extension is absent or unrecognized.
+     *
+     * @note The returned view aliases static storage or @p fileNameOnly; it is
+     *       valid only while @p fileNameOnly is alive.
      */
     std::string_view getFileType(std::string_view fileNameOnly) {
         const size_t dotPos = fileNameOnly.find_last_of('.');
@@ -135,17 +252,21 @@ namespace {
 
 /**
  * @file convert_iso.cpp
- * @brief Disk image batch conversion utilities.
+ * @brief Batch conversion driver for disk-image → ISO workflows.
  */
 
 namespace {
 
     /**
-     * @brief Formats the display path for logging based on configuration flags.
+     * @brief Formats the path shown in log and console messages.
      *
-     * @param directory The extracted directory path view.
-     * @param fileNameOnly The extracted filename view.
-     * @return std::string The formatted display path.
+     * When `displayConfig::toggleNamesOnly` is set the basename alone is used;
+     * otherwise the joined `"directory/filename"` form is produced.
+     *
+     * @param directory    Directory component of the image path.
+     * @param fileNameOnly Basename component of the image path.
+     * @return A formatted display path suitable for direct interpolation into
+     *         log messages.
      */
     std::string formatDisplayPath(std::string_view directory, std::string_view fileNameOnly) {
         if (!displayConfig::toggleNamesOnly) {
@@ -158,10 +279,14 @@ namespace {
     }
 
     /**
-     * @brief Derives the destination ISO file path from the source image path.
+     * @brief Derives the destination ISO path from a source image path.
      *
-     * @param inputPath The source image file path.
-     * @return std::string The target .iso file path.
+     * Replaces the final `.`-suffix with `.iso`. Paths without an extension
+     * receive the suffix appended verbatim.
+     *
+     * @param inputPath Source image path.
+     * @return The corresponding `.iso` path. The caller is responsible for
+     *         checking that it does not already exist.
      */
     std::string deriveOutputPath(const std::string& inputPath) {
         const size_t dotPos = inputPath.find_last_of('.');
@@ -174,181 +299,163 @@ namespace {
     }
 
     /**
-     * @brief Handles validation failure for an image file.
+     * @brief Records a validation failure for a source image.
      *
-     * @param inputPath Source file path.
-     * @param displayPath Formatted display path for messages.
-     * @param valRes The validation result enum.
-     * @param themes Theme strings configuration.
-     * @param modeMdf MDF/MDS mode flag.
-     * @param modeNrg NRG mode flag.
-     * @param modeChd CHD mode flag.
-     * @param modeDaa DAA/GBI mode flag.
-     * @param localFailedMsgs Local batch collection for failed messages.
-     * @param failedTasks Atomic counter for failed tasks.
-     * @param batchSize Threshold size for batch flushing.
-     * @param batchInsertFunc Callback function to flush messages.
+     * Builds the localized failure message, drops the path from the active
+     * format cache when the file is missing, bumps the failed-task counter,
+     * and flushes the buffer when the batch threshold is reached.
+     *
+     * @param file   Per-file context (paths and display strings).
+     * @param valRes Result of `validateImageFile`; must not be `Valid`.
+     * @param ctx    Batch context (mutated to append the message and bump counters).
      */
-    void handleValidationFailure(const std::string& inputPath,
-                                 const std::string& displayPath,
+    void handleValidationFailure(const ConversionFileContext& file,
                                  ValidationResult valRes,
-                                 const ConversionThemeStrings& themes,
-                                 bool modeMdf, bool modeNrg, bool modeChd, bool modeDaa,
-                                 std::vector<std::string>& localFailedMsgs,
-                                 std::atomic<size_t>* failedTasks,
-                                 size_t batchSize,
-                                 const std::function<void()>& batchInsertFunc) {
+                                 ConversionBatchContext& ctx) {
+        const auto& themes = ctx.themes;
         std::string msg;
         if (valRes == ValidationResult::Missing) {
-            msg.reserve(themes.missingLabel.size() * 2 + themes.errPath.size() + displayPath.size() + 32);
+            msg.reserve(themes.missingLabel.size() * 2 + themes.errPath.size() + file.displayPath.size() + 32);
             msg.append(themes.missingLabel).append("Convert2ISO: ")
-               .append(themes.errPath).append("'").append(displayPath).append("'")
+               .append(themes.errPath).append("'").append(file.displayPath).append("'")
                .append(themes.missingLabel).append(": Failed → MissingFile.");
-            removeFromCache(inputPath, modeMdf, modeNrg, modeChd, modeDaa);
+            removeFromCache(file.inputPath, ctx);
         } else {
-            msg.reserve(themes.errLabel.size() * 2 + themes.errPath.size() + displayPath.size() + 48);
+            msg.reserve(themes.errLabel.size() * 2 + themes.errPath.size() + file.displayPath.size() + 48);
             msg.append(themes.errLabel).append("Convert2ISO: ")
-               .append(themes.errPath).append("'").append(displayPath).append("'")
+               .append(themes.errPath).append("'").append(file.displayPath).append("'")
                .append(themes.errLabel).append(": Failed → NoAccess.");
         }
-        localFailedMsgs.push_back(std::move(msg));
-        failedTasks->fetch_add(1, std::memory_order_acq_rel);
-        if (localFailedMsgs.size() >= batchSize) {
-            batchInsertFunc();
-        }
+        ctx.localFailedMsgs.push_back(std::move(msg));
+        ctx.failedTasks->fetch_add(1, std::memory_order_acq_rel);
+        ctx.flushIfFull(ctx.localFailedMsgs);
     }
 
     /**
-     * @brief Handles the case where the output ISO file already exists.
+     * @brief Records a skip for a job whose destination already exists.
      *
-     * @param displayPath Formatted display path for messages.
-     * @param themes Theme strings configuration.
-     * @param localSkippedMsgs Local batch collection for skipped messages.
-     * @param completedTasks Atomic counter for completed/skipped tasks.
-     * @param batchSize Threshold size for batch flushing.
-     * @param batchInsertFunc Callback function to flush messages.
+     * Bumps the completed-task counter (a skip is treated as a successful
+     * no-op for progress purposes) and flushes the buffer when the batch
+     * threshold is reached.
+     *
+     * @param file Per-file context (paths and display strings).
+     * @param ctx  Batch context (mutated to append the message and bump counters).
      */
-    void handleExistingOutput(const std::string& displayPath,
-                             const ConversionThemeStrings& themes,
-                             std::vector<std::string>& localSkippedMsgs,
-                             std::atomic<size_t>* completedTasks,
-                             size_t batchSize,
-                             const std::function<void()>& batchInsertFunc) {
+    void handleExistingOutput(const ConversionFileContext& file, ConversionBatchContext& ctx) {
+        const auto& themes = ctx.themes;
         std::string msg;
-        msg.reserve(themes.skipLabel.size() * 2 + themes.skipPath.size() + displayPath.size() + 32);
+        msg.reserve(themes.skipLabel.size() * 2 + themes.skipPath.size() + file.displayPath.size() + 32);
         msg.append(themes.skipLabel).append("Convert2ISO: ")
-           .append(themes.skipPath).append("'").append(displayPath).append("'")
+           .append(themes.skipPath).append("'").append(file.displayPath).append("'")
            .append(themes.skipLabel).append(": ISOalrExists → Skipped.");
-        localSkippedMsgs.push_back(std::move(msg));
-        completedTasks->fetch_add(1, std::memory_order_acq_rel);
-        if (localSkippedMsgs.size() >= batchSize) {
-            batchInsertFunc();
-        }
+        ctx.localSkippedMsgs.push_back(std::move(msg));
+        ctx.completedTasks->fetch_add(1, std::memory_order_acq_rel);
+        ctx.flushIfFull(ctx.localSkippedMsgs);
     }
 
     /**
-     * @brief Handles a successful conversion result.
+     * @brief Records a successful conversion.
      *
-     * @param outputPath Destination ISO file path.
-     * @param fileNameOnly Filename view for type detection.
-     * @param real_uid Real User ID for ownership update.
-     * @param real_gid Real Group ID for ownership update.
-     * @param themes Theme strings configuration.
-     * @param localSuccessMsgs Local batch collection for success messages.
-     * @param completedTasks Atomic counter for completed tasks.
-     * @param successfulOutputPaths Optional vector to collect successful paths.
-     * @param outPathsMutex Mutex guarding successfulOutputPaths.
-     * @param batchSize Threshold size for batch flushing.
-     * @param batchInsertFunc Callback function to flush messages.
+     * Applies the real user/group ownership to the produced ISO, appends its
+     * path to the optional output collection, builds the localized success
+     * message, bumps the completed-task counter, and flushes the buffer when
+     * the batch threshold is reached.
+     *
+     * @param file Per-file context (paths and display strings).
+     * @param ctx  Batch context (mutated to append the message and bump counters).
+     *
+     * @note `chown` failures are intentionally non-fatal and ignored — the
+     *       conversion result is still considered successful.
      */
-    void handleSuccessfulConversion(const std::string& outputPath,
-                                   std::string_view fileNameOnly,
-                                   uid_t real_uid, gid_t real_gid,
-                                   const ConversionThemeStrings& themes,
-                                   std::vector<std::string>& localSuccessMsgs,
-                                   std::atomic<size_t>* completedTasks,
-                                   std::vector<std::string>* successfulOutputPaths,
-                                   std::mutex* outPathsMutex,
-                                   size_t batchSize,
-                                   const std::function<void()>& batchInsertFunc) {
-        [[maybe_unused]] int ret = chown(outputPath.c_str(), real_uid, real_gid);
+    void handleSuccessfulConversion(const ConversionFileContext& file, ConversionBatchContext& ctx) {
+        const auto& themes = ctx.themes;
+        [[maybe_unused]] int ret = chown(file.outputPath.c_str(), ctx.real_uid, ctx.real_gid);
 
-        if (successfulOutputPaths && outPathsMutex) {
-            std::lock_guard<std::mutex> lock(*outPathsMutex);
-            successfulOutputPaths->push_back(outputPath);
+        if (ctx.successfulOutputPaths && ctx.outPathsMutex) {
+            std::lock_guard<std::mutex> lock(*ctx.outPathsMutex);
+            ctx.successfulOutputPaths->push_back(file.outputPath);
         }
 
-        std::string_view fileType = getFileType(fileNameOnly);
+        std::string_view fileType = getFileType(file.fileNameOnly);
         std::string msg;
-        msg.reserve(themes.okLabel.size() * 2 + themes.okPath.size() + outputPath.size() + fileType.size() + 16);
+        msg.reserve(themes.okLabel.size() * 2 + themes.okPath.size() + file.outputPath.size() + fileType.size() + 16);
         msg.append(themes.okLabel).append("Convert2ISO: ")
-           .append(themes.okPath).append("'").append(outputPath).append("'")
+           .append(themes.okPath).append("'").append(file.outputPath).append("'")
            .append(themes.okLabel).append(": ").append(fileType).append(" → ISO.");
-        localSuccessMsgs.push_back(std::move(msg));
+        ctx.localSuccessMsgs.push_back(std::move(msg));
 
-        completedTasks->fetch_add(1, std::memory_order_acq_rel);
-        if (localSuccessMsgs.size() >= batchSize) {
-            batchInsertFunc();
-        }
+        ctx.completedTasks->fetch_add(1, std::memory_order_acq_rel);
+        ctx.flushIfFull(ctx.localSuccessMsgs);
     }
 
     /**
-     * @brief Handles a failed conversion result.
+     * @brief Records a failed conversion and cleans up any partial output.
      *
-     * @param outputPath Destination ISO file path to clean up if partial.
-     * @param displayPath Formatted display path for messages.
-     * @param themes Theme strings configuration.
-     * @param localFailedMsgs Local batch collection for failed messages.
-     * @param failedTasks Atomic counter for failed tasks.
-     * @param batchSize Threshold size for batch flushing.
-     * @param batchInsertFunc Callback function to flush messages.
+     * Removes a partially written ISO when present, distinguishes a
+     * user-requested cancellation from a backend error in the message,
+     * bumps the failed-task counter, and flushes the buffer when the batch
+     * threshold is reached.
+     *
+     * @param file Per-file context (paths and display strings).
+     * @param ctx  Batch context (mutated to append the message and bump counters).
      */
-    void handleFailedConversion(const std::string& outputPath,
-                               const std::string& displayPath,
-                               const ConversionThemeStrings& themes,
-                               std::vector<std::string>& localFailedMsgs,
-                               std::atomic<size_t>* failedTasks,
-                               size_t batchSize,
-                               const std::function<void()>& batchInsertFunc) {
+    void handleFailedConversion(const ConversionFileContext& file, ConversionBatchContext& ctx) {
         namespace fs = std::filesystem;
-        if (fs::exists(outputPath)) fs::remove(outputPath);
+        if (fs::exists(file.outputPath)) fs::remove(file.outputPath);
 
         bool isCancelled = GlobalState::g_operationCancelled.load(std::memory_order_relaxed);
+        const auto& themes = ctx.themes;
         std::string msg;
-        msg.reserve(themes.errLabel.size() * 2 + themes.errPath.size() + displayPath.size() + 24);
+        msg.reserve(themes.errLabel.size() * 2 + themes.errPath.size() + file.displayPath.size() + 24);
         msg.append(themes.errLabel).append("Convert2ISO: ")
-           .append(themes.errPath).append("'").append(displayPath).append("'")
+           .append(themes.errPath).append("'").append(file.displayPath).append("'")
            .append(themes.errLabel).append(": ").append(isCancelled ? "Cancelled." : "Failed.");
-        localFailedMsgs.push_back(std::move(msg));
+        ctx.localFailedMsgs.push_back(std::move(msg));
 
-        failedTasks->fetch_add(1, std::memory_order_acq_rel);
-        if (localFailedMsgs.size() >= batchSize) {
-            batchInsertFunc();
-        }
+        ctx.failedTasks->fetch_add(1, std::memory_order_acq_rel);
+        ctx.flushIfFull(ctx.localFailedMsgs);
     }
 
 } // namespace
 
 /**
- * @brief Batch converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD, DAA, GBI) to ISO format.
+ * @brief Batch-converts disk image files (BIN, IMG, MDF, NRG, CHD, CCD, DAA, GBI) to ISO format.
  *
- * Handles per-file validation (existence and basic readability), skips existing outputs,
- * selects the appropriate conversion backend based on mode flags, and aggregates
- * success/failed/skipped messages in a thread-safe manner.
+ * Iterates over @p imageFiles, performing per-file validation (existence and
+ * basic readability), skipping jobs whose destination ISO already exists,
+ * dispatching to the backend selected by the `mode*` flags, and aggregating
+ * success/failure/skip messages in a thread-safe manner. Successful output
+ * paths are optionally collected for downstream database indexing.
  *
- * Also updates file ownership for outputs, removes invalid cache entries, and
- * collects successful output paths for later database indexing by the caller.
+ * The iteration is cooperative with cancellation: when
+ * `GlobalState::g_operationCancelled` is set, no further jobs are started and
+ * the batch returns promptly after flushing any buffered messages.
  *
- * @param imageFiles               Vector containing absolute or relative paths of source images.
- * @param modeMdf                  True if converting MDF/MDS images.
- * @param modeNrg                  True if converting NRG images.
- * @param modeChd                  True if converting CHD images.
- * @param modeDaa                  True if converting DAA/GBI images.
- * @param completedBytes           Atomic counter to track cumulative processed bytes.
- * @param completedTasks           Atomic counter to track successfully completed or skipped tasks.
- * @param failedTasks              Atomic counter to track failed conversion tasks.
- * @param successfulOutputPaths    Optional pointer to a vector storing successfully generated ISO paths.
- * @param outPathsMutex            Optional pointer to a mutex guarding @p successfulOutputPaths.
+ * @param imageFiles              Source image paths to convert.
+ * @param modeMdf                 @c true selects the MDF/MDS backend.
+ * @param modeNrg                 @c true selects the NRG backend.
+ * @param modeChd                 @c true selects the CHD backend.
+ * @param modeDaa                 @c true selects the DAA/GBI backend.
+ *                                When all four mode flags are @c false, the
+ *                                CCD backend is used.
+ * @param completedBytes          Optional atomic counter incremented by bytes
+ *                                processed; may be @c nullptr.
+ * @param completedTasks          Atomic counter incremented per success or skip;
+ *                                must be non-null.
+ * @param failedTasks             Atomic counter incremented per failure; must
+ *                                be non-null.
+ * @param successfulOutputPaths   Optional sink for produced ISO paths. When
+ *                                non-null, @p outPathsMutex must also be non-null.
+ * @param outPathsMutex           Optional mutex guarding @p successfulOutputPaths.
+ *
+ * @warning Each of @p completedTasks, @p failedTasks, and (if @p successfulOutputPaths
+ *          is non-null) @p outPathsMutex must point to objects whose lifetime
+ *          exceeds this call. Null pointers for the required atomics are
+ *          undefined behavior.
+ *
+ * @note Safe to invoke concurrently for distinct batches provided the shared
+ *       counters/mutex semantics are respected; the global verbose sets are
+ *       internally locked.
  */
 void convertToISO(const std::vector<std::string>& imageFiles,
                   const bool& modeMdf,
@@ -361,65 +468,50 @@ void convertToISO(const std::vector<std::string>& imageFiles,
                   std::vector<std::string>* successfulOutputPaths,
                   std::mutex* outPathsMutex) {
 
-    const size_t BATCH_SIZE = 50;
-    ConversionThemeStrings themes = getConversionThemeStrings();
+    ConversionBatchContext ctx;
+    ctx.themes = getConversionThemeStrings();
+    ctx.mode   = ConversionMode{ modeMdf, modeNrg, modeChd, modeDaa };
 
-    uid_t real_uid; gid_t real_gid;
     std::string real_username, real_groupname;
-    getRealUserId(real_uid, real_gid, real_username, real_groupname);
+    getRealUserId(ctx.real_uid, ctx.real_gid, real_username, real_groupname);
 
-    std::vector<std::string> localSuccessMsgs, localFailedMsgs, localSkippedMsgs;
-
-    auto batchInsertMessages = [&]() {
-        std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
-        if (!localSuccessMsgs.empty()) {
-            verboseSets.operationCompleted.insert(localSuccessMsgs.begin(), localSuccessMsgs.end());
-            localSuccessMsgs.clear();
-        }
-        if (!localFailedMsgs.empty()) {
-            verboseSets.operationFailed.insert(localFailedMsgs.begin(), localFailedMsgs.end());
-            localFailedMsgs.clear();
-        }
-        if (!localSkippedMsgs.empty()) {
-            verboseSets.operationSkipped.insert(localSkippedMsgs.begin(), localSkippedMsgs.end());
-            localSkippedMsgs.clear();
-        }
-    };
+    ctx.completedBytes        = completedBytes;
+    ctx.completedTasks        = completedTasks;
+    ctx.failedTasks           = failedTasks;
+    ctx.successfulOutputPaths = successfulOutputPaths;
+    ctx.outPathsMutex         = outPathsMutex;
+    ctx.batchSize             = 50;
 
     for (const std::string& inputPath : imageFiles) {
         if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) break;
 
-        auto [directory, fileNameOnly] = extractDirectoryAndFilename(inputPath, "conversions");
-        std::string displayPath = formatDisplayPath(directory, fileNameOnly);
+        ConversionFileContext file;
+        file.inputPath = inputPath;
+        auto [dir, name] = extractDirectoryAndFilename(file.inputPath, "conversions");
+        file.fileNameOnly.assign(name);
+        file.displayPath = formatDisplayPath(dir, name);
 
-        ValidationResult valRes = validateImageFile(inputPath);
+        ValidationResult valRes = validateImageFile(file.inputPath);
         if (valRes != ValidationResult::Valid) {
-            handleValidationFailure(inputPath, displayPath, valRes, themes, modeMdf, modeNrg, modeChd, modeDaa,
-                                    localFailedMsgs, failedTasks, BATCH_SIZE, batchInsertMessages);
+            handleValidationFailure(file, valRes, ctx);
             continue;
         }
 
-        std::string outputPath = deriveOutputPath(inputPath);
+        file.outputPath = deriveOutputPath(file.inputPath);
 
-        if (fileExists(outputPath)) {
-            handleExistingOutput(displayPath, themes, localSkippedMsgs, completedTasks,
-                                 BATCH_SIZE, batchInsertMessages);
+        if (fileExists(file.outputPath)) {
+            handleExistingOutput(file, ctx);
             continue;
         }
 
         if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) break;
 
-        bool conversionSuccess = runConversion(modeMdf, modeNrg, modeChd, modeDaa, inputPath, outputPath, completedBytes);
-
-        if (conversionSuccess) {
-            handleSuccessfulConversion(outputPath, fileNameOnly, real_uid, real_gid, themes,
-                                       localSuccessMsgs, completedTasks, successfulOutputPaths,
-                                       outPathsMutex, BATCH_SIZE, batchInsertMessages);
+        if (runConversion(file, ctx)) {
+            handleSuccessfulConversion(file, ctx);
         } else {
-            handleFailedConversion(outputPath, displayPath, themes, localFailedMsgs,
-                                   failedTasks, BATCH_SIZE, batchInsertMessages);
+            handleFailedConversion(file, ctx);
         }
     }
 
-    batchInsertMessages();
+    ctx.flushMessages();
 }
