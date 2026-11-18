@@ -79,7 +79,6 @@ namespace {
 
         ~TerminalGuard() {
             if (active) {
-                tcflush(STDIN_FILENO, TCIFLUSH);
                 tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved);
             }
         }
