@@ -192,8 +192,7 @@ static std::string constructDatabasePrompt(const VerboseAndDatabaseTheme& dt) {
     prompt.reserve(512);
     prompt.append("\001").append(dt.green).append("\002FolderPaths")
           .append("\001").append(dt.blue).append("\002 ↵ to scan for ")
-          .append(globalTheme == "mono" ? std::string("\001") + dt.orange + "\002.iso"
-                                        : std::string("\001") + dt.green + "\002.iso")
+          .append(dt.green + "\002.iso")
           .append("\001").append(dt.blue).append("\002 entries and import into ")
           .append("\001").append(dt.green).append("\002local")
           .append("\001").append(dt.blue).append("\002 DB, ? for help:\n")
