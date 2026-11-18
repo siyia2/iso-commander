@@ -69,13 +69,15 @@ ReadlineColors resolveReadlineTheme() {
     const MainTheme* theme = getActiveTheme();
     const bool isOrig = (globalTheme == "original");
 
+    static constexpr std::string_view fileColor = UI::Palette::DimGray;
+
     if (isOrig) {
         return {
             UI::Palette::Brown.data(),       // label
             UI::Palette::Yellow.data(),      // hint
-            UI::Palette::BoldReset.data(),   // dir  (highlighted base color)
-            UI::Palette::Blue.data(),        // file
-            UI::Palette::Reset.data(),       // reset (true SGR reset, \033[0m)
+            UI::Palette::Blue.data(),        // dir
+            fileColor.data(),                // file (dim gray)
+            UI::Palette::Reset.data(),       // reset
             UI::Palette::Yellow.data(),      // warning
             UI::Palette::Purple.data()       // accent
         };
@@ -84,9 +86,9 @@ ReadlineColors resolveReadlineTheme() {
     return {
         theme->muted.data(),                 // label
         theme->accent.data(),                // hint
-        UI::Palette::BoldReset.data(),       // dir  (highlighted base color)
-        theme->accent.data(),                // file
-        UI::Palette::Reset.data(),           // reset (true SGR reset, \033[0m)
+        theme->accent.data(),                // dir
+        fileColor.data(),                    // file (dim gray)
+        UI::Palette::Reset.data(),           // reset
         theme->warning.data(),               // warning
         theme->accent.data()                 // accent
     };
