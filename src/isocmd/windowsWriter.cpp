@@ -8,12 +8,12 @@
 #include <cctype>
 #include <cerrno>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
-#include <memory>
 #include <mutex>
 #include <queue>
 #include <random>
@@ -30,7 +30,7 @@
 #include <spawn.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
