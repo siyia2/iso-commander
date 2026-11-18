@@ -25,6 +25,7 @@
 #include "../themes.h"
 
 namespace {
+
     /** @brief Set to 1 by the SIGWINCH handler; checked on the main loop. */
     volatile std::sig_atomic_t g_winch = 0;
 
@@ -137,13 +138,15 @@ namespace {
         enable_ctrl_d();
         recoverCoutIfNeeded();
 
-        TerminalGuard termGuard;
-        if (!termGuard.ok())
-            return;
-
-        g_winch = 0;
         SigwinchGuard sigGuard(handle_winch);
         if (!sigGuard.ok())
+            return;
+
+        // SIGWINCH is now blocked, so resetting the flag is race-free.
+        g_winch = 0;
+
+        TerminalGuard termGuard;
+        if (!termGuard.ok())
             return;
 
         sigset_t wait_mask = sigGuard.getOldMask();
