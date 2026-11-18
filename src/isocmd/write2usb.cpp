@@ -66,459 +66,459 @@ static bool isValidIso9660(int fd) {
 
 namespace {
 
-using Clock = std::chrono::high_resolution_clock;
+    using Clock = std::chrono::high_resolution_clock;
 
-constexpr size_t DESIRED_BUFFER  = 4 * 1024 * 1024;
-constexpr size_t MAX_WRITE_CHUNK = 4 * 1024 * 1024;
-constexpr int    NUM_BUFFERS     = 2;
-static_assert(MAX_WRITE_CHUNK <= DESIRED_BUFFER,
-              "write chunk larger than the buffer is pointless");
+    constexpr size_t DESIRED_BUFFER  = 4 * 1024 * 1024;
+    constexpr size_t MAX_WRITE_CHUNK = 4 * 1024 * 1024;
+    constexpr int    NUM_BUFFERS     = 2;
+    static_assert(MAX_WRITE_CHUNK <= DESIRED_BUFFER,
+                  "write chunk larger than the buffer is pointless");
 
-// AlignedBuffer (write2usb.h) is non-movable, so the pool holds unique_ptrs.
-using IsoBufferPool = std::vector<std::unique_ptr<AlignedBuffer>>;
+    // AlignedBuffer (write2usb.h) is non-movable, so the pool holds unique_ptrs.
+    using IsoBufferPool = std::vector<std::unique_ptr<AlignedBuffer>>;
 
-bool markFailed(std::vector<ProgressInfo>& progressData, size_t index) {
-    progressData[index].failed.store(true);
-    return false;
-}
-
-// RAII file descriptor (closes on scope exit if valid).
-struct FdGuard {
-    int fd;
-    explicit FdGuard(int f) : fd(f) {}
-    ~FdGuard() { if (fd != -1) close(fd); }
-    FdGuard(const FdGuard&)            = delete;
-    FdGuard& operator=(const FdGuard&) = delete;
-};
-
-// Effective O_DIRECT alignment: max(logical, physical) sector size.
-// BLKPBSZGET is best-effort and falls back to the logical size.
-bool queryEffectiveSectorSize(int devFd, int& sectorSize) {
-    int logical  = 0;
-    int physical = 0;
-
-    if (ioctl(devFd, BLKSSZGET, &logical) < 0 || logical <= 0)
+    bool markFailed(std::vector<ProgressInfo>& progressData, size_t index) {
+        progressData[index].failed.store(true);
         return false;
-    if (ioctl(devFd, BLKPBSZGET, &physical) < 0 || physical <= 0)
-        physical = logical;
-
-    sectorSize = std::max(logical, physical);
-    return true;
-}
-
-bool allocateAlignedBuffers(IsoBufferPool& out, int sectorSize, size_t bufferSize) {
-    for (int i = 0; i < NUM_BUFFERS; ++i) {
-        auto buf = std::make_unique<AlignedBuffer>(bufferSize, static_cast<size_t>(sectorSize));
-        if (!buf->ok())
-            return false;
-        out.push_back(std::move(buf));
-    }
-    return true;
-}
-
-// Validates the ISO, rewinds, and fetches its stat info.
-bool prepareIso(int isoFd, struct stat& sb) {
-    return isValidIso9660(isoFd)
-        && lseek(isoFd, 0, SEEK_SET) != -1
-        && fstat(isoFd, &sb) != -1;
-}
-
-// Exponentially smoothed write-speed estimator with stall handling.
-class SpeedEstimator {
-public:
-    explicit SpeedEstimator(Clock::time_point start)
-        : lastUpdate_(start), stallStart_(start) {}
-
-    // Returns a speed (MB/s) to publish, or nullopt if nothing should change.
-    std::optional<double> sample(uint64_t currentWritten, Clock::time_point now) {
-        const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                   now - lastUpdate_).count();
-        if (elapsedMs < MIN_UPDATE_INTERVAL_MS)
-            return std::nullopt;
-
-        const uint64_t delta = (currentWritten >= lastWritten_) ? (currentWritten - lastWritten_) : 0;
-        return delta > 0 ? onProgress(currentWritten, delta, elapsedMs, now)
-                         : onNoProgress(now);
     }
 
-private:
-    static constexpr double ALPHA = 0.3;
-    static constexpr int MIN_UPDATE_INTERVAL_MS = 1000;
-    static constexpr int STALL_TIMEOUT_SECONDS  = 60;
-
-    double onProgress(uint64_t currentWritten, uint64_t delta, long long elapsedMs,
-                      Clock::time_point now) {
-        stalled_ = false;
-
-        const double instant = (static_cast<double>(delta) / (1024.0 * 1024.0)) / (elapsedMs / 1000.0);
-        // Heavier smoothing for slow drives (< 10 MB/s) to reduce display
-        // jitter from bursty O_DIRECT writes at low throughput.
-        const double factor = (instant < 10.0) ? 0.2 : ALPHA;
-
-        smoothed_ = haveEstimate_ ? (factor * instant + (1.0 - factor) * smoothed_) : instant;
-        haveEstimate_ = true;
-
-        // Only reset the baseline when bytes actually arrived — this keeps
-        // `elapsed` spanning back to the last real data point instead of an
-        // arbitrary polling tick, which would truncate the window to ~1s and
-        // produce a spurious floor (one write chunk per interval) on
-        // slow/bursty O_DIRECT writers.
-        lastWritten_ = currentWritten;
-        lastUpdate_  = now;
-        return smoothed_;
-    }
-
-    std::optional<double> onNoProgress(Clock::time_point now) {
-        if (!stalled_) {
-            stalled_    = true;
-            stallStart_ = now;
-        }
-        const auto stallSeconds = std::chrono::duration_cast<std::chrono::seconds>(
-                                      now - stallStart_).count();
-        // Deliberately do NOT touch lastWritten_/lastUpdate_ here — let the
-        // elapsed window keep growing while a slow write is still in flight,
-        // so the eventual speed sample reflects the true transfer duration.
-        if (stallSeconds >= STALL_TIMEOUT_SECONDS)
-            return 0.0;
-        return std::nullopt;
-    }
-
-    Clock::time_point lastUpdate_;
-    Clock::time_point stallStart_;
-    uint64_t lastWritten_  = 0;
-    double   smoothed_     = 0.0;
-    bool     haveEstimate_ = false;
-    bool     stalled_      = false;
-};
-
-// Double-buffered reader-thread -> writer-thread ISO streamer with a progress
-// monitor thread.
-class IsoStreamer {
-public:
-    IsoStreamer(int isoFd, int devFd, uint64_t fileSize, uint64_t paddedSize,
-                size_t bufferSize, size_t writeChunk,
-                IsoBufferPool& buffers,
-                std::vector<ProgressInfo>& progressData, size_t progressIndex)
-        : isoFd_(isoFd), devFd_(devFd), fileSize_(fileSize), paddedSize_(paddedSize),
-          bufferSize_(bufferSize), writeChunk_(writeChunk),
-          progressData_(progressData), progressIndex_(progressIndex) {
-        for (auto& b : buffers)
-            emptyQ_.push_back({b->data, 0});
-    }
-
-    bool run() {
-        startTime_ = Clock::now();
-
-        try {
-            monitorThread_ = std::thread([this] { monitorLoop(); });
-            readerThread_  = std::thread([this] { readerLoop(); });
-            pumpToDevice();
-        } catch (...) {
-            shutdownThreads();
-            if (!isCancelled()) markFailed();
-            return false;
-        }
-
-        shutdownThreads();
-
-        if (readFailed_ || ioFailed_) {
-            if (!isCancelled()) markFailed();
-            return false;
-        }
-
-        posix_fadvise(isoFd_, 0, 0, POSIX_FADV_DONTNEED);
-
-        if (!aborted() && fsync(devFd_) != 0) {
-            markFailed();
-            return false;
-        }
-
-        return finishIfComplete();
-    }
-
-private:
-    struct Chunk {
-        char*  buf;
-        size_t len;   // 0 == end-of-stream sentinel
+    // RAII file descriptor (closes on scope exit if valid).
+    struct FdGuard {
+        int fd;
+        explicit FdGuard(int f) : fd(f) {}
+        ~FdGuard() { if (fd != -1) close(fd); }
+        FdGuard(const FdGuard&)            = delete;
+        FdGuard& operator=(const FdGuard&) = delete;
     };
 
-    static bool isCancelled() { return GlobalState::g_operationCancelled.load(); }
-    bool aborted() const { return cancelled_ || isCancelled(); }
+    // Effective O_DIRECT alignment: max(logical, physical) sector size.
+    // BLKPBSZGET is best-effort and falls back to the logical size.
+    bool queryEffectiveSectorSize(int devFd, int& sectorSize) {
+        int logical  = 0;
+        int physical = 0;
 
-    bool markFailed() {
-        return ::markFailed(progressData_, progressIndex_);
-    }
-
-    // ---- lifecycle -------------------------------------------------------
-
-    // Idempotent: stops and joins both helper threads.
-    void shutdownThreads() {
-        {
-            std::lock_guard<std::mutex> lk(qMutex_);
-            stopReader_ = true;
-        }
-        qCv_.notify_all();
-        if (readerThread_.joinable()) readerThread_.join();
-
-        {
-            std::lock_guard<std::mutex> lk(monMutex_);
-            monitoringActive_.store(false);
-        }
-        monCv_.notify_all();
-        if (monitorThread_.joinable()) monitorThread_.join();
-    }
-
-    bool finishIfComplete() {
-        if (aborted() || localBytesWritten_ < paddedSize_)
+        if (ioctl(devFd, BLKSSZGET, &logical) < 0 || logical <= 0)
             return false;
+        if (ioctl(devFd, BLKPBSZGET, &physical) < 0 || physical <= 0)
+            physical = logical;
 
-        const auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                      Clock::now() - startTime_);
-        const double seconds  = totalElapsed.count() / 1000.0;
-        const double avgSpeed = seconds > 0.0
-            ? (static_cast<double>(fileSize_) / (1024.0 * 1024.0)) / seconds
-            : 0.0;
-
-        auto& info = progressData_[progressIndex_];
-        info.speed.store(avgSpeed);
-        info.progress.store(100);
-        info.completed.store(true);
+        sectorSize = std::max(logical, physical);
         return true;
     }
 
-    // ---- progress monitor ------------------------------------------------
-
-    // Interruptible 500 ms tick: wakes immediately on shutdown instead of
-    // making the caller wait out a sleep. Returns false once shutdown was
-    // requested.
-    bool waitForTick() {
-        {
-            std::unique_lock<std::mutex> lk(monMutex_);
-            monCv_.wait_for(lk, std::chrono::milliseconds(500),
-                            [this] { return !monitoringActive_.load(); });
+    bool allocateAlignedBuffers(IsoBufferPool& out, int sectorSize, size_t bufferSize) {
+        for (int i = 0; i < NUM_BUFFERS; ++i) {
+            auto buf = std::make_unique<AlignedBuffer>(bufferSize, static_cast<size_t>(sectorSize));
+            if (!buf->ok())
+                return false;
+            out.push_back(std::move(buf));
         }
-        return monitoringActive_.load();
-    }
-
-    void publishProgress(uint64_t currentWritten) {
-        auto& info = progressData_[progressIndex_];
-        info.bytesWritten.store(currentWritten);
-        info.progress.store(static_cast<int>(
-            std::min(99.0, (static_cast<double>(currentWritten) / fileSize_) * 100.0)));
-    }
-
-    void monitorLoop() {
-        SpeedEstimator estimator(Clock::now());
-
-        while (monitoringActive_.load()) {
-            if (!waitForTick()) break;
-
-            const auto now = Clock::now();
-            const uint64_t currentWritten = directBytesWritten_.load();
-
-            publishProgress(currentWritten);
-
-            if (auto speed = estimator.sample(currentWritten, now))
-                progressData_[progressIndex_].speed.store(*speed);
-        }
-    }
-
-    // ---- reader thread ---------------------------------------------------
-
-    void pushSentinel(bool failed) {
-        {
-            std::lock_guard<std::mutex> lk(qMutex_);
-            if (failed) readFailed_ = true;
-            fullQ_.push_back({nullptr, 0});
-        }
-        qCv_.notify_all();
-    }
-
-    void pushFull(const Chunk& c) {
-        {
-            std::lock_guard<std::mutex> lk(qMutex_);
-            fullQ_.push_back(c);
-        }
-        qCv_.notify_all();
-    }
-
-    // Returns false if the reader was told to stop.
-    bool acquireEmptyBuffer(Chunk& out) {
-        std::unique_lock<std::mutex> lk(qMutex_);
-        qCv_.wait(lk, [this] { return stopReader_ || !emptyQ_.empty(); });
-        if (stopReader_) return false;
-        out = emptyQ_.front();
-        emptyQ_.pop_front();
         return true;
     }
 
-    // Reads until `toRead` bytes are gathered, EOF, or error (false on error).
-    // Short reads mid-file are not treated as EOF.
-    bool readFully(char* buf, size_t toRead, size_t& got, bool& reachedEof) {
-        got = 0;
-        reachedEof = false;
-        while (got < toRead) {
-            ssize_t r = read(isoFd_, buf + got, toRead - got);
-            if (r < 0) {
-                if (errno == EINTR) continue;
+    // Validates the ISO, rewinds, and fetches its stat info.
+    bool prepareIso(int isoFd, struct stat& sb) {
+        return isValidIso9660(isoFd)
+            && lseek(isoFd, 0, SEEK_SET) != -1
+            && fstat(isoFd, &sb) != -1;
+    }
+
+    // Exponentially smoothed write-speed estimator with stall handling.
+    class SpeedEstimator {
+    public:
+        explicit SpeedEstimator(Clock::time_point start)
+            : lastUpdate_(start), stallStart_(start) {}
+
+        // Returns a speed (MB/s) to publish, or nullopt if nothing should change.
+        std::optional<double> sample(uint64_t currentWritten, Clock::time_point now) {
+            const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       now - lastUpdate_).count();
+            if (elapsedMs < MIN_UPDATE_INTERVAL_MS)
+                return std::nullopt;
+
+            const uint64_t delta = (currentWritten >= lastWritten_) ? (currentWritten - lastWritten_) : 0;
+            return delta > 0 ? onProgress(currentWritten, delta, elapsedMs, now)
+                             : onNoProgress(now);
+        }
+
+    private:
+        static constexpr double ALPHA = 0.3;
+        static constexpr int MIN_UPDATE_INTERVAL_MS = 1000;
+        static constexpr int STALL_TIMEOUT_SECONDS  = 60;
+
+        double onProgress(uint64_t currentWritten, uint64_t delta, long long elapsedMs,
+                          Clock::time_point now) {
+            stalled_ = false;
+
+            const double instant = (static_cast<double>(delta) / (1024.0 * 1024.0)) / (elapsedMs / 1000.0);
+            // Heavier smoothing for slow drives (< 10 MB/s) to reduce display
+            // jitter from bursty O_DIRECT writes at low throughput.
+            const double factor = (instant < 10.0) ? 0.2 : ALPHA;
+
+            smoothed_ = haveEstimate_ ? (factor * instant + (1.0 - factor) * smoothed_) : instant;
+            haveEstimate_ = true;
+
+            // Only reset the baseline when bytes actually arrived — this keeps
+            // `elapsed` spanning back to the last real data point instead of an
+            // arbitrary polling tick, which would truncate the window to ~1s and
+            // produce a spurious floor (one write chunk per interval) on
+            // slow/bursty O_DIRECT writers.
+            lastWritten_ = currentWritten;
+            lastUpdate_  = now;
+            return smoothed_;
+        }
+
+        std::optional<double> onNoProgress(Clock::time_point now) {
+            if (!stalled_) {
+                stalled_    = true;
+                stallStart_ = now;
+            }
+            const auto stallSeconds = std::chrono::duration_cast<std::chrono::seconds>(
+                                          now - stallStart_).count();
+            // Deliberately do NOT touch lastWritten_/lastUpdate_ here — let the
+            // elapsed window keep growing while a slow write is still in flight,
+            // so the eventual speed sample reflects the true transfer duration.
+            if (stallSeconds >= STALL_TIMEOUT_SECONDS)
+                return 0.0;
+            return std::nullopt;
+        }
+
+        Clock::time_point lastUpdate_;
+        Clock::time_point stallStart_;
+        uint64_t lastWritten_  = 0;
+        double   smoothed_     = 0.0;
+        bool     haveEstimate_ = false;
+        bool     stalled_      = false;
+    };
+
+    // Double-buffered reader-thread -> writer-thread ISO streamer with a progress
+    // monitor thread.
+    class IsoStreamer {
+    public:
+        IsoStreamer(int isoFd, int devFd, uint64_t fileSize, uint64_t paddedSize,
+                    size_t bufferSize, size_t writeChunk,
+                    IsoBufferPool& buffers,
+                    std::vector<ProgressInfo>& progressData, size_t progressIndex)
+            : isoFd_(isoFd), devFd_(devFd), fileSize_(fileSize), paddedSize_(paddedSize),
+              bufferSize_(bufferSize), writeChunk_(writeChunk),
+              progressData_(progressData), progressIndex_(progressIndex) {
+            for (auto& b : buffers)
+                emptyQ_.push_back({b->data, 0});
+        }
+
+        bool run() {
+            startTime_ = Clock::now();
+
+            try {
+                monitorThread_ = std::thread([this] { monitorLoop(); });
+                readerThread_  = std::thread([this] { readerLoop(); });
+                pumpToDevice();
+            } catch (...) {
+                shutdownThreads();
+                if (!isCancelled()) markFailed();
                 return false;
             }
-            if (r == 0) {
-                reachedEof = true;
-                break;
+
+            shutdownThreads();
+
+            if (readFailed_ || ioFailed_) {
+                if (!isCancelled()) markFailed();
+                return false;
             }
-            got += static_cast<size_t>(r);
+
+            posix_fadvise(isoFd_, 0, 0, POSIX_FADV_DONTNEED);
+
+            if (!aborted() && fsync(devFd_) != 0) {
+                markFailed();
+                return false;
+            }
+
+            return finishIfComplete();
         }
-        return true;
-    }
 
-    void readerLoop() {
-        uint64_t readTotal = 0;
+    private:
+        struct Chunk {
+            char*  buf;
+            size_t len;   // 0 == end-of-stream sentinel
+        };
 
-        while (readTotal < paddedSize_ && !isCancelled()) {
+        static bool isCancelled() { return GlobalState::g_operationCancelled.load(); }
+        bool aborted() const { return cancelled_ || isCancelled(); }
+
+        bool markFailed() {
+            return ::markFailed(progressData_, progressIndex_);
+        }
+
+        // ---- lifecycle -------------------------------------------------------
+
+        // Idempotent: stops and joins both helper threads.
+        void shutdownThreads() {
+            {
+                std::lock_guard<std::mutex> lk(qMutex_);
+                stopReader_ = true;
+            }
+            qCv_.notify_all();
+            if (readerThread_.joinable()) readerThread_.join();
+
+            {
+                std::lock_guard<std::mutex> lk(monMutex_);
+                monitoringActive_.store(false);
+            }
+            monCv_.notify_all();
+            if (monitorThread_.joinable()) monitorThread_.join();
+        }
+
+        bool finishIfComplete() {
+            if (aborted() || localBytesWritten_ < paddedSize_)
+                return false;
+
+            const auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                          Clock::now() - startTime_);
+            const double seconds  = totalElapsed.count() / 1000.0;
+            const double avgSpeed = seconds > 0.0
+                ? (static_cast<double>(fileSize_) / (1024.0 * 1024.0)) / seconds
+                : 0.0;
+
+            auto& info = progressData_[progressIndex_];
+            info.speed.store(avgSpeed);
+            info.progress.store(100);
+            info.completed.store(true);
+            return true;
+        }
+
+        // ---- progress monitor ------------------------------------------------
+
+        // Interruptible 500 ms tick: wakes immediately on shutdown instead of
+        // making the caller wait out a sleep. Returns false once shutdown was
+        // requested.
+        bool waitForTick() {
+            {
+                std::unique_lock<std::mutex> lk(monMutex_);
+                monCv_.wait_for(lk, std::chrono::milliseconds(500),
+                                [this] { return !monitoringActive_.load(); });
+            }
+            return monitoringActive_.load();
+        }
+
+        void publishProgress(uint64_t currentWritten) {
+            auto& info = progressData_[progressIndex_];
+            info.bytesWritten.store(currentWritten);
+            info.progress.store(static_cast<int>(
+                std::min(99.0, (static_cast<double>(currentWritten) / fileSize_) * 100.0)));
+        }
+
+        void monitorLoop() {
+            SpeedEstimator estimator(Clock::now());
+
+            while (monitoringActive_.load()) {
+                if (!waitForTick()) break;
+
+                const auto now = Clock::now();
+                const uint64_t currentWritten = directBytesWritten_.load();
+
+                publishProgress(currentWritten);
+
+                if (auto speed = estimator.sample(currentWritten, now))
+                    progressData_[progressIndex_].speed.store(*speed);
+            }
+        }
+
+        // ---- reader thread ---------------------------------------------------
+
+        void pushSentinel(bool failed) {
+            {
+                std::lock_guard<std::mutex> lk(qMutex_);
+                if (failed) readFailed_ = true;
+                fullQ_.push_back({nullptr, 0});
+            }
+            qCv_.notify_all();
+        }
+
+        void pushFull(const Chunk& c) {
+            {
+                std::lock_guard<std::mutex> lk(qMutex_);
+                fullQ_.push_back(c);
+            }
+            qCv_.notify_all();
+        }
+
+        // Returns false if the reader was told to stop.
+        bool acquireEmptyBuffer(Chunk& out) {
+            std::unique_lock<std::mutex> lk(qMutex_);
+            qCv_.wait(lk, [this] { return stopReader_ || !emptyQ_.empty(); });
+            if (stopReader_) return false;
+            out = emptyQ_.front();
+            emptyQ_.pop_front();
+            return true;
+        }
+
+        // Reads until `toRead` bytes are gathered, EOF, or error (false on error).
+        // Short reads mid-file are not treated as EOF.
+        bool readFully(char* buf, size_t toRead, size_t& got, bool& reachedEof) {
+            got = 0;
+            reachedEof = false;
+            while (got < toRead) {
+                ssize_t r = read(isoFd_, buf + got, toRead - got);
+                if (r < 0) {
+                    if (errno == EINTR) continue;
+                    return false;
+                }
+                if (r == 0) {
+                    reachedEof = true;
+                    break;
+                }
+                got += static_cast<size_t>(r);
+            }
+            return true;
+        }
+
+        void readerLoop() {
+            uint64_t readTotal = 0;
+
+            while (readTotal < paddedSize_ && !isCancelled()) {
+                Chunk c;
+                if (!acquireEmptyBuffer(c)) return;
+
+                const size_t toRead = static_cast<size_t>(
+                    std::min<uint64_t>(bufferSize_, paddedSize_ - readTotal));
+
+                size_t got = 0;
+                bool reachedEof = false;
+
+                if (!readFully(c.buf, toRead, got, reachedEof)) {
+                    pushSentinel(true);
+                    return;
+                }
+
+                // A source shorter than fstat reported (truncated file) must
+                // fail rather than be zero-padded silently.
+                if (reachedEof && readTotal + got < fileSize_) {
+                    pushSentinel(true);
+                    return;
+                }
+
+                if (got < toRead)
+                    std::memset(c.buf + got, 0, toRead - got);
+
+                c.len = toRead;
+                readTotal += toRead;
+                pushFull(c);
+
+                if (reachedEof) break;
+            }
+
+            pushSentinel(false);
+        }
+
+        // ---- writer (calling thread) -----------------------------------------
+
+        // Blocks for the next full chunk. Returns false on the end sentinel
+        // (reader finished, failed, or was cancelled).
+        bool popFull(Chunk& out) {
+            std::unique_lock<std::mutex> lk(qMutex_);
+            qCv_.wait(lk, [this] { return !fullQ_.empty(); });
+            out = fullQ_.front();
+            fullQ_.pop_front();
+            return out.len != 0;
+        }
+
+        void recycle(char* buf) {
+            {
+                std::lock_guard<std::mutex> lk(qMutex_);
+                emptyQ_.push_back({buf, 0});
+            }
+            qCv_.notify_all();
+        }
+
+        void recordWritten(size_t written) {
+            // Cap reported progress at the true file size to hide padding.
+            const uint64_t reportable = std::min<uint64_t>(
+                static_cast<uint64_t>(written),
+                fileSize_ - std::min(localBytesWritten_, fileSize_));
+
+            localBytesWritten_ += static_cast<uint64_t>(written);
+            directBytesWritten_.fetch_add(reportable);
+        }
+
+        // Write loop — handles partial writes and EINTR. Each write() is capped at
+        // writeChunk_ (a multiple of sectorSize), so buffer address, length and
+        // device offset all stay sector-aligned for O_DIRECT while progress is
+        // reported (and cancellation checked) after every write of <= 4 MiB.
+        // Returns false on I/O failure or cancellation (ioFailed_/cancelled_ say
+        // which).
+        bool writeBuffer(const Chunk& c) {
+            size_t remaining = c.len;
+            char*  ptr       = c.buf;
+
+            while (remaining > 0) {
+                const size_t thisWrite = std::min(remaining, writeChunk_);
+                ssize_t written = write(devFd_, ptr, thisWrite);
+
+                if (written < 0) {
+                    if (errno == EINTR) continue;
+                    ioFailed_ = true;
+                    return false;
+                }
+                if (written == 0) {   // no progress; avoid infinite spin
+                    ioFailed_ = true;
+                    return false;
+                }
+                if (isCancelled()) {
+                    cancelled_ = true;
+                    return false;
+                }
+
+                remaining -= static_cast<size_t>(written);
+                ptr       += written;
+                recordWritten(static_cast<size_t>(written));
+            }
+            return true;
+        }
+
+        void pumpToDevice() {
             Chunk c;
-            if (!acquireEmptyBuffer(c)) return;
-
-            const size_t toRead = static_cast<size_t>(
-                std::min<uint64_t>(bufferSize_, paddedSize_ - readTotal));
-
-            size_t got = 0;
-            bool reachedEof = false;
-
-            if (!readFully(c.buf, toRead, got, reachedEof)) {
-                pushSentinel(true);
-                return;
+            while (popFull(c)) {
+                if (isCancelled()) {
+                    cancelled_ = true;
+                    break;
+                }
+                if (!writeBuffer(c)) break;
+                recycle(c.buf);
             }
-
-            // A source shorter than fstat reported (truncated file) must
-            // fail rather than be zero-padded silently.
-            if (reachedEof && readTotal + got < fileSize_) {
-                pushSentinel(true);
-                return;
-            }
-
-            if (got < toRead)
-                std::memset(c.buf + got, 0, toRead - got);
-
-            c.len = toRead;
-            readTotal += toRead;
-            pushFull(c);
-
-            if (reachedEof) break;
         }
 
-        pushSentinel(false);
-    }
+        // ---- state -----------------------------------------------------------
 
-    // ---- writer (calling thread) -----------------------------------------
+        const int      isoFd_;
+        const int      devFd_;
+        const uint64_t fileSize_;
+        const uint64_t paddedSize_;
+        const size_t   bufferSize_;
+        const size_t   writeChunk_;
 
-    // Blocks for the next full chunk. Returns false on the end sentinel
-    // (reader finished, failed, or was cancelled).
-    bool popFull(Chunk& out) {
-        std::unique_lock<std::mutex> lk(qMutex_);
-        qCv_.wait(lk, [this] { return !fullQ_.empty(); });
-        out = fullQ_.front();
-        fullQ_.pop_front();
-        return out.len != 0;
-    }
+        std::vector<ProgressInfo>& progressData_;
+        const size_t               progressIndex_;
 
-    void recycle(char* buf) {
-        {
-            std::lock_guard<std::mutex> lk(qMutex_);
-            emptyQ_.push_back({buf, 0});
-        }
-        qCv_.notify_all();
-    }
+        std::mutex              qMutex_;
+        std::condition_variable qCv_;
+        std::deque<Chunk>       emptyQ_;
+        std::deque<Chunk>       fullQ_;
+        bool                    stopReader_ = false;
+        bool                    readFailed_ = false;
 
-    void recordWritten(size_t written) {
-        // Cap reported progress at the true file size to hide padding.
-        const uint64_t reportable = std::min<uint64_t>(
-            static_cast<uint64_t>(written),
-            fileSize_ - std::min(localBytesWritten_, fileSize_));
+        std::atomic<uint64_t>   directBytesWritten_{0};
+        std::atomic<bool>       monitoringActive_{true};
+        std::mutex              monMutex_;
+        std::condition_variable monCv_;
 
-        localBytesWritten_ += static_cast<uint64_t>(written);
-        directBytesWritten_.fetch_add(reportable);
-    }
+        std::thread       readerThread_;
+        std::thread       monitorThread_;
+        Clock::time_point startTime_;
 
-    // Write loop — handles partial writes and EINTR. Each write() is capped at
-    // writeChunk_ (a multiple of sectorSize), so buffer address, length and
-    // device offset all stay sector-aligned for O_DIRECT while progress is
-    // reported (and cancellation checked) after every write of <= 4 MiB.
-    // Returns false on I/O failure or cancellation (ioFailed_/cancelled_ say
-    // which).
-    bool writeBuffer(const Chunk& c) {
-        size_t remaining = c.len;
-        char*  ptr       = c.buf;
-
-        while (remaining > 0) {
-            const size_t thisWrite = std::min(remaining, writeChunk_);
-            ssize_t written = write(devFd_, ptr, thisWrite);
-
-            if (written < 0) {
-                if (errno == EINTR) continue;
-                ioFailed_ = true;
-                return false;
-            }
-            if (written == 0) {   // no progress; avoid infinite spin
-                ioFailed_ = true;
-                return false;
-            }
-            if (isCancelled()) {
-                cancelled_ = true;
-                return false;
-            }
-
-            remaining -= static_cast<size_t>(written);
-            ptr       += written;
-            recordWritten(static_cast<size_t>(written));
-        }
-        return true;
-    }
-
-    void pumpToDevice() {
-        Chunk c;
-        while (popFull(c)) {
-            if (isCancelled()) {
-                cancelled_ = true;
-                break;
-            }
-            if (!writeBuffer(c)) break;
-            recycle(c.buf);
-        }
-    }
-
-    // ---- state -----------------------------------------------------------
-
-    const int      isoFd_;
-    const int      devFd_;
-    const uint64_t fileSize_;
-    const uint64_t paddedSize_;
-    const size_t   bufferSize_;
-    const size_t   writeChunk_;
-
-    std::vector<ProgressInfo>& progressData_;
-    const size_t               progressIndex_;
-
-    std::mutex              qMutex_;
-    std::condition_variable qCv_;
-    std::deque<Chunk>       emptyQ_;
-    std::deque<Chunk>       fullQ_;
-    bool                    stopReader_ = false;
-    bool                    readFailed_ = false;
-
-    std::atomic<uint64_t>   directBytesWritten_{0};
-    std::atomic<bool>       monitoringActive_{true};
-    std::mutex              monMutex_;
-    std::condition_variable monCv_;
-
-    std::thread       readerThread_;
-    std::thread       monitorThread_;
-    Clock::time_point startTime_;
-
-    uint64_t localBytesWritten_ = 0;
-    bool     cancelled_         = false;
-    bool     ioFailed_          = false;
-};
+        uint64_t localBytesWritten_ = 0;
+        bool     cancelled_         = false;
+        bool     ioFailed_          = false;
+    };
 
 } // namespace
 
