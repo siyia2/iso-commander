@@ -746,6 +746,70 @@ namespace {
         /** @brief Target size of the aligned I/O buffer (rounded down to sector). */
         constexpr size_t kDesiredBuffer       = 4 * 1024 * 1024;
 
+        /** @brief Writeback is paced once per this many buffered chunks. */
+        constexpr int kPaceEveryChunks = 1;
+
+        /**
+         * @brief Per-file writeback pacing state for the buffered path: the chunks
+         *        written since the last pacing point, and the range paced last time.
+         */
+        struct WritebackState {
+            uint64_t pendOff    = 0;   ///< Start of the not-yet-paced range.
+            uint64_t pendLen    = 0;   ///< Length of the not-yet-paced range.
+            int      pendChunks = 0;   ///< Chunks accumulated in that range.
+            uint64_t prevOff    = 0;   ///< Start of the range paced last time.
+            uint64_t prevLen    = 0;   ///< Length of the range paced last time.
+            bool     havePrev   = false;
+        };
+
+        /**
+         * @brief Bound the dirty-page backlog of a buffered output file to a few
+         *        chunks, pacing once every kPaceEveryChunks chunks.
+         *
+         * Chunks are accumulated into one contiguous range. When it reaches
+         * kPaceEveryChunks chunks, writeback of the whole range is started
+         * (SYNC_FILE_RANGE_WRITE, does not block on the device), then the range
+         * paced last time is waited on (WAIT_BEFORE | WRITE | WAIT_AFTER). The
+         * device therefore always has the newest range queued while the previous
+         * one drains, and a cancel never has more than about
+         * kPaceEveryChunks + 1 chunks left to flush.
+         *
+         * Best effort: failures (e.g. a filesystem without support) are ignored, as
+         * with the final syncfs() flush; the copy then degrades to plain buffered
+         * I/O.
+         *
+         * @param fd_out Buffered output file descriptor.
+         * @param off    File offset of the chunk just written.
+         * @param len    Length in bytes of the chunk just written (must be > 0).
+         * @param st     Pacing state for this output file.
+         */
+        void paceWriteback(int fd_out, uint64_t off, uint64_t len,
+                           WritebackState& st) {
+            if (st.pendChunks == 0) {
+                st.pendOff = off;
+                st.pendLen = 0;
+            }
+            st.pendLen += len;   // chunks are contiguous within a file
+            if (++st.pendChunks < kPaceEveryChunks) return;
+
+            sync_file_range(fd_out, static_cast<off64_t>(st.pendOff),
+                            static_cast<off64_t>(st.pendLen),
+                            SYNC_FILE_RANGE_WRITE);
+
+            if (st.havePrev) {
+                sync_file_range(fd_out, static_cast<off64_t>(st.prevOff),
+                                static_cast<off64_t>(st.prevLen),
+                                SYNC_FILE_RANGE_WAIT_BEFORE |
+                                SYNC_FILE_RANGE_WRITE |
+                                SYNC_FILE_RANGE_WAIT_AFTER);
+            }
+
+            st.prevOff    = st.pendOff;
+            st.prevLen    = st.pendLen;
+            st.havePrev   = true;
+            st.pendChunks = 0;
+        }
+
         /**
          * @brief Fill @p buf from @p fd_in up to @p bufferSize bytes, accumulating
          *        short reads and retrying EINTR; only read()==0 ends a chunk early.
@@ -777,13 +841,22 @@ namespace {
          * per-chunk credit high-water mark so already-counted source bytes are not
          * double-credited.
          *
+         * In the buffered branch, every kPaceEveryChunks completed chunks,
+         * writeback of those chunks is started and the previously paced range is
+         * waited on (see paceWriteback()), keeping the dirty backlog to a few
+         * chunks so a cancel drains quickly. O_DIRECT writes need none of this.
+         *
+         * @param wb Writeback pacing state for this output file; only used (and
+         *           updated) when @p useBufferedIO is true.
          * @return true if the chunk was written completely; false otherwise.
          */
         bool writeOneChunk(int fd_out, char* buf, ssize_t bytesRead,
                            uint64_t& fileOffset, bool useBufferedIO,
                            size_t sectorSize, size_t mask,
                            uint64_t& bytesCopiedTotal,
-                           std::atomic<uint64_t>& totalAccumulator) {
+                           std::atomic<uint64_t>& totalAccumulator,
+                           WritebackState& wb) {
+            const uint64_t chunkOffset = fileOffset;
             ssize_t writeLen = bytesRead;
             if (!useBufferedIO) {
                 const ssize_t aligned = (bytesRead + static_cast<ssize_t>(mask)) &
@@ -841,6 +914,10 @@ namespace {
                 }
             }
 
+            if (useBufferedIO)
+                paceWriteback(fd_out, chunkOffset,
+                              static_cast<uint64_t>(bytesRead), wb);
+
             // The next chunk starts after actual source bytes, not any padding added
             // to the final O_DIRECT write.
             fileOffset += static_cast<uint64_t>(bytesRead);
@@ -866,6 +943,7 @@ namespace {
 
             const size_t mask = static_cast<size_t>(sectorSize) - 1;
             uint64_t fileOffset = 0;
+            WritebackState wb;
             bool success = true;
 
             while (!GlobalState::g_operationCancelled.load()) {
@@ -880,7 +958,7 @@ namespace {
 
                 if (!writeOneChunk(fd_out, buf, n, fileOffset, useBufferedIO,
                                    sectorSize, mask, bytesCopiedTotal,
-                                   totalAccumulator)) {
+                                   totalAccumulator, wb)) {
                     success = false;
                     break;
                 }
@@ -1273,7 +1351,10 @@ bool isWindowsIso(const std::string& isoPath)
  *   @c ftruncate(). Unaligned positive writes trigger up to 3 chunk restarts
  *   from the original offset (never falling back to buffered I/O).
  * - **NTFS (Buffered):** Manual @c read()/pwrite() loop. Non-empty files are
- *   pre-allocated with @c posix_fallocate().
+ *   pre-allocated with @c posix_fallocate(). Every kPaceEveryChunks chunks (1),
+ *   writeback of those chunks is started with @c sync_file_range() and the
+ *   previously paced range is waited on, so the dirty backlog stays at about
+ *   two chunks and a cancel drains quickly.
  * - **Integrity:** Short reads accumulate until full or EOF; @c EINTR is
  *   retried; zero-byte writes fail immediately. Sources yielding fewer bytes
  *   than reported by the ISO walk fail the operation. On failure or
