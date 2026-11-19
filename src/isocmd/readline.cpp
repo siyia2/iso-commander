@@ -468,7 +468,7 @@ namespace {
 
     // Drains trailing CPR response bytes after a timeout.
     void drainCursorResponse(int tty_fd) {
-        for (int i = 0; i < 32; ++i) {
+        for (int i = 0; i < 5; ++i) {
             struct pollfd pfd{};
             pfd.fd = tty_fd;
             pfd.events = POLLIN;
