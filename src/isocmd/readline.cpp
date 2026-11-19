@@ -311,20 +311,44 @@ namespace {
     // ---------------------------------------------------------------------------
 
     std::string smartTruncate(const char* str, int max_width) {
-        std::string result(str);
-        size_t len = result.length();
-        if (len <= (size_t)max_width) return result;
+        if (!str || max_width <= 0)
+            return {};
 
-        // Try to preserve extension for files (harmless for other kinds)
-        size_t dot_pos = result.find_last_of('.');
-        if (dot_pos != std::string::npos && dot_pos > 0 && len - dot_pos <= 10) {
-            std::string ext = result.substr(dot_pos);
-            int prefix_len = std::max(3, max_width - (int)ext.length() - 3);
-            if (prefix_len >= 3) return result.substr(0, prefix_len) + "..." + ext;
+        std::string result(str);
+
+        const size_t width = static_cast<size_t>(max_width);
+
+        if (result.length() <= width)
+            return result;
+
+        if (max_width <= 3)
+            return result.substr(0, width);
+
+        // Try to preserve a reasonably short file extension.
+        const size_t dot_pos = result.find_last_of('.');
+
+        if (dot_pos != std::string::npos && dot_pos > 0) {
+            const size_t ext_len = result.length() - dot_pos;
+
+            if (ext_len + 4 <= width) {
+                const size_t prefix_len = width - ext_len - 3;
+
+                return result.substr(0, prefix_len) +
+                       "..." +
+                       result.substr(dot_pos);
+            }
         }
-        int prefix_len = (max_width - 3) / 2;
-        int suffix_len = max_width - 3 - prefix_len;
-        return result.substr(0, prefix_len) + "..." + result.substr(len - suffix_len, suffix_len);
+
+        // General truncation, preserving both the beginning and the end.
+        const int body_width = max_width - 3;
+        const int prefix_len = (body_width + 1) / 2;
+        const int suffix_len = body_width - prefix_len;
+
+        return result.substr(0, prefix_len) +
+               "..." +
+               (suffix_len > 0
+                    ? result.substr(result.length() - suffix_len)
+                    : std::string{});
     }
 
     bool isDirectory(const char* path) {
@@ -345,9 +369,7 @@ namespace {
         return {display, vis_len, raw};
     }
 
-    // `width` is the maximum text width; directories get `dir_shrink` fewer
-    // characters because of their trailing '/'.
-    DisplayItem formatItem(const char* raw, const FormatContext& ctx, int width, int dir_shrink) {
+    DisplayItem formatItem(const char* raw, const FormatContext& ctx, int width) {
         const ReadlineColors& rc = ctx.rc;
 
         if (ctx.kind == CompletionKind::Special)
@@ -357,8 +379,20 @@ namespace {
             return makeItem(raw, raw, ctx.base_color, "", width, rc);
 
         const char* relative = raw + ctx.base_len;
-        if (isDirectory(raw))
-            return makeItem(raw, relative, rc.dir, "/", width - dir_shrink, rc);
+
+        if (isDirectory(raw)) {
+            const bool show_slash = width >= 2;
+            const char* suffix = show_slash ? "/" : "";
+
+            return makeItem(
+                raw,
+                relative,
+                rc.dir,
+                suffix,
+                width - (show_slash ? 1 : 0),
+                rc);
+        }
+
         return makeItem(raw, relative, rc.file, "", width, rc);
     }
 
@@ -366,7 +400,10 @@ namespace {
         std::vector<DisplayItem> items;
         items.reserve(page.items_to_display);
         for (int i = 0; i < page.items_to_display; ++i)
-            items.push_back(formatItem(matches[page.start_index + i], ctx, kProbeWidth, 0));
+            items.push_back(formatItem(
+                matches[page.start_index + i],
+                ctx,
+                kProbeWidth));
         return items;
     }
 
@@ -379,7 +416,7 @@ namespace {
 
     void refitItems(std::vector<DisplayItem>& items, const FormatContext& ctx, int column_width) {
         for (auto& item : items)
-            item = formatItem(item.raw_match, ctx, column_width, 1);
+        item = formatItem(item.raw_match, ctx, column_width);
     }
 
     // ---------------------------------------------------------------------------
@@ -398,13 +435,37 @@ namespace {
     }
 
     ColumnLayout computeLayout(size_t max_item_length, int items_to_display) {
-        ColumnLayout layout;
-        layout.column_width = std::max(8, (int)max_item_length + 2);
+        ColumnLayout layout{};
 
-        int fit = std::max(1, (getTerminalWidth() + kColumnSpacing) / (layout.column_width + kColumnSpacing));
-        layout.num_columns = (items_to_display <= 4) ? 1 : std::min(fit, kMaxColumns);
-        layout.total_column_width = layout.column_width + kColumnSpacing;
-        layout.rows = (items_to_display + layout.num_columns - 1) / layout.num_columns;
+        const int terminal_width = std::max(1, getTerminalWidth());
+
+        // Leave the final terminal column unused to avoid automatic wrapping
+        // when the last printed character reaches the right edge.
+        const int usable_width = std::max(1, terminal_width - 1);
+
+        const int desired_width =
+            std::max(8, static_cast<int>(max_item_length) + 2);
+
+        // Never allow a completion column to exceed the available width.
+        layout.column_width = std::min(desired_width, usable_width);
+
+        const int fit = std::max(
+            1,
+            (usable_width + kColumnSpacing) /
+                (layout.column_width + kColumnSpacing));
+
+        layout.num_columns =
+            (items_to_display <= 4)
+                ? 1
+                : std::min(fit, kMaxColumns);
+
+        layout.total_column_width =
+            layout.column_width + kColumnSpacing;
+
+        layout.rows =
+            (items_to_display + layout.num_columns - 1) /
+            layout.num_columns;
+
         return layout;
     }
 
