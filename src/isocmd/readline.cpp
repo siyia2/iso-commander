@@ -616,6 +616,22 @@ namespace {
         if (pad) printf("%*s", std::max(0, total_column_width - item.visual_length), "");
     }
 
+    class AutoWrapGuard {
+    public:
+        AutoWrapGuard() {
+            // Prevent a mid-render terminal resize from causing automatic wrapping.
+            printf("\033[?7l");
+            fflush(stdout);
+        }
+        ~AutoWrapGuard() {
+            // Restore the normal terminal auto-wrap mode.
+            printf("\033[?7h");
+            fflush(stdout);
+        }
+        AutoWrapGuard(const AutoWrapGuard&) = delete;
+        AutoWrapGuard& operator=(const AutoWrapGuard&) = delete;
+    };
+
     void renderGrid(const std::vector<DisplayItem>& items, const ColumnLayout& layout) {
         if (layout.rows <= 0) return;
 
@@ -626,11 +642,14 @@ namespace {
             for (int col = 0; col < layout.num_columns; col++) {
                 int page_offset = row + col * layout.rows;
                 if (page_offset >= visible_count) continue;
+
                 // Pad only when not in the last column and not the last visible item
                 bool pad = col < layout.num_columns - 1 && page_offset < visible_count - 1;
                 printCell(items[page_offset], pad, layout.total_column_width);
             }
-            printf("\033[0m\n");
+
+            // Explicitly return to column 1 before advancing to the next row.
+            printf("\033[0m\r\n");
         }
     }
 
@@ -654,30 +673,10 @@ namespace {
         const int max_grid_rows =
             maxGridRowsBelowCursor(effective_cursor_row, term_rows, num_matches, show_footer);
 
-        // If the terminal has zero lines below the cursor position where Readline
-        // invoked the completion hook, print nothing rather than overflowing.
+        // If there are no rows below Readline's cursor, do not render.
         if (effective_cursor_row > 0 && term_rows <= effective_cursor_row) {
             fflush(stdout);
             return;
-        }
-
-        printf("\033[s\033[J\n");
-
-        int lines_remaining =
-            (effective_cursor_row > 0)
-                ? std::max(0, (term_rows - effective_cursor_row) - 1)
-                : -1;
-
-        const bool can_print_header =
-            (num_matches > 1) && (lines_remaining < 0 || lines_remaining >= 3);
-        if (can_print_header) {
-            printHeader(
-                kind,
-                page.total_pages,
-                num_matches,
-                displayed_page,
-                rc);
-            if (lines_remaining >= 0) lines_remaining -= 3;
         }
 
         const FormatContext ctx{
@@ -695,17 +694,42 @@ namespace {
 
         refitItems(items, ctx, layout.column_width);
 
-        renderGrid(items, layout);
-        if (lines_remaining >= 0) {
-            lines_remaining = std::max(0, lines_remaining - layout.rows);
-        }
+        {
+            // Prevent automatic wrapping during rendering if the terminal is resized.
+            AutoWrapGuard auto_wrap_guard;
 
-        if (show_footer && (lines_remaining < 0 || lines_remaining >= 2)) {
-            printFooter(page, num_matches, rc);
-        }
+            printf("\033[s\033[J\r\n");
 
-        printf("\033[u");
-        fflush(stdout);
+            int lines_remaining =
+                (effective_cursor_row > 0)
+                    ? std::max(0, (term_rows - effective_cursor_row) - 1)
+                    : -1;
+
+            const bool can_print_header =
+                (num_matches > 1) && (lines_remaining < 0 || lines_remaining >= 3);
+            if (can_print_header) {
+                printHeader(
+                    kind,
+                    page.total_pages,
+                    num_matches,
+                    displayed_page,
+                    rc);
+                if (lines_remaining >= 0) lines_remaining -= 3;
+            }
+
+            renderGrid(items, layout);
+
+            if (lines_remaining >= 0) {
+                lines_remaining = std::max(0, lines_remaining - layout.rows);
+            }
+
+            if (show_footer && (lines_remaining < 0 || lines_remaining >= 2)) {
+                printFooter(page, num_matches, rc);
+            }
+
+            printf("\033[u");
+            fflush(stdout);
+        }
     }
 
 } // namespace
