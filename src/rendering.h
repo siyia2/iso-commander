@@ -23,14 +23,12 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-namespace {
-    /// Synchronized-output (DEC mode 2026) control sequences, kept as named
-    /// constants so callers that write the sequences by hand stay in sync
-    /// with @ref SyncOutput.
-    constexpr bool             kUseSynchronizedOutput = true;
-    constexpr std::string_view kSyncBegin             = "\033[?2026h";
-    constexpr std::string_view kSyncEnd               = "\033[?2026l";
-}
+/// Synchronized-output (DEC mode 2026) control sequences, kept as named
+/// constants so callers that write the sequences by hand stay in sync
+/// with @ref SyncOutput.
+inline constexpr bool             kUseSynchronizedOutput = true;
+inline constexpr std::string_view kSyncBegin             = "\033[?2026h";
+inline constexpr std::string_view kSyncEnd               = "\033[?2026l";
 
 /**
  * @brief RAII guard that brackets a terminal repaint in DEC mode 2026
