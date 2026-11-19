@@ -438,6 +438,83 @@ void processInputForCpMvRm(const std::string& input,
 }
 
 /**
+ * @brief Builds the colorized operation label (e.g. "mdf2iso") for the header.
+ *
+ * Falls back to "ccd2iso" when no other mode flag is set.
+ *
+ * @param modeMdf True if converting MDF images.
+ * @param modeNrg True if converting NRG images.
+ * @param modeChd True if converting CHD images.
+ * @param modeDaa True if converting DAA/GBI images.
+ * @return Orange-highlighted operation name followed by the base color code.
+ */
+static std::string buildOperationLabel(const bool modeMdf, const bool modeNrg,
+                                       const bool modeChd, const bool modeDaa)
+{
+    const std::pair<bool, const char*> modes[] = {
+        {modeMdf, "mdf2iso"},
+        {modeNrg, "nrg2iso"},
+        {modeChd, "chd2iso"},
+        {modeDaa, "daa2iso"},
+    };
+
+    const char* name = "ccd2iso";
+    for (const auto& [enabled, label] : modes) {
+        if (enabled) { name = label; break; }
+    }
+
+    return std::string(UI::Palette::Orange) + name + std::string(color);
+}
+
+/**
+ * @brief Worker loop executed by each pool thread.
+ *
+ * Repeatedly claims the next file index from the shared atomic counter and
+ * converts that file until no indices remain, keeping the load balanced
+ * regardless of per-file size.
+ *
+ * @param fileList  Master list of image files.
+ * @param indices   1-based indices of the selected files.
+ * @param nextIndex Shared atomic counter of the next unclaimed position.
+ * @param mode      Conversion mode flags.
+ * @param batchData Shared progress counters and output-path collection.
+ */
+static void conversionWorker(const std::vector<std::string>& fileList,
+                             const std::vector<int>& indices,
+                             std::atomic<size_t>& nextIndex,
+                             const ConversionMode& mode,
+                             const ConversionBatchData& batchData)
+{
+    for (size_t i; (i = nextIndex.fetch_add(1)) < indices.size();) {
+        convertToISO(
+            {fileList[indices[i] - 1]},
+            mode,
+            batchData);
+    }
+}
+
+/**
+ * @brief Joins the successful output paths with ';' and triggers a
+ *        synchronous database update.
+ *
+ * Does nothing if no conversion succeeded.
+ *
+ * @param successfulOutputPaths Output paths of successfully converted files.
+ */
+static void updateDatabaseForSuccessfulPaths(
+    const std::vector<std::string>& successfulOutputPaths)
+{
+    if (successfulOutputPaths.empty()) return;
+
+    std::string exactPaths;
+    for (const auto& outPath : successfulOutputPaths) {
+        if (!exactPaths.empty()) exactPaths += ';';
+        exactPaths += outPath;
+    }
+    updateDatabaseAfterOperations(exactPaths);
+}
+
+/**
  * @brief Handles bulk image-to-ISO conversions with threading and progress
  *        visualization.
  *
@@ -508,32 +585,21 @@ void processInputForConversions(const std::string& input,
     }
 
     ThreadPool& pool = getStaticThreadPool();
-    const size_t poolSize = pool.threadCount();
     const size_t numThreads = std::max(size_t(2),
-        std::min({processedIndices.size(), GlobalConcurrency::CONV_THREAD_CAP, poolSize}));
+        std::min({processedIndices.size(), GlobalConcurrency::CONV_THREAD_CAP,
+                  pool.threadCount()}));
 
-    size_t totalBytes = 0;
-    {
-        std::vector<std::string> filesToProcess;
-        filesToProcess.reserve(processedIndices.size());
-        for (int idx : processedIndices)
-            filesToProcess.push_back(fileList[idx - 1]);
-        totalBytes = calculateTotalBytesForConversions(
-            filesToProcess, modeMdf, modeNrg, modeChd, modeDaa);
-    }
+    std::vector<std::string> filesToProcess;
+    filesToProcess.reserve(processedIndices.size());
+    for (int idx : processedIndices)
+        filesToProcess.push_back(fileList[idx - 1]);
+    const size_t totalBytes = calculateTotalBytesForConversions(
+        filesToProcess, modeMdf, modeNrg, modeChd, modeDaa);
 
     const size_t totalTasks = processedIndices.size();
-    std::string colorMuted = isOrig
-        ? std::string(UI::Palette::BoldReset)
-        : std::string(theme->muted);
-
-    std::string suffix = (totalTasks > 1 ? "tasks" : "task");
-    std::string operation;
-    if (modeMdf)      operation = std::string(UI::Palette::Orange) + "mdf2iso" + std::string(color);
-    else if (modeNrg) operation = std::string(UI::Palette::Orange) + "nrg2iso" + std::string(color);
-    else if (modeChd) operation = std::string(UI::Palette::Orange) + "chd2iso" + std::string(color);
-    else if (modeDaa) operation = std::string(UI::Palette::Orange) + "daa2iso" + std::string(color);
-    else              operation = std::string(UI::Palette::Orange) + "ccd2iso" + std::string(color);
+    const std::string suffix = (totalTasks > 1 ? "tasks" : "task");
+    const std::string operation =
+        buildOperationLabel(modeMdf, modeNrg, modeChd, modeDaa);
 
     clearScrollBuffer();
     std::ostringstream hdr;
@@ -578,15 +644,7 @@ void processInputForConversions(const std::string& input,
     for (size_t t = 0; t < numThreads; ++t) {
         futures.emplace_back(pool.enqueue(
             [&fileList, &indices, &nextIndex, mode, batchData]() {
-                while (true) {
-                    const size_t i = nextIndex.fetch_add(1);
-                    if (i >= indices.size()) break;
-
-                    convertToISO(
-                        {fileList[indices[i] - 1]},
-                        mode,
-                        batchData);
-                }
+                conversionWorker(fileList, indices, nextIndex, mode, batchData);
             }));
     }
 
@@ -597,12 +655,5 @@ void processInputForConversions(const std::string& input,
     signal(SIGINT, SIG_IGN);
     progressThread.join();
 
-    if (!successfulOutputPaths.empty()) {
-        std::string exactPaths;
-        for (const auto& outPath : successfulOutputPaths) {
-            if (!exactPaths.empty()) exactPaths += ';';
-            exactPaths += outPath;
-        }
-        updateDatabaseAfterOperations(exactPaths);
-    }
+    updateDatabaseForSuccessfulPaths(successfulOutputPaths);
 }
