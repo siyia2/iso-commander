@@ -12,6 +12,7 @@
 #include <cstring>
 #include <filesystem>
 #include <mutex>
+#include <random>
 #include <string>
 #include <thread>
 #include <unordered_set>
@@ -94,6 +95,43 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
 namespace {
 
     // ===========================================================================
+    // retry:: jittered, cancellable backoff
+    // ===========================================================================
+    namespace retry {
+
+        /**
+         * @brief Sleeps for a randomized backoff interval, waking early on cancel.
+         *
+         * The delay is @p baseMs plus a uniformly random jitter of 0-100% of
+         * @p baseMs, so the result lies in [baseMs, 2 * baseMs]. Jitter keeps
+         * concurrent jobs that failed on the same shared resource (free loop device,
+         * busy udev) from retrying in lockstep and colliding again.
+         *
+         * The wait is split into 50 ms slices that poll the cancellation flag, so a
+         * cancel during the backoff is noticed within ~50 ms. On cancel the function
+         * returns early; callers detect the cancel at the top of their next loop
+         * iteration.
+         *
+         * Each thread has its own random generator, seeded from std::random_device,
+         * so concurrent jobs draw independent delays.
+         *
+         * @param baseMs Minimum delay in milliseconds (the jitter is added on top).
+         */
+        void sleepWithJitter(int baseMs)
+        {
+            static thread_local std::mt19937 rng{std::random_device{}()};
+            const int total = baseMs + std::uniform_int_distribution<int>(0, baseMs)(rng);
+
+            const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(total);
+            while (std::chrono::steady_clock::now() < end) {
+                if (GlobalState::g_operationCancelled.load()) return;
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
+        }
+
+    }  // namespace retry
+
+    // ===========================================================================
     // proc:: spawning external commands
     // ===========================================================================
     namespace proc {
@@ -158,10 +196,47 @@ namespace {
             return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
         }
 
+        /**
+         * @brief Runs an external command, retrying on failure.
+         *
+         * Retries absorb transient failures caused by other system activity (udev
+         * re-probing the disk, boot-time services holding the device), which
+         * typically clear within a second or two.
+         *
+         * Between attempts the delay grows linearly with the attempt number and is
+         * jittered (see retry::sleepWithJitter): ~500-1000 ms after the first
+         * failure, ~1000-2000 ms after the second. Cancellation is checked before
+         * every attempt and during every backoff. The time each failed attempt
+         * itself takes is not included in these figures.
+         *
+         * @param args        Argument vector where args[0] is the executable name.
+         * @param attempts    Maximum number of attempts (default 3).
+         * @param baseDelayMs Base backoff in milliseconds, multiplied by the attempt
+         *                    number (default 500).
+         * @return 0 on success, -1 if cancelled, otherwise the exit code of the last
+         *         attempt.
+         */
+        int runCommandRetry(const std::vector<std::string>& args,
+                            int attempts    = 3,
+                            int baseDelayMs = 500)
+        {
+            int rc = -1;
+            for (int i = 0; i < attempts; ++i) {
+                if (GlobalState::g_operationCancelled.load()) return -1;
+
+                rc = runCommand(args);
+                if (rc == 0) return 0;
+
+                if (i + 1 < attempts)
+                    retry::sleepWithJitter(baseDelayMs * (i + 1));
+            }
+            return rc;
+        }
+
     }  // namespace proc
 
     // ===========================================================================
-    // mnt:: libmount wrappers, ScopedMount RAII
+    // mnt:: libmount wrappers, ScopedMount RAII, mount retries
     // ===========================================================================
     namespace mnt {
 
@@ -262,26 +337,80 @@ namespace {
         };
 
         /**
-         * @brief Mounts an NTFS partition through a specific kernel driver with
-         *        mount helpers disabled so the VFS invokes the named driver
-         *        directly (see disk::getBestNtfsDriver()).
+         * @brief libMount() with the same retry and jittered backoff as
+         *        proc::runCommandRetry().
          *
-         * @param src    NTFS partition node (e.g. "/dev/sdb2").
-         * @param target Existing mount point.
-         * @param fstype Kernel driver token ("ntfs" or "ntfs3").
-         * @return 0 on success, non-zero on failure.
+         * Mainly guards the ISO loop mount against transient failures such as
+         * loop-device contention with other boot-time services or concurrent jobs.
+         * Parameters match libMount(), plus the retry settings.
+         *
+         * @param attempts    Maximum number of attempts (default 3).
+         * @param baseDelayMs Base backoff in milliseconds, multiplied by the attempt
+         *                    number (default 500).
+         * @return 0 on success, -1 if cancelled, otherwise the return code of the
+         *         last mount attempt.
          */
-        int libMountNtfs(const char* src, const char* target, const char* fstype) {
-            libmnt_context* ctx = mnt_new_context();
-            if (!ctx) return -1;
+        int libMountRetry(const char* src, const char* target,
+                          const char* options = nullptr,
+                          const char* fstype  = nullptr,
+                          int attempts    = 3,
+                          int baseDelayMs = 500)
+        {
+            int rc = -1;
+            for (int i = 0; i < attempts; ++i) {
+                if (GlobalState::g_operationCancelled.load()) return -1;
 
-            mnt_context_set_source(ctx, src);
-            mnt_context_set_target(ctx, target);
-            mnt_context_set_fstype(ctx, fstype);
-            mnt_context_append_options(ctx, "noatime");
-            mnt_context_disable_helpers(ctx, true);
-            const int rc = mnt_context_mount(ctx);
-            mnt_free_context(ctx);
+                rc = libMount(src, target, options, fstype);
+                if (rc == 0) return 0;
+
+                if (i + 1 < attempts)
+                    retry::sleepWithJitter(baseDelayMs * (i + 1));
+            }
+            return rc;
+        }
+
+        /**
+         * @brief Mounts an NTFS partition through a specific kernel driver, with
+         *        retry and jittered backoff.
+         *
+         * Builds a fresh libmnt_context on every attempt, so no state from a failed
+         * attempt carries over. Mount helpers are disabled so the VFS invokes the
+         * named kernel driver directly (see disk::getBestNtfsDriver()).
+         *
+         * @param src         NTFS partition node (e.g. "/dev/sdb2").
+         * @param target      Existing mount point.
+         * @param fstype      Kernel driver token ("ntfs" or "ntfs3").
+         * @param attempts    Maximum number of attempts (default 3).
+         * @param baseDelayMs Base backoff in milliseconds (default 500).
+         * @return 0 on success, -1 if cancelled, otherwise the return code of the
+         *         last attempt.
+         */
+        int libMountNtfsRetry(const char* src, const char* target,
+                              const char* fstype,
+                              int attempts    = 3,
+                              int baseDelayMs = 500)
+        {
+            int rc = -1;
+            for (int i = 0; i < attempts; ++i) {
+                if (GlobalState::g_operationCancelled.load()) return -1;
+
+                libmnt_context* ctx = mnt_new_context();
+                if (ctx) {
+                    mnt_context_set_source(ctx, src);
+                    mnt_context_set_target(ctx, target);
+                    mnt_context_set_fstype(ctx, fstype);
+                    mnt_context_append_options(ctx, "noatime");
+                    mnt_context_disable_helpers(ctx, true);
+                    rc = mnt_context_mount(ctx);
+                    mnt_free_context(ctx);
+                } else {
+                    rc = -1;
+                }
+                if (rc == 0) return 0;
+
+                if (i + 1 < attempts)
+                    retry::sleepWithJitter(baseDelayMs * (i + 1));
+            }
             return rc;
         }
 
@@ -516,18 +645,18 @@ namespace {
 
             int partResult = -1;
             if (isoType == IsoType::WindowsInstall) {
-                partResult = proc::runCommand({"parted", "-s", device,
-                                               "mklabel", "gpt",
-                                               "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
-                                               "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
-                                               "set", "1", "esp",  "on",
-                                               "set", "1", "boot", "on"});
+                partResult = proc::runCommandRetry({"parted", "-s", device,
+                                                    "mklabel", "gpt",
+                                                    "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
+                                                    "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
+                                                    "set", "1", "esp",  "on",
+                                                    "set", "1", "boot", "on"});
             } else {
-                partResult = proc::runCommand({"parted", "-s", device,
-                                               "mklabel", "gpt",
-                                               "mkpart", "WINPE", "fat32", "1MiB", "100%",
-                                               "set", "1", "esp",  "on",
-                                               "set", "1", "boot", "on"});
+                partResult = proc::runCommandRetry({"parted", "-s", device,
+                                                    "mklabel", "gpt",
+                                                    "mkpart", "WINPE", "fat32", "1MiB", "100%",
+                                                    "set", "1", "esp",  "on",
+                                                    "set", "1", "boot", "on"});
             }
             if (partResult != 0) return false;
             if (!waitForDevice(device)) return false;
@@ -553,14 +682,14 @@ namespace {
         bool formatTargetPartitions(const std::string& fatPart,
                                     const std::string& ntfsPart,
                                     IsoType isoType) {
-            if (proc::runCommand({"mkfs.fat", "-F", "32", "-n",
-                                  (isoType == IsoType::WindowsInstall ? "WINBOOT" : "WINPE"),
-                                  fatPart}) != 0) {
+            if (proc::runCommandRetry({"mkfs.fat", "-F", "32", "-n",
+                                       (isoType == IsoType::WindowsInstall ? "WINBOOT" : "WINPE"),
+                                       fatPart}) != 0) {
                 return false;
             }
             if (isoType == IsoType::WindowsInstall) {
-                if (proc::runCommand({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA",
-                                      ntfsPart}) != 0) {
+                if (proc::runCommandRetry({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA",
+                                           ntfsPart}) != 0) {
                     return false;
                 }
             }
@@ -580,15 +709,15 @@ namespace {
                                     const std::string& ntfsMnt,
                                     mnt::ScopedMount& fatScope,
                                     mnt::ScopedMount& ntfsScope) {
-            if (mnt::libMount(fatPart.c_str(), fatMnt.c_str(), "noatime") != 0)
+            if (mnt::libMountRetry(fatPart.c_str(), fatMnt.c_str(), "noatime") != 0)
                 return false;
             fatScope.setMounted();
 
             if (isoType == IsoType::WindowsInstall) {
                 const std::string ntfsDriver = getBestNtfsDriver();
                 if (ntfsDriver.empty()) return false;
-                if (mnt::libMountNtfs(ntfsPart.c_str(), ntfsMnt.c_str(),
-                                      ntfsDriver.c_str()) != 0)
+                if (mnt::libMountNtfsRetry(ntfsPart.c_str(), ntfsMnt.c_str(),
+                                           ntfsDriver.c_str()) != 0)
                     return false;
                 ntfsScope.setMounted();
             }
@@ -618,7 +747,7 @@ namespace {
         constexpr size_t kDesiredBuffer       = 4 * 1024 * 1024;
 
         /**
-         * @brief Fill @p bufV from @p fd_in up to @p bufferSize bytes, accumulating
+         * @brief Fill @p buf from @p fd_in up to @p bufferSize bytes, accumulating
          *        short reads and retrying EINTR; only read()==0 ends a chunk early.
          *
          * @return Bytes filled (0 = EOF), or -1 on error / cancellation.
@@ -942,7 +1071,7 @@ namespace {
         bool mountIso(const std::string& isoPath, const char* isoMntBuf,
                       mnt::ScopedMount& isoScope)
         {
-            if (mnt::libMount(isoPath.c_str(), isoMntBuf, "ro,loop") != 0) return false;
+            if (mnt::libMountRetry(isoPath.c_str(), isoMntBuf, "ro,loop") != 0) return false;
             isoScope.setMounted();
             return true;
         }
