@@ -60,6 +60,15 @@ constexpr uint8_t kTypePrimary = 0x01;               // Primary Volume Descripto
  * also covers UDF-bridge images, or a UDF "NSR02"/"NSR03" descriptor, which
  * covers pure-UDF images.
  *
+ * @par Utility
+ * A disc image begins with small "labels" that say what kind of disc it is.
+ * This function is the single place that decides whether a label means "yes,
+ * this is a real disc image", so every check applies exactly the same rule.
+ *
+ * @par How it is used here
+ * The quick check of the first label and the longer check that reads several
+ * labels in a row both ask this same question.
+ *
  * @param type Descriptor type byte (offset 0 of the descriptor).
  * @param id   Five-byte standard identifier (offset 1 of the descriptor).
  * @return true if the descriptor is accepted.
@@ -76,6 +85,17 @@ constexpr bool isAcceptedDescriptor(uint8_t type, std::string_view id) {
  * skips over; any other identifier means the image is not a recognised
  * optical image and the walk stops.
  *
+ * @par Utility
+ * Between the main labels, a disc image may contain a few harmless marker
+ * entries that only mean "the list starts here" or "the list ends here". This
+ * tells those markers apart from entries that mean the file is not a disc image
+ * at all, so real images are not rejected and unrelated files fail quickly.
+ *
+ * @par How it is used here
+ * When the label walk meets an entry that is not the main label, it asks this
+ * function. A harmless marker means "keep looking"; anything else means "stop,
+ * this is not a disc image".
+ *
  * @param id Five-byte standard identifier of the descriptor.
  * @return true if the identifier is a known sequence entry.
  */
@@ -85,6 +105,15 @@ constexpr bool isRecognitionSequenceId(std::string_view id) {
 
 /**
  * @brief Validates the descriptor at sector 16 of an already-mapped image.
+ *
+ * @par Utility
+ * This is a quick sanity test of the very beginning of the image. Most files
+ * that are not disc images fail it at once, so the slower search for Windows
+ * files is never wasted on them.
+ *
+ * @par How it is used here
+ * It is the first step of the Windows check. The search only runs if the
+ * beginning of the image passes.
  *
  * @param addr    Pointer to the mapped file memory window.
  * @param mapSize Size of the mapped window in bytes.
@@ -106,6 +135,15 @@ namespace case_fold {
  *
  * Deliberately locale-independent (unlike std::tolower), so bytes >= 0x80
  * never fold and the automaton build and the scan loop always agree.
+ *
+ * @par Utility
+ * Lets "BOOTMGR", "bootmgr" and "BootMgr" count as the same word. It uses
+ * a fixed table instead of the computer's language settings, so the result is
+ * the same on every machine, and converting a letter is a single quick lookup.
+ *
+ * @par How it is used here
+ * When the search words are prepared, and again for every byte read from the
+ * image, letters are converted to lower case through this table.
  */
 const std::array<uint8_t, 256>& table() {
     static const auto t = [] {
@@ -146,8 +184,17 @@ constexpr std::array<std::string_view, 3> kPatterns{
 /**
  * @brief Returns the bitmask bit for one (pattern, encoding) pair.
  *
- * @param pattern  Pattern index (see Pattern).
- * @param encoding Encoding index (see Encoding).
+ * @par Utility
+ * The program has to remember many yes/no findings, such as "found boot.wim
+ * written as plain text". This gives every combination of file name and
+ * writing style its own on/off switch, so all the findings fit in one number.
+ *
+ * @par How it is used here
+ * While the search tool is being prepared, each search word is tagged with its
+ * switch. During the search, the switch is turned on whenever that word is found.
+ *
+ * @param pattern  Pattern index.
+ * @param encoding Encoding index.
  * @return A mask with exactly one bit set: 1 << (pattern * 3 + encoding).
  */
 constexpr uint32_t bit(int pattern, int encoding) {
@@ -157,7 +204,16 @@ constexpr uint32_t bit(int pattern, int encoding) {
 /**
  * @brief Returns the mask covering all three encodings of one pattern.
  *
- * @param pattern Pattern index (see Pattern).
+ * @par Utility
+ * The same file name can be written on a disc in three different ways, so
+ * there are three switches per name. This combines them, so the code can ask one
+ * question: "was this name found in any of the three ways?"
+ *
+ * @par How it is used here
+ * It builds the two masks used to decide whether an image looks like Windows
+ * setup media: one for boot.wim, one for bootmgr or bootmgr.efi.
+ *
+ * @param pattern Pattern index.
  * @return The three adjacent bits belonging to @p pattern.
  */
 constexpr uint32_t group(int pattern) {
@@ -175,6 +231,14 @@ constexpr uint32_t kMaskBootMgr = group(BootmgrEfi) | group(Bootmgr);
  *
  * A Windows ISO needs at least one hit from each group: "boot.wim" and
  * "bootmgr[.efi]", in any encoding.
+ *
+ * @par Utility
+ * This is the one place that defines what "looks like a Windows install disc"
+ * means: boot.wim was found, and so was a bootmgr file.
+ *
+ * @par How it is used here
+ * While searching, it is asked after every byte so the search can stop as soon
+ * as both are found. It is asked once more at the end to give the final answer.
  *
  * @param found Bitmask accumulated by aho_corasick::scan().
  * @return true if both groups have at least one match.
@@ -210,10 +274,20 @@ namespace detail {
  * requested encoding (one byte, or two bytes with a 0x00 before/after). The
  * terminal node is tagged with win_signature::bit(pattern, encoding).
  *
+ * @par Utility
+ * Disc formats store file names in different ways: as plain letters, or as
+ * letters each padded with an empty byte (two bytes per letter), in either
+ * order. This adds one search word in one of those forms, so every name can be
+ * found however the disc happens to store it.
+ *
+ * @par How it is used here
+ * It is called once for every name and form (nine times in total) while the
+ * search tool is being built.
+ *
  * @param trie     Trie under construction; node 0 is the root.
  * @param text     Pattern text (any case; folded to lower case).
- * @param pattern  Pattern index (see win_signature::Pattern).
- * @param encoding Encoding index (see win_signature::Encoding).
+ * @param pattern  Pattern index.
+ * @param encoding Encoding index.
  */
 void addPattern(std::vector<Node>& trie,
                        std::string_view text, int pattern, int encoding) {
@@ -246,6 +320,14 @@ void addPattern(std::vector<Node>& trie,
  * Processes nodes in breadth-first order so each node's failure target is
  * already finished when it is needed. Missing transitions are filled from the
  * failure target, and each node inherits its failure target's match bits.
+ *
+ * @par Utility
+ * Finishes the search tool so it can look for all words at the same time while
+ * reading the data only once and never going back. It also makes sure a name
+ * hidden inside a longer one ("bootmgr" inside "bootmgr.efi") is still noticed.
+ *
+ * @par How it is used here
+ * It is called once, after all the search words have been added.
  *
  * @param trie Trie whose patterns have all been inserted.
  */
@@ -283,6 +365,13 @@ void buildFailureLinks(std::vector<Node>& trie) {
  *
  * Matches "boot.wim", "bootmgr.efi" and "bootmgr" case-insensitively in
  * ASCII, UTF-16LE and UTF-16BE. Thread-safe via static-local initialisation.
+ *
+ * @par Utility
+ * Building the search tool takes some work, but the result never changes. So
+ * it is built the first time it is needed and reused after that.
+ *
+ * @par How it is used here
+ * Every scan of an image fetches it from here.
  */
 const std::vector<Node>& automaton() {
     static const auto nodes = [] {
@@ -304,7 +393,16 @@ const std::vector<Node>& automaton() {
  *
  * Stops as soon as both signature groups have been seen.
  *
- * @return Bitmask of matched (pattern, encoding) bits; see win_signature.
+ * @par Utility
+ * Looks for all the file names, in all their forms, in a single pass through the
+ * data, instead of reading it once per name. That matters because up to 32 MiB
+ * are searched.
+ *
+ * @par How it is used here
+ * It is given the loaded start of the image and reports which names were
+ * found. The caller then decides whether that adds up to a Windows disc.
+ *
+ * @return Bitmask of matched (pattern, encoding) bits.
  */
 uint32_t scan(const char* addr, size_t size) {
     const auto& ac   = automaton();
@@ -327,11 +425,26 @@ uint32_t scan(const char* addr, size_t size) {
  * @brief RAII wrapper around a private, read-only mmap of a file from offset 0.
  *
  * Unmaps on destruction. Not copyable. Check ok() before using the data.
+ *
+ * @par Utility
+ * "Mapping" lets the program look at a file as if it were already in memory,
+ * while the system loads only the parts that are actually used. This wrapper
+ * releases the mapping automatically, so it can never be left behind.
+ *
+ * @par How it is used here
+ * The Windows check creates one to look at the beginning of the ISO.
  */
 class ScopedMapping {
 public:
     /**
      * @brief Maps the first @p length bytes of @p fd read-only.
+     *
+     * @par Utility
+     * Only the parts of the file that are looked at are really read from disk, so
+     * checking a multi-gigabyte image stays fast.
+     *
+     * @par How it is used here
+     * It is created for at most the first 32 MiB of the ISO, never the whole file.
      *
      * @param fd     Open, readable file descriptor (not owned, not closed).
      * @param length Number of bytes to map; must not exceed the file size.
@@ -340,7 +453,15 @@ public:
         : addr_(mmap(nullptr, length, PROT_READ, MAP_PRIVATE, fd, 0)),
           length_(length) {}
 
-    /// Unmaps the window if the mapping succeeded.
+    /**
+     * @brief Unmaps the window if the mapping succeeded.
+     *
+     * @par Utility
+     * Cleanup happens by itself, so nobody has to remember to do it.
+     *
+     * @par How it is used here
+     * It runs when the Windows check ends, whatever the outcome.
+     */
     ~ScopedMapping() {
         if (ok()) munmap(addr_, length_);
     }
@@ -348,13 +469,46 @@ public:
     ScopedMapping(const ScopedMapping&)            = delete;
     ScopedMapping& operator=(const ScopedMapping&) = delete;
 
-    /// @return true if mmap succeeded.
+    /**
+     * @brief Reports whether mmap succeeded.
+     *
+     * @par Utility
+     * The system reports a failed mapping with a special value that is easy to
+     * overlook. This turns it into a plain yes or no.
+     *
+     * @par How it is used here
+     * The Windows check asks right after creating the mapping, and cleanup asks
+     * before releasing it.
+     *
+     * @return true if mmap succeeded.
+     */
     bool        ok()   const { return addr_ != MAP_FAILED; }
 
-    /// @return Pointer to the start of the mapped window (valid only if ok()).
+    /**
+     * @brief Returns the start of the mapped window.
+     *
+     * @par Utility
+     * Tells the other functions where the image data begins.
+     *
+     * @par How it is used here
+     * It is handed to the header check and to the search.
+     *
+     * @return Pointer to the start of the mapped window (valid only if ok()).
+     */
     const char* data() const { return static_cast<const char*>(addr_); }
 
-    /// @return Size of the mapped window in bytes.
+    /**
+     * @brief Returns the length of the mapped window.
+     *
+     * @par Utility
+     * Tells the other functions how much data is available, so nothing reads past
+     * the end. This can be less than the whole file.
+     *
+     * @par How it is used here
+     * It is handed over together with the start address.
+     *
+     * @return Size of the mapped window in bytes.
+     */
     size_t      size() const { return length_; }
 
     /**
@@ -364,6 +518,15 @@ public:
      * immediately, and MADV_SEQUENTIAL to the whole window so read-ahead stays
      * primed if the full window is scanned. Hints are best-effort; failures
      * are ignored.
+     *
+     * @par Utility
+     * It tells the operating system "I will read this from start to end, in order".
+     * The system can then load the next part of the file ahead of time, so the
+     * search does not have to wait for the disk.
+     *
+     * @par How it is used here
+     * It is called right after mapping, asking for the first 4 MiB to be loaded
+     * immediately.
      *
      * @param eagerBytes Prefix length to prefetch (clamped to the window size).
      */
@@ -476,6 +639,15 @@ using IsoBufferPool = std::vector<std::unique_ptr<AlignedBuffer>>;
 /**
  * @brief Flags one operation as failed.
  *
+ * @par Utility
+ * When something goes wrong, two things must always happen: the progress
+ * display is told this job failed, and the function reports failure. Doing both
+ * in one place keeps every error path consistent.
+ *
+ * @par How it is used here
+ * Every early-exit error in writeIsoToDevice() uses it, and the streaming
+ * class uses it too.
+ *
  * @param progressData Progress array shared with the UI.
  * @param index        Slot belonging to this operation.
  * @return Always false, so callers can write `return markFailed(...)`.
@@ -489,6 +661,14 @@ bool markFailed(std::vector<ProgressInfo>& progressData, size_t index) {
  * @brief RAII owner of a file descriptor.
  *
  * Closes the descriptor on scope exit if it is valid (!= -1). Not copyable.
+ *
+ * @par Utility
+ * An opened file or device has to be closed again, and it is easy to forget one
+ * of the many places where the function can exit early. This closes it
+ * automatically.
+ *
+ * @par How it is used here
+ * It holds the ISO file and the USB device while they are in use.
  */
 struct FdGuard {
     int fd;
@@ -504,6 +684,16 @@ struct FdGuard {
  * Returns max(logical, physical) sector size, which is correct for 512n,
  * 512e and 4Kn drives. BLKPBSZGET is best-effort: if it fails, the logical
  * size is used.
+ *
+ * @par Utility
+ * Drives store data in fixed-size blocks called sectors, usually 512 or 4096
+ * bytes. Writing straight to the drive, bypassing the system's cache, only works
+ * if the data is sent in whole sectors of exactly the right size. The size
+ * differs between drives, so the program has to ask the drive.
+ *
+ * @par How it is used here
+ * It is asked right after the USB device is opened. The answer sets how the
+ * end of the image is padded, and how big the buffers and the writes are.
  *
  * @param devFd      Open block-device descriptor.
  * @param[out] sectorSize Receives the effective sector size in bytes.
@@ -525,6 +715,16 @@ bool queryEffectiveSectorSize(int devFd, int& sectorSize) {
 /**
  * @brief Allocates NUM_BUFFERS sector-aligned buffers into @p out.
  *
+ * @par Utility
+ * Direct writes also need the data to sit in memory at a specially aligned
+ * address, which ordinary memory allocation does not promise. This prepares
+ * those memory areas ("buffers"). There are two, so one can be filled from the
+ * ISO while the other is being written to the drive.
+ *
+ * @par How it is used here
+ * They are created once before copying starts and then handed to the
+ * streaming class, which passes them back and forth during the copy.
+ *
  * @param out        Pool to fill (appended to).
  * @param sectorSize Alignment of every buffer, in bytes.
  * @param bufferSize Size of every buffer, in bytes (multiple of sectorSize).
@@ -542,6 +742,16 @@ bool allocateAlignedBuffers(IsoBufferPool& out, int sectorSize, size_t bufferSiz
 
 /**
  * @brief Validates the ISO, rewinds it, and fetches its stat info.
+ *
+ * @par Utility
+ * Gathers the checks that must pass before any copying starts: the file is a
+ * real disc image, it will be read from its beginning, and its size is known.
+ * The caller handles one failure instead of three.
+ *
+ * @par How it is used here
+ * It is the first step of writeIsoToDevice(), before the USB device is touched.
+ * The size it reports is used both to detect Windows images and to know how
+ * much to copy.
  *
  * @param isoFd      Open, readable ISO descriptor.
  * @param[out] sb    Receives fstat() data on success.
@@ -561,15 +771,44 @@ bool prepareIso(int isoFd, struct stat& sb) {
  * second apart are ignored. While bytes keep arriving it publishes a smoothed
  * MB/s figure (heavier smoothing below 10 MB/s). If nothing arrives it holds
  * the last figure, and reports 0 after 60 s without progress.
+ *
+ * @par Utility
+ * USB drives write in bursts, so the raw speed jumps up and down and would
+ * flicker on screen. This evens it out, keeps showing the last speed during short
+ * pauses, and shows 0 if nothing has been written for a minute.
+ *
+ * @par How it is used here
+ * The progress-reporting worker gives it the amount written so far, and shows
+ * whatever speed it returns.
  */
 class SpeedEstimator {
 public:
-    /// @param start Time the transfer started (initial baseline).
+    /**
+     * @brief Creates an estimator whose baseline is the transfer start.
+     *
+     * @par Utility
+     * Starting the clock at the real start time makes the first measurement
+     * accurate.
+     *
+     * @par How it is used here
+     * It is created when the progress-reporting worker starts.
+     *
+     * @param start Time the transfer started (initial baseline).
+     */
     explicit SpeedEstimator(Clock::time_point start)
         : lastUpdate_(start), stallStart_(start) {}
 
     /**
      * @brief Feeds one observation.
+     *
+     * @par Utility
+     * It is the single place where measurements are fed in. It ignores updates that
+     * arrive too quickly and picks the right handling for "data was written" or
+     * "nothing was written".
+     *
+     * @par How it is used here
+     * The progress worker calls it twice a second. When it returns a speed, that
+     * speed is shown.
      *
      * @param currentWritten Cumulative bytes written so far.
      * @param now            Time of the observation.
@@ -599,6 +838,13 @@ private:
      *
      * Computes the instantaneous speed over the window since the last real
      * data point, folds it into the smoothed value and resets the baseline.
+     *
+     * @par Utility
+     * Works out the speed from what was written since the last measurement, and
+     * blends it with earlier values so the number changes smoothly.
+     *
+     * @par How it is used here
+     * It runs when new data has been written since the last measurement.
      *
      * @param currentWritten Cumulative bytes written.
      * @param delta          Bytes written since the last baseline (> 0).
@@ -633,6 +879,14 @@ private:
      *
      * Starts (or continues) stall tracking and leaves the baseline untouched
      * so the next real sample spans the full transfer duration.
+     *
+     * @par Utility
+     * Handles the case where nothing new was written. It waits, keeps the last
+     * speed on screen, and only reports 0 after a full minute of silence. The
+     * measuring window keeps growing meanwhile, so a slow write is judged fairly.
+     *
+     * @par How it is used here
+     * It runs when no new data has been written since the last measurement.
      *
      * @param now Time of the observation.
      * @return 0.0 once the stall timeout is reached; otherwise std::nullopt
@@ -740,13 +994,47 @@ private:
         size_t len;   ///< Valid bytes; 0 == end-of-stream sentinel.
     };
 
-    /// @return true if the user requested cancellation globally.
+    /**
+     * @brief Reads the global cancellation flag.
+     *
+     * @par Utility
+     * The user can press cancel at any moment. This is the one way every part of
+     * the copy asks "should I stop?".
+     *
+     * @par How it is used here
+     * The reader, the writer and the final steps all check it often.
+     *
+     * @return true if the user requested cancellation globally.
+     */
     static bool isCancelled() { return GlobalState::g_operationCancelled.load(); }
 
-    /// @return true if this streamer stopped, or the user cancelled.
+    /**
+     * @brief Tells whether the transfer was stopped on purpose.
+     *
+     * @par Utility
+     * It tells "stopped on purpose" apart from "something went wrong". A cancelled
+     * copy should not be shown as an error and does not need the final flush.
+     *
+     * @par How it is used here
+     * It is checked before the final flush to the drive and before success is
+     * reported.
+     *
+     * @return true if this streamer stopped, or the user cancelled.
+     */
     bool aborted() const { return cancelled_ || isCancelled(); }
 
-    /// Flags this operation as failed; always returns false.
+    /**
+     * @brief Flags this operation as failed.
+     *
+     * @par Utility
+     * A shortcut for telling the progress display that this copy failed.
+     *
+     * @par How it is used here
+     * It is used when reading, writing or the final flush fails, unless the user
+     * cancelled.
+     *
+     * @return Always false.
+     */
     bool markFailed() {
         return ::markFailed(progressData_, progressIndex_);
     }
@@ -758,6 +1046,14 @@ private:
      *
      * Idempotent. The condition variables are notified so neither thread
      * stays blocked.
+     *
+     * @par Utility
+     * The copy uses two helper workers, one reading the ISO and one reporting
+     * progress. They must always be stopped and waited for, even after an error,
+     * otherwise the program could crash or hang.
+     *
+     * @par How it is used here
+     * It is called when the writing ends, and also from the error handler.
      */
     void shutdownThreads() {
         {
@@ -779,6 +1075,13 @@ private:
      * @brief Publishes the final result if the whole image was written.
      *
      * Stores the average speed, sets progress to 100 and marks completion.
+     *
+     * @par Utility
+     * It makes sure "100 %" and "done" are shown only when every byte has really
+     * been written and the copy was not cancelled.
+     *
+     * @par How it is used here
+     * It is the very last step of the copy.
      *
      * @return true if the transfer completed; false if aborted or incomplete.
      */
@@ -808,6 +1111,13 @@ private:
      * Sleeps on a condition variable so shutdown wakes it immediately
      * instead of waiting out a fixed sleep.
      *
+     * @par Utility
+     * Lets the progress worker rest for half a second between updates, yet wake up
+     * at once when the copy ends instead of finishing its sleep.
+     *
+     * @par How it is used here
+     * It is called at the start of every progress update.
+     *
      * @return false once shutdown was requested.
      */
     bool waitForTick() {
@@ -824,6 +1134,13 @@ private:
      *
      * The percentage is capped at 99 until finishIfComplete() sets 100.
      *
+     * @par Utility
+     * Turns "bytes written" into the percentage shown on screen. It stops at 99 %
+     * because the data is not safely on the drive until the final flush is done.
+     *
+     * @par How it is used here
+     * It is called on every progress update.
+     *
      * @param currentWritten Cumulative bytes written, excluding tail padding.
      */
     void publishProgress(uint64_t currentWritten) {
@@ -833,7 +1150,16 @@ private:
             std::min(99.0, (static_cast<double>(currentWritten) / fileSize_) * 100.0)));
     }
 
-    /// Monitor-thread body: every tick, publishes progress and the smoothed speed.
+    /**
+     * @brief Monitor-thread body: every tick, publishes progress and the smoothed speed.
+     *
+     * @par Utility
+     * A separate worker updates the progress and speed, so the screen stays
+     * current even while the drive is busy with a slow write.
+     *
+     * @par How it is used here
+     * It starts at the beginning of the copy and is stopped at the end.
+     */
     void monitorLoop() {
         SpeedEstimator estimator(Clock::now());
 
@@ -855,6 +1181,15 @@ private:
     /**
      * @brief Queues the end-of-stream marker for the writer.
      *
+     * @par Utility
+     * The writer waits for data, so it has to be told clearly when no more will
+     * come, whether the file ended normally or reading failed. The failure note is
+     * recorded together with this message so the writer cannot miss it.
+     *
+     * @par How it is used here
+     * The reader sends it when it reaches the end of the ISO or hits an error,
+     * including a file that turns out shorter than expected.
+     *
      * @param failed If true, also records that the reader failed.
      */
     void pushSentinel(bool failed) {
@@ -866,7 +1201,16 @@ private:
         qCv_.notify_all();
     }
 
-    /// Hands a filled buffer to the writer and wakes it.
+    /**
+     * @brief Hands a filled buffer to the writer and wakes it.
+     *
+     * @par Utility
+     * Passes the buffer on and alerts the writer in one step, so a buffer is never
+     * left waiting unnoticed.
+     *
+     * @par How it is used here
+     * The reader calls it each time it has filled a buffer.
+     */
     void pushFull(const Chunk& c) {
         {
             std::lock_guard<std::mutex> lk(qMutex_);
@@ -877,6 +1221,14 @@ private:
 
     /**
      * @brief Blocks until an empty buffer is available.
+     *
+     * @par Utility
+     * The reader waits here until a buffer is free. That stops it from racing ahead
+     * of the writer and using more and more memory. It can also be interrupted, so
+     * the copy can always be stopped.
+     *
+     * @par How it is used here
+     * The reader calls it at the start of every round.
      *
      * @param[out] out The acquired buffer.
      * @return false if the reader was told to stop while waiting.
@@ -895,6 +1247,14 @@ private:
      *
      * Retries on EINTR. A short read mid-file is not treated as EOF; only a
      * read() returning 0 is.
+     *
+     * @par Utility
+     * A read can return less data than asked for even though more is coming, and
+     * the drive wants full blocks. This keeps asking until the buffer is full or
+     * the file really ends, and it tells a real end apart from an error.
+     *
+     * @par How it is used here
+     * The reader calls it once for every buffer.
      *
      * @param buf            Destination buffer.
      * @param toRead         Bytes wanted.
@@ -927,6 +1287,13 @@ private:
      * A source shorter than fstat reported is treated as a failure instead of
      * being silently padded. Always ends by pushing the end-of-stream
      * sentinel (unless told to stop).
+     *
+     * @par Utility
+     * Reading the ISO runs alongside writing to the USB drive, so neither has to
+     * wait for the other.
+     *
+     * @par How it is used here
+     * It starts when the copy starts and passes each filled buffer to the writer.
      */
     void readerLoop() {
         uint64_t readTotal = 0;
@@ -971,6 +1338,13 @@ private:
     /**
      * @brief Blocks for the next filled buffer.
      *
+     * @par Utility
+     * The writer waits here for the next filled buffer, or learns that there is
+     * nothing more to write.
+     *
+     * @par How it is used here
+     * It is the condition of the writer's main loop.
+     *
      * @param[out] out The received chunk.
      * @return false on the end-of-stream sentinel (reader finished, failed
      *         or was cancelled).
@@ -983,7 +1357,15 @@ private:
         return out.len != 0;
     }
 
-    /// Returns a written buffer to the empty queue and wakes the reader.
+    /**
+     * @brief Returns a written buffer to the empty queue and wakes the reader.
+     *
+     * @par Utility
+     * Lets the same two buffers be reused over and over for the whole image.
+     *
+     * @par How it is used here
+     * The writer calls it after each buffer has been written successfully.
+     */
     void recycle(char* buf) {
         {
             std::lock_guard<std::mutex> lk(qMutex_);
@@ -997,6 +1379,14 @@ private:
      *
      * Updates the internal total (including padding) and the reported total,
      * which is capped at the true file size so padding stays hidden.
+     *
+     * @par Utility
+     * Keeps the running total. The padding added to fill the last block is left
+     * out of the reported figure, so progress never goes beyond the real file size,
+     * but it is still counted internally to know when everything is done.
+     *
+     * @par How it is used here
+     * It is called after every write to the drive.
      *
      * @param written Bytes written by the last write() call.
      */
@@ -1017,6 +1407,14 @@ private:
      * writeChunk_ (a multiple of the sector size), so buffer address, length
      * and device offset all stay sector-aligned for O_DIRECT, while progress
      * is reported and cancellation checked after every write of <= 4 MiB.
+     *
+     * @par Utility
+     * Sending data to a drive may take several tries, because it can be partial or
+     * interrupted. This deals with that, and checks for cancel after each piece,
+     * so the main loop can stay simple.
+     *
+     * @par How it is used here
+     * The writer calls it for every filled buffer it receives.
      *
      * @param c Chunk to write.
      * @return false on I/O failure or cancellation (ioFailed_ / cancelled_
@@ -1051,7 +1449,16 @@ private:
         return true;
     }
 
-    /// Writer loop (calling thread): pops full chunks, writes them, recycles buffers.
+    /**
+     * @brief Writer loop (calling thread): pops full chunks, writes them, recycles buffers.
+     *
+     * @par Utility
+     * This is the main loop of the writing side: take a filled buffer, write it,
+     * hand it back. It is kept separate so errors can be handled in one place.
+     *
+     * @par How it is used here
+     * run() calls it on the main thread while the two helper workers run.
+     */
     void pumpToDevice() {
         Chunk c;
         while (popFull(c)) {
@@ -1104,88 +1511,41 @@ private:
 //-------------------------------------------------------------
 
 /**
- * @brief Writes an ISO image to a raw block device, auto-routing Windows vs.
- *        Linux configurations.
+ * @brief Writes an ISO image to a raw block device, routing Windows and
+ *        Linux media to the appropriate writer.
  *
- * High-level orchestration routine that opens the ISO once, validates it,
- * then intercepts Windows installation media using an optimized metadata
- * signature probe. Standard/Linux distributions fall through directly into a
- * specialized, unbuffered block-level stream.
+ * Opens the ISO once, validates it with isValidIso9660, then checks for
+ * Windows media with isWindowsIsoInitialCheck. Windows images are handed to
+ * writeWindowsIsoToDevice (multi-partition layout, FAT32+NTFS, cluster
+ * tuning). Everything else is written as a raw image using O_DIRECT.
  *
- * @par Single fd lifecycle
- * The ISO is opened once at entry via open(O_RDONLY) and held for the
- * duration of the call. The same descriptor is passed to isValidIso9660 and
- * isWindowsIsoInitialCheck, avoiding redundant opens. File size is retrieved
- * once via fstat and reused across all paths.
+ * @par Raw write path
+ * Uses two 4 MiB posix_memalign buffers, rounded down to the device's
+ * effective sector size (the larger of BLKSSZGET and BLKPBSZGET; the physical
+ * size is best-effort) so O_DIRECT alignment holds on 512n, 512e and 4Kn
+ * drives. A reader thread fills one buffer, including zero-padding of the
+ * final partial sector, while the calling thread writes the other. Device
+ * writes are sector-aligned and capped at 4 MiB to keep progress and
+ * cancellation responsive on slow USB drives. Short reads mid-file are not
+ * treated as EOF.
  *
- * @par Early validation
- * isValidIso9660 is invoked before any device access or routing decision,
- * ensuring invalid images are rejected with minimal overhead.
+ * @par Progress
+ * A monitor thread samples the written-byte count every 500 ms and publishes
+ * progress (capped at 99% until done) and a smoothed speed. Speed holds
+ * through stalls and resets to 0 after 60 s without progress.
  *
- * @par Windows path routing
- * If isWindowsIsoInitialCheck passes, execution is delegated to
- * writeWindowsIsoToDevice, which automatically handles multi-partitioning,
- * hybrid FAT32+NTFS tables, and cluster tuning.
+ * @par Cancellation
+ * Both reader and writer check GlobalState::g_operationCancelled. On abort
+ * they stop promptly and skip the final fsync.
  *
- * @par Raw O_DIRECT pipeline
- * Non-Windows targets are imaged via raw unbuffered disk I/O. Data transfers
- * use two 4 MiB buffers allocated with posix_memalign (8 MiB per call), each
- * rounded down to a multiple of the device's effective sector size and
- * aligned to it. That size is derived by querying both the logical sector
- * size (ioctl(BLKSSZGET)) and the physical sector size (ioctl(BLKPBSZGET))
- * and taking the larger of the two. This ensures correct O_DIRECT alignment
- * on 512n, 512e, and 4Kn drives. BLKPBSZGET is treated as best-effort and
- * falls back to the logical size if the kernel or device does not support it.
- * POSIX_FADV_SEQUENTIAL is applied to the source descriptor before the write
- * loop to enable aggressive kernel read-ahead; POSIX_FADV_DONTNEED is applied
- * after to release the ISO from page cache once writing completes.
- *
- * @par Double buffering
- * A dedicated reader thread fills one aligned buffer from the ISO (including
- * tail zero-padding) while the calling thread writes the other buffer to the
- * device. The two buffers circulate between an "empty" and a "full" queue, so
- * the device is not left idle while the next chunk is being read. The reader
- * can run at most one buffer ahead of the writer, which bounds memory use per
- * call.
- *
- * @par Chunked device writes
- * Each device write() is sector-aligned and capped at 4 MiB. Buffer address,
- * length, and device offset all remain aligned for O_DIRECT. With the current
- * 4 MiB buffers each buffer goes out as a single write; the cap keeps
- * progress and cancellation granularity fine (important for slow USB drives,
- * < 10 MB/s) if the buffer size is increased later.
- *
- * @par Progress monitoring
- * A separate thread samples the written-byte counter every 500 ms, publishes
- * progress (capped at 99% until completion), and computes an exponentially
- * smoothed speed (heavier smoothing below 10 MB/s). The last known speed is
- * held through stalls and reset to 0 after 60 s without progress. The monitor
- * sleeps on a condition variable, so it wakes immediately on shutdown.
- *
- * @par Tail-block padding
- * Detects partial blocks at EOF, automatically zero-padding the remaining
- * buffer slice up to the strict sector layout boundary to prevent kernel
- * rejection errors (EINVAL). Short read() results mid-file are not treated as
- * EOF; the reader keeps reading until the chunk is full or read() returns 0.
- *
- * @par Asynchronous cancellation safety
- * Evaluates GlobalState::g_operationCancelled in both the reader and the
- * writer. On user abort, short-circuits execution, stops the reader thread,
- * and leaves the disk safely without triggering a cascading fsync block.
- *
- * @param isoPath       Absolute path to the source ISO image file on the host.
- * @param device        Target destination block node path (e.g., /dev/sdb).
- *                      WARNING: All existing underlying data will be
- *                      destructively overwritten.
- * @param progressIndex Unique thread tracking identifier mapped inside the
- *                      global progress array.
- * @param progressData  Reference to the operation-local progress data array
- *                      used for live progress, speed, and completion
- *                      reporting.
- * @return true if the image data was written in full and flushed to the
- *         device with fsync; false on I/O failure, validation failure, or
- *         user cancellation. The written data is not read back or verified
- *         against the ISO.
+ * @param isoPath       Path to the source ISO.
+ * @param device        Target block device (e.g. /dev/sdb).
+ *                      WARNING: existing data is destroyed.
+ * @param progressIndex Slot in the progress array for this operation.
+ * @param progressData  Operation-local progress, speed and completion data.
+ * @return true if the image was fully written and fsynced; false on I/O
+ *         error, validation failure or cancellation. The result is not read
+ *         back or verified against the ISO.
  *
  * @see isValidIso9660
  * @see isWindowsIsoInitialCheck
