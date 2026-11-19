@@ -9,9 +9,13 @@
 #include <vector>
 
 // C / System Headers
+#include <fcntl.h>
+#include <poll.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <termios.h>
+#include <unistd.h>
 
 // Third-Party Library Headers
 #include <readline/readline.h>
@@ -162,6 +166,7 @@ namespace {
         int num_matches = 0;
         int displayed_page = 0;
         int base_len = 0;
+        int hook_cursor_row = 0;    // 1-based terminal row where Readline invoked the completion hook
 
         bool valid = false;
 
@@ -170,6 +175,7 @@ namespace {
             num_matches = 0;
             displayed_page = 0;
             base_len = 0;
+            hook_cursor_row = 0;
             valid = false;
         }
 
@@ -178,7 +184,8 @@ namespace {
             int count,
             CompletionKind completion_kind,
             int page,
-            int base_length) {
+            int base_length,
+            int cursor_row) {
 
             clear();
 
@@ -191,6 +198,7 @@ namespace {
             num_matches = count;
             displayed_page = page;
             base_len = base_length;
+            hook_cursor_row = cursor_row;
 
             valid = true;
         }
@@ -409,7 +417,7 @@ namespace {
 
     void refitItems(std::vector<DisplayItem>& items, const FormatContext& ctx, int column_width) {
         for (auto& item : items)
-        item = formatItem(item.raw_match, ctx, column_width);
+            item = formatItem(item.raw_match, ctx, column_width);
     }
 
     // ---------------------------------------------------------------------------
@@ -427,7 +435,89 @@ namespace {
         return (cols == 0) ? 80 : cols;
     }
 
-    ColumnLayout computeLayout(size_t max_item_length, int items_to_display) {
+    int fdRows(int fd) {
+        struct winsize w = {};
+        return (ioctl(fd, TIOCGWINSZ, &w) == -1) ? 0 : w.ws_row;
+    }
+
+    int getTerminalRows() {
+        int rows = fdRows(STDOUT_FILENO);
+        if (rows == 0) rows = fdRows(STDERR_FILENO);
+        return (rows == 0) ? 24 : rows;
+    }
+
+    // Queries the 1-based cursor row via ANSI Cursor Position Report (ESC [ 6 n).
+    // Returns 0 if the terminal is non-interactive, unsupported, or times out.
+    int queryCursorRow() {
+        if (!isatty(STDOUT_FILENO)) return 0;
+
+        int tty_fd = open("/dev/tty", O_RDWR | O_NOCTTY);
+        int out_fd = (tty_fd >= 0) ? tty_fd : STDOUT_FILENO;
+        int in_fd  = (tty_fd >= 0) ? tty_fd : STDIN_FILENO;
+
+        struct termios orig_termios{}, raw_termios{};
+        bool have_termios = (tcgetattr(in_fd, &orig_termios) == 0);
+        if (have_termios) {
+            raw_termios = orig_termios;
+            raw_termios.c_lflag &= static_cast<tcflag_t>(~(ICANON | ECHO));
+            raw_termios.c_cc[VMIN] = 0;
+            raw_termios.c_cc[VTIME] = 0;
+            tcsetattr(in_fd, TCSANOW, &raw_termios);
+        }
+
+        fflush(stdout);
+        const char req[] = "\033[6n";
+        ssize_t written = write(out_fd, req, sizeof(req) - 1);
+
+        int row = 0;
+        if (written == static_cast<ssize_t>(sizeof(req) - 1)) {
+            char buf[64];
+            size_t pos = 0;
+            while (pos + 1 < sizeof(buf)) {
+                struct pollfd pfd{};
+                pfd.fd = in_fd;
+                pfd.events = POLLIN;
+                int pr = poll(&pfd, 1, 50);
+                if (pr <= 0) break;
+
+                ssize_t n = read(in_fd, buf + pos, 1);
+                if (n <= 0) break;
+                if (buf[pos] == 'R') {
+                    buf[pos + 1] = '\0';
+                    int parsed_row = 0, parsed_col = 0;
+                    const char* esc = strstr(buf, "\033[");
+                    if (esc && sscanf(esc + 2, "%d;%dR", &parsed_row, &parsed_col) == 2 && parsed_row > 0) {
+                        row = parsed_row;
+                    }
+                    break;
+                }
+                ++pos;
+            }
+        }
+
+        if (have_termios) {
+            tcsetattr(in_fd, TCSANOW, &orig_termios);
+        }
+        if (tty_fd >= 0) {
+            close(tty_fd);
+        }
+        return row;
+    }
+
+    // Computes the maximum number of grid rows that fit strictly below cursor_row
+    // without exceeding term_rows. Returns -1 when unconstrained.
+    int maxGridRowsBelowCursor(int cursor_row, int term_rows, int num_matches, bool show_footer) {
+        if (cursor_row <= 0 || term_rows <= 0) return -1;
+
+        const int lines_below_cursor = std::max(0, term_rows - cursor_row);
+        int overhead = 1; // opening '\n' in renderCompletionListing
+        if (num_matches > 1) overhead += 3; // printHeader: "\n<label>:\n\n"
+        if (show_footer) overhead += 2;     // printFooter: "\n[...]\n"
+
+        return std::max(0, lines_below_cursor - overhead);
+    }
+
+    ColumnLayout computeLayout(size_t max_item_length, int items_to_display, int max_grid_rows) {
         ColumnLayout layout{};
 
         const int terminal_width = std::max(1, getTerminalWidth());
@@ -459,6 +549,12 @@ namespace {
             (items_to_display + layout.num_columns - 1) /
             layout.num_columns;
 
+        // Vertical constraint: never allow the grid to exceed the rows available
+        // below the cursor position where Readline invoked the completion hook.
+        if (max_grid_rows >= 0 && layout.rows > max_grid_rows) {
+            layout.rows = max_grid_rows;
+        }
+
         return layout;
     }
 
@@ -468,13 +564,17 @@ namespace {
     }
 
     void renderGrid(const std::vector<DisplayItem>& items, const ColumnLayout& layout) {
-        const int count = (int)items.size();
+        if (layout.rows <= 0) return;
+
+        const int visible_count =
+            std::min((int)items.size(), layout.rows * layout.num_columns);
+
         for (int row = 0; row < layout.rows; row++) {
             for (int col = 0; col < layout.num_columns; col++) {
                 int page_offset = row + col * layout.rows;
-                if (page_offset >= count) continue;
-                // Pad only when not in the last column and not the last item
-                bool pad = col < layout.num_columns - 1 && page_offset < count - 1;
+                if (page_offset >= visible_count) continue;
+                // Pad only when not in the last column and not the last visible item
+                bool pad = col < layout.num_columns - 1 && page_offset < visible_count - 1;
                 printCell(items[page_offset], pad, layout.total_column_width);
             }
             printf("\033[0m\n");
@@ -486,21 +586,46 @@ namespace {
         int num_matches,
         CompletionKind kind,
         int displayed_page,
-        int base_len) {
+        int base_len,
+        int hook_cursor_row) {
 
         ReadlineColors rc = resolveReadlineTheme();
 
         const PageInfo page =
             computePageInfo(num_matches, displayed_page);
 
+        const int term_rows = getTerminalRows();
+        const int effective_cursor_row =
+            (hook_cursor_row > 0) ? std::min(hook_cursor_row, term_rows) : 0;
+        const bool show_footer = needsPagination(num_matches);
+        const int max_grid_rows =
+            maxGridRowsBelowCursor(effective_cursor_row, term_rows, num_matches, show_footer);
+
+        // If the terminal has zero lines below the cursor position where Readline
+        // invoked the completion hook, print nothing rather than overflowing.
+        if (effective_cursor_row > 0 && term_rows <= effective_cursor_row) {
+            fflush(stdout);
+            return;
+        }
+
         printf("\033[s\033[J\n");
 
-        printHeader(
-            kind,
-            page.total_pages,
-            num_matches,
-            displayed_page,
-            rc);
+        int lines_remaining =
+            (effective_cursor_row > 0)
+                ? std::max(0, (term_rows - effective_cursor_row) - 1)
+                : -1;
+
+        const bool can_print_header =
+            (num_matches > 1) && (lines_remaining < 0 || lines_remaining >= 3);
+        if (can_print_header) {
+            printHeader(
+                kind,
+                page.total_pages,
+                num_matches,
+                displayed_page,
+                rc);
+            if (lines_remaining >= 0) lines_remaining -= 3;
+        }
 
         const FormatContext ctx{
             kind,
@@ -513,12 +638,18 @@ namespace {
             formatPageItems(matches, page, ctx);
 
         const ColumnLayout layout =
-            computeLayout(maxVisualLength(items), page.items_to_display);
+            computeLayout(maxVisualLength(items), page.items_to_display, max_grid_rows);
 
         refitItems(items, ctx, layout.column_width);
 
         renderGrid(items, layout);
-        printFooter(page, num_matches, rc);
+        if (lines_remaining >= 0) {
+            lines_remaining = std::max(0, lines_remaining - layout.rows);
+        }
+
+        if (show_footer && (lines_remaining < 0 || lines_remaining >= 2)) {
+            printFooter(page, num_matches, rc);
+        }
 
         printf("\033[u");
         fflush(stdout);
@@ -544,6 +675,12 @@ void repaintCompletionListing() {
     if (!lastCompletion.valid)
         return;
 
+    // Re-query the current cursor row on repaint if available, falling back
+    // to the row captured when Readline originally invoked the hook.
+    const int current_cursor_row = queryCursorRow();
+    const int cursor_row =
+        (current_cursor_row > 0) ? current_cursor_row : lastCompletion.hook_cursor_row;
+
     std::vector<char*> matches;
     matches.reserve(lastCompletion.matches.size());
 
@@ -555,7 +692,8 @@ void repaintCompletionListing() {
         lastCompletion.num_matches,
         lastCompletion.kind,
         lastCompletion.displayed_page,
-        lastCompletion.base_len);
+        lastCompletion.base_len,
+        cursor_row);
 }
 
 /**
@@ -575,6 +713,10 @@ void repaintCompletionListing() {
  */
 void customListingsFunction(char **matches, int num_matches, int max_length) {
     (void)max_length;
+
+    // Capture the cursor position right where Readline invoked the completion hook,
+    // before any output is emitted, to enforce the vertical viewport constraint.
+    const int hook_cursor_row = queryCursorRow();
 
     list_shown_during_completion = true;
     install_esc_hijack();
@@ -596,14 +738,16 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
         num_matches,
         kind,
         displayed_page,
-        base_len);
+        base_len,
+        hook_cursor_row);
 
     renderCompletionListing(
         matches,
         num_matches,
         kind,
         displayed_page,
-        base_len);
+        base_len,
+        hook_cursor_row);
 
     // Preserve existing Tab-to-next-page behavior.
     const PageInfo page =
