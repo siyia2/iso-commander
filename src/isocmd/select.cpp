@@ -282,7 +282,6 @@ namespace {
                               bool& isFiltered,
                               const std::vector<std::string>& filteredFiles,
                               std::vector<std::string>& isoDirs,
-                              std::vector<std::string>& pendingIndices,
                               const std::string& operation,
                               bool& umountMvRmBreak,
                               bool& filterHistory,
@@ -301,7 +300,7 @@ namespace {
                 if (isUnmount) umountMvRmBreak = true;
                 processInputForMountOrUmount(inputString, activeList, umountMvRmBreak, verbose, isUnmount);
             } else if (operation == "write2usb") {
-                writeToUsb(inputString, activeList, pendingIndices);
+                writeToUsb(inputString, activeList);
             } else {
                 processInputForCpMvRm(inputString, activeList, operation, umountMvRmBreak, filterHistory, verbose);
             }
@@ -670,13 +669,13 @@ namespace {
                     hasPendingProcess = false;
                     return;
                 }
-                processOperation(batch, isFiltered, filteredFiles, isoDirs, pendingIndices,
+                processOperation(batch, isFiltered, filteredFiles, isoDirs,
                                  operation, umountMvRmBreak, filterHistory,
                                  /*useSourceList=*/true);
             }
 
             void runDirect(const std::string& input) {
-                processOperation(input, isFiltered, filteredFiles, isoDirs, pendingIndices,
+                processOperation(input, isFiltered, filteredFiles, isoDirs,
                                  operation, umountMvRmBreak, filterHistory,
                                  /*useSourceList=*/false);
             }

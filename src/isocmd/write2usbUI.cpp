@@ -901,13 +901,11 @@ namespace MappingPrompt {
  * for final user confirmation before returning confirmed association pairs.
  *
  * @param selectedIsos Vector of selected ISO files designated for writing.
- * @param[out] pendingIndices Output container for tracking unassigned or pending index identifiers.
  * @return std::vector<std::pair<IsoInfo, std::string>> Vector of confirmed (ISO, Target Device) association pairs,
  *         or an empty vector if cancelled or stopped by thread pool limits.
  */
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
-    const std::vector<IsoInfo>& selectedIsos,
-    std::vector<std::string>& pendingIndices)
+    const std::vector<IsoInfo>& selectedIsos)
 {
     PendingReadlineTextClearGuard pendingTextGuard;
     const WriteTheme wt = getWriteTheme();
@@ -1008,8 +1006,6 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
         if (MappingPrompt::confirmDeviceMappings(devicePrompt, mainInputString, warnRows, wt, color)) {
             setupSignalHandlerCancellations();
             GlobalState::g_operationCancelled.store(false);
-            g_isoPending.paths.clear();
-            pendingIndices.clear();
             return validPairs;
         } else {
             rl_bind_keyseq("?", help_handler);
@@ -1354,9 +1350,8 @@ std::shared_ptr<WriteScreen> performWriteOperation(
  *
  * @param input          Raw selection string from the main menu (e.g. "1 3-5").
  * @param isoFiles       Full ordered list of available ISO paths.
- * @param pendingIndices Staged selection display tokens to be cleared on confirmation.
  */
-void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles, std::vector<std::string>& pendingIndices) {
+void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles) {
     clearScrollBuffer();
     std::unordered_set<int> indicesToProcess;
 
@@ -1388,7 +1383,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
         return;
     }
 
-    auto validPairs = collectDeviceMappings(selectedIsos, pendingIndices);
+    auto validPairs = collectDeviceMappings(selectedIsos);
     if (validPairs.empty()) {
         return;
     }
