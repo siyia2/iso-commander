@@ -51,7 +51,7 @@
 
 namespace fs = std::filesystem;
 
-// Defined elsewhere (help / error display).
+// Defined in help.cpp and verbose.cpp
 void helpMappings();
 void displayErrors();
 
