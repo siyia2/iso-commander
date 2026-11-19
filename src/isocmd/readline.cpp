@@ -383,14 +383,7 @@ namespace {
         if (isDirectory(raw)) {
             const bool show_slash = width >= 2;
             const char* suffix = show_slash ? "/" : "";
-
-            return makeItem(
-                raw,
-                relative,
-                rc.dir,
-                suffix,
-                width - (show_slash ? 1 : 0),
-                rc);
+            return makeItem(raw, relative, rc.dir, suffix, width - (show_slash ? 1 : 0), rc);
         }
 
         return makeItem(raw, relative, rc.file, "", width, rc);
