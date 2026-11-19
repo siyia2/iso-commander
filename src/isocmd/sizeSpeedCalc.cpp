@@ -218,22 +218,27 @@ static size_t estimateNrgBytes(const std::string& file) {
 /**
  * @brief Estimates the output ISO size for a Media Descriptor Image (MDF/MDS) file.
  *
- * Detects sector geometry using @c MdfTypeInfo and calculates total sector count
- * multiplied by the specific sector data payload size.
+ * Retrieves the MDF file size using stat(), detects sector geometry using
+ * @c MdfTypeInfo, and calculates the output ISO size by multiplying the
+ * total sector count by the corresponding sector data payload size.
  *
  * @param file Absolute path to the MDF file.
- * @return Estimated size in bytes of the resulting ISO, or 0 if geometry is undetectable.
+ * @return Estimated size in bytes of the resulting ISO, or 0 if file access
+ *         fails or sector geometry cannot be determined.
  */
 static size_t estimateMdfBytes(const std::string& file) {
+    struct stat st{};
+    if (stat(file.c_str(), &st) != 0 || st.st_size <= 0)
+        return 0;
+
     std::ifstream mdf(file, std::ios::binary);
     if (!mdf) return 0;
+
     MdfTypeInfo info;
     if (!info.determineMdfType(mdf)) return 0;
-    mdf.seekg(0, std::ios::end);
-    std::streampos pos = mdf.tellg();
-    if (pos < 0) return 0;
-    size_t fileSize = static_cast<size_t>(pos);
-    return (fileSize / info.sector_size) * info.sector_data;
+
+    return (static_cast<size_t>(st.st_size) / info.sector_size)
+           * info.sector_data;
 }
 
 /**
