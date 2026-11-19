@@ -162,6 +162,9 @@ int checkPendingRefresh();
 /** @brief Clears readline list completions on exact matches. */
 int my_rl_complete(int ignore, int invoking_key);
 
+/** @brief Custom hook for GNU Readline to display completions with pagination and color themes. */
+void customListingsFunction(char **matches, int num_matches, int max_length);
+
 /**
  * KEYBINDING MANAGEMENT
  * Functions to toggle between "Hotkeys" and "Standard Typing" modes.
