@@ -2,6 +2,7 @@
 
 // C++ Standard Library Headers
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdio>
 #include <iostream>
@@ -15,7 +16,6 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <termios.h>
-#include <time.h>
 #include <unistd.h>
 
 // Third-Party Library Headers
@@ -447,12 +447,6 @@ namespace {
         return (rows == 0) ? 24 : rows;
     }
 
-    long elapsedMs(const timespec& start, const timespec& now) {
-        long sec_diff = now.tv_sec - start.tv_sec;
-        long nsec_diff = now.tv_nsec - start.tv_nsec;
-        return sec_diff * 1000L + nsec_diff / 1000000L;
-    }
-
     // Queries the 1-based cursor row via ANSI Cursor Position Report (ESC [ 6 n).
     // Returns 0 if the terminal is non-interactive, unsupported, or times out.
     int queryCursorRow() {
@@ -479,23 +473,21 @@ namespace {
         bool saw_cpr_terminator = false;
 
         if (written == static_cast<ssize_t>(sizeof(req) - 1)) {
-            constexpr long kDeadlineMs = 150;
-            timespec start_ts{};
-            clock_gettime(CLOCK_MONOTONIC, &start_ts);
+            using clock = std::chrono::steady_clock;
+            const auto deadline = clock::now() + std::chrono::milliseconds(150);
 
             char buf[64];
             size_t pos = 0;
 
             while (pos + 1 < sizeof(buf)) {
-                timespec now_ts{};
-                clock_gettime(CLOCK_MONOTONIC, &now_ts);
-                long remaining_ms = kDeadlineMs - elapsedMs(start_ts, now_ts);
-                if (remaining_ms <= 0) break;
+                const auto remaining =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(deadline - clock::now());
+                if (remaining.count() <= 0) break;
 
                 struct pollfd pfd{};
                 pfd.fd = tty_fd;
                 pfd.events = POLLIN;
-                int pr = poll(&pfd, 1, static_cast<int>(remaining_ms));
+                int pr = poll(&pfd, 1, static_cast<int>(remaining.count()));
                 if (pr <= 0) break;
 
                 ssize_t n = read(tty_fd, buf + pos, 1);
