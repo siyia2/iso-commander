@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
+#include <cstdint>
 #include <cstddef>
+#include <cstring>
 #include <cstdio>
 #include <fstream>
 #include <iomanip>
@@ -10,8 +12,8 @@
 #include <vector>
 
 // C / System Headers
-#include <stdint.h>
-#include <string.h>
+#include <fcntl.h>
+#include <linux/stat.h>
 #include <sys/stat.h>
 
 // Third-Party Library Headers
@@ -37,11 +39,11 @@
  * @param device Absolute path to the block device (e.g. @c /dev/sdb).
  * @return Size in bytes, or @c 0 on failure or if the sysfs entry is absent.
  */
-uint64_t getBlockDeviceSize(const std::string& device) {
+std::uint64_t getBlockDeviceSize(const std::string& device) {
     std::string deviceName = device.substr(device.find_last_of('/') + 1);
     std::ifstream sizeFile("/sys/block/" + deviceName + "/size");
 
-    uint64_t sectors = 0;
+    std::uint64_t sectors = 0;
     if (!(sizeFile >> sectors)) {
         return 0;
     }
@@ -60,17 +62,17 @@ uint64_t getBlockDeviceSize(const std::string& device) {
  * @param size Raw size in bytes.
  * @return Formatted string such as @c "4.70 GB" or @c "720.00 MB".
  */
-std::string formatFileSize(uint64_t size) {
+std::string formatFileSize(std::uint64_t size) {
     std::ostringstream oss;
     if (size < 1024 * 1024) {
         oss << std::fixed << std::setprecision(2)
             << static_cast<double>(size) / 1024 << " KB";
-    } else if (size < 1024 * 1024 * 1024) {
+    } else if (size < 1024ULL * 1024 * 1024) {
         oss << std::fixed << std::setprecision(2)
             << static_cast<double>(size) / (1024 * 1024) << " MB";
     } else {
         oss << std::fixed << std::setprecision(2)
-            << static_cast<double>(size) / (1024 * 1024 * 1024) << " GB";
+            << static_cast<double>(size) / (1024ULL * 1024 * 1024) << " GB";
     }
     return oss.str();
 }
@@ -120,25 +122,25 @@ std::string formatSpeed(double mbPerSec) {
  *
  * @see daa_t::isosize
  */
-static uint64_t getDaaIsoSize(const std::string& path) {
-    FILE* f = fopen(path.c_str(), "rb");
+static std::uint64_t getDaaIsoSize(const std::string& path) {
+    std::FILE* f = std::fopen(path.c_str(), "rb");
     if (!f) return 0;
 
     daa_t daa;
-    if (fread(&daa, 1, sizeof(daa), f) != sizeof(daa)) {
-        fclose(f);
+    if (std::fread(&daa, 1, sizeof(daa), f) != sizeof(daa)) {
+        std::fclose(f);
         return 0;
     }
-    fclose(f);
+    std::fclose(f);
 
     // Determine host endianness (0 = little-endian, no swap)
     int endian = 1;
-    if (*(char*)&endian) endian = 0;
+    if (*reinterpret_cast<const char*>(&endian)) endian = 0;
     swap_daa_if_be(&daa, endian);
 
     // Check signature (basic validation)
-    if (strncmp((char*)daa.sign, "DAA", 16) != 0 &&
-        strncmp((char*)daa.sign, "GBI", 16) != 0) {
+    if (std::strncmp(reinterpret_cast<const char*>(daa.sign), "DAA", 16) != 0 &&
+        std::strncmp(reinterpret_cast<const char*>(daa.sign), "GBI", 16) != 0) {
         return 0;
     }
     return daa.isosize;
@@ -150,8 +152,8 @@ static uint64_t getDaaIsoSize(const std::string& path) {
  * * @param files Vector of file paths.
  * @return Total size in bytes.
  */
-size_t getTotalFileSize(const std::vector<std::string>& files) {
-    size_t totalSize = 0;
+std::size_t getTotalFileSize(const std::vector<std::string>& files) {
+    std::size_t totalSize = 0;
     for (const auto& file : files) {
         struct stat st;
         if (stat(file.c_str(), &st) == 0) {
@@ -172,24 +174,25 @@ void toLowerInPlace(std::string& str);
  * @param file Absolute path to the CHD file.
  * @return Estimated size in bytes of the resulting ISO, or 0 if opening/parsing fails.
  */
-static size_t estimateChdBytes(const std::string& file) {
+static std::size_t estimateChdBytes(const std::string& file) {
     chd_file* rawChd = nullptr;
     if (chd_open(file.c_str(), CHD_OPEN_READ, nullptr, &rawChd) != CHDERR_NONE || !rawChd) {
         return 0;
     }
 
-    size_t bytes = 0;
+    std::size_t bytes = 0;
     if (const chd_header* header = chd_get_header(rawChd)) {
-        uint32_t hunkSize = header->hunkbytes;
-        uint32_t rawSectorSize = 0;
+        std::uint32_t hunkSize = header->hunkbytes;
+        std::uint32_t rawSectorSize = 0;
         if      (hunkSize % 2448 == 0) rawSectorSize = 2448;
         else if (hunkSize % 2352 == 0) rawSectorSize = 2352;
         else if (hunkSize % 2048 == 0) rawSectorSize = 2048;
 
         if (rawSectorSize != 0) {
-            constexpr uint32_t userDataSize = 2048;
-            uint32_t sectorsPerHunk = hunkSize / rawSectorSize;
-            uint64_t totalSectors = static_cast<uint64_t>(header->totalhunks) * sectorsPerHunk;
+            constexpr std::uint32_t userDataSize = 2048;
+            std::uint32_t sectorsPerHunk = hunkSize / rawSectorSize;
+            std::uint64_t totalSectors =
+                static_cast<std::uint64_t>(header->totalhunks) * sectorsPerHunk;
             bytes = totalSectors * userDataSize;
         }
     }
@@ -206,30 +209,33 @@ static size_t estimateChdBytes(const std::string& file) {
  * @param file Absolute path to the NRG file.
  * @return Estimated size in bytes of the resulting ISO, or 0 if the file cannot be read.
  */
-static size_t estimateNrgBytes(const std::string& file) {
+static std::size_t estimateNrgBytes(const std::string& file) {
     std::ifstream nrg(file, std::ios::binary | std::ios::ate);
     if (!nrg) return 0;
     std::streampos pos = nrg.tellg();
     if (pos <= 0) return 0;
-    size_t sz = static_cast<size_t>(pos);
+    std::size_t sz = static_cast<std::size_t>(pos);
     return (sz > 307200) ? (sz - 307200) : 0;
 }
 
 /**
  * @brief Estimates the output ISO size for a Media Descriptor Image (MDF/MDS) file.
  *
- * Retrieves the MDF file size using stat(), detects sector geometry using
- * @c MdfTypeInfo, and calculates the output ISO size by multiplying the
- * total sector count by the corresponding sector data payload size.
+ * Retrieves the MDF file size using Linux statx(), detects sector geometry
+ * using @c MdfTypeInfo, and calculates the output ISO size by multiplying
+ * the total sector count by the corresponding sector data payload size.
  *
  * @param file Absolute path to the MDF file.
  * @return Estimated size in bytes of the resulting ISO, or 0 if file access
  *         fails or sector geometry cannot be determined.
  */
-static size_t estimateMdfBytes(const std::string& file) {
-    struct stat st{};
-    if (stat(file.c_str(), &st) != 0 || st.st_size <= 0)
+static std::size_t estimateMdfBytes(const std::string& file) {
+    struct statx stx{};
+
+    if (statx(AT_FDCWD, file.c_str(), 0, STATX_SIZE, &stx) != 0 ||
+        !(stx.stx_mask & STATX_SIZE) || stx.stx_size == 0) {
         return 0;
+    }
 
     std::ifstream mdf(file, std::ios::binary);
     if (!mdf) return 0;
@@ -237,7 +243,7 @@ static size_t estimateMdfBytes(const std::string& file) {
     MdfTypeInfo info;
     if (!info.determineMdfType(mdf)) return 0;
 
-    return (static_cast<size_t>(st.st_size) / info.sector_size)
+    return (static_cast<std::size_t>(stx.stx_size) / info.sector_size)
            * info.sector_data;
 }
 
@@ -249,9 +255,9 @@ static size_t estimateMdfBytes(const std::string& file) {
  * @param file Absolute path to the DAA or GBI file.
  * @return Uncompressed ISO size in bytes, or 0 if extraction fails.
  */
-static size_t estimateDaaBytes(const std::string& file) {
-    uint64_t isoSize = getDaaIsoSize(file);
-    return (isoSize > 0) ? static_cast<size_t>(isoSize) : 0;
+static std::size_t estimateDaaBytes(const std::string& file) {
+    std::uint64_t isoSize = getDaaIsoSize(file);
+    return (isoSize > 0) ? static_cast<std::size_t>(isoSize) : 0;
 }
 
 /**
@@ -263,12 +269,12 @@ static size_t estimateDaaBytes(const std::string& file) {
  * @param file Absolute path to the raw image file.
  * @return Estimated size in bytes of the resulting ISO, or 0 on read failure.
  */
-static size_t estimateBinBytes(const std::string& file) {
+static std::size_t estimateBinBytes(const std::string& file) {
     std::ifstream ccd(file, std::ios::binary | std::ios::ate);
     if (!ccd) return 0;
     std::streampos pos = ccd.tellg();
     if (pos <= 0) return 0;
-    return (static_cast<size_t>(pos) / sizeof(CcdSector)) * DATA_SIZE;
+    return (static_cast<std::size_t>(pos) / sizeof(CcdSector)) * DATA_SIZE;
 }
 
 /**
@@ -295,12 +301,12 @@ static size_t estimateBinBytes(const std::string& file) {
  * @param modeDaa        True if converting DAA images.
  * @return Total estimated output size in bytes across all files.
  */
-size_t calculateTotalBytesForConversions(
+std::size_t calculateTotalBytesForConversions(
     const std::vector<std::string>& filesToProcess,
     const bool modeMdf, const bool modeNrg,
     const bool modeChd, const bool modeDaa)
 {
-    size_t totalBytes = 0;
+    std::size_t totalBytes = 0;
     const bool noModesActive = !modeMdf && !modeNrg && !modeChd && !modeDaa;
 
     for (const auto& file : filesToProcess) {
