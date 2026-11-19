@@ -72,8 +72,8 @@ static char* command_generator(const char* text, int state) {
  * @c setting_value_completion_entry(), which suppresses the default.
  *
  * @param text The partial text.
- * @param start Start index in line buffer.
- * @param end End index in line buffer.
+ * @param start Start index in line buffer (unused).
+ * @param end End index in line buffer (unused).
  * @return Array of matches or nullptr.
  */
 char** my_special_completion_entry(const char* text, int start, int end) {
@@ -113,13 +113,15 @@ static void restore_esc_default() {
  *
  * If Readline inserts a common prefix while also displaying matches, the
  * subsequent @c clear_screen_and_buffer() call restores the default Esc
- * binding; @c my_rl_complete() uses this flag to re-install the hijack so
- * the first Esc still clears the list and the second exits.
+ * binding and, because this flag is set, preserves the repaint snapshot.
+ * @c my_rl_complete() uses this flag to re-install the Esc hijack so the
+ * first Esc still clears the list and the second exits.
  */
 static bool list_shown_during_completion = false;
 
 //=============================================================================
-// Completion list display (helpers for customListingsFunction)
+// Completion list display (helpers for customListingsFunction and
+// repaintCompletionListing)
 //=============================================================================
 
 namespace {
@@ -204,6 +206,9 @@ namespace {
     // Completion kind / pagination
     // ---------------------------------------------------------------------------
 
+    // Characters that mark a match as a special (command-style) entry for
+    // display purposes. Note: '?' is recognized here for display/coloring only;
+    // my_special_completion_entry() only generates matches for '!' and '*'.
     bool isSpecialPrefix(char c) {
         return c != '\0' && strchr("!?*", c) != nullptr;
     }
@@ -478,7 +483,7 @@ namespace {
  * attempt, an explicit screen clear, or a prompt-state reset.
  *
  * @note The listing saves/restores an absolute cursor position
- *       (ESC[s / ESC[u]), so callers must invoke this with the cursor on the
+ *       (@c ESC[s / @c ESC[u), so callers must invoke this with the cursor on the
  *       prompt's input line (see the repaint callbacks).
  */
 void repaintCompletionListing() {
@@ -592,10 +597,10 @@ static char* setting_value_generator(const char* text, int state) {
  * deliberate ways: it sets @c rl_attempted_completion_over = 1 (so Readline
  * does not fall back to filename completion on this prompt) and forces the
  * append character to a single space. When matches exist, Readline hands the
- * list to @c customListingsFunction (already installed as
- * @c rl_completion_display_matches_hook), so pagination, colors, column
- * layout, resize repaints and the Esc handling (first Esc clears the list,
- * second Esc exits) all behave exactly like the search prompt.
+ * list to @c customListingsFunction (installed as
+ * @c rl_completion_display_matches_hook by @c restoreReadline), so pagination,
+ * colors, column layout, resize repaints and the Esc handling (first Esc
+ * clears the list, second Esc exits) all behave exactly like the search prompt.
  *
  * @note The candidate list @c g_activeSettingValues is populated/cleared by
  *       the Settings Editor (see @c editSetting / the RAII guard in
@@ -726,6 +731,12 @@ static char** handle_device_completion(const char* text, int start, const std::s
 
 /**
  * @brief Callback for Readline to handle ISO-to-USB mapping completions.
+ *
+ * Resets pagination state and the completion repaint snapshot inline (the same
+ * resets @c resetReadlinePagination performs), suppresses Readline's default
+ * filename completion, then dispatches to the ISO-index or USB-device handler
+ * depending on whether the current word contains a '>' separator.
+ *
  * @param text The partial text currently being completed.
  * @param start Start index of the current word in the line buffer.
  * @param end End index of the current word in the line buffer.
@@ -755,11 +766,15 @@ char** completion_cb(const char* text, int start, int end) {
  *
  * Clears the current page counter, the cached common prefix used to
  * detect the start of a new completion session, and the saved completion
- * repaint snapshot (@c lastCompletion). Called by @c completion_cb at the start
- * of each completion attempt (inline reset), after a screen wipe via
- * @c clear_screen_and_buffer and @c my_rl_complete, and at the top of the
- * Settings Editor's per-setting loop so a snapshot from a previous prompt
- * can never be repainted on a different screen.
+ * repaint snapshot (@c lastCompletion).
+ *
+ * This is the callable form of a reset that is also performed inline elsewhere
+ * in this file: @c completion_cb resets all three at the start of each
+ * completion attempt, @c my_rl_complete clears the snapshot at the start of each
+ * attempt, and @c clear_screen_and_buffer resets the page and prefix (and the
+ * snapshot, unless a list was just shown during completion). External callers,
+ * such as the Settings Editor's per-setting loop, call this function so a
+ * snapshot from a previous prompt can never be repainted on a different screen.
  */
 void resetReadlinePagination() {
     current_page = 0;
@@ -768,7 +783,16 @@ void resetReadlinePagination() {
 }
 
 /**
- * @brief Re-enables custom completion hooks and history navigation keybindings.
+ * @brief Installs the custom completion display hook and restores history navigation keybindings.
+ *
+ * Sets @c rl_completion_display_matches_hook to @c customListingsFunction,
+ * clears @c rl_attempted_completion_function, and rebinds the Up/Down arrows and
+ * PageUp/PageDown to history navigation.
+ *
+ * @note Ctrl+L (@c '\\f') and Tab (@c '\\t') are bound to
+ *       @c prevent_readline_keybindings here, i.e. they are disabled. Use
+ *       @c RestoreReadlineBuffer to bind them to @c clear_screen_and_buffer and
+ *       @c my_rl_complete for prompts that support completion.
  */
 void restoreReadline() {
     rl_completion_display_matches_hook = customListingsFunction;
@@ -803,22 +827,27 @@ int prevent_readline_keybindings(int, int) {
 
 
 /**
- * @brief Clears the terminal screen, scrollback buffer, resets pagination/UI state,
- *        and clears the saved completion repaint snapshot.
+ * @brief Clears the terminal screen, redraws the prompt, resets pagination state,
+ *        and (usually) clears the saved completion repaint snapshot.
  *
  * If a Settings Editor body-repaint hook is installed
  * (@c SettingsEditorRepaint::g_fn), the editor's own draw lambda is invoked
  * instead of @c clearScrollBuffer so the header/value/description/footer are
- * repainted along with the prompt. Otherwise the scrollback is cleared and
- * Readline is asked to redraw. Pagination state and the last completion
- * snapshot are then reset.
+ * repainted along with the prompt. Otherwise the scrollback is cleared. Readline
+ * is then asked to redraw, the page counter and cached common prefix are reset,
+ * and the default Esc binding is restored via @c restore_esc_default.
  *
- * @note The snapshot is cleared only AFTER the repaint hook runs. A caller
- *       that wants a visible completion list dismissed (Esc, or Ctrl+L in the
- *       Settings Editor) must drop the snapshot first; use
- *       @c clear_list_and_screen for that. @c my_rl_complete calls this
- *       function directly on purpose, so a list shown together with an
- *       inserted common prefix is still repainted by the hook.
+ * The completion snapshot (@c lastCompletion) is cleared only when
+ * @c list_shown_during_completion is false. When @c my_rl_complete calls this
+ * function after Readline inserted a common prefix and also displayed a list,
+ * the snapshot is deliberately preserved so the repaint hook can redraw the list
+ * and later terminal resizes can repaint it. @c my_rl_complete re-installs the
+ * Esc hijack right after this returns.
+ *
+ * @note The snapshot is cleared (when it is) only AFTER the repaint hook runs.
+ *       A caller that wants a visible completion list dismissed (Esc, or Ctrl+L
+ *       in the Settings Editor) must drop the snapshot first; use
+ *       @c clear_list_and_screen for that.
  *
  * When @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode is active, the
  * current input line is captured, Readline is forced to exit its loop, and the
@@ -895,26 +924,34 @@ int clear_list_and_screen(int a, int b) {
 }
 
 /**
- * @brief TAB-completion handler that extends @c rl_complete with pagination
- * reset, custom directory formatting, and completion-list state management.
+ * @brief TAB-completion handler that extends @c rl_complete with directory
+ * slash handling, completion-list state management, and screen repaint.
  *
  * Delegates to @c rl_complete_internal('?') on double-TAB (list matches)
- * or @c rl_complete_internal('!') on single TAB (insert/complete). After
- * completion, if the result is a directory, it ensures a trailing slash is
- * appended. When the input changes, it clears the scroll buffer. It also
- * dismisses any previously displayed completion listing when a new completion
- * attempt does not display a listing, even if the input remains unchanged.
+ * or @c rl_complete_internal('!') on single TAB (insert/complete). At the start
+ * of each attempt it clears the completion repaint snapshot and restores the
+ * default Esc binding. After completion, if the input changed and the result is
+ * a directory, it appends a trailing slash.
+ *
+ * It then repaints via @c clear_screen_and_buffer (which uses the Settings
+ * Editor's repaint hook when one is installed, and clears the scroll buffer
+ * otherwise) in two cases: when the input changed, or when a previously
+ * displayed listing needs dismissing because this attempt did not display a new
+ * one, even if the input is unchanged. The repaint also resets the page counter
+ * and cached common prefix.
  *
  * When a completion list is displayed, Esc is rebound to
  * @c clear_list_and_screen (see @c install_esc_hijack): the first Esc
  * clears/repaints the list and restores the default binding, and a second Esc
  * exits. This applies to every prompt using this handler, including the
- * Settings Editor value prompt.
+ * Settings Editor value prompt. If a repaint follows a displayed list (e.g. a
+ * common prefix was inserted), the hijack is re-installed afterwards.
  *
- * When @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode is 1, it saves the
- * completed text to @c g_rl_pending_text, clears the input buffer, and sets
- * @c rl_done to exit readline, allowing the next loop iteration to restore
- * the text.
+ * @note When @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode is 1, the
+ *       repaint path (@c clear_screen_and_buffer) stashes the current input in
+ *       @c g_rl_pending_text, clears the buffer and sets @c rl_done so the next
+ *       loop iteration can restore the text. This function does not handle that
+ *       mode itself.
  *
  * @param ignore       Numeric argument (unused).
  * @param invoking_key Triggering key (unused).
@@ -970,14 +1007,6 @@ int my_rl_complete(int ignore, int invoking_key)
         // completion-list binding only if this attempt displayed a list.
         if (list_shown_during_completion)
             install_esc_hijack();
-
-        if (RetainAndRestoreReadlineBuffer::g_rl_complete_mode == 1) {
-            RetainAndRestoreReadlineBuffer::g_rl_pending_text = new_text;
-            rl_on_new_line();
-            rl_replace_line("", 0);
-            rl_done = 1;
-            RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 0;
-        }
     }
 
     list_shown_during_completion = false;
@@ -996,7 +1025,9 @@ int my_rl_complete(int ignore, int invoking_key)
  * displayed. If no pending text exists, the startup hook is cleared.
  *
  * Key bindings set:
- * - `Ctrl+L` (`\f`): Clears the screen and current input buffer.
+ * - `Ctrl+L` (`\f`): Clears/repaints the screen via @p clear_screen_and_buffer.
+ *   The input buffer is only cleared (and stashed for restoration) when
+ *   @c g_rl_complete_mode is active.
  * - `Tab`    (`\t`): Invokes custom completion via @p my_rl_complete.
  *
  * @note The startup hook consumes @p g_rl_pending_text exactly once,
@@ -1007,8 +1038,6 @@ int my_rl_complete(int ignore, int invoking_key)
  * @see my_rl_complete()
  */
 void RestoreReadlineBuffer() {
-    // Ctrl+L now calls clear_screen_and_buffer directly (no static-captured
-    // line that was reused on every later press).
     rl_bind_key('\f', clear_screen_and_buffer);
     rl_bind_key('\t', my_rl_complete);
 
