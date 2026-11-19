@@ -9,9 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
 #include <filesystem>
-#include <mutex>
 #include <random>
 #include <string>
 #include <thread>
@@ -21,9 +19,7 @@
 
 // C / System Headers
 #include <fcntl.h>
-#include <linux/fs.h>
 #include <spawn.h>
-#include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -249,15 +245,12 @@ namespace {
          *                Pass nullptr or "" for no extra options.
          * @param fstype  Filesystem type override (e.g. "ntfs3").
          *                Pass nullptr to let the kernel auto-detect.
-         * @param flags   Extra libmount context flags (e.g. MNT_MS_PROPAGATION).
-         *                Pass 0 for the common case.
          * @return 0 on success, non-zero on failure.
          */
         int libMount(const char* src,
                      const char* target,
                      const char* options = nullptr,
-                     const char* fstype  = nullptr,
-                     int         flags   = 0)
+                     const char* fstype  = nullptr)
         {
             libmnt_context* ctx = mnt_new_context();
             if (!ctx) return -1;
@@ -268,7 +261,6 @@ namespace {
                          mnt_context_append_options(ctx, options);
             if (fstype && *fstype)
                          mnt_context_set_fstype(ctx, fstype);
-            (void)flags; // reserved for caller convenience
 
             int rc = mnt_context_mount(ctx);
             mnt_free_context(ctx);
@@ -551,10 +543,10 @@ namespace {
          * modern remake is unavailable.
          *
          * @note Because modern Linux distributions frequently symlink userspace
-         * binaries or default to older FUSE wrappers, downstream mounting logic
-         * should pass the internal flag ("mount", "-i", "-t", driver, ...) when using
-         * the returned token. This bypasses userspace mount helpers and forces the
-         * VFS subsystem to invoke the designated kernel module directly.
+         * binaries or default to older FUSE wrappers, the returned token is mounted
+         * with libmount helpers disabled (see mnt::libMountNtfsRetry()). This
+         * bypasses userspace mount helpers and forces the VFS subsystem to invoke
+         * the designated kernel module directly.
          *
          * Driver priority tiering:
          * 1. "ntfs"  via Kernel 7.1+ (modernized native read/write engine) — highest
@@ -611,24 +603,6 @@ namespace {
 
             blkid_free_probe(pr);
             return true;
-        }
-
-        /**
-         * @brief Return the larger of a block device's logical and physical sector
-         *        sizes, falling back to 512 on any open/ioctl failure or non-positive
-         *        result.
-         * @param devNode Block device node (e.g. /dev/sdb1).
-         * @return max(BLKSSZGET, BLKPBSZGET), or 512 on failure.
-         */
-        int queryBestSectorSize(const std::string& devNode) {
-            int fd = open(devNode.c_str(), O_RDONLY);
-            if (fd < 0) return 512;
-            int logicalSize  = 512;
-            int physicalSize = 512;
-            if (ioctl(fd, BLKSSZGET,  &logicalSize)  < 0 || logicalSize  <= 0) logicalSize  = 512;
-            if (ioctl(fd, BLKPBSZGET, &physicalSize) < 0 || physicalSize <= 0) physicalSize = 512;
-            close(fd);
-            return std::max(logicalSize, physicalSize);
         }
 
         /**
@@ -736,22 +710,22 @@ namespace {
     }  // namespace disk
 
     // ===========================================================================
-    // copy:: file copy engine (O_DIRECT / buffered, single aligned buffer)
+    // copy:: file copy engine (buffered I/O with paced writeback, one buffer)
     // ===========================================================================
     namespace copy {
 
-        /** @brief Maximum restarts allowed for an unaligned O_DIRECT short write. */
-        constexpr int    kMaxUnalignedRetries = 3;
+        /** @brief Size of the shared I/O buffer. */
+        constexpr size_t kBufferSize  = 4 * 1024 * 1024;
 
-        /** @brief Target size of the aligned I/O buffer (rounded down to sector). */
-        constexpr size_t kDesiredBuffer       = 4 * 1024 * 1024;
+        /** @brief Alignment of the shared I/O buffer (one page). */
+        constexpr size_t kBufferAlign = 4096;
 
-        /** @brief Writeback is paced once per this many buffered chunks. */
+        /** @brief Writeback is paced once per this many chunks. */
         constexpr int kPaceEveryChunks = 1;
 
         /**
-         * @brief Per-file writeback pacing state for the buffered path: the chunks
-         *        written since the last pacing point, and the range paced last time.
+         * @brief Per-file writeback pacing state: the chunks written since the last
+         *        pacing point, and the range paced last time.
          */
         struct WritebackState {
             uint64_t pendOff    = 0;   ///< Start of the not-yet-paced range.
@@ -763,8 +737,8 @@ namespace {
         };
 
         /**
-         * @brief Bound the dirty-page backlog of a buffered output file to a few
-         *        chunks, pacing once every kPaceEveryChunks chunks.
+         * @brief Bound the dirty-page backlog of an output file to a few chunks,
+         *        pacing once every kPaceEveryChunks chunks.
          *
          * Chunks are accumulated into one contiguous range. When it reaches
          * kPaceEveryChunks chunks, writeback of the whole range is started
@@ -778,7 +752,7 @@ namespace {
          * with the final syncfs() flush; the copy then degrades to plain buffered
          * I/O.
          *
-         * @param fd_out Buffered output file descriptor.
+         * @param fd_out Output file descriptor.
          * @param off    File offset of the chunk just written.
          * @param len    Length in bytes of the chunk just written (must be > 0).
          * @param st     Pacing state for this output file.
@@ -832,95 +806,40 @@ namespace {
         }
 
         /**
-         * @brief Write one chunk at @p fileOffset, advancing it by the source-byte
-         *        count (not the aligned padded length) on success.
+         * @brief Write one chunk at @p fileOffset and advance it by the chunk length.
          *
-         * Applies O_DIRECT padding to @p sectorSize alignment, retries EINTR,
-         * treats a 0-byte write as EIO, and on an unaligned O_DIRECT short write
-         * restarts the chunk up to kMaxUnalignedRetries times while preserving the
-         * per-chunk credit high-water mark so already-counted source bytes are not
-         * double-credited.
+         * Retries EINTR, finishes short writes, and treats a 0-byte write as EIO.
+         * Every byte written is credited to the progress counters as it lands. After
+         * the chunk is complete, writeback is paced (see paceWriteback()) so the
+         * dirty backlog stays at a few chunks and a cancel drains quickly.
          *
-         * In the buffered branch, every kPaceEveryChunks completed chunks,
-         * writeback of those chunks is started and the previously paced range is
-         * waited on (see paceWriteback()), keeping the dirty backlog to a few
-         * chunks so a cancel drains quickly. O_DIRECT writes need none of this.
-         *
-         * @param wb Writeback pacing state for this output file; only used (and
-         *           updated) when @p useBufferedIO is true.
+         * @param wb Writeback pacing state for this output file.
          * @return true if the chunk was written completely; false otherwise.
          */
-        bool writeOneChunk(int fd_out, char* buf, ssize_t bytesRead,
-                           uint64_t& fileOffset, bool useBufferedIO,
-                           size_t sectorSize, size_t mask,
+        bool writeOneChunk(int fd_out, const char* buf, size_t len,
+                           uint64_t& fileOffset,
                            uint64_t& bytesCopiedTotal,
                            std::atomic<uint64_t>& totalAccumulator,
                            WritebackState& wb) {
-            const uint64_t chunkOffset = fileOffset;
-            ssize_t writeLen = bytesRead;
-            if (!useBufferedIO) {
-                const ssize_t aligned = (bytesRead + static_cast<ssize_t>(mask)) &
-                                        ~static_cast<ssize_t>(mask);
-                if (aligned > bytesRead) {
-                    memset(buf + bytesRead, 0, static_cast<size_t>(aligned - bytesRead));
-                }
-                writeLen = aligned;
-            }
-
-            ssize_t bytes_written = 0;
-            uint64_t creditedHighWater = 0;
-            int unalignedRetries = 0;
-
-            while (bytes_written < writeLen) {
+            size_t done = 0;
+            while (done < len) {
                 if (GlobalState::g_operationCancelled.load()) return false;
 
-                const off_t writeOffset =
-                    static_cast<off_t>(fileOffset) + static_cast<off_t>(bytes_written);
-
-                const ssize_t written = pwrite(fd_out, buf + bytes_written,
-                                               static_cast<size_t>(writeLen - bytes_written),
-                                               writeOffset);
-
+                const ssize_t written = pwrite(fd_out, buf + done, len - done,
+                                               static_cast<off_t>(fileOffset + done));
                 if (written < 0) {
                     if (errno == EINTR) continue;
                     return false;
                 }
                 if (written == 0) { errno = EIO; return false; }
 
-                // A positive unaligned O_DIRECT short write may leave part of the
-                // destination inconsistent. Restart the whole chunk from its original
-                // aligned offset, with the original buffer.
-                if (!useBufferedIO &&
-                    (static_cast<size_t>(written) % static_cast<size_t>(sectorSize)) != 0) {
-                    if (++unalignedRetries > kMaxUnalignedRetries) {
-                        errno = EIO;
-                        return false;
-                    }
-                    // Do not reset creditedHighWater: already credited source bytes
-                    // must not be counted a second time.
-                    bytes_written = 0;
-                    continue;
-                }
-
-                bytes_written += written;
-
-                const uint64_t realBytesSoFar = static_cast<uint64_t>(
-                    std::min<ssize_t>(bytes_written, bytesRead));
-                if (realBytesSoFar > creditedHighWater) {
-                    const uint64_t delta = realBytesSoFar - creditedHighWater;
-                    totalAccumulator.fetch_add(delta);
-                    bytesCopiedTotal += delta;
-                    creditedHighWater = realBytesSoFar;
-                }
+                done += static_cast<size_t>(written);
+                totalAccumulator.fetch_add(static_cast<uint64_t>(written));
+                bytesCopiedTotal += static_cast<uint64_t>(written);
             }
 
-            if (useBufferedIO)
-                paceWriteback(fd_out, chunkOffset,
-                              static_cast<uint64_t>(bytesRead), wb);
-
-            // The next chunk starts after actual source bytes, not any padding added
-            // to the final O_DIRECT write.
-            fileOffset += static_cast<uint64_t>(bytesRead);
+            paceWriteback(fd_out, fileOffset, len, wb);
+            fileOffset += len;
             return true;
         }
 
@@ -931,17 +850,13 @@ namespace {
          * @return true only if the complete expected file size was copied without
          *         failure or cancellation.
          */
-         bool copyFileChunks(
-                int fd_in, int fd_out,
-                uint64_t fileSize,
-                bool useBufferedIO,
-                int sectorSize,
-                size_t bufferSize,
-                char* buf,
-                std::atomic<uint64_t>& totalAccumulator,
-                uint64_t& bytesCopiedTotal) {
+        bool copyFileChunks(int fd_in, int fd_out,
+                            uint64_t fileSize,
+                            size_t bufferSize,
+                            char* buf,
+                            std::atomic<uint64_t>& totalAccumulator,
+                            uint64_t& bytesCopiedTotal) {
 
-            const size_t mask = static_cast<size_t>(sectorSize) - 1;
             uint64_t fileOffset = 0;
             WritebackState wb;
             bool success = true;
@@ -956,9 +871,8 @@ namespace {
 
                 if (n == 0) break;
 
-                if (!writeOneChunk(fd_out, buf, n, fileOffset, useBufferedIO,
-                                   sectorSize, mask, bytesCopiedTotal,
-                                   totalAccumulator, wb)) {
+                if (!writeOneChunk(fd_out, buf, static_cast<size_t>(n), fileOffset,
+                                   bytesCopiedTotal, totalAccumulator, wb)) {
                     success = false;
                     break;
                 }
@@ -967,46 +881,31 @@ namespace {
             if (GlobalState::g_operationCancelled.load())
                 success = false;
 
-            // Detect source truncation before the caller performs the final ftruncate.
-            if (success && !GlobalState::g_operationCancelled.load() &&
-                bytesCopiedTotal < fileSize) {
+            // Fewer bytes than the ISO walk reported means the source was truncated.
+            if (success && bytesCopiedTotal < fileSize)
                 success = false;
-            }
 
             return success;
         }
 
         /**
-         * @brief Finalizes an O_DIRECT output file, setting its expected size on
-         *        success or clearing it after failure or cancellation.
-         */
-         void finalizeDirectOutput(int fd_out, uint64_t fileSize,
-                                         bool& success) {
-
-            if (GlobalState::g_operationCancelled.load()) {
-                [[maybe_unused]] const int r = ftruncate(fd_out, 0);
-            } else if (success) {
-                if (ftruncate(fd_out, static_cast<off_t>(fileSize)) != 0)
-                    success = false;
-            }
-
-            if (!success) {
-                [[maybe_unused]] const int r = ftruncate(fd_out, 0);
-            }
-        }
-
-        /**
-         * @brief Per-file copy entry point: opens src/dst, chooses buffered (NTFS)
-         *        vs. O_DIRECT (FAT32) strategy, pre-allocates non-empty NTFS files
-         *        via posix_fallocate, and performs the appropriate finalization.
+         * @brief Per-file copy entry point: opens src/dst, optionally pre-allocates
+         *        the destination, copies it with paced buffered I/O, and cleans up
+         *        after a failure or cancellation.
          *
+         * Pre-allocation (posix_fallocate) is done for NTFS only: FAT's fallocate
+         * allocates clusters one by one and is slow. On failure or cancellation,
+         * partially written FAT32 files are truncated to 0 bytes; NTFS files are
+         * left as-is.
+         *
+         * @param preallocate true for NTFS destinations (pre-allocate non-empty
+         *                    files); false for FAT32.
          * @return true only if the whole file was copied and no cancellation is in
          *         effect; false otherwise.
          */
         bool copyFileWithProgress(const fs::path& src, const fs::path& dst,
-                                  uint64_t fileSize, bool useBufferedIO,
-                                  int sectorSize, size_t bufferSize,
-                                  char* buf,
+                                  uint64_t fileSize, bool preallocate,
+                                  size_t bufferSize, char* buf,
                                   std::atomic<uint64_t>& totalAccumulator) {
 
             const int fd_in = open(src.c_str(), O_RDONLY);
@@ -1014,26 +913,25 @@ namespace {
 
             posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
 
-            int outFlags = O_WRONLY | O_CREAT | O_TRUNC;
-            if (!useBufferedIO) outFlags |= O_DIRECT;
-
-            const int fd_out = open(dst.c_str(), outFlags, 0644);
+            const int fd_out = open(dst.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if (fd_out < 0) {
                 close(fd_in);
                 return false;
             }
 
-            if (useBufferedIO && fileSize > 0)
+            if (preallocate && fileSize > 0)
                 posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
 
             uint64_t bytesCopiedTotal = 0;
 
-            bool success = copyFileChunks(
-                fd_in, fd_out, fileSize, useBufferedIO, sectorSize,
-                bufferSize, buf, totalAccumulator, bytesCopiedTotal);
+            const bool success = copyFileChunks(
+                fd_in, fd_out, fileSize, bufferSize, buf,
+                totalAccumulator, bytesCopiedTotal);
 
-            if (!useBufferedIO)
-                finalizeDirectOutput(fd_out, fileSize, success);
+            if (!success && !preallocate) {
+                // Don't leave partial FAT32 files behind.
+                [[maybe_unused]] const int r = ftruncate(fd_out, 0);
+            }
 
             if (GlobalState::g_operationCancelled.load())
                 posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
@@ -1047,14 +945,13 @@ namespace {
         }
 
         /**
-         * @brief Iterate one entry list, creating directories and copying files
-         *        with the correct sector size per destination filesystem.
+         * @brief Iterate one entry list, creating directories and copying files.
+         *        NTFS-bound files are pre-allocated; FAT32-bound files are not.
          *
          * @return false on the first copy failure or cancellation; true otherwise.
          */
         bool processEntries(const std::vector<iso::IsoCopyEntry>& entries,
                             IsoType isoType, const std::string& ntfsMnt,
-                            int fatSectorSize, int ntfsSectorSize,
                             size_t bufferSize, char* buf,
                             std::atomic<uint64_t>& totalAccumulator) {
             for (const auto& e : entries) {
@@ -1067,9 +964,8 @@ namespace {
 
                     const bool toNtfs = (isoType == IsoType::WindowsInstall) &&
                                         (e.dst.string().rfind(ntfsMnt, 0) == 0);
-                    const int sectorSize = toNtfs ? ntfsSectorSize : fatSectorSize;
 
-                    if (!copyFileWithProgress(e.src, e.dst, e.size, toNtfs, sectorSize,
+                    if (!copyFileWithProgress(e.src, e.dst, e.size, toNtfs,
                                               bufferSize, buf, totalAccumulator)) {
                         return false;
                     }
@@ -1195,20 +1091,15 @@ namespace {
             return true;
         }
 
-        // Wipe, partition, format and query sector sizes. Returns false on any step
-        // failure or if cancellation is observed after the sector-size queries.
+        // Wipe, partition and format. Returns false on any step failure or if
+        // cancellation is observed afterwards.
         bool prepareDevice(const std::string& device, IsoType isoType,
-                           std::string& fatPart, std::string& ntfsPart,
-                           int& fatSectorSize, int& ntfsSectorSize)
+                           std::string& fatPart, std::string& ntfsPart)
         {
             if (!disk::setupPartitionedDevice(device, isoType, fatPart, ntfsPart))
                 return false;
             if (!disk::formatTargetPartitions(fatPart, ntfsPart, isoType))
                 return false;
-
-            fatSectorSize  = disk::queryBestSectorSize(fatPart);
-            ntfsSectorSize = (isoType == IsoType::WindowsInstall)
-                                 ? disk::queryBestSectorSize(ntfsPart) : 512;
             return !isCancelled();
         }
 
@@ -1324,7 +1215,7 @@ bool isWindowsIso(const std::string& isoPath)
 
 /**
  * @brief Wipe a block device, repartition it, and write a Windows-family ISO
- *        using a hybrid I/O model.
+ *        using buffered I/O with paced writeback.
  *
  * The ISO is loop-mounted read-only and copied file-by-file onto freshly
  * formatted filesystems. Symlinks in the ISO are silently skipped to prevent
@@ -1345,21 +1236,21 @@ bool isWindowsIso(const std::string& isoPath)
  * (30 s timeout).
  *
  * @par I/O & Buffering
- * - **FAT32 (O_DIRECT):** Bypasses page cache using an aligned buffer
- *   (4 MiB rounded down to the max logical/physical sector size, fallback
- *   512 B). Final chunks are zero-padded to sector alignment and trimmed via
- *   @c ftruncate(). Unaligned positive writes trigger up to 3 chunk restarts
- *   from the original offset (never falling back to buffered I/O).
- * - **NTFS (Buffered):** Manual @c read()/pwrite() loop. Non-empty files are
- *   pre-allocated with @c posix_fallocate(). Every kPaceEveryChunks chunks (1),
- *   writeback of those chunks is started with @c sync_file_range() and the
- *   previously paced range is waited on, so the dirty backlog stays at about
- *   two chunks and a cancel drains quickly.
- * - **Integrity:** Short reads accumulate until full or EOF; @c EINTR is
- *   retried; zero-byte writes fail immediately. Sources yielding fewer bytes
- *   than reported by the ISO walk fail the operation. On failure or
- *   cancellation, FAT32 destinations are truncated to 0 bytes; NTFS files are
- *   left as-is.
+ * Every file, on both partitions, is copied through the page cache with a
+ * manual @c read()/pwrite() loop and one reusable 4 MiB buffer.
+ * - **Writeback pacing:** After each chunk (every kPaceEveryChunks chunks,
+ *   currently 1), writeback of that chunk is started with
+ *   @c sync_file_range() and the previously paced range is waited on. The dirty
+ *   backlog therefore stays at about two chunks, progress and speed track the
+ *   device rather than the page cache, and a cancel has almost nothing left to
+ *   flush at unmount. Pacing is best effort; if unsupported it is ignored.
+ * - **Pre-allocation:** Non-empty NTFS files are pre-allocated with
+ *   @c posix_fallocate(). FAT32 files are not (its fallocate is slow).
+ * - **Integrity:** Short reads accumulate until full or EOF; short writes are
+ *   completed; @c EINTR is retried; zero-byte writes fail immediately. Sources
+ *   yielding fewer bytes than reported by the ISO walk fail the operation. On
+ *   failure or cancellation, FAT32 destinations are truncated to 0 bytes; NTFS
+ *   files are left as-is.
  *
  * @par Lifecycle, Telemetry & Cleanup
  * - **Concurrency & RAII:** Fully re-entrant per job. Mounts
@@ -1367,7 +1258,7 @@ bool isWindowsIso(const std::string& isoPath)
  *   (@c ThreadGuard) clean up automatically on all return paths.
  * - **Cancellation:** Aborts cleanly during setup or I/O loops without setting
  *   the slot's @c failed flag (except @c mkdtemp() failures, which always set
- *   @c failed).
+ *   @c failed). Unmounts on cancel are lazy.
  * - **Telemetry:** A background thread polls every 500 ms and updates EMA
  *   speed once per second (holding last speed up to 300 s during USB stalls).
  *   Progress caps at 99% during copy and hits 100% upon completion.
@@ -1406,9 +1297,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     const IsoType     isoType = iso::detectIsoType(isoMnt);
 
     std::string fatPart, ntfsPart;
-    int fatSectorSize = 0, ntfsSectorSize = 512;
-    if (!steps::prepareDevice(device, isoType, fatPart, ntfsPart,
-                              fatSectorSize, ntfsSectorSize))
+    if (!steps::prepareDevice(device, isoType, fatPart, ntfsPart))
         return report.failUnlessCancelled();
 
     char fatMntBuf[]  = "/tmp/win_fat_XXXXXX";
@@ -1446,16 +1335,14 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     // Ensures the thread is always stopped and joined on any return path.
     ThreadGuard threadGuard(progressMonitorThread, monitoringActive);
 
-    const int    maxSectorSize = std::max(fatSectorSize, ntfsSectorSize);
-    const size_t bufferSize    = (copy::kDesiredBuffer / maxSectorSize) * maxSectorSize;
+    constexpr size_t bufferSize = copy::kBufferSize;
 
-    AlignedBuffer ioBuf(bufferSize, maxSectorSize);
+    AlignedBuffer ioBuf(bufferSize, copy::kBufferAlign);
     if (!ioBuf)
         return report.failUnlessCancelled();
 
     auto runPass = [&](std::vector<iso::IsoCopyEntry>& entries) {
         return copy::processEntries(entries, isoType, ntfsMnt,
-                                    fatSectorSize, ntfsSectorSize,
                                     bufferSize, ioBuf.data,
                                     totalBytesWrittenAccumulator);
     };
