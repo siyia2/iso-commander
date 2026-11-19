@@ -61,6 +61,41 @@ int help_handler(int, int)       { return submitHotkey("?",     true);  }
 int exit_handler(int, int)       { return submitHotkey("\x1b",  false); }
 
 /**
+ * @brief Installs the custom completion display hook and restores history navigation keybindings.
+ *
+ * Sets @c rl_completion_display_matches_hook to @c customListingsFunction,
+ * clears @c rl_attempted_completion_function, and rebinds the Up/Down arrows and
+ * PageUp/PageDown to history navigation.
+ *
+ * @note Ctrl+L (@c '\\f') and Tab (@c '\\t') are bound to
+ *       @c prevent_readline_keybindings here, i.e. they are disabled. Use
+ *       @c RestoreReadlineBuffer to bind them to @c clear_screen_and_buffer and
+ *       @c my_rl_complete for prompts that support completion.
+ */
+void restoreReadline() {
+    rl_completion_display_matches_hook = customListingsFunction;
+    rl_attempted_completion_function = nullptr;
+    rl_bind_keyseq("\033[A", rl_get_previous_history);
+    rl_bind_keyseq("\033[B", rl_get_next_history);
+    rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+    rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+    rl_bind_key('\f', prevent_readline_keybindings);
+    rl_bind_key('\t', prevent_readline_keybindings);
+}
+
+/**
+ * @brief Disables standard completion and history navigation for confirmation prompts.
+ */
+void disableReadlineForConfirmation() {
+    rl_bind_key('\f', prevent_readline_keybindings);
+    rl_bind_key('\t', prevent_readline_keybindings);
+    rl_bind_keyseq("\033[A", prevent_readline_keybindings);
+    rl_bind_keyseq("\033[B", prevent_readline_keybindings);
+    rl_bind_keyseq("\\e[5~", prevent_readline_keybindings);
+    rl_bind_keyseq("\\e[6~", prevent_readline_keybindings);
+}
+
+/**
  * @brief Keybindings for the main File Selection interface.
  *
  * Binds PageUp/PageDown (navigation), `*` (toggle file-number display),
