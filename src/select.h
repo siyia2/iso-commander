@@ -232,8 +232,7 @@ void processInputForConversions(
 /// Handles the write-to-USB flow for a user selection.
 void writeToUsb(
     const std::string &input,
-    const std::vector<std::string> &isoFiles,
-    std::vector<std::string>& pendingIndices
+    const std::vector<std::string> &isoFiles
 );
 
 
