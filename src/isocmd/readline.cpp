@@ -15,6 +15,7 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 
 // Third-Party Library Headers
@@ -446,61 +447,97 @@ namespace {
         return (rows == 0) ? 24 : rows;
     }
 
+    long elapsedMs(const timespec& start, const timespec& now) {
+        long sec_diff = now.tv_sec - start.tv_sec;
+        long nsec_diff = now.tv_nsec - start.tv_nsec;
+        return sec_diff * 1000L + nsec_diff / 1000000L;
+    }
+
     // Queries the 1-based cursor row via ANSI Cursor Position Report (ESC [ 6 n).
     // Returns 0 if the terminal is non-interactive, unsupported, or times out.
     int queryCursorRow() {
         if (!isatty(STDOUT_FILENO)) return 0;
 
         int tty_fd = open("/dev/tty", O_RDWR | O_NOCTTY);
-        int out_fd = (tty_fd >= 0) ? tty_fd : STDOUT_FILENO;
-        int in_fd  = (tty_fd >= 0) ? tty_fd : STDIN_FILENO;
+        if (tty_fd < 0) return 0;
 
         struct termios orig_termios{}, raw_termios{};
-        bool have_termios = (tcgetattr(in_fd, &orig_termios) == 0);
+        bool have_termios = (tcgetattr(tty_fd, &orig_termios) == 0);
         if (have_termios) {
             raw_termios = orig_termios;
             raw_termios.c_lflag &= static_cast<tcflag_t>(~(ICANON | ECHO));
             raw_termios.c_cc[VMIN] = 0;
             raw_termios.c_cc[VTIME] = 0;
-            tcsetattr(in_fd, TCSANOW, &raw_termios);
+            tcsetattr(tty_fd, TCSANOW, &raw_termios);
         }
 
         fflush(stdout);
         const char req[] = "\033[6n";
-        ssize_t written = write(out_fd, req, sizeof(req) - 1);
+        ssize_t written = write(tty_fd, req, sizeof(req) - 1);
 
         int row = 0;
+        bool saw_cpr_terminator = false;
+
         if (written == static_cast<ssize_t>(sizeof(req) - 1)) {
+            constexpr long kDeadlineMs = 150;
+            timespec start_ts{};
+            clock_gettime(CLOCK_MONOTONIC, &start_ts);
+
             char buf[64];
             size_t pos = 0;
+
             while (pos + 1 < sizeof(buf)) {
+                timespec now_ts{};
+                clock_gettime(CLOCK_MONOTONIC, &now_ts);
+                long remaining_ms = kDeadlineMs - elapsedMs(start_ts, now_ts);
+                if (remaining_ms <= 0) break;
+
                 struct pollfd pfd{};
-                pfd.fd = in_fd;
+                pfd.fd = tty_fd;
                 pfd.events = POLLIN;
-                int pr = poll(&pfd, 1, 50);
+                int pr = poll(&pfd, 1, static_cast<int>(remaining_ms));
                 if (pr <= 0) break;
 
-                ssize_t n = read(in_fd, buf + pos, 1);
+                ssize_t n = read(tty_fd, buf + pos, 1);
                 if (n <= 0) break;
+
                 if (buf[pos] == 'R') {
                     buf[pos + 1] = '\0';
+                    saw_cpr_terminator = true;
                     int parsed_row = 0, parsed_col = 0;
+                    char term_ch = 0;
                     const char* esc = strstr(buf, "\033[");
-                    if (esc && sscanf(esc + 2, "%d;%dR", &parsed_row, &parsed_col) == 2 && parsed_row > 0) {
+                    if (esc &&
+                        sscanf(esc + 2, "%d;%d%c", &parsed_row, &parsed_col, &term_ch) == 3 &&
+                        term_ch == 'R' &&
+                        parsed_row > 0 &&
+                        parsed_col > 0) {
                         row = parsed_row;
                     }
                     break;
                 }
                 ++pos;
             }
+
+            // If a CPR sequence started ("ESC [") but timed out before 'R',
+            // drain any trailing bytes up to 'R' so a late tail doesn't leak.
+            if (!saw_cpr_terminator && pos > 0 && strstr(buf, "\033[") != nullptr) {
+                for (int i = 0; i < 32; ++i) {
+                    struct pollfd pfd{};
+                    pfd.fd = tty_fd;
+                    pfd.events = POLLIN;
+                    if (poll(&pfd, 1, 20) <= 0) break;
+                    char ch = 0;
+                    if (read(tty_fd, &ch, 1) <= 0) break;
+                    if (ch == 'R') break;
+                }
+            }
         }
 
         if (have_termios) {
-            tcsetattr(in_fd, TCSANOW, &orig_termios);
+            tcsetattr(tty_fd, TCSANOW, &orig_termios);
         }
-        if (tty_fd >= 0) {
-            close(tty_fd);
-        }
+        close(tty_fd);
         return row;
     }
 
