@@ -848,41 +848,34 @@ namespace {
         }
 
         /**
-         * @brief Per-file copy entry point: opens src/dst, chooses buffered (NTFS)
-         *        vs. O_DIRECT (FAT32) strategy, pre-allocates non-empty NTFS files
-         *        via posix_fallocate, checks for a truncated source before the FAT32
-         *        final ftruncate, and performs the conditional ftruncate/fadvise
-         *        cleanup.
+         * @brief Copies file data in chunks while tracking progress and checking for
+         *        cancellation and source truncation.
          *
-         * @return true only if the whole file was copied and no cancellation is in
-         *         effect; false otherwise.
+         * @return true only if the complete expected file size was copied without
+         *         failure or cancellation.
          */
-        bool copyFileWithProgress(const fs::path& src, const fs::path& dst,
-                                  uint64_t fileSize, bool useBufferedIO,
-                                  int sectorSize, size_t bufferSize,
-                                  char* buf,
-                                  std::atomic<uint64_t>& totalAccumulator) {
-            const int fd_in = open(src.c_str(), O_RDONLY);
-            if (fd_in < 0) return false;
-            posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
-
-            int outFlags = O_WRONLY | O_CREAT | O_TRUNC;
-            if (!useBufferedIO) outFlags |= O_DIRECT;
-
-            const int fd_out = open(dst.c_str(), outFlags, 0644);
-            if (fd_out < 0) { close(fd_in); return false; }
-
-            if (useBufferedIO && fileSize > 0)
-                posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
+         bool copyFileChunks(
+                int fd_in, int fd_out,
+                uint64_t fileSize,
+                bool useBufferedIO,
+                int sectorSize,
+                size_t bufferSize,
+                char* buf,
+                std::atomic<uint64_t>& totalAccumulator,
+                uint64_t& bytesCopiedTotal) {
 
             const size_t mask = static_cast<size_t>(sectorSize) - 1;
-            uint64_t bytesCopiedTotal = 0;
             uint64_t fileOffset = 0;
             bool success = true;
 
             while (!GlobalState::g_operationCancelled.load()) {
                 const ssize_t n = fillChunk(fd_in, buf, bufferSize);
-                if (n < 0) { success = false; break; }
+
+                if (n < 0) {
+                    success = false;
+                    break;
+                }
+
                 if (n == 0) break;
 
                 if (!writeOneChunk(fd_out, buf, n, fileOffset, useBufferedIO,
@@ -893,28 +886,76 @@ namespace {
                 }
             }
 
-            if (GlobalState::g_operationCancelled.load()) {
+            if (GlobalState::g_operationCancelled.load())
                 success = false;
-            }
 
-            // Detect a source shorter than the walk reported. Run before the FAT32
-            // ftruncate that would otherwise zero-extend and mask truncation.
+            // Detect source truncation before the caller performs the final ftruncate.
             if (success && !GlobalState::g_operationCancelled.load() &&
                 bytesCopiedTotal < fileSize) {
                 success = false;
             }
 
-            if (!useBufferedIO) {
-                if (GlobalState::g_operationCancelled.load()) {
-                    [[maybe_unused]] const int r = ftruncate(fd_out, 0);
-                } else if (success) {
-                    if (ftruncate(fd_out, static_cast<off_t>(fileSize)) != 0)
-                        success = false;
-                }
-                if (!success) {
-                    [[maybe_unused]] const int r = ftruncate(fd_out, 0);
-                }
+            return success;
+        }
+
+        /**
+         * @brief Finalizes an O_DIRECT output file, setting its expected size on
+         *        success or clearing it after failure or cancellation.
+         */
+         void finalizeDirectOutput(int fd_out, uint64_t fileSize,
+                                         bool& success) {
+
+            if (GlobalState::g_operationCancelled.load()) {
+                [[maybe_unused]] const int r = ftruncate(fd_out, 0);
+            } else if (success) {
+                if (ftruncate(fd_out, static_cast<off_t>(fileSize)) != 0)
+                    success = false;
             }
+
+            if (!success) {
+                [[maybe_unused]] const int r = ftruncate(fd_out, 0);
+            }
+        }
+
+        /**
+         * @brief Per-file copy entry point: opens src/dst, chooses buffered (NTFS)
+         *        vs. O_DIRECT (FAT32) strategy, pre-allocates non-empty NTFS files
+         *        via posix_fallocate, and performs the appropriate finalization.
+         *
+         * @return true only if the whole file was copied and no cancellation is in
+         *         effect; false otherwise.
+         */
+        bool copyFileWithProgress(const fs::path& src, const fs::path& dst,
+                                  uint64_t fileSize, bool useBufferedIO,
+                                  int sectorSize, size_t bufferSize,
+                                  char* buf,
+                                  std::atomic<uint64_t>& totalAccumulator) {
+
+            const int fd_in = open(src.c_str(), O_RDONLY);
+            if (fd_in < 0) return false;
+
+            posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
+
+            int outFlags = O_WRONLY | O_CREAT | O_TRUNC;
+            if (!useBufferedIO) outFlags |= O_DIRECT;
+
+            const int fd_out = open(dst.c_str(), outFlags, 0644);
+            if (fd_out < 0) {
+                close(fd_in);
+                return false;
+            }
+
+            if (useBufferedIO && fileSize > 0)
+                posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
+
+            uint64_t bytesCopiedTotal = 0;
+
+            bool success = copyFileChunks(
+                fd_in, fd_out, fileSize, useBufferedIO, sectorSize,
+                bufferSize, buf, totalAccumulator, bytesCopiedTotal);
+
+            if (!useBufferedIO)
+                finalizeDirectOutput(fd_out, fileSize, success);
 
             if (GlobalState::g_operationCancelled.load())
                 posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
