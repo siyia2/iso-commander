@@ -6,14 +6,12 @@
 #include <chrono>
 #include <cctype>
 #include <cerrno>
-#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <mutex>
-#include <random>
 #include <string>
 #include <thread>
 #include <unordered_set>
@@ -96,43 +94,6 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
 namespace {
 
     // ===========================================================================
-    // retry:: jittered, cancellable backoff
-    // ===========================================================================
-    namespace retry {
-
-        /**
-         * @brief Sleeps for a randomized backoff interval, waking early on cancel.
-         *
-         * The delay is @p baseMs plus a uniformly random jitter of 0-100% of
-         * @p baseMs, so the result lies in [baseMs, 2 * baseMs]. Jitter keeps
-         * concurrent jobs that failed on the same shared resource (free loop device,
-         * busy udev) from retrying in lockstep and colliding again.
-         *
-         * The wait is split into 50 ms slices that poll the cancellation flag, so a
-         * cancel during the backoff is noticed within ~50 ms. On cancel the function
-         * returns early; callers detect the cancel at the top of their next loop
-         * iteration.
-         *
-         * Each thread has its own random generator, seeded from std::random_device,
-         * so concurrent jobs draw independent delays.
-         *
-         * @param baseMs Minimum delay in milliseconds (the jitter is added on top).
-         */
-        void sleepWithJitter(int baseMs)
-        {
-            static thread_local std::mt19937 rng{std::random_device{}()};
-            const int total = baseMs + std::uniform_int_distribution<int>(0, baseMs)(rng);
-
-            const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(total);
-            while (std::chrono::steady_clock::now() < end) {
-                if (GlobalState::g_operationCancelled.load()) return;
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            }
-        }
-
-    }  // namespace retry
-
-    // ===========================================================================
     // proc:: spawning external commands
     // ===========================================================================
     namespace proc {
@@ -197,47 +158,10 @@ namespace {
             return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
         }
 
-        /**
-         * @brief Runs an external command, retrying on failure.
-         *
-         * Retries absorb transient failures caused by other system activity (udev
-         * re-probing the disk, boot-time services holding the device), which
-         * typically clear within a second or two.
-         *
-         * Between attempts the delay grows linearly with the attempt number and is
-         * jittered (see retry::sleepWithJitter): ~500-1000 ms after the first
-         * failure, ~1000-2000 ms after the second. Cancellation is checked before
-         * every attempt and during every backoff. The time each failed attempt
-         * itself takes is not included in these figures.
-         *
-         * @param args        Argument vector where args[0] is the executable name.
-         * @param attempts    Maximum number of attempts (default 3).
-         * @param baseDelayMs Base backoff in milliseconds, multiplied by the attempt
-         *                    number (default 500).
-         * @return 0 on success, -1 if cancelled, otherwise the exit code of the last
-         *         attempt.
-         */
-        int runCommandRetry(const std::vector<std::string>& args,
-                            int attempts    = 3,
-                            int baseDelayMs = 500)
-        {
-            int rc = -1;
-            for (int i = 0; i < attempts; ++i) {
-                if (GlobalState::g_operationCancelled.load()) return -1;
-
-                rc = runCommand(args);
-                if (rc == 0) return 0;
-
-                if (i + 1 < attempts)
-                    retry::sleepWithJitter(baseDelayMs * (i + 1));
-            }
-            return rc;
-        }
-
     }  // namespace proc
 
     // ===========================================================================
-    // mnt:: libmount wrappers, ScopedMount RAII, mount retries
+    // mnt:: libmount wrappers, ScopedMount RAII
     // ===========================================================================
     namespace mnt {
 
@@ -338,80 +262,26 @@ namespace {
         };
 
         /**
-         * @brief libMount() with the same retry and jittered backoff as
-         *        proc::runCommandRetry().
+         * @brief Mounts an NTFS partition through a specific kernel driver with
+         *        mount helpers disabled so the VFS invokes the named driver
+         *        directly (see disk::getBestNtfsDriver()).
          *
-         * Mainly guards the ISO loop mount against transient failures such as
-         * loop-device contention with other boot-time services or concurrent jobs.
-         * Parameters match libMount(), plus the retry settings.
-         *
-         * @param attempts    Maximum number of attempts (default 3).
-         * @param baseDelayMs Base backoff in milliseconds, multiplied by the attempt
-         *                    number (default 500).
-         * @return 0 on success, -1 if cancelled, otherwise the return code of the
-         *         last mount attempt.
+         * @param src    NTFS partition node (e.g. "/dev/sdb2").
+         * @param target Existing mount point.
+         * @param fstype Kernel driver token ("ntfs" or "ntfs3").
+         * @return 0 on success, non-zero on failure.
          */
-        int libMountRetry(const char* src, const char* target,
-                          const char* options = nullptr,
-                          const char* fstype  = nullptr,
-                          int attempts    = 3,
-                          int baseDelayMs = 500)
-        {
-            int rc = -1;
-            for (int i = 0; i < attempts; ++i) {
-                if (GlobalState::g_operationCancelled.load()) return -1;
+        int libMountNtfs(const char* src, const char* target, const char* fstype) {
+            libmnt_context* ctx = mnt_new_context();
+            if (!ctx) return -1;
 
-                rc = libMount(src, target, options, fstype);
-                if (rc == 0) return 0;
-
-                if (i + 1 < attempts)
-                    retry::sleepWithJitter(baseDelayMs * (i + 1));
-            }
-            return rc;
-        }
-
-        /**
-         * @brief Mounts an NTFS partition through a specific kernel driver, with
-         *        retry and jittered backoff.
-         *
-         * Builds a fresh libmnt_context on every attempt, so no state from a failed
-         * attempt carries over. Mount helpers are disabled so the VFS invokes the
-         * named kernel driver directly (see disk::getBestNtfsDriver()).
-         *
-         * @param src         NTFS partition node (e.g. "/dev/sdb2").
-         * @param target      Existing mount point.
-         * @param fstype      Kernel driver token ("ntfs" or "ntfs3").
-         * @param attempts    Maximum number of attempts (default 3).
-         * @param baseDelayMs Base backoff in milliseconds (default 500).
-         * @return 0 on success, -1 if cancelled, otherwise the return code of the
-         *         last attempt.
-         */
-        int libMountNtfsRetry(const char* src, const char* target,
-                              const char* fstype,
-                              int attempts    = 3,
-                              int baseDelayMs = 500)
-        {
-            int rc = -1;
-            for (int i = 0; i < attempts; ++i) {
-                if (GlobalState::g_operationCancelled.load()) return -1;
-
-                libmnt_context* ctx = mnt_new_context();
-                if (ctx) {
-                    mnt_context_set_source(ctx, src);
-                    mnt_context_set_target(ctx, target);
-                    mnt_context_set_fstype(ctx, fstype);
-                    mnt_context_append_options(ctx, "noatime");
-                    mnt_context_disable_helpers(ctx, true);
-                    rc = mnt_context_mount(ctx);
-                    mnt_free_context(ctx);
-                } else {
-                    rc = -1;
-                }
-                if (rc == 0) return 0;
-
-                if (i + 1 < attempts)
-                    retry::sleepWithJitter(baseDelayMs * (i + 1));
-            }
+            mnt_context_set_source(ctx, src);
+            mnt_context_set_target(ctx, target);
+            mnt_context_set_fstype(ctx, fstype);
+            mnt_context_append_options(ctx, "noatime");
+            mnt_context_disable_helpers(ctx, true);
+            const int rc = mnt_context_mount(ctx);
+            mnt_free_context(ctx);
             return rc;
         }
 
@@ -646,18 +516,18 @@ namespace {
 
             int partResult = -1;
             if (isoType == IsoType::WindowsInstall) {
-                partResult = proc::runCommandRetry({"parted", "-s", device,
-                                                    "mklabel", "gpt",
-                                                    "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
-                                                    "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
-                                                    "set", "1", "esp",  "on",
-                                                    "set", "1", "boot", "on"});
+                partResult = proc::runCommand({"parted", "-s", device,
+                                               "mklabel", "gpt",
+                                               "mkpart", "ESP",  "fat32", "1MiB",    "1025MiB",
+                                               "mkpart", "DATA", "ntfs",  "1025MiB", "100%",
+                                               "set", "1", "esp",  "on",
+                                               "set", "1", "boot", "on"});
             } else {
-                partResult = proc::runCommandRetry({"parted", "-s", device,
-                                                    "mklabel", "gpt",
-                                                    "mkpart", "WINPE", "fat32", "1MiB", "100%",
-                                                    "set", "1", "esp",  "on",
-                                                    "set", "1", "boot", "on"});
+                partResult = proc::runCommand({"parted", "-s", device,
+                                               "mklabel", "gpt",
+                                               "mkpart", "WINPE", "fat32", "1MiB", "100%",
+                                               "set", "1", "esp",  "on",
+                                               "set", "1", "boot", "on"});
             }
             if (partResult != 0) return false;
             if (!waitForDevice(device)) return false;
@@ -683,14 +553,14 @@ namespace {
         bool formatTargetPartitions(const std::string& fatPart,
                                     const std::string& ntfsPart,
                                     IsoType isoType) {
-            if (proc::runCommandRetry({"mkfs.fat", "-F", "32", "-n",
-                                       (isoType == IsoType::WindowsInstall ? "WINBOOT" : "WINPE"),
-                                       fatPart}) != 0) {
+            if (proc::runCommand({"mkfs.fat", "-F", "32", "-n",
+                                  (isoType == IsoType::WindowsInstall ? "WINBOOT" : "WINPE"),
+                                  fatPart}) != 0) {
                 return false;
             }
             if (isoType == IsoType::WindowsInstall) {
-                if (proc::runCommandRetry({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA",
-                                           ntfsPart}) != 0) {
+                if (proc::runCommand({"mkfs.ntfs", "-f", "-c", "4096", "-L", "WINDATA",
+                                      ntfsPart}) != 0) {
                     return false;
                 }
             }
@@ -710,15 +580,15 @@ namespace {
                                     const std::string& ntfsMnt,
                                     mnt::ScopedMount& fatScope,
                                     mnt::ScopedMount& ntfsScope) {
-            if (mnt::libMountRetry(fatPart.c_str(), fatMnt.c_str(), "noatime") != 0)
+            if (mnt::libMount(fatPart.c_str(), fatMnt.c_str(), "noatime") != 0)
                 return false;
             fatScope.setMounted();
 
             if (isoType == IsoType::WindowsInstall) {
                 const std::string ntfsDriver = getBestNtfsDriver();
                 if (ntfsDriver.empty()) return false;
-                if (mnt::libMountNtfsRetry(ntfsPart.c_str(), ntfsMnt.c_str(),
-                                           ntfsDriver.c_str()) != 0)
+                if (mnt::libMountNtfs(ntfsPart.c_str(), ntfsMnt.c_str(),
+                                      ntfsDriver.c_str()) != 0)
                     return false;
                 ntfsScope.setMounted();
             }
@@ -737,18 +607,15 @@ namespace {
     }  // namespace disk
 
     // ===========================================================================
-    // copy:: file copy engine (O_DIRECT / buffered, ping-pong double buffering)
+    // copy:: file copy engine (O_DIRECT / buffered, single aligned buffer)
     // ===========================================================================
     namespace copy {
 
-        /** @brief Minimum size for NTFS pre-allocation via posix_fallocate. */
-        constexpr uint64_t kFallocateMinSize    = 1 * 1024 * 1024;
-
         /** @brief Maximum restarts allowed for an unaligned O_DIRECT short write. */
-        constexpr int      kMaxUnalignedRetries = 3;
+        constexpr int    kMaxUnalignedRetries = 3;
 
-        /** @brief Target size of each ping-pong I/O buffer (rounded down to sector). */
-        constexpr size_t   kDesiredBuffer       = 4 * 1024 * 1024;
+        /** @brief Target size of the aligned I/O buffer (rounded down to sector). */
+        constexpr size_t kDesiredBuffer       = 4 * 1024 * 1024;
 
         /**
          * @brief Fill @p bufV from @p fd_in up to @p bufferSize bytes, accumulating
@@ -756,8 +623,7 @@ namespace {
          *
          * @return Bytes filled (0 = EOF), or -1 on error / cancellation.
          */
-        ssize_t fillChunk(int fd_in, void* bufV, size_t bufferSize) {
-            unsigned char* buf = static_cast<unsigned char*>(bufV);
+        ssize_t fillChunk(int fd_in, char* buf, size_t bufferSize) {
             size_t total = 0;
             while (total < bufferSize) {
                 if (GlobalState::g_operationCancelled.load()) return -1;
@@ -784,13 +650,11 @@ namespace {
          *
          * @return true if the chunk was written completely; false otherwise.
          */
-        bool writeOneChunk(int fd_out, void* bufV, ssize_t bytesRead,
+        bool writeOneChunk(int fd_out, char* buf, ssize_t bytesRead,
                            uint64_t& fileOffset, bool useBufferedIO,
                            size_t sectorSize, size_t mask,
                            uint64_t& bytesCopiedTotal,
                            std::atomic<uint64_t>& totalAccumulator) {
-            unsigned char* buf = static_cast<unsigned char*>(bufV);
-
             ssize_t writeLen = bytesRead;
             if (!useBufferedIO) {
                 const ssize_t aligned = (bytesRead + static_cast<ssize_t>(mask)) &
@@ -855,135 +719,11 @@ namespace {
         }
 
         /**
-         * @brief Copy a file that fits in one buffer on the calling thread
-         *        (no reader thread is spawned).
-         * @return true on success; false on read/write error or cancellation.
-         */
-        bool copySmallFile(int fd_in, int fd_out, void* buf,
-                           size_t bufferSize, bool useBufferedIO,
-                           size_t sectorSize, size_t mask,
-                           uint64_t& bytesCopiedTotal,
-                           std::atomic<uint64_t>& totalAccumulator) {
-            uint64_t fileOffset = 0;
-            for (;;) {
-                const ssize_t n = fillChunk(fd_in, buf, bufferSize);
-                if (n < 0) return false;
-                if (n == 0) break;
-                if (!writeOneChunk(fd_out, buf, n, fileOffset, useBufferedIO,
-                                   sectorSize, mask, bytesCopiedTotal, totalAccumulator))
-                    return false;
-            }
-            return true;
-        }
-
-        /**
-         * @brief Copy a file larger than one buffer using a short-lived reader
-         *        thread and two ping-pong slots.
-         *
-         * The reader is always stopped and joined before returning. Writer failures
-         * and cancellation are propagated to the reader via a shared flag, and any
-         * already-published slot is written first (per "Double buffering").
-         *
-         * @return true on success; false on read/write error or cancellation.
-         */
-        bool copyLargeFile(int fd_in, int fd_out, void* bufA, void* bufB,
-                           size_t bufferSize, bool useBufferedIO,
-                           size_t sectorSize, size_t mask,
-                           uint64_t& bytesCopiedTotal,
-                           std::atomic<uint64_t>& totalAccumulator) {
-            void* slotBuf[2] = { bufA, bufB };
-            struct Slot { ssize_t bytes = 0; bool full = false; };
-            Slot slots[2];
-
-            std::mutex              mtx;
-            std::condition_variable cv;
-            bool readerDone = false;
-            bool readFailed = false;
-            bool stopReader = false;
-            bool success    = true;
-
-            std::thread reader;
-            try {
-                reader = std::thread([&]() {
-                    for (size_t i = 0; ; ++i) {
-                        const size_t s = i & 1;
-                        {
-                            std::unique_lock<std::mutex> lk(mtx);
-                            cv.wait(lk, [&] { return !slots[s].full || stopReader; });
-                            if (stopReader) break;
-                        }
-
-                        const ssize_t n = fillChunk(fd_in, slotBuf[s], bufferSize);
-
-                        bool finished = false;
-                        {
-                            std::lock_guard<std::mutex> lk(mtx);
-                            if (n < 0)      { readFailed = true; finished = true; }
-                            else if (n == 0){ finished = true; }
-                            else            { slots[s].bytes = n; slots[s].full = true; }
-                        }
-                        cv.notify_all();
-                        if (finished) break;
-                    }
-                    {
-                        std::lock_guard<std::mutex> lk(mtx);
-                        readerDone = true;
-                    }
-                    cv.notify_all();
-                });
-            } catch (...) {
-                success = false;
-            }
-
-            if (reader.joinable()) {
-                uint64_t fileOffset = 0;
-                for (size_t i = 0; ; ++i) {
-                    const size_t s = i & 1;
-                    ssize_t n = 0;
-
-                    {
-                        std::unique_lock<std::mutex> lk(mtx);
-                        cv.wait(lk, [&] { return slots[s].full || readerDone; });
-                        // Slots are published in order, so if this one is not full
-                        // and the reader is done, there is no more data.
-                        if (!slots[s].full) break;
-                        n = slots[s].bytes;
-                    }
-
-                    if (!writeOneChunk(fd_out, slotBuf[s], n, fileOffset,
-                                       useBufferedIO, sectorSize, mask,
-                                       bytesCopiedTotal, totalAccumulator)) {
-                        success = false;
-                        break;
-                    }
-
-                    {
-                        std::lock_guard<std::mutex> lk(mtx);
-                        slots[s].full = false;
-                    }
-                    cv.notify_all();
-                }
-
-                // Always stop and join the reader before returning (and thus before
-                // the caller closes the fds).
-                {
-                    std::lock_guard<std::mutex> lk(mtx);
-                    stopReader = true;
-                }
-                cv.notify_all();
-                reader.join();
-
-                if (readFailed) success = false;
-            }
-
-            return success;
-        }
-
-        /**
          * @brief Per-file copy entry point: opens src/dst, chooses buffered (NTFS)
-         *        vs. O_DIRECT (FAT32) strategy, applies posix_fallocate above the
-         *        threshold, checks for a truncated source before the FAT32 final
-         *        ftruncate, and performs the conditional ftruncate/fadvise cleanup.
+         *        vs. O_DIRECT (FAT32) strategy, pre-allocates non-empty NTFS files
+         *        via posix_fallocate, checks for a truncated source before the FAT32
+         *        final ftruncate, and performs the conditional ftruncate/fadvise
+         *        cleanup.
          *
          * @return true only if the whole file was copied and no cancellation is in
          *         effect; false otherwise.
@@ -991,7 +731,7 @@ namespace {
         bool copyFileWithProgress(const fs::path& src, const fs::path& dst,
                                   uint64_t fileSize, bool useBufferedIO,
                                   int sectorSize, size_t bufferSize,
-                                  void* bufA, void* bufB,
+                                  char* buf,
                                   std::atomic<uint64_t>& totalAccumulator) {
             const int fd_in = open(src.c_str(), O_RDONLY);
             if (fd_in < 0) return false;
@@ -1003,20 +743,29 @@ namespace {
             const int fd_out = open(dst.c_str(), outFlags, 0644);
             if (fd_out < 0) { close(fd_in); return false; }
 
-            if (useBufferedIO && fileSize >= kFallocateMinSize)
+            if (useBufferedIO && fileSize > 0)
                 posix_fallocate(fd_out, 0, static_cast<off_t>(fileSize));
 
             const size_t mask = static_cast<size_t>(sectorSize) - 1;
             uint64_t bytesCopiedTotal = 0;
-            bool success;
+            uint64_t fileOffset = 0;
+            bool success = true;
 
-            if (fileSize <= bufferSize) {
-                success = copySmallFile(fd_in, fd_out, bufA, bufferSize, useBufferedIO,
-                                        sectorSize, mask, bytesCopiedTotal, totalAccumulator);
-            } else {
-                success = copyLargeFile(fd_in, fd_out, bufA, bufB, bufferSize,
-                                        useBufferedIO, sectorSize, mask,
-                                        bytesCopiedTotal, totalAccumulator);
+            while (!GlobalState::g_operationCancelled.load()) {
+                const ssize_t n = fillChunk(fd_in, buf, bufferSize);
+                if (n < 0) { success = false; break; }
+                if (n == 0) break;
+
+                if (!writeOneChunk(fd_out, buf, n, fileOffset, useBufferedIO,
+                                   sectorSize, mask, bytesCopiedTotal,
+                                   totalAccumulator)) {
+                    success = false;
+                    break;
+                }
+            }
+
+            if (GlobalState::g_operationCancelled.load()) {
+                success = false;
             }
 
             // Detect a source shorter than the walk reported. Run before the FAT32
@@ -1058,8 +807,7 @@ namespace {
         bool processEntries(const std::vector<iso::IsoCopyEntry>& entries,
                             IsoType isoType, const std::string& ntfsMnt,
                             int fatSectorSize, int ntfsSectorSize,
-                            size_t bufferSize,
-                            void* bufA, void* bufB,
+                            size_t bufferSize, char* buf,
                             std::atomic<uint64_t>& totalAccumulator) {
             for (const auto& e : entries) {
                 if (GlobalState::g_operationCancelled.load()) return false;
@@ -1074,7 +822,7 @@ namespace {
                     const int sectorSize = toNtfs ? ntfsSectorSize : fatSectorSize;
 
                     if (!copyFileWithProgress(e.src, e.dst, e.size, toNtfs, sectorSize,
-                                              bufferSize, bufA, bufB, totalAccumulator)) {
+                                              bufferSize, buf, totalAccumulator)) {
                         return false;
                     }
                 }
@@ -1139,7 +887,7 @@ namespace {
                     const double instantSpeed = (static_cast<double>(deltaBytes) /
                                                     (1024.0 * 1024.0)) / (ms / 1000.0);
 
-                    double smoothingFactor = (instantSpeed < 10.0) ? 0.6 : alpha;
+                    double smoothingFactor = (instantSpeed < 10.0) ? 0.2 : alpha;
 
                     smoothedSpeed = haveEstimate
                         ? (smoothingFactor * instantSpeed + (1.0 - smoothingFactor) * smoothedSpeed)
@@ -1194,7 +942,7 @@ namespace {
         bool mountIso(const std::string& isoPath, const char* isoMntBuf,
                       mnt::ScopedMount& isoScope)
         {
-            if (mnt::libMountRetry(isoPath.c_str(), isoMntBuf, "ro,loop") != 0) return false;
+            if (mnt::libMount(isoPath.c_str(), isoMntBuf, "ro,loop") != 0) return false;
             isoScope.setMounted();
             return true;
         }
@@ -1251,22 +999,6 @@ namespace {
             return totalBytes != 0;
         }
 
-        bool buffersValid(AlignedBuffer& a, AlignedBuffer& b) { return a && b; }
-
-        // Drain the NTFS write-back backlog before the O_DIRECT ESP pass starts.
-        // Buffered NTFS writes only land in the page cache, so without this the
-        // kernel keeps flushing the NTFS data in the background while the ESP
-        // pass writes directly to a different region of the same device. Two
-        // competing write streams make cheap flash crawl near the end of the
-        // copy. The return value is not checked: a flush error here is not
-        // reported (same as the final syncfs), and the unmount still blocks until
-        // all I/O completes.
-        void flushNtfsBacklog(IsoType isoType, const std::string& ntfsMnt)
-        {
-            if (isoType == IsoType::WindowsInstall && !isCancelled())
-                disk::syncMount(ntfsMnt);
-        }
-
         void finalFlush(IsoType isoType, const std::string& ntfsMnt,
                         const std::string& fatMnt)
         {
@@ -1283,7 +1015,6 @@ namespace {
                            EntryVec& ntfsEntries, EntryVec& espEntries)
         {
             if (!runPass(ntfsEntries)) return false;
-            flushNtfsBacklog(isoType, ntfsMnt);
             if (!runPass(espEntries)) return false;
             finalFlush(isoType, ntfsMnt, fatMnt);
             return true;
@@ -1366,16 +1097,13 @@ bool isWindowsIso(const std::string& isoPath)
  * (30 s timeout).
  *
  * @par I/O & Buffering
- * - **FAT32 (O_DIRECT):** Bypasses page cache using two ping-pong buffers
+ * - **FAT32 (O_DIRECT):** Bypasses page cache using an aligned buffer
  *   (4 MiB rounded down to the max logical/physical sector size, fallback
  *   512 B). Final chunks are zero-padded to sector alignment and trimmed via
  *   @c ftruncate(). Unaligned positive writes trigger up to 3 chunk restarts
  *   from the original offset (never falling back to buffered I/O).
- * - **NTFS (Buffered):** Manual @c read()/pwrite() loop. Files >= 1 MiB are
+ * - **NTFS (Buffered):** Manual @c read()/pwrite() loop. Non-empty files are
  *   pre-allocated with @c posix_fallocate().
- * - **Double Buffering:** Files larger than one buffer spawn a reader thread
- *   (at most one slot ahead of the calling writer thread); smaller files copy
- *   synchronously on the calling thread.
  * - **Integrity:** Short reads accumulate until full or EOF; @c EINTR is
  *   retried; zero-byte writes fail immediately. Sources yielding fewer bytes
  *   than reported by the ISO walk fail the operation. On failure or
@@ -1384,7 +1112,7 @@ bool isWindowsIso(const std::string& isoPath)
  *
  * @par Lifecycle, Telemetry & Cleanup
  * - **Concurrency & RAII:** Fully re-entrant per job. Mounts
- *   (@c mnt::ScopedMount), buffers (@c AlignedBuffer), and threads
+ *   (@c mnt::ScopedMount), buffer (@c AlignedBuffer), and threads
  *   (@c ThreadGuard) clean up automatically on all return paths.
  * - **Cancellation:** Aborts cleanly during setup or I/O loops without setting
  *   the slot's @c failed flag (except @c mkdtemp() failures, which always set
@@ -1392,10 +1120,10 @@ bool isWindowsIso(const std::string& isoPath)
  * - **Telemetry:** A background thread polls every 500 ms and updates EMA
  *   speed once per second (holding last speed up to 300 s during USB stalls).
  *   Progress caps at 99% during copy and hits 100% upon completion.
- * - **Flush & Unmount:** Calls @c syncfs() between NTFS and ESP passes and
- *   before unmount. @c ScopedMount destructors block on @c safeUmount() as the
- *   function returns—after @c completed is marked true—so callers must wait
- *   for the function to return before advising device removal.
+ * - **Flush & Unmount:** Calls @c syncfs() on NTFS then FAT32 before unmount.
+ *   @c ScopedMount destructors block on @c safeUmount() as the function returns—
+ *   after @c completed is marked true—so callers must wait for the function to
+ *   return before advising device removal.
  *
  * @param isoPath       Path to the source ISO file.
  * @param device        Target block device (e.g., @c /dev/sdb). Will be wiped.
@@ -1470,15 +1198,14 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     const int    maxSectorSize = std::max(fatSectorSize, ntfsSectorSize);
     const size_t bufferSize    = (copy::kDesiredBuffer / maxSectorSize) * maxSectorSize;
 
-    AlignedBuffer ioBufA(bufferSize, maxSectorSize);
-    AlignedBuffer ioBufB(bufferSize, maxSectorSize);
-    if (!steps::buffersValid(ioBufA, ioBufB))
+    AlignedBuffer ioBuf(bufferSize, maxSectorSize);
+    if (!ioBuf)
         return report.failUnlessCancelled();
 
     auto runPass = [&](std::vector<iso::IsoCopyEntry>& entries) {
         return copy::processEntries(entries, isoType, ntfsMnt,
                                     fatSectorSize, ntfsSectorSize,
-                                    bufferSize, ioBufA.data, ioBufB.data,
+                                    bufferSize, ioBuf.data,
                                     totalBytesWrittenAccumulator);
     };
 
