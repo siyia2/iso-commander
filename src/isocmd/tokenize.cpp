@@ -158,7 +158,7 @@ namespace {
         bool first = true;
 
         for (const auto& item : container) {
-            if (!first) oss << ", ";
+            if (!first) oss << " ";
             oss << item;
             first = false;
         }
@@ -213,7 +213,7 @@ void tokenizeInput(const std::string& input,
     }
 
     std::string errIndexMsg = formatCategory(
-        sc, sc.error, "Invalid index", "Invalid indexes", invalidIndices);
+        sc, sc.error, "Invalid index", "Invalid indices", invalidIndices);
 
     if (!errIndexMsg.empty()) {
         verboseSets.uniqueErrorTokenMessages.insert(errIndexMsg);
