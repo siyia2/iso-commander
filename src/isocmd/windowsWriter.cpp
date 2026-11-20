@@ -766,13 +766,13 @@ namespace {
             st.pendLen += len;   // chunks are contiguous within a file
             if (++st.pendChunks < kPaceEveryChunks) return;
 
-            sync_file_range(fd_out, static_cast<off64_t>(st.pendOff),
-                            static_cast<off64_t>(st.pendLen),
+            sync_file_range(fd_out, static_cast<off_t>(st.pendOff),
+                            static_cast<off_t>(st.pendLen),
                             SYNC_FILE_RANGE_WRITE);
 
             if (st.havePrev) {
-                sync_file_range(fd_out, static_cast<off64_t>(st.prevOff),
-                                static_cast<off64_t>(st.prevLen),
+                sync_file_range(fd_out, static_cast<off_t>(st.prevOff),
+                                static_cast<off_t>(st.prevLen),
                                 SYNC_FILE_RANGE_WAIT_BEFORE |
                                 SYNC_FILE_RANGE_WRITE |
                                 SYNC_FILE_RANGE_WAIT_AFTER);

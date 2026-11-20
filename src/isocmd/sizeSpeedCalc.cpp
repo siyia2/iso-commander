@@ -13,7 +13,6 @@
 
 // C / System Headers
 #include <fcntl.h>
-#include <linux/stat.h>
 #include <sys/stat.h>
 
 // Third-Party Library Headers
