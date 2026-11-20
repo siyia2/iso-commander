@@ -486,7 +486,7 @@ bool saveToDatabase(const std::vector<std::string>& discoveredISO, bool* newISOF
     seen.reserve(oldSize + discoveredISO.size());
     for (const auto& s : combinedCache) seen.insert(s);
 
-    // Append new paths straight into combinedCache (no newEntries copy).
+    // Append new paths straight into combinedCache.
     for (const auto& iso : discoveredISO) {
         if (seen.insert(iso).second) {
             combinedCache.push_back(iso);
