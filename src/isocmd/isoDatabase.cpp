@@ -18,6 +18,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_set>
 #include <utility>
@@ -441,9 +442,11 @@ namespace {
  * creation fails or the path exists but is not a directory), then acquires
  * dbFileMutex and reads existing entries from the database under a shared
  * flock. Deduplicates incoming paths against the existing cache and against
- * each other via an unordered_set; appends new entries; trims to
- * GlobalState::maxDatabaseSize by dropping the oldest entries (front erase)
- * if needed. Writes the merged contents to a mkstemp temp file (fchmod 0644,
+ * each other via an unordered_set of string_views (no string copies; the views
+ * point into the existing cache and the input vector); appends new entries
+ * directly to the cache; trims to GlobalState::maxDatabaseSize
+ * by dropping the oldest entries (front erase) if needed.
+ * Writes the merged contents to a mkstemp temp file (fchmod 0644,
  * write, fsync) and atomically renames it into place, so readers always see
  * either the complete old file or the complete new one. Sets
  * GlobalState::isoListDirty to true on success.
@@ -472,20 +475,27 @@ bool saveToDatabase(const std::vector<std::string>& discoveredISO, bool* newISOF
     std::lock_guard<std::mutex> fileLock(dbFileMutex);
 
     std::vector<std::string> combinedCache = readExistingCache(cachePath);
-    std::unordered_set<std::string> existingSet(combinedCache.begin(), combinedCache.end());
+    const size_t oldSize = combinedCache.size();
 
-    std::vector<std::string> newEntries;
+    // Reserve up front: no reallocation, so the string_views below stay valid
+    // (also covers SSO strings, whose characters live inside the vector).
+    combinedCache.reserve(oldSize + discoveredISO.size());
+
+    // Dedupe by view: no per-path string copies, no rehashing.
+    std::unordered_set<std::string_view> seen;
+    seen.reserve(oldSize + discoveredISO.size());
+    for (const auto& s : combinedCache) seen.insert(s);
+
+    // Append new paths straight into combinedCache (no newEntries copy).
     for (const auto& iso : discoveredISO) {
-        if (existingSet.insert(iso).second) {
-            newEntries.push_back(iso);
+        if (seen.insert(iso).second) {
+            combinedCache.push_back(iso);
         }
     }
 
-    if (newEntries.empty()) {
+    if (combinedCache.size() == oldSize) {
         return false;
     }
-
-    combinedCache.insert(combinedCache.end(), newEntries.begin(), newEntries.end());
 
     if (!atomicWriteCache(cachePath, combinedCache)) {
         return false;
