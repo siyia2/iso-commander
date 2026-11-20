@@ -125,6 +125,35 @@ namespace {
             }
         }
 
+        /**
+         * @brief Calls @p fn until it returns 0, with jittered linear backoff.
+         *
+         * Cancellation is checked before every attempt (and sleepWithJitter wakes
+         * early on cancel). The delay after attempt i (1-based) is ~baseDelayMs * i,
+         * jittered.
+         *
+         * @param fn          Callable returning int; 0 means success.
+         * @param attempts    Maximum number of attempts (default 3).
+         * @param baseDelayMs Base backoff in milliseconds (default 500).
+         * @return 0 on success, -1 if cancelled (or attempts <= 0), otherwise the
+         *         return value of the last attempt.
+         */
+        template <class Fn>
+        int withBackoff(Fn&& fn, int attempts = 3, int baseDelayMs = 500)
+        {
+            int rc = -1;
+            for (int i = 0; i < attempts; ++i) {
+                if (GlobalState::g_operationCancelled.load()) return -1;
+
+                rc = fn();
+                if (rc == 0) return 0;
+
+                if (i + 1 < attempts)
+                    sleepWithJitter(baseDelayMs * (i + 1));
+            }
+            return rc;
+        }
+
     }  // namespace retry
 
     // ===========================================================================
@@ -143,6 +172,9 @@ namespace {
          * deadlock on its very first allocation before exec() ever replaces it.
          * posix_spawn sidesteps this entirely since no such fork-without-exec
          * window exists.
+         *
+         * The executable is located with posix_spawnp, which searches the caller's
+         * PATH. The child itself runs with a fixed PATH (see below).
          *
          * @param args Argument vector where args[0] is the executable name.
          * @return Exit code of the child process, or -1 on spawn/wait failure.
@@ -168,12 +200,11 @@ namespace {
             posix_spawn_file_actions_adddup2(&fileActions, devNull, STDERR_FILENO);
             posix_spawn_file_actions_addclose(&fileActions, devNull);
 
-            // Fixed, trusted search path for privileged helper binaries — deliberately
-            // NOT the inherited `environ`, whose PATH could be attacker-influenced
-            // (e.g. via sudo/pkexec with preserved env, or a less-trusted parent).
-            // Covers the standard sbin/bin split across major distros (Debian/Ubuntu,
-            // Fedora/RHEL, Arch's merged-/usr layout) without hardcoding a single
-            // absolute binary path.
+            // The child runs with a fixed PATH so that helper programs launched by
+            // parted/mkfs.* resolve predictably. This is the child's environment
+            // only; the executable itself is looked up by posix_spawnp using the
+            // caller's PATH. Covers the standard sbin/bin layouts of Debian/Ubuntu,
+            // Fedora/RHEL and Arch (merged-/usr).
             static char trustedPath[] =
                 "PATH=/usr/sbin:/usr/bin:/sbin:/bin";
             char* const spawnEnv[] = { trustedPath, nullptr };
@@ -195,6 +226,7 @@ namespace {
         /**
          * @brief Runs an external command, retrying on failure.
          *
+         * Retry policy is implemented by retry::withBackoff().
          * Retries absorb transient failures caused by other system activity (udev
          * re-probing the disk, boot-time services holding the device), which
          * typically clear within a second or two.
@@ -216,17 +248,8 @@ namespace {
                             int attempts    = 3,
                             int baseDelayMs = 500)
         {
-            int rc = -1;
-            for (int i = 0; i < attempts; ++i) {
-                if (GlobalState::g_operationCancelled.load()) return -1;
-
-                rc = runCommand(args);
-                if (rc == 0) return 0;
-
-                if (i + 1 < attempts)
-                    retry::sleepWithJitter(baseDelayMs * (i + 1));
-            }
-            return rc;
+            return retry::withBackoff([&] { return runCommand(args); },
+                                      attempts, baseDelayMs);
         }
 
     }  // namespace proc
@@ -332,6 +355,7 @@ namespace {
          * @brief libMount() with the same retry and jittered backoff as
          *        proc::runCommandRetry().
          *
+         * Retry policy is implemented by retry::withBackoff().
          * Mainly guards the ISO loop mount against transient failures such as
          * loop-device contention with other boot-time services or concurrent jobs.
          * Parameters match libMount(), plus the retry settings.
@@ -348,23 +372,16 @@ namespace {
                           int attempts    = 3,
                           int baseDelayMs = 500)
         {
-            int rc = -1;
-            for (int i = 0; i < attempts; ++i) {
-                if (GlobalState::g_operationCancelled.load()) return -1;
-
-                rc = libMount(src, target, options, fstype);
-                if (rc == 0) return 0;
-
-                if (i + 1 < attempts)
-                    retry::sleepWithJitter(baseDelayMs * (i + 1));
-            }
-            return rc;
+            return retry::withBackoff(
+                [&] { return libMount(src, target, options, fstype); },
+                attempts, baseDelayMs);
         }
 
         /**
          * @brief Mounts an NTFS partition through a specific kernel driver, with
          *        retry and jittered backoff.
          *
+         * Retry policy is implemented by retry::withBackoff().
          * Builds a fresh libmnt_context on every attempt, so no state from a failed
          * attempt carries over. Mount helpers are disabled so the VFS invokes the
          * named kernel driver directly (see disk::getBestNtfsDriver()).
@@ -382,28 +399,20 @@ namespace {
                               int attempts    = 3,
                               int baseDelayMs = 500)
         {
-            int rc = -1;
-            for (int i = 0; i < attempts; ++i) {
-                if (GlobalState::g_operationCancelled.load()) return -1;
-
+            return retry::withBackoff([&] {
                 libmnt_context* ctx = mnt_new_context();
-                if (ctx) {
-                    mnt_context_set_source(ctx, src);
-                    mnt_context_set_target(ctx, target);
-                    mnt_context_set_fstype(ctx, fstype);
-                    mnt_context_append_options(ctx, "noatime");
-                    mnt_context_disable_helpers(ctx, true);
-                    rc = mnt_context_mount(ctx);
-                    mnt_free_context(ctx);
-                } else {
-                    rc = -1;
-                }
-                if (rc == 0) return 0;
+                if (!ctx) return -1;
 
-                if (i + 1 < attempts)
-                    retry::sleepWithJitter(baseDelayMs * (i + 1));
-            }
-            return rc;
+                mnt_context_set_source(ctx, src);
+                mnt_context_set_target(ctx, target);
+                mnt_context_set_fstype(ctx, fstype);
+                mnt_context_append_options(ctx, "noatime");
+                mnt_context_disable_helpers(ctx, true);
+
+                const int rc = mnt_context_mount(ctx);
+                mnt_free_context(ctx);
+                return rc;
+            }, attempts, baseDelayMs);
         }
 
     }  // namespace mnt
