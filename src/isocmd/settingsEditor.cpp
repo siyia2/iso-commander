@@ -828,6 +828,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
     };
 
     auto repaintEditOnResize = [&] {
+        SyncOutput sync;
         drawEdit();
         std::cout << "\n";
         repaintCompletionListing();
@@ -838,8 +839,11 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
         resetReadlinePagination();
         term::setupSettingReadline(total, isNumeric, validValues);
 
-        drawEdit();
-        std::cout << "\n";
+        {
+            SyncOutput sync;
+            drawEdit();
+            std::cout << "\n";
+        }
 
         const std::string prompt = view::buildValuePrompt(tc);
 
