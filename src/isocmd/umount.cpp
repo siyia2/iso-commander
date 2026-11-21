@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstddef>
 #include <filesystem>
+#include <functional>
+#include <iterator>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -55,7 +59,7 @@ static bool isDirectoryEmpty(const std::string& path) {
  * @param messageKey The key for the specific message template.
  * @return A fully constructed, styled string ready for display.
  */
-static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessageFormatter& fmt, const char* messageKey) {
+static std::string formatDirText(const std::string& isoDir) {
     auto dirParts = parseMountPointComponents(isoDir);
 
     std::string formattedDir{std::get<1>(dirParts)};
@@ -69,7 +73,11 @@ static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessage
                        + std::string(UI::Palette::BoldReset);
     }
 
-    return fmt.format(messageKey, formattedDir);
+    return formattedDir;
+}
+
+static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessageFormatter& fmt, const char* messageKey) {
+    return fmt.format(messageKey, formatDirText(isoDir));
 }
 
 /**
@@ -105,38 +113,29 @@ void unmountISO(
     bool silentMode)
 {
     const bool hasRoot = (geteuid() == 0);
-    VerboseMessageFormatter messageFormatter;
-    std::vector<std::string> errorMessages, successMessages;
+    // Results are kept as compact records (directory + message key) and turned into
+    // lines only when they are printed; see forEachUmountLine().
+    std::vector<UmountRecord> tempRecords;
     constexpr size_t kBatchSize = 50;
-    if (!silentMode) {
-        errorMessages.reserve(kBatchSize);
-        successMessages.reserve(kBatchSize);
-    }
+    if (!silentMode) tempRecords.reserve(kBatchSize);
     auto flushTemporaryBuffers = [&]() {
-        if (silentMode) return;
+        if (silentMode || tempRecords.empty()) return;
         std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
-        if (!successMessages.empty()) {
-            verboseSets.operationCompleted.insert(successMessages.begin(), successMessages.end());
-            successMessages.clear();
-        }
-        if (!errorMessages.empty()) {
-            verboseSets.operationFailed.insert(errorMessages.begin(), errorMessages.end());
-            errorMessages.clear();
-        }
+        verboseSets.umountRecords.insert(verboseSets.umountRecords.end(),
+                                         std::make_move_iterator(tempRecords.begin()),
+                                         std::make_move_iterator(tempRecords.end()));
+        tempRecords.clear();
+    };
+    auto record = [&](const std::string& isoDir, const char* messageKey, bool completed) {
+        if (!silentMode) tempRecords.push_back({isoDir, messageKey, completed});
     };
     auto maybeFlush = [&]() {
-        if (!silentMode &&
-            (successMessages.size() >= kBatchSize ||
-             errorMessages.size()   >= kBatchSize)) {
-            flushTemporaryBuffers();
-        }
+        if (!silentMode && tempRecords.size() >= kBatchSize) flushTemporaryBuffers();
     };
 
     if (!hasRoot) {
         if (!silentMode) {
-            for (const auto& isoDir : isoDirs)
-                errorMessages.push_back(
-                    formatDirForDisplay(isoDir, messageFormatter, "root_error"));
+            for (const auto& isoDir : isoDirs) record(isoDir, "root_error", false);
             flushTemporaryBuffers();
         }
         failedTasks->fetch_add(isoDirs.size(), std::memory_order_relaxed);
@@ -144,9 +143,7 @@ void unmountISO(
     }
     for (const auto& isoDir : isoDirs) {
         if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
-            if (!silentMode)
-                errorMessages.push_back(
-                    formatDirForDisplay(isoDir, messageFormatter, "cancel"));
+            record(isoDir, "cancel", false);
             failedTasks->fetch_add(1, std::memory_order_relaxed);
             maybeFlush();
             continue;
@@ -156,9 +153,7 @@ void unmountISO(
         libmnt_context* ctx = mnt_new_context();
         if (!ctx) {
             failedTasks->fetch_add(1, std::memory_order_relaxed);
-            if (!silentMode)
-                errorMessages.push_back(
-                    formatDirForDisplay(isoDir, messageFormatter, "error"));
+            record(isoDir, "error", false);
             maybeFlush();
             continue;
         }
@@ -176,16 +171,86 @@ void unmountISO(
         if (result == 0 || isDirectoryEmpty(isoDir)) {
             rmdir(isoDir.c_str());
             completedTasks->fetch_add(1, std::memory_order_relaxed);
-            if (!silentMode)
-                successMessages.push_back(
-                    formatDirForDisplay(isoDir, messageFormatter, "success"));
+            record(isoDir, "success", true);
         } else {
             failedTasks->fetch_add(1, std::memory_order_relaxed);
-            if (!silentMode)
-                errorMessages.push_back(
-                    formatDirForDisplay(isoDir, messageFormatter, "error"));
+            record(isoDir, "error", false);
         }
         maybeFlush();
     }
     flushTemporaryBuffers();
+}
+
+// ---------------------------------------------------------------------------
+// Unmount results: records are turned into lines only when printed.
+// ---------------------------------------------------------------------------
+namespace {
+
+/// Case-insensitive three-way compare, the same ordering verbosePrint() uses.
+int compareIgnoreCase(std::string_view a, std::string_view b) {
+    const size_t n = std::min(a.size(), b.size());
+    for (size_t i = 0; i < n; ++i) {
+        const int x = std::tolower(static_cast<unsigned char>(a[i]));
+        const int y = std::tolower(static_cast<unsigned char>(b[i]));
+        if (x != y) return x < y ? -1 : 1;
+    }
+    if (a.size() == b.size()) return 0;
+    return a.size() < b.size() ? -1 : 1;
+}
+
+struct UmountLineRef {
+    std::string key;   // displayed directory text + the bytes that follow it in the line
+    size_t      index; // position in verboseSets.umountRecords
+};
+
+} // namespace
+
+size_t countUmountRecords(bool completed) {
+    return static_cast<size_t>(std::count_if(
+        verboseSets.umountRecords.begin(), verboseSets.umountRecords.end(),
+        [completed](const UmountRecord& r) { return r.completed == completed; }));
+}
+
+void forEachUmountLine(bool completed, const std::function<void(std::string_view)>& fn) {
+    const std::vector<UmountRecord>& records = verboseSets.umountRecords;
+    VerboseMessageFormatter formatter;
+
+    // In a printed line the directory text is followed by a fixed colour code and a
+    // quote (different for success and failure lines). Comparing directory + that
+    // suffix orders lines like comparing the full lines would, up to the final tag.
+    std::string suffix(completed ? std::string_view(formatter.tc.path)
+                                 : std::string_view(formatter.tc.warning));
+    suffix.push_back('\'');
+
+    std::vector<UmountLineRef> refs;
+    for (size_t i = 0; i < records.size(); ++i)
+        if (records[i].completed == completed)
+            refs.push_back({formatDirText(records[i].mountPoint) + suffix, i});
+    if (refs.empty()) return;
+
+    auto line = [&](size_t i) {
+        return formatDirForDisplay(records[i].mountPoint, formatter, records[i].messageKey);
+    };
+
+    // Ties (same directory text, e.g. different failure tags) are broken by the full
+    // line, so repeated lines end up next to each other and can be dropped, as the
+    // old string sets did.
+    std::sort(refs.begin(), refs.end(), [&](const UmountLineRef& a, const UmountLineRef& b) {
+        if (int c = compareIgnoreCase(a.key, b.key)) return c < 0;
+        if (a.index == b.index) return false;
+        const std::string la = line(a.index);
+        const std::string lb = line(b.index);
+        if (int c = compareIgnoreCase(la, lb)) return c < 0;
+        return la < lb;
+    });
+
+    std::string previous;
+    bool havePrevious = false;
+    for (const UmountLineRef& ref : refs) {
+        std::string current = line(ref.index);
+        if (havePrevious && current == previous) continue;
+        fn(current);
+        previous = std::move(current);
+        havePrevious = true;
+    }
 }

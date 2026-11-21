@@ -713,12 +713,15 @@ static void showMountSummary(bool silentMode, bool showVerbose,
         clearScrollBuffer();
         std::cout << "\n";
 
-        for (const auto& msg : verboseSets.operationCompleted)
+        auto printLine = [](std::string_view msg) {
             std::cout << msg << UI::Palette::BoldReset << "\n";
-        for (const auto& msg : verboseSets.operationSkipped)
-            std::cout << msg << UI::Palette::BoldReset << "\n";
-        for (const auto& msg : verboseSets.operationFailed)
-            std::cout << msg << UI::Palette::BoldReset << "\n";
+        };
+        for (const auto& msg : verboseSets.operationCompleted) printLine(msg);
+        forEachMountLine(MountRecKind::Completed, printLine);
+        for (const auto& msg : verboseSets.operationSkipped) printLine(msg);
+        forEachMountLine(MountRecKind::Skipped, printLine);
+        for (const auto& msg : verboseSets.operationFailed) printLine(msg);
+        forEachMountLine(MountRecKind::Failed, printLine);
 
         std::cout << "\nMount summary:\n"
                   << " Successful: " << completedTasks.load() << "\n"
@@ -1121,11 +1124,14 @@ static int executeUnmounts(const std::unordered_set<std::string>& mountPoints,
         clearScrollBuffer();
         std::cout << "\n";
 
-        for (const auto& msg : verboseSets.operationCompleted)
+        auto printUmountLine = [](std::string_view msg) {
             std::cout << msg << UI::Palette::BoldReset << "\n";
+        };
+        for (const auto& msg : verboseSets.operationCompleted) printUmountLine(msg);
+        forEachUmountLine(true, printUmountLine);
 
-        for (const auto& msg : verboseSets.operationFailed)
-            std::cout << msg << UI::Palette::BoldReset << "\n";
+        for (const auto& msg : verboseSets.operationFailed) printUmountLine(msg);
+        forEachUmountLine(false, printUmountLine);
 
         std::cout << "\nUnmount summary:\n"
                   << " Successful: " << completedTasks.load() << "\n"

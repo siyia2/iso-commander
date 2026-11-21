@@ -77,31 +77,66 @@ void verbosePrint(std::unordered_set<std::string>& primarySet,
         SyncOutput sync;
         clearScrollBuffer();
 
-        auto printSortedSet = [&](std::unordered_set<std::string>& set, bool isError = false) {
-            if (set.empty()) return;
+        // Stored mount/unmount records: how many there are, and how to walk them as
+        // formatted lines (one line in memory at a time).
+        struct RecordSource {
+            std::function<size_t()> count;
+            std::function<void(const std::function<void(std::string_view)>&)> each;
+        };
 
-            std::vector<std::string_view> views;
-            views.reserve(set.size());
-            for (const auto& s : set)
-                views.emplace_back(s);
+        // Prints @p set sorted, then the stored records of @p records (mount and
+        // unmount results), formatted one at a time while printing, so no second copy
+        // of all lines is built (see forEachMountLine(), forEachUmountLine()).
+        auto printSortedSet = [&](std::unordered_set<std::string>& set, bool isError = false,
+                                  const RecordSource* records = nullptr) {
+            const bool hasRecords = records && records->count() > 0;
+            if (set.empty() && !hasRecords) return;
 
-            std::sort(views.begin(), views.end(), [](std::string_view a, std::string_view b) {
-                return std::lexicographical_compare(
-                    a.begin(), a.end(), b.begin(), b.end(),
-                    [](char x, char y) {
-                        return std::tolower((unsigned char)x) < std::tolower((unsigned char)y);
-                    }
-                );
-            });
-
-            std::cout << "\n";
-            for (std::string_view item : views) {
+            auto emit = [&](std::string_view item) {
                 if (isError)
                     std::cerr << vt.red << item << vt.reset << "\n";
                 else
                     std::cout << item << "\n";
+            };
+
+            std::cout << "\n";
+
+            if (!set.empty()) {
+                std::vector<std::string_view> views;
+                views.reserve(set.size());
+                for (const auto& s : set)
+                    views.emplace_back(s);
+
+                std::sort(views.begin(), views.end(), [](std::string_view a, std::string_view b) {
+                    return std::lexicographical_compare(
+                        a.begin(), a.end(), b.begin(), b.end(),
+                        [](char x, char y) {
+                            return std::tolower((unsigned char)x) < std::tolower((unsigned char)y);
+                        }
+                    );
+                });
+
+                for (std::string_view item : views) emit(item);
             }
+
+            if (hasRecords) records->each(emit);
         };
+
+        auto mountSource = [](MountRecKind kind) {
+            return RecordSource{
+                [kind] { return countMountRecords(kind); },
+                [kind](const std::function<void(std::string_view)>& fn) { forEachMountLine(kind, fn); }};
+        };
+        auto umountSource = [](bool completed) {
+            return RecordSource{
+                [completed] { return countUmountRecords(completed); },
+                [completed](const std::function<void(std::string_view)>& fn) { forEachUmountLine(completed, fn); }};
+        };
+        const RecordSource mountCompleted = mountSource(MountRecKind::Completed);
+        const RecordSource mountSkipped   = mountSource(MountRecKind::Skipped);
+        const RecordSource mountFailed    = mountSource(MountRecKind::Failed);
+        const RecordSource umountCompleted = umountSource(true);
+        const RecordSource umountFailed    = umountSource(false);
 
         switch (printType) {
             case 0:
@@ -109,15 +144,15 @@ void verbosePrint(std::unordered_set<std::string>& primarySet,
                 printSortedSet(secondarySet);
                 printSortedSet(errorSet, true);
                 break;
-            case 1:
-                printSortedSet(primarySet);
-                printSortedSet(secondarySet);
+            case 1: // everything but mount; unmount results also come from umount records
+                printSortedSet(primarySet, false, &umountCompleted);
+                printSortedSet(secondarySet, false, &umountFailed);
                 printSortedSet(errorSet);
                 break;
-            case 2:
-                printSortedSet(primarySet);
-                printSortedSet(tertiarySet, true);
-                printSortedSet(secondarySet, true);
+            case 2: // mount: completed / skipped / failed also come from mount records
+                printSortedSet(primarySet, false, &mountCompleted);
+                printSortedSet(tertiarySet, true, &mountSkipped);
+                printSortedSet(secondarySet, true, &mountFailed);
                 printSortedSet(errorSet, true);
                 break;
             case 3:
@@ -183,7 +218,9 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
     if (!verboseSets.uniqueErrorTokenMessages.empty() &&
         verboseSets.operationFailed.empty() &&
         verboseSets.operationSkipped.empty() &&
-        verboseSets.operationCompleted.empty()) {
+        verboseSets.operationCompleted.empty() &&
+        verboseSets.mountRecords.empty() &&
+        verboseSets.umountRecords.empty()) {
 
         auto render = [&] {
             SyncOutput sync;

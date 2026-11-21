@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cerrno>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <iterator>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -547,15 +551,14 @@ namespace {
                           std::atomic<size_t>* failedTasks,
                           bool silentMode) {
         if (!silentMode) {
-            VerbosityFormatter formatter;
-            std::vector<std::string> fails;
+            std::vector<MountRecord> fails;
             fails.reserve(isoFiles.size());
-            for (const auto& isoFile : isoFiles) {
-                auto [dir, file] = extractDirectoryAndFilename(isoFile, "mount");
-                fails.push_back(formatter.formatError(std::string(dir), std::string(file), "needsRoot"));
-            }
+            for (const auto& isoFile : isoFiles)
+                fails.push_back({isoFile, "needsRoot", MountRecKind::Failed});
             std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
-            verboseSets.operationFailed.insert(fails.begin(), fails.end());
+            verboseSets.mountRecords.insert(verboseSets.mountRecords.end(),
+                                            std::make_move_iterator(fails.begin()),
+                                            std::make_move_iterator(fails.end()));
         }
         failedTasks->fetch_add(isoFiles.size(), std::memory_order_relaxed);
     }
@@ -622,6 +625,16 @@ namespace {
         return mountPoint;
     }
 
+    /// Returns a pointer to a process-lifetime copy of a filesystem type name, so
+    /// MountRecord can store a pointer instead of a string. There are only a few
+    /// distinct values (iso9660, udf, hfsplus, hfs, unknown).
+    const char* internFsType(const char* fsType) {
+        static std::mutex poolMutex;
+        static std::unordered_set<std::string> pool;
+        std::lock_guard<std::mutex> lock(poolMutex);
+        return pool.emplace(fsType).first->c_str(); // node-based: address stays valid
+    }
+
     /**
      * @brief State of one mountIsoFiles() batch: the libmount context, the dedup
      * caches, and the buffered verbose results (flushed to verboseSets in batches to
@@ -639,11 +652,7 @@ namespace {
               silentMode_(silent),
               mountPointCache_(buildMountPointCache()),
               mountedInodes_(buildMountedInodeCache()) {
-            if (!silentMode_) {
-                tempCompleted_.reserve(kBatchSize);
-                tempSkipped_.reserve(kBatchSize);
-                tempFailed_.reserve(kBatchSize);
-            }
+            if (!silentMode_) tempRecords_.reserve(kBatchSize);
         }
 
         /// Mounts one image (or records why it was skipped / failed).
@@ -676,23 +685,16 @@ namespace {
         }
 
         void maybeFlush() {
-            if (!silentMode_ &&
-                (tempCompleted_.size() >= kBatchSize ||
-                 tempSkipped_.size()   >= kBatchSize ||
-                 tempFailed_.size()    >= kBatchSize)) {
-                flush();
-            }
+            if (!silentMode_ && tempRecords_.size() >= kBatchSize) flush();
         }
 
         void flush() {
-            if (silentMode_) return;
+            if (silentMode_ || tempRecords_.empty()) return;
             std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
-            verboseSets.operationCompleted.insert(tempCompleted_.begin(), tempCompleted_.end());
-            verboseSets.operationSkipped.insert(tempSkipped_.begin(), tempSkipped_.end());
-            verboseSets.operationFailed.insert(tempFailed_.begin(), tempFailed_.end());
-            tempCompleted_.clear();
-            tempSkipped_.clear();
-            tempFailed_.clear();
+            verboseSets.mountRecords.insert(verboseSets.mountRecords.end(),
+                                            std::make_move_iterator(tempRecords_.begin()),
+                                            std::make_move_iterator(tempRecords_.end()));
+            tempRecords_.clear();
         }
 
     private:
@@ -719,21 +721,14 @@ namespace {
         }
 
         void recordFail(const std::string& isoFile, const char* reason) {
-            if (!silentMode_) {
-                auto [dir, file] = extractDirectoryAndFilename(isoFile, "mount");
-                tempFailed_.push_back(formatter_.formatError(std::string(dir), std::string(file), reason));
-            }
+            // @p reason is always a string literal, so the pointer can be stored as is.
+            if (!silentMode_) tempRecords_.push_back({isoFile, reason, MountRecKind::Failed});
             failedTasks_->fetch_add(1, std::memory_order_relaxed);
         }
 
-        void recordSkip(const std::string& isoFile, const std::string& mountPoint) {
-            if (!silentMode_) {
-                auto [mntDir, mntName] = extractDirectoryAndFilename(mountPoint, "mount");
-                auto [isoDir, isoName] = extractDirectoryAndFilename(isoFile, "mount");
-                tempSkipped_.push_back(
-                    formatter_.formatSkipped(std::string(isoDir), std::string(isoName),
-                                             std::string(mntDir), std::string(mntName)));
-            }
+        void recordSkip(const std::string& isoFile, const std::string& /*mountPoint*/) {
+            // The mount point is derived from the path again when the line is printed.
+            if (!silentMode_) tempRecords_.push_back({isoFile, nullptr, MountRecKind::Skipped});
             completedTasks_->fetch_add(1, std::memory_order_relaxed);
         }
 
@@ -761,13 +756,9 @@ namespace {
         void onMountSuccess(const std::string& isoFile, const std::string& mountPoint,
                             const struct stat& isoStat) {
             if (!silentMode_) {
-                auto [mntDir, mntName] = extractDirectoryAndFilename(mountPoint, "mount");
-                auto [isoDir, isoName] = extractDirectoryAndFilename(isoFile, "mount");
                 const char* rawFsType = mnt_context_get_fstype(ctx_);
-                const std::string fsType = rawFsType ? rawFsType : "unknown";
-                tempCompleted_.push_back(
-                    formatter_.formatMountSuccess(std::string(isoDir), std::string(isoName),
-                                                  std::string(mntDir), std::string(mntName), fsType));
+                tempRecords_.push_back({isoFile, internFsType(rawFsType ? rawFsType : "unknown"),
+                                        MountRecKind::Completed});
             }
             mountPointCache_.emplace(mountPoint);
             // Keep the inode cache consistent so subsequent entries in the same
@@ -794,12 +785,9 @@ namespace {
         std::atomic<size_t>*           completedTasks_;
         std::atomic<size_t>*           failedTasks_;
         const bool                     silentMode_;
-        VerbosityFormatter             formatter_;
         std::unordered_set<std::string> mountPointCache_;
         std::unordered_set<uint64_t>   mountedInodes_;
-        std::vector<std::string>       tempCompleted_;
-        std::vector<std::string>       tempSkipped_;
-        std::vector<std::string>       tempFailed_;
+        std::vector<MountRecord>       tempRecords_;
     };
 
 } // namespace
@@ -876,4 +864,96 @@ void mountIsoFiles(
         batch.maybeFlush();
     }
     batch.flush();
+}
+
+// ---------------------------------------------------------------------------
+// Mount results: records are turned into lines only when printed.
+// ---------------------------------------------------------------------------
+namespace {
+
+/// Case-insensitive three-way compare, the same ordering verbosePrint() uses.
+int compareIgnoreCase(std::string_view a, std::string_view b) {
+    const size_t n = std::min(a.size(), b.size());
+    for (size_t i = 0; i < n; ++i) {
+        const int x = std::tolower(static_cast<unsigned char>(a[i]));
+        const int y = std::tolower(static_cast<unsigned char>(b[i]));
+        if (x != y) return x < y ? -1 : 1;
+    }
+    if (a.size() == b.size()) return 0;
+    return a.size() < b.size() ? -1 : 1;
+}
+
+/// Displayed image path followed by the closing quote. A printed line is
+/// "<colour>ISO: <colour>'<path>'<rest>", so for lines of one kind comparing this
+/// text orders them exactly as comparing the whole formatted lines would.
+std::string displayedPathKey(const std::string& isoPath) {
+    auto [dir, file] = extractDirectoryAndFilename(isoPath, "mount");
+    std::string key;
+    if (displayConfig::toggleNamesOnly) {
+        key.assign(file);
+    } else {
+        key.reserve(dir.size() + file.size() + 2);
+        key.append(dir).append("/").append(file);
+    }
+    key.push_back('\'');
+    return key;
+}
+
+struct MountLineRef {
+    std::string key;   // displayedPathKey()
+    size_t      index; // position in verboseSets.mountRecords
+};
+
+/// Builds the printed line for one record (the same text the old code stored).
+std::string formatMountLine(VerbosityFormatter& formatter, const MountRecord& r) {
+    auto [isoDir, isoName] = extractDirectoryAndFilename(r.isoPath, "mount");
+    if (r.kind == MountRecKind::Failed)
+        return formatter.formatError(isoDir, isoName, r.code ? r.code : "");
+
+    const std::string mountPoint = buildMountPoint(r.isoPath);
+    auto [mntDir, mntName] = extractDirectoryAndFilename(mountPoint, "mount");
+    return r.kind == MountRecKind::Completed
+               ? formatter.formatMountSuccess(isoDir, isoName, mntDir, mntName, r.code ? r.code : "")
+               : formatter.formatSkipped(isoDir, isoName, mntDir, mntName);
+}
+
+} // namespace
+
+size_t countMountRecords(MountRecKind kind) {
+    return static_cast<size_t>(std::count_if(
+        verboseSets.mountRecords.begin(), verboseSets.mountRecords.end(),
+        [kind](const MountRecord& r) { return r.kind == kind; }));
+}
+
+void forEachMountLine(MountRecKind kind, const std::function<void(std::string_view)>& fn) {
+    const std::vector<MountRecord>& records = verboseSets.mountRecords;
+
+    std::vector<MountLineRef> refs;
+    for (size_t i = 0; i < records.size(); ++i)
+        if (records[i].kind == kind) refs.push_back({displayedPathKey(records[i].isoPath), i});
+    if (refs.empty()) return;
+
+    VerbosityFormatter formatter;
+
+    // Order by displayed path. Different images can display identically (directory
+    // names are shortened) and the old string sets dropped repeated lines, so ties
+    // are broken by the full line: repeated lines then end up next to each other.
+    std::sort(refs.begin(), refs.end(), [&](const MountLineRef& a, const MountLineRef& b) {
+        if (int c = compareIgnoreCase(a.key, b.key)) return c < 0;
+        if (a.index == b.index) return false;
+        const std::string la = formatMountLine(formatter, records[a.index]);
+        const std::string lb = formatMountLine(formatter, records[b.index]);
+        if (int c = compareIgnoreCase(la, lb)) return c < 0;
+        return la < lb;
+    });
+
+    std::string previous;
+    bool havePrevious = false;
+    for (const MountLineRef& ref : refs) {
+        std::string line = formatMountLine(formatter, records[ref.index]);
+        if (havePrevious && line == previous) continue;
+        fn(line);
+        previous = std::move(line);
+        havePrevious = true;
+    }
 }
