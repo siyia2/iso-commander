@@ -18,7 +18,7 @@
  */
 void handleIsoFileOperation(
     const std::vector<std::string>& isoFiles,
-    const std::vector<std::string>& isoFilesCopy,
+    const std::vector<int>& chunkIndices,
     const std::string& userDestDir,
     bool isMove,
     bool isCopy,
