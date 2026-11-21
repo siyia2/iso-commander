@@ -7,10 +7,64 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
+
+/// Outcome category of one mount result.
+enum class MountRecKind : uint8_t { Completed, Skipped, Failed };
+
+/**
+ * @brief Compact result of one mount attempt.
+ *
+ * Mount results used to be stored as fully formatted, colour-coded lines (about
+ * 300 bytes each). A record keeps only what is needed to rebuild the line:
+ * the image path and a code. The mount point is derived from the path, so it is
+ * not stored. The line is formatted only when it is printed
+ * (see forEachMountLine()).
+ *
+ * @c code is a pointer to a string with static storage duration: the failure
+ * reason for Failed records, the filesystem type for Completed records
+ * (interned), and unused for Skipped records.
+ */
+struct MountRecord {
+    std::string  isoPath;
+    const char*  code = nullptr;
+    MountRecKind kind = MountRecKind::Completed;
+};
+
+/**
+ * @brief Compact result of one unmount attempt (same idea as MountRecord).
+ *
+ * @c messageKey is one of the string literals "success", "error", "cancel",
+ * "root_error"; the line is built from it and @c mountPoint when printed.
+ */
+struct UmountRecord {
+    std::string mountPoint;
+    const char* messageKey = nullptr;
+    bool        completed  = false;
+};
+
+/// Number of stored unmount records (completed or failed).
+size_t countUmountRecords(bool completed);
+
+/// Like forEachMountLine(), for unmount results. Defined in umount.cpp.
+void forEachUmountLine(bool completed, const std::function<void(std::string_view)>& fn);
+
+/// Number of stored mount records of the given kind.
+size_t countMountRecords(MountRecKind kind);
+
+/**
+ * @brief Calls @p fn once per distinct mount result of @p kind, as a formatted line.
+ *
+ * Lines are produced in the same order verbosePrint() uses for string sets
+ * (case-insensitive, by displayed path), duplicates are dropped, and only one
+ * line exists in memory at a time. Defined in mount.cpp.
+ */
+void forEachMountLine(MountRecKind kind, const std::function<void(std::string_view)>& fn);
 
 /**
  * @brief Holds verbose output sets for operation results and user input.
@@ -32,6 +86,8 @@ struct VerboseSets {
     std::unordered_set<std::string> operationFailed;
     std::unordered_set<std::string> operationSkipped;
     std::unordered_set<std::string> uniqueErrorTokenMessages;
+    std::vector<MountRecord>        mountRecords; ///< Mount results; formatted at print time.
+    std::vector<UmountRecord>       umountRecords; ///< Unmount results; formatted at print time.
 };
 
 inline VerboseSets verboseSets;
@@ -47,6 +103,8 @@ inline void clearGlobalVerboseSets() {
     verboseSets.operationFailed.clear();
     verboseSets.operationSkipped.clear();
     verboseSets.uniqueErrorTokenMessages.clear();
+    std::vector<MountRecord>().swap(verboseSets.mountRecords); // also release capacity
+    std::vector<UmountRecord>().swap(verboseSets.umountRecords);
 }
 
 // --- Output & Logging Functions ---
