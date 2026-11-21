@@ -98,30 +98,56 @@ namespace {
             bool   source = false;   // '^' suffix: indices refer to the source list
         };
 
-        /// Parses "N", "A-B", "N^" or "A-B^" (1-based). Returns false for anything else.
+        /// Parses "N", "A-B", "N^" or "A-B^" using tokenizeInput's strict rules.
         bool parseIndexToken(std::string_view tok, IndexToken& out) {
             out = {};
+
             if (!tok.empty() && tok.back() == '^') {
                 out.source = true;
                 tok.remove_suffix(1);
             }
+
             if (tok.empty()) return false;
 
-            const char* p = tok.data();
-            const char* e = p + tok.size();
-            size_t a = 0, b = 0;
+            const size_t dashPos = tok.find('-');
 
-            auto r = std::from_chars(p, e, a);
-            if (r.ec != std::errc{} || a == 0) return false;
-            b = a;
-            if (r.ptr != e) {
-                if (*r.ptr != '-') return false;
-                r = std::from_chars(r.ptr + 1, e, b);
-                if (r.ec != std::errc{} || r.ptr != e || b == 0) return false;
+            // More than one dash is malformed.
+            if (dashPos != std::string_view::npos &&
+                tok.find('-', dashPos + 1) != std::string_view::npos) {
+                return false;
             }
+
+            auto parse = [](std::string_view s, int& value) {
+                if (s.empty() || s.front() == '0') return false;
+
+                for (unsigned char c : s) {
+                    if (!std::isdigit(c)) return false;
+                }
+
+                auto [ptr, ec] = std::from_chars(
+                    s.data(), s.data() + s.size(), value);
+
+                return ec == std::errc{} && ptr == s.data() + s.size();
+            };
+
+            int a = 0;
+            int b = 0;
+
+            if (dashPos == std::string_view::npos) {
+                if (!parse(tok, a)) return false;
+                b = a;
+            } else {
+                if (!parse(tok.substr(0, dashPos), a) ||
+                    !parse(tok.substr(dashPos + 1), b)) {
+                    return false;
+                }
+            }
+
             if (a > b) std::swap(a, b);
-            out.lo = a;
-            out.hi = b;
+
+            out.lo = static_cast<size_t>(a);
+            out.hi = static_cast<size_t>(b);
+
             return true;
         }
 
@@ -193,13 +219,17 @@ namespace {
          * @brief Stages semicolon-terminated selections ("3 5-9 12^;") as paths.
          *
          * Recognizes input containing a semicolon and no forward slash. Tokens before
-         * the first semicolon are expanded: bare numbers index @p viewList (what is on
-         * screen), numbers with a trailing '^' index @p sourceList. Out-of-range and
-         * non-numeric tokens are ignored. New paths are appended in the order given;
-         * paths already staged are not duplicated.
+         * the first semicolon are parsed using the same strict numeric validation rules
+         * as @c tokenizeInput(): leading-zero indices, malformed tokens, and integer
+         * overflow are rejected. Bare numbers index @p viewList (what is on screen),
+         * while numbers with a trailing '^' index @p sourceList. Descending ranges are
+         * accepted, but an entire range is rejected if either endpoint exceeds the
+         * selected list's size. Valid indices are expanded into paths; new paths are
+         * appended in input order, and paths already staged are not duplicated.
          *
-         * @return true when the input is accepted as staging syntax (and the queue is
-         *         non-empty); false when it should go down the normal command path.
+         * @return true when the input is accepted as staging syntax and the pending
+         *         queue is non-empty; false when it should go down the normal command
+         *         path.
          */
         bool stagePending(const std::string& inputString,
                           std::vector<std::string>& paths,
@@ -220,10 +250,16 @@ namespace {
                 if (!parseIndexToken(tok, t)) continue;
 
                 const std::vector<std::string>& list = t.source ? sourceList : viewList;
-                const size_t hi = std::min(t.hi, list.size());   // also bounds huge ranges
-                for (size_t n = t.lo; n <= hi; ++n) {
+
+                // Match tokenizeInput(): reject the entire token if either
+                // endpoint exceeds the available list size.
+                if (t.lo > list.size() || t.hi > list.size()) continue;
+
+                for (size_t n = t.lo;; ++n) {
                     const std::string& path = list[n - 1];
                     if (seen.insert(path).second) paths.push_back(path);
+
+                    if (n == t.hi) break;
                 }
             }
 
