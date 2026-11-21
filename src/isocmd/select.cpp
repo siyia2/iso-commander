@@ -585,6 +585,12 @@ namespace {
                 return LoopAction::Return;
             }
 
+            void clearPendingSelection() {
+                g_isoPending.paths.clear();
+                pendingIndices.clear();
+                hasPendingProcess = false;
+            }
+
             // "P" with nothing staged, and "clr".
             LoopAction stagedCommands(const std::string& input) {
                 if (input == "P" && g_isoPending.paths.empty()) {
@@ -593,9 +599,7 @@ namespace {
                     return LoopAction::Continue;
                 }
                 if (input == "clr") {
-                    g_isoPending.paths.clear();
-                    pendingIndices.clear();
-                    hasPendingProcess = false;
+                    clearPendingSelection();
                     needsClrScrn = true;
                     return LoopAction::Continue;
                 }
@@ -672,6 +676,7 @@ namespace {
                 processOperation(batch, isFiltered, filteredFiles, isoDirs,
                                  operation, umountMvRmBreak, filterHistory,
                                  /*useSourceList=*/true);
+                clearPendingSelection();
             }
 
             void runDirect(const std::string& input) {
@@ -908,6 +913,12 @@ namespace {
                 return LoopAction::Return;
             }
 
+            void clearPendingSelection() {
+                pendingPaths.clear();
+                pendingIndices.clear();
+                hasPendingProcess = false;
+            }
+
             // "P" with nothing staged, and "clr".
             LoopAction stagedCommands(const std::string& input) {
                 if (input == "P" && pendingPaths.empty()) {
@@ -916,9 +927,7 @@ namespace {
                     return LoopAction::Continue;
                 }
                 if (input == "clr") {
-                    pendingPaths.clear();
-                    pendingIndices.clear();
-                    hasPendingProcess = false;
+                    clearPendingSelection();
                     needsClrScrn = true;
                     return LoopAction::Continue;
                 }
@@ -969,6 +978,7 @@ namespace {
 
                 convert(batch, target);
                 keybindingGuard.restore();
+                clearPendingSelection();
                 if (verbose) printVerboseResults();
                 return LoopAction::Continue;
             }
