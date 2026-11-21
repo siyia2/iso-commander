@@ -302,11 +302,7 @@ static void executeFileOperations(ThreadPool& pool,
                                            &userDestDir, isMove, isCopy, isDelete,
                                            &completedBytes, &completedTasks, &failedTasks,
                                            &overwriteExisting, &successfulDestPaths, &destPathsMutex]() {
-            std::vector<std::string> isoFilesInChunk;
-            isoFilesInChunk.reserve(chunk.size());
-            for (int idx : chunk)
-                isoFilesInChunk.push_back(isoFiles[idx - 1]);
-            handleIsoFileOperation(isoFilesInChunk, isoFiles,
+            handleIsoFileOperation(isoFiles, chunk,
                                    userDestDir, isMove, isCopy, isDelete,
                                    &completedBytes, &completedTasks, &failedTasks,
                                    overwriteExisting, &successfulDestPaths, &destPathsMutex);

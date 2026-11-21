@@ -651,7 +651,11 @@ static void logOperationResult(OperationContext& ctx,
     } else {
         std::string_view pastVerb = (verb == "moving") ? "Moved" : "Copied";
         std::string msg;
-        msg.reserve(128 + displaySrc.size() + destDirProcessed.size() + destFile.size());
+        // Exact size (plus a little slack) instead of a generous guess: these
+        // strings are kept until the verbose report is printed.
+        msg.reserve(3 * colors.success_label.size() + pastVerb.size() + colors.success_path.size()
+                    + displaySrc.size() + UI::Palette::BoldReset.size() + colors.dest_path.size()
+                    + destDirProcessed.size() + destFile.size() + 16);
 
         msg.append(colors.success_label).append(pastVerb).append(": '")
            .append(colors.success_path).append(displaySrc)
@@ -716,7 +720,8 @@ static void performDeleteOperation(OperationContext& ctx,
         completedBytes->fetch_add(fileSize, std::memory_order_relaxed);
 
         std::string msg;
-        msg.reserve(128 + displaySrc.size());
+        msg.reserve(2 * colors.success_label.size() + colors.success_path.size() + displaySrc.size()
+                    + 2 * UI::Palette::BoldReset.size() + 16);
         msg.append(colors.success_label).append("Deleted: ")
            .append(colors.success_path).append("'").append(displaySrc).append("'")
            .append(UI::Palette::BoldReset).append(colors.success_label).append(".")
@@ -1139,7 +1144,7 @@ namespace {
  * Processing flow:
  * - Parses semicolon‑separated destination directories from @p userDestDir.
  * - Creates a thread‑local BatchReporter and OperationContext.
- * - For each file in @p isoFiles (that also exists in @p isoFilesCopy):
+ * - For each 1-based index in @p chunkIndices (resolved against @p isoFiles):
  *   - Validates the file still exists on disk.
  *   - For delete: calls performDeleteOperation.
  *   - For move/copy: iterates over all destinations, checking for same‑file,
@@ -1150,8 +1155,8 @@ namespace {
  * - Ownership of newly created files is restored to the real user (via chown).
  * - Batched messages are flushed on exit.
  *
- * @param isoFiles            Files to operate on in this chunk.
- * @param isoFilesCopy        Master file list (for existence validation).
+ * @param isoFiles            Master file list (not copied; indexed by @p chunkIndices).
+ * @param chunkIndices        1-based indices into @p isoFiles to operate on in this chunk.
  * @param userDestDir         Semicolon‑separated destination directories.
  * @param isMove              True for move operation.
  * @param isCopy              True for copy operation.
@@ -1168,7 +1173,7 @@ namespace {
  * @note Ownership is restored using the real user ID from sudo/setuid context.
  */
 void handleIsoFileOperation(const std::vector<std::string>& isoFiles,
-                            const std::vector<std::string>& isoFilesCopy,
+                            const std::vector<int>& chunkIndices,
                             const std::string& userDestDir,
                             bool isMove, bool isCopy, bool isDelete,
                             std::atomic<size_t>* completedBytes,
@@ -1201,13 +1206,9 @@ void handleIsoFileOperation(const std::vector<std::string>& isoFiles,
     // ----- Parse destinations -----
     const std::vector<std::string> destDirs = parseDestinationDirs(userDestDir);
 
-    const std::unordered_set<std::string> isoFilesCopySet(
-        isoFilesCopy.begin(), isoFilesCopy.end());
-
     // ----- Process each file -----
-    for (const auto& iso : isoFiles) {
-        if (!isoFilesCopySet.count(iso)) continue;
-
+    for (const int chunkIdx : chunkIndices) {
+        const std::string& iso = isoFiles[chunkIdx - 1];
         fs::path srcPath(iso);
         if (!fs::exists(srcPath)) {
             auto [isoDir, isoFile] =
