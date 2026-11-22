@@ -527,13 +527,15 @@ static void reportErrorCpMvRm(OperationContext& ctx,
  * @brief Performs a binary file copy with real-time progress tracking and
  *        cancellation support.
  *
- * Uses a 4 MiB buffered stream approach to transfer data between two paths.
- * Data is written to a temporary file (@p dst plus a ".part" suffix) and
- * renamed over @p dst only after every byte has been written and the stream
- * has been flushed and closed successfully. The destination is therefore
- * never touched until the copy is complete: if @p dst already exists it is
- * replaced atomically by the rename, and it is left intact on failure or
- * cancellation.
+ * Uses separate 4 MiB buffers for input and output streams, attaching each
+ * buffer to the underlying file buffer via `rdbuf()->pubsetbuf()` before
+ * opening the file to avoid unnecessary double buffering (subject to
+ * standard-library implementation behavior). Data is written to a temporary
+ * file (@p dst plus a ".part" suffix) and renamed over @p dst only after
+ * every byte has been written and the stream has been flushed and closed
+ * successfully. The destination is therefore never touched until the copy is
+ * complete: if @p dst already exists it is replaced atomically by the rename,
+ * and it is left intact on failure or cancellation.
  *
  * An atomic counter is updated incrementally so the UI can display progress.
  * The operation can be aborted at any time via GlobalState::g_operationCancelled.
@@ -544,8 +546,7 @@ static void reportErrorCpMvRm(OperationContext& ctx,
  * @param src            Source file path.
  * @param dst            Destination file path.
  * @param completedBytes Optional (may be null) atomic counter for tracking bytes
- *                       written (updated with
- *                       memory_order_relaxed).
+ *                       written (updated with memory_order_relaxed).
  * @param ec             Error code object to capture system failures.
  *                       Set to operation_canceled on user abort,
  *                       no_such_file_or_directory if the source is missing,
@@ -555,61 +556,71 @@ static void reportErrorCpMvRm(OperationContext& ctx,
  * @return True if the copy completed successfully, false if cancelled or failed.
  */
 static bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst,
-                              std::atomic<size_t>* completedBytes,
-                              std::error_code& ec) {
-    const size_t bufferSize = 4 * 1024 * 1024;
-    std::vector<char> buffer(bufferSize);
+                                     std::atomic<size_t>* completedBytes,
+                                     std::error_code& ec) {
+    constexpr size_t kBufferSize = 4 * 1024 * 1024;
+    std::vector<char> inBuf(kBufferSize);
+    std::vector<char> outBuf(kBufferSize);
 
-    if (GlobalState::g_operationCancelled.load()) return false;
+    if (GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
+        ec = std::make_error_code(std::errc::operation_canceled);
+        return false;
+    }
 
-    std::ifstream input(src, std::ios::binary);
+    std::ifstream input;
+    if (auto* sb = input.rdbuf()) {
+        sb->pubsetbuf(inBuf.data(), static_cast<std::streamsize>(inBuf.size()));
+    }
+    input.open(src, std::ios::binary);
     if (!input) {
         ec = std::make_error_code(std::errc::no_such_file_or_directory);
         return false;
     }
 
-    // Write to a temp file so a failed or cancelled copy never leaves a
-    // partial file at dst, and never touches an existing dst until success.
     fs::path tmp = dst;
     tmp += ".part";
 
-    std::ofstream output(tmp, std::ios::binary);
+    std::ofstream output;
+    if (auto* sb = output.rdbuf()) {
+        sb->pubsetbuf(outBuf.data(), static_cast<std::streamsize>(outBuf.size()));
+    }
+    output.open(tmp, std::ios::binary);
     if (!output) {
         ec = std::make_error_code(std::errc::permission_denied);
         return false;
     }
 
-    // Closes and removes the temp file; uses its own error_code so the
-    // caller's ec (operation_canceled / io_error) is never overwritten.
     auto discardTemp = [&]() {
         output.close();
         std::error_code rmEc;
         fs::remove(tmp, rmEc);
     };
 
-    while (!GlobalState::g_operationCancelled.load()) {
-        input.read(buffer.data(), buffer.size());
-        std::streamsize bytesRead = input.gcount();
+    while (!GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
+        input.read(inBuf.data(), static_cast<std::streamsize>(inBuf.size()));
+        const std::streamsize bytesRead = input.gcount();
         if (bytesRead == 0) break;
 
-        output.write(buffer.data(), bytesRead);
+        output.write(inBuf.data(), bytesRead);
         if (!output) {
             ec = std::make_error_code(std::errc::io_error);
             discardTemp();
             return false;
         }
 
-        if (completedBytes)
-            completedBytes->fetch_add(bytesRead, std::memory_order_relaxed);
+        if (completedBytes) {
+            completedBytes->fetch_add(static_cast<size_t>(bytesRead),
+                                      std::memory_order_relaxed);
+        }
     }
 
-    if (GlobalState::g_operationCancelled.load()) {
+    if (GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
         ec = std::make_error_code(std::errc::operation_canceled);
         discardTemp();
         return false;
     }
 
-    output.close();                       // flush; catches deferred write errors
+    output.close();
     if (!output) {
         ec = std::make_error_code(std::errc::io_error);
         discardTemp();
@@ -617,7 +628,7 @@ static bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst,
     }
 
     std::error_code renameEc;
-    fs::rename(tmp, dst, renameEc);       // atomically replaces dst if it exists
+    fs::rename(tmp, dst, renameEc);
     if (renameEc) {
         ec = renameEc;
         discardTemp();
