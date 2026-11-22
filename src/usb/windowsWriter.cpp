@@ -889,7 +889,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         steps::ntfsScopePath(isoType, ntfsMntBuf));
 
     const std::string fatMnt = fatMntBuf;
-    const std::string ntfsMnt = ntfsMntBuf;
+    const std::string ntfsMnt =
+        (isoType == IsoType::WindowsInstall) ? ntfsMntBuf : std::string{};
 
     if (!steps::mountTargets(
             isoType, fatPart, ntfsPart,
