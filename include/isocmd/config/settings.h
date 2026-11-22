@@ -7,12 +7,20 @@
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
+#include <format>
 #include <functional>
+#include <iostream>
 #include <map>
 #include <string>
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+// Project Headers
+#include "isocmd/ui/pausePrompts.h"
+#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/themes.h"
+#include "isocmd/util/sort.h"
 
 /**
  * DATA STRUCTURES
@@ -42,12 +50,17 @@ struct ConfigEntry {
 };
 
 /**
+ * @brief Result of a single @c editSetting screen.
+ */
+enum class EditNav { Advance, Updated, Next, Prev, GoTo, Abort, Handled };
+
+/**
  * @namespace ConfigCaches
  * @brief Global storage for configuration state and file system paths.
  */
 namespace ConfigCaches {
     inline std::map<std::string, std::string> g_configCache;
-	inline std::string g_cachedPath;
+    inline std::string g_cachedPath;
 }
 
 /**
@@ -128,16 +141,6 @@ inline ConfigEntry numericEntry(std::string key, std::string def, std::string co
     e.maxValue = max;
     return e;
 }
-
-// Forward declaration for the actual writing logic
-bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config);
-
-
-/**
- * INTERACTIVE EDITOR & APPLICATION LOGIC
- */
-void interactiveConfigEditor(const std::string& configPath);
-void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap);
 
 /**
  * CONFIGURATION DEFINITIONS
@@ -233,5 +236,92 @@ inline const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
                  "Max concurrent threads for list filtering within the global pool",
                  "", 1, 64),
 };
+
+/**
+ * CONFIGURATION EFFECTS & PERSISTENCE (settingsEffect.cpp)
+ */
+bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config);
+void printConfigError(const std::string& configPath);
+bool flushCache(const std::string& configPath);
+void applyConfigEffects(const std::map<std::string, std::string>& cache,
+                        const std::string& onlyKey = {});
+void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap);
+const ConfigEntry* findConfigEntry(const std::string& key);
+
+namespace settings_ops {
+
+    inline std::string resolveCurrent(const std::string& key, const ConfigEntry* entry) {
+        auto it = ConfigCaches::g_configCache.find(key);
+        if (it != ConfigCaches::g_configCache.end()) {
+            return it->second;
+        }
+        return entry->defaultValue;
+    }
+
+    template <typename ThemeType>
+    bool validate(const ConfigEntry* entry, const std::string& newVal,
+                  const ThemeType& tc, const std::function<void()>& drawEdit) {
+        if (!entry->validate || entry->validate(newVal)) {
+            return true;
+        }
+
+        auto render = [&] {
+            SyncOutput sync;
+            drawEdit();
+            std::cout << "\n" << tc.error << "Invalid value: "
+                      << tc.warning << "'" << newVal << "'" << tc.reset << "\n";
+        };
+        pressEnterToTryWithRepaint(render);
+        return false;
+    }
+
+    template <typename ThemeT>
+    bool commitSetting(const std::string& configPath, const std::string& key,
+                       const std::string& newVal, ThemeT& tc,
+                       std::string& current, const std::function<void()>& drawEditCallback) {
+        ConfigCaches::g_configCache[key] = newVal;
+        applyConfigEffects(ConfigCaches::g_configCache, key);
+
+        current = ConfigCaches::g_configCache.count(key) ? ConfigCaches::g_configCache[key] : "";
+        bool saved = flushCache(configPath);
+
+        tc = resolveOptionsTheme();
+
+        auto render = [&] {
+            SyncOutput sync;
+            drawEditCallback();
+            if (saved) {
+                std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n",
+                                         tc.path, tc.reset, configPath);
+            } else {
+                std::cout << tc.warning << "\nWarning: " << tc.error
+                          << "Setting update is memory-only (Disk write failed)."
+                          << tc.reset << "\n";
+            }
+        };
+        pressEnterToContinueWithRepaint(render);
+
+        if (key == "filenames_only") {
+            sortAfterFilenamesOnlyFlag();
+        }
+
+        return saved;
+    }
+
+} // namespace settings_ops
+
+/**
+ * INTERACTIVE EDITOR DECLARATIONS (settingsEditor.cpp & related UI/input helpers)
+ */
+void helpSettingsEditor();
+void syncCache(const std::string& filePath);
+int pgup_handler(int, int);
+int pgdn_handler(int, int);
+
+EditNav editSetting(const std::string& configPath, const std::string& key,
+                    const std::vector<std::string>& inputErrors,
+                    size_t pos, size_t total);
+
+void interactiveConfigEditor(const std::string& configPath);
 
 #endif // SETTINGS_H

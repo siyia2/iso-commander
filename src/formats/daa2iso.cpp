@@ -1143,7 +1143,6 @@ struct ChunkDecodeConfig {
     u32 bitsize;
     u32 bittype;
     int dolamebits;
-    int powerisuxn;
 };
 
 /**
@@ -1159,12 +1158,15 @@ struct ChunkDecodeConfig {
  * @param[in]     chunk_idx  Zero-based index of the chunk being decoded.
  * @param[in,out] bitpos     Current bit offset in @p daa_data for v1.10 streams;
  *                           incremented by @p cfg.bitsize + @p cfg.bittype.
+ * @param[in,out] powerisuxn Running bit-reader counter (lives in DaaContext).
+ *                           Must be passed by reference so increments persist
+ *                           across chunks when @p cfg.dolamebits is set.
  * @param[out]    out_len    Decoded chunk payload length in bytes.
  * @param[out]    out_ztype  Resolved chunk mode (@c -1 uncompressed, @c 0 LZMA,
  *                           @c 1 Inflate).
  */
 static void decodeChunkEntry(const void *daa_data, const ChunkDecodeConfig &cfg,
-                             u32 chunk_idx, int &bitpos,
+                             u32 chunk_idx, int &bitpos, int &powerisuxn,
                              u32 &out_len, int &out_ztype)
 {
     if (cfg.version == 0x100) {
@@ -1177,8 +1179,6 @@ static void decodeChunkEntry(const void *daa_data, const ChunkDecodeConfig &cfg,
     }
 
     const auto *raw_bits = static_cast<const u8 *>(daa_data);
-    int powerisuxn = cfg.powerisuxn;
-
     out_len = daa2iso_read_bits(cfg.bitsize, raw_bits, bitpos,
                                 cfg.dolamebits, 0, powerisuxn);
     bitpos += static_cast<int>(cfg.bitsize);
@@ -1332,7 +1332,6 @@ static bool processAllChunks(DaaContext &ctx, const daa_t &daa, void *daa_data,
         bitsize,
         bittype,
         dolamebits,
-        ctx.powerisuxn,
     };
 
     u64 tot = 0;
@@ -1347,7 +1346,7 @@ static bool processAllChunks(DaaContext &ctx, const daa_t &daa, void *daa_data,
 
         u32 len = 0;
         int ztype = 1;
-        decodeChunkEntry(daa_data, decode_cfg, i, bitpos, len, ztype);
+        decodeChunkEntry(daa_data, decode_cfg, i, bitpos, ctx.powerisuxn, len, ztype);
 
         if (len > 0x1000000) {
             throw DaaError("excessive chunk length");

@@ -533,7 +533,10 @@ namespace {
              * @brief Executes a direct index selection.
              *
              * Runs the converter against @c files, requests a redraw, prints
-             * verbose results when enabled, and restores keybindings.
+             * verbose results when enabled, restores keybindings, and finally
+             * discards the staged selection via @c clearPendingSelection()
+             * (a direct run invalidates anything staged earlier, even if the
+             * conversion failed or was cancelled).
              *
              * @param input Raw user input containing indices or ranges.
              */
@@ -618,7 +621,10 @@ namespace {
  *   numbers are what is on screen, "n^" numbers are indices into the
  *   unfiltered list. "P" resolves the paths to indices of the unfiltered list
  *   and converts against it; an active filter stays in place. The pending line
- *   shows the unfiltered-list numbers. Verbose output, when enabled, is printed after
+ *   shows the unfiltered-list numbers. Running a direct selection (an index
+ *   expression without ';') also discards any staged set, even if the
+ *   conversion failed or was cancelled; staged paths survive filter changes
+ *   but not a direct run. Verbose output, when enabled, is printed after
  *   each dispatch.
  * - **Structure:** the loop body is delegated to @c image_select::ImageSession,
  *   whose input handlers are tried in a fixed order (ESC, staged commands,

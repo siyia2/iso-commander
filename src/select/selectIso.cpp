@@ -701,6 +701,10 @@ namespace {
              *
              * Runs @c processOperation() with @c useSourceList=false so the
              * indices resolve against the current view (filtered or source).
+             * Afterwards the staged selection is discarded via
+             * @c clearPendingSelection(), whether or not the operation
+             * succeeded or was cancelled: a direct run invalidates anything
+             * staged earlier.
              *
              * @param input Raw user input containing indices or ranges.
              */
@@ -859,7 +863,10 @@ bool syncIsoPendingDisplay(std::vector<std::string>& pendingIndices,
  *   different filters (or none) is always executed correctly. The
  *   "Pending Indices" line shows the same source numbers as the "n:m^"
  *   column, merged into ranges. @c "clr" discards the staged set; @c "P" with
- *   nothing staged is a no-op.
+ *   nothing staged is a no-op. Running a direct selection (an index
+ *   expression without ';') also discards any staged set once the operation
+ *   returns, even if it failed or was cancelled. Staged paths survive list
+ *   reloads and filter changes, but not a direct run.
  * - **Manual refresh:** pressing @c "R" (when not unmount, the ISO list is
  *   non-empty, and no import is running) spawns a background database import.
  *   Stale completed threads in @p backgroundThreads are joined and erased
@@ -954,5 +961,5 @@ void selectForIsoFiles(const std::string& operation,
         if (action == LoopAction::Break)  break;
         if (action == LoopAction::Return) return;
     }
-    // Keybinding guard destructor automatically calls reset_custom_keybindings_forSelect().
+    // Keybinding guard destructor automatically calls reset_custom_keybindingsForSelect().
 }

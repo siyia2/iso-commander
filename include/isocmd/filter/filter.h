@@ -78,6 +78,21 @@ struct FilterContext {
 };
 
 /**
+ * @brief Translates a local filtered-list index into its global list index.
+ */
+size_t resolveGlobalIndex(size_t localIdx);
+
+/**
+ * @brief Extracts the basename-based unmount key from a mounted ISO path.
+ */
+std::string extractUnmountKey(const std::string& path);
+
+/**
+ * @brief Applies and commits a filter query to the supplied filter context.
+ */
+bool applyFilterCore(const std::string& searchString, FilterContext& ctx);
+
+/**
  * @brief Configuration for runSharedFilterFlow, describing one filter operation.
  */
 struct FilterCallConfig {

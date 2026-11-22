@@ -377,17 +377,17 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
 
     uint32_t userDataOffset = detectUserDataOffset(chd.get(), hunkSize, rawSectorSize, sectorsPerHunk);
 
-    const HunkConvertParams params{
-        HunkExtractConfig{hunkSize, rawSectorSize, sectorsPerHunk, userDataOffset},
-        header->totalhunks,
-        totalUserData,
-    };
-
     const uint64_t ONE_GB = 1ULL << 30;
     if (totalUserData <= ONE_GB) {
         return convertSingleThreaded(chd.get(), isoPath, hunkSize, rawSectorSize,
                                      sectorsPerHunk, userDataOffset, header->totalhunks, completedBytes);
     }
+
+    const HunkConvertParams params{
+        HunkExtractConfig{hunkSize, rawSectorSize, sectorsPerHunk, userDataOffset},
+        header->totalhunks,
+        totalUserData,
+    };
 
     return convertMultiThreaded(chdPath, isoPath, params, completedBytes);
 }
