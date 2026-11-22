@@ -895,7 +895,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
                 fileType,
                 list,
                 state,
-                repaintPrompt))
+                repaintCallerPrompt))
             continue;
 
         std::cout << " \n\033[3H\033[J\n";
