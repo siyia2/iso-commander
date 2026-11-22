@@ -731,8 +731,56 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
 }
 
 /**
- * @brief Enters the interactive settings editor loop until EOF or Escape.
- * @param configPath Path to the configuration file to load and edit.
+ * @brief Runs the interactive configuration editor.
+ *
+ * Displays settings grouped by section and lets the user edit entries by
+ * index or restore all defaults.
+ *
+ * - **Input:** GNU Readline accepts individual selections and tokenized
+ *   multi-selections; per-setting validation is handled by @c editSetting.
+ * - **Multi-selection navigation:** when several settings are selected, they
+ *   are edited one screen at a time. A blank Enter skips the current setting
+ *   and a valid value (even one equal to the current value) is saved; either
+ *   way the setting is removed from the loop. The loop ends on Esc / Ctrl+D
+ *   or once every selected setting has been updated or skipped. PgDn / PgUp
+ *   move to the next / previous selected setting without wrapping: at either
+ *   end the key is ignored and the matching footer hint is hidden.
+ * - **Handled settings leave the loop:** once a setting has been updated
+ *   (@c EditNav::Updated) or skipped (@c EditNav::Advance) it is removed from
+ *   the selection, so the "(n/total)" indicator, PgUp / PgDn navigation and
+ *   "g#" numbering only cover the settings that have not been handled yet.
+ *   After either result the loop continues with the setting that followed
+ *   the removed one (wrapping to the first remaining one) and ends only when
+ *   no setting is left. Settings reached only by navigation (PgUp / PgDn /
+ *   g#) stay in the loop.
+ * - **Input errors:** token errors from a multi-selection are passed to the
+ *   first @c editSetting call and printed above its "Edit Setting" header.
+ *   If the input produced only errors and no valid selection, the errors are
+ *   listed followed by "No valid input provided", and the editor returns to
+ *   the main prompt.
+ * - **Persistence:** edits update the in-memory cache and runtime state, then
+ *   attempt to write the configuration file. Resetting all settings follows
+ *   the same sequence after confirmation.
+ * - **Terminal cleanup:** a local RAII guard restores the settings-editor
+ *   keybindings on every exit path.
+ * - **Signals:** SIGINT is set to @c SIG_IGN for the duration of the editor.
+ *   The previous disposition is @b not restored on exit; this matches the
+ *   program-wide policy of ignoring Ctrl+C once the interactive UI is up.
+ * - **Resize handling:** every screen shares @c view::SettingsScreen::paintBody,
+ *   so a resize repaints the full settings view rather than just the last
+ *   message. @c view::SettingsScreen::draw is the repaint callback for both the
+ *   main prompt and the reset confirmation, and @c view::paintResetStatus serves
+ *   the post-reset status screen while @c view::reportNoValidInput serves the
+ *   "No valid input provided" screen. Once a reset is requested, the screen
+ *   is repainted without the main prompt line, and neither that line nor the
+ *   confirmation line is re-echoed afterwards.
+ * - **Clear handling:** <kbd>Ctrl+L</kbd> is bound only on the per-setting
+ *   value prompt in @c editSetting, where it dismisses any completion list and
+ *   repaints the edit screen via @c term::readlineWithRepaint. The binding is
+ *   released when @c editSetting returns, so it is not active on the main
+ *   settings prompt or the reset confirmation.
+ *
+ * @param configPath Configuration file used to load and save settings.
  */
 void interactiveConfigEditor(const std::string& configPath) {
     PendingReadlineTextClearGuard pendingTextGuard;
