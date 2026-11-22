@@ -5,7 +5,9 @@
 
 // C++ Standard Library Headers
 #include <cstdint>
+#include <functional>
 #include <string>
+#include <vector>
 
 // Third-Party Library Headers
 #include <readline/readline.h>
