@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
@@ -331,7 +330,7 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
     return true;
 }
 
-// Implemented in cli_convert_write.cpp
+// Implemented in cmdAutomationCovertWrite.cpp
 int handleConvert(const ParsedArgs& args);
 int handleWriteUsb(const ParsedArgs& args);
 
