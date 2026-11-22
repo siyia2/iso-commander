@@ -98,6 +98,8 @@ struct DestinationCheckParams {
     size_t fileSize = 0;                           ///< Source file size in bytes
     size_t destDirCount = 0;                       ///< Number of destination directories targeted
     MultiDestState& state;                         ///< Mutable tracking state shared across a file's destinations
+    std::vector<std::string>* successfulDestPaths = nullptr; ///< Optional: collects destination paths of successful operations
+    std::mutex* destPathsMutex = nullptr;          ///< Optional: protects @c successfulDestPaths
 };
 
 
