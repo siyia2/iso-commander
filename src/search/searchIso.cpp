@@ -203,7 +203,7 @@ static void executeParallelTraversal(
  */
 static std::string constructDatabasePrompt(const VerboseAndDatabaseTheme& dt) {
     return std::format(
-        "\001{0}\002FolderPaths\001{1}\002 ↵ to scan for {0}\002.iso"
+        "\001{0}\002FolderPaths\001{1}\002 ↵ to search for {0}\002.iso"
         "\001{1}\002 entries and import into \001{0}\002local"
         "\001{1}\002 DB, ? for help:\n\001{2}\002",
         dt.green, // {0}
@@ -469,7 +469,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
                     std::lock_guard<std::mutex> lock(traverseErrorsMutex);
                     uniqueErrorMessages.clear();
 
-                    std::string msg = "\n" + dt.yellow + "ISO scan interrupted by user" + dt.reset;
+                    std::string msg = "\n" + dt.yellow + "ISO search interrupted by user" + dt.reset;
                     uniqueErrorMessages.insert(msg);
                 }
                 break;

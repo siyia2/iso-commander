@@ -321,7 +321,7 @@ static void recordCancellationNotice(const std::string& mode,
     if (!cancelledMessageAdded.exchange(true)) {
         processedErrorsFind.clear();
         processedErrorsFind.insert(dt.yellow + getModeLabel(mode) +
-                                   " scan interrupted by user\n\n" + dt.reset);
+                                   " search interrupted by user\n\n" + dt.reset);
     }
 }
 
@@ -715,7 +715,7 @@ static const std::unordered_map<std::string, FileTypeConfig>& getFileTypeMap() {
  */
 static std::string buildSearchPrompt(const VerboseAndDatabaseTheme& dt, const std::string& fileExtension) {
     return std::format(
-        "\001{0}\002FolderPaths\001{1}\002 ↵ to scan for \001{2}\002{3}"
+        "\001{0}\002FolderPaths\001{1}\002 ↵ to search for \001{2}\002{3}"
         "\001{1}\002 entries and cache in \001{4}\002RAM\001{1}"
         "\002, ? for help:\n\001{5}\002",
         dt.green,      // {0}
