@@ -554,6 +554,14 @@ void processInputForCpMvRm(const std::string& input,
     };
     const std::string processedUserDestDir = userDestDirCpMv(promptCtx);
 
+    // CpMvPromptContext holds copies of these in/out values; propagate the
+    // results back to this function's variables, as the former by-reference
+    // userDestDirCpMv() signature did.
+    umountMvRmBreak   = promptCtx.umountMvRmBreak;
+    filterHistory     = promptCtx.filterHistory;
+    abortDel          = promptCtx.abortDel;
+    overwriteExisting = promptCtx.overwriteExisting;
+
     GlobalState::g_operationCancelled.store(false);
     verboseSets.uniqueErrorTokenMessages.clear();
 

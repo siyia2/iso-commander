@@ -987,6 +987,10 @@ namespace {
      *               - @c state.atLeastOneCopySucceeded (set true on successful copy
      *                 in multi-destination move mode)
      *
+     *               On success, and when @c successfulDestPaths and
+     *               @c destPathsMutex are non-null, the destination path is
+     *               appended under the mutex.
+     *
      * @note For multi-destination moves, @c state.atLeastOneCopySucceeded is
      *       what drives the caller's source-removal logic.
      */
@@ -999,14 +1003,22 @@ namespace {
 
         const TransferPaths& p = params.paths;
 
+        bool success = false;
+
         if (params.op == TransferOp::Move && params.destDirCount > 1) {
-            if (performBufferedCopyOperation(ctx, p, "moving")) {
+            success = performBufferedCopyOperation(ctx, p, "moving");
+            if (success) {
                 params.state.atLeastOneCopySucceeded = true;
             }
         } else if (params.op == TransferOp::Move) {
-            performMoveOperation(ctx, p, params.fileSize);
+            success = performMoveOperation(ctx, p, params.fileSize);
         } else {
-            performBufferedCopyOperation(ctx, p, "copying");
+            success = performBufferedCopyOperation(ctx, p, "copying");
+        }
+
+        if (success && params.successfulDestPaths && params.destPathsMutex) {
+            std::lock_guard<std::mutex> lock(*params.destPathsMutex);
+            params.successfulDestPaths->push_back(p.destPath.string());
         }
     }
 
@@ -1089,6 +1101,8 @@ namespace {
  *                  - `completedBytes`  atomic counter for bytes processed
  *                  - `completedTasks`  atomic counter for successful operations
  *                  - `failedTasks`     atomic counter for failed operations
+ *                  - `successfulDestPaths` / `destPathsMutex` optional collector
+ *                    of successful destination paths and its mutex
  *
  * @note For multi-destination moves, the source file is removed once at least
  *       one copy succeeds — not necessarily all copies.
@@ -1171,6 +1185,8 @@ void handleIsoFileOperation(const FileOperationOptions& options,
                 .fileSize          = fileSize,
                 .destDirCount      = destDirs.size(),
                 .state             = state,
+                .successfulDestPaths = &progress.successfulDestPaths,
+                .destPathsMutex      = &progress.destPathsMutex,
             };
             processCopyMoveDestination(ctx, destParams);
         }
