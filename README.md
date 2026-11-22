@@ -79,3 +79,30 @@ The following conversion tools were ported — special thanks to their original 
 - **nrg2iso** — Grégory Kokanosky *(GPL-3.0-or-later, as of 2021)*
 - **ccd2iso** — Danny Kurniawan & Kerry Harris *(GPL-2.0-or-later)*
 - **daa2iso** — Luigi Auriemma *(GPL-2.0-or-later)*
+
+## Project layout
+
+```
+include/isocmd/<module>/   headers (include as "isocmd/<module>/<header>.h")
+src/<module>/              implementations, mirroring include/
+deps/                      vendored libchdr
+man/  preview/             manpage and assets
+```
+
+| Module     | Responsibility                                              |
+|------------|-------------------------------------------------------------|
+| `app`      | entry point (`main`) and main menu                          |
+| `cli`      | non-interactive command automation (mount/umount/convert/write) |
+| `config`   | settings storage and the interactive settings editor        |
+| `core`     | global state, mutexes, caches, thread pool, concurrency caps |
+| `database` | ISO database load/save                                      |
+| `formats`  | image converters (CCD/MDF/NRG, CHD, DAA → ISO)              |
+| `input`    | terminal/termios, signals, readline, history, tokenizing    |
+| `ops`      | mount, umount, cp/mv/rm, convert, size/speed helpers        |
+| `search`   | search and live filtering                                   |
+| `select`   | image selection UI                                          |
+| `ui`       | rendering, pagination, lists, progress bars, themes, help   |
+| `usb`      | write-to-USB (raw and Windows writer)                       |
+| `util`     | string helpers, natural sort, ownership helpers             |
+
+Build variants: `make`, `make STATIC=1`, `make SANITIZE=1` (ASan), `make SANITIZE=2` (TSan), `make V=1` for verbose output.

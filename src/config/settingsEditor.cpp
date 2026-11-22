@@ -1,0 +1,1113 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// C++ Standard Library Headers
+#include <algorithm>
+#include <cctype>
+#include <csignal>
+#include <cstddef>
+#include <cstdlib>
+#include <format>
+#include <functional>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <unordered_set>
+#include <vector>
+
+// Third-Party Library Headers
+#include <readline/readline.h>
+
+// Project Headers
+#include "isocmd/ui/display.h"
+#include "isocmd/input/inputHandling.h"
+#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/pausePrompts.h"
+#include "isocmd/input/readline.h"
+#include "isocmd/util/sort.h"
+#include "isocmd/core/state.h"
+#include "isocmd/ui/themes.h"
+#include "isocmd/config/settings.h"
+#include "isocmd/ui/verbose.h"
+#include "isocmd/input/tokenize.h"
+
+// ---------------------------------------------------------------------------
+// Global scope: shared types and external declarations
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Result of a single @c editSetting screen.
+ *
+ * - @c Advance: the edit was skipped with a blank Enter (or the setting has
+ *               no matching entry, so there is nothing to edit). The setting
+ *               is removed from the selection (and therefore from the
+ *               PgUp / PgDn / g# loop), exactly like @c Updated.
+ * - @c Updated: a value was accepted and saved (re-entering the current value
+ *               counts too); the setting is removed
+ *               from the selection (and therefore from the PgUp / PgDn / g#
+ *               loop), then the loop moves on to the setting that followed it
+ *               (wrapping to the first pending one) and finishes only when
+ *               nothing is left.
+ * - @c Next:    PgDn was pressed; go to the next selected setting.
+ * - @c Prev:    PgUp was pressed; go to the previous selected setting.
+ * - @c GoTo:    "g#" was entered; jump to selected setting number # (see
+ *               @c nav::gotoPos). A target equal to the current position is
+ *               treated like an invalid target and simply redraws.
+ * - @c Handled: PgUp or PgDn was pressed at a boundary (first or last page);
+ *               the navigation input is consumed cleanly without changing position
+ *               or triggering an invalid input warning.
+ * - @c Abort:   Esc or Ctrl+D; leave the whole multi-edit sequence.
+ */
+enum class EditNav { Advance, Updated, Next, Prev, GoTo, Abort, Handled };
+
+void helpSettingsEditor();
+void syncCache(const std::string& filePath);
+
+// Existing handlers from readline.cpp: they replace the line with "PgUp" /
+// "PgDn", stash the typed text, and submit via rl_newline (which sets
+// rl_done). The stash is cleared by editSetting() after either key is
+// observed, so it cannot leak to the next screen. (Redeclared here in case
+// readline.h doesn't expose them.)
+int pgup_handler(int, int);
+int pgdn_handler(int, int);
+
+EditNav editSetting(const std::string& configPath, const std::string& key,
+                    const std::vector<std::string>& inputErrors,
+                    size_t pos, size_t total);
+
+// ---------------------------------------------------------------------------
+// Global scope: configuration helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Prints the standard "configuration file inaccessible" error.
+ *
+ * @param configPath Path of the configuration file to name in the message.
+ */
+void printConfigError(const std::string& configPath) {
+    auto [label, accent, warning, error, reset, path, highlight, data, str] = resolveOptionsTheme();
+    std::cerr << "\n" << error
+              << "Error: Unable to access configuration file: "
+              << warning << "'" << configPath << "'"
+              << error << ".\033[J\n" << reset;
+}
+
+/**
+ * @brief Commits the in-memory configuration cache to disk.
+ *
+ * @param configPath Path of the configuration file to write.
+ * @return true on success; false on write failure (after printing the error).
+ */
+bool flushCache(const std::string& configPath) {
+    if (writeConfig(configPath, ConfigCaches::g_configCache)) return true;
+    printConfigError(configPath);
+    return false;
+}
+
+namespace {
+
+    /**
+     * @brief Maps a configuration key to a boolean runtime toggle and its "enabled" value.
+     */
+    struct BoolToggleRule {
+        const char* key;
+        bool& target;
+        const char* enabledValue;
+    };
+
+    /**
+     * @brief Parses an unsigned integer from a string, leaving the target unchanged on failure.
+     *
+     * @param rawValue String representation to parse.
+     * @param target   Destination unsigned value updated only when parsing succeeds.
+     */
+    void tryParseUlong(const std::string& rawValue, unsigned long& target) {
+        try {
+            target = std::stoul(rawValue);
+        } catch (...) {
+        }
+    }
+
+    /**
+     * @brief Applies matching boolean toggle entries from the configuration cache.
+     *
+     * @param cache    Configuration key-value pairs.
+     * @param onlyKey  If non-empty, restricts updates to this single key.
+     * @param rules    Table of boolean toggle bindings to evaluate.
+     * @param count    Number of entries in @p rules.
+     */
+    void applyBoolToggles(const std::map<std::string, std::string>& cache,
+                                 const std::string& onlyKey,
+                                 const BoolToggleRule* rules,
+                                 std::size_t count) {
+        for (std::size_t i = 0; i < count; ++i) {
+            const auto& rule = rules[i];
+            if (!onlyKey.empty() && onlyKey != rule.key) {
+                continue;
+            }
+            const auto it = cache.find(rule.key);
+            if (it != cache.end()) {
+                rule.target = (it->second == rule.enabledValue);
+            }
+        }
+    }
+
+    /**
+     * @brief Applies appearance, palette, and numeric limit settings from the cache.
+     *
+     * @param cache   Configuration key-value pairs.
+     * @param onlyKey If non-empty, restricts updates to this single key.
+     */
+    void applyAppearanceAndLimits(const std::map<std::string, std::string>& cache,
+                                         const std::string& onlyKey) {
+        auto matches = [&](const char* key) -> const std::string* {
+            if (!onlyKey.empty() && onlyKey != key) {
+                return nullptr;
+            }
+            const auto it = cache.find(key);
+            return (it != cache.end()) ? &it->second : nullptr;
+        };
+
+        if (const std::string* val = matches("skin")) {
+            skin = *val;
+            color = getskin();
+        }
+        if (const std::string* val = matches("theme")) {
+            globalTheme = *val;
+        }
+        if (const std::string* val = matches("base")) {
+            UI::Palette::defaultColor = *val;
+            UI::Palette::updateDefaultColors();
+        }
+        if (const std::string* val = matches("pagination")) {
+            tryParseUlong(*val, GlobalState::ITEMS_PER_PAGE);
+        }
+        if (const std::string* val = matches("live_filter_limit")) {
+            tryParseUlong(*val, GlobalState::LIVE_FILTER_LIMIT);
+        }
+    }
+
+} // namespace
+
+/**
+ * @brief Applies cached configuration values to the runtime state.
+ *
+ * Updates thread and history limits, list-display options, the selected skin
+ * and theme, the default input color, pagination, and the live-filter limit.
+ * Changing the skin also refreshes the derived color palette. Numeric values
+ * that cannot be parsed leave the corresponding runtime setting unchanged.
+ *
+ * @param cache   Configuration key-value pairs.
+ * @param onlyKey If non-empty, apply only the effect of this key; if empty,
+ *                apply everything (startup, reset-all).
+ */
+void applyConfigEffects(const std::map<std::string, std::string>& cache,
+                        const std::string& onlyKey = {}) {
+    static const std::unordered_set<std::string> nonThreadKeys = {
+        "mount_list", "umount_list", "cp_mv_rm_list", "write2usb_list",
+        "convert2iso_lists", "filenames_only", "skin", "theme", "base",
+        "pagination", "live_filter_limit"
+    };
+    if (onlyKey.empty() || !nonThreadKeys.count(onlyKey)) {
+        applyThreadCapsAndHistoryLimits(cache);
+    }
+
+    const BoolToggleRule toggleRules[] = {
+        { "mount_list",        displayConfig::toggleFullListMount,      "full" },
+        { "umount_list",       displayConfig::toggleFullListUmount,     "full" },
+        { "cp_mv_rm_list",     displayConfig::toggleFullListCpMvRm,     "full" },
+        { "write2usb_list",    displayConfig::toggleFullListWrite2usb,  "full" },
+        { "convert2iso_lists", displayConfig::toggleFullListConvert2iso,"full" },
+        { "filenames_only",    displayConfig::toggleNamesOnly,          "on"   },
+    };
+    applyBoolToggles(cache, onlyKey, toggleRules, std::size(toggleRules));
+    applyAppearanceAndLimits(cache, onlyKey);
+}
+
+/**
+ * @brief Finds and returns the configuration entry metadata matching the specified key.
+ *
+ * Iterates through the global ordered configuration defaults list to find a
+ * matching configuration key.
+ *
+ * @param key The configuration key string to search for (e.g., "theme", "base").
+ * @return const ConfigEntry* Pointer to the matching configuration entry, or @c nullptr if not found.
+ */
+const ConfigEntry* findConfigEntry(const std::string& key) {
+    for (const auto& e : CONFIG_ORDERED_DEFAULTS) {
+        if (e.key == key) return &e;
+    }
+    return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// Translation-unit private implementation
+// ---------------------------------------------------------------------------
+
+namespace {
+
+    // ===========================================================================
+    // nav:: multi-selection navigation (PgUp / PgDn / g#)
+    // ===========================================================================
+    namespace nav {
+
+        // Target position (1-based, within the current selection) for EditNav::GoTo.
+        size_t gotoPos = 0;
+
+        /**
+         * @brief Evaluates multi-selection navigation input tokens such as Page Up, Page Down, or GoTo commands.
+         *
+         * Parses readline inputs to check if the user triggered batch navigation. Clears pending text buffers
+         * when navigation keys are pressed and validates target bounds for explicit numeric `g#` jumps.
+         *
+         * - **PgUp / PgDn:** Returns @c EditNav::Next, @c EditNav::Prev, or @c EditNav::Handled if at a boundary or single-page mode.
+         * - **g# syntax:** Jumps to the specified #-th configuration setting index in the batch, or returns @c EditNav::Handled if out of bounds or pagination is disabled.
+         *
+         * @param s      String view of the raw user input token.
+         * @param pos    Current 1-based setting index in the selection.
+         * @param total  Total number of settings in the selection batch.
+         * @param newVal Reference to the working (trimmed) input value string.
+         * @return @c std::optional<EditNav> Contains the resulting navigation state if matched/consumed, or @c std::nullopt to treat input as a regular config value.
+         */
+        std::optional<EditNav> handleInput(const std::string_view& s, size_t pos, size_t total,
+                                           const std::string& newVal) {
+            if (s == "PgUp" || s == "PgDn") {
+                RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
+
+                if (s == "PgDn") {
+                    if (pos < total) return EditNav::Next;
+                    return EditNav::Handled; // At last page or single page: consume input
+                }
+                if (s == "PgUp") {
+                    if (pos > 1) return EditNav::Prev;
+                    return EditNav::Handled; // At first page or single page: consume input
+                }
+            }
+
+            // Check g# regardless of whether total > 1 so single-page mode also consumes it
+            if (newVal.size() >= 2 && newVal[0] == 'g' &&
+                std::isdigit(static_cast<unsigned char>(newVal[1]))) {
+                RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
+                try {
+                    size_t target = std::stoul(newVal.substr(1));
+                    if (target >= 1 && target <= total && target != pos) {
+                        gotoPos = target;
+                        return EditNav::GoTo;
+                    }
+                } catch (...) {}
+                return EditNav::Handled; // Invalid target or pagination disabled: consume input
+            }
+            return std::nullopt;
+        }
+
+        // Skipped and updated settings both leave the PgUp/PgDn/g# loop. The next
+        // setting slides into index i, so don't increment; past the end, wrap to the
+        // first pending setting. Returns true once nothing is left to edit.
+        bool removeHandled(std::vector<int>& ordered, size_t& i) {
+            ordered.erase(ordered.begin() + static_cast<std::ptrdiff_t>(i));
+            if (ordered.empty()) return true;
+            if (i >= ordered.size()) i = 0;
+            return false;
+        }
+
+        // Applies one navigation result to the selection. Returns true when the loop
+        // should end.
+        bool advance(EditNav r, std::vector<int>& ordered, size_t& i) {
+            const size_t n = ordered.size();
+            switch (r) {
+                case EditNav::Advance:   // skipped: dropped just like an update
+                case EditNav::Updated:
+                    return removeHandled(ordered, i);
+                case EditNav::Next:
+                    if (i + 1 < n) ++i;
+                    return false;
+                case EditNav::Prev:
+                    if (i > 0) --i;
+                    return false;
+                case EditNav::GoTo:
+                    if (gotoPos >= 1 && gotoPos <= n) i = gotoPos - 1;
+                    return false;
+                case EditNav::Abort:
+                    return true;
+                case EditNav::Handled:
+                    // Do nothing, boundary reached but input is consumed successfully
+                    break;
+            }
+            return false;
+        }
+
+    }  // namespace nav
+
+    // ===========================================================================
+    // term:: readline plumbing (repaint wrapper, key bindings, RAII guards)
+    // ===========================================================================
+    namespace term {
+
+        /**
+         * @brief Tab handler that does nothing.
+         *
+         * Bound to Tab on numeric settings so completion is fully disabled there.
+         * Merely clearing @c rl_attempted_completion_function would not be enough:
+         * readline would fall back to its default filename completion.
+         */
+        int noopTabHandler(int, int) { return 0; }
+
+        /**
+         * @brief Like @c readlineWithResize, but also routes <kbd>Ctrl+L</kbd> clears
+         *        through @p repaint.
+         *
+         * Installs @p repaint as the active body-repaint hook
+         * (@c SettingsEditorRepaint::set) for the duration of the
+         * @c readlineWithResize call and clears it immediately after, so
+         * @c clear_screen_and_buffer (triggered by <kbd>Ctrl+L</kbd>) repaints the
+         * full setting screen — header, current value, description, valid values,
+         * navigation footer — instead of leaving only the input prompt on screen.
+         * @p repaint is also passed to @c readlineWithResize unchanged so
+         * terminal-resize repaints keep working.
+         *
+         * @param prompt  The readline prompt string.
+         * @param repaint Full-screen body repaint callback for this prompt.
+         * @return The line read by readline, or an empty @c RlLine on EOF / abort.
+         */
+        RlLine readlineWithRepaint(const std::string& prompt,
+                                   const std::function<void()>& repaint) {
+            SettingsEditorRepaint::set(repaint);
+            RlLine line = readlineWithResize(prompt, repaint);
+            SettingsEditorRepaint::set(nullptr);
+            return line;
+        }
+
+        /**
+         * @brief Configures readline keybindings and global completion hooks for the settings editor.
+         *
+         * @param total Number of settings in the batch (enables page up/down bindings if greater than one).
+         * @param isNumeric Flag indicating if the entry is numeric (disables tab completion).
+         * @param validValues Non-const vector of valid choices for completion display.
+         */
+        void setupSettingReadline(size_t total, bool isNumeric, std::vector<std::string>& validValues) {
+            reset_custom_keybindingsForSettingsEditor();
+
+            g_activeSettingValues = validValues.empty() ? nullptr : &validValues;
+            rl_attempted_completion_function = isNumeric ? nullptr : setting_value_completion_entry;
+            rl_completion_display_matches_hook = customListingsFunction;
+            rl_bind_key('\t', isNumeric ? noopTabHandler : my_rl_complete);
+            rl_bind_key('\f', clear_list_and_screen);
+
+            rl_bind_keyseq("\\e", exit_handler);
+            if (total > 1) {
+                rl_bind_keyseq("\\e[5~", pgup_handler);
+                rl_bind_keyseq("\\e[6~", pgdn_handler);
+            }
+        }
+
+        /**
+         * @brief RAII helper to ensure safe restoration of Readline navigation and escape key bindings.
+         *
+         * Restores PgUp, PgDn, and Esc (`\e`) keybindings back to their default system handlers
+         * upon exiting any scope where custom settings editor bindings were active, preventing
+         * keybinding leaks into other prompts.
+         */
+        struct NavBindGuard {
+            bool on;
+            ~NavBindGuard() {
+                if (on) {
+                    rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+                    rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+                }
+                rl_bind_keyseq("\\e", exit_handler);
+            }
+        };
+
+        /**
+         * @brief RAII helper to clean up tab completion hooks and active settings on all exit paths.
+         *
+         * Resets global pointers like @c g_activeSettingValues, uninstalls custom completion functions,
+         * restores standard listing hooks, and binds Tab and Ctrl+L back to no-op handlers so the value
+         * prompt's bindings (filename completion fallback, @c clear_list_and_screen) cannot leak outside
+         * the settings editor.
+         */
+        struct CompletionGuard {
+            ~CompletionGuard() {
+                g_activeSettingValues = nullptr;
+                rl_attempted_completion_function = nullptr;
+                rl_completion_display_matches_hook = customListingsFunction;
+                rl_bind_key('\t', noopTabHandler);
+                rl_bind_key('\f', prevent_readline_keybindings);
+            }
+        };
+
+        /**
+         * @brief RAII helper to toggle global completion mode for the duration of the edit call.
+         *
+         * Temporarily clears @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode to ensure search-prompt
+         * completion stash-and-exit semantics are never inherited by the settings value prompt. Restores
+         * the original state automatically upon destruction.
+         */
+        struct CompleteModeGuard {
+            int saved = RetainAndRestoreReadlineBuffer::g_rl_complete_mode;
+            ~CompleteModeGuard() {
+                RetainAndRestoreReadlineBuffer::g_rl_complete_mode = saved;
+            }
+        };
+
+    }  // namespace term
+
+    // ===========================================================================
+    // view:: screen painting and prompt construction
+    // ===========================================================================
+    namespace view {
+
+        using ThemeColors = decltype(resolveOptionsTheme());
+
+        // Single definition of the settings screen body (header + table + actions
+        // line). Shared by the normal draw, the reset confirmation and the post-reset
+        // repaint, so a resize reconstructs the whole screen.
+        struct SettingsScreen {
+            const std::string& configPath;
+            ThemeColors tc;  // refreshed after a reset, so it lives with the screen
+
+            static std::string currentValue(const auto& entry) {
+                return ConfigCaches::g_configCache.count(entry.key)
+                           ? ConfigCaches::g_configCache[entry.key]
+                           : entry.defaultValue;
+            }
+
+            std::string_view rowColor(int index) const {
+                if (index == 1) return UI::Palette::BoldReset;
+                if (index == 2) return color;
+                return tc.data;
+            }
+
+            void paintRow(int index, const auto& entry) const {
+                if (!entry.section.empty()) {
+                    std::cout << tc.accent << "\n--- " << entry.section << " ---\n" << tc.reset;
+                }
+                std::string val = currentValue(entry);
+                std::cout << tc.warning << std::right << std::setw(2) << index << ". " << tc.reset
+                          << tc.label << std::left << std::setw(32) << entry.key << tc.reset
+                          << "= " << tc.reset
+                          << rowColor(index) << val << tc.reset << "\n";
+            }
+
+            void paintBody() const {
+                std::cout << "\n" << tc.accent << "=== Settings Editor ===\n\n" << tc.reset;
+                std::cout << tc.warning << "Config File: " << tc.reset << configPath << "\n";
+
+                int index = 1;
+                for (const auto& entry : CONFIG_ORDERED_DEFAULTS) {
+                    paintRow(index++, entry);
+                }
+                std::cout << "\n" << tc.accent << "Actions: " << tc.warning << "1-" << (index - 1)
+                          << tc.reset << " ↵ Edit | " << tc.warning << "r" << tc.reset << " Reset\n";
+            }
+
+            void draw() const {
+                SyncOutput sync;
+                clearScrollBuffer();
+                paintBody();
+            }
+        };
+
+        std::string buildMainPrompt(const ThemeColors& tc) {
+            return std::format(
+                "\n{}IDX\001{}\002 ↵ for {}editor\001{}\002, ? for help: \001{}\002",
+                UI::Palette::RL_idxGreen,
+                tc.path,
+                UI::Palette::RL_Yellow,
+                tc.path,
+                tc.reset
+            );
+        }
+
+        template <typename ThemeT>
+        std::string buildValuePrompt(const ThemeT& tc) {
+            return std::format(
+                "\001{}\002Value \001{}\002↵ | ↵ \001{}\002Skip\001{}\002: \001{}\002",
+                UI::Palette::idxGreen, tc.path, UI::Palette::Yellow, tc.path, tc.reset
+            );
+        }
+
+        void paintResetStatus(const SettingsScreen& screen, bool saved) {
+            const auto& tc = screen.tc;
+            SyncOutput sync;
+            clearScrollBuffer();
+            screen.paintBody();
+            std::cout << color << "\nReset all settings to default? (y/n): \n" << UI::Palette::BoldReset;
+
+            std::cout << "\n" << tc.label << "[+] Defaults applied\n" << tc.reset;
+            if (saved) {
+                std::cout << tc.highlight << "[✔] Saved to disk\n" << tc.reset;
+            } else {
+                std::cout << tc.error << "[✗] Save failed\n" << tc.reset;
+            }
+        }
+
+        void reportNoValidInput(const ThemeColors& tc) {
+            auto render = [&] {
+                SyncOutput sync;
+                clearScrollBuffer();
+                std::cout << "\n" << tc.error << "No valid input provided"
+                          << tc.reset << "\n";
+            };
+            pressEnterToContinueWithRepaint(render);
+        }
+
+        /**
+        * @brief Prints and clears any queued validation or token error messages.
+        *
+        * When @p pendingErrors is non-empty, writes a leading newline, prints each
+        * error message on its own line, and clears @p pendingErrors.
+        *
+        * @param pendingErrors Queue of error strings to display and clear.
+        */
+        void flushPendingErrors(std::vector<std::string>& pendingErrors) {
+            if (pendingErrors.empty()) {
+                return;
+            }
+
+            std::cout << "\n";
+            for (const auto& err : pendingErrors) {
+                std::cout << err << "\n";
+            }
+            pendingErrors.clear();
+        }
+
+        /**
+        * @brief Formats a setting comment block for aligned terminal display.
+        *
+        * Replaces the first `"\n# "` sequence in @p comment with a 13-space indented
+        * newline so continuation comment lines align with the description label.
+        *
+        * @param comment Raw comment string from the configuration entry.
+        * @return Formatted comment string ready for output.
+        */
+        std::string formatDescriptionComment(const std::string& comment) {
+            std::string displayComment = comment;
+            const size_t cpos = displayComment.find("\n# ");
+            if (cpos != std::string::npos) {
+                displayComment.replace(cpos, 3, "\n             ");
+            }
+            return displayComment;
+        }
+
+        /**
+        * @brief Renders the "Valid values" line for enumerated, numeric, or free-form settings.
+        *
+        * Prints enumerated @p validValues (wrapping after 7 items when @p key is `"theme"`),
+        * otherwise prints the numeric min-max range when @p isNumeric is true, or falls
+        * back to referencing the description above.
+        *
+        * @tparam ThemeT Type representing the active UI theme color configuration.
+        * @param key Configuration key name used to check special line-wrapping rules.
+        * @param tc Theme color reference used for labels and resets.
+        * @param entry Pointer to the metadata @c ConfigEntry holding min and max bounds.
+        * @param validValues Allowed string values for enumerated settings.
+        * @param isNumeric True if the setting accepts numeric values within min/max bounds.
+        */
+        template <typename ThemeT>
+        void drawValidValuesSection(const std::string& key, const ThemeT& tc,
+                                           const ConfigEntry* entry,
+                                           const std::vector<std::string>& validValues,
+                                           bool isNumeric) {
+            std::cout << tc.str << "Valid values: " << tc.reset;
+            if (!validValues.empty()) {
+                const size_t wrapAfter = (key == "theme") ? 7 : validValues.size();
+                for (size_t k = 0; k < validValues.size(); ++k) {
+                    if (k == wrapAfter) {
+                        std::cout << "\n               ";
+                    } else if (k > 0) {
+                        std::cout << ", ";
+                    }
+                    std::cout << validValues[k];
+                    if (k + 1 == wrapAfter && k + 1 < validValues.size()) {
+                        std::cout << ",";
+                    }
+                }
+                std::cout << "\n";
+                return;
+            }
+
+            if (isNumeric) {
+                std::cout << "numeric value (min - max: " << entry->minValue
+                          << " - " << entry->maxValue << ")\n";
+                return;
+            }
+
+            std::cout << "Refer to description above\n";
+        }
+
+        /**
+        * @brief Renders the batch navigation footer when editing multiple settings.
+        *
+        * Outputs `[PgUp] Prev` and `[PgDn] Next` prompts conditionally based on @p pos
+        * and @p total, followed by `[g#] ↵ GoTo`, whenever @p total is greater than 1.
+        *
+        * @tparam ThemeT Type representing the active UI theme color configuration.
+        * @param tc Theme color reference used for footer styling.
+        * @param pos 1-based index of the active setting within the batch.
+        * @param total Total number of settings in the current selection batch.
+        */
+        template <typename ThemeT>
+        void drawBatchNavigationFooter(const ThemeT& tc, size_t pos, size_t total) {
+            if (total <= 1) {
+                return;
+            }
+
+            std::cout << "\n" << tc.str;
+            if (pos > 1) {
+                std::cout << "[PgUp] Prev | ";
+            }
+            if (pos < total) {
+                std::cout << "[PgDn] Next | ";
+            }
+            std::cout << "[g#] ↵ GoTo" << tc.reset << "\n";
+        }
+
+        /**
+        * @brief Renders the interactive configuration setting edit screen layout.
+        *
+        * Clears the scroll buffer, prints any pending token errors from selection validation above the header,
+        * and formats the current setting key, active value, description comments, valid values or numeric
+        * min-max ranges, and multi-selection navigation footers. Designed to be reusable across redraws,
+        * invalid input warnings, and terminal resize events.
+        *
+        * @tparam ThemeT Type representing the active UI theme color configuration.
+        * @param key The configuration key being edited.
+        * @param current The current string value of the configuration option.
+        * @param tc Theme color reference used for rendering headings, highlights, and borders.
+        * @param entry Pointer to the metadata @c ConfigEntry containing comments, defaults, and ranges.
+        * @param validValues List of valid allowed strings for enumerated settings.
+        * @param isNumeric Flag indicating whether the setting accepts free-form numeric values.
+        * @param pos 1-based index of this setting within an active multi-setting selection batch.
+        * @param total Total number of settings in the current selection batch.
+        * @param pendingErrors Reference to token/input error messages to display; cleared after printing.
+        */
+        template <typename ThemeT>
+        void drawEditScreen(const std::string& key, const std::string& current,
+                            const ThemeT& tc, const ConfigEntry* entry,
+                            const std::vector<std::string>& validValues,
+                            bool isNumeric, size_t pos, size_t total,
+                            std::vector<std::string>& pendingErrors)
+        {
+            clearScrollBuffer();
+            flushPendingErrors(pendingErrors);
+
+            const auto currentColor = (key == "base") ? tc.reset
+                                    : (key == "skin") ? color
+                                    : tc.highlight;
+
+            std::cout << "\n" << tc.str << "=== Edit Setting ===";
+            if (total > 1) {
+                const auto batchBadgeColor = (globalTheme == "original") ? UI::Palette::DarkCyan : tc.highlight;
+                std::cout << "  (" << batchBadgeColor
+                          << pos << tc.str << "/" << tc.warning << total << tc.str << ")";
+            }
+            std::cout << "\n\n" << tc.reset;
+
+            std::cout << tc.str << "Setting: " << tc.reset << tc.warning << key << tc.reset << "\n";
+            std::cout << tc.str << "Current: " << tc.reset << currentColor << current << tc.reset << "\n";
+            std::cout << "\nDescription: " << formatDescriptionComment(entry->comment) << tc.reset << "\n\n";
+
+            drawValidValuesSection(key, tc, entry, validValues, isNumeric);
+            drawBatchNavigationFooter(tc, pos, total);
+        }
+
+    }  // namespace view
+
+    // ===========================================================================
+    // ops:: validate, apply and persist a single setting
+    // ===========================================================================
+    namespace ops {
+
+        /**
+         * @brief Resolves the current configuration value from cache or falls back to the default value.
+         *
+         * @param key Configuration key being edited.
+         * @param entry Configuration entry metadata.
+         * @return The resolved current value string.
+         */
+        std::string resolveCurrent(const std::string& key, const ConfigEntry* entry) {
+            auto it = ConfigCaches::g_configCache.find(key);
+            if (it != ConfigCaches::g_configCache.end()) {
+                return it->second;
+            }
+            return entry->defaultValue;
+        }
+
+        /**
+         * @brief Validates a proposed configuration value against the entry's validation rules.
+         *
+         * @tparam ThemeType Type of the theme object.
+         * @param entry Configuration entry containing the validation function.
+         * @param newVal Trimmed new value entered by the user.
+         * @param tc Current options theme colors.
+         * @param drawEdit Lambda function to redraw the edit screen on validation error.
+         * @return true if validation succeeded or no validator exists, false if validation failed.
+         */
+        template <typename ThemeType>
+        bool validate(const ConfigEntry* entry, const std::string& newVal,
+                      const ThemeType& tc, const std::function<void()>& drawEdit) {
+            if (!entry->validate || entry->validate(newVal)) {
+                return true;
+            }
+
+            auto render = [&] {
+                SyncOutput sync;
+                drawEdit();
+                std::cout << "\n" << tc.error << "Invalid value: "
+                          << tc.warning << "'" << newVal << "'" << tc.reset << "\n";
+            };
+            pressEnterToTryWithRepaint(render);
+            return false;
+        }
+
+        /**
+         * @brief Commits validation, cache updates, runtime effect application, and disk persistence for an accepted value.
+         *
+         * Stores the validated new configuration value into @c g_configCache, triggers immediate runtime application
+         * via @c applyConfigEffects, attempts persistence via @c flushCache, then refreshes @p tc via
+         * @c resolveOptionsTheme so subsequent redraws (through @p drawEditCallback) reflect any palette
+         * changes caused by the edit (e.g. @c theme, @c skin, @c base). Notifies the user of success or
+         * memory-only fallback status. Also triggers specialized flag sorting logic when editing @c filenames_only.
+         *
+         * @tparam ThemeT Type representing the active UI theme color configuration.
+         * @param configPath Configuration file path used to persist changes.
+         * @param key Configuration setting key being updated.
+         * @param newVal The validated new string value to store.
+         * @param tc In/out theme color configuration. Reassigned from @c resolveOptionsTheme after
+         *           @c applyConfigEffects runs, so callers' repaint lambdas that capture @p tc by
+         *           reference pick up the new palette on the first redraw (not the second).
+         * @param current Reference to the current value variable, updated upon success.
+         * @param drawEditCallback Lambda callback used to redraw the edit screen during confirmation prompts.
+         * @return @c EditNav::Updated indicating successful update and completion for this setting item.
+         */
+        template <typename ThemeT>
+        EditNav saveAndApply(const std::string& configPath, const std::string& key,
+                             const std::string& newVal, ThemeT& tc,
+                             std::string& current, const std::function<void()>& drawEditCallback)
+        {
+            ConfigCaches::g_configCache[key] = newVal;
+            applyConfigEffects(ConfigCaches::g_configCache, key);
+
+            current = ConfigCaches::g_configCache.count(key) ? ConfigCaches::g_configCache[key] : "";
+            bool saved = flushCache(configPath);
+
+            tc = resolveOptionsTheme();
+
+            auto render = [&] {
+                SyncOutput sync;
+                drawEditCallback();
+                if (saved) {
+                    std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n",
+                                             tc.path, tc.reset, configPath);
+                } else {
+                    std::cout << tc.warning << "\nWarning: " << tc.error
+                              << "Setting update is memory-only (Disk write failed)."
+                              << tc.reset << "\n";
+                }
+            };
+            pressEnterToContinueWithRepaint(render);
+
+            if (key == "filenames_only") {
+                sortAfterFilenamesOnlyFlag();
+            }
+
+            return EditNav::Updated;
+        }
+
+    }  // namespace ops
+
+    // ===========================================================================
+    // flow:: main-prompt dispatch, reset flow, selection / multi-edit flow
+    // ===========================================================================
+    namespace flow {
+
+        // ---- Reset ----------------------------------------------------------
+
+        bool isConfirmed(const std::string& answer) {
+            return answer == "y" || answer == "Y";
+        }
+
+        void applyDefaultsAndReport(view::SettingsScreen& screen) {
+            for (const auto& e : CONFIG_ORDERED_DEFAULTS) {
+                ConfigCaches::g_configCache[e.key] = e.defaultValue;
+            }
+            applyConfigEffects(ConfigCaches::g_configCache);
+            screen.tc = resolveOptionsTheme();
+
+            bool saved = false;
+            {
+                SyncOutput sync;
+                saved = flushCache(screen.configPath);
+            }
+
+            auto render = [&] { view::paintResetStatus(screen, saved); };
+            pressEnterToContinueWithRepaint(render);
+        }
+
+        void handleReset(view::SettingsScreen& screen) {
+            reset_custom_keybindingsForSettingsEditor();
+            std::string confirmPrompt = std::format(
+                "\n\001{}\002Reset all settings to default? (y/n): \001{}\002",
+                color,
+                UI::Palette::BoldReset
+            );
+
+            auto drawSettings = [&] { screen.draw(); };
+
+            // Wipe the IDX prompt line now so the screen looks the same before and
+            // after a resize: settings body, then the y/n prompt directly beneath.
+            drawSettings();
+
+            armPendingInputRestore();
+            RlLine confirmInput = term::readlineWithRepaint(confirmPrompt, drawSettings);
+            rl_startup_hook = nullptr;
+
+            if (!confirmInput) return;
+            if (!isConfirmed(trim(confirmInput.get()))) return;
+            applyDefaultsAndReport(screen);
+        }
+
+        // ---- Selection / multi-edit ----------------------------------------
+
+        void runMultiEdit(const std::string& configPath,
+                          std::vector<int> ordered,
+                          const std::vector<std::string>& inputErrors) {
+            const std::vector<std::string> noErrors;
+            size_t i = 0;
+            bool showErrors = true;          // token errors only on the first screen
+            bool done = false;
+            while (!done) {
+                // Recomputed every iteration: handled settings are erased from
+                // `ordered`, so the total shown in "(n/total)" and used for
+                // PgUp/PgDn/g# shrinks accordingly.
+                const size_t n = ordered.size();
+                EditNav r = editSetting(configPath,
+                                        CONFIG_ORDERED_DEFAULTS[ordered[i] - 1].key,
+                                        showErrors ? inputErrors : noErrors,
+                                        i + 1, n);
+                showErrors = false;
+                done = nav::advance(r, ordered, i);
+            }
+        }
+
+        void handleSelection(const view::SettingsScreen& screen, const std::string& input) {
+            std::vector<std::string> slots(CONFIG_ORDERED_DEFAULTS.size());
+            std::unordered_set<int> choices;
+
+            tokenizeInput(input, slots, choices);
+
+            // Snapshot of the token errors so they can be handed to editSetting
+            // and survive repaint callbacks.
+            const std::vector<std::string> inputErrors(
+                verboseSets.uniqueErrorTokenMessages.begin(),
+                verboseSets.uniqueErrorTokenMessages.end());
+
+            // Only errors, nothing valid to edit: report and return to the main prompt.
+            if (choices.empty()) {
+                if (!inputErrors.empty()) view::reportNoValidInput(screen.tc);
+                return;
+            }
+
+            // Valid choices exist: errors (if any) are shown above the first
+            // edit screen only.
+            std::vector<int> ordered(choices.begin(), choices.end());
+            std::sort(ordered.begin(), ordered.end());
+            runMultiEdit(screen.configPath, std::move(ordered), inputErrors);
+        }
+
+        // ---- Main-prompt dispatch ------------------------------------------
+
+        void handleMainInput(view::SettingsScreen& screen, const std::string& input) {
+            if (input == "?") {
+                helpSettingsEditor();
+                return;
+            }
+            if (input == "r" || input == "R") {
+                handleReset(screen);
+                return;
+            }
+            handleSelection(screen, input);
+        }
+
+    }  // namespace flow
+
+}  // namespace
+
+// ---------------------------------------------------------------------------
+// Global scope: public entry points
+// ---------------------------------------------------------------------------
+
+/**
+ * @brief Interactively edits one configuration setting with full tab completion, validation, and multi-selection navigation support.
+ *
+ * Displays the current value, description, and valid-value guidance. Invalid input returns to the prompt;
+ * a blank input skips the edit (dropping the setting from the selection loop). Re-entering the current value
+ * counts as a valid update. Manages readline keybindings, completion hooks, buffer guards, validation checks,
+ * runtime application, persistence flushing, and batch navigation (`PgUp`, `PgDn`, `g#`).
+ *
+ * @param configPath Configuration file path used to persist the change.
+ * @param key Configuration key to edit.
+ * @param inputErrors Token errors from selection prompts, printed above the edit screen header for the first edit.
+ * @param pos 1-based position of this setting within the current selection batch.
+ * @param total Number of settings in the selection batch; navigation keys are only active when greater than one.
+ * @return @c EditNav::Updated if a value was accepted; @c EditNav::Advance if skipped with a blank Enter or unmatched key;
+ *         @c EditNav::Next / @c Prev / @c GoTo for multi-setting navigation flows; or @c EditNav::Abort if aborted via Esc/Ctrl+D.
+ */
+EditNav editSetting(const std::string& configPath, const std::string& key,
+                    const std::vector<std::string>& inputErrors,
+                    size_t pos, size_t total) {
+    auto tc = resolveOptionsTheme();
+    const ConfigEntry* entry = findConfigEntry(key);
+    if (!entry) return EditNav::Advance;
+
+    const bool isNumeric = entry->numeric;
+    std::vector<std::string> validValues = entry->values ? *entry->values : std::vector<std::string>{};
+
+    term::NavBindGuard navGuard{ total > 1 };
+    term::CompletionGuard completionGuard;
+    term::CompleteModeGuard completeModeGuard;
+    RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 0;
+
+    std::string current = ops::resolveCurrent(key, entry);
+    std::vector<std::string> pendingErrors = inputErrors;
+
+    auto drawEdit = [&] {
+        view::drawEditScreen(key, current, tc, entry, validValues, isNumeric, pos, total, pendingErrors);
+    };
+
+    auto repaintEditOnResize = [&] {
+        SyncOutput sync;
+        drawEdit();
+        std::cout << "\n";
+        repaintCompletionListing();
+        std::cout << "\033[A";
+    };
+
+    while (true) {
+        resetReadlinePagination();
+        term::setupSettingReadline(total, isNumeric, validValues);
+
+        {
+            SyncOutput sync;
+            drawEdit();
+            std::cout << "\n";
+        }
+
+        const std::string prompt = view::buildValuePrompt(tc);
+
+        RlLine rawInput = term::readlineWithRepaint(prompt, repaintEditOnResize);
+
+        armPendingInputRestore();
+        rl_startup_hook = nullptr;
+
+        if (!rawInput || rawInput.get()[0] == 27) return EditNav::Abort;
+
+        const std::string newVal = trim(rawInput.get());
+
+        auto navAction = nav::handleInput(rawInput.get(), pos, total, newVal);
+        if (navAction.has_value()) {
+            if (*navAction == EditNav::Next || *navAction == EditNav::Prev || *navAction == EditNav::GoTo) {
+                return *navAction;
+            }
+            continue;
+        }
+
+        if (newVal.empty()) return EditNav::Advance;
+
+        if (!ops::validate(entry, newVal, tc, drawEdit)) {
+            continue;
+        }
+
+        return ops::saveAndApply(configPath, key, newVal, tc, current, drawEdit);
+    }
+    return EditNav::Advance;
+}
+
+/**
+ * @brief Runs the interactive configuration editor.
+ *
+ * Displays settings grouped by section and lets the user edit entries by
+ * index or restore all defaults.
+ *
+ * - **Input:** GNU Readline accepts individual selections and tokenized
+ *   multi-selections; per-setting validation is handled by @c editSetting.
+ * - **Multi-selection navigation:** when several settings are selected, they
+ *   are edited one screen at a time. A blank Enter skips the current setting
+ *   and a valid value (even one equal to the current value) is saved; either
+ *   way the setting is removed from the loop. The loop ends on Esc / Ctrl+D
+ *   or once every selected setting has been updated or skipped. PgDn / PgUp
+ *   move to the next / previous selected setting without wrapping: at either
+ *   end the key is ignored and the matching footer hint is hidden.
+ * - **Handled settings leave the loop:** once a setting has been updated
+ *   (@c EditNav::Updated) or skipped (@c EditNav::Advance) it is removed from
+ *   the selection, so the "(n/total)" indicator, PgUp / PgDn navigation and
+ *   "g#" numbering only cover the settings that have not been handled yet.
+ *   After either result the loop continues with the setting that followed
+ *   the removed one (wrapping to the first remaining one) and ends only when
+ *   no setting is left. Settings reached only by navigation (PgUp / PgDn /
+ *   g#) stay in the loop.
+ * - **Input errors:** token errors from a multi-selection are passed to the
+ *   first @c editSetting call and printed above its "Edit Setting" header.
+ *   If the input produced only errors and no valid selection, the errors are
+ *   listed followed by "No valid input provided", and the editor returns to
+ *   the main prompt.
+ * - **Persistence:** edits update the in-memory cache and runtime state, then
+ *   attempt to write the configuration file. Resetting all settings follows
+ *   the same sequence after confirmation.
+ * - **Terminal cleanup:** a local RAII guard restores the settings-editor
+ *   keybindings on every exit path.
+ * - **Signals:** SIGINT is set to @c SIG_IGN for the duration of the editor.
+ *   The previous disposition is @b not restored on exit; this matches the
+ *   program-wide policy of ignoring Ctrl+C once the interactive UI is up.
+ * - **Resize handling:** every screen shares @c view::SettingsScreen::paintBody,
+ *   so a resize repaints the full settings view rather than just the last
+ *   message. @c view::SettingsScreen::draw is the repaint callback for both the
+ *   main prompt and the reset confirmation, and @c view::paintResetStatus serves
+ *   the post-reset status screen while @c view::reportNoValidInput serves the
+ *   "No valid input provided" screen. Once a reset is requested, the screen
+ *   is repainted without the main prompt line, and neither that line nor the
+ *   confirmation line is re-echoed afterwards.
+ * - **Clear handling:** <kbd>Ctrl+L</kbd> is bound only on the per-setting
+ *   value prompt in @c editSetting, where it dismisses any completion list and
+ *   repaints the edit screen via @c term::readlineWithRepaint. The binding is
+ *   released when @c editSetting returns, so it is not active on the main
+ *   settings prompt or the reset confirmation.
+ *
+ * @param configPath Configuration file used to load and save settings.
+ */
+void interactiveConfigEditor(const std::string& configPath) {
+    PendingReadlineTextClearGuard pendingTextGuard;
+
+    struct SettingsGuard {
+        ~SettingsGuard() { reset_custom_keybindingsForSettingsEditor(); }
+    } guard;
+
+    signal(SIGINT, SIG_IGN);
+    syncCache(configPath);
+
+    while (true) {
+        verboseSets.uniqueErrorTokenMessages.clear();
+        view::SettingsScreen screen{configPath, resolveOptionsTheme()};
+
+        auto drawSettings = [&] { screen.draw(); };
+        drawSettings();
+
+        setup_custom_keybindingsForSettingsEditor();
+
+        const std::string prompt = view::buildMainPrompt(screen.tc);
+        armPendingInputRestore();
+        RlLine rawInput = term::readlineWithRepaint(prompt, drawSettings);
+        rl_startup_hook = nullptr;
+
+        if (!rawInput) break;
+
+        const std::string input = trim(rawInput.get());
+        if (input == "\x1b") break;
+
+        flow::handleMainInput(screen, input);
+    }
+}

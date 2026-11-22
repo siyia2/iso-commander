@@ -1,0 +1,646 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#ifndef WRITE2USBUI_H
+#define WRITE2USBUI_H
+
+// C++ Standard Library Headers
+#include <atomic>
+#include <condition_variable>
+#include <csignal>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <thread>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
+// Third-Party Library Headers
+#include <readline/readline.h>
+
+// Project Headers
+#include "isocmd/input/inputHandling.h"
+#include "isocmd/input/readline.h"
+
+// --- Data Structures ---
+
+/**
+ * @brief Information about an ISO image file.
+ */
+struct IsoInfo {
+    std::string path;          /** Full filesystem path to the ISO file. */
+    std::string filename;      /** Name of the file without path. */
+    uint64_t size;             /** Size of the ISO in bytes. */
+    std::string sizeStr;       /** Human-readable size string (e.g., "4.2 GB"). */
+    size_t originalIndex;      /** Original sort index for maintaining list order. */
+};
+
+/**
+ * @brief Thread-safe state tracker for an ongoing write process.
+ * @details Utilizes atomics for progress updates and move-only semantics to
+ * prevent accidental copying of atomic states.
+ */
+struct ProgressInfo {
+    std::string filename;
+    std::string device;
+    std::string totalSize;
+    std::string sourcePath;
+
+    std::atomic<bool> completed{false};
+    std::atomic<bool> failed{false};
+    std::atomic<uint64_t> bytesWritten{0};
+    std::atomic<int> progress{0};
+    std::atomic<double> speed{0.0};
+
+    // Constructor
+    ProgressInfo(std::string filename, std::string device, std::string totalSize,
+                 std::string sourcePath)
+        : filename(std::move(filename)),
+          device(std::move(device)),
+          totalSize(std::move(totalSize)),
+          sourcePath(std::move(sourcePath)) {}
+
+    // Move Constructor
+    ProgressInfo(ProgressInfo&& other) noexcept
+        : filename(std::move(other.filename)),
+          device(std::move(other.device)),
+          totalSize(std::move(other.totalSize)),
+          sourcePath(std::move(other.sourcePath)),
+          completed(other.completed.load()),
+          failed(other.failed.load()),
+          bytesWritten(other.bytesWritten.load()),
+          progress(other.progress.load()),
+          speed(other.speed.load()) {}
+
+    // Move Assignment
+    ProgressInfo& operator=(ProgressInfo&& other) noexcept {
+        if (this != &other) {
+            filename = std::move(other.filename);
+            device = std::move(other.device);
+            totalSize = std::move(other.totalSize);
+            sourcePath = std::move(other.sourcePath);
+            completed.store(other.completed.load());
+            failed.store(other.failed.load());
+            bytesWritten.store(other.bytesWritten.load());
+            progress.store(other.progress.load());
+            speed.store(other.speed.load());
+        }
+        return *this;
+    }
+
+    // Disable Copying (Atomics cannot be copied)
+    ProgressInfo(const ProgressInfo&) = delete;
+    ProgressInfo& operator=(const ProgressInfo&) = delete;
+};
+
+/**
+ * @brief Completion-tracking state shared between pooled write tasks and the UI.
+ *
+ * Holds the counters, mutex and condition variable that pooled write tasks
+ * update and that the display thread and the main thread wait on. It is owned
+ * through a @c std::shared_ptr that every task captures by value, so it stays
+ * alive for tasks that outlive @ref performWriteOperation after cancellation
+ * (a task must never reference these members from the function's stack).
+ *
+ * Neither copyable nor movable, because it contains atomics, a mutex and a
+ * condition variable.
+ */
+struct WriteSync {
+    std::atomic<size_t>     completedTasks{0};
+    std::atomic<size_t>     finishedTasks{0};   // success OR failure
+    std::mutex              mutex;
+    std::condition_variable cv;
+};
+
+/**
+ * @brief RAII guard for the readline/terminal state that needs to be set up
+ *        at the start of every loop iteration and torn down on every exit
+ *        path (return, continue, or exception).
+ */
+struct TerminalStateGuard {
+    /**
+     * @brief Configures readline bindings/hooks and disables SIGINT /
+     *        Ctrl-D for the duration of the guard's lifetime.
+     */
+    TerminalStateGuard() {
+        rl_completion_display_matches_hook = [](char **matches, int num_matches, int max_length) {
+            (void)matches;
+            (void)num_matches;
+            (void)max_length;
+        };
+
+        rl_attempted_completion_function = completion_cb;
+        rl_bind_key('\t', rl_complete);
+        rl_bind_key('\f', clear_screen_and_buffer);
+        rl_bind_keyseq("\033[A", rl_get_previous_history);
+        rl_bind_keyseq("\033[B", rl_get_next_history);
+        rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+        rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+
+        signal(SIGINT, SIG_IGN);
+        disable_ctrl_d();
+        clearScrollBuffer();
+    }
+
+    /**
+     * @brief Restores readline bindings/hooks via restoreReadline().
+     *
+     * @note restoreReadline() only resets readline bindings/hooks. The
+     *       SIGINT = SIG_IGN and disable_ctrl_d() set in the constructor
+     *       are NOT undone here, matching the original code's behavior
+     *       (it never restored these at any exit point either). If that's
+     *       actually a latent bug, it's pre-existing and separate from
+     *       this refactor.
+     */
+    ~TerminalStateGuard() {
+        restoreReadline();
+    }
+
+    TerminalStateGuard(const TerminalStateGuard&) = delete;
+    TerminalStateGuard& operator=(const TerminalStateGuard&) = delete;
+};
+
+/**
+ * @brief RAII guard for the brief window where readline is reconfigured to
+ *        ask the y/n confirmation question.
+ *
+ * Restores the *outer* (TerminalStateGuard) readline configuration on
+ * exit, regardless of how this scope is left.
+ */
+struct ConfirmationModeGuard {
+    /**
+     * @brief Switches readline into confirmation-prompt mode.
+     */
+    ConfirmationModeGuard() {
+        disableReadlineForConfirmation();
+    }
+
+    /**
+     * @brief Re-applies the main mappings-prompt readline configuration.
+     *
+     * Ensures that if the user says "no" and the outer loop continues,
+     * the next TerminalStateGuard iteration (or the existing one, if we
+     * don't reconstruct it) is in the expected state.
+     */
+    ~ConfirmationModeGuard() {
+        setupReadline();
+    }
+
+    ConfirmationModeGuard(const ConfirmationModeGuard&) = delete;
+    ConfirmationModeGuard& operator=(const ConfirmationModeGuard&) = delete;
+
+private:
+    /**
+     * @brief Mirrors the original setupReadline() lambda so this guard
+     *        doesn't depend on a free function with the same name living
+     *        elsewhere.
+     */
+    static void setupReadline() {
+        rl_completion_display_matches_hook = [](char **matches, int num_matches, int max_length) {
+            (void)matches;
+            (void)num_matches;
+            (void)max_length;
+        };
+
+        rl_attempted_completion_function = completion_cb;
+        rl_bind_key('\t', rl_complete);
+        rl_bind_key('\f', clear_screen_and_buffer);
+        rl_bind_keyseq("\033[A", rl_get_previous_history);
+        rl_bind_keyseq("\033[B", rl_get_next_history);
+        rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
+        rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+    }
+};
+
+// ---------- Used exclusively for the [FLUSHING] device indicator ------------
+
+/**
+ * @brief A thread-safe manager for tracking and joining background tasks.
+ * * This structure acts as a registry for detached-style background threads,
+ * allowing the application to track them and ensure they are joined gracefully
+ * during the application's shutdown sequence. This prevents crashes related
+ * to global object destruction while background threads are still active.
+ */
+struct DrainingThreadManager {
+    std::vector<std::thread> threads; ///< Internal storage for registered threads.
+    std::mutex mtx;                  ///< Mutex to ensure thread-safe registration and access.
+
+    /**
+     * @brief Adds a thread to the manager for lifecycle tracking.
+     * * @param t An rvalue reference to the std::thread to be managed.
+     * The manager takes ownership of the thread.
+     */
+    void add(std::thread&& t) {
+        std::lock_guard<std::mutex> lock(mtx);
+        threads.emplace_back(std::move(t));
+    }
+
+    /**
+     * @brief Blocks until all registered threads have completed their execution.
+     * * Iterates through the registered threads, verifies they are joinable,
+     * and performs a join operation. The internal vector is cleared
+     * upon completion to prevent duplicate joins.
+     */
+    void joinAll() {
+        std::lock_guard<std::mutex> lock(mtx);
+        for (auto& t : threads) {
+            if (t.joinable()) {
+                t.join();
+            }
+        }
+        threads.clear();
+    }
+};
+
+// Global instances
+inline DrainingThreadManager g_drainingManager;
+inline std::mutex g_drainingDevicesMutex;
+inline std::unordered_set<std::string> g_drainingDevices;
+inline std::atomic<bool> g_drainingCancelled{false};
+
+// ---------- End of [FLUSHING] device indicator block ------------
+
+/**
+ * Performs the actual write2usb.
+ */
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex, std::vector<ProgressInfo>& progressData);
+
+/**
+ * Returns true if the block device (e.g. /dev/sdb) is a removable USB flash drive.
+ */
+bool isFlashDrive(const std::string&);
+
+/**
+ * Returns true if the block device or any of its partitions is currently mounted.
+ */
+bool isDeviceMounted(const std::string&);
+
+/**
+ * Returns the drive's model name from sysfs, or "Unknown Drive" if unavailable.
+ */
+std::string getDriveName(const std::string&);
+
+// --- Write theme forward declaration (used by WriteScreen + WriteValidation) ---
+
+namespace UI { struct WriteTheme; }
+
+// --- UTF-8 / ANSI-escape width helpers (defined in write2usbUIRendering.cpp) ---
+
+/**
+ * @brief Returns the number of UTF-8 code points (characters) in a string.
+ *
+ * Counts bytes that are not UTF-8 continuation bytes (i.e., bytes where
+ * the top two bits are not 10, or `(c & 0xC0) != 0x80`). Assuming valid
+ * UTF-8 input, this gives the total number of characters, serving as an
+ * approximation of the string's display column width for standard text.
+ *
+ * @param s Input string containing UTF-8 encoded text.
+ * @return The number of UTF-8 code points in @p s.
+ */
+inline size_t utf8Width(const std::string& s) {
+    size_t w = 0;
+    for (unsigned char c : s)
+        if ((c & 0xC0) != 0x80) ++w;
+    return w;
+}
+
+/**
+ * @brief Visible width of a string that may contain ANSI CSI escapes.
+ *
+ * Like utf8Width, but skips ANSI CSI sequences (ESC [ … final byte in
+ * 0x40..0x7E), which the terminal interprets rather than renders. The
+ * escapes count as 0 columns; every other UTF-8 code point counts as 1.
+ *
+ * @param s String that may contain colour/formatting escapes.
+ * @return Visible columns @p s occupies when printed.
+ */
+inline size_t visibleWidth(const std::string& s) {
+    size_t w = 0;
+    for (size_t i = 0; i < s.size(); ) {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        if (c == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
+            i += 2;
+            while (i < s.size() && !(s[i] >= 0x40 && s[i] <= 0x7E)) ++i;
+            if (i < s.size()) ++i;
+            continue;
+        }
+        if ((c & 0xC0) != 0x80) ++w;
+        ++i;
+    }
+    return w;
+}
+
+/**
+ * @brief Cuts a string to at most @p maxCols visible columns.
+ *
+ * ANSI CSI escape sequences are copied through untouched and do not count
+ * toward the budget, so colours opened before the cut remain effective past
+ * it (the caller handles any reset it needs). UTF-8 multi-byte sequences
+ * are never split: an escape or code point that would cross the limit is
+ * dropped whole.
+ *
+ * @param s       Input string, possibly with ANSI escapes and UTF-8.
+ * @param maxCols Maximum visible columns to keep. 0 returns an empty string;
+ *                escapes appearing before the first visible character are
+ *                still emitted.
+ * @return The longest prefix of @p s whose visible width is <= @p maxCols.
+ */
+inline std::string clipToWidth(const std::string& s, size_t maxCols) {
+    std::string out;
+    out.reserve(s.size());
+    size_t w = 0;
+    for (size_t i = 0; i < s.size(); ) {
+        if (static_cast<unsigned char>(s[i]) == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
+            size_t j = i + 2;
+            while (j < s.size() && !(s[j] >= 0x40 && s[j] <= 0x7E)) ++j;
+            if (j < s.size()) ++j;
+            out.append(s, i, j - i);
+            i = j;
+            continue;
+        }
+        size_t len = 1;
+        while (i + len < s.size() &&
+            (static_cast<unsigned char>(s[i + len]) & 0xC0) == 0x80) ++len;
+        if (w >= maxCols) break;
+        out.append(s, i, len);
+        i += len;
+        ++w;
+    }
+    return out;
+}
+
+/**
+ * @brief Shortens an ISO filename to fit a column budget, keeping ".iso".
+ *
+ * If @p name already fits in @p maxCols columns it is returned unchanged.
+ * Otherwise a trailing ".iso" extension (case-insensitive) is separated off,
+ * the stem is cut to maxCols minus (width of "…" + ".iso") columns (floored
+ * at 4), and the result is reconstructed as "stem….iso". Truncation walks
+ * whole UTF-8 code points, so a multi-byte sequence is never split.
+ *
+ * @par Stem floor
+ * MIN_STEM is 4 columns, so on very narrow terminals the returned string
+ * can exceed @p maxCols by up to 5 columns (4 stem + 1 "…") when an
+ * extension is present, or by 1 column when it is not. Callers should clip
+ * the containing line with clipToWidth to prevent wrap.
+ *
+ * @param name    Filename to shorten (may be empty, with or without a ".iso"
+ *                extension).
+ * @param maxCols Column budget the result should fit within; 0 forces the
+ *                stem floor and returns "….iso" or "…".
+ * @return @p name unchanged if it fits, otherwise the shortened form.
+ */
+inline std::string truncateIsoName(const std::string& name, size_t maxCols) {
+    if (utf8Width(name) <= maxCols) return name;
+
+    std::string ext;
+    std::string stem = name;
+    if (name.size() >= 4) {
+        const std::string tail = name.substr(name.size() - 4);
+        if (tail[0] == '.' &&
+            std::tolower(static_cast<unsigned char>(tail[1])) == 'i' &&
+            std::tolower(static_cast<unsigned char>(tail[2])) == 's' &&
+            std::tolower(static_cast<unsigned char>(tail[3])) == 'o') {
+            ext  = tail;
+            stem = name.substr(0, name.size() - 4);
+        }
+    }
+
+    constexpr size_t MIN_STEM = 4;
+    const size_t overhead = 1 + utf8Width(ext);
+    const size_t keep = std::max(MIN_STEM, maxCols > overhead ? maxCols - overhead : 0);
+
+    std::string out;
+    size_t cols = 0, i = 0;
+    while (i < stem.size() && cols < keep) {
+        size_t len = 1;
+        while (i + len < stem.size() &&
+               (static_cast<unsigned char>(stem[i + len]) & 0xC0) == 0x80) ++len;
+        out.append(stem, i, len);
+        i += len;
+        ++cols;
+    }
+    if (i >= stem.size()) return name;
+
+    out += "\u2026";
+    out += ext;
+    return out;
+}
+
+/**
+ * @brief Live progress/result screen for a write2usb operation.
+ *
+ * Opaque handle returned by @ref performWriteOperation. It owns the keeper
+ * thread that keeps the screen laid out correctly on terminal resize, and it
+ * must stay alive until the caller has finished waiting for the user. The
+ * destructor stops and joins that thread. Defined in
+ * write2usbUIRendering.cpp.
+ */
+class WriteScreen;
+
+// --- Opaque WriteScreen interface (defined in write2usbUIRendering.cpp) ---
+//
+// WriteScreen is forward-declared above; these free functions are the only
+// way to drive it. All are no-ops / safe to call on a stopped screen.
+
+/**
+ * @brief Constructs a WriteScreen from the shared per-task progress vector,
+ *        the shared WriteSync state and the active write theme.
+ *
+ * The screen captures shared_ptr copies of both shared objects, so it never
+ * refers to the stack of the function that created it.
+ */
+std::shared_ptr<WriteScreen> createWriteScreen(
+        std::shared_ptr<std::vector<ProgressInfo>> progressData,
+        std::shared_ptr<WriteSync> sync,
+        UI::WriteTheme theme);
+
+/** @brief Prints the header and starts the keeper / relay threads. */
+void startWriteScreen(WriteScreen& screen);
+
+/** @brief Switches to the result screen and paints it. Call once. */
+void finishWriteScreen(WriteScreen& screen);
+
+/**
+ * @brief True if Ctrl+C is relayed into the shared condition variable, so a
+ *        waiter on it is woken immediately on cancellation (no timed recheck).
+ */
+bool writeScreenCancelWakeable(const WriteScreen& screen);
+
+/**
+ * @brief Registers the program's "press Enter" prompt so that a terminal
+ *        resize triggers repaintWriteScreen() instead of the keeper's own
+ *        repaint path.
+ */
+void setWriteScreenPrompt(WriteScreen& screen, std::string prompt);
+
+/**
+ * @brief Re-emits the result screen at the current terminal width. Called by
+ *        the pressEnterTo*WithRepaint() machinery on resize.
+ */
+void repaintWriteScreen(WriteScreen& screen);
+
+/** @brief Stops and joins the keeper and relay threads. Safe to call twice. */
+void stopWriteScreen(WriteScreen& screen);
+
+/**
+ * @brief Watches terminal resizes while the write confirmation prompt is active.
+ *
+ * The implementation and its signal/self-pipe state are kept in
+ * write2usbUIRendering.cpp. The painter callback redraws the prompt for the
+ * supplied terminal width and returns the widths of the rendered lines.
+ */
+class ConfirmResizeWatcher {
+public:
+    using Painter = std::function<std::vector<size_t>(size_t cols)>;
+
+    ConfirmResizeWatcher(Painter paint, size_t drawnCols,
+                         std::vector<size_t> drawnWidths,
+                         const std::string& promptText);
+
+    ~ConfirmResizeWatcher();
+
+    ConfirmResizeWatcher(const ConfirmResizeWatcher&) = delete;
+    ConfirmResizeWatcher& operator=(const ConfirmResizeWatcher&) = delete;
+    ConfirmResizeWatcher(ConfirmResizeWatcher&&) = delete;
+    ConfirmResizeWatcher& operator=(ConfirmResizeWatcher&&) = delete;
+
+    void stop();
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
+/**
+ * Writes the given (ISO, device) pairs concurrently on the thread pool,
+ * with a live progress display and a final status summary.
+ */
+std::shared_ptr<WriteScreen> performWriteOperation(
+    const std::vector<std::pair<IsoInfo, std::string>>&);
+
+
+// --- Device discovery and mapping APIs (defined in write2usbUI.cpp) ---
+
+/** @brief Enumerates removable USB block devices visible to the system. */
+std::vector<std::string> getRemovableDevices();
+
+/**
+ * @brief Validates parsed ISO-to-device mappings and returns viable pairs.
+ */
+std::vector<std::pair<IsoInfo, std::string>> validateDevices(
+    const std::vector<std::pair<size_t, std::string>>& deviceMap,
+    const std::vector<IsoInfo>& selectedIsos,
+    bool noPermissions,
+    std::vector<std::string>& validationErrors);
+
+/**
+ * @brief Parses semicolon-delimited INDEX>DEVICE mappings.
+ */
+std::vector<std::pair<size_t, std::string>> parseDeviceMappings(
+    const std::string& pairString,
+    const std::vector<std::string>& selectedIsos,
+    std::vector<std::string>& errors);
+
+/** @brief Runs the interactive ISO-to-device mapping and confirmation flow. */
+std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
+    const std::vector<IsoInfo>& selectedIsos);
+
+/** @brief Entry point for the write-to-USB workflow. */
+void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles);
+
+// --- Filesystem & Formatting Utilities ---
+
+/**
+ * Converts a raw byte count into a human-readable string (KB, MB, GB).
+ */
+std::string formatFileSize(uint64_t size);
+
+/**
+ * Formats a speed value into a readable string (e.g., "15.4 MB/s").
+ */
+std::string formatSpeed(double mbPerSec);
+
+/**
+ * Queries the kernel for the total capacity of a block device.
+ * @param device Path to the device (e.g., "/dev/sdb").
+ * @return Size in bytes.
+ */
+uint64_t getBlockDeviceSize(const std::string& device);
+
+// --- Shared validation helpers (defined in the same .cpp as validateDevices) ---
+
+/**
+ * @namespace WriteValidation
+ * @brief Shared validation helpers used by the interactive write2usb UI and
+ *        the non-interactive CLI writer.
+ *
+ * Defined in write2usbUI.cpp alongside validateDevices().
+ */
+namespace WriteValidation {
+
+/**
+ * @brief Builds a themed error message that has no associated path.
+ *
+ * @param wt  Active write theme supplying the label and reset colours.
+ * @param msg Message text (e.g. "Root privileges are required").
+ * @return The message prefixed with the error label colour and terminated
+ *         with a colour reset.
+ */
+std::string plainErr(const UI::WriteTheme& wt, const std::string& msg);
+
+/**
+ * @brief Builds a themed error message of the form "'<path>' <message>".
+ *
+ * @param wt   Active write theme.
+ * @param path Path to display, quoted, at the start of the message.
+ * @param msg  Message text; include a leading space (e.g. " is not an ISO file").
+ * @return The fully coloured message string.
+ */
+std::string pathErr(const UI::WriteTheme& wt, const std::string& path, const std::string& msg);
+
+/**
+ * @brief Prints a themed "Validation errors:" block to stderr.
+ *
+ * @param wt   Active write theme.
+ * @param errs Pre-formatted error messages, printed as indented bullets.
+ */
+void printValidationErrors(const UI::WriteTheme& wt, const std::vector<std::string>& errs);
+
+/**
+ * @brief Runs the device-level checks, independent of which ISO is paired with it.
+ *
+ * Verifies that the device is a removable USB flash drive, is not mounted,
+ * is not in the draining set (pending kernel-level tasks), has no write I/O
+ * still in flight (non-interactive mode only), and has a determinable size.
+ *
+ * @param wt     Active write theme.
+ * @param device Path used for the checks (canonical /dev/sdX).
+ * @param shown  Path displayed in error messages (what the user typed).
+ * @param[out] size Device size in bytes; only valid when no error is returned.
+ * @return An error message for the first failed check, or std::nullopt if
+ *         the device is usable.
+ */
+std::optional<std::string> checkDevice(const UI::WriteTheme& wt, const std::string& device,
+                                       const std::string& shown, uint64_t& size);
+
+/**
+ * @brief Checks that an ISO fits on a device.
+ *
+ * @param wt         Active write theme.
+ * @param iso        ISO to be written.
+ * @param device     Device path, used for the message and the drive-name lookup.
+ * @param deviceSize Device capacity in bytes (as returned by checkDevice()).
+ * @return A themed "is too large for" message including both sizes and the
+ *         drive name, or std::nullopt if the ISO fits.
+ */
+std::optional<std::string> checkCapacity(const UI::WriteTheme& wt, const IsoInfo& iso,
+                                         const std::string& device, uint64_t deviceSize);
+
+} // namespace WriteValidation
+
+#endif // WRITE2USBUI_H

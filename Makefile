@@ -1,93 +1,145 @@
+# ============================================================================
+#  iso-commander Makefile
+#
+#  Layout:
+#    include/isocmd/<module>/*.h   public/internal headers  (-Iinclude)
+#    src/<module>/*.cpp            implementation, mirrors include/
+#    deps/                         vendored third-party code (libchdr)
+#    build/<variant>/              object + dependency files (generated)
+#    isocmd                        final binary (generated, kept at the root)
+#
+#  Usage:
+#    make                  optimized dynamic build
+#    make STATIC=1         fully static build
+#    make SANITIZE=1       AddressSanitizer build
+#    make SANITIZE=2       ThreadSanitizer build
+#    make V=1              show full compiler command lines
+#    make install [BINDIR=/some/dir]
+# ============================================================================
+
+# ---------- Parallelism ----------
 NUM_PROCESSORS := $(shell nproc)
 ifeq ($(filter -j%, $(MAKEFLAGS)),)
     MAKEFLAGS += -j$(NUM_PROCESSORS)
 endif
+
+# ---------- Project ----------
+TARGET   := isocmd
+SRC_DIR  := src
+INC_DIR  := include
+DEPS_DIR := deps
+BUILD_DIR ?= build
+BINDIR   ?= bin
+
+# ---------- Toolchain ----------
+CXX ?= g++
+
+# ---------- Verbosity ----------
+ifeq ($(V),1)
+    Q :=
+else
+    Q := @
+endif
+
 # ---------- Compiler and common flags ----------
-CXX = g++
-# ---- Base flags (used by both normal and sanitizer builds) ----
 CXXFLAGS_BASE = -std=c++20 -Wall -Wextra
 LDFLAGS_BASE  = -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
+
 # ---- Normal build ----
 CXXFLAGS_NORMAL = -O3 -flto=auto -fmerge-all-constants -fdata-sections -ffunction-sections -fno-plt -fno-rtti
 LDFLAGS_NORMAL  = -Wl,--gc-sections
+LDFLAGS_STRIP   = -Wl,--strip-all
+VARIANT         = release
+
 # ---- Sanitizer builds ----
 ifeq ($(SANITIZE),1)
     # AddressSanitizer
-    CXXFLAGS_EXTRA  = -O1 -g -fno-omit-frame-pointer -fsanitize=address
+    CXXFLAGS_EXTRA  = -fsanitize=address
     LDFLAGS_EXTRA   = -fsanitize=address
     CXXFLAGS_NORMAL = -O1 -g -fno-omit-frame-pointer
     LDFLAGS_NORMAL  =
     LDFLAGS_STRIP   =
+    VARIANT         = asan
 else ifeq ($(SANITIZE),2)
     # ThreadSanitizer
-    CXXFLAGS_EXTRA  = -O1 -g -fno-omit-frame-pointer -fsanitize=thread
+    CXXFLAGS_EXTRA  = -fsanitize=thread
     LDFLAGS_EXTRA   = -fsanitize=thread
     CXXFLAGS_NORMAL = -O1 -g -fno-omit-frame-pointer
     LDFLAGS_NORMAL  =
     LDFLAGS_STRIP   =
-else
-    # Normal build
-    LDFLAGS_STRIP   = -Wl,--strip-all
+    VARIANT         = tsan
 endif
 
-CXXFLAGS_COMMON = $(CXXFLAGS_BASE) $(CXXFLAGS_NORMAL) $(CXXFLAGS_EXTRA)
-LDFLAGS_COMMON  = $(LDFLAGS_BASE) $(LDFLAGS_NORMAL) $(LDFLAGS_EXTRA)
-# ---------- Shared library for both builds ----------
-CHD_STATIC = ./deps/libchdr-static.a
-# ---------- Dynamic build (default) ----------
-CXXFLAGS_DYN = $(CXXFLAGS_COMMON) -I./deps/libchdr/include
+# ---------- Third-party / system libraries ----------
+CHD_STATIC = $(DEPS_DIR)/libchdr-static.a
+CHD_INC    = $(DEPS_DIR)/libchdr/include
+
+# Dynamic (default)
 LIBS_DYN = -lreadline -lmount -lblkid $(CHD_STATIC)
-LDFLAGS_DYN = $(LDFLAGS_COMMON) $(LDFLAGS_STRIP)
-# ---------- Static build (use STATIC=1) ----------
-LZMA_STATIC = /usr/lib/liblzma.a
-ZLIB_STATIC = /usr/lib/libz.a
-ZSTD_STATIC = /usr/lib/libzstd.a
+
+# Static (STATIC=1)
+LZMA_STATIC     = /usr/lib/liblzma.a
+ZLIB_STATIC     = /usr/lib/libz.a
+ZSTD_STATIC     = /usr/lib/libzstd.a
 READLINE_STATIC = /usr/lib/libreadline.a
-NCURSES_STATIC = /usr/lib/libncurses.a
-MOUNT_STATIC = /usr/lib/libmount.a
-BLKID_STATIC = /usr/lib/libblkid.a
-ECONF_STATIC = /usr/lib/libeconf.a
-INTL_STATIC = /usr/lib/libintl.a
-LDFLAGS_STAT = -static $(LDFLAGS_COMMON) $(LDFLAGS_STRIP)
-CXXFLAGS_STAT = $(CXXFLAGS_COMMON) -I./deps/libchdr/include
+NCURSES_STATIC  = /usr/lib/libncurses.a
+MOUNT_STATIC    = /usr/lib/libmount.a
+BLKID_STATIC    = /usr/lib/libblkid.a
+ECONF_STATIC    = /usr/lib/libeconf.a
+INTL_STATIC     = /usr/lib/libintl.a
 LIBS_STAT = $(CHD_STATIC) \
             $(LZMA_STATIC) $(ZLIB_STATIC) $(ZSTD_STATIC) \
             $(READLINE_STATIC) $(NCURSES_STATIC) $(MOUNT_STATIC) $(BLKID_STATIC) \
             $(ECONF_STATIC) $(INTL_STATIC) -pthread
+
 # ---------- Select build type ----------
 ifeq ($(STATIC),1)
-    CXXFLAGS = $(CXXFLAGS_STAT)
-    LIBS     = $(LIBS_STAT)
-    LDFLAGS  = $(LDFLAGS_STAT)
+    LIBS         = $(LIBS_STAT)
+    LDFLAGS_LINK = -static
+    VARIANT     := $(VARIANT)-static
 else
-    CXXFLAGS = $(CXXFLAGS_DYN)
-    LIBS     = $(LIBS_DYN)
-    LDFLAGS  = $(LDFLAGS_DYN)
+    LIBS         = $(LIBS_DYN)
+    LDFLAGS_LINK =
 endif
-# ---------- Directories and source files ----------
-SRC_DIR = $(CURDIR)/src
-OBJ_DIR = $(CURDIR)/obj
-INSTALL_DIR = $(CURDIR)/bin
-SRC_FILES = isocmd/main.cpp isocmd/history.cpp isocmd/verbose.cpp isocmd/isoDatabase.cpp isocmd/filtering.cpp\
-			isocmd/mount.cpp isocmd/umount.cpp isocmd/cpMvRm.cpp isocmd/pausePrompts.cpp isocmd/convert.cpp\
-			isocmd/write2usb.cpp isocmd/write2usbUIResize.cpp isocmd/stringManipulation.cpp isocmd/signalsAndTermios.cpp\
-			isocmd/select.cpp isocmd/sizeSpeedCalc.cpp isocmd/listResize.cpp isocmd/windowsWriter.cpp isocmd/search.cpp\
-			isocmd/readline.cpp isocmd/progressbar.cpp isocmd/processInput.cpp isocmd/pagination.cpp isocmd/naturalSort.cpp\
-			isocmd/cmdAutomation.cpp isocmd/themes.cpp isocmd/settingsEditor.cpp isocmd/eventKeys.cpp isocmd/ccd2iso_mdf2iso_nrg2iso.cpp\
-			isocmd/printList.cpp isocmd/displayCode.cpp isocmd/setupOptions.cpp isocmd/help.cpp isocmd/tokenize.cpp\
- 			isocmd/menu.cpp isocmd/chOwnership.cpp isocmd/chd2iso.cpp isocmd/daa2iso.cpp isocmd/write2usbUI.cpp
-OBJ_FILES = $(patsubst %.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
-all: isocmd
-isocmd: $(OBJ_FILES)
-	$(CXX) $(LDFLAGS) $^ -o $@ $(LIBS)
+
+# Assigned (not appended) so environment CXXFLAGS/LDFLAGS (e.g. from makepkg)
+# do not alter the tuned flags above, matching the previous Makefile.
+CPPFLAGS = -I$(INC_DIR) -I$(CHD_INC) -MMD -MP
+CXXFLAGS = $(CXXFLAGS_BASE) $(CXXFLAGS_NORMAL) $(CXXFLAGS_EXTRA)
+LDFLAGS  = $(LDFLAGS_LINK) $(LDFLAGS_BASE) $(LDFLAGS_NORMAL) $(LDFLAGS_EXTRA) $(LDFLAGS_STRIP)
+
+# ---------- Sources (auto-discovered, one object tree per build variant) ----------
+OBJ_DIR  := $(BUILD_DIR)/$(VARIANT)
+SRCS     := $(sort $(shell find $(SRC_DIR) -name '*.cpp'))
+OBJS     := $(SRCS:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
+DEPFILES := $(OBJS:.o=.d)
+
+# ---------- Targets ----------
+.PHONY: all clean install uninstall help
+all: $(TARGET)
+
+$(TARGET): $(OBJS)
+	@echo "  LD      $@"
+	$(Q)$(CXX) $(LDFLAGS) $^ -o $@ $(LIBS)
+
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@echo "  CXX     $<"
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(Q)$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+
 clean:
-	rm -rf $(OBJ_DIR) isocmd
-install: isocmd
-	mkdir -p $(INSTALL_DIR)
-	install -m 755 isocmd $(INSTALL_DIR)
+	rm -rf $(BUILD_DIR) $(TARGET)
+
+install: $(TARGET)
+	mkdir -p $(BINDIR)
+	install -m 755 $(TARGET) $(BINDIR)
+
 uninstall:
-	rm -f $(INSTALL_DIR)/isocmd
-.PHONY: clean install uninstall
+	rm -f $(BINDIR)/$(TARGET)
+
+help:
+	@echo "Targets:  all (default)  clean  install  uninstall  help"
+	@echo "Options:  STATIC=1  SANITIZE=1|2  V=1  BINDIR=<dir>  BUILD_DIR=<dir>"
+
+# Header dependency tracking (generated by -MMD)
+-include $(DEPFILES)
