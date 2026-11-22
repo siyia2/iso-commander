@@ -708,6 +708,7 @@ namespace {
                 processOperation(input, isFiltered, filteredFiles, isoDirs,
                                  operation, umountMvRmBreak, filterHistory,
                                  /*useSourceList=*/false);
+                clearPendingSelection();
             }
 
             /**

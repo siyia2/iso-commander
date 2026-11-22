@@ -542,6 +542,7 @@ namespace {
                 needsClrScrn = true;
                 if (verbose) printVerboseResults();
                 keybindingGuard.restore();
+                clearPendingSelection();
             }
 
             // ----- dispatcher ------------------------------------------------------
