@@ -527,7 +527,7 @@ static void reportErrorCpMvRm(OperationContext& ctx,
  * @brief Performs a binary file copy with real-time progress tracking and
  *        cancellation support.
  *
- * Uses an 8 MiB buffered stream approach to transfer data between two paths.
+ * Uses a 4 MiB buffered stream approach to transfer data between two paths.
  * Data is written to a temporary file (@p dst plus a ".part" suffix) and
  * renamed over @p dst only after every byte has been written and the stream
  * has been flushed and closed successfully. The destination is therefore
@@ -557,7 +557,7 @@ static void reportErrorCpMvRm(OperationContext& ctx,
 static bool bufferedCopyWithProgress(const fs::path& src, const fs::path& dst,
                               std::atomic<size_t>* completedBytes,
                               std::error_code& ec) {
-    const size_t bufferSize = 8 * 1024 * 1024;
+    const size_t bufferSize = 4 * 1024 * 1024;
     std::vector<char> buffer(bufferSize);
 
     if (GlobalState::g_operationCancelled.load()) return false;
