@@ -3,21 +3,13 @@
 // C++ Standard Library Headers
 #include <algorithm>
 #include <atomic>
-#include <cctype>
-#include <charconv>
-#include <condition_variable>
 #include <cstddef>
-#include <cstdlib>
 #include <format>
 #include <iostream>
 #include <memory>
 #include <mutex>
-#include <sstream>
 #include <string>
-#include <string_view>
 #include <thread>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -190,8 +182,8 @@ namespace {
             bool&                     hasPendingProcess;
             bool&                     umountMvRmBreak;
             std::string&              listSubtype;
-            size_t&                   currentPage;
-            size_t&                   originalPage;
+            std::size_t&                   currentPage;
+            std::size_t&                   originalPage;
 
             bool needsClrScrn  = true;
             bool filterHistory = false;
@@ -564,7 +556,7 @@ namespace {
              *
              * @return Total number of pages in the active list.
              */
-            size_t countPages() {
+            std::size_t countPages() {
                 std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
                 const std::vector<std::string>& currentList =
                     isFiltered ? filteredFiles
@@ -585,7 +577,7 @@ namespace {
              *         otherwise.
              */
             LoopAction pagination(const std::string& input) {
-                size_t totalPages = countPages();
+                std::size_t totalPages = countPages();
                 bool need2Sort = false;
                 const bool handled = processPaginationHelpAndDisplay(
                     input, totalPages, currentPage, isFiltered, needsClrScrn,

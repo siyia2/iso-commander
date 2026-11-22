@@ -6,7 +6,6 @@
 #include <chrono>
 #include <csignal>
 #include <cstddef>
-#include <cstdint>
 #include <cstdlib>
 #include <format>
 #include <functional>
@@ -22,7 +21,6 @@
 // C / System Headers
 #include <fcntl.h>
 #include <poll.h>
-#include <signal.h>
 #include <termios.h>
 #include <unistd.h>
 

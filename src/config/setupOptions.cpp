@@ -2,6 +2,7 @@
 
 // C++ Standard Library Headers
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
@@ -9,15 +10,12 @@
 #include <string>
 #include <vector>
 
-// C / System Headers
-#include <ctype.h>
-
 // Project Headers
 #include "isocmd/core/concurrency.h"
-#include "isocmd/ui/display.h"
 #include "isocmd/core/state.h"
-#include "isocmd/ui/themes.h"
 #include "isocmd/config/settings.h"
+#include "isocmd/ui/display.h"
+#include "isocmd/ui/themes.h"
 
 namespace fs = std::filesystem;
 
@@ -126,7 +124,8 @@ void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& c
 		auto it = configMap.find(key);
 		if (it == configMap.end()) return defaultVal;
 		const std::string& s = it->second;
-		if (s.empty() || !std::all_of(s.begin(), s.end(), ::isdigit)) return defaultVal;
+		if (s.empty() || !std::all_of(s.begin(), s.end(), [](unsigned char c) {return std::isdigit(c);}))
+		return defaultVal;
 		if (s.size() > 1 && s[0] == '0') return defaultVal;
 		try {
 			return static_cast<size_t>(std::stoull(s));

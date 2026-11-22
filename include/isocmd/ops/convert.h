@@ -20,9 +20,9 @@
  *       must also be non-null.
  */
 struct ConversionBatchData {
-    std::atomic<size_t>* completedBytes = nullptr;
-    std::atomic<size_t>* completedTasks = nullptr;
-    std::atomic<size_t>* failedTasks = nullptr;
+    std::atomic<std::size_t>* completedBytes = nullptr;
+    std::atomic<std::size_t>* completedTasks = nullptr;
+    std::atomic<std::size_t>* failedTasks = nullptr;
 
     std::vector<std::string>* successfulOutputPaths = nullptr;
     std::mutex* outPathsMutex = nullptr;
@@ -80,7 +80,7 @@ void convertToISO(
  * @note Thread-safety: safe to invoke concurrently for distinct (ccdPath, isoPath)
  *       pairs; concurrent calls sharing either path are the caller's responsibility.
  */
-bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
+bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std::atomic<std::size_t>* completedBytes);
 
 /**
  * @brief Converts a CHD (MAME Compressed Hunks of Data) image into a plain ISO.
@@ -94,7 +94,7 @@ bool convertCcdToIso(const std::string& ccdPath, const std::string& isoPath, std
  * @return @c true on success; @c false on read error, decode failure, or
  *         cancellation.
  */
-bool convertChdToIso(const std::string& chdPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
+bool convertChdToIso(const std::string& chdPath, const std::string& isoPath, std::atomic<std::size_t>* completedBytes);
 
 /**
  * @brief Converts a DAA/GBI image into a plain ISO.
@@ -108,7 +108,7 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath, std
  * @return @c true on success; @c false on read error, decode failure, or
  *         cancellation.
  */
-bool convertDaaToIso(const std::string &inputFile, const std::string &outputFile, std::atomic<size_t> *completedBytes);
+bool convertDaaToIso(const std::string &inputFile, const std::string &outputFile, std::atomic<std::size_t> *completedBytes);
 
 /**
  * @brief Converts an MDF/MDS image pair into a plain ISO.
@@ -123,7 +123,7 @@ bool convertDaaToIso(const std::string &inputFile, const std::string &outputFile
  * @return @c true on success; @c false on read error, descriptor mismatch, or
  *         cancellation.
  */
-bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<size_t>* completedBytes);
+bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std::atomic<std::size_t>* completedBytes);
 
 /**
  * @brief Converts an NRG (Nero) image into a plain ISO.
@@ -137,6 +137,6 @@ bool convertMdfToIso(const std::string& mdfPath, const std::string& isoPath, std
  * @return @c true on success; @c false on read error, invalid NRG layout, or
  *         cancellation.
  */
-bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<size_t>* completedBytes);
+bool convertNrgToIso(const std::string& inputFile, const std::string& outputFile, std::atomic<std::size_t>* completedBytes);
 
 #endif // CONVERT_H

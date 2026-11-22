@@ -4,7 +4,9 @@
 #define WRITE2USBUI_H
 
 // C++ Standard Library Headers
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <condition_variable>
 #include <csignal>
 #include <cstddef>

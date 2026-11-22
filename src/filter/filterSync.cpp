@@ -32,7 +32,7 @@ static std::string extractFilterTargetText(const std::string& path, bool namesOn
         return path;
     }
 
-    const size_t slashPos = path.find_last_of('/');
+    const std::size_t slashPos = path.find_last_of('/');
     return (slashPos != std::string::npos) ? path.substr(slashPos + 1) : path;
 }
 
@@ -42,13 +42,13 @@ static std::string extractFilterTargetText(const std::string& path, bool namesOn
  * @param globalList Sorted list of global paths.
  * @return Hash map from path string to its index in @p globalList.
  */
-static std::unordered_map<std::string, size_t> buildPathIndexMap(
+static std::unordered_map<std::string, std::size_t> buildPathIndexMap(
     const std::vector<std::string>& globalList)
 {
-    std::unordered_map<std::string, size_t> indexOf;
+    std::unordered_map<std::string, std::size_t> indexOf;
     indexOf.reserve(globalList.size());
 
-    for (size_t i = 0; i < globalList.size(); ++i) {
+    for (std::size_t i = 0; i < globalList.size(); ++i) {
         indexOf.emplace(globalList[i], i);
     }
 
@@ -67,13 +67,13 @@ static std::unordered_map<std::string, size_t> buildPathIndexMap(
  * @param filteringStack Active filter stack applied sequentially to new candidates.
  * @return Indices in @p newGlobal of newly added paths matching all filter levels.
  */
-static std::vector<size_t> evaluateNewCandidates(
+static std::vector<std::size_t> evaluateNewCandidates(
     const std::vector<std::string>& newGlobal,
     const std::unordered_set<std::string>& oldPaths,
     const std::vector<FilteringState>& filteringStack)
 {
-    std::vector<size_t> candidates;
-    for (size_t i = 0; i < newGlobal.size(); ++i) {
+    std::vector<std::size_t> candidates;
+    for (std::size_t i = 0; i < newGlobal.size(); ++i) {
         if (oldPaths.find(newGlobal[i]) == oldPaths.end()) {
             candidates.push_back(i);
         }
@@ -86,15 +86,15 @@ static std::vector<size_t> evaluateNewCandidates(
 
         std::vector<std::string> texts;
         texts.reserve(candidates.size());
-        for (size_t gi : candidates) {
+        for (std::size_t gi : candidates) {
             texts.push_back(extractFilterTargetText(newGlobal[gi], lvl.namesOnly));
         }
 
-        const std::vector<size_t> hit = filterFilesIndices(texts, lvl.query);
+        const std::vector<std::size_t> hit = filterFilesIndices(texts, lvl.query);
 
-        std::vector<size_t> next;
+        std::vector<std::size_t> next;
         next.reserve(hit.size());
-        for (size_t h : hit) {
+        for (std::size_t h : hit) {
             next.push_back(candidates[h]);
         }
         candidates = std::move(next);
@@ -137,9 +137,9 @@ void refreshFilterKeepingResults(
         return;
     }
 
-    const std::unordered_map<std::string, size_t> indexOf = buildPathIndexMap(newGlobal);
+    const std::unordered_map<std::string, std::size_t> indexOf = buildPathIndexMap(newGlobal);
 
-    std::vector<size_t> result;
+    std::vector<std::size_t> result;
     result.reserve(filteredFiles.size());
 
     // 1) Existing results that still exist: kept untouched.
@@ -152,7 +152,7 @@ void refreshFilterKeepingResults(
 
     // 2) Newly discovered ISOs: must pass every level, each level using the
     //    text mode it was committed with. One batched search per level.
-    std::vector<size_t> candidates = evaluateNewCandidates(newGlobal, oldPaths, filteringStack);
+    std::vector<std::size_t> candidates = evaluateNewCandidates(newGlobal, oldPaths, filteringStack);
     result.insert(result.end(), candidates.begin(), candidates.end());
 
     // Global list is sorted, so ascending index == display order.
@@ -168,7 +168,7 @@ void refreshFilterKeepingResults(
 
     filteredFiles.clear();
     filteredFiles.reserve(result.size());
-    for (size_t idx : result) {
+    for (std::size_t idx : result) {
         filteredFiles.push_back(newGlobal[idx]);
     }
 
@@ -210,15 +210,15 @@ void refreshFilteredSourceIndices(
     if (filteringStack.empty() || filteredFiles.empty()) return;
 
     // Only the F filtered paths are stored; views avoid copying strings.
-    std::unordered_map<std::string_view, size_t> wanted;
+    std::unordered_map<std::string_view, std::size_t> wanted;
     wanted.reserve(filteredFiles.size());
-    for (size_t k = 0; k < filteredFiles.size(); ++k)
+    for (std::size_t k = 0; k < filteredFiles.size(); ++k)
         wanted.emplace(filteredFiles[k], k);
 
-    std::vector<size_t> currentIndices(filteredFiles.size());
-    size_t found = 0;
+    std::vector<std::size_t> currentIndices(filteredFiles.size());
+    std::size_t found = 0;
 
-    for (size_t i = 0; i < globalIsoFileList.size() && found < wanted.size(); ++i) {
+    for (std::size_t i = 0; i < globalIsoFileList.size() && found < wanted.size(); ++i) {
         const auto it = wanted.find(globalIsoFileList[i]);
         if (it != wanted.end()) {
             currentIndices[it->second] = i;

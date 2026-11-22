@@ -9,7 +9,6 @@
 #include <memory>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -45,7 +44,7 @@ struct QueryToken {
  * @brief A single level of filter state, enabling nested (stacked) filtering.
  */
 struct FilteringState {
-    std::vector<size_t> originalIndices;
+    std::vector<std::size_t> originalIndices;
     std::string query;
     bool isFiltered;
     bool namesOnly = false;
@@ -59,7 +58,7 @@ struct FilterContext {
     bool& isFiltered;
     bool& needsClrScrn;
     bool& filterHistory;
-    size_t& currentPage;
+    std::size_t& currentPage;
     const std::vector<std::string>* sourceOverride = nullptr;
     bool isUnmount = false;
     bool toggleFullListUmount = false;
@@ -80,7 +79,7 @@ struct FilterContext {
 /**
  * @brief Translates a local filtered-list index into its global list index.
  */
-size_t resolveGlobalIndex(size_t localIdx);
+std::size_t resolveGlobalIndex(std::size_t localIdx);
 
 /**
  * @brief Extracts the basename-based unmount key from a mounted ISO path.
@@ -104,7 +103,7 @@ struct FilterCallConfig {
     bool* needsClrScrn = nullptr;
     bool* filterHistory = nullptr;
     bool* need2Sort = nullptr;
-    size_t* currentPage = nullptr;
+    std::size_t* currentPage = nullptr;
     bool isUnmount = false;
     bool toggleFullList = false;
     std::function<void()> repaintList = nullptr;
@@ -129,7 +128,7 @@ struct FilterEntryContext {
     bool* isFiltered = nullptr;                        /**< Points to caller's flag indicating whether the list is filtered. */
     bool* needsClrScrn = nullptr;                      /**< Points to caller's flag requesting a full screen redraw. */
     bool* filterHistory = nullptr;                     /**< Points to caller's flag indicating filter history should be saved. */
-    size_t* currentPage = nullptr;                     /**< Points to caller's page index; may be reset after filtering. */
+    std::size_t* currentPage = nullptr;                     /**< Points to caller's page index; may be reset after filtering. */
     bool* need2Sort = nullptr;                         /**< Optional pointer to flag requesting resort after filtering. */
     std::vector<std::string>* pendingIndices = nullptr;/**< Optional pointer to caller's pending-selection indices. */
     bool* hasPendingProcess = nullptr;                 /**< Optional pointer to flag indicating a staged process action. */
@@ -160,7 +159,7 @@ inline std::vector<FilteringState> filteringStack;
  *        pass this to lowercase each entry once instead of per call. When
  *        nullptr, entries are lowercased on every call.
  */
-std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query,
+std::vector<std::size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query,
                                         const std::vector<std::string>* precomputedLower = nullptr);
 
 /**
@@ -184,9 +183,9 @@ bool groupsHaveNegation(const std::vector<QueryGroup>& groups);
 
 /// Like filterFilesIndices, but tests only the previously established
 /// @p candidateIndices (incremental narrowing for the live preview).
-std::vector<size_t> filterFilesIndicesSubset(
+std::vector<std::size_t> filterFilesIndicesSubset(
     const std::vector<std::string>& files,
-    const std::vector<size_t>& candidateIndices,
+    const std::vector<std::size_t>& candidateIndices,
     const std::string& query,
     const std::vector<std::string>* precomputedLower);
 

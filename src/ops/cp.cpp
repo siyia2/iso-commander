@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
+#include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
+#include <string>
 #include <string_view>
 #include <system_error>
+#include <vector>
 
 // Project Headers
-#include "isocmd/ops/cpMvRm.h"
 #include "isocmd/core/state.h"
+#include "isocmd/ops/cpMvRm.h"
 
 /**
  * @brief Performs a buffered file copy with progress and cancellation support.

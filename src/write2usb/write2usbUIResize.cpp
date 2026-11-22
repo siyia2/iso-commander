@@ -4,33 +4,20 @@
 #include <algorithm>
 #include <atomic>
 #include <cassert>
-#include <cctype>
 #include <cerrno>
 #include <chrono>
-#include <condition_variable>
-#include <csignal>
 #include <cstddef>
-#include <cstdint>
 #include <cstdio>
-#include <cstdlib>
-#include <exception>
 #include <filesystem>
-#include <format>
-#include <fstream>
 #include <functional>
-#include <future>
 #include <iomanip>
 #include <iostream>
 #include <memory>
 #include <mutex>
-#include <numeric>
-#include <optional>
 #include <sstream>
 #include <string>
-#include <system_error>
 #include <thread>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -38,25 +25,17 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
-#include <sys/ioctl.h>
 #include <unistd.h>
 
 // Third-Party Library Headers
-#include <readline/history.h>
 #include <readline/readline.h>
 
 // Project Headers
 #include "isocmd/ui/display.h"
-#include "isocmd/input/inputHandling.h"
 #include "isocmd/ui/rendering.h"
-#include "isocmd/ui/pausePrompts.h"
-#include "isocmd/input/readline.h"
-#include "isocmd/util/sort.h"
 #include "isocmd/core/state.h"
 #include "isocmd/util/stringManipulation.h"
 #include "isocmd/ui/themes.h"
-#include "isocmd/core/threadpool.h"
-#include "isocmd/input/tokenize.h"
 #include "isocmd/usb/write2usbUI.h"
 
 namespace fs = std::filesystem;

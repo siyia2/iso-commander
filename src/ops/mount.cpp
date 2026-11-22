@@ -6,11 +6,13 @@
 #include <cctype>
 #include <cerrno>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <initializer_list>
 #include <iterator>
 #include <mutex>
 #include <string>
@@ -22,9 +24,9 @@
 
 // C / System Headers
 #include <fcntl.h>
-#include <stdint.h>
 #include <spawn.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 

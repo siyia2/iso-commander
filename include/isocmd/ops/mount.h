@@ -113,6 +113,6 @@ private:
     }
 };
 
-void mountIsoFiles(const std::vector<std::string>& isoFiles, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool silentMode);
+void mountIsoFiles(const std::vector<std::string>& isoFiles, std::atomic<std::size_t>* completedTasks, std::atomic<std::size_t>* failedTasks, bool silentMode);
 
 #endif // MOUNT_H

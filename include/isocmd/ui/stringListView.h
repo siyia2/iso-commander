@@ -23,13 +23,13 @@ public:
         : base_(&base) {}
 
     StringListView(const std::vector<std::string>& base,
-                   const std::vector<size_t>& subset) noexcept
+                   const std::vector<std::size_t>& subset) noexcept
         : base_(&base), subset_(&subset) {}
 
-    size_t size()  const noexcept { return subset_ ? subset_->size() : base_->size(); }
+    std::size_t size()  const noexcept { return subset_ ? subset_->size() : base_->size(); }
     bool   empty() const noexcept { return size() == 0; }
 
-    const std::string& operator[](size_t i) const noexcept {
+    const std::string& operator[](std::size_t i) const noexcept {
         return subset_ ? (*base_)[(*subset_)[i]] : (*base_)[i];
     }
 
@@ -41,7 +41,7 @@ public:
         using pointer           = const std::string*;
         using reference         = const std::string&;
 
-        const_iterator(const StringListView* v, size_t i) noexcept : v_(v), i_(i) {}
+        const_iterator(const StringListView* v, std::size_t i) noexcept : v_(v), i_(i) {}
         reference operator*()  const noexcept { return (*v_)[i_]; }
         pointer   operator->() const noexcept { return &(*v_)[i_]; }
         const_iterator& operator++() noexcept { ++i_; return *this; }
@@ -50,7 +50,7 @@ public:
         bool operator!=(const const_iterator& o) const noexcept { return i_ != o.i_; }
     private:
         const StringListView* v_;
-        size_t i_;
+        std::size_t i_;
     };
 
     const_iterator begin() const noexcept { return {this, 0}; }
@@ -58,7 +58,7 @@ public:
 
 private:
     const std::vector<std::string>* base_;
-    const std::vector<size_t>*      subset_ = nullptr;
+    const std::vector<std::size_t>*      subset_ = nullptr;
 };
 
 #endif // STRINGLISTVIEW_H

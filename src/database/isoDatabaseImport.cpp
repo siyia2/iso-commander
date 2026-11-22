@@ -5,7 +5,6 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
-#include <filesystem>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -18,8 +17,6 @@
 #include <vector>
 
 // Project Headers
-#include "isocmd/core/concurrency.h"
-#include "isocmd/core/sharedRefreshState.h"
 #include "isocmd/core/state.h"
 #include "isocmd/core/threadpool.h"
 #include "isocmd/database/databaseOps.h"
@@ -71,10 +68,10 @@ namespace {
      * @return Prefix key through the third '/' or the full path.
      */
     std::string thirdSlashPrefix(const std::string& path) {
-        size_t slashCount = 0;
-        size_t pos = 0;
+        std::size_t slashCount = 0;
+        std::size_t pos = 0;
 
-        for (size_t i = 1; i < path.length() && slashCount < 3; ++i) {
+        for (std::size_t i = 1; i < path.length() && slashCount < 3; ++i) {
             if (path[i] == '/') {
                 pos = i;
                 ++slashCount;
@@ -294,30 +291,30 @@ namespace {
         const std::shared_ptr<RefreshState>& state,
         std::vector<std::string>& allIsoFiles,
         std::unordered_set<std::string>& uniqueErrorMessages,
-        std::atomic<size_t>& totalFiles,
+        std::atomic<std::size_t>& totalFiles,
         std::mutex& processMutex,
         std::mutex& traverseErrorMutex,
         int localMaxDepth,
         bool localPromptFlag
     ) {
-        const size_t groupSize = std::max<size_t>(
+        const std::size_t groupSize = std::max<std::size_t>(
             1,
             getStaticThreadPool().threadCount()
         );
 
-        for (size_t i = 0; i < finalPaths.size(); i += groupSize) {
+        for (std::size_t i = 0; i < finalPaths.size(); i += groupSize) {
             if (state->stopImport.load()) {
                 return false;
             }
 
-            const size_t end = std::min(i + groupSize, finalPaths.size());
+            const std::size_t end = std::min(i + groupSize, finalPaths.size());
 
             std::vector<std::thread> threads;
             threads.reserve(end - i);
 
             state->activeWorkers.store(0, std::memory_order_relaxed);
 
-            for (size_t j = i; j < end; ++j) {
+            for (std::size_t j = i; j < end; ++j) {
                 if (state->stopImport.load()) {
                     break;
                 }
@@ -428,7 +425,7 @@ void backgroundDatabaseImport(std::shared_ptr<RefreshState> state) {
     }
 
     std::vector<std::string> allIsoFiles;
-    std::atomic<size_t> totalFiles{0};
+    std::atomic<std::size_t> totalFiles{0};
     std::unordered_set<std::string> uniqueErrorMessages;
 
     std::mutex processMutex;

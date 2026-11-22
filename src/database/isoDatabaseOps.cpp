@@ -6,6 +6,8 @@
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -21,24 +23,23 @@
 #include <vector>
 
 // C / System Headers
-#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 // Project Headers
 #include "isocmd/core/caches.h"
+#include "isocmd/core/concurrency.h"
 #include "isocmd/core/globalMutexes.h"
 #include "isocmd/core/state.h"
 #include "isocmd/database/databaseOps.h"
 #include "isocmd/input/history.h"
 #include "isocmd/input/inputHandling.h"
-#include "isocmd/core/concurrency.h"
 #include "isocmd/core/threadpool.h"
-#include "isocmd/ui/display.h"
 #include "isocmd/ui/pausePrompts.h"
 #include "isocmd/ui/rendering.h"
 #include "isocmd/ui/themes.h"

@@ -17,6 +17,9 @@
 #include <utility>
 #include <vector>
 
+// C / System Headers
+#include <sys/types.h>
+
 // Third-Party Library Headers
 #include <readline/readline.h>
 

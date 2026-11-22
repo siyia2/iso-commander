@@ -1,21 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
-#include <string>
+#include <cstddef>
+#include <iostream>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 
 // Project Headers
 #include "isocmd/cli/cmdAutomation.h"
-#include "isocmd/core/concurrency.h"
 #include "isocmd/input/inputHandling.h"
-#include "isocmd/ops/mount.h"
-#include "isocmd/ui/rendering.h"
 #include "isocmd/core/state.h"
 #include "isocmd/ui/themes.h"
-#include "isocmd/core/threadpool.h"
-#include "isocmd/ops/umount.h"
-#include "isocmd/ui/verbose.h"
-#include "isocmd/usb/write2usbUI.h"
 
 // ─── Argument parsing ────────────────────────────────────────────────────────
 
@@ -330,7 +326,7 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
     return true;
 }
 
-// Implemented in cmdAutomationCovertWrite.cpp
+// Implemented in cmdAutomationConvertWrite.cpp
 int handleConvert(const ParsedArgs& args);
 int handleWriteUsb(const ParsedArgs& args);
 

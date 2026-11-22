@@ -72,7 +72,7 @@ namespace {
                            std::unordered_set<int>& processedIndices,
                            std::unordered_set<std::string>& invalidInputs,
                            std::unordered_set<std::string>& invalidRanges) {
-        size_t dashPos = token.find('-');
+        std::size_t dashPos = token.find('-');
 
         // More than one dash, e.g. "1-2-3"
         if (token.find('-', dashPos + 1) != std::string::npos) {
@@ -94,8 +94,8 @@ namespace {
 
         // "1-99999999999", or "1-5000" when only 100 files exist
         if (a == ParseResult::OutOfRange || b == ParseResult::OutOfRange ||
-            static_cast<size_t>(start) > isoFiles.size() ||
-            static_cast<size_t>(end) > isoFiles.size()) {
+            static_cast<std::size_t>(start) > isoFiles.size() ||
+            static_cast<std::size_t>(end) > isoFiles.size()) {
             invalidRanges.insert(token);
             return;
         }
@@ -128,7 +128,7 @@ namespace {
         int num = 0;
 
         if (parseIndex(token, num) == ParseResult::Ok &&
-            static_cast<size_t>(num) <= isoFiles.size()) {
+            static_cast<std::size_t>(num) <= isoFiles.size()) {
             processedIndices.insert(num);
         } else {
             invalidIndices.insert(token);
@@ -191,7 +191,7 @@ void tokenizeInput(const std::string& input,
     std::unordered_set<std::string> invalidRanges;
 
     while (iss >> token) {
-        size_t dashPos = token.find('-');
+        std::size_t dashPos = token.find('-');
 
         if (dashPos != std::string::npos) {
             processRangeToken(token, isoFiles, processedIndices,

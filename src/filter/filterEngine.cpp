@@ -25,7 +25,7 @@
  * @param localIdx Index into the list currently being searched/displayed.
  * @return The corresponding index into globalIsoFileList.
  */
-size_t resolveGlobalIndex(size_t localIdx) {
+std::size_t resolveGlobalIndex(std::size_t localIdx) {
     if (!filteringStack.empty()) {
         const auto& top = filteringStack.back().originalIndices;
         if (localIdx < top.size())
@@ -44,12 +44,12 @@ size_t resolveGlobalIndex(size_t localIdx) {
  * @return The entry's basename with any trailing "~hash" suffix removed.
  */
 std::string extractUnmountKey(const std::string& path) {
-    size_t lastSlash = path.find_last_of('/');
+    std::size_t lastSlash = path.find_last_of('/');
     std::string name = (lastSlash != std::string::npos)
         ? path.substr(lastSlash + 1)
         : path;
 
-    size_t lastTilde = name.find_last_of('~');
+    std::size_t lastTilde = name.find_last_of('~');
     return (lastTilde != std::string::npos)
         ? name.substr(0, lastTilde)
         : name;
@@ -77,7 +77,7 @@ static std::string formatSearchCandidate(
     if (!useNameOnly)
         return path;
 
-    const size_t lastSlash = path.find_last_of('/');
+    const std::size_t lastSlash = path.find_last_of('/');
     return (lastSlash != std::string::npos)
         ? path.substr(lastSlash + 1)
         : path;
@@ -104,9 +104,9 @@ static bool collectFilterMatches(
     bool useNameOnly,
     bool useUnmountKey,
     std::vector<std::string>& outFiltered,
-    std::vector<size_t>& outIndices)
+    std::vector<std::size_t>& outIndices)
 {
-    std::vector<size_t> matchedIndices;
+    std::vector<std::size_t> matchedIndices;
 
     if (useNameOnly || useUnmountKey) {
         std::vector<std::string> derived;
@@ -126,7 +126,7 @@ static bool collectFilterMatches(
     outFiltered.reserve(matchedIndices.size());
     outIndices.reserve(matchedIndices.size());
 
-    for (size_t idx : matchedIndices) {
+    for (std::size_t idx : matchedIndices) {
         outFiltered.push_back(sourceList[idx]);
         outIndices.push_back(idx);
     }
@@ -152,7 +152,7 @@ static void commitFilteredResults(
     FilterContext& ctx,
     bool useNameOnly,
     std::vector<std::string>&& filteredFiles,
-    const std::vector<size_t>& matchedIndices)
+    const std::vector<std::size_t>& matchedIndices)
 {
     ctx.currentPage  = 0;
     ctx.needsClrScrn = true;
@@ -164,7 +164,7 @@ static void commitFilteredResults(
     newState.namesOnly  = useNameOnly;
     newState.isFiltered = true;
 
-    for (size_t idx : matchedIndices)
+    for (std::size_t idx : matchedIndices)
         newState.originalIndices.push_back(resolveGlobalIndex(idx));
 
     filteringStack.push_back(std::move(newState));
@@ -199,7 +199,7 @@ bool applyFilterCore(const std::string& searchString, FilterContext& ctx) {
     const bool useUnmountKey = ctx.isUnmount && !ctx.toggleFullListUmount;
 
     std::vector<std::string> tempFiltered;
-    std::vector<size_t> tempIndices;
+    std::vector<std::size_t> tempIndices;
 
     if (!collectFilterMatches(
             sourceList,

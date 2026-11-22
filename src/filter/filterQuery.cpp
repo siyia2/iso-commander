@@ -11,6 +11,7 @@
 #include <numeric>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 // C / System Headers
@@ -18,9 +19,9 @@
 
 // Project Headers
 #include "isocmd/core/concurrency.h"
+#include "isocmd/core/threadpool.h"
 #include "isocmd/filter/filter.h"
 #include "isocmd/util/stringManipulation.h"
-#include "isocmd/core/threadpool.h"
 
 // ─── SIMD Search Implementation (SSE2) ───────────────────────────────────────
 

@@ -2,27 +2,19 @@
 
 // C++ Standard Library Headers
 #include <algorithm>
-#include <atomic>
 #include <cctype>
-#include <chrono>
-#include <condition_variable>
-#include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <future>
 #include <iostream>
 #include <memory>
 #include <mutex>
-#include <numeric>
-#include <optional>
 #include <sstream>
 #include <string>
 #include <system_error>
-#include <thread>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -36,17 +28,13 @@
 
 // Project Headers
 #include "isocmd/ui/display.h"
-#include "isocmd/input/inputHandling.h"
 #include "isocmd/ui/rendering.h"
 #include "isocmd/ui/pausePrompts.h"
-#include "isocmd/input/readline.h"
-#include "isocmd/select/select.h"
 #include "isocmd/util/sort.h"
 #include "isocmd/core/state.h"
 #include "isocmd/util/stringManipulation.h"
 #include "isocmd/ui/themes.h"
 #include "isocmd/core/threadpool.h"
-#include "isocmd/input/tokenize.h"
 #include "isocmd/usb/write2usbUI.h"
 
 namespace fs = std::filesystem;

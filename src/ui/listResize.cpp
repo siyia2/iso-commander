@@ -1,27 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
-#include <array>
 #include <atomic>
 #include <cassert>
-#include <charconv>
-#include <chrono>
-#include <condition_variable>
-#include <csignal>
-#include <cstddef>
-#include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <memory>
-#include <mutex>
 #include <string>
-#include <string_view>
-#include <thread>
 #include <utility>
 
 // C / System Headers
 #include <signal.h>
-#include <sys/ioctl.h>
-#include <unistd.h>
 
 // Third-Party Library Headers
 #include <readline/readline.h>

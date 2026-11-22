@@ -7,12 +7,12 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 
 // Project Headers
 #include "isocmd/ops/cpMvRm.h"
 #include "isocmd/core/state.h"
 #include "isocmd/ui/themes.h"
-#include "isocmd/ui/verbose.h"
 
 /**
  * @brief Executes a file move operation to a single destination.

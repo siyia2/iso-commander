@@ -5,32 +5,18 @@
 #include <array>
 #include <atomic>
 #include <charconv>
-#include <chrono>
-#include <condition_variable>
 #include <cstddef>
-#include <cstdint>
 #include <filesystem>
-#include <functional>
 #include <iostream>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
-#include <thread>
-#include <utility>
 #include <vector>
-
-// C / System Headers
-#include <sys/ioctl.h>
-#include <unistd.h>
-
-// Third-Party Library Headers
-#include <readline/readline.h>
 
 // Project Headers
 #include "isocmd/ui/display.h"
 #include "isocmd/filter/filter.h"
-#include "isocmd/database/databaseOps.h"
 #include "isocmd/ui/rendering.h"
 #include "isocmd/app/main.h"
 #include "isocmd/core/sharedRefreshState.h"
@@ -171,8 +157,8 @@ namespace {
      * @param c                 Theme color configuration structure (@c PrintListTheme).
      * @return size_t           The exact byte offset position in the buffer where the sync line can be spliced.
      */
-    size_t appendHeader(std::string& output, bool disablePagination, size_t effectivePage, size_t totalPages,
-                        size_t startIndex, size_t endIndex, size_t totalItems, const PrintListTheme& c)
+    size_t appendHeader(std::string& output, bool disablePagination, std::size_t effectivePage, std::size_t totalPages,
+                        std::size_t startIndex, std::size_t endIndex, std::size_t totalItems, const PrintListTheme& c)
     {
         if (!disablePagination) {
             output.append(c.head).append("Page ");
@@ -188,11 +174,11 @@ namespace {
             appendNum(output, totalItems);
             output.append(c.head).append(")");
 
-            size_t syncInsertPos = output.size();
+            std::size_t syncInsertPos = output.size();
             output.append(UI::Palette::BoldReset).append("\n\n");
             return syncInsertPos;
         } else {
-            size_t syncInsertPos = output.size();
+            std::size_t syncInsertPos = output.size();
             return syncInsertPos;
         }
     }
@@ -202,8 +188,8 @@ namespace {
      */
     struct PrintFilterContext {
         const std::vector<unsigned long>* origIdx; /**< Pointer to original index mapping vector, or nullptr. */
-        size_t origSize;                           /**< Total size of the original index vector. */
-        size_t maxOrigDigits;                      /**< Maximum digit length across active original indices for alignment. */
+        std::size_t origSize;                           /**< Total size of the original index vector. */
+        std::size_t maxOrigDigits;                      /**< Maximum digit length across active original indices for alignment. */
     };
 
     /**
@@ -215,7 +201,7 @@ namespace {
         bool isMountedMode;      /**< True if the item list represents mounted ISO entries. */
         bool showNamesOnly;      /**< Configuration flag to hide parent directory paths. */
         bool showFullUmount;     /**< Configuration flag to display full unmount path details. */
-        size_t usableCols;       /**< Maximum width in columns available for row rendering. */
+        std::size_t usableCols;       /**< Maximum width in columns available for row rendering. */
         const PrintListTheme& colors; /**< Theme palette (non-owning; must outlive the row config). */
     };
 
@@ -328,7 +314,7 @@ namespace {
      * @param listSubType Extension or sub-format string used for path splitting.
      * @param cfg         Row configuration flags, view constraints, and color definitions (@c RowConfig).
      */
-    void appendItemRow(std::string& output, const StringListView& items, size_t i, size_t maxDigits,
+    void appendItemRow(std::string& output, const StringListView& items, std::size_t i, std::size_t maxDigits,
                        const PrintFilterContext& filterCtx, const std::string& listSubType, const RowConfig& cfg)
     {
         const std::size_t rowStart = output.size();
@@ -360,8 +346,8 @@ namespace {
      * @param isImgMode          Flag indicating if the list represents image files (used for color styling).
      * @param c                  Theme color configuration structure (@c PrintListTheme).
      */
-    void appendFooterAndPending(std::string& output, bool disablePagination, size_t effectivePage,
-                                size_t totalPages, bool showPendingIndices, bool hasPendingProcess,
+    void appendFooterAndPending(std::string& output, bool disablePagination, std::size_t effectivePage,
+                                std::size_t totalPages, bool showPendingIndices, bool hasPendingProcess,
                                 const std::vector<std::string>& pendingIndices, bool isImgMode, const PrintListTheme& c)
     {
         if (!disablePagination) {
@@ -378,7 +364,7 @@ namespace {
                   .append(UI::Palette::BoldReset).append(c.bracketBg).append("]: ");
 
             output.append(!isImgMode ? c.iso : c.img);
-            for (size_t i = 0; i < pendingIndices.size(); ++i) {
+            for (std::size_t i = 0; i < pendingIndices.size(); ++i) {
                 output.append(pendingIndices[i]);
                 if (i < pendingIndices.size() - 1) output.push_back(' ');
             }
@@ -397,7 +383,7 @@ namespace {
         bool showNamesOnly;     /**< Configuration toggle to show filenames only without paths. */
         bool showFullUmount;    /**< Configuration toggle for full unmount listing options. */
         PrintListTheme colors;  /**< Color palette associated with the list. */
-        size_t usableCols;      /**< Number of usable columns in the terminal (width - 1). */
+        std::size_t usableCols;      /**< Number of usable columns in the terminal (width - 1). */
         bool noFilterResults;   /**< True if an active filter yields zero matching items. */
     };
 
@@ -415,8 +401,8 @@ namespace {
         const bool isFileMode     = (isIsoMode || isImgMode);
         const bool showNamesOnly  = displayConfig::toggleNamesOnly;
         const bool showFullUmount = displayConfig::toggleFullListUmount;
-        const size_t termCols   = terminalColumns();
-        const size_t usableCols = termCols > 1 ? termCols - 1 : 0;
+        const std::size_t termCols   = terminalColumns();
+        const std::size_t usableCols = termCols > 1 ? termCols - 1 : 0;
 
         const bool noFilterResults =
             (items.empty() && !GlobalState::globalIsoFileList.empty() && isIsoMode) ||
@@ -430,11 +416,11 @@ namespace {
      */
     struct PaginationInfo {
         bool disablePagination; /**< True if pagination is turned off or all items fit on one page. */
-        size_t totalPages;      /**< Total number of available pages. */
-        size_t effectivePage;   /**< Clamped zero-based active page index. */
-        size_t startIndex;      /**< Starting index of items for the current page. */
-        size_t endIndex;        /**< Ending index (exclusive) of items for the current page. */
-        size_t maxDigits;       /**< Number of digits required to format row item numbers. */
+        std::size_t totalPages;      /**< Total number of available pages. */
+        std::size_t effectivePage;   /**< Clamped zero-based active page index. */
+        std::size_t startIndex;      /**< Starting index of items for the current page. */
+        std::size_t endIndex;        /**< Ending index (exclusive) of items for the current page. */
+        std::size_t maxDigits;       /**< Number of digits required to format row item numbers. */
     };
 
     /**
@@ -444,15 +430,15 @@ namespace {
      * @param currentPage Requested zero-based page index.
      * @return PaginationInfo Computed pagination metrics.
      */
-    PaginationInfo computePagination(const StringListView& items, size_t currentPage) {
-        const size_t totalItems = items.size();
+    PaginationInfo computePagination(const StringListView& items, std::size_t currentPage) {
+        const std::size_t totalItems = items.size();
         const bool disablePagination = (GlobalState::ITEMS_PER_PAGE == 0 || totalItems <= GlobalState::ITEMS_PER_PAGE);
-        const size_t totalPages = disablePagination ? 1 : (totalItems + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE;
+        const std::size_t totalPages = disablePagination ? 1 : (totalItems + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE;
 
-        const size_t effectivePage = disablePagination ? 0 : (currentPage >= totalPages ? totalPages - 1 : currentPage);
-        const size_t startIndex = disablePagination ? 0 : (effectivePage * GlobalState::ITEMS_PER_PAGE);
-        const size_t endIndex = disablePagination ? totalItems : std::min(startIndex + GlobalState::ITEMS_PER_PAGE, totalItems);
-        const size_t maxDigits = digitCount(endIndex);
+        const std::size_t effectivePage = disablePagination ? 0 : (currentPage >= totalPages ? totalPages - 1 : currentPage);
+        const std::size_t startIndex = disablePagination ? 0 : (effectivePage * GlobalState::ITEMS_PER_PAGE);
+        const std::size_t endIndex = disablePagination ? totalItems : std::min(startIndex + GlobalState::ITEMS_PER_PAGE, totalItems);
+        const std::size_t maxDigits = digitCount(endIndex);
 
         return {disablePagination, totalPages, effectivePage, startIndex, endIndex, maxDigits};
     }
@@ -468,12 +454,12 @@ namespace {
      * @param noFilterResults If true, appends a "No filter results" notice.
      * @param c               Theme color palette.
      */
-    void reserveAndBuildOutput(std::string& output, size_t startIndex, size_t endIndex,
+    void reserveAndBuildOutput(std::string& output, std::size_t startIndex, std::size_t endIndex,
                                const StringListView& items, bool clearFirst, bool noFilterResults,
                                const PrintListTheme& c) {
         {
             std::size_t estimate = 1024;
-            for (size_t i = startIndex; i < endIndex; ++i) {
+            for (std::size_t i = startIndex; i < endIndex; ++i) {
                 estimate += items[i].size() + kPerRowOverhead;
             }
             if (output.capacity() < estimate) output.reserve(estimate);
@@ -498,9 +484,9 @@ namespace {
      * @param endIndex   End index of items on the page.
      * @return PrintFilterContext Populated print filter context structure.
      */
-    PrintFilterContext computePrintFilterContext(size_t startIndex, size_t endIndex) {
+    PrintFilterContext computePrintFilterContext(std::size_t startIndex, std::size_t endIndex) {
         const auto* origIdx = filteringStack.empty() ? nullptr : &filteringStack.back().originalIndices;
-        const size_t origSize = origIdx ? origIdx->size() : 0;
+        const std::size_t origSize = origIdx ? origIdx->size() : 0;
 
         std::size_t maxOrigDigits = 0;
         if (origIdx) {
@@ -528,7 +514,7 @@ namespace {
      * @param maybeSyncing  Quick preliminary check flag indicating whether an import could be running.
      */
     void flushOutput(const std::shared_ptr<RefreshState>& state, const std::string& output,
-                     const std::string& syncLine, size_t syncInsertPos, bool maybeSyncing) {
+                     const std::string& syncLine, std::size_t syncInsertPos, bool maybeSyncing) {
         std::lock_guard<std::mutex> lk(state->printMutex);
 
         const bool syncing = maybeSyncing
@@ -622,7 +608,7 @@ namespace {
  */
 void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
                std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-               size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst, bool showPendingIndices) {
+               std::size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst, bool showPendingIndices) {
 
     const ListConfig cfg = getListConfig(items, listType);
     const PaginationInfo page = computePagination(items, currentPage);
@@ -638,13 +624,13 @@ void printList(const StringListView& items, const std::string& listType, const s
 
     reserveAndBuildOutput(output, page.startIndex, page.endIndex, items, clearFirst, cfg.noFilterResults, cfg.colors);
 
-    size_t syncInsertPos = appendHeader(output, page.disablePagination, page.effectivePage, page.totalPages,
+    std::size_t syncInsertPos = appendHeader(output, page.disablePagination, page.effectivePage, page.totalPages,
                                         page.startIndex, page.endIndex, items.size(), cfg.colors);
 
     const PrintFilterContext filterCtx = computePrintFilterContext(page.startIndex, page.endIndex);
     const RowConfig rowCfg{cfg.isFileMode, cfg.isIsoMode, cfg.isMountedMode, cfg.showNamesOnly, cfg.showFullUmount, cfg.usableCols, cfg.colors};
 
-    for (size_t i = page.startIndex; i < page.endIndex; ++i) {
+    for (std::size_t i = page.startIndex; i < page.endIndex; ++i) {
         appendItemRow(output, items, i, page.maxDigits, filterCtx, listSubType, rowCfg);
     }
 

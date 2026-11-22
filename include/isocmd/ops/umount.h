@@ -53,6 +53,6 @@ struct VerboseMessageFormatter {
     }
 };
 
-void unmountISO(const std::vector<std::string>& isoDirs, std::atomic<size_t>* completedTasks, std::atomic<size_t>* failedTasks, bool silentMode);
+void unmountISO(const std::vector<std::string>& isoDirs, std::atomic<std::size_t>* completedTasks, std::atomic<std::size_t>* failedTasks, bool silentMode);
 
 #endif // UMOUNT_H

@@ -5,10 +5,12 @@
 #include <atomic>
 #include <cstddef>
 #include <format>
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 // Third-Party Library Headers
@@ -18,13 +20,11 @@
 // Project Headers
 #include "isocmd/ops/cpMvRm.h"
 #include "isocmd/input/history.h"
-#include "isocmd/input/inputHandling.h"
 #include "isocmd/input/readline.h"
 #include "isocmd/core/state.h"
 #include "isocmd/util/sort.h"
 #include "isocmd/util/stringManipulation.h"
 #include "isocmd/ui/themes.h"
-#include "isocmd/ui/verbose.h"
 
 namespace fs = std::filesystem;
 

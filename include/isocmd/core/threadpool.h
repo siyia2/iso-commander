@@ -875,7 +875,7 @@ private:
  */
 class ThreadPool {
 private:
-    const size_t num_threads;
+    const std::size_t num_threads;
 
     alignas(64) std::atomic<uint64_t> task_state{0};
 
@@ -946,10 +946,10 @@ private:
     }
 
 public:
-    explicit ThreadPool(size_t n) : num_threads(n) {
+    explicit ThreadPool(std::size_t n) : num_threads(n) {
         if (n == 0) throw std::invalid_argument("ThreadPool: n > 0 required");
         workers.reserve(n);
-        for (size_t i = 0; i < n; ++i) {
+        for (std::size_t i = 0; i < n; ++i) {
             workers.emplace_back(&ThreadPool::workerThread, this);
         }
     }
@@ -1018,7 +1018,7 @@ public:
         return pendingFromState(s) == 0 && activeFromState(s) == 0;
     }
 
-    size_t threadCount() const { return num_threads; }
+    std::size_t threadCount() const { return num_threads; }
     uint64_t pendingCount() const { return pendingFromState(task_state.load(std::memory_order_acquire)); }
     uint64_t activeCount() const { return activeFromState(task_state.load(std::memory_order_acquire)); }
 };
@@ -1029,7 +1029,7 @@ public:
 inline ThreadPool& getStaticThreadPool() {
     unsigned int maxThreads = std::max(2u, std::thread::hardware_concurrency());
     static ThreadPool instance(
-        std::min({ static_cast<size_t>(maxThreads),
+        std::min({ static_cast<std::size_t>(maxThreads),
                    GlobalConcurrency::MAX_USEFUL_THREADS }));
     return instance;
 }

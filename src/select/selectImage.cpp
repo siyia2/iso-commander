@@ -1,23 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
-#include <algorithm>
 #include <atomic>
-#include <cctype>
-#include <charconv>
-#include <condition_variable>
 #include <cstddef>
-#include <cstdlib>
 #include <format>
 #include <iostream>
 #include <memory>
-#include <mutex>
-#include <sstream>
 #include <string>
-#include <string_view>
-#include <thread>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -116,8 +105,8 @@ namespace {
             std::vector<std::string> pendingPaths;     // the real staged selection
             bool   hasPendingProcess = false;
 
-            size_t currentPage  = 0;
-            size_t originalPage = 0;
+            std::size_t currentPage  = 0;
+            std::size_t originalPage = 0;
 
             bool isFiltered    = false;
             bool needsClrScrn  = true;
@@ -432,7 +421,7 @@ namespace {
              *         otherwise.
              */
             LoopAction pagination(const std::string& input) {
-                size_t totalPages = (GlobalState::ITEMS_PER_PAGE != 0)
+                std::size_t totalPages = (GlobalState::ITEMS_PER_PAGE != 0)
                     ? ((files.size() + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE)
                     : 0;
 

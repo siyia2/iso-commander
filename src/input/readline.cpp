@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -22,9 +23,8 @@
 #include <readline/readline.h>
 
 // Project Headers
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/input/readline.h"
 #include "isocmd/core/state.h"
+#include "isocmd/input/readline.h"
 #include "isocmd/ui/themes.h"
 #include "isocmd/usb/write2usbUI.h"
 

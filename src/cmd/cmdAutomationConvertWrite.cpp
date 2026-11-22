@@ -3,39 +3,37 @@
 // C++ Standard Library Headers
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <future>
 #include <iostream>
+#include <memory>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <thread>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 // C / System Headers
-#include <ctype.h>
-#include <stddef.h>
 #include <unistd.h>
 
 // Project Headers
 #include "isocmd/cli/cmdAutomation.h"
 #include "isocmd/core/concurrency.h"
-#include "isocmd/ops/convert.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/ops/mount.h"
-#include "isocmd/ui/rendering.h"
 #include "isocmd/core/state.h"
-#include "isocmd/ui/themes.h"
 #include "isocmd/core/threadpool.h"
-#include "isocmd/ops/umount.h"
+#include "isocmd/input/inputHandling.h"
+#include "isocmd/ops/convert.h"
+#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/themes.h"
 #include "isocmd/ui/verbose.h"
 #include "isocmd/usb/write2usbUI.h"
-
-#include <future>
-#include <memory>
-#include <sstream>
-#include <stdexcept>
 
 namespace fs = std::filesystem;
 
@@ -76,7 +74,10 @@ enum class ImgKind { None, BinImg, Mdf, Nrg, Chd, Daa };
  */
 static ImgKind classifyImage(const fs::path& p) {
     std::string ext = p.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+        [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
     if (ext == ".bin" || ext == ".img" || ext == ".ccd") return ImgKind::BinImg;
     if (ext == ".mdf") return ImgKind::Mdf;
     if (ext == ".nrg") return ImgKind::Nrg;

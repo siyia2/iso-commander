@@ -1,10 +1,11 @@
-
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <future>
 #include <iostream>
@@ -12,12 +13,12 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <thread>
 #include <unordered_set>
 #include <vector>
 
 // C / System Headers
-#include <ctype.h>
 #include <unistd.h>
 
 // Project Headers
@@ -31,7 +32,6 @@
 #include "isocmd/core/threadpool.h"
 #include "isocmd/ops/umount.h"
 #include "isocmd/ui/verbose.h"
-#include "isocmd/usb/write2usbUI.h"
 
 namespace fs = std::filesystem;
 

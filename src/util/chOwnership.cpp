@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
+#include <cerrno>
 #include <cstdlib>
 #include <string>
 
 // C / System Headers
-#include <errno.h>
 #include <grp.h>
 #include <pwd.h>
 #include <sys/types.h>
@@ -13,10 +13,10 @@
 
 /**
  * @brief Retrieves the identity of the user who invoked the process via sudo.
- * * This function is designed to be thread-safe. It attempts to extract the 
- * original user's UID and GID from the `SUDO_UID` and `SUDO_GID` environment 
- * variables. If these are unavailable or invalid, it falls back to the 
- * current effective user/group IDs. It also resolves these IDs into 
+ * * This function is designed to be thread-safe. It attempts to extract the
+ * original user's UID and GID from the `SUDO_UID` and `SUDO_GID` environment
+ * variables. If these are unavailable or invalid, it falls back to the
+ * current effective user/group IDs. It also resolves these IDs into
  * human-readable usernames and group names using reentrant system calls.
  * * @param[out] real_uid The resolved numeric User ID.
  * @param[out] real_gid The resolved numeric Group ID.
@@ -36,16 +36,16 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
         char* endptr;
         errno = 0;
         unsigned long uid_val = std::strtoul(sudo_uid, &endptr, 10);
-        
+
         if (errno != 0 || *endptr != '\0' || endptr == sudo_uid) {
             real_uid = geteuid();
             real_gid = getegid();
         } else {
             real_uid = static_cast<uid_t>(uid_val);
-            
+
             errno = 0;
             unsigned long gid_val = std::strtoul(sudo_gid, &endptr, 10);
-            
+
             if (errno != 0 || *endptr != '\0' || endptr == sudo_gid) {
                 real_gid = getegid();
             } else {

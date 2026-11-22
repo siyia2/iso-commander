@@ -3,6 +3,7 @@
 // C++ Standard Library Headers
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <csignal>
 #include <cstddef>
 #include <filesystem>
@@ -11,6 +12,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
@@ -18,7 +20,6 @@
 #include <vector>
 
 // C / System Headers
-#include <ctype.h>
 #include <sys/stat.h>
 
 // Project Headers
@@ -755,7 +756,8 @@ void processInputForConversions(const std::string& input,
     GlobalState::g_operationCancelled.store(false);
     std::unordered_set<int> processedIndices;
 
-    if (!(input.empty() || std::all_of(input.begin(), input.end(), isspace))) {
+    if (!(input.empty() || std::all_of(input.begin(), input.end(), [](unsigned char ch) {
+    return std::isspace(ch);}))) {
         tokenizeInput(input, fileList, processedIndices);
     } else return;
 

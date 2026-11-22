@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
@@ -18,12 +17,9 @@
 #include <readline/readline.h>
 
 // Project Headers
-#include "isocmd/core/concurrency.h"
-#include "isocmd/core/sharedRefreshState.h"
 #include "isocmd/core/state.h"
 #include "isocmd/filter/filter.h"
 #include "isocmd/input/history.h"
-#include "isocmd/input/inputHandling.h"
 #include "isocmd/input/readline.h"
 #include "isocmd/ui/display.h"
 #include "isocmd/ui/rendering.h"

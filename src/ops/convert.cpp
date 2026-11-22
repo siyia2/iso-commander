@@ -3,9 +3,9 @@
 // C++ Standard Library Headers
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstddef>
 #include <cstring>
-#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -14,18 +14,18 @@
 #include <utility>
 #include <vector>
 
-// C / System Headers
+// C / POSIX Headers
 #include <sys/types.h>
 #include <unistd.h>
 
 // Project Headers
 #include "isocmd/core/globalMutexes.h"
+#include "isocmd/core/state.h"
 #include "isocmd/ops/convert.h"
 #include "isocmd/ui/display.h"
-#include "isocmd/core/state.h"
+#include "isocmd/ui/themes.h"
 #include "isocmd/ui/verbose.h"
 #include "isocmd/util/stringManipulation.h"
-#include "isocmd/ui/themes.h"
 
 /**
  * @brief Checks whether a filesystem entry exists at the given path.

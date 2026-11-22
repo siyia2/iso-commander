@@ -12,7 +12,6 @@
 #include <iostream>
 #include <map>
 #include <string>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -94,7 +93,10 @@ inline bool isOneOf(const std::vector<std::string>& values, const std::string& v
  * Rejects leading zeros, signs, decimals, or any non-digit characters.
  */
 inline auto isNum = [](const std::string& v, int min, int max) -> bool {
-    if (v.empty() || !std::all_of(v.begin(), v.end(), ::isdigit)) return false;
+    if (v.empty() ||
+        !std::all_of(v.begin(), v.end(),
+                     [](unsigned char c) { return std::isdigit(c); }))
+        return false;
     if (v.size() > 1 && v[0] == '0') return false;
     try {
         int n = std::stoi(v);
@@ -110,7 +112,7 @@ inline auto isNum = [](const std::string& v, int min, int max) -> bool {
 inline std::string trim(std::string str) {
     if (str.empty()) return str;
     str.erase(0, str.find_first_not_of(" \t"));
-    size_t last = str.find_last_not_of(" \t");
+    std::size_t last = str.find_last_not_of(" \t");
     if (last != std::string::npos) str.erase(last + 1);
     return str;
 }
@@ -320,7 +322,7 @@ int pgdn_handler(int, int);
 
 EditNav editSetting(const std::string& configPath, const std::string& key,
                     const std::vector<std::string>& inputErrors,
-                    size_t pos, size_t total);
+                    std::size_t pos, std::size_t total);
 
 void interactiveConfigEditor(const std::string& configPath);
 

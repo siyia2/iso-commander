@@ -26,9 +26,9 @@ struct FileOperationOptions {
  * @brief Shared progress counters and recorded destination paths for an ISO operation.
  */
 struct FileOperationProgress {
-    std::atomic<size_t>& completedBytes;          ///< Total bytes processed across operations.
-    std::atomic<size_t>& completedTasks;          ///< Count of completed tasks.
-    std::atomic<size_t>& failedTasks;             ///< Count of failed tasks.
+    std::atomic<std::size_t>& completedBytes;          ///< Total bytes processed across operations.
+    std::atomic<std::size_t>& completedTasks;          ///< Count of completed tasks.
+    std::atomic<std::size_t>& failedTasks;             ///< Count of failed tasks.
     std::vector<std::string>& successfulDestPaths; ///< Destination paths written successfully.
     std::mutex& destPathsMutex;                   ///< Mutex guarding @c successfulDestPaths.
 };
@@ -57,11 +57,11 @@ void updateDatabaseAfterOperations(
 - Renders a visual progress bar based on byte count and task completion.
  */
 void displayProgressBarWithSize(
-    std::atomic<size_t>* completedBytes,
-    size_t totalBytes,
-    std::atomic<size_t>* completedTasks,
-    std::atomic<size_t>* failedTasks,
-    size_t totalTasks,
+    std::atomic<std::size_t>* completedBytes,
+    std::size_t totalBytes,
+    std::atomic<std::size_t>* completedTasks,
+    std::atomic<std::size_t>* failedTasks,
+    std::size_t totalTasks,
     std::atomic<bool>* isComplete,
     bool* verbose,
     const std::string& operation,
@@ -74,12 +74,12 @@ void displayProgressBarWithSize(
 /**
 - Calculates the sum of file sizes for a list of paths.
  */
-size_t getTotalFileSize(const std::vector<std::string>& files);
+std::size_t getTotalFileSize(const std::vector<std::string>& files);
 
 /**
 - Estimates total bytes specifically for conversion tasks based on enabled modes.
  */
-size_t calculateTotalBytesForConversions(
+std::size_t calculateTotalBytesForConversions(
     const std::vector<std::string>& filesToProcess,
     bool modeMdf,
     bool modeNrg,

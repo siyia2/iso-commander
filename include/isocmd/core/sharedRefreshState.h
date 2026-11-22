@@ -17,8 +17,8 @@ struct RefreshState {
     bool hasPendingProcess;
     bool umountMvRmBreak;
     std::string listSubtype;
-    size_t currentPage;
-    size_t originalPage;
+    std::size_t currentPage;
+    std::size_t originalPage;
     std::mutex importMutex;
     std::condition_variable importCV;
     std::atomic<bool> isImportRunning{false};
@@ -27,7 +27,7 @@ struct RefreshState {
     std::mutex printMutex;
     std::condition_variable workerCV;
     std::mutex workerMutex;
-    std::atomic<size_t> activeWorkers{0};
+    std::atomic<std::size_t> activeWorkers{0};
 };
 
 #endif // SHAREDREFRESHSTATE_H

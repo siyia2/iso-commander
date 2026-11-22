@@ -26,7 +26,6 @@
 #include <readline/readline.h>
 
 // Project Headers
-#include "isocmd/core/concurrency.h"
 #include "isocmd/database/databaseOps.h"
 #include "isocmd/ui/display.h"
 #include "isocmd/core/globalMutexes.h"

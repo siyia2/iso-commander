@@ -2,11 +2,8 @@
 
 // C++ Standard Library Headers
 #include <algorithm>
-#include <atomic>
 #include <cctype>
 #include <chrono>
-#include <cerrno>
-#include <csignal>
 #include <cstddef>
 #include <functional>
 #include <iomanip>
@@ -19,13 +16,9 @@
 #include <vector>
 
 // C / System Headers
-#include <termios.h>
-#include <poll.h>
 #include <signal.h>
-#include <unistd.h>
 
 // Third-Party Library Headers
-#include <readline/readline.h>
 #include <readline/history.h>
 
 // Project Headers

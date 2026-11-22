@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -21,15 +22,11 @@
 #include <utility>
 #include <vector>
 
-// C / System Headers
-#include <signal.h>
-
 // Third-Party Library Headers
 #include <readline/history.h>
 #include <readline/readline.h>
 
 // Project Headers
-#include "isocmd/core/concurrency.h"
 #include "isocmd/database/databaseOps.h"
 #include "isocmd/ui/display.h"
 #include "isocmd/core/globalMutexes.h"
@@ -330,8 +327,8 @@ static void recordCancellationNotice(const std::string& mode,
  *
  * @param totalFiles Shared atomic counter of regular files visited.
  */
-static void updateProgressCounter(std::atomic<size_t>& totalFiles) {
-    const uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
+static void updateProgressCounter(std::atomic<std::size_t>& totalFiles) {
+    const std::uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
     if (val % 100 == 0) {
         std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
         std::cout << "\r" << color << "Total files processed: " << val << std::flush;
@@ -386,7 +383,7 @@ static void tryRecordDiscoveredFile(const std::filesystem::directory_entry& entr
 static std::unordered_set<std::string> processPaths(const std::string& path, const std::string& mode,
                                                     const std::function<void(const std::string&, const std::string&)>& callback,
                                                     std::unordered_set<std::string>& processedErrorsFind,
-                                                    std::atomic<size_t>& totalFiles) {
+                                                    std::atomic<std::size_t>& totalFiles) {
     const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
     std::unordered_set<std::string> localFileNames;
@@ -506,7 +503,7 @@ static void scanPathsParallel(const std::vector<std::string>& filteredPaths,
                               const std::string& mode,
                               const std::function<void(const std::string&, const std::string&)>& callback,
                               std::unordered_set<std::string>& processedErrorsFind,
-                              std::atomic<size_t>& totalFiles,
+                              std::atomic<std::size_t>& totalFiles,
                               std::unordered_set<std::string>& fileNames) {
     auto& pool = getStaticThreadPool();
     std::vector<std::future<std::unordered_set<std::string>>> threadFutures;
@@ -588,7 +585,7 @@ static std::vector<std::string> findFiles(const std::vector<std::string>& inputP
                                    int& currentCacheOld, const std::string& mode,
                                    const std::function<void(const std::string&, const std::string&)>& callback,
                                    std::unordered_set<std::string>& processedErrorsFind,
-                                   std::atomic<size_t>& totalFiles) {
+                                   std::atomic<std::size_t>& totalFiles) {
     setupSignalHandlerCancellations();
     GlobalState::g_operationCancelled.store(false);
     disableInput();
@@ -742,12 +739,12 @@ static void printRepaintedCallerPrompt(const std::string& header, const std::str
     // Make sure the typed line starts on a new line: find the last
     // visible character of the header, skipping trailing ANSI SGR
     // sequences (e.g. "\033[0m") and readline's \001/\002 markers.
-    size_t end = header.size();
+    std::size_t end = header.size();
     while (end > 0) {
         const char c = header[end - 1];
         if (c == '\001' || c == '\002') { --end; continue; }
         if (c == 'm') {
-            const size_t esc = header.rfind('\033', end - 1);
+            const std::size_t esc = header.rfind('\033', end - 1);
             if (esc != std::string::npos && esc + 1 < end && header[esc + 1] == '[') {
                 end = esc;
                 continue;
@@ -851,7 +848,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         int currentCacheOld = 0;
         std::vector<std::string> directoryPaths;
         std::unordered_set<std::string> invalidDirectoryPaths, processedErrorsFind;
-        std::atomic<size_t> totalFiles{0};
+        std::atomic<std::size_t> totalFiles{0};
         std::string cleanedInput;
         bool filterHistory = false;
 
