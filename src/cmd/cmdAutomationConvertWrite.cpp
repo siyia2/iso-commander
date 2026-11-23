@@ -731,7 +731,7 @@ static std::vector<IsoInfo> validateIsos(const std::vector<std::string>& isoArgs
  * @brief Validates target storage devices for write operations.
  *
  * Resolves canonical device paths, checks for duplicate device entries in the argument list,
- * and delegates device-specific checks (such as active flushing states) via
+ * and delegates device-specific checks via
  * @ref WriteValidation::checkDevice.
  *
  * @param devArgs Vector of raw target device path strings.
@@ -932,7 +932,7 @@ static int evaluateWriteResult(const std::vector<ProgressInfo>& progressData) {
  *
  * Every validation error is collected and reported (using the write2usb UI theme) before
  * any hardware is touched. Per device, this includes checks in @ref WriteValidation::checkDevice
- * (such as rejecting devices still flushing data) and capacity checks in @ref WriteValidation::checkCapacity.
+ * and capacity checks in @ref WriteValidation::checkCapacity.
  *
  * @param args Parsed command-line arguments containing target devices, ISO paths, and execution flags.
  * @return int Returns `0` if all write operations completed successfully; `1` on validation failure,
