@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cerrno>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -15,11 +16,10 @@
 // C / System Headers
 #include <fcntl.h>
 #include <sys/mman.h>
-#include <stdint.h>
 #include <unistd.h>
 
 // Project Headers
-#include "isocmd/converters/chd.h"
+#include "isocmd/converters/chd2iso.h"
 #include "isocmd/core/cancellation.h"
 
 namespace fs = std::filesystem;

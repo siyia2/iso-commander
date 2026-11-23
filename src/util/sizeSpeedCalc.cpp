@@ -21,9 +21,9 @@
 #include <chd.h>
 
 // Project Headers
-#include "isocmd/converters/ccd.h"
-#include "isocmd/converters/daa.h"
-#include "isocmd/converters/mdf.h"
+#include "isocmd/converters/ccd2iso.h"
+#include "isocmd/converters/daa2iso.h"
+#include "isocmd/converters/mdf2iso.h"
 
 //=============================================================================
 // Write2Usb Section
