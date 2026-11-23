@@ -57,16 +57,27 @@ bool isDeviceReady(const std::string& path) {
  * @brief Waits for a device node to appear and become ready within a timeout.
  */
 bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
-    auto start = std::chrono::steady_clock::now();
+    using Clock = std::chrono::steady_clock;
 
-    while (std::chrono::steady_clock::now() - start <
-           std::chrono::seconds(timeout_seconds)) {
+    const auto deadline =
+        Clock::now() + std::chrono::seconds(timeout_seconds);
+
+    while (Clock::now() < deadline) {
+        if (GlobalState::g_operationCancelled.load()) {
+            errno = ECANCELED;
+            return false;
+        }
+
         if (fs::exists(path) && fs::is_block_file(path)) {
-            if (isDeviceReady(path)) return true;
+            if (isDeviceReady(path))
+                return !GlobalState::g_operationCancelled.load();
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+
+    if (GlobalState::g_operationCancelled.load())
+        errno = ECANCELED;
 
     return false;
 }
@@ -130,6 +141,58 @@ namespace {
     namespace proc {
 
         /**
+         * @brief Waits for a child process while monitoring cancellation.
+         *
+         * On cancellation, sends SIGTERM, allows a short grace period, then
+         * sends SIGKILL if necessary. The child is always reaped before return.
+         *
+         * @return 0 when the child is reaped; -1 on error or cancellation.
+         */
+        int waitForChild(pid_t pid, int& status) {
+            using Clock = std::chrono::steady_clock;
+
+            constexpr auto pollInterval = std::chrono::milliseconds(25);
+            constexpr auto terminateGrace = std::chrono::milliseconds(500);
+
+            bool terminating = false;
+            bool killed = false;
+            auto terminateDeadline = Clock::time_point{};
+
+            for (;;) {
+                const pid_t result = waitpid(pid, &status, WNOHANG);
+
+                if (result == pid)
+                    return terminating ? (errno = ECANCELED, -1) : 0;
+
+                if (result < 0) {
+                    if (errno == EINTR)
+                        continue;
+
+                    return -1;
+                }
+
+                if (GlobalState::g_operationCancelled.load() && !terminating) {
+                    terminating = true;
+                    terminateDeadline = Clock::now() + terminateGrace;
+
+                    if (kill(pid, SIGTERM) < 0 && errno != ESRCH)
+                        return -1;
+                }
+
+                if (terminating && !killed &&
+                    Clock::now() >= terminateDeadline) {
+
+                    if (kill(pid, SIGKILL) < 0 && errno != ESRCH)
+                        return -1;
+
+                    killed = true;
+                }
+
+                std::this_thread::sleep_for(pollInterval);
+            }
+        }
+
+        /**
          * @brief Runs an external command with stdout/stderr suppressed.
          */
         int runCommand(const std::vector<std::string>& args) {
@@ -175,7 +238,9 @@ namespace {
             if (rc != 0) return -1;
 
             int status = 0;
-            if (waitpid(pid, &status, 0) < 0) return -1;
+
+            if (waitForChild(pid, status) < 0)
+                return -1;
 
             return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
         }
@@ -571,14 +636,52 @@ namespace {
         }
 
         /**
-         * @brief syncfs() the filesystem mounted at @p mountPath.
+         * @brief Flushes filesystem changes on the filesystem mounted at @p mountPath.
+         *
+         * Avoids starting syncfs() after cancellation. An already-running syncfs()
+         * cannot reliably be interrupted by the cancellation flag.
          */
-        void syncMount(const std::string& mountPath) {
-            const int fd = open(mountPath.c_str(), O_RDONLY);
-            if (fd >= 0) {
-                syncfs(fd);
-                close(fd);
+        bool syncMount(const std::string& mountPath) {
+            if (GlobalState::g_operationCancelled.load()) {
+                errno = ECANCELED;
+                return false;
             }
+
+            const int fd = open(
+                mountPath.c_str(),
+                O_RDONLY | O_DIRECTORY | O_CLOEXEC
+            );
+
+            if (fd < 0)
+                return false;
+
+            int result = -1;
+            int syncError = 0;
+
+            if (GlobalState::g_operationCancelled.load()) {
+                syncError = ECANCELED;
+            } else {
+                do {
+                    result = syncfs(fd);
+                } while (result < 0 &&
+                         errno == EINTR &&
+                         !GlobalState::g_operationCancelled.load());
+
+                if (GlobalState::g_operationCancelled.load()) {
+                    syncError = ECANCELED;
+                } else if (result < 0) {
+                    syncError = errno;
+                }
+            }
+
+            close(fd);
+
+            if (syncError != 0) {
+                errno = syncError;
+                return false;
+            }
+
+            return true;
         }
 
     } // namespace disk
@@ -771,15 +874,24 @@ namespace {
             return totalBytes != 0;
         }
 
-        void finalFlush(IsoType isoType,
+        bool finalFlush(IsoType isoType,
                         const std::string& ntfsMnt,
                         const std::string& fatMnt) {
-            if (isCancelled()) return;
+            if (isCancelled())
+                return false;
 
-            if (isoType == IsoType::WindowsInstall)
-                disk::syncMount(ntfsMnt);
+            if (isoType == IsoType::WindowsInstall) {
+                if (!disk::syncMount(ntfsMnt))
+                    return false;
+            }
 
-            disk::syncMount(fatMnt);
+            if (isCancelled())
+                return false;
+
+            if (!disk::syncMount(fatMnt))
+                return false;
+
+            return !isCancelled();
         }
 
         // NTFS payload first, then ESP, so the bootloader only lands after
@@ -794,8 +906,7 @@ namespace {
             if (!runPass(ntfsEntries)) return false;
             if (!runPass(espEntries)) return false;
 
-            finalFlush(isoType, ntfsMnt, fatMnt);
-            return true;
+            return finalFlush(isoType, ntfsMnt, fatMnt);
         }
 
         double averageSpeedMBps(uint64_t totalBytes, double seconds) {
