@@ -45,6 +45,12 @@ namespace windowsWriter_engine::copy {
          */
         void paceWriteback(int fd_out, uint64_t off, uint64_t len,
                            WritebackState& st) {
+            if (GlobalState::g_operationCancelled.load()) {
+                st.pendChunks = 0;
+                st.havePrev = false;
+                return;
+            }
+
             if (st.pendChunks == 0) {
                 st.pendOff = off;
                 st.pendLen = 0;
@@ -57,6 +63,12 @@ namespace windowsWriter_engine::copy {
             sync_file_range(fd_out, static_cast<off_t>(st.pendOff),
                             static_cast<off_t>(st.pendLen),
                             SYNC_FILE_RANGE_WRITE);
+
+            if (GlobalState::g_operationCancelled.load()) {
+                st.pendChunks = 0;
+                st.havePrev = false;
+                return;
+            }
 
             if (st.havePrev) {
                 sync_file_range(fd_out, static_cast<off_t>(st.prevOff),
@@ -217,9 +229,6 @@ namespace windowsWriter_engine::copy {
                 // Don't leave partial FAT32 files behind.
                 [[maybe_unused]] const int r = ftruncate(fd_out, 0);
             }
-
-            if (GlobalState::g_operationCancelled.load())
-                posix_fadvise(fd_out, 0, 0, POSIX_FADV_DONTNEED);
 
             posix_fadvise(fd_in, 0, 0, POSIX_FADV_DONTNEED);
 
