@@ -259,34 +259,39 @@ namespace {
          * @brief Unmounts @p path and every mount stacked on it.
          *
          * Uses a fresh libmount context for each attempt so loop devices and utab
-         * are cleaned up without stale context state. When not cancelled, a normal
-         * unmount is attempted first before falling back to a lazy unmount. On
-         * cancellation, helpers are skipped and a lazy detach is used immediately.
-         * A raw umount2() sweep then removes any remaining stacked mount layers.
+         * are cleaned up without stale context state. A synchronous unmount is
+         * always attempted first, so the filesystem is really released when this
+         * returns; a lazy detach is only the fallback if that fails (e.g. EBUSY).
+         * On cancellation, userspace helpers are skipped in both attempts, since
+         * they can hang, but the synchronous unmount is not. A raw umount2() sweep
+         * then removes any remaining stacked mount layers.
          */
         void safeUmount(const char* path) {
-            auto runLibmntUmount = [&](bool lazy) -> bool {
+            auto runLibmntUmount = [&](bool lazy, bool noHelpers) -> bool {
                 libmnt_context* ctx = mnt_new_context();
                 if (!ctx) return false;
 
                 mnt_context_set_target(ctx, path);
                 mnt_context_enable_loopdel(ctx, true);
 
-                if (lazy) {
+                if (noHelpers || lazy)
                     mnt_context_disable_helpers(ctx, true);
+
+                if (lazy)
                     mnt_context_enable_lazy(ctx, true);
-                }
 
                 const int rc = mnt_context_umount(ctx);
                 mnt_free_context(ctx);
                 return rc == 0;
             };
 
-            if (GlobalState::g_operationCancelled.load()) {
-                runLibmntUmount(true);
-            } else if (!runLibmntUmount(false)) {
-                runLibmntUmount(true);
-            }
+            const bool cancelled = GlobalState::g_operationCancelled.load();
+
+            // Synchronous first, even on cancel: the kernel has to write the
+            // remaining metadata anyway, and a lazy detach only hides the mount
+            // while that happens in the background. Lazy is the EBUSY fallback.
+            if (!runLibmntUmount(false, cancelled))
+                runLibmntUmount(true, true);
 
             for (int i = 0; i < 8; ++i) {
                 if (umount2(path, MNT_DETACH | UMOUNT_NOFOLLOW) != 0)
