@@ -151,10 +151,13 @@ namespace windowsWriter_engine::copy {
         }
 
         /**
-         * @brief Copies file data in chunks while tracking progress and checking
-         *        for cancellation and source truncation.
+         * @brief Copies exactly the expected file size in chunks while tracking
+         *        progress and checking for cancellation and premature EOF.
          *
-         * @return true only if the complete expected file size was copied.
+         * Never reads beyond the expected file size and fails if the source
+         * reaches EOF before all expected bytes have been copied.
+         *
+         * @return true only if exactly the expected file size was copied.
          */
         bool copyFileChunks(int fd_in, int fd_out,
                             uint64_t fileSize,
@@ -164,34 +167,47 @@ namespace windowsWriter_engine::copy {
                             uint64_t& bytesCopiedTotal) {
             uint64_t fileOffset = 0;
             WritebackState wb;
-            bool success = true;
 
-            while (!GlobalState::g_operationCancelled.load()) {
-                const ssize_t n = fillChunk(fd_in, buf, bufferSize);
+            if (bufferSize == 0) {
+                errno = EINVAL;
+                return false;
+            }
+
+            while (fileOffset < fileSize &&
+                   !GlobalState::g_operationCancelled.load()) {
+
+                // Never read beyond the expected ISO file size.
+                const size_t chunkSize = static_cast<size_t>(
+                    std::min<uint64_t>(
+                        fileSize - fileOffset,
+                        static_cast<uint64_t>(bufferSize)
+                    )
+                );
+
+                const ssize_t n = fillChunk(fd_in, buf, chunkSize);
 
                 if (n < 0) {
-                    success = false;
-                    break;
+                    return false;
                 }
 
-                if (n == 0) break;
+                // fillChunk() only returns early when EOF is reached.
+                if (static_cast<size_t>(n) != chunkSize) {
+                    errno = EIO;
+                    return false;
+                }
 
-                if (!writeOneChunk(fd_out, buf, static_cast<size_t>(n),
+                if (!writeOneChunk(fd_out, buf, chunkSize,
                                    fileOffset, bytesCopiedTotal,
                                    totalAccumulator, wb)) {
-                    success = false;
-                    break;
+                    return false;
                 }
             }
 
             if (GlobalState::g_operationCancelled.load())
-                success = false;
+                return false;
 
-            // Fewer bytes than the ISO walk reported means the source was truncated.
-            if (success && bytesCopiedTotal < fileSize)
-                success = false;
-
-            return success;
+            // Require an exact match, not merely a minimum.
+            return bytesCopiedTotal == fileSize;
         }
 
         /**
@@ -241,7 +257,13 @@ namespace windowsWriter_engine::copy {
     } // namespace
 
     /**
-     * @brief Iterate one entry list, creating directories and copying files.
+     * @brief Creates all required directories and copies the entry list.
+     *
+     * Collects and deduplicates directory paths before creating them,
+     * avoiding redundant directory creation when processing multiple files.
+     * Files are copied only after all required directories exist.
+     *
+     * @return true if all entries were processed successfully.
      */
     bool processEntries(const std::vector<IsoCopyEntry>& entries,
                         IsoType isoType,
@@ -249,22 +271,48 @@ namespace windowsWriter_engine::copy {
                         size_t bufferSize,
                         char* buf,
                         std::atomic<uint64_t>& totalAccumulator) {
+
+        // Collect every directory that needs to exist.
+        std::vector<fs::path> directories;
+        directories.reserve(entries.size());
+
         for (const auto& e : entries) {
-            if (GlobalState::g_operationCancelled.load()) return false;
+            fs::path dir = e.isDir ? e.dst : e.dst.parent_path();
 
-            if (e.isDir) {
-                fs::create_directories(e.dst);
-            } else {
-                fs::create_directories(e.dst.parent_path());
+            if (!dir.empty())
+                directories.push_back(std::move(dir));
+        }
 
-                const bool toNtfs =
-                    (isoType == IsoType::WindowsInstall) &&
-                    (e.dst.string().rfind(ntfsMnt, 0) == 0);
+        // Eliminate duplicate directory paths.
+        std::sort(directories.begin(), directories.end());
+        directories.erase(
+            std::unique(directories.begin(), directories.end()),
+            directories.end()
+        );
 
-                if (!copyFileWithProgress(e.src, e.dst, e.size, toNtfs,
-                                          bufferSize, buf, totalAccumulator)) {
-                    return false;
-                }
+        // Create each required directory only once.
+        for (const auto& dir : directories) {
+            if (GlobalState::g_operationCancelled.load())
+                return false;
+
+            fs::create_directories(dir);
+        }
+
+        // All parent directories now exist. Copy files only.
+        for (const auto& e : entries) {
+            if (GlobalState::g_operationCancelled.load())
+                return false;
+
+            if (e.isDir)
+                continue;
+
+            const bool toNtfs =
+                (isoType == IsoType::WindowsInstall) &&
+                (e.dst.string().rfind(ntfsMnt, 0) == 0);
+
+            if (!copyFileWithProgress(e.src, e.dst, e.size, toNtfs,
+                                      bufferSize, buf, totalAccumulator)) {
+                return false;
             }
         }
 
