@@ -256,23 +256,19 @@ namespace {
         }
 
         /**
-         * @brief Unmounts @p path and attempts to detach any stacked mounts on it.
+         * @brief Unmounts @p path and every mount stacked on it.
          *
-         * Uses a fresh libmount context for each attempt to avoid stale context
-         * state and allow loop-device and utab cleanup. When not cancelled, a
-         * normal unmount is retried before falling back to a lazy unmount.
-         * On cancellation, normal unmount attempts and helpers are skipped,
-         * and a lazy detach is attempted immediately.
-         *
-         * Finally, a raw umount2() sweep attempts to detach up to eight
-         * remaining stacked mount layers.
+         * Uses a fresh libmount context for each attempt so loop devices and utab
+         * are cleaned up without stale context state. When not cancelled, a normal
+         * unmount is attempted first before falling back to a lazy unmount. On
+         * cancellation, helpers are skipped and a lazy detach is used immediately.
+         * A raw umount2() sweep then removes any remaining stacked mount layers.
          */
         void safeUmount(const char* path) {
             auto runLibmntUmount = [&](bool lazy) -> bool {
                 libmnt_context* ctx = mnt_new_context();
                 if (!ctx) return false;
 
-                mnt_reset_context(ctx);
                 mnt_context_set_target(ctx, path);
                 mnt_context_enable_loopdel(ctx, true);
 
@@ -286,26 +282,9 @@ namespace {
                 return rc == 0;
             };
 
-            bool unmountedCleanly = false;
-            constexpr int maxAttempts = 6;
-            constexpr auto retryDelay = std::chrono::milliseconds(150);
-
-            if (!GlobalState::g_operationCancelled.load()) {
-                for (int attempt = 0; attempt < maxAttempts; ++attempt) {
-                    if (GlobalState::g_operationCancelled.load()) break;
-
-                    if (runLibmntUmount(false)) {
-                        unmountedCleanly = true;
-                        break;
-                    }
-
-                    if (attempt + 1 < maxAttempts) {
-                        std::this_thread::sleep_for(retryDelay);
-                    }
-                }
-            }
-
-            if (!unmountedCleanly) {
+            if (GlobalState::g_operationCancelled.load()) {
+                runLibmntUmount(true);
+            } else if (!runLibmntUmount(false)) {
                 runLibmntUmount(true);
             }
 
