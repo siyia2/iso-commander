@@ -803,7 +803,7 @@ void displayDatabaseStatistics(
  * @param inputSearch Command string to process.
  * @param repaintHeader Callback invoked to repaint the screen header when needed.
  */
-void databaseSwitches(
+void dispatchDatabaseCommands(
     std::string& inputSearch,
     const std::function<void()>& repaintHeader
 ) {

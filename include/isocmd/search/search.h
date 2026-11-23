@@ -114,10 +114,10 @@ void displayDatabaseStatistics(
 /**
  * @brief Processes special CLI switches related to database maintenance.
  *
- * Handles internal commands like --refresh or --cleanup passed via the
- * search input field.
+ * Handles internal commands like *stats or !clean passed via the
+ * importISO search input field.
  */
-void databaseSwitches(
+void dispatchDatabaseCommands(
     std::string& inputSearch,
     const std::function<void()>& repaintHeader
 );

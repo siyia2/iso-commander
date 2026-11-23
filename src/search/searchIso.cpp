@@ -55,11 +55,11 @@ namespace fs = std::filesystem;
  * @brief Handles special user commands such as help (?) and database statistics or clear commands.
  *
  * Recognizes "?" (help), "*stats"/"!clr"/"!clr_paths"/"!clr_filter" (delegated
- * to @c databaseSwitches), and whitespace-only input (swallowed). Any other
+ * to @c dispatchDatabaseCommands), and whitespace-only input (swallowed). Any other
  * input is treated as regular path data.
  *
  * @param input               The trimmed user input string.
- * @param repaintCallerPrompt Passed through to @c databaseSwitches; invoked on
+ * @param repaintCallerPrompt Passed through to @c dispatchDatabaseCommands; invoked on
  *                            resize repaints of the statistics/clear
  *                            confirmation screens.
  * @return true if a command was recognized and handled (signaling the loop to
@@ -72,8 +72,8 @@ static bool handleDatabaseCommands(const std::string& input, const std::function
         return true;
     }
     if (input == "*stats" || input == "!clr" || input == "!clr_paths" || input == "!clr_filter") {
-        std::string mutableInput = input; // Create a non-const copy for databaseSwitches
-        databaseSwitches(mutableInput, repaintCallerPrompt);
+        std::string mutableInput = input; // Create a non-const copy for dispatchDatabaseCommands
+        dispatchDatabaseCommands(mutableInput, repaintCallerPrompt);
         return true;
     }
     if (input.find_first_not_of(" \t\n\r") == std::string::npos) {

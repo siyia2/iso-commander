@@ -30,7 +30,7 @@
 #include "isocmd/ui/rendering.h"
 #include "isocmd/ops/mount.h"
 #include "isocmd/ui/pausePrompts.h"
-#include "isocmd/input/process.h"
+#include "isocmd/proc/process.h"
 #include "isocmd/core/state.h"
 #include "isocmd/ui/verbose.h"
 #include "isocmd/core/threadpool.h"
