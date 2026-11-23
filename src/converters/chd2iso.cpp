@@ -19,7 +19,7 @@
 #include <unistd.h>
 
 // Project Headers
-#include "isocmd/formats/chd.h"
+#include "isocmd/converters/chd.h"
 #include "isocmd/core/state.h"
 
 namespace fs = std::filesystem;

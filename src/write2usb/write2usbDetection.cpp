@@ -15,7 +15,7 @@
 #include <unistd.h>
 
 // Project Headers
-#include "isocmd/usb/write2usb.h"
+#include "isocmd/write2usb/write2usb.h"
 
 namespace {
 

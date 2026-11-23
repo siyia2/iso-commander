@@ -28,8 +28,8 @@
 
 // Project Headers
 #include "isocmd/core/state.h"
-#include "isocmd/usb/write2usbUI.h"
-#include "isocmd/usb/write2usb.h"
+#include "isocmd/write2usb/write2usbUI.h"
+#include "isocmd/write2usb/write2usb.h"
 
 namespace {
 

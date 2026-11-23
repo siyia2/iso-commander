@@ -10,7 +10,7 @@
 #include <vector>
 
 // Project Headers
-#include "isocmd/formats/ccd.h"
+#include "isocmd/converters/ccd.h"
 #include "isocmd/core/state.h"
 
 namespace fs = std::filesystem;

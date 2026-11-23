@@ -33,7 +33,7 @@
 #include "isocmd/core/state.h"
 #include "isocmd/ui/themes.h"
 #include "isocmd/config/settings.h"
-#include "isocmd/usb/write2usbUI.h"
+#include "isocmd/write2usb/write2usbUI.h"
 
 namespace fs = std::filesystem;
 
