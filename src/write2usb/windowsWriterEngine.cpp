@@ -28,6 +28,23 @@ namespace windowsWriter_engine::copy {
 
     namespace {
 
+        // Also start writeback once this many bytes are pending, so batch
+        // size (and cancel latency on slow sticks) does not depend on the
+        // chunk size. The caller may bind a per-worker source (see
+        // setPaceBytesSource) that adapts this to the target's speed; the
+        // default applies when none is bound.
+        constexpr uint64_t kDefaultPaceMaxBytes = 8ull << 20;
+
+        // Bound by the worker thread that runs processEntries(); every
+        // pacing call happens on that same thread.
+        thread_local const std::atomic<uint64_t>* t_paceBytesSource = nullptr;
+
+        uint64_t paceMaxBytes() {
+            return t_paceBytesSource
+                       ? t_paceBytesSource->load(std::memory_order_relaxed)
+                       : kDefaultPaceMaxBytes;
+        }
+
         /**
          * @brief Per-file writeback pacing state.
          */
@@ -58,7 +75,8 @@ namespace windowsWriter_engine::copy {
 
             st.pendLen += len;
 
-            if (++st.pendChunks < kPaceEveryChunks) return;
+            if (++st.pendChunks < kPaceEveryChunks && st.pendLen < paceMaxBytes())
+                return;
 
             sync_file_range(fd_out, static_cast<off_t>(st.pendOff),
                             static_cast<off_t>(st.pendLen),
@@ -239,6 +257,17 @@ namespace windowsWriter_engine::copy {
         }
 
     } // namespace
+
+    /**
+     * @brief Binds (or, with nullptr, unbinds) the writeback batch-size source
+     *        for the calling thread.
+     *
+     * The pointed-to value must outlive the binding. Only affects
+     * processEntries() calls made from this thread.
+     */
+    void setPaceBytesSource(const std::atomic<uint64_t>* src) {
+        t_paceBytesSource = src;
+    }
 
     /**
      * @brief Iterate one entry list, creating directories and copying files.

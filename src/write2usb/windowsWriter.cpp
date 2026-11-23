@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <random>
 #include <string>
 #include <thread>
@@ -22,6 +23,8 @@
 #include <spawn.h>
 #include <signal.h>
 #include <sys/mount.h>
+#include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -39,6 +42,12 @@
 #include "isocmd/write2usb/windowsWriterEngine.h"
 
 namespace fs = std::filesystem;
+
+// Defined in windowsWriterEngine.cpp (move this declaration into
+// windowsWriterEngine.h if you prefer).
+namespace windowsWriter_engine::copy {
+    void setPaceBytesSource(const std::atomic<uint64_t>* src);
+}
 
 // ---------------------------------------------------------------------------
 // Global scope: device readiness
@@ -630,6 +639,170 @@ namespace {
     } // namespace disk
 
     // ===========================================================================
+    // wbcap:: bound the dirty-page backlog of the target disk
+    // ===========================================================================
+
+    namespace wbcap {
+
+        // Upper bound on dirty + writeback pages the kernel may hold for the
+        // target disk. Writing starts with the smallest cap so a cancel only
+        // waits for a little data to reach even a very slow stick; the
+        // progress monitor raises it as the stick proves to be faster.
+        //
+        //   speed < 10 MiB/s          -> 8 MiB
+        //   10 <= speed < 100 MiB/s   -> 32 MiB
+        //   speed >= 100 MiB/s        -> 64 MiB
+        constexpr uint64_t kSlowDirtyBytes = 8ull << 20;
+        constexpr uint64_t kMidDirtyBytes  = 32ull << 20;
+        constexpr uint64_t kFastDirtyBytes = 64ull << 20;
+
+        constexpr uint64_t kTierBytes[] = {
+            kSlowDirtyBytes, kMidDirtyBytes, kFastDirtyBytes
+        };
+
+        // Writeback batch size per tier: half the cap (tier 0 uses 4 MiB
+        // under its 8 MiB cap), so the batch being submitted plus the
+        // previous one still in flight fit under it.
+        constexpr uint64_t kSlowPaceBytes = 4ull << 20;
+
+        constexpr uint64_t kTierPaceBytes[] = {
+            kSlowPaceBytes, kMidDirtyBytes / 2, kFastDirtyBytes / 2
+        };
+
+        // Speeds (MiB/s) at which the cap steps up from tier 0->1 and 1->2.
+        constexpr double kTierThresholdMBps[] = { 10.0, 100.0 };
+
+        /**
+         * @brief Picks the cap tier (0..2) for @p mbps, given the current
+         *        @p tier. Steps up at +20% of a threshold and back down at
+         *        -20% so the cap does not flap around a boundary.
+         */
+        inline int tierForSpeed(double mbps, int tier) {
+            while (tier < 2 && mbps >= kTierThresholdMBps[tier] * 1.2)
+                ++tier;
+
+            while (tier > 0 && mbps < kTierThresholdMBps[tier - 1] * 0.8)
+                --tier;
+
+            return tier;
+        }
+
+        bool readSysfs(const std::string& path, std::string& out) {
+            std::ifstream in(path);
+            if (!in) return false;
+            std::getline(in, out);
+            return !out.empty();
+        }
+
+        bool writeSysfs(const std::string& path, const std::string& value) {
+            std::ofstream out(path);
+            if (!out) return false;
+            out << value << std::endl;
+            return out.good();
+        }
+
+        /**
+         * @brief Caps the writeback backlog of one whole-disk device for the
+         *        lifetime of the object, then restores the previous values.
+         *
+         * Uses /sys/class/bdi/<major>:<minor>/{strict_limit,max_bytes}
+         * (Linux 6.2+), falling back to a non-strict max_ratio of 1 on older
+         * kernels. With a strict cap, write() throttles the writer in short
+         * sleeps, so the cancel flag is noticed promptly and only a small
+         * backlog has to drain afterwards. Best effort: failures are ignored.
+         *
+         * Declare it before the ScopedMount objects so it is restored after
+         * they unmount.
+         */
+        class ScopedWritebackLimit {
+        public:
+            explicit ScopedWritebackLimit(const std::string& device) {
+                struct stat st{};
+                if (stat(device.c_str(), &st) != 0 || !S_ISBLK(st.st_mode))
+                    return;
+
+                dir_ = "/sys/class/bdi/" +
+                       std::to_string(major(st.st_rdev)) + ":" +
+                       std::to_string(minor(st.st_rdev)) + "/";
+
+                const bool haveStrict =
+                    readSysfs(dir_ + "strict_limit", oldStrict_);
+                const bool haveRatio =
+                    readSysfs(dir_ + "max_ratio", oldRatio_);
+
+                if (haveStrict &&
+                    writeSysfs(dir_ + "strict_limit", "1") &&
+                    writeSysfs(dir_ + "max_bytes",
+                               std::to_string(kSlowDirtyBytes))) {
+                    strictApplied_ = true;
+                    currentBytes_ = kSlowDirtyBytes;
+                } else if (haveRatio) {
+                    // Older kernels: soft cap only.
+                    writeSysfs(dir_ + "max_ratio", "1");
+                    ratioApplied_ = true;
+                }
+
+                restoreStrict_ = haveStrict;
+                restoreRatio_ = haveRatio;
+            }
+
+            /**
+             * @brief Source of the writeback batch size for the copy engine.
+             *        Valid for the lifetime of this object.
+             */
+            const std::atomic<uint64_t>* paceBytesSource() const {
+                return &paceBytes_;
+            }
+
+            /**
+             * @brief Applies speed tier @p tier (0..2): resizes the writeback
+             *        batch always, and the kernel dirty cap when the strict
+             *        cap is active. Call from one thread at a time.
+             */
+            void setTier(int tier) {
+                paceBytes_.store(kTierPaceBytes[tier],
+                                 std::memory_order_relaxed);
+                setMaxBytes(kTierBytes[tier]);
+            }
+
+            /**
+             * @brief Adjusts the cap while writing. No-op unless the strict
+             *        cap was applied. Call from one thread at a time.
+             */
+            void setMaxBytes(uint64_t bytes) {
+                if (!strictApplied_ || bytes == currentBytes_) return;
+                if (writeSysfs(dir_ + "max_bytes", std::to_string(bytes)))
+                    currentBytes_ = bytes;
+            }
+
+            ScopedWritebackLimit(const ScopedWritebackLimit&) = delete;
+            ScopedWritebackLimit& operator=(const ScopedWritebackLimit&) = delete;
+
+            ~ScopedWritebackLimit() {
+                if (dir_.empty()) return;
+
+                if (strictApplied_ && restoreStrict_)
+                    writeSysfs(dir_ + "strict_limit", oldStrict_);
+
+                // Writing max_ratio also resets a max_bytes cap.
+                if ((strictApplied_ || ratioApplied_) && restoreRatio_)
+                    writeSysfs(dir_ + "max_ratio", oldRatio_);
+            }
+
+        private:
+            std::string dir_;
+            std::string oldStrict_, oldRatio_;
+            uint64_t currentBytes_ = 0;
+            std::atomic<uint64_t> paceBytes_{kTierPaceBytes[0]};
+            bool strictApplied_ = false;
+            bool ratioApplied_ = false;
+            bool restoreStrict_ = false;
+            bool restoreRatio_ = false;
+        };
+
+    } // namespace wbcap
+
+    // ===========================================================================
     // telemetry:: progress / speed monitor thread
     // ===========================================================================
 
@@ -641,7 +814,8 @@ namespace {
         void runProgressMonitor(std::atomic<uint64_t>& accumulator,
                                 std::atomic<bool>& active,
                                 uint64_t totalBytes,
-                                ProgressInfo& info) {
+                                ProgressInfo& info,
+                                wbcap::ScopedWritebackLimit* limiter) {
             auto lastUpdate = std::chrono::high_resolution_clock::now();
             uint64_t lastWritten = 0;
             double smoothedSpeed = 0.0;
@@ -649,6 +823,7 @@ namespace {
 
             auto stallStart = std::chrono::high_resolution_clock::now();
             bool stalled = false;
+            int capTier = 0;
 
             constexpr double alpha = 0.3;
             constexpr int MIN_UPDATE_INTERVAL_MS = 1000;
@@ -693,6 +868,19 @@ namespace {
 
                     haveEstimate = true;
                     info.speed.store(smoothedSpeed);
+
+                    // Slower sticks get a smaller dirty cap (faster cancel),
+                    // faster ones a larger cap (more buffering). Hysteresis
+                    // in tierForSpeed() avoids flapping.
+                    if (limiter) {
+                        const int newTier =
+                            wbcap::tierForSpeed(smoothedSpeed, capTier);
+
+                        if (newTier != capTier) {
+                            limiter->setTier(newTier);
+                            capTier = newTier;
+                        }
+                    }
 
                     lastWritten = currentWritten;
                     lastUpdate = now;
@@ -912,6 +1100,22 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     ProgressInfo& slot = progressData[progressIndex];
     const steps::FailureReporter report{slot};
 
+    // Bound the dirty backlog on the target disk so cancelling does not wait
+    // behind a long writeback queue on slow sticks. Declared before every
+    // ScopedMount so it is restored after they unmount.
+    wbcap::ScopedWritebackLimit writebackLimit(device);
+
+    // Let the copy engine size its writeback batches from the same tier.
+    // Declared after writebackLimit so it is unbound before it is destroyed.
+    struct PaceBinding {
+        explicit PaceBinding(const std::atomic<uint64_t>* src) {
+            windowsWriter_engine::copy::setPaceBytesSource(src);
+        }
+        ~PaceBinding() {
+            windowsWriter_engine::copy::setPaceBytesSource(nullptr);
+        }
+    } paceBinding(writebackLimit.paceBytesSource());
+
     char isoMntBuf[] = "/tmp/win_iso_XXXXXX";
     if (!mkdtemp(isoMntBuf))
         return report.fail();
@@ -968,7 +1172,7 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     std::thread progressMonitorThread([&, totalBytes]() {
         telemetry::runProgressMonitor(
             totalBytesWrittenAccumulator, monitoringActive,
-            totalBytes, slot);
+            totalBytes, slot, &writebackLimit);
     });
 
     // Ensures the thread is always stopped and joined on any return path.
