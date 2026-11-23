@@ -16,6 +16,165 @@
 #include "isocmd/ops/cpMvRm.h"
 
 /**
+ * @brief Checks whether the global operation cancellation flag is set.
+ *
+ * @return True if cancellation has been requested, false otherwise.
+ */
+static bool isCopyCancelled()
+{
+    return GlobalState::g_operationCancelled.load(std::memory_order_acquire);
+}
+
+/**
+ * @brief Closes the temporary output stream and removes the partial file.
+ *
+ * @param output Output file stream associated with the temporary file.
+ * @param tmp Path to the temporary ".part" file to remove.
+ */
+static void discardTemporaryFile(std::ofstream& output, const fs::path& tmp)
+{
+    output.close();
+
+    std::error_code rmEc;
+    fs::remove(tmp, rmEc);
+}
+
+/**
+ * @brief Opens a binary file stream using a caller-supplied buffer.
+ *
+ * @tparam StreamT Stream type (`std::ifstream` or `std::ofstream`).
+ * @param stream Stream instance to configure and open.
+ * @param path Filesystem path to open.
+ * @param buffer Backing buffer used via `pubsetbuf`.
+ * @return True if the stream was opened successfully, false otherwise.
+ */
+template <typename StreamT>
+static bool openBufferedBinaryStream(
+    StreamT& stream,
+    const fs::path& path,
+    std::vector<char>& buffer
+)
+{
+    if (auto* sb = stream.rdbuf()) {
+        sb->pubsetbuf(
+            buffer.data(),
+            static_cast<std::streamsize>(buffer.size())
+        );
+    }
+
+    stream.open(path, std::ios::binary);
+    return static_cast<bool>(stream);
+}
+
+/**
+ * @brief Streams chunks from input to output while tracking progress and cancellation.
+ *
+ * @param input Open source input stream.
+ * @param output Open destination output stream.
+ * @param inBuf Read buffer for source chunks.
+ * @param completedBytes Optional atomic progress counter updated per chunk.
+ * @param totalCopied Receives the total number of bytes written to @p output.
+ * @param ec Receives the failure reason if reading or writing fails.
+ * @return True if the loop exited without a read or write error, false otherwise.
+ */
+static bool copyStreamChunks(
+    std::ifstream& input,
+    std::ofstream& output,
+    std::vector<char>& inBuf,
+    std::atomic<std::size_t>* completedBytes,
+    std::uintmax_t& totalCopied,
+    std::error_code& ec
+)
+{
+    totalCopied = 0;
+
+    while (!isCopyCancelled()) {
+        input.read(
+            inBuf.data(),
+            static_cast<std::streamsize>(inBuf.size())
+        );
+
+        const std::streamsize bytesRead = input.gcount();
+
+        // badbit means a real read error, not a normal end of file. Any bytes
+        // already read are not trusted: the copy must fail.
+        if (input.bad()) {
+            ec = std::make_error_code(std::errc::io_error);
+            return false;
+        }
+
+        if (bytesRead == 0) {
+            break;
+        }
+
+        output.write(inBuf.data(), bytesRead);
+
+        if (!output) {
+            ec = std::make_error_code(std::errc::io_error);
+            return false;
+        }
+
+        totalCopied += static_cast<std::uintmax_t>(bytesRead);
+
+        if (completedBytes) {
+            completedBytes->fetch_add(
+                static_cast<std::size_t>(bytesRead),
+                std::memory_order_relaxed
+            );
+        }
+    }
+
+    return true;
+}
+
+/**
+ * @brief Finalizes the temporary file by flushing, verifying size, and renaming.
+ *
+ * @param output Temporary output stream to close and verify.
+ * @param tmp Path to the temporary ".part" file.
+ * @param dst Final destination path.
+ * @param totalCopied Total bytes written to @p tmp.
+ * @param expectedSize Expected source size in bytes.
+ * @param hasKnownSize True if @p expectedSize was determined without error.
+ * @param ec Receives the failure reason if finalization fails.
+ * @return True if finalized and renamed cleanly, false otherwise.
+ */
+static bool finalizeTemporaryFile(
+    std::ofstream& output,
+    const fs::path& tmp,
+    const fs::path& dst,
+    std::uintmax_t totalCopied,
+    std::uintmax_t expectedSize,
+    bool hasKnownSize,
+    std::error_code& ec
+)
+{
+    output.close();
+
+    if (!output) {
+        ec = std::make_error_code(std::errc::io_error);
+        return false;
+    }
+
+    // Never publish a short copy: a cross-device move deletes the source
+    // after this function reports success.
+    if (hasKnownSize && totalCopied != expectedSize) {
+        ec = std::make_error_code(std::errc::io_error);
+        return false;
+    }
+
+    std::error_code renameEc;
+    fs::rename(tmp, dst, renameEc);
+
+    if (renameEc) {
+        ec = renameEc;
+        return false;
+    }
+
+    return true;
+}
+
+/**
  * @brief Performs a buffered file copy with progress and cancellation support.
  *
  * Writes to a temporary ".part" file and renames it to the destination only
@@ -40,23 +199,13 @@ bool bufferedCopyWithProgress(
     std::vector<char> inBuf(kBufferSize);
     std::vector<char> outBuf(kBufferSize);
 
-    if (GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
+    if (isCopyCancelled()) {
         ec = std::make_error_code(std::errc::operation_canceled);
         return false;
     }
 
     std::ifstream input;
-
-    if (auto* sb = input.rdbuf()) {
-        sb->pubsetbuf(
-            inBuf.data(),
-            static_cast<std::streamsize>(inBuf.size())
-        );
-    }
-
-    input.open(src, std::ios::binary);
-
-    if (!input) {
+    if (!openBufferedBinaryStream(input, src, inBuf)) {
         ec = std::make_error_code(std::errc::no_such_file_or_directory);
         return false;
     }
@@ -65,27 +214,10 @@ bool bufferedCopyWithProgress(
     tmp += ".part";
 
     std::ofstream output;
-
-    if (auto* sb = output.rdbuf()) {
-        sb->pubsetbuf(
-            outBuf.data(),
-            static_cast<std::streamsize>(outBuf.size())
-        );
-    }
-
-    output.open(tmp, std::ios::binary);
-
-    if (!output) {
+    if (!openBufferedBinaryStream(output, tmp, outBuf)) {
         ec = std::make_error_code(std::errc::permission_denied);
         return false;
     }
-
-    auto discardTemp = [&]() {
-        output.close();
-
-        std::error_code rmEc;
-        fs::remove(tmp, rmEc);
-    };
 
     // Expected size, used to detect a source that ended early without the
     // stream reporting an error. If it cannot be determined, skip that check.
@@ -93,79 +225,31 @@ bool bufferedCopyWithProgress(
     const std::uintmax_t expectedSize = fs::file_size(src, sizeEc);
 
     std::uintmax_t totalCopied = 0;
-
-    while (!GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
-        input.read(
-            inBuf.data(),
-            static_cast<std::streamsize>(inBuf.size())
-        );
-
-        const std::streamsize bytesRead = input.gcount();
-
-        // badbit means a real read error, not a normal end of file. Any bytes
-        // already read are not trusted: the copy must fail.
-        if (input.bad()) {
-            ec = std::make_error_code(std::errc::io_error);
-            discardTemp();
-            return false;
-        }
-
-        if (bytesRead == 0) {
-            break;
-        }
-
-        output.write(inBuf.data(), bytesRead);
-
-        if (!output) {
-            ec = std::make_error_code(std::errc::io_error);
-            discardTemp();
-            return false;
-        }
-
-        totalCopied += static_cast<std::uintmax_t>(bytesRead);
-
-        if (completedBytes) {
-            completedBytes->fetch_add(
-                static_cast<std::size_t>(bytesRead),
-                std::memory_order_relaxed
-            );
-        }
+    if (!copyStreamChunks(input, output, inBuf, completedBytes, totalCopied, ec)) {
+        discardTemporaryFile(output, tmp);
+        return false;
     }
 
-    if (GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
+    if (isCopyCancelled()) {
         ec = std::make_error_code(std::errc::operation_canceled);
-        discardTemp();
+        discardTemporaryFile(output, tmp);
         return false;
     }
 
-    output.close();
-
-    if (!output) {
-        ec = std::make_error_code(std::errc::io_error);
-        discardTemp();
-        return false;
-    }
-
-    // Never publish a short copy: a cross-device move deletes the source
-    // after this function reports success.
-    if (!sizeEc && totalCopied != expectedSize) {
-        ec = std::make_error_code(std::errc::io_error);
-        discardTemp();
-        return false;
-    }
-
-    std::error_code renameEc;
-    fs::rename(tmp, dst, renameEc);
-
-    if (renameEc) {
-        ec = renameEc;
-        discardTemp();
+    if (!finalizeTemporaryFile(
+            output,
+            tmp,
+            dst,
+            totalCopied,
+            expectedSize,
+            !sizeEc,
+            ec)) {
+        discardTemporaryFile(output, tmp);
         return false;
     }
 
     return true;
 }
-
 
 /**
  * @brief Buffered copy to a single destination, with reporting and ownership.
