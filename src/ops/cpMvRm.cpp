@@ -31,7 +31,7 @@
 #include "isocmd/input/history.h"
 #include "isocmd/input/inputHandling.h"
 #include "isocmd/input/readline.h"
-#include "isocmd/ops/process.h"
+#include "isocmd/input/process.h"
 #include "isocmd/ui/themes.h"
 #include "isocmd/ui/verbose.h"
 #include "isocmd/util/sort.h"
