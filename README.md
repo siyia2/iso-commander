@@ -1,7 +1,6 @@
 # iso-commander
 Mount ISOs, convert images, write bootable USB drives — done right
 
-![Demo](preview/iso-commander-preview.gif)
 
 ## Getting Started
 
