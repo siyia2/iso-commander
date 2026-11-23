@@ -118,37 +118,31 @@ namespace WriteExecution {
  * the prompt.
  *
  * One managed background thread is started per future. Each waits on its
- * future and, on completion, erases that device from @c g_drainingDevices.
- * Because every pending device has an independent waiter, a device's
- * "[FLUSHING]" indicator clears the moment its task finishes, regardless of
- * how long the others take. When the last thread empties the set,
- * g_drainingCancelled is cleared.
+ * future and decrements the active drain count on completion. When the last
+ * active drain thread finishes, @c g_drainingCancelled is cleared.
  *
  * Only devices whose tasks had neither completed nor failed when
- * cancellation was handled are added to @c g_drainingDevices. Tasks that
- * have already returned from writeIsoToDevice() need no further draining.
+ * cancellation was handled are counted as active drains. Tasks that have
+ * already returned from writeIsoToDevice() need no further draining.
  *
  * The progress vector is shared rather than copied or moved. Each drain
  * thread captures the shared pointer to keep the per-operation records alive
- * until its future completes. Device paths are paired with futures by index
- * through @p progressData[i].device.
+ * until its future completes.
  *
  * @param futures        Per-task futures, taken by value and moved into the
  *                       background drain threads.
  * @param progressData   Per-task progress records. Read only: .completed /
- *                       .failed are inspected to decide which devices still
- *                       need draining, and .device enumerates the draining
- *                       set.
+ *                       .failed are inspected to decide which tasks still
+ *                       need draining.
  * @param progressDataPtr Shared ownership of the progress records; captured
- *                       by each detached thread to keep the operation data
- *                       alive until that device's drain completes.
+ *                       by each thread to keep the operation data alive until
+ *                       that task's drain completes.
  *
  * @note The caller's future vector is consumed by this call; ownership of
  *       each future is transferred to its background drain thread.
  *
- * @note @p futures and @p progressData must have the same size:
- *       drainDevices[i] is paired with futures[i], and each spawned thread
- *       indexes both. A mismatch is an out-of-bounds read.
+ * @note @p futures and @p progressData must have the same size, and each
+ *       thread indexes both. A mismatch is an out-of-bounds read.
  *
  * @note May add multiple threads to @c g_drainingManager in one call
  *       (one per future).
@@ -157,35 +151,37 @@ namespace WriteExecution {
  *       performWriteOperation waits on the futures inline instead, because
  *       nothing needs to outlive the function in that case.
  *
- * @see g_drainingDevices, g_drainingCancelled, g_drainingManager
+ * @see g_drainingCancelled, g_drainingManager
  */
 void drainManagerForWrite2UsbUI(
     std::vector<std::future<void>> futures,
     const std::vector<ProgressInfo>& progressData,
     std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr)
 {
-    std::vector<std::string> drainDevices;
-    drainDevices.reserve(progressData.size());
+    static std::atomic<size_t> activeDrains{0};
 
-    bool anyDraining = false;
-    {
-        std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-        for (size_t i = 0; i < progressData.size(); ++i) {
-            const std::string& device = progressData[i].device;
-            drainDevices.push_back(device);
+    std::vector<bool> needsDrain;
+    needsDrain.reserve(progressData.size());
 
-            if (!progressData[i].completed.load() && !progressData[i].failed.load()) {
-                g_drainingDevices.insert(device);
-                anyDraining = true;
-            }
+    size_t newlyDraining = 0;
+    for (size_t i = 0; i < progressData.size(); ++i) {
+        const bool pending =
+            !progressData[i].completed.load() && !progressData[i].failed.load();
+        needsDrain.push_back(pending);
+        if (pending) {
+            ++newlyDraining;
         }
     }
-    g_drainingCancelled.store(anyDraining);
+
+    if (newlyDraining > 0) {
+        activeDrains.fetch_add(newlyDraining, std::memory_order_relaxed);
+        g_drainingCancelled.store(true, std::memory_order_release);
+    }
 
     for (size_t i = 0; i < futures.size(); ++i) {
         g_drainingManager.add(std::thread([
             f = std::move(futures[i]),
-            dev = drainDevices[i],
+            tracked = needsDrain[i],
             progressDataPtr
         ]() mutable {
             (void)progressDataPtr;
@@ -194,16 +190,14 @@ void drainManagerForWrite2UsbUI(
                 f.wait();
             }
 
-            std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-            g_drainingDevices.erase(dev);
-
-            if (g_drainingDevices.empty()) {
-                g_drainingCancelled.store(false);
+            if (tracked) {
+                if (activeDrains.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                    g_drainingCancelled.store(false, std::memory_order_release);
+                }
             }
         }));
     }
 }
-
 
 /**
  * @brief Executes validated ISO-to-device writes and manages the progress
@@ -237,8 +231,7 @@ void drainManagerForWrite2UsbUI(
  * drainManagerForWrite2UsbUI, which keeps their futures alive while they
  * finish in the background. This allows outstanding writes and OS page-cache
  * flushing to continue. The drain manager removes each device from
- * g_drainingDevices when its drain completes, clearing its [FLUSHING]
- * indicator.
+ * g_drainingDevices when its drain completes.
  *
  * The result screen reflects task states at the time it is painted; tasks
  * that continue running after cancellation may finish later. The successful

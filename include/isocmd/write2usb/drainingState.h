@@ -11,7 +11,7 @@
 #include <unordered_set>
 #include <vector>
 
-// ---------- Used exclusively for the [FLUSHING] device indicator ------------
+// ---------- Used exclusively for write2usb device indicator ------------
 
 /**
  * @brief A thread-safe manager for tracking and joining background tasks.
@@ -42,10 +42,8 @@ struct DrainingThreadManager {
 
 // Global instances
 inline DrainingThreadManager g_drainingManager;
-inline std::mutex g_drainingDevicesMutex;
-inline std::unordered_set<std::string> g_drainingDevices;
 inline std::atomic<bool> g_drainingCancelled{false};
 
-// ---------- End of [FLUSHING] device indicator block ------------
+// ---------- End of write2usb device indicator block ------------
 
 #endif // DRAININGSTATE_H

@@ -202,9 +202,6 @@ namespace MappingPrompt {
                            << UI::Palette::DimGray << ")"
                            << ([&]() -> std::string {
                                if (dev.mounted) return wt.colorFailure + " [MOUNTED]" + wt.rl_resetCol;
-                               std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-                               if (g_drainingDevices.count(dev.path))
-                                   return wt.colorFailure + " [FLUSHING]" + wt.rl_resetCol;
                                return "";
                            }())
                            << "\n";

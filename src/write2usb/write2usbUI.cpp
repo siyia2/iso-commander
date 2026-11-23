@@ -361,12 +361,6 @@ namespace WriteValidation {
         if (isDeviceMounted(device))
             return pathErr(wt, shown, " or its partitions are mounted");
 
-        {
-            std::lock_guard<std::mutex> lock(g_drainingDevicesMutex);
-            if (g_drainingDevices.count(device))
-                return pathErr(wt, shown, " has pending kernel-level tasks");
-        }
-
         if (GlobalState::isNonInteractive.load() && isDeviceBusy(device))
             return pathErr(wt, shown, " has pending kernel-level tasks");
 
