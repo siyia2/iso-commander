@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
@@ -21,6 +20,8 @@
 // C / System Headers
 #include <fcntl.h>
 #include <spawn.h>
+#include <signal.h>
+#include <sys/mount.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -47,7 +48,7 @@ namespace fs = std::filesystem;
  * @brief Checks if a block device is accessible and ready for I/O operations.
  */
 bool isDeviceReady(const std::string& path) {
-    int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK);
+    int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
     if (fd == -1) return false;
     close(fd);
     return true;
@@ -57,27 +58,18 @@ bool isDeviceReady(const std::string& path) {
  * @brief Waits for a device node to appear and become ready within a timeout.
  */
 bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
-    using Clock = std::chrono::steady_clock;
+    auto start = std::chrono::steady_clock::now();
 
-    const auto deadline =
-        Clock::now() + std::chrono::seconds(timeout_seconds);
-
-    while (Clock::now() < deadline) {
-        if (GlobalState::g_operationCancelled.load()) {
-            errno = ECANCELED;
-            return false;
-        }
+    while (std::chrono::steady_clock::now() - start <
+           std::chrono::seconds(timeout_seconds)) {
+        if (GlobalState::g_operationCancelled.load()) return false;
 
         if (fs::exists(path) && fs::is_block_file(path)) {
-            if (isDeviceReady(path))
-                return !GlobalState::g_operationCancelled.load();
+            if (isDeviceReady(path)) return true;
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-
-    if (GlobalState::g_operationCancelled.load())
-        errno = ECANCELED;
 
     return false;
 }
@@ -141,58 +133,6 @@ namespace {
     namespace proc {
 
         /**
-         * @brief Waits for a child process while monitoring cancellation.
-         *
-         * On cancellation, sends SIGTERM, allows a short grace period, then
-         * sends SIGKILL if necessary. The child is always reaped before return.
-         *
-         * @return 0 when the child is reaped; -1 on error or cancellation.
-         */
-        int waitForChild(pid_t pid, int& status) {
-            using Clock = std::chrono::steady_clock;
-
-            constexpr auto pollInterval = std::chrono::milliseconds(25);
-            constexpr auto terminateGrace = std::chrono::milliseconds(500);
-
-            bool terminating = false;
-            bool killed = false;
-            auto terminateDeadline = Clock::time_point{};
-
-            for (;;) {
-                const pid_t result = waitpid(pid, &status, WNOHANG);
-
-                if (result == pid)
-                    return terminating ? (errno = ECANCELED, -1) : 0;
-
-                if (result < 0) {
-                    if (errno == EINTR)
-                        continue;
-
-                    return -1;
-                }
-
-                if (GlobalState::g_operationCancelled.load() && !terminating) {
-                    terminating = true;
-                    terminateDeadline = Clock::now() + terminateGrace;
-
-                    if (kill(pid, SIGTERM) < 0 && errno != ESRCH)
-                        return -1;
-                }
-
-                if (terminating && !killed &&
-                    Clock::now() >= terminateDeadline) {
-
-                    if (kill(pid, SIGKILL) < 0 && errno != ESRCH)
-                        return -1;
-
-                    killed = true;
-                }
-
-                std::this_thread::sleep_for(pollInterval);
-            }
-        }
-
-        /**
          * @brief Runs an external command with stdout/stderr suppressed.
          */
         int runCommand(const std::vector<std::string>& args) {
@@ -210,7 +150,7 @@ namespace {
             if (posix_spawn_file_actions_init(&fileActions) != 0)
                 return -1;
 
-            int devNull = open("/dev/null", O_WRONLY);
+            int devNull = open("/dev/null", O_WRONLY | O_CLOEXEC);
             if (devNull < 0) {
                 posix_spawn_file_actions_destroy(&fileActions);
                 return -1;
@@ -237,10 +177,30 @@ namespace {
 
             if (rc != 0) return -1;
 
+            // Poll so a cancel does not leave us blocked behind a long
+            // mkfs/parted child that may also be holding resources.
             int status = 0;
+            bool terminated = false;
 
-            if (waitForChild(pid, status) < 0)
-                return -1;
+            for (;;) {
+                const pid_t w = waitpid(pid, &status, WNOHANG);
+
+                if (w == pid) break;
+
+                if (w < 0) {
+                    if (errno == EINTR) continue;
+                    return -1;
+                }
+
+                if (!terminated && GlobalState::g_operationCancelled.load()) {
+                    kill(pid, SIGTERM);
+                    terminated = true;
+                }
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            }
+
+            if (terminated) return -1;
 
             return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
         }
@@ -283,38 +243,54 @@ namespace {
                 mnt_context_set_fstype(ctx, fstype);
 
             int rc = mnt_context_mount(ctx);
+
+            // libmount may report an error from a post-mount step (e.g. the
+            // utab update) although mount(2) succeeded. Retrying then would
+            // stack a second mount on the same target and leak the first.
+            if (rc != 0 && mnt_context_get_status(ctx) == 1)
+                rc = 0;
+
             mnt_free_context(ctx);
 
             return rc;
         }
 
         /**
-         * @brief Performs a controlled unmount using a persistent libmount context.
+         * @brief Unmounts @p path and every mount stacked on it.
+         *
+         * libmount is tried first so loop devices and utab are cleaned up.
+         * A raw umount2() sweep then removes anything left behind (stacked
+         * layers, or a failed libmount attempt). On cancellation helpers are
+         * skipped and the detach is lazy so a busy mount cannot block exit.
          */
         void safeUmount(const char* path) {
-            libmnt_context* ctx = mnt_new_context();
-            if (!ctx) return;
-
-            mnt_context_set_target(ctx, path);
-
             const bool cancelled = GlobalState::g_operationCancelled.load();
 
-            if (cancelled) {
-                mnt_context_disable_helpers(ctx, true);
-                mnt_context_enable_lazy(ctx, true);
-                mnt_context_umount(ctx);
-            } else {
+            if (libmnt_context* ctx = mnt_new_context()) {
+                mnt_context_set_target(ctx, path);
                 mnt_context_enable_loopdel(ctx, true);
 
-                // If the plain unmount reports the device is busy, force a lazy
-                // detachment and retry on the same context.
-                if (mnt_context_umount(ctx) != 0) {
+                if (cancelled)
+                    mnt_context_disable_helpers(ctx, true);
+
+                if (cancelled) {
+                    mnt_context_enable_lazy(ctx, true);
+                    mnt_context_umount(ctx);
+                } else if (mnt_context_umount(ctx) != 0) {
+                    // Busy: force a lazy detach and retry on the same context.
                     mnt_context_enable_lazy(ctx, true);
                     mnt_context_umount(ctx);
                 }
+
+                mnt_free_context(ctx);
             }
 
-            mnt_free_context(ctx);
+            // Sweep: succeeds once per remaining layer; EINVAL means the
+            // path is no longer a mount point.
+            for (int i = 0; i < 8; ++i) {
+                if (umount2(path, MNT_DETACH | UMOUNT_NOFOLLOW) != 0)
+                    break;
+            }
         }
 
         /**
@@ -375,7 +351,12 @@ namespace {
                 mnt_context_append_options(ctx, "noatime");
                 mnt_context_disable_helpers(ctx, true);
 
-                const int rc = mnt_context_mount(ctx);
+                int rc = mnt_context_mount(ctx);
+
+                // See libMount(): never retry a mount(2) that succeeded.
+                if (rc != 0 && mnt_context_get_status(ctx) == 1)
+                    rc = 0;
+
                 mnt_free_context(ctx);
 
                 return rc;
@@ -636,52 +617,14 @@ namespace {
         }
 
         /**
-         * @brief Flushes filesystem changes on the filesystem mounted at @p mountPath.
-         *
-         * Avoids starting syncfs() after cancellation. An already-running syncfs()
-         * cannot reliably be interrupted by the cancellation flag.
+         * @brief syncfs() the filesystem mounted at @p mountPath.
          */
-        bool syncMount(const std::string& mountPath) {
-            if (GlobalState::g_operationCancelled.load()) {
-                errno = ECANCELED;
-                return false;
+        void syncMount(const std::string& mountPath) {
+            const int fd = open(mountPath.c_str(), O_RDONLY | O_CLOEXEC);
+            if (fd >= 0) {
+                syncfs(fd);
+                close(fd);
             }
-
-            const int fd = open(
-                mountPath.c_str(),
-                O_RDONLY | O_DIRECTORY | O_CLOEXEC
-            );
-
-            if (fd < 0)
-                return false;
-
-            int result = -1;
-            int syncError = 0;
-
-            if (GlobalState::g_operationCancelled.load()) {
-                syncError = ECANCELED;
-            } else {
-                do {
-                    result = syncfs(fd);
-                } while (result < 0 &&
-                         errno == EINTR &&
-                         !GlobalState::g_operationCancelled.load());
-
-                if (GlobalState::g_operationCancelled.load()) {
-                    syncError = ECANCELED;
-                } else if (result < 0) {
-                    syncError = errno;
-                }
-            }
-
-            close(fd);
-
-            if (syncError != 0) {
-                errno = syncError;
-                return false;
-            }
-
-            return true;
         }
 
     } // namespace disk
@@ -874,24 +817,15 @@ namespace {
             return totalBytes != 0;
         }
 
-        bool finalFlush(IsoType isoType,
+        void finalFlush(IsoType isoType,
                         const std::string& ntfsMnt,
                         const std::string& fatMnt) {
-            if (isCancelled())
-                return false;
+            if (isCancelled()) return;
 
-            if (isoType == IsoType::WindowsInstall) {
-                if (!disk::syncMount(ntfsMnt))
-                    return false;
-            }
+            if (isoType == IsoType::WindowsInstall)
+                disk::syncMount(ntfsMnt);
 
-            if (isCancelled())
-                return false;
-
-            if (!disk::syncMount(fatMnt))
-                return false;
-
-            return !isCancelled();
+            disk::syncMount(fatMnt);
         }
 
         // NTFS payload first, then ESP, so the bootloader only lands after
@@ -906,7 +840,8 @@ namespace {
             if (!runPass(ntfsEntries)) return false;
             if (!runPass(espEntries)) return false;
 
-            return finalFlush(isoType, ntfsMnt, fatMnt);
+            finalFlush(isoType, ntfsMnt, fatMnt);
+            return true;
         }
 
         double averageSpeedMBps(uint64_t totalBytes, double seconds) {
