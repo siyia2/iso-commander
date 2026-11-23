@@ -625,13 +625,19 @@ namespace {
 
         /**
          * @brief syncfs() the filesystem mounted at @p mountPath.
+         *
+         * Writeback during the copy is paced best-effort, so this is where a
+         * deferred I/O error (e.g. the stick failing or being pulled) surfaces.
+         *
+         * @return true if the filesystem was opened and flushed successfully.
          */
-        void syncMount(const std::string& mountPath) {
+        bool syncMount(const std::string& mountPath) {
             const int fd = open(mountPath.c_str(), O_RDONLY | O_CLOEXEC);
-            if (fd >= 0) {
-                syncfs(fd);
-                close(fd);
-            }
+            if (fd < 0) return false;
+
+            const bool ok = (syncfs(fd) == 0);
+            close(fd);
+            return ok;
         }
 
     } // namespace disk
@@ -824,15 +830,20 @@ namespace {
             return totalBytes != 0;
         }
 
-        void finalFlush(IsoType isoType,
+        // Flushes every target filesystem (both are attempted even if the first
+        // fails). Returns false if any flush failed or a cancel was observed.
+        bool finalFlush(IsoType isoType,
                         const std::string& ntfsMnt,
                         const std::string& fatMnt) {
-            if (isCancelled()) return;
+            if (isCancelled()) return false;
+
+            bool ok = true;
 
             if (isoType == IsoType::WindowsInstall)
-                disk::syncMount(ntfsMnt);
+                ok = disk::syncMount(ntfsMnt) && ok;
 
-            disk::syncMount(fatMnt);
+            ok = disk::syncMount(fatMnt) && ok;
+            return ok;
         }
 
         // NTFS payload first, then ESP, so the bootloader only lands after
@@ -849,8 +860,7 @@ namespace {
 
             if (isCancelled()) return false;
 
-            finalFlush(isoType, ntfsMnt, fatMnt);
-            return true;
+            return finalFlush(isoType, ntfsMnt, fatMnt);
         }
 
         double averageSpeedMBps(uint64_t totalBytes, double seconds) {

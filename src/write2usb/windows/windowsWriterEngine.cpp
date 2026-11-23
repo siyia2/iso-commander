@@ -28,29 +28,27 @@ namespace windowsWriter_engine::copy {
    namespace {
 
        /**
-        * @brief Maximum amount of outstanding written data per file.
-        */
-       constexpr uint64_t kMaxWritebackBytes = 4ULL * 1024 * 1024;
-
-       /**
-        * @brief Tracks the current uncompleted writeback range.
-        *
-        * Includes all successfully written bytes, whether submitted for
-        * writeback or still waiting to be submitted.
+        * @brief Per-file writeback pacing state: the chunks written since the last
+        *        pacing point, and the range paced last time.
         */
        struct WritebackState {
-           uint64_t rangeOff = 0;
-           uint64_t rangeLen = 0;
+           uint64_t pendOff    = 0;   ///< Start of the not-yet-paced range.
+           uint64_t pendLen    = 0;   ///< Length of the not-yet-paced range.
+           int      pendChunks = 0;   ///< Chunks accumulated in that range.
+           uint64_t prevOff    = 0;   ///< Start of the range paced last time.
+           uint64_t prevLen    = 0;   ///< Length of the range paced last time.
+           bool     havePrev   = false;
        };
 
        /**
-        * @brief Synchronizes a file range, retrying interrupted calls.
+        * @brief sync_file_range() on a file range, retrying interrupted calls.
         *
-        * Checks for cancellation when interrupted by a signal.
+        * Checks for cancellation before the call and when interrupted by a signal.
         *
+        * @param flags SYNC_FILE_RANGE_* flags passed through to the kernel.
         * @return Zero on success, or -1 on failure or cancellation.
         */
-       int syncFileRange(int fd, uint64_t off, uint64_t len) {
+       int syncFileRange(int fd, uint64_t off, uint64_t len, unsigned int flags) {
            if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
                errno = ECANCELED;
                return -1;
@@ -63,9 +61,7 @@ namespace windowsWriter_engine::copy {
                    fd,
                    static_cast<off_t>(off),
                    static_cast<off_t>(len),
-                   SYNC_FILE_RANGE_WAIT_BEFORE |
-                   SYNC_FILE_RANGE_WRITE |
-                   SYNC_FILE_RANGE_WAIT_AFTER
+                   flags
                );
 
                if (result < 0 && errno == EINTR &&
@@ -80,50 +76,56 @@ namespace windowsWriter_engine::copy {
        }
 
        /**
-        * @brief Submit and wait for the accumulated writeback range.
+        * @brief Bound the dirty-page backlog of an output file to a few chunks,
+        *        pacing once every kPaceEveryChunks chunks.
         *
-        * Resets the tracked range only after synchronization succeeds.
+        * Chunks are accumulated into one contiguous range. When it reaches
+        * kPaceEveryChunks chunks, writeback of the whole range is started
+        * (SYNC_FILE_RANGE_WRITE, does not block on the device), then the range
+        * paced last time is waited on (WAIT_BEFORE | WRITE | WAIT_AFTER). The
+        * device therefore always has the newest range queued while the previous
+        * one drains, and a cancel never has more than about
+        * kPaceEveryChunks + 1 chunks left to flush.
         *
-        * @return true if the range completed successfully or was empty.
+        * Best effort: failures (e.g. a filesystem without support, or a cancel)
+        * are ignored, as with the caller's final syncfs() flush; the copy then
+        * degrades to plain buffered I/O.
+        *
+        * @param fd_out Output file descriptor.
+        * @param off    File offset of the chunk just written.
+        * @param len    Length in bytes of the chunk just written (must be > 0).
+        * @param st     Pacing state for this output file.
         */
-       bool flushWriteback(int fd_out, WritebackState& st) {
-           if (st.rangeLen == 0)
-               return true;
-
-           if (syncFileRange(
-                   fd_out, st.rangeOff, st.rangeLen) < 0) {
-               return false;
+       void paceWriteback(int fd_out, uint64_t off, uint64_t len,
+                          WritebackState& st) {
+           if (st.pendChunks == 0) {
+               st.pendOff = off;
+               st.pendLen = 0;
            }
 
-           st.rangeOff += st.rangeLen;
-           st.rangeLen = 0;
+           st.pendLen += len;   // chunks are contiguous within a file
 
-           return true;
-       }
+           if (++st.pendChunks < kPaceEveryChunks)
+               return;
 
-       /**
-        * @brief Account for successfully written bytes and enforce the budget.
-        *
-        * Tracks both unsubmitted and submitted-but-uncompleted data.
-        * Once the accumulated range reaches kMaxWritebackBytes, writeback
-        * is completed before additional data can be written.
-        *
-        * @return true if accounting and any required synchronization succeeded.
-        */
-       bool paceWriteback(int fd_out, uint64_t off, uint64_t len,
-                          WritebackState& st) {
-           if (len == 0)
-               return true;
+           static_cast<void>(syncFileRange(
+               fd_out, st.pendOff, st.pendLen,
+               SYNC_FILE_RANGE_WRITE
+           ));
 
-           if (st.rangeLen == 0)
-               st.rangeOff = off;
+           if (st.havePrev) {
+               static_cast<void>(syncFileRange(
+                   fd_out, st.prevOff, st.prevLen,
+                   SYNC_FILE_RANGE_WAIT_BEFORE |
+                   SYNC_FILE_RANGE_WRITE |
+                   SYNC_FILE_RANGE_WAIT_AFTER
+               ));
+           }
 
-           st.rangeLen += len;
-
-           if (st.rangeLen >= kMaxWritebackBytes)
-               return flushWriteback(fd_out, st);
-
-           return true;
+           st.prevOff    = st.pendOff;
+           st.prevLen    = st.pendLen;
+           st.havePrev   = true;
+           st.pendChunks = 0;
        }
 
        /**
@@ -159,15 +161,14 @@ namespace windowsWriter_engine::copy {
        }
 
        /**
-        * @brief Write one chunk while enforcing the writeback budget.
-        *
-        * Limits individual writes to the remaining outstanding budget.
-        * When the budget is exhausted, waits for writeback completion
-        * before issuing another write.
+        * @brief Write one chunk, retrying short writes and EINTR.
         *
         * Successfully written bytes are accounted for even if a subsequent
-        * write or synchronization operation fails.
+        * write fails. Once the whole chunk has landed, writeback is paced
+        * (see paceWriteback()) so the dirty backlog stays at a few chunks and
+        * a cancel drains quickly.
         *
+        * @param wb Writeback pacing state for this output file.
         * @return true if the entire chunk was written successfully.
         */
        bool writeOneChunk(int fd_out, const char* buf, size_t len,
@@ -175,32 +176,17 @@ namespace windowsWriter_engine::copy {
                           uint64_t& bytesCopiedTotal,
                           std::atomic<uint64_t>& totalAccumulator,
                           WritebackState& wb) {
+           const uint64_t chunkOff = fileOffset;
            size_t done = 0;
 
            while (done < len) {
                if (GlobalState::g_operationCancelled.load())
                    return false;
 
-               // Never exceed the outstanding writeback budget.
-               if (wb.rangeLen == kMaxWritebackBytes) {
-                   if (!flushWriteback(fd_out, wb))
-                       return false;
-               }
-
-               const uint64_t available =
-                   kMaxWritebackBytes - wb.rangeLen;
-
-               const size_t writeSize = static_cast<size_t>(
-                   std::min<uint64_t>(
-                       len - done,
-                       available
-                   )
-               );
-
                const ssize_t written = pwrite(
                    fd_out,
                    buf + done,
-                   writeSize,
+                   len - done,
                    static_cast<off_t>(fileOffset)
                );
 
@@ -224,16 +210,9 @@ namespace windowsWriter_engine::copy {
 
                totalAccumulator.fetch_add(writtenBytes);
                bytesCopiedTotal += writtenBytes;
-
-               if (!paceWriteback(
-                       fd_out,
-                       fileOffset - writtenBytes,
-                       writtenBytes,
-                       wb)) {
-                   return false;
-               }
            }
 
+           paceWriteback(fd_out, chunkOff, len, wb);
            return true;
        }
 
@@ -243,12 +222,12 @@ namespace windowsWriter_engine::copy {
         * Never reads beyond the expected ISO file size and fails if the
         * source reaches EOF before all expected bytes have been copied.
         *
-        * Completes outstanding writeback on successful completion.
-        * On failure or cancellation, skips the remaining writeback because
-        * the caller discards the partially written destination file.
+        * Writeback is paced per chunk by writeOneChunk(); no per-file flush
+        * is done here. Any range still in flight when the file is closed is
+        * covered by the caller's final syncfs().
         *
         * @return true only if exactly the expected file size was copied
-        *         and all tracked writeback completed successfully.
+        *         without failure or cancellation.
         */
        bool copyFileChunks(int fd_in, int fd_out,
                            uint64_t fileSize,
@@ -302,17 +281,13 @@ namespace windowsWriter_engine::copy {
                }
            }
 
-           // On failure or cancellation the data is garbage: don't wait for it.
+           // On failure or cancellation the data is garbage.
            // The caller truncates the file, which drops the dirty pages without I/O.
            if (!success || GlobalState::g_operationCancelled.load())
                return false;
 
            // Require an exact match, not merely a minimum.
-           if (bytesCopiedTotal != fileSize)
-               return false;
-
-           // Success path only: complete the remaining partial writeback range.
-           return flushWriteback(fd_out, wb);
+           return bytesCopiedTotal == fileSize;
        }
 
        /**
