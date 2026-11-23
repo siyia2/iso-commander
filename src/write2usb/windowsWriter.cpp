@@ -231,18 +231,22 @@ namespace {
             if (!ctx) return;
 
             mnt_context_set_target(ctx, path);
-            mnt_context_enable_loopdel(ctx, true);
 
-            // Cancellation: bypass a standard unmount and go straight to lazy
-            // detachment for immediate release.
-            if (GlobalState::g_operationCancelled.load())
-                mnt_context_enable_lazy(ctx, true);
+            const bool cancelled = GlobalState::g_operationCancelled.load();
 
-            // If the plain unmount reports the device is busy, force a lazy
-            // detachment and retry on the same context.
-            if (mnt_context_umount(ctx) != 0) {
+            if (cancelled) {
+                mnt_context_disable_helpers(ctx, true);
                 mnt_context_enable_lazy(ctx, true);
                 mnt_context_umount(ctx);
+            } else {
+                mnt_context_enable_loopdel(ctx, true);
+
+                // If the plain unmount reports the device is busy, force a lazy
+                // detachment and retry on the same context.
+                if (mnt_context_umount(ctx) != 0) {
+                    mnt_context_enable_lazy(ctx, true);
+                    mnt_context_umount(ctx);
+                }
             }
 
             mnt_free_context(ctx);
@@ -268,7 +272,9 @@ namespace {
             ~ScopedMount() {
                 if (path.empty()) return;
                 if (active) safeUmount(path.c_str());
-                rmdir(path.c_str());
+                if (rmdir(path.c_str()) != 0 && errno != EBUSY) {
+                    // Optional: log if needed
+                }
             }
         };
 
