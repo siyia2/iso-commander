@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
@@ -13,7 +12,6 @@
 
 // C / System Headers
 #include <fcntl.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 // Project Headers
@@ -432,7 +430,7 @@ namespace windowsWriter_engine::copy {
 
            const bool toNtfs =
                (isoType == IsoType::WindowsInstall) &&
-               (e.dst.string().rfind(ntfsMnt, 0) == 0);
+               e.dst.native().compare(0, ntfsMnt.size(), ntfsMnt) == 0;
 
            if (!copyFileWithProgress(
                    e.src, e.dst, e.size, toNtfs,
