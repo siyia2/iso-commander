@@ -258,35 +258,39 @@ namespace {
         /**
          * @brief Unmounts @p path and every mount stacked on it.
          *
-         * libmount is tried first so loop devices and utab are cleaned up.
-         * A raw umount2() sweep then removes anything left behind (stacked
-         * layers, or a failed libmount attempt). On cancellation helpers are
-         * skipped and the detach is lazy so a busy mount cannot block exit.
+         * Uses a fresh/reset libmount context per attempt so loop devices and utab
+         * are cleaned up without stale context state. When not cancelled, a normal
+         * unmount is attempted first before falling back to a lazy unmount. On
+         * cancellation, helpers are skipped and a lazy detach is used immediately.
+         * A raw umount2() sweep then removes any remaining stacked mount layers.
          */
         void safeUmount(const char* path) {
             const bool cancelled = GlobalState::g_operationCancelled.load();
 
-            if (libmnt_context* ctx = mnt_new_context()) {
+            auto runLibmntUmount = [&](bool lazy) -> bool {
+                libmnt_context* ctx = mnt_new_context();
+                if (!ctx) return false;
+
+                mnt_reset_context(ctx);
                 mnt_context_set_target(ctx, path);
                 mnt_context_enable_loopdel(ctx, true);
 
-                if (cancelled)
+                if (cancelled || lazy) {
                     mnt_context_disable_helpers(ctx, true);
-
-                if (cancelled) {
                     mnt_context_enable_lazy(ctx, true);
-                    mnt_context_umount(ctx);
-                } else if (mnt_context_umount(ctx) != 0) {
-                    // Busy: force a lazy detach and retry on the same context.
-                    mnt_context_enable_lazy(ctx, true);
-                    mnt_context_umount(ctx);
                 }
 
+                const int rc = mnt_context_umount(ctx);
                 mnt_free_context(ctx);
+                return rc == 0;
+            };
+
+            if (cancelled) {
+                runLibmntUmount(true);
+            } else if (!runLibmntUmount(false)) {
+                runLibmntUmount(true);
             }
 
-            // Sweep: succeeds once per remaining layer; EINVAL means the
-            // path is no longer a mount point.
             for (int i = 0; i < 8; ++i) {
                 if (umount2(path, MNT_DETACH | UMOUNT_NOFOLLOW) != 0)
                     break;
