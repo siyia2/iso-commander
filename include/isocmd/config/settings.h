@@ -7,19 +7,10 @@
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
-#include <format>
 #include <functional>
-#include <iostream>
 #include <map>
 #include <string>
-#include <utility>
 #include <vector>
-
-// Project Headers
-#include "isocmd/ui/pausePrompts.h"
-#include "isocmd/ui/rendering.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/util/sort.h"
 
 /**
  * DATA STRUCTURES
@@ -250,67 +241,6 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache,
 void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap);
 const ConfigEntry* findConfigEntry(const std::string& key);
 
-namespace settings_ops {
-
-    inline std::string resolveCurrent(const std::string& key, const ConfigEntry* entry) {
-        auto it = ConfigCaches::g_configCache.find(key);
-        if (it != ConfigCaches::g_configCache.end()) {
-            return it->second;
-        }
-        return entry->defaultValue;
-    }
-
-    template <typename ThemeType>
-    bool validate(const ConfigEntry* entry, const std::string& newVal,
-                  const ThemeType& tc, const std::function<void()>& drawEdit) {
-        if (!entry->validate || entry->validate(newVal)) {
-            return true;
-        }
-
-        auto render = [&] {
-            SyncOutput sync;
-            drawEdit();
-            std::cout << "\n" << tc.error << "Invalid value: "
-                      << tc.warning << "'" << newVal << "'" << tc.reset << "\n";
-        };
-        pressEnterToTryWithRepaint(render);
-        return false;
-    }
-
-    template <typename ThemeT>
-    bool commitSetting(const std::string& configPath, const std::string& key,
-                       const std::string& newVal, ThemeT& tc,
-                       std::string& current, const std::function<void()>& drawEditCallback) {
-        ConfigCaches::g_configCache[key] = newVal;
-        applyConfigEffects(ConfigCaches::g_configCache, key);
-
-        current = ConfigCaches::g_configCache.count(key) ? ConfigCaches::g_configCache[key] : "";
-        bool saved = flushCache(configPath);
-
-        tc = resolveOptionsTheme();
-
-        auto render = [&] {
-            SyncOutput sync;
-            drawEditCallback();
-            if (saved) {
-                std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n",
-                                         tc.path, tc.reset, configPath);
-            } else {
-                std::cout << tc.warning << "\nWarning: " << tc.error
-                          << "Setting update is memory-only (Disk write failed)."
-                          << tc.reset << "\n";
-            }
-        };
-        pressEnterToContinueWithRepaint(render);
-
-        if (key == "filenames_only") {
-            sortAfterFilenamesOnlyFlag();
-        }
-
-        return saved;
-    }
-
-} // namespace settings_ops
 
 /**
  * INTERACTIVE EDITOR DECLARATIONS (settingsEditor.cpp & related UI/input helpers)

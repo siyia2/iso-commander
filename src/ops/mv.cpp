@@ -11,7 +11,7 @@
 
 // Project Headers
 #include "isocmd/ops/cpMvRm.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
 #include "isocmd/ui/themes.h"
 
 /**

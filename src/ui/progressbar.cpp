@@ -30,8 +30,11 @@
 // Project Headers
 #include "isocmd/input/inputHandling.h"
 #include "isocmd/input/readline.h"
-#include "isocmd/ui/rendering.h"
-#include "isocmd/core/state.h"
+#include "isocmd/ui/progressBarSizeWatcher.h"
+#include "isocmd/ui/syncOutput.h"
+#include "isocmd/ui/termSize.h"
+#include "isocmd/core/cancellation.h"
+#include "isocmd/core/uiState.h"
 #include "isocmd/ui/themes.h"
 
 namespace {

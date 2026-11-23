@@ -27,7 +27,6 @@
 // Project Headers
 #include "isocmd/ops/cpMvRm.h"
 #include "isocmd/core/globalMutexes.h"
-#include "isocmd/core/state.h"
 #include "isocmd/input/history.h"
 #include "isocmd/input/inputHandling.h"
 #include "isocmd/input/readline.h"

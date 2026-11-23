@@ -21,7 +21,7 @@
 #include "isocmd/ops/cpMvRm.h"
 #include "isocmd/input/history.h"
 #include "isocmd/input/readline.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
 #include "isocmd/util/sort.h"
 #include "isocmd/util/stringManipulation.h"
 #include "isocmd/ui/themes.h"

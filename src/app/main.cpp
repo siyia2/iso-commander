@@ -24,13 +24,19 @@
 #include <readline/readline.h>
 
 // Project Headers
-#include "isocmd/core/threadpool.h"
+#include "isocmd/input/inputHandling.h"
+#include "isocmd/core/sharedRefreshState.h"
+#include "isocmd/threadpool/threadpool.h"
 #include "isocmd/database/databaseOps.h"
 #include "isocmd/ui/display.h"
-#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/readlineResize.h"
+#include "isocmd/ui/syncOutput.h"
 #include "isocmd/app/main.h"
 #include "isocmd/input/readline.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
+#include "isocmd/core/lists.h"
+#include "isocmd/core/paths.h"
+#include "isocmd/core/uiState.h"
 #include "isocmd/ui/themes.h"
 #include "isocmd/config/settings.h"
 #include "isocmd/write2usb/write2usbUI.h"

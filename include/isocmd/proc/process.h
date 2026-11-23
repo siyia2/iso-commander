@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+struct CpMvPromptContext;
+
 /**
  * @brief Input options and operation mode flags for an ISO file operation batch.
  */

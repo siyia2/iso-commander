@@ -16,7 +16,8 @@
 #include <readline/readline.h>
 
 // Project Headers
-#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/readlineResize.h"
+#include "isocmd/ui/termSize.h"
 
 /**
  * @brief Wraps @c readline() with an optional @ref ListResizeWatcher and

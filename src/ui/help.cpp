@@ -9,7 +9,7 @@
 
 // Project Headers
 #include "isocmd/input/inputHandling.h"
-#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/syncOutput.h"
 #include "isocmd/ui/pausePrompts.h"
 #include "isocmd/ui/themes.h"
 

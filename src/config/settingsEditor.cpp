@@ -20,16 +20,80 @@
 
 // Project Headers
 #include "isocmd/config/settings.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/paths.h"
 #include "isocmd/input/inputHandling.h"
 #include "isocmd/input/readline.h"
 #include "isocmd/input/tokenize.h"
 #include "isocmd/ui/display.h"
 #include "isocmd/ui/pausePrompts.h"
-#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/readlineResize.h"
+#include "isocmd/ui/syncOutput.h"
 #include "isocmd/ui/themes.h"
 #include "isocmd/ui/verbose.h"
 #include "isocmd/util/sort.h"
+
+// Editor helpers (formerly in settings.h; only used here).
+namespace settings_ops {
+
+    inline std::string resolveCurrent(const std::string& key, const ConfigEntry* entry) {
+        auto it = ConfigCaches::g_configCache.find(key);
+        if (it != ConfigCaches::g_configCache.end()) {
+            return it->second;
+        }
+        return entry->defaultValue;
+    }
+
+    template <typename ThemeType>
+    bool validate(const ConfigEntry* entry, const std::string& newVal,
+                  const ThemeType& tc, const std::function<void()>& drawEdit) {
+        if (!entry->validate || entry->validate(newVal)) {
+            return true;
+        }
+
+        auto render = [&] {
+            SyncOutput sync;
+            drawEdit();
+            std::cout << "\n" << tc.error << "Invalid value: "
+                      << tc.warning << "'" << newVal << "'" << tc.reset << "\n";
+        };
+        pressEnterToTryWithRepaint(render);
+        return false;
+    }
+
+    template <typename ThemeT>
+    bool commitSetting(const std::string& configPath, const std::string& key,
+                       const std::string& newVal, ThemeT& tc,
+                       std::string& current, const std::function<void()>& drawEditCallback) {
+        ConfigCaches::g_configCache[key] = newVal;
+        applyConfigEffects(ConfigCaches::g_configCache, key);
+
+        current = ConfigCaches::g_configCache.count(key) ? ConfigCaches::g_configCache[key] : "";
+        bool saved = flushCache(configPath);
+
+        tc = resolveOptionsTheme();
+
+        auto render = [&] {
+            SyncOutput sync;
+            drawEditCallback();
+            if (saved) {
+                std::cout << std::format("\n{}✓ Updated and saved to: {}{}\n",
+                                         tc.path, tc.reset, configPath);
+            } else {
+                std::cout << tc.warning << "\nWarning: " << tc.error
+                          << "Setting update is memory-only (Disk write failed)."
+                          << tc.reset << "\n";
+            }
+        };
+        pressEnterToContinueWithRepaint(render);
+
+        if (key == "filenames_only") {
+            sortAfterFilenamesOnlyFlag();
+        }
+
+        return saved;
+    }
+
+} // namespace settings_ops
 
 // ============================================================================
 // Internal Editor Subsystems

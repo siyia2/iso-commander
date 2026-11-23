@@ -24,7 +24,6 @@
 #include "isocmd/converters/ccd.h"
 #include "isocmd/converters/daa.h"
 #include "isocmd/converters/mdf.h"
-#include "isocmd/write2usb/write2usb.h"
 
 //=============================================================================
 // Write2Usb Section

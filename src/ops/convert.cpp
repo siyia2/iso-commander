@@ -20,7 +20,8 @@
 
 // Project Headers
 #include "isocmd/core/globalMutexes.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
+#include "isocmd/core/lists.h"
 #include "isocmd/ops/convert.h"
 #include "isocmd/ui/display.h"
 #include "isocmd/ui/themes.h"

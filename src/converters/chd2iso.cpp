@@ -20,7 +20,7 @@
 
 // Project Headers
 #include "isocmd/converters/chd.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
 
 namespace fs = std::filesystem;
 

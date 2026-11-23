@@ -25,12 +25,18 @@
 #include "isocmd/database/databaseOps.h"
 #include "isocmd/ui/display.h"
 #include "isocmd/input/inputHandling.h"
-#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/syncOutput.h"
 #include "isocmd/ui/pausePrompts.h"
 #include "isocmd/input/readline.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
+#include "isocmd/core/lists.h"
 #include "isocmd/ui/themes.h"
 #include "isocmd/ui/verbose.h"
+
+std::int64_t monotonicNowNs() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 
 /**
  * @brief Prints categorized operation results, sorted case-insensitively.
@@ -488,8 +494,7 @@ void saveAndReportResultsForDatabase(DatabaseRefreshResult& result,
     const bool saveSuccess = GlobalState::g_operationCancelled
                                  ? false
                                  : saveToDatabase(result.allIsoFiles, &result.newISOFound);
-    const auto end_time = std::chrono::high_resolution_clock::now();
-    const double total_elapsed = std::chrono::duration<double>(end_time - result.start_time).count();
+    const double total_elapsed = static_cast<double>(monotonicNowNs() - result.start_time_ns) / 1e9;
 
     const int deltaCount =
         (!result.allIsoFiles.empty() && saveSuccess && result.newISOFound)
@@ -739,9 +744,8 @@ void verboseImageSearchResults(ImageSearchRequest& req,
     const bool hasFindContent = verboseFindOutput.size() > 1;
     const size_t totalProcessed = req.totalFiles.load();
 
-    const auto end_time = std::chrono::high_resolution_clock::now();
     const double total_elapsed_time =
-        std::chrono::duration<double>(end_time - req.start_time).count();
+        static_cast<double>(monotonicNowNs() - req.start_time_ns) / 1e9;
 
     auto render = [&] {
         renderImageSearchSummary(req,

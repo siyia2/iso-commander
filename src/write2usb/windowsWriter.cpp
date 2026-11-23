@@ -30,9 +30,12 @@
 #include <blkid/blkid.h>
 
 // Project Headers
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
 #include "isocmd/write2usb/write2usbUI.h"
-#include "isocmd/write2usb/write2usb.h"
+#include "isocmd/write2usb/alignedBuffer.h"
+#include "isocmd/write2usb/threadGuard.h"
+#include "isocmd/write2usb/windowsWriter.h"
+#include "isocmd/write2usb/windowsWriterEngine.h"
 
 namespace fs = std::filesystem;
 

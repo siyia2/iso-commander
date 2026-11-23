@@ -17,8 +17,9 @@
 #include <vector>
 
 // Project Headers
-#include "isocmd/core/state.h"
-#include "isocmd/core/threadpool.h"
+#include "isocmd/core/sharedRefreshState.h"
+#include "isocmd/core/paths.h"
+#include "isocmd/threadpool/threadpool.h"
 #include "isocmd/database/databaseOps.h"
 
 namespace {

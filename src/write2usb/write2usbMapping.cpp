@@ -3,6 +3,7 @@
 // C++ Standard Library Headers
 #include <algorithm>
 #include <cctype>
+#include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -27,14 +28,18 @@
 #include <readline/readline.h>
 
 // Project Headers
+#include "isocmd/input/readline.h"
+#include "isocmd/input/inputHandling.h"
 #include "isocmd/ui/display.h"
-#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/readlineResize.h"
+#include "isocmd/ui/syncOutput.h"
+#include "isocmd/ui/termSize.h"
 #include "isocmd/ui/pausePrompts.h"
 #include "isocmd/util/sort.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
 #include "isocmd/util/stringManipulation.h"
 #include "isocmd/ui/themes.h"
-#include "isocmd/core/threadpool.h"
+#include "isocmd/threadpool/threadpool.h"
 #include "isocmd/write2usb/write2usbUI.h"
 
 namespace fs = std::filesystem;

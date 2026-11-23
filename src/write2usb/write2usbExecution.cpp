@@ -22,11 +22,12 @@
 #include <vector>
 
 // Project Headers
+#include "isocmd/input/inputHandling.h"
 #include "isocmd/ui/pausePrompts.h"
 #include "isocmd/util/sort.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
 #include "isocmd/ui/themes.h"
-#include "isocmd/core/threadpool.h"
+#include "isocmd/threadpool/threadpool.h"
 #include "isocmd/input/tokenize.h"
 #include "isocmd/write2usb/write2usbUI.h"
 

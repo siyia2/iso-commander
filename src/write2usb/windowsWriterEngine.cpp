@@ -16,8 +16,8 @@
 #include <unistd.h>
 
 // Project Headers
-#include "isocmd/core/state.h"
-#include "isocmd/write2usb/write2usb.h"
+#include "isocmd/core/cancellation.h"
+#include "isocmd/write2usb/windowsWriterEngine.h"
 
 namespace fs = std::filesystem;
 

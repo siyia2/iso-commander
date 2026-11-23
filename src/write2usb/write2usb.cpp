@@ -27,9 +27,11 @@
 #include <unistd.h>
 
 // Project Headers
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
 #include "isocmd/write2usb/write2usbUI.h"
-#include "isocmd/write2usb/write2usb.h"
+#include "isocmd/write2usb/alignedBuffer.h"
+#include "isocmd/write2usb/isoDetect.h"
+#include "isocmd/write2usb/windowsWriter.h"
 
 namespace {
 

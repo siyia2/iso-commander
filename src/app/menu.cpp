@@ -17,10 +17,11 @@
 // Project Headers
 #include "isocmd/core/globalMutexes.h"
 #include "isocmd/input/inputHandling.h"
-#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/readlineResize.h"
+#include "isocmd/ui/syncOutput.h"
 #include "isocmd/input/readline.h"
 #include "isocmd/select/select.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/uiState.h"
 #include "isocmd/ui/themes.h"
 #include "isocmd/ui/display.h"
 #include "isocmd/core/sharedRefreshState.h"

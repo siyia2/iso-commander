@@ -5,7 +5,6 @@
 
 // C++ Standard Library Headers
 #include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -13,6 +12,10 @@
 #include <string_view>
 #include <unordered_set>
 #include <vector>
+
+/// Monotonic timestamp in nanoseconds, for the @c start_time_ns fields below.
+/// Keeps <chrono> out of this header, which many translation units include.
+std::int64_t monotonicNowNs();
 
 /// Outcome category of one mount result.
 enum class MountRecKind : uint8_t { Completed, Skipped, Failed };
@@ -146,7 +149,7 @@ struct ImageSearchRequest {
     bool list;                                                    ///< Suppresses the "no new files" / "cache empty" branches.
     int currentCacheOld;                                          ///< Cache count before this search.
     const std::atomic<size_t>& totalFiles;                        ///< Aggregate regular-file count from findFiles().
-    std::chrono::high_resolution_clock::time_point start_time;    ///< Search start; used for elapsed time.
+    std::int64_t start_time_ns;                                   ///< Search start (see monotonicNowNs()); used for elapsed time.
 };
 
 struct DatabaseRefreshReport {
@@ -216,7 +219,7 @@ struct DatabaseRefreshResult {
     std::unordered_set<std::string>& uniqueErrorMessages;      ///< Deduplicated system-level I/O errors.
     std::atomic<size_t>& totalFiles;                           ///< Atomic count of files scanned.
     bool& newISOFound;                                         ///< On entry, whether the scan produced delta changes; may be mutated by the save step.
-    std::chrono::high_resolution_clock::time_point start_time; ///< Refresh origin timestamp; used for elapsed time.
+    std::int64_t start_time_ns;                                ///< Refresh origin (see monotonicNowNs()); used for elapsed time.
 };
 
 /**

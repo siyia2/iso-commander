@@ -32,8 +32,9 @@
 
 // Project Headers
 #include "isocmd/ui/display.h"
-#include "isocmd/ui/rendering.h"
-#include "isocmd/core/state.h"
+#include "isocmd/ui/syncOutput.h"
+#include "isocmd/ui/termSize.h"
+#include "isocmd/core/cancellation.h"
 #include "isocmd/util/stringManipulation.h"
 #include "isocmd/ui/themes.h"
 #include "isocmd/write2usb/write2usbUI.h"

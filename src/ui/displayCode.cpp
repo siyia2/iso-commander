@@ -22,7 +22,7 @@
 // Project Headers
 #include "isocmd/core/caches.h"
 #include "isocmd/database/databaseOps.h"
-#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/syncOutput.h"
 #include "isocmd/filter/filter.h"
 #include "isocmd/input/inputHandling.h"
 #include "isocmd/core/globalMutexes.h"
@@ -30,7 +30,8 @@
 #include "isocmd/ui/pausePrompts.h"
 #include "isocmd/core/sharedRefreshState.h"
 #include "isocmd/util/sort.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/lists.h"
+#include "isocmd/core/uiState.h"
 #include "isocmd/ui/themes.h"
 
 // =============================================================================

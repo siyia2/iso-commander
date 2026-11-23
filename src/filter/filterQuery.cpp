@@ -19,7 +19,7 @@
 
 // Project Headers
 #include "isocmd/core/concurrency.h"
-#include "isocmd/core/threadpool.h"
+#include "isocmd/threadpool/threadpool.h"
 #include "isocmd/filter/filter.h"
 #include "isocmd/util/stringManipulation.h"
 

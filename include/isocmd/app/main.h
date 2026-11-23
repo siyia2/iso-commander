@@ -11,6 +11,8 @@
 #include <thread>
 #include <vector>
 
+struct RefreshState;
+
 /**
  * CONFIGURATION & PERSISTENCE
  * Logic for reading, parsing, and validating user preferences and history.

@@ -18,8 +18,7 @@
 
 // Project Headers
 #include "isocmd/ui/display.h"
-#include "isocmd/ui/rendering.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/uiState.h"
 #include "isocmd/ui/themes.h"
 #include "isocmd/write2usb/write2usbUI.h"
 

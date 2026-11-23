@@ -35,13 +35,15 @@
 #include "isocmd/core/caches.h"
 #include "isocmd/core/concurrency.h"
 #include "isocmd/core/globalMutexes.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/lists.h"
+#include "isocmd/core/paths.h"
+#include "isocmd/core/uiState.h"
 #include "isocmd/database/databaseOps.h"
 #include "isocmd/input/history.h"
 #include "isocmd/input/inputHandling.h"
-#include "isocmd/core/threadpool.h"
+#include "isocmd/threadpool/threadpool.h"
 #include "isocmd/ui/pausePrompts.h"
-#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/syncOutput.h"
 #include "isocmd/ui/themes.h"
 
 // Local ISO Database mutex

@@ -12,7 +12,8 @@
 
 // Project Headers
 #include "isocmd/core/concurrency.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/paths.h"
+#include "isocmd/core/uiState.h"
 #include "isocmd/config/settings.h"
 #include "isocmd/ui/display.h"
 #include "isocmd/ui/themes.h"

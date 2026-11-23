@@ -9,12 +9,6 @@
 #include <string>
 #include <vector>
 
-// Third-Party Library Headers
-#include <readline/readline.h>
-
-// Project Headers
-#include "isocmd/input/readline.h"
-
 /**
  * @brief RAII guard for Readline session state during search operations.
  *
@@ -34,24 +28,17 @@
  */
 class SearchReadlineGuard {
 public:
-    SearchReadlineGuard()
-        : oldCompletion_(rl_attempted_completion_function) {}
-
-    ~SearchReadlineGuard() {
-        rl_attempted_completion_function = oldCompletion_;
-        rl_bind_key('\t', prevent_readline_keybindings);
-        rl_bind_key('\f', rl_insert);
-        clear_history();
-        resetReadlinePagination();
-        reset_custom_keybindingsForSearches();
-    }
+    SearchReadlineGuard();
+    ~SearchReadlineGuard();
 
     // Non-copyable, non-movable
     SearchReadlineGuard(const SearchReadlineGuard&) = delete;
     SearchReadlineGuard& operator=(const SearchReadlineGuard&) = delete;
 
 private:
-    rl_completion_func_t* oldCompletion_;
+    // Same type as readline's rl_completion_func_t, spelled out so this
+    // header does not need <readline/readline.h>.
+    char** (*oldCompletion_)(const char*, int, int);
 };
 
 /**

@@ -36,7 +36,7 @@
 // Project Headers
 #include "isocmd/core/globalMutexes.h"
 #include "isocmd/ops/mount.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
 #include "isocmd/util/stringManipulation.h"
 #include "isocmd/ui/verbose.h"
 

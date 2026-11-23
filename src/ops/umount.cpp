@@ -25,7 +25,7 @@
 // Project Headers
 #include "isocmd/ui/display.h"
 #include "isocmd/core/globalMutexes.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
 #include "isocmd/util/stringManipulation.h"
 #include "isocmd/ui/themes.h"
 #include "isocmd/ops/umount.h"

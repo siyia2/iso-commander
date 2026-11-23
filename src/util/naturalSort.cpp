@@ -17,9 +17,8 @@
 #include "isocmd/core/concurrency.h"
 #include "isocmd/ui/display.h"
 #include "isocmd/core/globalMutexes.h"
-#include "isocmd/core/state.h"
-#include "isocmd/core/threadpool.h"
-
+#include "isocmd/core/lists.h"
+#include "isocmd/threadpool/threadpool.h"
 namespace {
 
     /**

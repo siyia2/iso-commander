@@ -8,9 +8,10 @@
 #include <string_view>
 
 // Project Headers
-#include "isocmd/cli/cmdAutomation.h"
+#include "isocmd/cmd/cmdAutomation.h"
 #include "isocmd/input/inputHandling.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
+#include "isocmd/core/uiState.h"
 #include "isocmd/ui/themes.h"
 
 // ─── Argument parsing ────────────────────────────────────────────────────────

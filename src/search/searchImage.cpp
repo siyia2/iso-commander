@@ -32,14 +32,18 @@
 #include "isocmd/core/globalMutexes.h"
 #include "isocmd/input/history.h"
 #include "isocmd/input/inputHandling.h"
-#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/readlineResize.h"
+#include "isocmd/ui/syncOutput.h"
+#include "isocmd/ui/termSize.h"
 #include "isocmd/ui/pausePrompts.h"
 #include "isocmd/input/readline.h"
 #include "isocmd/search/search.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
+#include "isocmd/core/lists.h"
+#include "isocmd/core/paths.h"
 #include "isocmd/util/stringManipulation.h"
 #include "isocmd/ui/themes.h"
-#include "isocmd/core/threadpool.h"
+#include "isocmd/threadpool/threadpool.h"
 #include "isocmd/ui/verbose.h"
 
 namespace fs = std::filesystem;
@@ -900,7 +904,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
         parseAndValidateDirectories(inputSearch, directoryPaths, invalidDirectoryPaths, cleanedInput);
 
         bool newFilesFound = false;
-        const auto start_time = std::chrono::high_resolution_clock::now();
+        const auto start_time = monotonicNowNs();
 
         std::unordered_set<std::string> fileNames;
         files = findFiles(directoryPaths, fileNames, currentCacheOld, fileType,
@@ -928,7 +932,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
             .list                  = list,
             .currentCacheOld       = currentCacheOld,
             .totalFiles            = totalFiles,
-            .start_time            = start_time,
+            .start_time_ns         = start_time,
         };
         verboseImageSearchResults(req, repaintCallerPrompt);
 

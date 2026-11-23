@@ -17,12 +17,14 @@
 #include <readline/readline.h>
 
 // Project Headers
-#include "isocmd/core/state.h"
+#include "isocmd/core/sharedRefreshState.h"
+#include "isocmd/core/lists.h"
+#include "isocmd/core/uiState.h"
 #include "isocmd/filter/filter.h"
 #include "isocmd/input/history.h"
 #include "isocmd/input/readline.h"
 #include "isocmd/ui/display.h"
-#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/readlineResize.h"
 #include "isocmd/ui/stringListView.h"
 #include "isocmd/ui/themes.h"
 #include "isocmd/util/stringManipulation.h"

@@ -23,7 +23,8 @@
 #include <readline/readline.h>
 
 // Project Headers
-#include "isocmd/core/state.h"
+#include "isocmd/input/inputHandling.h"
+#include "isocmd/core/uiState.h"
 #include "isocmd/input/readline.h"
 #include "isocmd/ui/themes.h"
 #include "isocmd/write2usb/write2usbUI.h"

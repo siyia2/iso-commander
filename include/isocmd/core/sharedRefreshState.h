@@ -3,6 +3,7 @@
 #ifndef SHAREDREFRESHSTATE_H
 #define SHAREDREFRESHSTATE_H
 
+// C++ Standard Library Headers
 #include <atomic>
 #include <condition_variable>
 #include <cstddef>

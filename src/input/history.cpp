@@ -24,11 +24,11 @@
 #include <readline/history.h>
 
 // Project Headers
-#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/syncOutput.h"
 #include "isocmd/input/history.h"
 #include "isocmd/input/inputHandling.h"
 #include "isocmd/ui/pausePrompts.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/paths.h"
 #include "isocmd/ui/themes.h"
 
 /**

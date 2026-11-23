@@ -15,7 +15,8 @@
 
 // Project Headers
 #include "isocmd/input/inputHandling.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
+#include "isocmd/core/uiState.h"
 
 /**
  * @brief Disables EOF (Ctrl+D) processing in the terminal.

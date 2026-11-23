@@ -31,14 +31,16 @@
 #include "isocmd/core/globalMutexes.h"
 #include "isocmd/input/history.h"
 #include "isocmd/input/inputHandling.h"
-#include "isocmd/ui/rendering.h"
+#include "isocmd/ui/readlineResize.h"
+#include "isocmd/ui/syncOutput.h"
+#include "isocmd/ui/termSize.h"
 #include "isocmd/ui/pausePrompts.h"
 #include "isocmd/input/readline.h"
 #include "isocmd/search/search.h"
-#include "isocmd/core/state.h"
+#include "isocmd/core/cancellation.h"
 #include "isocmd/util/stringManipulation.h"
 #include "isocmd/ui/themes.h"
-#include "isocmd/core/threadpool.h"
+#include "isocmd/threadpool/threadpool.h"
 #include "isocmd/ui/verbose.h"
 
 namespace fs = std::filesystem;
@@ -248,7 +250,7 @@ static void processPathTraversalAndReporting(const std::string& input,
     std::cout << "\033[3H\033[J\n";
     disableInput();
 
-    auto start_time = std::chrono::high_resolution_clock::now();
+    const auto start_time = monotonicNowNs();
 
     std::string cleanedInput = parseAndFilterPaths(input, validPaths, invalidPaths);
 
@@ -265,7 +267,7 @@ static void processPathTraversalAndReporting(const std::string& input,
                 .uniqueErrorMessages  = uniqueErrorMessages,
                 .totalFiles           = totalFiles,
                 .newISOFound          = newISOFound,
-                .start_time           = start_time,
+                .start_time_ns        = start_time,
             };
             saveAndReportResultsForDatabase(refreshResult, repaintCallerPrompt);
         }
@@ -295,7 +297,7 @@ static void processPathTraversalAndReporting(const std::string& input,
         .uniqueErrorMessages = uniqueErrorMessages,
         .totalFiles          = totalFiles,
         .newISOFound         = newISOFound,
-        .start_time          = start_time,
+        .start_time_ns       = start_time,
     };
     saveAndReportResultsForDatabase(refreshResult, repaintCallerPrompt);
 }

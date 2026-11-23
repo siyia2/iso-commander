@@ -22,14 +22,14 @@
 #include <unistd.h>
 
 // Project Headers
-#include "isocmd/cli/cmdAutomation.h"
+#include "isocmd/cmd/cmdAutomation.h"
 #include "isocmd/core/concurrency.h"
 #include "isocmd/input/inputHandling.h"
 #include "isocmd/ops/mount.h"
-#include "isocmd/ui/rendering.h"
-#include "isocmd/core/state.h"
+#include "isocmd/ui/syncOutput.h"
+#include "isocmd/core/cancellation.h"
 #include "isocmd/ui/themes.h"
-#include "isocmd/core/threadpool.h"
+#include "isocmd/threadpool/threadpool.h"
 #include "isocmd/ops/umount.h"
 #include "isocmd/ui/verbose.h"
 
