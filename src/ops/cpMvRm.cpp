@@ -187,6 +187,225 @@ static std::string validateLinuxPath(const std::string& path)
 }
 
 /**
+ * @brief Configures Readline keybindings, signal handlers, and history for a prompt iteration.
+ *
+ * @param ctx Prompt context containing operation flags and history settings.
+ * @param isPageTurn Indicates whether the current Readline invocation is a page turn.
+ */
+static void configureCpMvReadlineEnv(CpMvPromptContext& ctx, const bool& isPageTurn)
+{
+    enable_ctrl_d();
+    setupSignalHandlerCancellations();
+
+    RestoreReadlineBuffer();
+    rl_bind_keyseq("\\e", exit_handler);
+
+    if (!ctx.isCopy) {
+        ctx.umountMvRmBreak = true;
+    }
+
+    if (!isPageTurn) {
+        clear_history();
+        ctx.filterHistory = false;
+        loadHistory(ctx.filterHistory);
+    }
+}
+
+/**
+ * @brief Builds the formatted Readline prompt suffix for Copy/Move destination selection.
+ *
+ * @param ctx Prompt context providing operation color and description.
+ * @return Formatted prompt string with Readline color escape sequences.
+ */
+static std::string buildCpMvPromptSuffix(const CpMvPromptContext& ctx)
+{
+    const CpMvRmColors colors = getCpMvRmColors();
+
+    const std::string green =
+        "\001" + std::string(colors.prompt_green) + "\002";
+
+    const std::string blue =
+        "\001" + std::string(colors.prompt_blue) + "\002";
+
+    const std::string reset =
+        "\001" + std::string(UI::Palette::BoldReset) + "\002";
+
+    return std::format(
+        "{0}FolderPaths{1} ↵ for selected {0}ISO{1} to be {2}{3}{1} into, ? for help:\n{4}",
+        green,
+        blue,
+        ctx.operationColor,
+        ctx.operationDescription,
+        reset
+    );
+}
+
+/**
+ * @brief Trims leading and trailing horizontal whitespace from a path token in place.
+ *
+ * @param token Path token string to trim.
+ */
+static void trimPathToken(std::string& token)
+{
+    token.erase(0, token.find_first_not_of(" \t"));
+    token.erase(token.find_last_not_of(" \t") + 1);
+}
+
+/**
+ * @brief Parses and validates semicolon-delimited Linux destination paths.
+ *
+ * Trims each semicolon-separated token, validates it with validateLinuxPath(),
+ * and rebuilds a normalized semicolon-joined path string. On the first invalid
+ * token, records the error in @p invalidPathError and returns false.
+ *
+ * @param rawPathsInput Raw path list with any trailing overwrite flag stripped.
+ * @param normalizedPaths Output string receiving trimmed, valid paths joined by ';'.
+ * @param invalidPathError Output error message when validation fails.
+ * @return true if all tokens are valid, false otherwise.
+ */
+static bool parseAndValidateDestPaths(
+    const std::string& rawPathsInput,
+    std::string& normalizedPaths,
+    std::string& invalidPathError)
+{
+    normalizedPaths.clear();
+    invalidPathError.clear();
+
+    std::istringstream iss(rawPathsInput);
+    std::string token;
+
+    while (std::getline(iss, token, ';')) {
+        trimPathToken(token);
+
+        std::string err = validateLinuxPath(token);
+        if (!err.empty()) {
+            invalidPathError = std::move(err);
+            return false;
+        }
+
+        if (!normalizedPaths.empty()) {
+            normalizedPaths += ';';
+        }
+
+        normalizedPaths += token;
+    }
+
+    return true;
+}
+
+/**
+ * @brief Handles non-control Copy/Move input, path validation, and history persistence.
+ *
+ * @param ctx Prompt context updated with validated paths and overwrite flag.
+ * @param userInput Raw line returned by paginated Readline display.
+ * @param shouldContinue Loop control flag cleared when a valid destination is accepted.
+ */
+static void processCpMvInput(
+    CpMvPromptContext& ctx,
+    const std::string& userInput,
+    bool& shouldContinue)
+{
+    if (userInput.empty()) {
+        return;
+    }
+
+    const bool hasOverwriteFlag =
+        userInput.size() >= 3 &&
+        userInput.substr(userInput.size() - 3) == " -o";
+
+    const std::string rawPathsInput = hasOverwriteFlag
+        ? userInput.substr(0, userInput.size() - 3)
+        : userInput;
+
+    std::string pathsInput;
+    std::string invalidPathError;
+
+    if (!parseAndValidateDestPaths(rawPathsInput, pathsInput, invalidPathError)) {
+        verboseSets.uniqueErrorTokenMessages.insert(invalidPathError);
+        ctx.userDestDir.clear();
+        resetReadlinePagination();
+        return;
+    }
+
+    // Input such as " -o" leaves no paths at all.
+    if (pathsInput.empty()) {
+        ctx.userDestDir.clear();
+        return;
+    }
+
+    ctx.overwriteExisting = hasOverwriteFlag;
+    ctx.userDestDir = pathsInput;
+
+    add_history(pathsInput.c_str());
+    saveHistory(ctx.filterHistory);
+
+    shouldContinue = false;
+}
+
+/**
+ * @brief Runs a single Copy/Move prompt iteration and updates loop state.
+ *
+ * @param ctx Prompt context.
+ * @param entries Sorted ISO entry list for display.
+ * @param currentPage Current pagination page index.
+ * @param shouldContinue Loop control flag updated on exit, cancel, or completion.
+ */
+static void handleCpMvIteration(
+    CpMvPromptContext& ctx,
+    const std::vector<std::string>& entries,
+    std::size_t& currentPage,
+    bool& shouldContinue)
+{
+    bool isPageTurn = false;
+    auto setupEnv = [&]() {
+        configureCpMvReadlineEnv(ctx, isPageTurn);
+    };
+
+    const std::string promptPrefix = "\n";
+    const std::string promptSuffix = buildCpMvPromptSuffix(ctx);
+
+    std::string userInput;
+    {
+        RlKeyBindGuard keyGuard;
+        RlStartupHookGuard hookGuard;
+
+        userInput = handlePaginatedDisplay(
+            entries,
+            promptPrefix,
+            promptSuffix,
+            setupEnv,
+            isPageTurn,
+            currentPage,
+            false
+        );
+    }
+
+    if (userInput == "EOF_SIGNAL") {
+        shouldContinue = false;
+        return;
+    }
+
+    if (userInput == "?") {
+        constexpr bool import2ISO = false;
+        constexpr bool isCpMv = true;
+
+        helpSearches(isCpMv, import2ISO, ctx.isCopy);
+        ctx.userDestDir.clear();
+        return;
+    }
+
+    if (userInput == "\x1b") {
+        ctx.umountMvRmBreak = false;
+        ctx.userDestDir.clear();
+        clear_history();
+        shouldContinue = false;
+        return;
+    }
+
+    processCpMvInput(ctx, userInput, shouldContinue);
+}
+
+/**
  * @brief Prompts for destination directories or routes to deletion confirmation.
  *
  * In Copy/Move mode, validates Linux paths, handles pagination, processes
@@ -215,8 +434,6 @@ std::string userDestDirCpMv(CpMvPromptContext& ctx)
     RlCompleteModeGuard completeModeGuard;
 
     bool shouldContinue = true;
-    std::string userInput;
-
     std::size_t currentPage = 0;
 
     while (shouldContinue) {
@@ -224,148 +441,7 @@ std::string userDestDirCpMv(CpMvPromptContext& ctx)
         RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 1;
 
         if (!ctx.isDelete) {
-            bool isPageTurn = false;
-
-            auto setupEnv = [&]() {
-                enable_ctrl_d();
-                setupSignalHandlerCancellations();
-
-                RestoreReadlineBuffer();
-                rl_bind_keyseq("\\e", exit_handler);
-
-                if (!ctx.isCopy) {
-                    ctx.umountMvRmBreak = true;
-                }
-
-                if (!isPageTurn) {
-                    clear_history();
-                    ctx.filterHistory = false;
-                    loadHistory(ctx.filterHistory);
-                }
-            };
-
-            const CpMvRmColors colors = getCpMvRmColors();
-
-            const std::string green =
-                "\001" + std::string(colors.prompt_green) + "\002";
-
-            const std::string blue =
-                "\001" + std::string(colors.prompt_blue) + "\002";
-
-            const std::string reset =
-                "\001" + std::string(UI::Palette::BoldReset) + "\002";
-
-            const std::string promptPrefix = "\n";
-
-            const std::string promptSuffix = std::format(
-                "{0}FolderPaths{1} ↵ for selected {0}ISO{1} to be {2}{3}{1} into, ? for help:\n{4}",
-                green,
-                blue,
-                ctx.operationColor,
-                ctx.operationDescription,
-                reset
-            );
-
-            {
-                RlKeyBindGuard keyGuard;
-                RlStartupHookGuard hookGuard;
-
-                userInput = handlePaginatedDisplay(
-                    entries,
-                    promptPrefix,
-                    promptSuffix,
-                    setupEnv,
-                    isPageTurn,
-                    currentPage,
-                    false
-                );
-            }
-
-            if (userInput == "EOF_SIGNAL") {
-                shouldContinue = false;
-                break;
-            }
-
-            if (userInput == "?") {
-                constexpr bool import2ISO = false;
-                constexpr bool isCpMv = true;
-
-                helpSearches(isCpMv, import2ISO, ctx.isCopy);
-
-                ctx.userDestDir.clear();
-                continue;
-            }
-
-            if (userInput == "\x1b") {
-                ctx.umountMvRmBreak = false;
-                ctx.userDestDir.clear();
-                clear_history();
-                shouldContinue = false;
-                continue;
-            }
-
-            if (userInput.empty()) {
-                continue;
-            }
-
-            const bool hasOverwriteFlag =
-                userInput.size() >= 3 &&
-                userInput.substr(userInput.size() - 3) == " -o";
-
-            const std::string rawPathsInput = hasOverwriteFlag
-                ? userInput.substr(0, userInput.size() - 3)
-                : userInput;
-
-            bool pathsValid = true;
-            std::string invalidPathError;
-
-            // Trimmed tokens are what get validated, so they are also what
-            // gets stored; otherwise "/a; /b" would validate but later be
-            // used as " /b".
-            std::string pathsInput;
-
-            std::istringstream iss(rawPathsInput);
-            std::string token;
-
-            while (std::getline(iss, token, ';')) {
-                token.erase(0, token.find_first_not_of(" \t"));
-                token.erase(token.find_last_not_of(" \t") + 1);
-
-                std::string err = validateLinuxPath(token);
-
-                if (!err.empty()) {
-                    pathsValid = false;
-                    invalidPathError = std::move(err);
-                    break;
-                }
-
-                if (!pathsInput.empty()) {
-                    pathsInput += ';';
-                }
-
-                pathsInput += token;
-            }
-
-            if (!pathsValid) {
-                verboseSets.uniqueErrorTokenMessages.insert(invalidPathError);
-                ctx.userDestDir.clear();
-                resetReadlinePagination();
-                continue;
-            }
-
-            // Input such as " -o" leaves no paths at all.
-            if (pathsInput.empty()) {
-                ctx.userDestDir.clear();
-                continue;
-            }
-
-            ctx.overwriteExisting = hasOverwriteFlag;
-            ctx.userDestDir = pathsInput;
-
-            add_history(pathsInput.c_str());
-            saveHistory(ctx.filterHistory);
-
-            shouldContinue = false;
+            handleCpMvIteration(ctx, entries, currentPage, shouldContinue);
         } else {
             const bool proceedWithDelete = handleDeleteOperation(
                 ctx.isoFiles,
@@ -376,8 +452,6 @@ std::string userDestDirCpMv(CpMvPromptContext& ctx)
 
             if (!proceedWithDelete) {
                 ctx.userDestDir.clear();
-                shouldContinue = false;
-                continue;
             }
 
             shouldContinue = false;
