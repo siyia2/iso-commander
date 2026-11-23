@@ -259,12 +259,12 @@ namespace {
          * @brief Unmounts @p path and every mount stacked on it.
          *
          * Uses a fresh libmount context for each attempt so loop devices and utab
-         * are cleaned up without stale context state. A synchronous unmount is
-         * always attempted first, so the filesystem is really released when this
-         * returns; a lazy detach is only the fallback if that fails (e.g. EBUSY).
-         * On cancellation, userspace helpers are skipped in both attempts, since
-         * they can hang, but the synchronous unmount is not. A raw umount2() sweep
-         * then removes any remaining stacked mount layers.
+         * are cleaned up without stale context state. Normally a synchronous unmount
+         * is attempted first so the filesystem is really released when this returns,
+         * with a lazy detach as the fallback if that fails (e.g. EBUSY). On
+         * cancellation the synchronous unmount is skipped entirely and the mount is
+         * lazily detached with userspace helpers disabled, so no flush is waited on.
+         * A raw umount2() sweep then removes any remaining stacked mount layers.
          */
         void safeUmount(const char* path) {
             auto runLibmntUmount = [&](bool lazy, bool noHelpers) -> bool {
@@ -287,11 +287,12 @@ namespace {
 
             const bool cancelled = GlobalState::g_operationCancelled.load();
 
-            // Synchronous first, even on cancel: the kernel has to write the
-            // remaining metadata anyway, and a lazy detach only hides the mount
-            // while that happens in the background. Lazy is the EBUSY fallback.
-            if (!runLibmntUmount(false, cancelled))
+            if (cancelled) {
+                // Cancelled: don't wait for the flush, detach immediately.
                 runLibmntUmount(true, true);
+            } else if (!runLibmntUmount(false, false)) {
+                runLibmntUmount(true, true);   // EBUSY fallback
+            }
 
             for (int i = 0; i < 8; ++i) {
                 if (umount2(path, MNT_DETACH | UMOUNT_NOFOLLOW) != 0)
@@ -845,6 +846,8 @@ namespace {
                            EntryVec& espEntries) {
             if (!runPass(ntfsEntries)) return false;
             if (!runPass(espEntries)) return false;
+
+            if (isCancelled()) return false;
 
             finalFlush(isoType, ntfsMnt, fatMnt);
             return true;
