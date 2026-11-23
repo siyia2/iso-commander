@@ -229,9 +229,7 @@ void drainManagerForWrite2UsbUI(
  * When cancellation is detected, the result screen is painted and terminal
  * input state is restored. Any tasks still running are transferred to
  * drainManagerForWrite2UsbUI, which keeps their futures alive while they
- * finish in the background. This allows outstanding writes and OS page-cache
- * flushing to continue. The drain manager removes each device from
- * g_drainingDevices when its drain completes.
+ * finish in the background.
  *
  * The result screen reflects task states at the time it is painted; tasks
  * that continue running after cancellation may finish later. The successful
