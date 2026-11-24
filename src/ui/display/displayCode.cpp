@@ -28,6 +28,7 @@
 #include "isocmd/core/globalMutexes.h"
 #include "isocmd/ui/stringListView.h"
 #include "isocmd/ui/pausePrompts.h"
+#include "isocmd/ui/printList.h"
 #include "isocmd/core/sharedRefreshState.h"
 #include "isocmd/util/sort.h"
 #include "isocmd/core/lists.h"
@@ -37,10 +38,6 @@
 // =============================================================================
 // External declarations
 // =============================================================================
-
-void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
-               std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-               size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst = true, bool showPendingIndices = true);
 
 // Defined in select.cpp. While an ISO select screen is active it owns the staged
 // selection as PATHS and projects it onto the display state (source indices,
@@ -136,6 +133,9 @@ namespace {
      * Clears the scroll buffer, prints the empty-database prompt using the current
      * list color theme, and delegates blocking/repaint handling to
      * @c pressEnterToReturnWithRepaint.
+     *
+     * @note The lambda uses @c std::cout (not @c std::cerr) and emits via the
+     *       SyncOutput scope for atomic presentation with the repaint.
      */
     void handleEmptyIsoDatabase() {
         auto render = [] {
@@ -169,6 +169,10 @@ namespace {
  *
  * @note SIGINT is set to @c SIG_IGN and Ctrl+D is disabled for the duration
  *       of the call; the SIGINT handler is not restored on return.
+ *
+ * @note Pending selection is re-projected under @c updateListMutex, before
+ *       @c printList, so the displayed indices match the freshly loaded
+ *       (sorted) list rather than a stale pre-reload view.
  *
  * @param filteredFiles      Currently filtered files; may be cleared when the
  *                           filter is reset.
@@ -234,8 +238,16 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles,
         reconcilePendingSelection(pendingIndices, hasPendingProcess, needToReload, state);
 
         // Use either the recently refreshed filteredFiles or the global master list.
-        printList(isFiltered ? filteredFiles : GlobalState::globalIsoFileList, "ISO_FILES", listSubType,
-                  pendingIndices, hasPendingProcess, currentPage, state, true, true);
+        printList(
+            isFiltered ? filteredFiles : GlobalState::globalIsoFileList,
+            "ISO_FILES",
+            listSubType,
+            PrintListContext{
+                .pendingIndices = pendingIndices,
+                .hasPendingProcess = hasPendingProcess,
+                .currentPage = currentPage,
+                .state = state
+            });
 
         isEmpty = GlobalState::globalIsoFileList.empty();
     }
@@ -286,6 +298,11 @@ namespace {
      * If @ref MOUNTED_ISO_PATH is missing or inaccessible, resets the cache and
      * reports no directory list change.
      *
+     * A rescan runs only when the metadata changed. The rescan result replaces
+     * the cache only when the new directory list actually differs in size or
+     * content, so a metadata-only change (e.g. an mtime bump from an unrelated
+     * write inside the directory) yields @c false and leaves the cache intact.
+     *
      * @param[in,out] lastDirStat    Cached filesystem metadata for @ref MOUNTED_ISO_PATH.
      * @param[in,out] lastSortedDirs Cached sorted directory paths.
      * @param[in,out] lastIsoCount   Cached count of entries in @p lastSortedDirs.
@@ -327,6 +344,10 @@ namespace {
      * blocks on @ref pressEnterToReturnWithRepaint, and releases static and parse
      * caches after the prompt returns.
      *
+     * @note This path emits to @c std::cerr (contrast with handleEmptyIsoDatabase,
+     *       which uses @c std::cout). The "original" theme uses Yellow; other
+     *       themes use @c theme->warning.
+     *
      * @param[in,out] lastSortedDirs Static cached directory list to swap-clear.
      * @param[in,out] lastIsoCount   Static cached directory count to reset to zero.
      */
@@ -354,6 +375,15 @@ namespace {
 
     /**
      * @brief Updates filter state and synchronizes pending selection indices after a refresh.
+     *
+     * Resets the filter stack and view (clearing @p filteredFiles and setting
+     * @p isFiltered to @c false) when the filtered list has caught up with the
+     * full list (equal sizes) or when @p umountMvRmBreak forces it. On that
+     * reset @p originalPage receives the current page so the full list can be
+     * restored at the same position.
+     *
+     * @note @p currentPage is taken by value and only forwarded into
+     *       @p originalPage; it is not modified here.
      *
      * @param[in]     isoDirs           Current list of mounted ISO directories.
      * @param[in,out] filteredFiles     Filtered entries; cleared when filter state resets.
@@ -407,6 +437,10 @@ namespace {
  * returns @c false. Otherwise it manages pagination state and delegates to
  * @c printList.
  *
+ * @note The static @c lastDirStat / @c lastSortedDirs / @c lastIsoCount are
+ *       process-wide (not per-call), so this function is not reentrant and
+ *       assumes a single mounted-ISO view owner.
+ *
  * @note SIGINT is set to @c SIG_IGN and Ctrl+D is disabled for the duration
  *       of the call; the SIGINT handler is not restored on return.
  *
@@ -455,8 +489,16 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
                                   pendingIndices, hasPendingProcess, currentPage,
                                   originalPage, dirsChanged);
 
-    printList(isFiltered ? filteredFiles : isoDirs, "MOUNTED_ISOS", "", pendingIndices,
-              hasPendingProcess, currentPage, state, true, true);
+    printList(
+        isFiltered ? filteredFiles : isoDirs,
+        "MOUNTED_ISOS",
+        "",
+        PrintListContext{
+            .pendingIndices = pendingIndices,
+            .hasPendingProcess = hasPendingProcess,
+            .currentPage = currentPage,
+            .state = state
+        });
     return true;
 }
 
@@ -484,7 +526,8 @@ namespace {
  * @c "img" or @c "gbi".
  *
  * @param fileType Disc image extension identifier.
- * @return Target cache and mutex pointers for @p fileType.
+ * @return Target cache and mutex pointers for @p fileType. Both pointers are
+ *         null for an unmapped type; they are non-null as a pair otherwise.
  */
 CacheTarget resolveCacheTarget(const std::string& fileType) {
     if (fileType == "bin") {
@@ -511,6 +554,10 @@ CacheTarget resolveCacheTarget(const std::string& fileType) {
  * Checks whether the current view is unfiltered and the cache is populated
  * with different contents. When a mismatch is found, copies the cached list
  * into @p files and flags @p need2Sort.
+ *
+ * @note The cache is read without taking @p target.mutex here; callers are
+ *       expected to be on the single UI thread, and the actual sort/copy-back
+ *       into the cache under the mutex happens later in applyPendingSort.
  *
  * @param[in,out] files      Working file list to update from cache.
  * @param[in]     target     Resolved cache and mutex pair.
@@ -540,6 +587,10 @@ void restoreFromCacheIfNeeded(std::vector<std::string>& files, const CacheTarget
  * Executes case-insensitive sorting on @p files and, if available, on
  * @p target.cache under @p target.mutex when @p need2Sort is set, then
  * resets pending sort flags.
+ *
+ * @note @c GlobalState::needSortingAfterflno is cleared unconditionally, and
+ *       @p need2Sort is cleared unconditionally, even when @p need2Sort was
+ *       already @c false on entry.
  *
  * @param[in,out] files      Working file list to sort.
  * @param[in]     target     Resolved cache and mutex pair.
@@ -572,6 +623,9 @@ void applyPendingSort(std::vector<std::string>& files, const CacheTarget& target
  * format-specific mutex. The function then delegates to @c printList with
  * @c listType "IMAGE_FILES" and @c listSubType "convert2iso".
  *
+ * @note Unlike loadAndDisplayIso/loadAndDisplayMountedISOs, this function does
+ *       not toggle SIGINT or Ctrl+D; it is a pure prepare-and-print step.
+ *
  * @param files              [in/out] Working file list; may be replaced
  *                           wholesale from a cache.
  * @param fileType           File extension type: "bin", "img", "mdf", "nrg",
@@ -597,5 +651,14 @@ void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string
         applyPendingSort(files, target, need2Sort);
     }
 
-    printList(files, "IMAGE_FILES", "convert2iso", pendingIndices, hasPendingProcess, currentPage, state, true, true);
+    printList(
+        files,
+        "IMAGE_FILES",
+        "convert2iso",
+        PrintListContext{
+            .pendingIndices = pendingIndices,
+            .hasPendingProcess = hasPendingProcess,
+            .currentPage = currentPage,
+            .state = state
+        });
 }

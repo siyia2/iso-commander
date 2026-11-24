@@ -114,7 +114,6 @@ namespace {
         signal(SIGTERM, signalHandler);
 
         paginationSet(GlobalState::configPath);
-        liveFilteringSet(GlobalState::configPath);
 
         // Readline refresh hook for pending UI refreshes.
         rl_event_hook = checkPendingRefresh;

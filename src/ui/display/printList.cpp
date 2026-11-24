@@ -19,6 +19,7 @@
 #include "isocmd/filter/filter.h"
 #include "isocmd/ui/syncOutput.h"
 #include "isocmd/ui/termSize.h"
+#include "isocmd/ui/printList.h"
 #include "isocmd/app/main.h"
 #include "isocmd/core/sharedRefreshState.h"
 #include "isocmd/core/lists.h"
@@ -39,7 +40,8 @@ constexpr std::string_view kClearSeq = "\033[2J\033[3J\033[H\033[0m";
 constexpr std::size_t kPerRowOverhead = 96;
 
 /// Retained capacity (per list-type buffer) above which we release memory after a
-/// render.
+/// render. The release happens only *after* the frame has been flushed, so a
+/// large page never incurs a reallocation mid-write.
 constexpr std::size_t kMaxRetainedCapacity = 4u << 20; // 4 MiB
 
 namespace {
@@ -52,6 +54,11 @@ namespace {
      *
      * Each list kind owns its independent buffer, ensuring rendering one list type
      * never grows, shrinks, or reallocates the buffer used by another.
+     *
+     * @note Selection is by kind only. printList() maps ISO_FILES -> Iso,
+     *       IMAGE_FILES -> Image, and *every other* listType (notably
+     *       MOUNTED_ISOS) to Mounted. An unexpected listType therefore shares
+     *       the Mounted buffer rather than getting one of its own.
      *
      * @param kind The category of the list (@c ListKind).
      * @return std::string& Reference to the retained thread-local buffer.
@@ -82,7 +89,7 @@ namespace {
      * @param value The numeric value to append.
      */
     void appendNum(std::string& out, std::size_t value) {
-        char buf[20]; // enough for a 64-bit unsigned integer
+        char buf[20];
         const auto res = std::to_chars(buf, buf + sizeof(buf), value);
         out.append(buf, static_cast<std::size_t>(res.ptr - buf));
     }
@@ -90,9 +97,12 @@ namespace {
     /**
      * @brief Formats an integer value with right-alignment padding into the output string.
      *
+     * @note @p width is a *minimum* only. A value whose digit count exceeds
+     *       @p width is appended in full with no truncation.
+     *
      * @param out   Reference to the destination string buffer.
      * @param value The numeric value to append.
-     * @param width The target formatting column width.
+     * @param width The minimum formatting column width.
      */
     void appendNumPadded(std::string& out, std::size_t value, std::size_t width) {
         char buf[20];
@@ -105,15 +115,23 @@ namespace {
     /**
      * @brief Prepares the background synchronization indicator text if a database import is active.
      *
-     * Performs an atomic pre-check to bypass unnecessary filesystem syscalls when imports are inactive.
-     * Validates history file availability and formats the dim synchronization status string, including
-     * filtering lock notices if applicable.
+     * Builds the "Syncing: NewISO -> Restructure" banner (plus an optional
+     * "Filtering locked during sync" notice) that flushOutput() splices into
+     * the frame at the header boundary. When no import is running, or the
+     * list is not an ISO list, or the view has no filter results, returns an
+     * empty string (the caller treats empty as "not syncing").
      *
-     * @param isIsoMode         True if the active view mode is ISO_FILES.
-     * @param noFilterResults   True if the active filter yielded empty results.
-     * @param state             Shared refresh state containing import flags and synchronization mutexes.
-     * @param disablePagination True if pagination is bypassed for the active view.
-     * @return std::string      The formatted sync message string, or an empty string if no sync is required.
+     * In paginated mode the banner is prefixed with blank lines and, for the
+     * filtering notice, a cursor-up (`\033[1A`) + erase-line (`\033[K`) pair so
+     * the notice replaces the blank line above it rather than pushing the
+     * header down. In non-paginated mode plain blank-line separators are used
+     * instead.
+     *
+     * @param isIsoMode          True when rendering the ISO list.
+     * @param noFilterResults    True when the view is empty due to filtering.
+     * @param state              Shared refresh state; isImportRunning is sampled.
+     * @param disablePagination  Selects the cursor-up vs. plain-separator layout.
+     * @return std::string The styled sync banner, or an empty string if not syncing.
      */
     std::string prepareSyncLine(bool isIsoMode, bool noFilterResults, const std::shared_ptr<RefreshState>& state, bool disablePagination) {
         const bool wantSync = isIsoMode && !noFilterResults && !GlobalState::globalIsoFileList.empty();
@@ -147,18 +165,14 @@ namespace {
     /**
      * @brief Appends pagination header information to the output frame buffer.
      *
-     * Formats the current page, total pages, and visible item range statistics (e.g., "Page 1/3 (Items (1-50)/150)")
-     * using theme colors and appends it to the output string buffer.
+     * In paginated mode emits the "Page X/Y (Items A-B/N)" line followed by a
+     * reset and a blank line. In non-paginated mode emits nothing.
      *
-     * @param output            Reference to the retained output string buffer.
-     * @param disablePagination Flag indicating whether pagination is bypassed.
-     * @param effectivePage     Zero-based index of the current active page.
-     * @param totalPages        Total number of available pages.
-     * @param startIndex        1-based index of the first item on the current page.
-     * @param endIndex          1-based index of the last item on the current page.
-     * @param totalItems        Total number of items across all pages.
-     * @param c                 Theme color configuration structure (@c PrintListTheme).
-     * @return size_t           The exact byte offset position in the buffer where the sync line can be spliced.
+     * @return std::size_t Byte offset within @p output at which the sync banner
+     *         (see prepareSyncLine) should later be spliced in. This is the
+     *         position immediately after the header text (paginated) or
+     *         immediately after the leading content (non-paginated); the
+     *         caller must pass it to flushOutput().
      */
     size_t appendHeader(std::string& output, bool disablePagination, std::size_t effectivePage, std::size_t totalPages,
                         std::size_t startIndex, std::size_t endIndex, std::size_t totalItems, const PrintListTheme& c)
@@ -188,50 +202,81 @@ namespace {
 
     /**
      * @brief Bundles filtering index mappings, collection sizes, and dynamic padding constraints.
+     *
+     * @c origIdx          Back-filter mapping: view index -> original (pre-filter)
+     *                     index. Null when no filter is active.
+     * @c origSize         Number of entries in @c origIdx (0 when null).
+     * @c maxOrigDigits    Maximum digit count, over the current page slice, of the
+     *                     *1-based* original index (i.e. digitCount(orig + 1)).
+     *                     Used to right-align the "orig^" badge column.
      */
     struct PrintFilterContext {
-        const std::vector<unsigned long>* origIdx; /**< Pointer to original index mapping vector, or nullptr. */
-        std::size_t origSize;                           /**< Total size of the original index vector. */
-        std::size_t maxOrigDigits;                      /**< Maximum digit length across active original indices for alignment. */
+        const std::vector<unsigned long>* origIdx;
+        std::size_t origSize;
+        std::size_t maxOrigDigits;
     };
 
     /**
      * @brief Bundles list mode flags, path layout toggles, sizing constraints, and color themes.
+     *
+     * @c isFileMode        True for ISO_FILES / IMAGE_FILES (use appendFileModeBody).
+     * @c isIsoMode         True for ISO_FILES (affects filename coloring).
+     * @c isMountedMode     True for MOUNTED_ISOS (use appendMountedModeBody).
+     * @c showNamesOnly     Hide directory components in file mode.
+     * @c showFullUmount    In mounted mode, include dir + hash in addition to the path.
+     * @c usableCols        Terminal width minus one. When 0, row clipping is disabled.
+     * @c colors            Theme colors for this render.
      */
     struct RowConfig {
-        bool isFileMode;         /**< True if the item list represents file entries. */
-        bool isIsoMode;          /**< True if the item list represents ISO file entries. */
-        bool isMountedMode;      /**< True if the item list represents mounted ISO entries. */
-        bool showNamesOnly;      /**< Configuration flag to hide parent directory paths. */
-        bool showFullUmount;     /**< Configuration flag to display full unmount path details. */
-        std::size_t usableCols;       /**< Maximum width in columns available for row rendering. */
-        const PrintListTheme& colors; /**< Theme palette (non-owning; must outlive the row config). */
+        bool isFileMode;
+        bool isIsoMode;
+        bool isMountedMode;
+        bool showNamesOnly;
+        bool showFullUmount;
+        std::size_t usableCols;
+        const PrintListTheme& colors;
     };
 
     /**
      * @brief Appends the alternating sequence number and optional original-index badge to the row.
      *
-     * @param output    Target output string buffer.
-     * @param i         Zero-based index of the current row.
-     * @param maxDigits Width used to right-align the display index (`i + 1`).
-     * @param filterCtx Active filter state providing original indices and badge padding width.
-     * @param cfg       Row configuration containing sequence and badge color tokens.
+     * @param rowIndex          Absolute (global) index into the list view, i.e. the
+     *                          startIndex..endIndex loop counter. Used to look up
+     *                          filterCtx.origIdx[rowIndex].
+     * @param displayIndex      Absolute position in the displayed list, used for
+     *                          numbering and alternating index colors.
+     * @param maxDigits         Width of the sequence-number field.
+     * @param showSourceIndices When true (and a filter is active and rowIndex is in
+     *                          range), emit "orig^" badge padded to maxOrigDigits.
      */
-    void appendRowIndexPrefix(std::string& output, std::size_t i, std::size_t maxDigits,
-                                     const PrintFilterContext& filterCtx, const RowConfig& cfg)
+    void appendRowIndexPrefix(
+        std::string& output,
+        std::size_t rowIndex,
+        std::size_t displayIndex,
+        std::size_t maxDigits,
+        const PrintFilterContext& filterCtx,
+        const RowConfig& cfg,
+        bool showSourceIndices)
     {
-        const std::string_view seqColor = (i % 2 == 0) ? cfg.colors.indexA : cfg.colors.indexB;
+        const std::string_view seqColor =
+            (displayIndex % 2 == 0) ? cfg.colors.indexA : cfg.colors.indexB;
 
         output.append(seqColor);
-        appendNumPadded(output, i + 1, maxDigits);
+        appendNumPadded(output, displayIndex + 1, maxDigits);
 
-        if (filterCtx.origIdx && i < filterCtx.origSize) {
-            const std::size_t origVal = static_cast<std::size_t>((*filterCtx.origIdx)[i]) + 1;
+        // The filter mapping is indexed by the global row index, not by a
+        // view-local offset.
+        if (showSourceIndices && filterCtx.origIdx && rowIndex < filterCtx.origSize) {
+            const std::size_t origVal =
+                static_cast<std::size_t>((*filterCtx.origIdx)[rowIndex]) + 1;
+
             output.append(":").append(UI::Palette::BoldReset).append(cfg.colors.square);
             appendNum(output, origVal);
             output.append("^");
+
             const std::size_t pad = filterCtx.maxOrigDigits - digitCount(origVal);
             if (pad) output.append(pad, ' ');
+
             output.append(" ").append(UI::Palette::BoldReset);
         } else {
             output.append(". ").append(UI::Palette::BoldReset);
@@ -241,14 +286,13 @@ namespace {
     /**
      * @brief Appends a file-mode entry with left-ellipsized directory clipping and filename coloring.
      *
-     * @param output      Target output string buffer.
-     * @param rowStart    Byte offset in @p output where the current row begins.
-     * @param item        Raw item string to split into directory and filename.
-     * @param listSubType Sub-format or extension hint forwarded to path splitting.
-     * @param cfg         Row configuration controlling name-only mode, column budget, and colors.
+     * @param rowStart  Byte offset in @p output where this row began. Used to
+     *                  measure the already-emitted prefix (index + badge) so the
+     *                  directory/filename budget can be computed against
+     *                  cfg.usableCols.
      */
     void appendFileModeBody(std::string& output, std::size_t rowStart, const std::string& item,
-                                   const std::string& listSubType, const RowConfig& cfg)
+                            const std::string& listSubType, const RowConfig& cfg)
     {
         auto [dir, fname] = extractDirectoryAndFilename(item, listSubType);
         const std::string_view dirView{dir};
@@ -284,10 +328,6 @@ namespace {
 
     /**
      * @brief Appends a mounted-ISO entry, optionally including mount point and hash components.
-     *
-     * @param output Target output string buffer.
-     * @param item   Raw mount string to parse into mount directory, path, and hash segments.
-     * @param cfg    Row configuration controlling full-unmount verbosity and color tokens.
      */
     void appendMountedModeBody(std::string& output, const std::string& item, const RowConfig& cfg)
     {
@@ -305,33 +345,43 @@ namespace {
     /**
      * @brief Renders and clips a single item row into the output buffer with uniform alignment.
      *
-     * Handles row numbering, original index badge rendering (`n^`) when filters are active with dynamic padding,
-     * directory/filename splitting for file modes, path parsing for mounted ISO modes, and enforces terminal width
-     * bounds to prevent line auto-wrapping. Directory paths are clipped from the left with an ellipsis (`…`) if needed.
-     *
-     * @param output      Reference to the retained output string buffer.
-     * @param items       Non-owning view collection of string items to display.
-     * @param i           Current zero-based index of the item being rendered.
-     * @param maxDigits   Maximum digit count used for right-aligning row sequence numbers.
-     * @param filterCtx   Filtering context structure containing index mappings and padding constraints.
-     * @param listSubType Extension or sub-format string used for path splitting.
-     * @param cfg         Row configuration flags, view constraints, and color definitions (@c RowConfig).
+     * @param showSourceIndices Forwarded to appendRowIndexPrefix; when false the
+     *                          "orig^" badge is never emitted.
      */
-    void appendItemRow(std::string& output, const StringListView& items, std::size_t i, std::size_t maxDigits,
-                       const PrintFilterContext& filterCtx, const std::string& listSubType, const RowConfig& cfg)
+    void appendItemRow(
+        std::string& output,
+        const StringListView& items,
+        std::size_t rowIndex,
+        std::size_t displayIndexOffset,
+        std::size_t maxDigits,
+        const PrintFilterContext& filterCtx,
+        const std::string& listSubType,
+        const RowConfig& cfg,
+        bool showSourceIndices)
     {
         const std::size_t rowStart = output.size();
+        const std::size_t displayIndex = rowIndex + displayIndexOffset;
 
-        appendRowIndexPrefix(output, i, maxDigits, filterCtx, cfg);
+        appendRowIndexPrefix(
+            output,
+            rowIndex,
+            displayIndex,
+            maxDigits,
+            filterCtx,
+            cfg,
+            showSourceIndices);
 
-        const std::string& item = items[i];
+        const std::string& item = items[rowIndex];
+
         if (cfg.isFileMode) {
             appendFileModeBody(output, rowStart, item, listSubType, cfg);
         } else if (cfg.isMountedMode) {
             appendMountedModeBody(output, item, cfg);
         }
 
-        if (cfg.usableCols > 0) fitRowToWidth(output, rowStart, cfg.usableCols);
+        if (cfg.usableCols > 0) {
+            fitRowToWidth(output, rowStart, cfg.usableCols);
+        }
 
         output.append(UI::Palette::Reset).append(UI::Palette::BoldReset).append("\n");
     }
@@ -339,15 +389,11 @@ namespace {
     /**
      * @brief Appends pagination footers and staged pending process queues to the output frame buffer.
      *
-     * @param output             Reference to the retained output string buffer.
-     * @param disablePagination  Flag indicating whether pagination is bypassed.
-     * @param effectivePage      Zero-based index of the current active page.
-     * @param totalPages         Total number of available pages.
-     * @param showPendingIndices Flag indicating whether pending indices should be displayed.
-     * @param hasPendingProcess  Flag indicating whether a process action is currently staged.
-     * @param pendingIndices     Vector containing string identifiers of staged indices.
-     * @param isImgMode          Flag indicating if the list represents image files (used for color styling).
-     * @param c                  Theme color configuration structure (@c PrintListTheme).
+     * The pagination footer ("[PgUp] Prev | [PgDn] Next | [g#] GoTo") is
+     * suppressed entirely when @p disablePagination is true. The pending-index
+     * block is emitted only when @p showPendingIndices, @p hasPendingProcess,
+     * and the queue is non-empty; its indices are colored with c.img in image
+     * mode and c.iso otherwise.
      */
     void appendFooterAndPending(std::string& output, bool disablePagination, std::size_t effectivePage,
                                 std::size_t totalPages, bool showPendingIndices, bool hasPendingProcess,
@@ -377,25 +423,33 @@ namespace {
 
     /**
      * @brief Configuration and display flags derived from the list type and global settings.
+     *
+     * Field meanings mirror RowConfig (isFileMode/isIsoMode/isMountedMode/
+     * showNamesOnly/showFullUmount/usableCols/colors) with two additions:
+     * @c isImgMode        True for IMAGE_FILES.
+     * @c noFilterResults  True when the view is empty because a filter excluded
+     *                     every item. ISO mode requires the global ISO list to be
+     *                     non-empty; all other modes treat any empty view as
+     *                     "no results".
      */
     struct ListConfig {
-        bool isIsoMode;         /**< True if the list represents ISO files. */
-        bool isImgMode;         /**< True if the list represents image files. */
-        bool isMountedMode;     /**< True if the list represents mounted ISOs. */
-        bool isFileMode;        /**< True if the list is either ISO or image files. */
-        bool showNamesOnly;     /**< Configuration toggle to show filenames only without paths. */
-        bool showFullUmount;    /**< Configuration toggle for full unmount listing options. */
-        PrintListTheme colors;  /**< Color palette associated with the list. */
-        std::size_t usableCols;      /**< Number of usable columns in the terminal (width - 1). */
-        bool noFilterResults;   /**< True if an active filter yields zero matching items. */
+        bool isIsoMode;
+        bool isImgMode;
+        bool isMountedMode;
+        bool isFileMode;
+        bool showNamesOnly;
+        bool showFullUmount;
+        PrintListTheme colors;
+        std::size_t usableCols;
+        bool noFilterResults;
     };
 
     /**
      * @brief Evaluates the current list type, configuration settings, and terminal dimensions.
      *
-     * @param items    Non-owning view of the items to display.
-     * @param listType Category string specifying the list kind ("ISO_FILES", "IMAGE_FILES", "MOUNTED_ISOS").
-     * @return ListConfig Populated configuration structure.
+     * noFilterResults is computed as:
+     *   - ISO mode:     view empty AND the global ISO list is non-empty, or
+     *   - non-ISO mode: view empty.
      */
     ListConfig getListConfig(const StringListView& items, const std::string& listType) {
         const bool isIsoMode      = (listType == "ISO_FILES");
@@ -416,22 +470,26 @@ namespace {
 
     /**
      * @brief Computed pagination boundaries and slice indices for the current frame.
+     *
+     * @c disablePagination True when ITEMS_PER_PAGE == 0 or the item count fits
+     *                      in a single page.
+     * @c totalPages        Effective page count (1 when pagination is disabled).
+     * @c effectivePage     currentPage clamped to [0, totalPages - 1].
+     * @c startIndex        First view index of the rendered slice.
+     * @c endIndex          One-past-last view index of the rendered slice.
+     * @c maxDigits         Digit count of endIndex; used to size the index column.
      */
     struct PaginationInfo {
-        bool disablePagination; /**< True if pagination is turned off or all items fit on one page. */
-        std::size_t totalPages;      /**< Total number of available pages. */
-        std::size_t effectivePage;   /**< Clamped zero-based active page index. */
-        std::size_t startIndex;      /**< Starting index of items for the current page. */
-        std::size_t endIndex;        /**< Ending index (exclusive) of items for the current page. */
-        std::size_t maxDigits;       /**< Number of digits required to format row item numbers. */
+        bool disablePagination;
+        std::size_t totalPages;
+        std::size_t effectivePage;
+        std::size_t startIndex;
+        std::size_t endIndex;
+        std::size_t maxDigits;
     };
 
     /**
      * @brief Calculates pagination boundaries based on item count and global page constraints.
-     *
-     * @param items       Non-owning view of all list items.
-     * @param currentPage Requested zero-based page index.
-     * @return PaginationInfo Computed pagination metrics.
      */
     PaginationInfo computePagination(const StringListView& items, std::size_t currentPage) {
         const std::size_t totalItems = items.size();
@@ -447,15 +505,13 @@ namespace {
     }
 
     /**
-     * @brief Reserves buffer capacity and appends initial frame formatting (synchronized output, clears, and filter notices).
+     * @brief Reserves buffer capacity and appends initial frame formatting.
      *
-     * @param output          Retained string buffer for the current list kind.
-     * @param startIndex      Start index of items on the page.
-     * @param endIndex        End index of items on the page.
-     * @param items           Non-owning view of the list items.
-     * @param clearFirst      If true, appends screen clear sequence.
-     * @param noFilterResults If true, appends a "No filter results" notice.
-     * @param c               Theme color palette.
+     * Emits, in order: the synchronized-output begin marker (when enabled), the
+     * clear sequence (when @p clearFirst), a leading blank line, and — when
+     * @p noFilterResults — the "No filter results" line. Capacity is reserved
+     * up front from the per-row sizes of the *rendered slice* plus
+     * kPerRowOverhead per row.
      */
     void reserveAndBuildOutput(std::string& output, std::size_t startIndex, std::size_t endIndex,
                                const StringListView& items, bool clearFirst, bool noFilterResults,
@@ -482,10 +538,6 @@ namespace {
 
     /**
      * @brief Computes original index mappings and padding digit bounds when a filter is active.
-     *
-     * @param startIndex Start index of items on the page.
-     * @param endIndex   End index of items on the page.
-     * @return PrintFilterContext Populated print filter context structure.
      */
     PrintFilterContext computePrintFilterContext(std::size_t startIndex, std::size_t endIndex) {
         const auto* origIdx = filteringStack.empty() ? nullptr : &filteringStack.back().originalIndices;
@@ -504,17 +556,13 @@ namespace {
     }
 
     /**
-     * @brief Atomically writes the built frame buffer to standard output under the print mutex lock.
+     * @brief Writes the built frame buffer to standard output under the print mutex lock.
      *
-     * Takes @c RefreshState::printMutex, re-checks @c isImportRunning under the
-     * lock, writes the frame (splicing @p syncLine at @p syncInsertPos when an
-     * import is still running), and flushes once.
-     *
-     * @param state         Shared application state containing the synchronization mutex and background import flag.
-     * @param output        The fully assembled frame string buffer.
-     * @param syncLine      Pre-formatted sync/import indicator string.
-     * @param syncInsertPos Buffer byte offset where the sync line should be spliced if syncing is active.
-     * @param maybeSyncing  Quick preliminary check flag indicating whether an import could be running.
+     * When syncing, the frame is written in three segments (before syncInsertPos,
+     * the sync banner, after syncInsertPos) so the banner appears between the
+     * header and the rows. Exclusion is guaranteed only against other callers
+     * that also take @c state->printMutex; it is not a single atomic write to
+     * the underlying file descriptor.
      */
     void flushOutput(const std::shared_ptr<RefreshState>& state, const std::string& output,
                      const std::string& syncLine, std::size_t syncInsertPos, bool maybeSyncing) {
@@ -540,109 +588,97 @@ namespace {
 /**
  * @brief Renders one page of an ISO, image, or mounted-ISO list to the terminal.
  *
- * The whole frame (optional clear, header, rows, footer, pending-indices line)
- * is built in a retained buffer and written to stdout with a single flush.
+ * Side effects:
+ *   - Uses and mutates the thread-local retained buffer for the detected
+ *     list kind (see bufferFor).
+ *   - After flushing, releases that buffer (swap with a fresh string) if its
+ *     capacity exceeds kMaxRetainedCapacity.
+ *   - Splices the "Syncing" banner into the frame at the header boundary when
+ *     an import is in progress (see prepareSyncLine / flushOutput).
  *
- * @par Layout
- *  - "No filter results" is shown when the list is empty because of an active
- *    filter (or, for non-ISO lists, simply empty).
- *  - When the list spans more than one page, a header ("Page n/N (Items
- *    (a-b)/total)") and a footer with PgUp / PgDn / g# hints are shown.
- *    Pagination is disabled if ITEMS_PER_PAGE is 0 or all items fit on one page.
- *  - Rows are numbered and right-aligned. While a filter is active, each row
- *    also shows the item's original index ("n:m^"). The original-index field
- *    is padded (after the '^') so that filenames line up across all rows on
- *    the page.
- *  - ISO mode only: while a background import is running, a dim
- *    "[↻ Syncing: NewISO → Restructure]" indicator (or a "no history" notice)
- *    is inserted after the header, plus a "Filtering locked" note if the
- *    filtering indicator is set.
- *  - If @p showPendingIndices is set and a process is staged, a
- *    "Pending Indices [P]: ..." line is appended.
- *
- * @par Terminal width
- * Rows never wrap. The width is queried once per frame via terminalColumns()
- * (a transient failure keeps the last known width; an unknown width, e.g.
- * redirected output, disables clipping), and the last column is always left
- * free so a full-width row cannot trigger auto-wrap. An over-wide row is
- * shortened in two steps:
- *  1. File lists with the directory shown: the directory is cut from its left
- *     side and prefixed with "…" so the filename stays intact. If there is no
- *     room even for that, the directory is dropped for that row.
- *  2. Any row still too wide (very long filename, narrow terminal, or a
- *     mounted-ISO row) is cut at the right with "…" (ANSI- and UTF-8-aware).
- * The header, footer, sync indicator and pending-indices line are not clipped.
- * A resize only affects the next call; to repaint while a prompt is waiting,
- * the prompt owner runs a @ref ListResizeWatcher around its @c readline() call.
- *
- * @par Performance
- *  - The frame is built in a thread_local std::string per list type. Capacity
- *    is retained across redraws (no steady-state allocation, and switching list
- *    types never reallocates another type's buffer). A buffer that grows past
- *    kMaxRetainedCapacity (4 MiB) is released after the render.
- *  - Numbers are formatted with std::to_chars directly into the buffer.
- *  - Filesystem checks and the sync-indicator text are computed before taking
- *    the print lock. Under the lock, the code re-reads isImportRunning, writes
- *    the frame (in segments, so the indicator is spliced in without an insert),
- *    and flushes once.
- *  - If kUseSynchronizedOutput is set, the frame is wrapped in
- *    synchronized-output escapes to avoid tearing.
- *
- * @par Thread safety
- * The sync-indicator check and the terminal write happen atomically under
- * RefreshState::printMutex, so a background import finishing cannot leave a
- * stale "Syncing" indicator on screen.
- *
- * @param items               Non-owning view of the strings to display. No copies
- *                            are made; the underlying storage must outlive the call.
- * @param listType            List category: "ISO_FILES", "IMAGE_FILES" or "MOUNTED_ISOS".
- * @param listSubType         Extension / sub-format used to split directory and filename.
- * @param pendingIndices      Indices staged for processing (shown in the pending line).
- * @param hasPendingProcess   Whether a process action is staged.
- * @param currentPage         Requested zero-based page. It is clamped to the last
- *                            page for display; the caller's value is not modified.
- * @param state               Shared state providing printMutex and isImportRunning.
- * @param clearFirst          If true, clears screen and scrollback inside the same
- *                            synchronized frame, so clear and content appear
- *                            atomically (no blank flash). Default is declared in
- *                            the header.
- * @param showPendingIndices  If true, appends the pending-indices line when a
- *                            process is staged. Default is declared in the header.
+ * @param items        List entries to render.
+ * @param listType     Type of list being rendered.
+ * @param listSubType  Subtype used to configure row formatting.
+ * @param ctx          Rendering state and display options. Notable fields:
+ *                     clearFirst (emit clear-screen), displayIndexOffset
+ *                     (numbering offset), showSourceIndices (emit "orig^"
+ *                     badge), showPendingIndices / hasPendingProcess /
+ *                     pendingIndices (pending queue block), currentPage,
+ *                     and state (shared refresh state / print mutex).
  */
-void printList(const StringListView& items, const std::string& listType, const std::string& listSubType,
-               std::vector<std::string>& pendingIndices, bool& hasPendingProcess,
-               std::size_t& currentPage, std::shared_ptr<RefreshState> state, bool clearFirst, bool showPendingIndices) {
+void printList(const StringListView& items,
+               const std::string& listType,
+               const std::string& listSubType,
+               const PrintListContext& ctx) {
 
     const ListConfig cfg = getListConfig(items, listType);
-    const PaginationInfo page = computePagination(items, currentPage);
+    const PaginationInfo page = computePagination(items, ctx.currentPage);
 
-    std::string syncLine = prepareSyncLine(cfg.isIsoMode, cfg.noFilterResults, state, page.disablePagination);
+    const std::size_t displayMaxDigits =
+        digitCount(ctx.displayIndexOffset + page.endIndex);
+
+    std::string syncLine = prepareSyncLine(
+        cfg.isIsoMode, cfg.noFilterResults, ctx.state, page.disablePagination);
+
     const bool maybeSyncing = !syncLine.empty();
 
     const ListKind kind = cfg.isIsoMode ? ListKind::Iso
                         : cfg.isImgMode ? ListKind::Image
-                                    : ListKind::Mounted;
+                                        : ListKind::Mounted;
+
     std::string& output = bufferFor(kind);
     output.clear();
 
-    reserveAndBuildOutput(output, page.startIndex, page.endIndex, items, clearFirst, cfg.noFilterResults, cfg.colors);
+    reserveAndBuildOutput(
+        output, page.startIndex, page.endIndex, items,
+        ctx.clearFirst, cfg.noFilterResults, cfg.colors);
 
-    std::size_t syncInsertPos = appendHeader(output, page.disablePagination, page.effectivePage, page.totalPages,
-                                        page.startIndex, page.endIndex, items.size(), cfg.colors);
+    std::size_t syncInsertPos = appendHeader(
+        output, page.disablePagination, page.effectivePage, page.totalPages,
+        page.startIndex, page.endIndex, items.size(), cfg.colors);
 
-    const PrintFilterContext filterCtx = computePrintFilterContext(page.startIndex, page.endIndex);
-    const RowConfig rowCfg{cfg.isFileMode, cfg.isIsoMode, cfg.isMountedMode, cfg.showNamesOnly, cfg.showFullUmount, cfg.usableCols, cfg.colors};
+    const PrintFilterContext filterCtx =
+        computePrintFilterContext(page.startIndex, page.endIndex);
+
+    const RowConfig rowCfg{
+        cfg.isFileMode,
+        cfg.isIsoMode,
+        cfg.isMountedMode,
+        cfg.showNamesOnly,
+        cfg.showFullUmount,
+        cfg.usableCols,
+        cfg.colors
+    };
 
     for (std::size_t i = page.startIndex; i < page.endIndex; ++i) {
-        appendItemRow(output, items, i, page.maxDigits, filterCtx, listSubType, rowCfg);
+        appendItemRow(
+            output,
+            items,
+            i,
+            ctx.displayIndexOffset,
+            displayMaxDigits,
+            filterCtx,
+            listSubType,
+            rowCfg,
+            ctx.showSourceIndices);
     }
 
-    appendFooterAndPending(output, page.disablePagination, page.effectivePage, page.totalPages,
-                           showPendingIndices, hasPendingProcess, pendingIndices, cfg.isImgMode, cfg.colors);
+    appendFooterAndPending(
+        output,
+        page.disablePagination,
+        page.effectivePage,
+        page.totalPages,
+        ctx.showPendingIndices,
+        ctx.hasPendingProcess,
+        ctx.pendingIndices,
+        cfg.isImgMode,
+        cfg.colors);
 
-    if (kUseSynchronizedOutput) output.append(kSyncEnd);
+    if (kUseSynchronizedOutput) {
+        output.append(kSyncEnd);
+    }
 
-    flushOutput(state, output, syncLine, syncInsertPos, maybeSyncing);
+    flushOutput(ctx.state, output, syncLine, syncInsertPos, maybeSyncing);
 
     if (output.capacity() > kMaxRetainedCapacity) {
         std::string().swap(output);

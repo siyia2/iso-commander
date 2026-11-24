@@ -66,7 +66,7 @@ namespace {
     }
 
     /**
-     * @brief Applies skin, theme, base palette, and pagination/filter limit settings.
+     * @brief Applies skin, theme, base palette, and pagination settings.
      * @param cache Configuration key-value map.
      * @param onlyKey Optional single key filter; empty applies to all matching keys.
      */
@@ -93,9 +93,6 @@ namespace {
         }
         if (const std::string* val = matches("pagination")) {
             tryParseUlong(*val, GlobalState::ITEMS_PER_PAGE);
-        }
-        if (const std::string* val = matches("live_filter_limit")) {
-            tryParseUlong(*val, GlobalState::LIVE_FILTER_LIMIT);
         }
     }
 
@@ -140,7 +137,7 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache,
     static const std::unordered_set<std::string> nonThreadKeys = {
         "mount_list", "umount_list", "cp_mv_rm_list", "write2usb_list",
         "convert2iso_lists", "filenames_only", "skin", "theme", "base",
-        "pagination", "live_filter_limit"
+        "pagination"
     };
     if (onlyKey.empty() || !nonThreadKeys.count(onlyKey)) {
         applyThreadCapsAndHistoryLimits(cache);

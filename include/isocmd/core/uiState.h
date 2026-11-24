@@ -44,7 +44,6 @@ namespace GlobalState {
     inline std::atomic<bool> isNonInteractive{false};
     inline bool needSortingAfterflno      = false;
     inline std::size_t ITEMS_PER_PAGE          = 25;
-    inline std::size_t LIVE_FILTER_LIMIT       = 10000;
     inline int lockFileDescriptor         = -1;
 
 } // namespace GlobalState

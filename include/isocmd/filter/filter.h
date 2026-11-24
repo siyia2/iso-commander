@@ -211,4 +211,59 @@ void refreshFilteredSourceIndices(
     std::vector<FilteringState>& filteringStack,
     const std::vector<std::string>& filteredFiles);
 
+/**
+ * LIVE FILTER PREVIEW
+ */
+
+/**
+ * @brief Configures live-preview state for an interactive filter session.
+ *
+ * @param ctx Filter context supplying list-rendering configuration.
+ * @param previewSource Source list displayed by the preview.
+ */
+void configureLivePreview(
+    FilterContext& ctx,
+    const std::vector<std::string>& previewSource);
+
+/**
+ * @brief Repaints the live preview after a terminal resize when enabled.
+ *
+ * @return True if the live preview handled the repaint; otherwise false.
+ */
+bool repaintLivePreviewOnResizeIfConfigured();
+
+/**
+ * @brief Resets incremental matching and scrolling state before a prompt read.
+ */
+void resetLivePreviewIteration();
+
+/**
+ * @brief Marks the current live-preview session as inactive.
+ */
+void deactivateLivePreview();
+
+/**
+ * @brief Reports whether the live preview has repainted at least once.
+ *
+ * @return True if a preview frame has been rendered during the current
+ *         preview session; otherwise false.
+ */
+bool livePreviewWasRepainted();
+
+/**
+ * @brief Manages Readline hooks and keybindings for a live-preview session.
+ *
+ * Installs the preview redisplay hook and PageUp/PageDown bindings on
+ * construction, then restores the original Readline configuration and
+ * resets preview state on destruction.
+ */
+class LivePreviewReadlineGuard {
+public:
+    LivePreviewReadlineGuard();
+    ~LivePreviewReadlineGuard();
+
+    LivePreviewReadlineGuard(const LivePreviewReadlineGuard&) = delete;
+    LivePreviewReadlineGuard& operator=(const LivePreviewReadlineGuard&) = delete;
+};
+
 #endif // FILTER_H

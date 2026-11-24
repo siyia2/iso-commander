@@ -52,14 +52,14 @@ ReadlineAndPromptTheme getFilterTheme(const std::string& operationColor, bool in
         ft.highlight = wrap(UI::Palette::Orange);
         ft.reset     = wrap(UI::Palette::BoldReset);
         ft.iso       = includeIso ? wrap(UI::Palette::Green) : "";
-        ft.accent    = "";
+        ft.accent    = "UI::Palette::Brown";
     } else {
         ft.primary   = wrap(t->muted);
         ft.filter    = wrap(UI::Palette::Cyan);
         ft.highlight = operationColor.empty() ? wrap(t->highlight) : wrap(operationColor);
         ft.reset     = wrap(UI::Palette::BoldReset);
         ft.iso       = includeIso ? wrap(t->accent) : "";
-        ft.accent    = "";
+        ft.accent    = t->muted;
     }
 
     return ft;
