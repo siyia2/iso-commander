@@ -2,6 +2,7 @@
 
 // C++ Standard Library Headers
 #include <csignal>
+#include <cstdio>
 
 // Third-Party Library Headers
 #include <readline/readline.h>
