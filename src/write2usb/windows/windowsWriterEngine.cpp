@@ -28,17 +28,32 @@ namespace windowsWriter_engine::copy {
    namespace {
 
        /**
-        * @brief Per-file writeback pacing state: the chunks written since the last
-        *        pacing point, and the range paced last time.
+        * @brief Per-file range accumulated before it is handed to the shared
+        *        filesystem writeback pacer.
         */
-       struct WritebackState {
-           uint64_t pendOff    = 0;   ///< Start of the not-yet-paced range.
-           uint64_t pendLen    = 0;   ///< Length of the not-yet-paced range.
+       struct FileWritebackState {
+           uint64_t pendOff    = 0;   ///< Start of the not-yet-submitted range.
+           uint64_t pendLen    = 0;   ///< Length of the not-yet-submitted range.
            int      pendChunks = 0;   ///< Chunks accumulated in that range.
-           uint64_t prevOff    = 0;   ///< Start of the range paced last time.
-           uint64_t prevLen    = 0;   ///< Length of the range paced last time.
-           bool     havePrev   = false;
        };
+
+       /** A submitted file range retained for a later writeback wait. */
+       struct WritebackRange {
+           int      fd = -1;
+           uint64_t off = 0;
+           uint64_t len = 0;
+       };
+
+       /**
+        * @brief Closes the duplicated descriptors retained by a range batch.
+        */
+       void closeRanges(std::vector<WritebackRange>& ranges) {
+           for (auto& range : ranges) {
+               if (range.fd >= 0)
+                   close(range.fd);
+           }
+           ranges.clear();
+       }
 
        /**
         * @brief sync_file_range() on a file range, retrying interrupted calls.
@@ -76,56 +91,114 @@ namespace windowsWriter_engine::copy {
        }
 
        /**
-        * @brief Bound the dirty-page backlog of an output file to a few chunks,
-        *        pacing once every kPaceEveryChunks chunks.
+        * @brief Shared writeback pacing state for one filesystem copy pass.
         *
-        * Chunks are accumulated into one contiguous range. When it reaches
-        * kPaceEveryChunks chunks, writeback of the whole range is started
-        * (SYNC_FILE_RANGE_WRITE, does not block on the device), then the range
-        * paced last time is waited on (WAIT_BEFORE | WRITE | WAIT_AFTER). The
-        * device therefore always has the newest range queued while the previous
-        * one drains, and a cancel never has more than about
-        * kPaceEveryChunks + 1 chunks left to flush.
+        * Each completed file range is submitted asynchronously immediately.
+        * Chunk accounting is shared across files, so small files contribute to
+        * the same pacing interval instead of resetting the threshold per file.
+        * Once the current batch reaches kPaceEveryChunks, the previously
+        * submitted batch is waited on and the current batch becomes previous.
         *
-        * Best effort: failures (e.g. a filesystem without support, or a cancel)
-        * are ignored, as with the caller's final syncfs() flush; the copy then
-        * degrades to plain buffered I/O.
-        *
-        * @param fd_out Output file descriptor.
-        * @param off    File offset of the chunk just written.
-        * @param len    Length in bytes of the chunk just written (must be > 0).
-        * @param st     Pacing state for this output file.
+        * Duplicated descriptors keep the relevant file descriptions available
+        * for the later range wait even after copyFileWithProgress() closes its
+        * original descriptor. The destructor only closes descriptors; it does
+        * not wait, preserving cancellation responsiveness.
+        */
+       struct FilesystemWritebackState {
+           std::vector<WritebackRange> current;
+           std::vector<WritebackRange> previous;
+           int currentChunks = 0;
+
+           ~FilesystemWritebackState() {
+               closeRanges(current);
+               closeRanges(previous);
+           }
+
+           void submitRange(int fd, uint64_t off, uint64_t len, int chunks) {
+               if (len == 0 || chunks <= 0)
+                   return;
+
+               const int heldFd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+               if (heldFd < 0)
+                   return;
+
+               // Start this range's writeback immediately. This is especially
+               // important for a file that finishes below the chunk threshold.
+               if (syncFileRange(heldFd, off, len, SYNC_FILE_RANGE_WRITE) != 0) {
+                   close(heldFd);
+                   return;
+               }
+
+               current.push_back({heldFd, off, len});
+               currentChunks += chunks;
+
+               if (currentChunks < kPaceEveryChunks)
+                   return;
+
+               // The just-submitted batch can drain while the previous batch
+               // is waited on, retaining the original double-buffered pacing.
+               for (const auto& range : previous) {
+                   static_cast<void>(syncFileRange(
+                       range.fd, range.off, range.len,
+                       SYNC_FILE_RANGE_WAIT_BEFORE |
+                       SYNC_FILE_RANGE_WRITE |
+                       SYNC_FILE_RANGE_WAIT_AFTER
+                   ));
+               }
+
+               closeRanges(previous);
+               previous.swap(current);
+               current.clear();
+               currentChunks = 0;
+           }
+       };
+
+       /**
+        * @brief Accumulates contiguous chunks for the current file, then hands
+        *        a completed pacing range to the shared filesystem state.
         */
        void paceWriteback(int fd_out, uint64_t off, uint64_t len,
-                          WritebackState& st) {
-           if (st.pendChunks == 0) {
-               st.pendOff = off;
-               st.pendLen = 0;
+                          FileWritebackState& fileState,
+                          FilesystemWritebackState& filesystemState) {
+           if (fileState.pendChunks == 0) {
+               fileState.pendOff = off;
+               fileState.pendLen = 0;
            }
 
-           st.pendLen += len;   // chunks are contiguous within a file
+           fileState.pendLen += len;
 
-           if (++st.pendChunks < kPaceEveryChunks)
+           if (++fileState.pendChunks < kPaceEveryChunks)
                return;
 
-           static_cast<void>(syncFileRange(
-               fd_out, st.pendOff, st.pendLen,
-               SYNC_FILE_RANGE_WRITE
-           ));
+           filesystemState.submitRange(
+               fd_out, fileState.pendOff, fileState.pendLen,
+               fileState.pendChunks
+           );
 
-           if (st.havePrev) {
-               static_cast<void>(syncFileRange(
-                   fd_out, st.prevOff, st.prevLen,
-                   SYNC_FILE_RANGE_WAIT_BEFORE |
-                   SYNC_FILE_RANGE_WRITE |
-                   SYNC_FILE_RANGE_WAIT_AFTER
-               ));
-           }
+           fileState.pendChunks = 0;
+           fileState.pendLen = 0;
+       }
 
-           st.prevOff    = st.pendOff;
-           st.prevLen    = st.pendLen;
-           st.havePrev   = true;
-           st.pendChunks = 0;
+       /**
+        * @brief Submits the final partial range when a file completes.
+        *
+        * The range is started asynchronously even when the file contains fewer
+        * than kPaceEveryChunks chunks. Incomplete/cancelled files deliberately
+        * do not submit their tail because the caller truncates them.
+        */
+       void finishFileWriteback(int fd_out,
+                                FileWritebackState& fileState,
+                                FilesystemWritebackState& filesystemState) {
+           if (fileState.pendChunks == 0)
+               return;
+
+           filesystemState.submitRange(
+               fd_out, fileState.pendOff, fileState.pendLen,
+               fileState.pendChunks
+           );
+
+           fileState.pendChunks = 0;
+           fileState.pendLen = 0;
        }
 
        /**
@@ -164,18 +237,19 @@ namespace windowsWriter_engine::copy {
         * @brief Write one chunk, retrying short writes and EINTR.
         *
         * Successfully written bytes are accounted for even if a subsequent
-        * write fails. Once the whole chunk has landed, writeback is paced
-        * (see paceWriteback()) so the dirty backlog stays at a few chunks and
-        * a cancel drains quickly.
+        * write fails. Once the whole chunk has landed, its range is accumulated
+        * for the shared filesystem writeback pacer.
         *
-        * @param wb Writeback pacing state for this output file.
+        * @param fileWriteback      Per-file contiguous range accumulator.
+        * @param filesystemWriteback Shared filesystem pacing state.
         * @return true if the entire chunk was written successfully.
         */
        bool writeOneChunk(int fd_out, const char* buf, size_t len,
                           uint64_t& fileOffset,
                           uint64_t& bytesCopiedTotal,
                           std::atomic<uint64_t>& totalAccumulator,
-                          WritebackState& wb) {
+                          FileWritebackState& fileWriteback,
+                          FilesystemWritebackState& filesystemWriteback) {
            const uint64_t chunkOff = fileOffset;
            size_t done = 0;
 
@@ -212,7 +286,10 @@ namespace windowsWriter_engine::copy {
                bytesCopiedTotal += writtenBytes;
            }
 
-           paceWriteback(fd_out, chunkOff, len, wb);
+           paceWriteback(
+               fd_out, chunkOff, len,
+               fileWriteback, filesystemWriteback
+           );
            return true;
        }
 
@@ -222,9 +299,9 @@ namespace windowsWriter_engine::copy {
         * Never reads beyond the expected ISO file size and fails if the
         * source reaches EOF before all expected bytes have been copied.
         *
-        * Writeback is paced per chunk by writeOneChunk(); no per-file flush
-        * is done here. Any range still in flight when the file is closed is
-        * covered by the caller's final syncfs().
+        * Writeback is paced per chunk by writeOneChunk(). A successful file
+        * submits its final partial range asynchronously before it is closed;
+        * incomplete files do not submit their remaining range.
         *
         * @return true only if exactly the expected file size was copied
         *         without failure or cancellation.
@@ -234,9 +311,10 @@ namespace windowsWriter_engine::copy {
                            size_t bufferSize,
                            char* buf,
                            std::atomic<uint64_t>& totalAccumulator,
-                           uint64_t& bytesCopiedTotal) {
+                           uint64_t& bytesCopiedTotal,
+                           FilesystemWritebackState& filesystemWriteback) {
            uint64_t fileOffset = 0;
-           WritebackState wb;
+           FileWritebackState fileWriteback;
 
            if (bufferSize == 0) {
                errno = EINVAL;
@@ -275,19 +353,26 @@ namespace windowsWriter_engine::copy {
                if (!writeOneChunk(
                        fd_out, buf, chunkSize,
                        fileOffset, bytesCopiedTotal,
-                       totalAccumulator, wb)) {
+                       totalAccumulator, fileWriteback,
+                       filesystemWriteback)) {
                    success = false;
                    break;
                }
            }
 
-           // On failure or cancellation the data is garbage.
-           // The caller truncates the file, which drops the dirty pages without I/O.
+           // On failure or cancellation the caller truncates the file. Do not
+           // submit this file's remaining range: it belongs to the incomplete file.
            if (!success || GlobalState::g_operationCancelled.load())
                return false;
 
            // Require an exact match, not merely a minimum.
-           return bytesCopiedTotal == fileSize;
+           if (bytesCopiedTotal != fileSize)
+               return false;
+
+           // Submit the final partial range asynchronously before this file's
+           // descriptor is closed. Small files therefore enter shared pacing.
+           finishFileWriteback(fd_out, fileWriteback, filesystemWriteback);
+           return true;
        }
 
        /**
@@ -299,7 +384,8 @@ namespace windowsWriter_engine::copy {
        bool copyFileWithProgress(const fs::path& src, const fs::path& dst,
                                  uint64_t fileSize, bool preallocate,
                                  size_t bufferSize, char* buf,
-                                 std::atomic<uint64_t>& totalAccumulator) {
+                                 std::atomic<uint64_t>& totalAccumulator,
+                                 FilesystemWritebackState& filesystemWriteback) {
            const int fd_in = open(
                src.c_str(), O_RDONLY | O_CLOEXEC
            );
@@ -331,7 +417,8 @@ namespace windowsWriter_engine::copy {
 
            const bool success = copyFileChunks(
                fd_in, fd_out, fileSize, bufferSize, buf,
-               totalAccumulator, bytesCopiedTotal
+               totalAccumulator, bytesCopiedTotal,
+               filesystemWriteback
            );
 
            if (!success) {
@@ -357,7 +444,8 @@ namespace windowsWriter_engine::copy {
     *
     * Collects and deduplicates directory paths before creating them,
     * avoiding redundant directory creation when processing multiple files.
-    * Files are copied only after all required directories exist.
+    * Files are copied only after all required directories exist, using
+    * independent writeback pacing states for FAT32 and NTFS.
     *
     * @return true if all entries were processed successfully.
     */
@@ -395,6 +483,13 @@ namespace windowsWriter_engine::copy {
            fs::create_directories(dir);
        }
 
+       // Independent writeback pacing states for FAT32 and NTFS.
+       // Each state spans all files written to its respective filesystem
+       // during this copy pass, allowing small files to contribute to the
+       // shared chunk threshold instead of resetting it.
+       FilesystemWritebackState fatWriteback;
+       FilesystemWritebackState ntfsWriteback;
+
        // All parent directories now exist. Copy files only.
        for (const auto& e : entries) {
            if (GlobalState::g_operationCancelled.load())
@@ -407,9 +502,14 @@ namespace windowsWriter_engine::copy {
                (isoType == IsoType::WindowsInstall) &&
                e.dst.native().compare(0, ntfsMnt.size(), ntfsMnt) == 0;
 
+           auto& filesystemWriteback = toNtfs
+               ? ntfsWriteback
+               : fatWriteback;
+
            if (!copyFileWithProgress(
                    e.src, e.dst, e.size, toNtfs,
-                   bufferSize, buf, totalAccumulator)) {
+                   bufferSize, buf, totalAccumulator,
+                   filesystemWriteback)) {
                return false;
            }
        }
