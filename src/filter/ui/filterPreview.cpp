@@ -36,6 +36,8 @@ namespace {
 
     // Accounts for: leading newline before status, preview status line,
     // blank separator line in redisplay hook, prompt row, and header/safety margin.
+    // The status-line row is recovered for the preview when the status line is
+    // suppressed (see computeDynamicPreviewWindowRows()).
     constexpr size_t PREVIEW_BASE_RESERVED_ROWS = 6;
 
     // ─── Data Structures ─────────────────────────────────────────────────────────
@@ -169,14 +171,25 @@ namespace {
      * Subtracts PREVIEW_BASE_RESERVED_ROWS plus @p extraReservedRows from the
      * terminal height and clamps the result to at least PREVIEW_MIN_ROWS.
      *
+     * PREVIEW_BASE_RESERVED_ROWS counts one row for the preview status line.
+     * When @p showStatus is false that line is not printed, so its row is
+     * subtracted from the reservation and made available to the preview.
+     *
      * @param extraReservedRows Additional rows reserved for wrapped content.
+     * @param showStatus Whether the preview status line will be printed this
+     *        frame; when false, the status-line row in the base reservation is
+     *        reclaimed for the preview.
      *
      * @return Available number of preview rows (>= PREVIEW_MIN_ROWS).
      */
-    size_t computeDynamicPreviewWindowRows(size_t extraReservedRows = 0)
+    size_t computeDynamicPreviewWindowRows(
+        size_t extraReservedRows = 0,
+        bool showStatus = true)
     {
         const size_t termRows = queryTerminalRows();
-        const size_t reserved = PREVIEW_BASE_RESERVED_ROWS + extraReservedRows;
+        const size_t reserved =
+            PREVIEW_BASE_RESERVED_ROWS - (showStatus ? 0 : 1)
+            + extraReservedRows;
 
         if (termRows <= reserved)
             return PREVIEW_MIN_ROWS;
@@ -192,13 +205,19 @@ namespace {
      *
      * @param extraReservedRows Additional rows reserved for wrapped content.
      *        Only applies when using dynamic terminal-height sizing.
+     * @param showStatus Whether the preview status line will be printed this
+     *        frame. Forwarded to computeDynamicPreviewWindowRows() so the
+     *        status-line row is reclaimed when the line is suppressed. Ignored
+     *        when ITEMS_PER_PAGE sizing is in effect.
      */
-    void refreshPreviewWindowHeight(size_t extraReservedRows = 0)
+    void refreshPreviewWindowHeight(
+        size_t extraReservedRows = 0,
+        bool showStatus = true)
     {
         g_livePreview.previewWindowRows =
             GlobalState::ITEMS_PER_PAGE > 0
                 ? GlobalState::ITEMS_PER_PAGE
-                : computeDynamicPreviewWindowRows(extraReservedRows);
+                : computeDynamicPreviewWindowRows(extraReservedRows, showStatus);
     }
 
     // ─── Preview Configuration ───────────────────────────────────────────────────
@@ -560,6 +579,11 @@ namespace {
      * available height from terminal dimensions, status-line wrapping, and
      * estimated item-label wrapping.
      *
+     * The status line is only printed when the match set differs from the full
+     * source list (see renderPreviewWindow()). When it is suppressed, this
+     * function passes @c showStatus == false to refreshPreviewWindowHeight() so
+     * the status-line row is reclaimed and status-wrap height is not charged.
+     *
      * Maintains a valid cursor and scroll offset.
      *
      * @param preview Filtered preview result.
@@ -580,35 +604,44 @@ namespace {
             g_livePreview.previewCursor = totalMatches - 1;
         }
 
-        const size_t sampleEnd =
-            std::min(totalMatches, static_cast<size_t>(9999));
-
-        const size_t initialRows = GlobalState::ITEMS_PER_PAGE > 0
-            ? GlobalState::ITEMS_PER_PAGE
-            : computeDynamicPreviewWindowRows(0);
-        const size_t sampleShown = std::min(totalMatches, initialRows);
-
-        const std::string statusSample = (totalMatches > sampleShown)
-            ? std::format(
-                  "[preview {}-{}/{} · shown {} · PgUp/PgDn to scroll]",
-                  totalMatches > 0 ? 1 : 0,
-                  sampleEnd,
-                  totalMatches,
-                  sampleShown)
-            : std::format(
-                  "[preview {}-{}/{} · shown {}]",
-                  totalMatches > 0 ? 1 : 0,
-                  sampleEnd,
-                  totalMatches,
-                  sampleShown);
-
-        const size_t statusWrappedRows =
-            wrappedLineRows(statusSample.size(), termCols);
-
-        const size_t statusWrapExtra =
-            statusWrappedRows > 1 ? statusWrappedRows - 1 : 0;
-
         const std::vector<std::string>& source = *g_livePreview.sourceList;
+
+        // Keep this predicate in sync with renderPreviewWindow(): the status
+        // line is only printed when the match set is a strict subset of the
+        // source list.
+        const bool showStatus = totalMatches > 0 && totalMatches != source.size();
+
+        // Status-line wrapping only consumes vertical space when it is printed.
+        size_t statusWrapExtra = 0;
+
+        if (showStatus) {
+            const size_t sampleEnd =
+                std::min(totalMatches, static_cast<size_t>(9999));
+
+            const size_t initialRows = GlobalState::ITEMS_PER_PAGE > 0
+                ? GlobalState::ITEMS_PER_PAGE
+                : computeDynamicPreviewWindowRows(0, showStatus);
+            const size_t sampleShown = std::min(totalMatches, initialRows);
+
+            const std::string statusSample = (totalMatches > sampleShown)
+                ? std::format(
+                      "[preview {}-{}/{} · shown {} · PgUp/PgDn to scroll]",
+                      totalMatches > 0 ? 1 : 0,
+                      sampleEnd,
+                      totalMatches,
+                      sampleShown)
+                : std::format(
+                      "[preview {}-{}/{} · shown {}]",
+                      totalMatches > 0 ? 1 : 0,
+                      sampleEnd,
+                      totalMatches,
+                      sampleShown);
+
+            const size_t statusWrappedRows =
+                wrappedLineRows(statusSample.size(), termCols);
+
+            statusWrapExtra = statusWrappedRows > 1 ? statusWrappedRows - 1 : 0;
+        }
 
         const std::vector<std::string>& displayLabels =
             g_livePreview.hasDerivedCache
@@ -637,7 +670,7 @@ namespace {
                 ? (maxWrappedPerItem - 1) * 2
                 : 0;
 
-        refreshPreviewWindowHeight(statusWrapExtra + wrapAdjustment);
+        refreshPreviewWindowHeight(statusWrapExtra + wrapAdjustment, showStatus);
 
         return calculateWrappedPreviewWindow(
             preview,
@@ -653,6 +686,11 @@ namespace {
      *
      * Builds a windowed StringListView when necessary, renders without pagination,
      * and prints the preview status line.
+     *
+     * The status line is suppressed when the match set equals the full source
+     * list (no filtering is in effect, e.g. an empty query or a query that
+     * matches everything). The same predicate is used by calculatePreviewWindow()
+     * to reclaim the status-line row and skip status-wrap sizing.
      *
      * Two windowing cases exist:
      *   - non-identity match set: a view over the matching local indices;
@@ -735,9 +773,17 @@ namespace {
                 });
         }
 
-        const PrintListTheme ft = getListColors();
+        // Keep this predicate in sync with calculatePreviewWindow(): the status
+        // line is only printed when the match set is a strict subset of the
+        // source list.
+        const bool showStatus =
+            g_livePreview.previewWindowRows > 0
+            && totalMatches > 0
+            && totalMatches != source.size();
 
-        if (g_livePreview.previewWindowRows > 0 && totalMatches > 0) {
+        if (showStatus) {
+            const PrintListTheme ft = getListColors();
+
             const size_t shownStart = win.start + 1;
             const size_t shownEnd = win.end;
 
