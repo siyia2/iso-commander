@@ -176,7 +176,7 @@ namespace MappingPrompt {
 
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
             auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write2usb");
-            stream << wt.indexCol << " " << (i + 1) << ">" << wt.bold << " ";
+            stream << wt.indexCol << " " << (i + 1) << ">" << " ";
             if (!displayConfig::toggleNamesOnly) {
                 stream << wt.pathCol << isoDir << "/";
             }
