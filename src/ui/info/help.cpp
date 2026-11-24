@@ -184,7 +184,7 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
         printSection(tc, "\n4. Tips:",
             "   • Indices^ always refer to the source list\n"
             "   • Pending indices always refer to the source list\n"
-            "   • Filtering spans all pages and is incremental");
+            "   • Filtering is unconstrained by pagination");
     };
 
     pressEnterToReturnWithRepaint(render);

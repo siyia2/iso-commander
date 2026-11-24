@@ -351,10 +351,12 @@ static bool runSharedFilterFlow(
  * Selects the appropriate source list and configures the shared filter
  * workflow with the ISO operation's rendering and state information.
  *
- * Base source selection: the already-filtered list when @c ctx.isFiltered is
- * set and true; otherwise the mounted ISO dirs for unmount, or the global ISO
- * list for all other operations. When @c ctx.state is present, rendering is
- * wired as "MOUNTED_ISOS" (unmount) or "ISO_FILES" (other) with the state's
+ * Base source selection: the original list is ALWAYS used as the search
+ * source — mounted ISO dirs for unmount, or the global ISO list for all other
+ * operations — so each committed filter starts fresh instead of narrowing the
+ * previous result. The already-filtered list is only the destination
+ * (@c filteredFiles). When @c ctx.state is present, rendering is wired as
+ * "MOUNTED_ISOS" (unmount) or "ISO_FILES" (other) with the state's
  * pending-selection fields.
  *
  * @param inputString Original command input.
@@ -376,10 +378,9 @@ bool handleFilteringForISO(
     bool isUnmount,
     FilterEntryContext ctx)
 {
+    // Always search the original list, never the previous filter's result.
     const std::vector<std::string>& baseSource =
-        (ctx.isFiltered && *ctx.isFiltered)
-            ? filteredFiles
-            : (isUnmount ? isoDirs : GlobalState::globalIsoFileList);
+        isUnmount ? isoDirs : GlobalState::globalIsoFileList;
 
     FilterCallConfig cfg{
         .files = &filteredFiles,
@@ -413,13 +414,16 @@ bool handleFilteringForISO(
  * Configures the shared filter workflow with the image-conversion list
  * rendering context and optional caller-owned state.
  *
- * When @c ctx.state is present, rendering is wired as "IMAGE_FILES" with
- * sub-type "convert2iso". The operation color is fixed to
- * UI::Palette::Orange. The return value of runSharedFilterFlow is discarded
- * (this entry point is void).
+ * The incoming @p files vector is snapshotted into a local copy so every
+ * committed filter re-searches the ORIGINAL image list rather than the
+ * previous filter's result; @p files itself remains the destination that
+ * applyFilterCore overwrites on commit. When @c ctx.state is present,
+ * rendering is wired as "IMAGE_FILES" with sub-type "convert2iso". The
+ * operation color is fixed to UI::Palette::Orange. The return value of
+ * runSharedFilterFlow is discarded (this entry point is void).
  *
  * @param inputString Original command input.
- * @param files Image files to filter.
+ * @param files Image files to filter (also the destination of the result).
  * @param operation Operation name.
  * @param ctx Optional caller-owned filter state and callbacks.
  */
@@ -429,8 +433,13 @@ void handleFilteringConvert2ISO(
     const std::string& operation,
     FilterEntryContext ctx)
 {
+    // Snapshot the original list: `files` is overwritten on commit, so the
+    // search source must be a stable copy captured before the prompt runs.
+    const std::vector<std::string> originalFiles = files;
+
     FilterCallConfig cfg{
         .files = &files,
+        .sourceOverride = &originalFiles,
         .operation = operation,
         .operationColor = UI::Palette::Orange,
         .isFiltered = ctx.isFiltered,

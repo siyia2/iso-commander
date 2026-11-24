@@ -15,12 +15,16 @@
  * display list) into its corresponding globalIsoFileList index.
  *
  * filteringStack[lvl].originalIndices always stores fully resolved global
- * indices at every level (applyFilterCore builds each level from the previous
- * one's already-global indices). On an ISO list refresh only the top level is
- * rewritten (see refreshFilterKeepingResults), and only the top level is ever
- * read, so resolving a local index requires one lookup against the top of the
- * stack; it must not walk back through earlier levels, whose stored indices
- * may be stale.
+ * indices at every level (applyFilterCore builds each level from the source
+ * list's indices). Because every committed filter now searches the ORIGINAL
+ * source (not the previous level's output), the stack only ever holds a
+ * single top level describing the current commit; lower levels are cleared
+ * on each commit. resolveGlobalIndex() therefore reads only the top of the
+ * stack. On an ISO list refresh only the top level is rewritten (see
+ * refreshFilterKeepingResults), and only the top level is ever read, so
+ * resolving a local index requires one lookup against the top of the stack;
+ * it must not walk back through earlier levels, whose stored indices may be
+ * stale.
  *
  * @param localIdx Index into the list currently being searched/displayed.
  * @return The corresponding index into globalIsoFileList.
@@ -137,9 +141,11 @@ static bool collectFilterMatches(
 /**
  * @brief Commits a non-trivial filtered result set to UI and stack state.
  *
- * Resets pagination, requests a screen clear, replaces @c ctx.files, maps
- * local indices back to global database indices, and pushes a new
- * @c FilteringState entry onto @c filteringStack.
+ * Each commit REPLACES the active filter rather than stacking on top of it,
+ * so the stack is cleared before the new level is pushed. Resets pagination,
+ * requests a screen clear, replaces @c ctx.files, maps local indices back to
+ * global database indices, and pushes a new @c FilteringState entry onto
+ * @c filteringStack.
  *
  * @param searchString  Original filter query stored for state recovery.
  * @param[in,out] ctx   Filter context updated in place.
@@ -158,6 +164,11 @@ static void commitFilteredResults(
     ctx.needsClrScrn = true;
     ctx.files        = std::move(filteredFiles);
 
+    // Every commit searches the original source, so previous levels are no
+    // longer part of the current match. Drop them to keep the stack a single
+    // description of the active filter.
+    filteringStack.clear();
+
     FilteringState newState;
     newState.originalIndices.reserve(matchedIndices.size());
     newState.query      = searchString;
@@ -174,13 +185,18 @@ static void commitFilteredResults(
 /**
  * @brief Executes the core filter commit: transforms source paths into
  * searchable strings (filename only, unmount keys, or raw paths), runs the
- * query, and chains the result through @c filteringStack so local indices map
+ * query, and records the result in @c filteringStack so local indices map
  * back to global database indices. Resets pagination and marks the screen for
  * refresh.
  *
  * This is the COMMIT path, run when the user presses Enter. It is separate
  * from the live preview, which never touches @c filteringStack or @c ctx.files.
  * It does no terminal output or cursor movement; the caller owns that.
+ *
+ * The search source is @c ctx.sourceOverride when set (the original,
+ * unfiltered list), falling back to @c ctx.files otherwise. Entry points are
+ * expected to set @c sourceOverride so each commit re-searches the original
+ * list instead of narrowing the previous result.
  *
  * @param searchString The query to filter by (saved for state recovery).
  * @param ctx FilterContext providing source lists, unmount flags, and UI state.
