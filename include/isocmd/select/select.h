@@ -153,25 +153,24 @@ bool handleFilteringForISO(const std::string& inputString,
 
 /**
  * @brief Filter entry point for convert-to-ISO operations.
- * @details Forwards directly to @c runSharedFilterFlow with a fixed orange
- * operation color. Unlike @c handleFilteringForISO there is no unmount mode
- * or source list override — the files vector is always used as-is.
  *
- * When @p ctx.state is provided it enables the live main-list preview for the
- * @c "IMAGE_FILES" list (subtype @c "convert2iso"). Unlike the ISO path,
- * @c ctx.pendingIndices and @c ctx.hasPendingProcess here point to the caller's
- * own locals (selectForImageFiles), not fields of @p ctx.state.
+ * Filtering is single-level and non-incremental: every prompt filters from
+ * @p sourceFiles (the original unfiltered image list), never from @p files
+ * (which may already be the current filtered view). A second filter
+ * therefore replaces the previous result instead of narrowing it.
  *
- * @param inputString Raw user input; must be exactly @c "/" to trigger filtering.
- * @param files       The list of convertible files to filter in place.
- * @param operation   Name of the conversion operation shown in the prompt.
- * @param ctx         Shared filter/display state pointers, sort/pending pointers,
- *                    refresh state, and repaint callback.
+ * @param inputString Original command input.
+ * @param files       Image files to filter (the current display list).
+ * @param sourceFiles Original unfiltered image list used as the filter
+ *                    corpus on every prompt.
+ * @param operation   Operation name.
+ * @param ctx         Optional caller-owned filter state and callbacks.
  */
 void handleFilteringConvert2ISO(const std::string& inputString,
-                              std::vector<std::string>& files,
-                              const std::string& operation,
-                              FilterEntryContext ctx);
+                                std::vector<std::string>& files,
+                                const std::vector<std::string>& sourceFiles,
+                                const std::string& operation,
+                                FilterEntryContext ctx);
 
 
 // --- Utility & Cleanup ---

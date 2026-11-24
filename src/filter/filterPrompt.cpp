@@ -414,32 +414,33 @@ bool handleFilteringForISO(
  * Configures the shared filter workflow with the image-conversion list
  * rendering context and optional caller-owned state.
  *
- * The incoming @p files vector is snapshotted into a local copy so every
- * committed filter re-searches the ORIGINAL image list rather than the
- * previous filter's result; @p files itself remains the destination that
- * applyFilterCore overwrites on commit. When @c ctx.state is present,
- * rendering is wired as "IMAGE_FILES" with sub-type "convert2iso". The
- * operation color is fixed to UI::Palette::Orange. The return value of
- * runSharedFilterFlow is discarded (this entry point is void).
+ * Filtering is single-level: every prompt filters from @p sourceFiles (the
+ * original unfiltered image list), never from @p files (which may already be
+ * the current filtered view). A second filter therefore replaces the previous
+ * result instead of narrowing it.
+ *
+ * When @c ctx.state is present, rendering is wired as "IMAGE_FILES" with
+ * sub-type "convert2iso". The operation color is fixed to
+ * UI::Palette::Orange. The return value of runSharedFilterFlow is discarded
+ * (this entry point is void).
  *
  * @param inputString Original command input.
- * @param files Image files to filter (also the destination of the result).
+ * @param files Image files to filter (the current display list).
+ * @param sourceFiles Original unfiltered image list used as the filter
+ *        corpus on every prompt.
  * @param operation Operation name.
  * @param ctx Optional caller-owned filter state and callbacks.
  */
 void handleFilteringConvert2ISO(
     const std::string& inputString,
     std::vector<std::string>& files,
+    const std::vector<std::string>& sourceFiles,
     const std::string& operation,
     FilterEntryContext ctx)
 {
-    // Snapshot the original list: `files` is overwritten on commit, so the
-    // search source must be a stable copy captured before the prompt runs.
-    const std::vector<std::string> originalFiles = files;
-
     FilterCallConfig cfg{
         .files = &files,
-        .sourceOverride = &originalFiles,
+        .sourceOverride = &sourceFiles,
         .operation = operation,
         .operationColor = UI::Palette::Orange,
         .isFiltered = ctx.isFiltered,

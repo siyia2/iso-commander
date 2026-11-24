@@ -59,7 +59,8 @@ namespace {
         /**
          * @brief Returns the RAM cache backing a file type's unfiltered list.
          *
-         * Used by ESC to restore the unfiltered list for the active file type.
+         * Used by ESC to restore the unfiltered list for the active file type,
+         * and as the filter corpus so every prompt re-filters from source.
          *
          * @param fileType File type key ("bin", "mdf", "nrg", "chd", "daa").
          * @return Pointer to the matching cache, or @c nullptr for an unknown
@@ -101,7 +102,8 @@ namespace {
             const bool                      isDaa;
 
             // The unfiltered list for this file type (what ESC restores). While a
-            // filter is active, source indices ("n^") refer to this list.
+            // filter is active, source indices ("n^") refer to this list, and
+            // the filter prompt searches this list on every commit.
             const std::vector<std::string>* const cache;
 
             std::vector<std::string> pendingIndices;   // display projection only
@@ -123,7 +125,8 @@ namespace {
              *
              * Sets @c operation to the mapped conversion name and the
              * @c isMdf/@c isNrg/@c isChd/@c isDaa flags from @p type;
-             * resolves the backing cache pointer used for ESC restores.
+             * resolves the backing cache pointer used for ESC restores and as
+             * the filter corpus.
              *
              * @param type         File type key ("bin", "mdf", "nrg", "chd",
              *                     "daa").
@@ -164,6 +167,21 @@ namespace {
              */
             const std::vector<std::string>& sourceList() const {
                 return (isFiltered && cache) ? *cache : files;
+            }
+
+            /**
+             * @brief Returns the original unfiltered list used as the filter
+             *        corpus.
+             *
+             * Prefers the backing RAM cache (the pre-filter list for this file
+             * type) so every filter prompt re-filters from source rather than
+             * narrowing the previous result. Falls back to @c files when no
+             * cache exists (defensive; unknown file type).
+             *
+             * @return Const reference to the unfiltered source list.
+             */
+            const std::vector<std::string>& filterSourceList() const {
+                return cache ? *cache : files;
             }
 
             /**
@@ -476,8 +494,12 @@ namespace {
              * @brief Handles filter-command input.
              *
              * Delegates to @c handleFilteringConvert2ISO() with a context that
-             * wires the filter state into this session, then restores
-             * keybindings.
+             * wires the filter state into this session, passing the original
+             * unfiltered image list (the backing RAM cache, or @c files when no
+             * cache exists) as the filter corpus. Filtering is single-level and
+             * non-incremental: each Enter re-filters from that source rather
+             * than narrowing the previous result. Restores keybindings on
+             * return.
              *
              * @param input Raw user input.
              * @return @c Continue when the command was handled, @c Proceed
@@ -496,7 +518,7 @@ namespace {
                     .state             = state,
                     .repaintList       = [this] { repaintList(); }
                 };
-                handleFilteringConvert2ISO(input, files, operation, ctx);
+                handleFilteringConvert2ISO(input, files, filterSourceList(), operation, ctx);
                 keybindingGuard.restore();
                 return LoopAction::Continue;
             }
@@ -609,6 +631,11 @@ namespace {
  *   for this file type and the original page) if a filter is active,
  *   otherwise resets the page and returns to the caller. The @c R key is
  *   unbound because this prompt has no manual refresh.
+ * - **Single-level filtering:** the filter prompt always searches the
+ *   unfiltered RAM cache for this file type (see
+ *   @c ImageSession::filterSourceList()), never the current filtered view, so
+ *   a second Enter replaces the previous result instead of narrowing it. The
+ *   filter stack never holds more than one level.
  * - **Two-phase execution (path-based):** "3 5-9;" is staged as paths. Bare
  *   numbers are what is on screen, "n^" numbers are indices into the
  *   unfiltered list. "P" resolves the paths to indices of the unfiltered list
