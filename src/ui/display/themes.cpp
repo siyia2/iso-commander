@@ -52,7 +52,7 @@ ReadlineAndPromptTheme getFilterTheme(const std::string& operationColor, bool in
         ft.highlight = wrap(UI::Palette::Orange);
         ft.reset     = wrap(UI::Palette::BoldReset);
         ft.iso       = includeIso ? wrap(UI::Palette::Green) : "";
-        ft.accent    = "UI::Palette::Brown";
+        ft.accent    = UI::Palette::Brown;
     } else {
         ft.primary   = wrap(t->muted);
         ft.filter    = wrap(UI::Palette::Cyan);

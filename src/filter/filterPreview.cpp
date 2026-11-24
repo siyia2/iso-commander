@@ -731,7 +731,7 @@ namespace {
                 });
         }
 
-        const ReadlineAndPromptTheme ft = getFilterTheme("", false);
+        const PrintListTheme ft = getListColors();
 
         if (g_livePreview.previewWindowRows > 0 && totalMatches > 0) {
             const size_t shownStart = win.start + 1;
@@ -741,15 +741,15 @@ namespace {
             const bool canScrollDown = win.end < totalMatches;
 
             std::cout << "\r\033[K"
-                      << ft.accent
-                      << std::format(
-                             "\n[({}-{})/{}{}{}]",
-                             shownStart,
-                             shownEnd,
-                             totalMatches,
-                             canScrollUp ? " · PgUp ↑" : "",
-                             canScrollDown ? (canScrollUp ? " | PgDn ↓" : " · PgDn ↓") : "")
-                      << "\n";
+                      << ft.head
+                      << std::format("\n[Matches {}({}", ft.head, ft.accent)
+                      << shownStart
+                      << ft.accent << "-"
+                      << ft.accent << shownEnd
+                      << ft.head << ")/" << totalMatches
+                      << (canScrollUp ? " · PgUp ↑" : "")
+                      << (canScrollDown ? (canScrollUp ? " | PgDn ↓" : " · PgDn ↓") : "")
+                      << "]\n";
         }
     }
 
