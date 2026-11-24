@@ -444,8 +444,7 @@ namespace windowsWriter_engine::copy {
     *
     * Collects and deduplicates directory paths before creating them,
     * avoiding redundant directory creation when processing multiple files.
-    * Files are copied only after all required directories exist, using
-    * independent writeback pacing states for FAT32 and NTFS.
+    * Files are copied only after all required directories exist.
     *
     * @return true if all entries were processed successfully.
     */
@@ -483,12 +482,9 @@ namespace windowsWriter_engine::copy {
            fs::create_directories(dir);
        }
 
-       // Independent writeback pacing states for FAT32 and NTFS.
-       // Each state spans all files written to its respective filesystem
-       // during this copy pass, allowing small files to contribute to the
-       // shared chunk threshold instead of resetting it.
-       FilesystemWritebackState fatWriteback;
-       FilesystemWritebackState ntfsWriteback;
+       // One shared pacing state spans every file written to this filesystem
+       // during this copy pass. Small files no longer reset the chunk threshold.
+       FilesystemWritebackState filesystemWriteback;
 
        // All parent directories now exist. Copy files only.
        for (const auto& e : entries) {
@@ -501,10 +497,6 @@ namespace windowsWriter_engine::copy {
            const bool toNtfs =
                (isoType == IsoType::WindowsInstall) &&
                e.dst.native().compare(0, ntfsMnt.size(), ntfsMnt) == 0;
-
-           auto& filesystemWriteback = toNtfs
-               ? ntfsWriteback
-               : fatWriteback;
 
            if (!copyFileWithProgress(
                    e.src, e.dst, e.size, toNtfs,
