@@ -11,7 +11,7 @@
 #include <unordered_set>
 #include <vector>
 
-// ---------- Used exclusively for write2usb device indicator ------------
+// ---------- Used exclusively for write2usb devices ------------
 
 /**
  * @brief A thread-safe manager for tracking and joining background tasks.
@@ -44,6 +44,6 @@ struct DrainingThreadManager {
 inline DrainingThreadManager g_drainingManager;
 inline std::atomic<bool> g_drainingCancelled{false};
 
-// ---------- End of write2usb device indicator block ------------
+// ---------- End of write2usb device draining manager ------------
 
 #endif // DRAININGSTATE_H
