@@ -781,25 +781,45 @@ namespace {
             && totalMatches > 0
             && totalMatches != source.size();
 
-        if (showStatus) {
+        const bool canScrollUp = win.start > 0;
+        const bool canScrollDown = win.end < totalMatches;
+        const bool showScrollHintOnly =
+            !showStatus
+            && g_livePreview.previewWindowRows > 0
+            && totalMatches > 0
+            && (canScrollUp || canScrollDown);
+
+        if (showStatus || showScrollHintOnly) {
             const PrintListTheme ft = getListColors();
 
-            const size_t shownStart = win.start + 1;
-            const size_t shownEnd = win.end;
-
-            const bool canScrollUp = win.start > 0;
-            const bool canScrollDown = win.end < totalMatches;
+            const char* const standaloneScrollHint =
+                canScrollUp && canScrollDown
+                    ? "PgUp ↑ | PgDn ↓"
+                    : (canScrollUp ? "PgUp ↑" : "PgDn ↓");
 
             std::cout << "\r\033[K"
-                      << ft.head
-                      << std::format("\n[Matches {}({}", ft.head, ft.accent)
-                      << shownStart
-                      << ft.accent << "-"
-                      << ft.accent << shownEnd
-                      << ft.head << ")/" << totalMatches
-                      << (canScrollUp ? " · PgUp ↑" : "")
-                      << (canScrollDown ? (canScrollUp ? " | PgDn ↓" : " · PgDn ↓") : "")
-                      << "]\n";
+                      << ft.head;
+
+            if (showStatus) {
+                const size_t shownStart = win.start + 1;
+                const size_t shownEnd = win.end;
+
+                const char* const statusScrollHint =
+                    canScrollUp && canScrollDown
+                        ? " · PgUp ↑ | PgDn ↓"
+                        : (canScrollUp ? " · PgUp ↑" : (canScrollDown ? " · PgDn ↓" : ""));
+
+                std::cout << std::format("\n(Matches {}({}", ft.head, ft.accent)
+                          << shownStart
+                          << ft.accent << "-"
+                          << ft.accent << shownEnd
+                          << ft.head << ")/" << ft.num << totalMatches
+                          << ft.head << ")"
+                          << statusScrollHint
+                          << "\n";
+            } else {
+                std::cout << "\n[" << standaloneScrollHint << "]\n";
+            }
         }
     }
 
