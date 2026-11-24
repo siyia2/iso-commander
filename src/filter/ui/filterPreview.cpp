@@ -801,20 +801,17 @@ namespace {
                       << ft.head;
 
             if (showStatus) {
-                const size_t shownStart = win.start + 1;
-                const size_t shownEnd = win.end;
-
                 const char* const statusScrollHint =
                     canScrollUp && canScrollDown
                         ? " · PgUp ↑ | PgDn ↓"
                         : (canScrollUp ? " · PgUp ↑" : (canScrollDown ? " · PgDn ↓" : ""));
 
-                std::cout << std::format("\n(Matches {}({}", ft.head, ft.accent)
-                          << shownStart
-                          << ft.accent << "-"
-                          << ft.accent << shownEnd
-                          << ft.head << ")/" << ft.num << totalMatches
+                const char* const matchWord = (totalMatches == 1) ? " Match" : " Matches";
+
+                std::cout << std::format("\n{}({}", ft.head, ft.accent)
+                          << totalMatches
                           << ft.head << ")"
+                          << ft.head << matchWord
                           << statusScrollHint
                           << "\n";
             } else {
