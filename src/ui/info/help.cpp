@@ -183,7 +183,7 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
         );
         printSection(tc, "\n4. Tips:",
             "   • Indices^ always refer to the source list\n"
-            "   • Pending indices always refer to the source list\n"
+            "   • Pending indices map to source indices^\n"
             "   • Filtering is unconstrained by pagination");
     };
 
