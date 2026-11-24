@@ -792,30 +792,15 @@ namespace {
         if (showStatus || showScrollHintOnly) {
             const PrintListTheme ft = getListColors();
 
-            const char* const standaloneScrollHint =
+            const char* const scrollHint =
                 canScrollUp && canScrollDown
-                    ? "PgUp ↑ | PgDn ↓"
-                    : (canScrollUp ? "PgUp ↑" : "PgDn ↓");
+                    ? "[PgUp] ↑ | [PgDn] ↓"
+                    : (canScrollUp ? "[PgUp] ↑" : (canScrollDown ? "[PgDn] ↓" : ""));
 
-            std::cout << "\r\033[K"
-                      << ft.head;
-
-            if (showStatus) {
-                const char* const statusScrollHint =
-                    canScrollUp && canScrollDown
-                        ? " · PgUp ↑ | PgDn ↓"
-                        : (canScrollUp ? " · PgUp ↑" : (canScrollDown ? " · PgDn ↓" : ""));
-
-                const char* const matchWord = (totalMatches == 1) ? " Match" : " Matches";
-
-                std::cout << std::format("\n{}({}", ft.head, ft.accent)
-                          << totalMatches
-                          << ft.head << ")"
-                          << ft.head << matchWord
-                          << statusScrollHint
-                          << "\n";
-            } else {
-                std::cout << "\n[" << standaloneScrollHint << "]\n";
+            if (*scrollHint != '\0') {
+                std::cout << "\r\033[K"
+                          << ft.head
+                          << "\n" << scrollHint << "\n";
             }
         }
     }
