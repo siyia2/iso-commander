@@ -176,12 +176,12 @@ namespace MappingPrompt {
 
         for (size_t i = 0; i < sortedIsos.size(); ++i) {
             auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write2usb");
-            stream << " " << wt.indexCol << (i + 1) << ">" << wt.bold << " ";
+            stream << wt.indexCol << " " << (i + 1) << ">" << wt.bold << " ";
             if (!displayConfig::toggleNamesOnly) {
                 stream << wt.pathCol << isoDir << "/";
             }
             stream << wt.fileCol << filename;
-            stream << UI::Palette::DimGray << " (" << wt.sizeCol << sortedIsos[i].sizeStr
+            stream << " " << UI::Palette::DimGray << "(" << wt.sizeCol << sortedIsos[i].sizeStr
                    << UI::Palette::DimGray << ")\n";
         }
 
@@ -196,9 +196,9 @@ namespace MappingPrompt {
                 if (dev.error) {
                     stream << " " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
                 } else {
-                    stream << " " << wt.deviceCol << dev.path
+                    stream << wt.deviceCol << " " << dev.path
                            << wt.infoLabel << " <" << dev.driveName
-                           << ">" << UI::Palette::DimGray << " (" << wt.sizeCol << dev.sizeStr
+                           << "> " << UI::Palette::DimGray << "(" << wt.sizeCol << dev.sizeStr
                            << UI::Palette::DimGray << ")"
                            << ([&]() -> std::string {
                                if (dev.mounted) return wt.colorFailure + " [MOUNTED]" + wt.rl_resetCol;

@@ -400,12 +400,12 @@ namespace WriteValidation {
         std::string e;
         e.append(wt.errLabel).append("ISO exceeds target drive capacity:\n")
          .append(wt.errLabel).append(isoLabelPadded)
-         .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol)
-         .append(UI::Palette::DimGray).append(" (").append(wt.fileCol).append(iso.filename)
+         .append(wt.sizeCol).append(iso.sizeStr).append(" ").append(wt.rl_resetCol)
+         .append(UI::Palette::DimGray).append("(").append(wt.fileCol).append(iso.filename)
          .append(UI::Palette::DimGray).append(")\n")
          .append(wt.errLabel).append(driveLabelPadded)
-         .append(wt.sizeCol).append(deviceSizeStr).append(wt.rl_resetCol)
-         .append(UI::Palette::DimGray).append(" (").append(wt.warnLabel).append(device)
+         .append(wt.sizeCol).append(deviceSizeStr).append(" ").append(wt.rl_resetCol)
+         .append(UI::Palette::DimGray).append("(").append(wt.warnLabel).append(device)
          .append(wt.infoLabel).append(" <").append(driveName).append(">")
          .append(UI::Palette::DimGray).append(")")
          .append(wt.rl_resetCol);
