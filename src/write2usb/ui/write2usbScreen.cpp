@@ -797,7 +797,9 @@ private:
         }
 
         const std::string speedPad(maxSpeedWidth - utf8Width(speedStr), ' ');
-        row << color << speedStr << (isCompleted ? " (avg)" : speedPad);
+        row << color << speedPad << speedStr;
+        if (isCompleted)
+            row << " (avg)";
 
         // Last line of defense: if the terminal is too narrow even for the
         // truncated row, cut the row instead of letting it wrap.

@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C++ Standard Library Headers
+#include <algorithm>
 #include <cctype>
+#include <csignal>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <iostream>
-#include <optional>
+#include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -16,578 +20,562 @@
 #include <utility>
 #include <vector>
 
+// C / System Headers
+#include <unistd.h>
+
+// Third-Party Library Headers
+#include <readline/history.h>
+#include <readline/readline.h>
+
 // Project Headers
+#include "isocmd/input/readline.h"
+#include "isocmd/input/inputHandling.h"
 #include "isocmd/ui/display.h"
-#include "isocmd/core/uiState.h"
+#include "isocmd/ui/readlineResize.h"
+#include "isocmd/ui/syncOutput.h"
+#include "isocmd/ui/termSize.h"
+#include "isocmd/ui/pausePrompts.h"
+#include "isocmd/util/sort.h"
+#include "isocmd/core/cancellation.h"
+#include "isocmd/util/stringManipulation.h"
 #include "isocmd/ui/themes.h"
+#include "isocmd/threadpool/threadpool.h"
 #include "isocmd/write2usb/write2usbUI.h"
 
 namespace fs = std::filesystem;
 
-// Defined in help.cpp and verbose.cpp
+// ---------------------------------------------------------------------------
+// Global scope: external declarations
+// ---------------------------------------------------------------------------
+
 void helpMappings();
 void displayErrors();
 
 // --------------------------------------------------------------------------- //
-// Device discovery (sysfs / procfs)                                           //
+// namespace MappingPrompt  (interactive prompt and confirmation UI)           //
 // --------------------------------------------------------------------------- //
 
-/**
- * @brief Reads a block device's model name from sysfs.
- *
- * Reads /sys/block/<name>/device/model and trims surrounding whitespace.
- *
- * @param device Absolute block-device path (e.g. /dev/sdc).
- * @return Model name, or "Unknown Drive" if the file is absent or empty.
- */
-std::string getDriveName(const std::string& device) {
-    std::string deviceName = device.substr(device.find_last_of('/') + 1);
-    std::string sysfsPath = "/sys/block/" + deviceName + "/device/model";
+namespace MappingPrompt {
 
-    std::ifstream modelFile(sysfsPath);
-    std::string driveName;
+    /**
+     * @brief Represents summary information for a physical removable storage device.
+     */
+    struct DeviceInfo {
+        std::string path;     ///< Device node path (e.g., /dev/sdb).
+        uint64_t size;        ///< Total storage capacity in bytes.
+        std::string driveName;///< Vendor or model drive name.
+        std::string sizeStr;  ///< Human-readable formatted file size string.
+        bool mounted;         ///< True if the device currently has active mounts.
+        bool error;           ///< True if an error occurred while probing the device.
+    };
 
-    if (modelFile.is_open()) {
-        std::getline(modelFile, driveName);
-        driveName.erase(0, driveName.find_first_not_of(" \t"));
-        driveName.erase(driveName.find_last_not_of(" \t") + 1);
+    /**
+     * @brief Represents a single row in the pre-burn warning confirmation table.
+     */
+    struct WarnRow {
+        std::string device;       ///< Target device path.
+        std::string driveName;    ///< Drive model/name description.
+        std::string deviceSizeStr;///< Formatted storage device size.
+        std::string filename;     ///< Source ISO filename.
+        std::string isoSizeStr;   ///< Formatted ISO image size.
+    };
+
+    /**
+     * @brief Constructs the interactive index prompt string for device mapping input.
+     *
+     * @param wt The active write theme configuration.
+     * @return std::string Formatted ANSI-colored prompt string.
+     */
+    std::string buildIdxPrompt(const WriteTheme& wt) {
+        return std::format(
+            "\n{}IDX>DEVICE{} ↵ for {}write2usb{}, ? for help: {}",
+            UI::Palette::RL_idxGreen,
+            wt.rl_primaryCol,
+            UI::Palette::RL_Yellow,
+            wt.rl_primaryCol,
+            wt.rl_resetCol
+        );
     }
 
-    return driveName.empty() ? "Unknown Drive" : driveName;
-}
+    /**
+     * @brief Validates whether the number of selected ISOs exceeds the thread pool capacity.
+     *
+     * @param pool Reference to the application thread pool.
+     * @param selectedIsos Vector of ISO files chosen by the user.
+     * @param wt The active write theme configuration.
+     * @return true If the selection limit has been exceeded.
+     * @return false If within safe execution limits.
+     */
+    bool checkThreadPoolLimit(ThreadPool& pool, const std::vector<IsoInfo>& selectedIsos, const WriteTheme& wt) {
+        if (selectedIsos.size() <= pool.threadCount()) return false;
+        auto render = [&] {
+            SyncOutput sync;
+            clearScrollBuffer();
+            std::cout << "\n"
+                      << wt.colorFailure << "Error: "
+                      << UI::Palette::Yellow << "write2usb"
+                      << wt.colorFailure << " selection limit" << wt.colorFailure << " is "
+                      << wt.colorWarning << pool.threadCount()
+                      << wt.colorFailure << " (thread pool size)."
+                      << wt.speedCol << "\n";
+        };
+        pressEnterToTryWithRepaint(render);
+        return true;
+    }
+
+    /**
+     * @brief Collects probe information and sizes for a list of USB device paths.
+     *
+     * @param usbDevices Vector of detected USB device node paths.
+     * @return std::vector<DeviceInfo> Sorted and populated device details.
+     */
+    std::vector<DeviceInfo> collectAndSortDeviceInfos(const std::vector<std::string>& usbDevices) {
+        std::vector<DeviceInfo> deviceInfos;
+        deviceInfos.reserve(usbDevices.size());
+        for (const auto& device : usbDevices) {
+            try {
+                std::string driveName = getDriveName(device);
+                uint64_t deviceSize = getBlockDeviceSize(device);
+                std::string sizeStr = formatFileSize(deviceSize);
+                bool mounted = isDeviceMounted(device);
+                deviceInfos.push_back({device, deviceSize, driveName, sizeStr, mounted, false});
+            } catch (...) {
+                deviceInfos.push_back({device, 0, "", "", false, true});
+            }
+        }
+
+        std::sort(deviceInfos.begin(), deviceInfos.end(), [](const DeviceInfo& a, const DeviceInfo& b) {
+            if (a.error != b.error) return !a.error;
+            return a.size > b.size;
+        });
+        return deviceInfos;
+    }
+
+    /**
+     * @brief Builds the comprehensive device selection prompt string listing ISOs and targets.
+     *
+     * @param selectedIsos Original collection of selected ISO inputs.
+     * @param[out] sortedIsos Output parameter containing size-sorted ISO metadata.
+     * @param[out] usbDevices Output parameter containing detected removable block devices.
+     * @param wt The active write theme configuration.
+     * @return std::string The fully formatted multi-line console prompt.
+     */
+    std::string buildDevicePromptString(
+        const std::vector<IsoInfo>& selectedIsos,
+        std::vector<IsoInfo>& sortedIsos,
+        std::vector<std::string>& usbDevices,
+        const WriteTheme& wt
+    ) {
+        sortedIsos = selectedIsos;
+        std::sort(sortedIsos.begin(), sortedIsos.end(), [](const IsoInfo& a, const IsoInfo& b) {
+            return a.size > b.size;
+        });
+
+        std::ostringstream stream;
+        stream << "\n" << color << "Selected " << wt.fileCol << "ISO" << color << ":\n\n";
+
+        for (size_t i = 0; i < sortedIsos.size(); ++i) {
+            auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write2usb");
+            stream << " " << wt.indexCol << (i + 1) << ">" << wt.bold << " ";
+            if (!displayConfig::toggleNamesOnly) {
+                stream << wt.pathCol << isoDir << "/";
+            }
+            stream << wt.fileCol << filename;
+            stream << UI::Palette::DimGray << " (" << wt.sizeCol << sortedIsos[i].sizeStr
+                   << UI::Palette::DimGray << ")\n";
+        }
+
+        stream << "\n" << color << "Removable USB Flash Devices:" << wt.rl_resetCol << "\n\n";
+        usbDevices = getRemovableDevices();
+        auto deviceInfos = collectAndSortDeviceInfos(usbDevices);
+
+        if (deviceInfos.empty()) {
+            stream << " " << wt.colorFailure << "No USB flash drives detected!" << wt.rl_resetCol << "\n";
+        } else {
+            for (const auto& dev : deviceInfos) {
+                if (dev.error) {
+                    stream << " " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
+                } else {
+                    stream << " " << wt.deviceCol << dev.path
+                           << wt.infoLabel << " <" << dev.driveName
+                           << ">" << UI::Palette::DimGray << " (" << wt.sizeCol << dev.sizeStr
+                           << UI::Palette::DimGray << ")"
+                           << ([&]() -> std::string {
+                               if (dev.mounted) return wt.colorFailure + " [MOUNTED]" + wt.rl_resetCol;
+                               return "";
+                           }())
+                           << "\n";
+                }
+            }
+        }
+
+        g_completerData.sortedIsos = &sortedIsos;
+        g_completerData.usbDevices = &usbDevices;
+        reset_custom_keybindingsForCpMvWrite2Usb();
+
+        stream << buildIdxPrompt(wt);
+        return stream.str();
+    }
+
+    /**
+     * @brief Generates warning row dataset structures from validated ISO-to-device mapping pairs.
+     *
+     * @param validPairs Vector of validated ISO and target device mappings.
+     * @return std::vector<WarnRow> Compact structural rows ready for confirmation formatting.
+     */
+    std::vector<WarnRow> buildWarnRows(const std::vector<std::pair<IsoInfo, std::string>>& validPairs) {
+        std::vector<WarnRow> warnRows;
+        warnRows.reserve(validPairs.size());
+        for (const auto& [iso, device] : validPairs) {
+            warnRows.push_back({ device,
+                                 getDriveName(device),
+                                 formatFileSize(getBlockDeviceSize(device)),
+                                 iso.filename,
+                                 iso.sizeStr });
+        }
+        return warnRows;
+    }
+
+    /**
+     * @brief Renders the destructive action confirmation table layout for terminal UI.
+     *
+     * @param cols Current terminal column width constraint.
+     * @param clearFirst If true, issues screen reset sequence codes before painting.
+     * @param devicePrompt Original prompt content block string.
+     * @param mainInputString User-supplied input string to echo back.
+     * @param warnRows Structural warning metadata row items.
+     * @param wt The active write theme configuration.
+     * @return std::vector<size_t> Calculated character widths per rendered line for window resizing hooks.
+     */
+    std::vector<size_t> renderConfirmRows(
+        size_t cols,
+        bool clearFirst,
+        const std::string& devicePrompt,
+        const std::string& mainInputString,
+        const std::vector<WarnRow>& warnRows,
+        const WriteTheme& wt
+    ) {
+        const size_t usableCols = cols > 1 ? cols - 1 : 1;
+        std::vector<size_t> widths;
+
+        if (clearFirst) {
+            std::cout << "\033[H\033[2J\033[3J";
+            std::cout << promptHeaderForRepaint(devicePrompt);
+            std::cout << buildIdxPrompt(wt) << mainInputString << "\n";
+            std::cout << "\n";
+        } else {
+            std::cout << "\n";
+            widths.push_back(0);
+        }
+
+        std::cout << wt.colorWarning << "WARNING: This will "
+                  << UI::Palette::Red << "*ERASE ALL DATA*"
+                  << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
+        widths.push_back(0);
+        widths.push_back(utf8Width("WARNING: This will *ERASE ALL DATA* on:"));
+        widths.push_back(0);
+        rl_bind_keyseq("?", rl_insert);
+        for (const auto& r : warnRows) {
+            const size_t fixedWidth = 17 + r.device.size() + utf8Width(r.driveName)
+                                    + utf8Width(r.deviceSizeStr) + utf8Width(r.isoSizeStr);
+            const size_t availForName = usableCols > fixedWidth ? usableCols - fixedWidth : 0;
+            const std::string shownName = truncateIsoName(r.filename, availForName);
+
+            std::ostringstream row;
+            row << UI::Palette::DimGray << " {" << wt.deviceCol << r.device
+                << " " << wt.infoLabel << "<" << r.driveName << ">" << UI::Palette::DimGray << " ("
+                << wt.sizeCol << r.deviceSizeStr
+                << UI::Palette::DimGray << ")} " << color << "←" << UI::Palette::DimGray << " {" << wt.fileCol
+                << shownName << UI::Palette::DimGray << " (" << wt.sizeCol
+                << r.isoSizeStr << UI::Palette::DimGray << ")}";
+
+            const std::string clipped = clipToWidth(row.str(), usableCols);
+            std::cout << clipped << "\n";
+            widths.push_back(std::min(visibleWidth(clipped), usableCols));
+        }
+
+        std::cout << "\n";
+        widths.push_back(0);
+        return widths;
+    }
+
+    /**
+     * @brief Renders error messages with the specified prompt, main input string, and theme styling.
+     *
+     * @param devicePrompt The current device input prompt string.
+     * @param mainInputString The raw input string entered by the user.
+     * @param errors Vector of error messages to display.
+     * @param wt The current write theme configuration.
+     * @param color Color formatting string for error bullets.
+     */
+    void renderErrorMessage(const std::string& devicePrompt,
+                                   const std::string& mainInputString,
+                                   const std::vector<std::string>& errors,
+                                   const WriteTheme& wt,
+                                   std::string_view color)
+    {
+        SyncOutput sync;
+        clearScrollBuffer();
+        std::cout << promptHeaderForRepaint(devicePrompt);
+        std::cout << buildIdxPrompt(wt) << mainInputString << "\n";
+        std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
+        for (const auto& e : errors) {
+            std::cerr << color << " • " << e << "\n";
+        }
+    }
+
+    /**
+     * @brief Prompts the user to confirm the valid ISO-to-device mapping pairs.
+     *
+     * @param devicePrompt The current device input prompt string.
+     * @param mainInputString The raw input string entered by the user.
+     * @param warnRows Warning rows generated for the valid pairs.
+     * @param wt The current write theme configuration.
+     * @param color Color formatting string for confirmation prompt.
+     * @return true if the user confirmed with 'y' or 'Y', false otherwise.
+     */
+    bool confirmDeviceMappings(const std::string& devicePrompt,
+                                      const std::string& mainInputString,
+                                      const std::vector<WarnRow>& warnRows,
+                                      const WriteTheme& wt,
+                                      std::string_view color)
+    {
+        const size_t drawnCols = terminalSize().cols;
+        std::vector<size_t> drawnWidths;
+        {
+            SyncOutput sync;
+            drawnWidths = renderConfirmRows(drawnCols, /*clearFirst=*/false, devicePrompt, mainInputString, warnRows, wt);
+        }
+
+        const std::string promptText = "Proceed? (y/n): ";
+        const std::string confirmPrompt =
+            std::format("\001{}\002{}{}", color, promptText, wt.rl_resetCol);
+
+        std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
+        {
+            ConfirmationModeGuard confirmGuard;
+            ConfirmResizeWatcher watcher(
+                [&](size_t cols) { return renderConfirmRows(cols, /*clearFirst=*/true, devicePrompt, mainInputString, warnRows, wt); },
+                drawnCols, drawnWidths, promptText);
+
+            confirmation.reset(readline(confirmPrompt.c_str()));
+            watcher.stop();
+        }
+
+        std::string ans;
+        if (confirmation) {
+            ans = confirmation.get();
+            while (!ans.empty() && std::isspace(static_cast<unsigned char>(ans.back()))) {
+                ans.pop_back();
+            }
+        }
+
+        return (ans == "y" || ans == "Y");
+    }
+
+} // namespace MappingPrompt
+
+// --------------------------------------------------------------------------- //
+// Device mapping collection (public API)                                      //
+// --------------------------------------------------------------------------- //
 
 namespace {
 
-/**
- * @brief Reads and right-trims the first line of a sysfs attribute file.
- *
- * @param attributePath Full path to the sysfs attribute file to read.
- * @return Trimmed string contents of the first line, or std::nullopt on read failure.
- */
-static std::optional<std::string> readTrimmedSysfsAttribute(const fs::path& attributePath) {
-    std::ifstream file(attributePath);
-    std::string value;
-    if (!file || !std::getline(file, value)) {
-        return std::nullopt;
-    }
+    /**
+     * @brief Installs a temporary GNU Readline startup hook to prefill the next input line.
+     *
+     * Restores any previously registered `rl_startup_hook` before inserting the prefilled text.
+     * If `prefill` is empty, no hook is installed.
+     *
+     * @param prefill Text to insert into the Readline buffer when Readline starts.
+     */
+    void installPrefillStartupHook(const std::string& prefill)
+    {
+        static std::string activePrefillText;
+        static rl_hook_func_t* previousStartupHook = nullptr;
 
-    while (!value.empty() &&
-           std::isspace(static_cast<unsigned char>(value.back()))) {
-        value.pop_back();
-    }
+        rl_startup_hook = nullptr;
+        previousStartupHook = nullptr;
+        activePrefillText.clear();
 
-    return value;
-}
-
-/**
- * @brief Resolves a device path under /dev/ to its /sys/block entry path.
- *
- * Validates the input prefix, resolves symlinks to a canonical device node,
- * and verifies that a corresponding /sys/block/<name> entry exists.
- *
- * @param devicePath Block-device path (must start with /dev/).
- * @param ec Output error code populated on filesystem errors.
- * @return Canonical path under /sys/block if valid and existing, otherwise std::nullopt.
- */
-static std::optional<fs::path> resolveSysBlockPath(const std::string& devicePath,
-                                                   std::error_code& ec) {
-    if (devicePath.size() <= 5 || devicePath.rfind("/dev/", 0) != 0) {
-        return std::nullopt;
-    }
-
-    const fs::path devNode = fs::canonical(devicePath, ec);
-    if (ec) {
-        return std::nullopt;
-    }
-
-    const std::string name = devNode.filename().string();
-    if (name.empty()) {
-        return std::nullopt;
-    }
-
-    const fs::path sysPath = fs::path("/sys/block") / name;
-    if (!fs::exists(sysPath, ec) || ec) {
-        return std::nullopt;
-    }
-
-    return sysPath;
-}
-
-/**
- * @brief Walks up a canonical sysfs path looking for a USB device node.
- *
- * Identifies a USB device ancestor by checking for the presence of an
- * "idVendor" file at each directory level up to the root path.
- *
- * @param canonicalSysPath Canonical path within the sysfs hierarchy.
- * @param ec Working error code cleared across filesystem probes.
- * @return true if an ancestor directory contains "idVendor", false otherwise.
- */
-static bool hasUsbVendorAncestor(const fs::path& canonicalSysPath, std::error_code& ec) {
-    for (fs::path p = canonicalSysPath; p != p.root_path(); p = p.parent_path()) {
-        if (fs::exists(p / "idVendor", ec)) {
-            return true;
+        if (prefill.empty()) {
+            return;
         }
-        ec.clear();
+
+        activePrefillText = prefill;
+        previousStartupHook = rl_startup_hook;
+        rl_startup_hook = +[]() -> int {
+            if (previousStartupHook) {
+                previousStartupHook();
+            }
+            if (!activePrefillText.empty()) {
+                rl_insert_text(activePrefillText.c_str());
+            }
+            return 0;
+        };
     }
 
-    return false;
-}
+    /**
+     * @brief Clears any temporary Readline startup hook installed for input prefilling.
+     */
+    void clearPrefillStartupHook()
+    {
+        rl_startup_hook = nullptr;
+    }
+
+    /**
+     * @brief Extracts file paths from sorted ISO descriptors for mapping parsing.
+     *
+     * @param sortedIsos Ordered list of available ISO descriptors.
+     * @return std::vector<std::string> Vector of ISO file paths in matching order.
+     */
+    std::vector<std::string> extractIsoFilenames(const std::vector<IsoInfo>& sortedIsos)
+    {
+        std::vector<std::string> isoFilenames;
+        isoFilenames.reserve(sortedIsos.size());
+        for (const auto& iso : sortedIsos) {
+            isoFilenames.push_back(iso.path);
+        }
+        return isoFilenames;
+    }
+
+    /**
+     * @brief Prompts the user to acknowledge parse or validation errors with window-resize repaint support.
+     *
+     * Disables `SIGINT` and `Ctrl+D` before waiting for acknowledgement when validation fails.
+     *
+     * @param devicePrompt Rendered Readline prompt string.
+     * @param rawInput Raw user input string to re-display alongside the error message.
+     * @param messages List of parse or validation error messages to render.
+     * @param wt Active write theme configuration.
+     * @param pauseForContinue True to wait to continue (e.g., missing root permissions); false to retry.
+     * @param ignoreSignals True to ignore `SIGINT` and disable `Ctrl+D` prior to prompting.
+     */
+    void handlePromptErrors(
+        const std::string& devicePrompt,
+        const std::string& rawInput,
+        const std::vector<std::string>& messages,
+        const WriteTheme& wt,
+        bool pauseForContinue,
+        bool ignoreSignals)
+    {
+        if (ignoreSignals) {
+            signal(SIGINT, SIG_IGN);
+            disable_ctrl_d();
+        }
+
+        const auto renderError = [&] {
+            MappingPrompt::renderErrorMessage(devicePrompt, rawInput, messages, wt, color);
+        };
+
+        if (pauseForContinue) {
+            pressEnterToContinueWithRepaint(renderError);
+        } else {
+            pressEnterToTryWithRepaint(renderError);
+        }
+    }
+
+    /**
+     * @brief Finalizes confirmed ISO-to-device mappings and prepares signal state for writing.
+     */
+    void finalizeConfirmedMappings()
+    {
+        setupSignalHandlerCancellations();
+        GlobalState::g_operationCancelled.store(false);
+    }
 
 } // namespace
 
 /**
- * @brief Returns true if @p devicePath is a removable USB block device.
+ * @brief Interactive loop to collect, parse, validate, and confirm mappings between ISO images and USB storage targets.
  *
- * Resolves symlinks (e.g. /dev/disk/by-id/...), requires the sysfs
- * "removable" attribute to read "1", then walks up the device's canonical
- * sysfs path looking for a USB device node (identified by its "idVendor"
- * file). Fails closed on any error.
+ * Manages the interactive terminal session using GNU Readline, displaying available ISOs and USB devices,
+ * parsing user mapping inputs, validating device permissions and constraints, displaying warnings, and prompting
+ * for final user confirmation before returning confirmed association pairs.
  *
- * @param devicePath Block-device path (must start with /dev/).
- * @return true if the device is a removable USB block device.
+ * @param selectedIsos Vector of selected ISO files designated for writing.
+ * @return std::vector<std::pair<IsoInfo, std::string>> Vector of confirmed (ISO, Target Device) association pairs,
+ *         or an empty vector if cancelled or stopped by thread pool limits.
  */
-bool isFlashDrive(const std::string& devicePath) {
-    try {
-        std::error_code ec;
-
-        const auto sysPath = resolveSysBlockPath(devicePath, ec);
-        if (!sysPath) {
-            return false;
-        }
-
-        const auto removableValue = readTrimmedSysfsAttribute(*sysPath / "removable");
-        if (!removableValue || *removableValue != "1") {
-            return false;
-        }
-
-        const fs::path resolved = fs::canonical(*sysPath, ec);
-        if (ec) {
-            return false;
-        }
-
-        return hasUsbVendorAncestor(resolved, ec);
-    } catch (...) {
-        return false;
-    }
-}
-
-/**
- * @brief Enumerates removable USB block devices visible in /sys/block.
- *
- * Skips loop devices, RAM disks, zram devices, and partition entries (names
- * ending in a digit). A device is included only when its removable sysfs
- * attribute reads "1" and isFlashDrive() confirms it is USB-attached.
- *
- * @return Absolute device paths such as /dev/sdb.
- */
-std::vector<std::string> getRemovableDevices() {
-    std::vector<std::string> devices;
-
-    try {
-        for (const auto& entry : fs::directory_iterator("/sys/block")) {
-            const std::string deviceName = entry.path().filename().string();
-
-            if (deviceName.rfind("loop", 0) == 0 ||
-                deviceName.rfind("ram",  0) == 0 ||
-                deviceName.rfind("zram", 0) == 0) {
-                continue;
-            }
-
-            if (!deviceName.empty() && std::isdigit(static_cast<unsigned char>(deviceName.back()))) {
-                continue;
-            }
-
-            std::ifstream removableFile(entry.path() / "removable");
-            std::string removable;
-            if (!(removableFile >> removable) || removable != "1") {
-                continue;
-            }
-
-            const std::string devPath = "/dev/" + deviceName;
-
-            if (isFlashDrive(devPath)) {
-                devices.push_back(devPath);
-            }
-        }
-    } catch (const fs::filesystem_error& e) {
-        std::cerr << "Filesystem error: " << e.what() << '\n';
-    }
-
-    return devices;
-}
-
-/**
- * @brief Returns true if @p device or any of its partitions is mounted.
- *
- * Parses /proc/mounts and compares the base device name (without /dev/)
- * against each mounted entry, including partition nodes whose names start
- * with the same base and continue with a digit.
- *
- * @param device Absolute block-device path (e.g. /dev/sdb).
- * @return true if the device or a partition of it is mounted.
- */
-bool isDeviceMounted(const std::string& device) {
-    std::ifstream mountsFile("/proc/mounts");
-    if (!mountsFile.is_open()) {
-        return false;
-    }
-
-    std::string line;
-    std::string deviceName = device;
-
-    if (deviceName.substr(0, 5) == "/dev/") {
-        deviceName = deviceName.substr(5);
-    }
-
-    while (std::getline(mountsFile, line)) {
-        std::istringstream iss(line);
-        std::string mountDevice;
-        iss >> mountDevice;
-
-        if (mountDevice.substr(0, 5) == "/dev/") {
-            mountDevice = mountDevice.substr(5);
-        }
-
-        if (mountDevice == deviceName ||
-            (mountDevice.find(deviceName) == 0 &&
-             std::isdigit(mountDevice[deviceName.length()]))) {
-            mountsFile.close();
-            return true;
-        }
-    }
-
-    mountsFile.close();
-    return false;
-}
-
-// --------------------------------------------------------------------------- //
-// namespace WriteValidation                                                   //
-// --------------------------------------------------------------------------- //
-
-namespace WriteValidation {
-
-    /**
-     * @brief Builds a themed error message that has no associated path.
-     *
-     * @param wt  Active write theme.
-     * @param msg Message text (e.g. "Root privileges are required").
-     * @return The message prefixed with the error label colour and terminated
-     *         with a colour reset.
-     */
-    std::string plainErr(const WriteTheme& wt, const std::string& msg) {
-        return std::string(wt.errLabel) + msg + wt.rl_resetCol;
-    }
-
-    /**
-     * @brief Builds a themed error message of the form "'<path>' <message>".
-     *
-     * The path is rendered in the theme's path colour and the message in the
-     * error label colour.
-     *
-     * @param wt   Active write theme.
-     * @param path Path to display, quoted, at the start of the message.
-     * @param msg  Message text; include a leading space (e.g. " is not an ISO file").
-     * @return The fully coloured message string.
-     */
-    std::string pathErr(const WriteTheme& wt, const std::string& path, const std::string& msg) {
-        std::string s;
-        s.append(wt.errPath).append("'").append(path).append("'")
-         .append(wt.rl_resetCol).append(wt.errLabel).append(msg)
-         .append(wt.rl_resetCol);
-        return s;
-    }
-
-    /**
-     * @brief Prints a themed "Validation errors:" block to stderr.
-     *
-     * Each entry is printed as an indented bullet. Entries are expected to be
-     * already themed (see plainErr and pathErr).
-     *
-     * @param wt   Active write theme.
-     * @param errs Pre-formatted error messages.
-     */
-    void printValidationErrors(const WriteTheme& wt, const std::vector<std::string>& errs) {
-        std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.rl_resetCol << wt.bold << "\n";
-        for (const auto& e : errs)
-            std::cerr << " \u2022 " << e << wt.bold << "\n";
-        std::cerr << wt.rl_resetCol << (GlobalState::isNonInteractive ? "\n" : "");
-    }
-
-    /**
-     * @brief Reports whether a block device still has write I/O in flight.
-     *
-     * Reads the read/write request counters in
-     * /sys/block/<name>/inflight. This also detects writes still being flushed
-     * by another process. Returns false if the counters cannot be read.
-     *
-     * @param device Whole-disk path (e.g. "/dev/sdb").
-     * @return true if one or more write requests are still pending.
-     */
-    bool isDeviceBusy(const std::string& device) {
-        const std::string name = std::filesystem::path(device).filename().string();
-        std::ifstream in("/sys/block/" + name + "/inflight");
-        unsigned long reads = 0, writes = 0;
-        if (!(in >> reads >> writes))
-            return false;
-        return writes > 0;
-    }
-
-    /**
-     * @brief Runs the device-level checks, independent of the paired ISO.
-     *
-     * Checks, in order:
-     * -# The device is a removable USB flash drive (isFlashDrive).
-     * -# The device and its partitions are not mounted (isDeviceMounted).
-     * -# The device is not in @c g_drainingDevices, which tracks writes still
-     *    being drained by this process after cancellation.
-     * -# In non-interactive mode, the device has no write I/O in flight
-     *    (@ref isDeviceBusy). This also catches pending writes from another
-     *    process, which the in-process set cannot track.
-     * -# The device size can be determined (getBlockDeviceSize).
-     *
-     * @param wt     Active write theme.
-     * @param device Path used for the checks (canonical /dev/sdX).
-     * @param shown  Path displayed in error messages (what the user typed).
-     * @param[out] size Device size in bytes; only valid when no error is returned.
-     * @return An error message for the first failed check, or std::nullopt if the
-     *         device is ready for writing.
-     */
-    std::optional<std::string> checkDevice(const WriteTheme& wt, const std::string& device,
-                                           const std::string& shown, uint64_t& size) {
-        if (!isFlashDrive(device))
-            return pathErr(wt, shown, " is not a removable USB flash device");
-
-        if (isDeviceMounted(device))
-            return pathErr(wt, shown, " or its partitions are mounted");
-
-        if (GlobalState::isNonInteractive.load() && isDeviceBusy(device))
-            return pathErr(wt, shown, " has pending kernel-level tasks");
-
-        size = getBlockDeviceSize(device);
-        if (size == 0) {
-            std::string e;
-            e.append(wt.errLabel).append("Failed to get size for ")
-             .append(wt.errPath).append("'").append(shown).append("'")
-             .append(wt.rl_resetCol);
-            return e;
-        }
-        return std::nullopt;
-    }
-
-    /**
-     * @brief Checks that an ISO fits on a device.
-     *
-     * @param wt         Active write theme.
-     * @param iso        ISO to be written.
-     * @param device     Device path, used for the message and to look up the
-     *                   drive name.
-     * @param deviceSize Device capacity in bytes (as returned by checkDevice).
-     * @return A themed validation error with aligned size details (filename,
-     *         device path, drive name), or std::nullopt if the ISO fits.
-     */
-    std::optional<std::string> checkCapacity(const WriteTheme& wt, const IsoInfo& iso,
-                                             const std::string& device, uint64_t deviceSize) {
-        if (iso.size <= deviceSize)
-            return std::nullopt;
-
-        const std::string deviceSizeStr = formatFileSize(deviceSize);
-        const std::string driveName = getDriveName(device);
-
-        const auto isoLabelPadded   = std::format("    {:<5} = ", "ISO");
-        const auto driveLabelPadded = std::format("    {:<5} = ", "Drive");
-
-        std::string e;
-        e.append(wt.errLabel).append("ISO exceeds target drive capacity:\n")
-         .append(wt.errLabel).append(isoLabelPadded)
-         .append(wt.sizeCol).append(iso.sizeStr).append(wt.rl_resetCol)
-         .append(UI::Palette::DimGray).append(" (").append(wt.fileCol).append(iso.filename)
-         .append(UI::Palette::DimGray).append(")\n")
-         .append(wt.errLabel).append(driveLabelPadded)
-         .append(wt.sizeCol).append(deviceSizeStr).append(wt.rl_resetCol)
-         .append(UI::Palette::DimGray).append(" (").append(wt.warnLabel).append(device)
-         .append(wt.infoLabel).append(" <").append(driveName).append(">")
-         .append(UI::Palette::DimGray).append(")")
-         .append(wt.rl_resetCol);
-
-        return e;
-    }
-
-} // namespace WriteValidation
-
-// --------------------------------------------------------------------------- //
-// Validation and mapping parser (public API)                                  //
-// --------------------------------------------------------------------------- //
-
-/**
- * @brief Validates a set of ISO-to-device mappings and returns only the
- * viable pairs.
- *
- * If @p noPermissions is true, validation is skipped and a
- * "Root privileges are required" error is reported. Otherwise each pair is
- * checked with WriteValidation::checkDevice and then
- * WriteValidation::checkCapacity.
- *
- * Errors are collected into @p validationErrors and an empty vector is
- * returned if any occur, even if some pairs were valid. Valid pairs are
- * returned only when every pair passes all checks. Reporting the errors
- * (printing, prompting, signal handling) is the caller's job.
- *
- * @param deviceMap        Pairs of (1-based ISO index, device path) to validate.
- * @param selectedIsos     Ordered ISOs corresponding to the indices.
- * @param noPermissions    True if the process lacks root; validation is
- *                         skipped and a privilege error is reported.
- * @param validationErrors Receives one message per failure.
- * @return The valid (IsoInfo, device) pairs, or an empty vector if any
- *         validation failed.
- */
-std::vector<std::pair<IsoInfo, std::string>> validateDevices(
-        const std::vector<std::pair<size_t, std::string>>& deviceMap,
-        const std::vector<IsoInfo>& selectedIsos,
-        bool noPermissions,
-        std::vector<std::string>& validationErrors) {
-
-    using namespace WriteValidation;
+std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
+    const std::vector<IsoInfo>& selectedIsos)
+{
+    PendingReadlineTextClearGuard pendingTextGuard;
     const WriteTheme wt = getWriteTheme();
+    const bool noPermissions = (geteuid() != 0);
+    std::string pendingInput;
 
-    std::vector<std::pair<IsoInfo, std::string>> validPairs;
+    while (true) {
+        TerminalStateGuard termGuard;
+        ThreadPool& pool = getStaticThreadPool();
+        if (MappingPrompt::checkThreadPoolLimit(pool, selectedIsos, wt)) {
+            return {};
+        }
 
-    if (noPermissions) {
-        validationErrors.push_back(plainErr(wt, "Root privileges are required"));
-        return {};
-    }
+        displayErrors();
 
-    for (const auto& [index, device] : deviceMap) {
-        const auto& iso = selectedIsos[index - 1];
+        std::vector<IsoInfo> sortedIsos;
+        std::vector<std::string> usbDevices;
+        const std::string devicePrompt =
+            MappingPrompt::buildDevicePromptString(selectedIsos, sortedIsos, usbDevices, wt);
 
-        uint64_t deviceSize = 0;
-        if (auto err = checkDevice(wt, device, device, deviceSize)) {
-            validationErrors.push_back(std::move(*err));
+        const auto repaintDevices = [&] {
+            SyncOutput sync;
+            clearScrollBuffer();
+            std::cout << promptHeaderForRepaint(devicePrompt);
+        };
+
+        armPendingInputRestore();
+        installPrefillStartupHook(pendingInput);
+        pendingInput.clear();
+
+        RlLine deviceInput = readlineWithResize(devicePrompt, repaintDevices);
+        clearPrefillStartupHook();
+
+        if (!deviceInput) {
+            return {};
+        }
+
+        std::string mainInputString(deviceInput.get());
+        if (mainInputString.empty()) {
             continue;
         }
-        if (auto err = checkCapacity(wt, iso, device, deviceSize)) {
-            validationErrors.push_back(std::move(*err));
-            continue;
+        if (mainInputString == "\x1b") {
+            return {};
         }
-        validPairs.emplace_back(iso, device);
-    }
-
-    return validPairs;
-}
-
-/**
- * @brief Parses a semicolon-delimited mapping string into (index, device) pairs.
- *
- * Expected format: "1>/dev/sdb;2>/dev/sdc", where each token is
- * INDEX>DEVICE_PATH. Whitespace around the index and the device path is
- * ignored (e.g. "1 > /dev/sdb"). Enforced:
- *  - Valid INDEX>DEVICE format per token.
- *  - Index within [1, selectedIsos.size()].
- *  - Device path starts with /dev/ and exists.
- *  - No device used more than once, compared after symlink resolution (e.g.
- *    /dev/sdb and its /dev/disk/by-id/usb-... alias count as the same device).
- *  - Every ISO index in @p selectedIsos has at least one mapping.
- *
- * @par Symlink resolution
- * Each device path is resolved with std::filesystem::canonical(), so the
- * returned paths are always the real device nodes (e.g. /dev/sdb), never the
- * alias the user typed. Callers must use the returned path for every later
- * check and for the write itself. Messages that show a device afterwards
- * therefore display the resolved path.
- *
- * Errors are appended to @p errors; the caller inspects this vector to
- * decide whether to re-prompt. Error messages for a rejected token show the
- * path as the user typed it, except for the duplicate-device error, which
- * shows the resolved path.
- *
- * This parser checks path existence and mapping uniqueness only. It does
- * not verify that a device is removable, unmounted, or large enough; those
- * checks are performed later by validateDevices().
- *
- * @param pairString   Raw input containing semicolon-separated mappings.
- * @param selectedIsos Ordered ISO list; only its size() is used, to bound
- *                     valid indices.
- * @param[out] errors  Cleared, then populated with human-readable error
- *                     messages.
- * @return Vector of valid (1-based index, canonical device path) pairs.
- */
-std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::string& pairString,
-                                                                const std::vector<std::string>& selectedIsos,
-                                                                std::vector<std::string>& errors) {
-
-    std::vector<std::pair<size_t, std::string>> deviceMap;
-    std::unordered_set<std::string> usedDevices;
-    std::istringstream pairStream(pairString);
-    std::string pair;
-
-    const WriteTheme wt = getWriteTheme();
-
-    errors.clear();
-
-    auto trim = [](std::string& s) {
-        s.erase(s.find_last_not_of(" \t\n\r\f\v") + 1);
-        s.erase(0, s.find_first_not_of(" \t\n\r\f\v"));
-    };
-
-    while (std::getline(pairStream, pair, ';')) {
-        trim(pair);
-        if (pair.empty()) continue;
-
-        size_t sepPos = pair.find('>');
-        if (sepPos == std::string::npos) {
-            errors.push_back(wt.warnLabel + "Invalid pair format: '" + wt.errLabel + pair + wt.warnLabel + "'");
+        if (mainInputString == "?") {
+            helpMappings();
             continue;
         }
 
-        std::string indexStr = pair.substr(0, sepPos);
-        std::string device   = pair.substr(sepPos + 1);
-        trim(indexStr);
-        trim(device);
+        add_history(deviceInput.get());
 
-        try {
-            size_t index = std::stoul(indexStr);
-
-            if (index < 1 || index > selectedIsos.size()) {
-                errors.push_back(wt.warnLabel + "Invalid index '" + wt.errLabel + indexStr + wt.warnLabel + "'");
-                continue;
-            }
-
-            if (device.rfind("/dev/", 0) != 0) {
-                errors.push_back(wt.warnLabel + "Invalid device path: '" + wt.errLabel + device + wt.warnLabel + "'");
-                continue;
-            }
-
-            std::error_code ec;
-            const fs::path canon = fs::canonical(device, ec);
-            if (ec) {
-                errors.push_back(wt.warnLabel + "Device not found: '" + wt.errLabel + device + wt.warnLabel + "'");
-                continue;
-            }
-            device = canon.string();
-
-            if (usedDevices.count(device)) {
-                errors.push_back(wt.warnLabel + "Device '" + wt.errLabel + device + wt.warnLabel + "' used multiple times");
-                continue;
-            }
-
-            deviceMap.emplace_back(index, device);
-            usedDevices.insert(device);
-
-        } catch (...) {
-            errors.push_back(wt.warnLabel + "Invalid index: '" + wt.errLabel + indexStr + wt.warnLabel + "'");
+        std::vector<std::string> parseErrors;
+        auto deviceMap = parseDeviceMappings(deviceInput.get(), extractIsoFilenames(sortedIsos), parseErrors);
+        if (!parseErrors.empty()) {
+            handlePromptErrors(devicePrompt, mainInputString, parseErrors, wt, false, false);
+            continue;
         }
-    }
 
-    std::unordered_set<size_t> mappedIndices;
-    for (const auto& [index, device] : deviceMap) {
-        mappedIndices.insert(index);
-    }
-
-    for (size_t i = 1; i <= selectedIsos.size(); ++i) {
-        if (mappedIndices.find(i) == mappedIndices.end()) {
-            errors.push_back(wt.warnLabel + "Missing mapping for ISO '" + wt.errLabel + std::to_string(i) + wt.warnLabel + "'");
+        std::vector<std::string> validationErrors;
+        auto validPairs = validateDevices(deviceMap, sortedIsos, noPermissions, validationErrors);
+        if (!validationErrors.empty()) {
+            handlePromptErrors(devicePrompt, mainInputString, validationErrors, wt, noPermissions, true);
+            continue;
         }
-    }
 
-    return deviceMap;
+        if (validPairs.empty()) {
+            pendingInput = mainInputString;
+            continue;
+        }
+
+        auto warnRows = MappingPrompt::buildWarnRows(validPairs);
+        if (MappingPrompt::confirmDeviceMappings(devicePrompt, mainInputString, warnRows, wt, color)) {
+            finalizeConfirmedMappings();
+            return validPairs;
+        }
+
+        rl_bind_keyseq("?", help_handler);
+        pendingInput = mainInputString;
+    }
 }
