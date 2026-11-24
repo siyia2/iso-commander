@@ -573,6 +573,85 @@ namespace {
     }
 
     /**
+     * @brief Determines whether the preview status line should be displayed.
+     */
+    bool shouldShowPreviewStatus(size_t totalMatches, size_t sourceSize)
+    {
+        return totalMatches > 0 && totalMatches != sourceSize;
+    }
+
+    /**
+     * @brief Calculates additional rows consumed by the preview status line.
+     */
+    size_t calculateStatusWrapExtra(
+        size_t totalMatches,
+        size_t termCols,
+        bool showStatus)
+    {
+        if (!showStatus)
+            return 0;
+
+        const size_t sampleEnd =
+            std::min(totalMatches, static_cast<size_t>(9999));
+
+        const size_t initialRows = GlobalState::ITEMS_PER_PAGE > 0
+            ? GlobalState::ITEMS_PER_PAGE
+            : computeDynamicPreviewWindowRows(0, showStatus);
+
+        const size_t sampleShown = std::min(totalMatches, initialRows);
+
+        const std::string statusSample = (totalMatches > sampleShown)
+            ? std::format(
+                  "[preview {}-{}/{} · shown {} · PgUp/PgDn to scroll]",
+                  1,
+                  sampleEnd,
+                  totalMatches,
+                  sampleShown)
+            : std::format(
+                  "[preview {}-{}/{} · shown {}]",
+                  1,
+                  sampleEnd,
+                  totalMatches,
+                  sampleShown);
+
+        const size_t wrappedRows =
+            wrappedLineRows(statusSample.size(), termCols);
+
+        return wrappedRows > 1 ? wrappedRows - 1 : 0;
+    }
+
+    /**
+     * @brief Estimates additional rows required by wrapped preview item labels.
+     */
+    size_t calculateItemWrapAdjustment(
+        const std::vector<std::string>& displayLabels,
+        const LivePreviewResult& preview,
+        size_t totalMatches,
+        size_t termCols)
+    {
+        size_t maxWrappedPerItem = 1;
+
+        for (size_t i = 0; i < totalMatches && i < 64; ++i) {
+            const size_t itemIdx =
+                preview.identity ? i : preview.local[i];
+
+            if (itemIdx < displayLabels.size()) {
+                // Prefix "[idx]^ " (~10 characters) plus label length.
+                const size_t approxCols =
+                    displayLabels[itemIdx].size() + 10;
+
+                maxWrappedPerItem = std::max(
+                    maxWrappedPerItem,
+                    wrappedLineRows(approxCols, termCols));
+            }
+        }
+
+        return maxWrappedPerItem > 1
+            ? (maxWrappedPerItem - 1) * 2
+            : 0;
+    }
+
+    /**
      * @brief Calculates the visible live-preview window.
      *
      * Uses GlobalState::ITEMS_PER_PAGE when configured; otherwise determines
@@ -580,9 +659,8 @@ namespace {
      * estimated item-label wrapping.
      *
      * The status line is only printed when the match set differs from the full
-     * source list (see renderPreviewWindow()). When it is suppressed, this
-     * function passes @c showStatus == false to refreshPreviewWindowHeight() so
-     * the status-line row is reclaimed and status-wrap height is not charged.
+     * source list (see renderPreviewWindow()). When suppressed, its row is
+     * reclaimed and status-wrap height is not charged.
      *
      * Maintains a valid cursor and scroll offset.
      *
@@ -606,71 +684,28 @@ namespace {
 
         const std::vector<std::string>& source = *g_livePreview.sourceList;
 
-        // Keep this predicate in sync with renderPreviewWindow(): the status
-        // line is only printed when the match set is a strict subset of the
-        // source list.
-        const bool showStatus = totalMatches > 0 && totalMatches != source.size();
-
-        // Status-line wrapping only consumes vertical space when it is printed.
-        size_t statusWrapExtra = 0;
-
-        if (showStatus) {
-            const size_t sampleEnd =
-                std::min(totalMatches, static_cast<size_t>(9999));
-
-            const size_t initialRows = GlobalState::ITEMS_PER_PAGE > 0
-                ? GlobalState::ITEMS_PER_PAGE
-                : computeDynamicPreviewWindowRows(0, showStatus);
-            const size_t sampleShown = std::min(totalMatches, initialRows);
-
-            const std::string statusSample = (totalMatches > sampleShown)
-                ? std::format(
-                      "[preview {}-{}/{} · shown {} · PgUp/PgDn to scroll]",
-                      totalMatches > 0 ? 1 : 0,
-                      sampleEnd,
-                      totalMatches,
-                      sampleShown)
-                : std::format(
-                      "[preview {}-{}/{} · shown {}]",
-                      totalMatches > 0 ? 1 : 0,
-                      sampleEnd,
-                      totalMatches,
-                      sampleShown);
-
-            const size_t statusWrappedRows =
-                wrappedLineRows(statusSample.size(), termCols);
-
-            statusWrapExtra = statusWrappedRows > 1 ? statusWrappedRows - 1 : 0;
-        }
+        // Keep synchronized with renderPreviewWindow().
+        const bool showStatus =
+            shouldShowPreviewStatus(totalMatches, source.size());
 
         const std::vector<std::string>& displayLabels =
             g_livePreview.hasDerivedCache
                 ? g_livePreview.derivedCache
                 : source;
 
-        size_t maxWrappedPerItem = 1;
-
-        for (size_t i = 0; i < totalMatches && i < 64; ++i) {
-            const size_t itemIdx =
-                preview.identity ? i : preview.local[i];
-
-            if (itemIdx < displayLabels.size()) {
-                // Prefix "[idx]^ " (~10 characters) plus label length.
-                const size_t approxCols =
-                    displayLabels[itemIdx].size() + 10;
-
-                maxWrappedPerItem = std::max(
-                    maxWrappedPerItem,
-                    wrappedLineRows(approxCols, termCols));
-            }
-        }
+        const size_t statusWrapExtra =
+            calculateStatusWrapExtra(totalMatches, termCols, showStatus);
 
         const size_t wrapAdjustment =
-            maxWrappedPerItem > 1
-                ? (maxWrappedPerItem - 1) * 2
-                : 0;
+            calculateItemWrapAdjustment(
+                displayLabels,
+                preview,
+                totalMatches,
+                termCols);
 
-        refreshPreviewWindowHeight(statusWrapExtra + wrapAdjustment, showStatus);
+        refreshPreviewWindowHeight(
+            statusWrapExtra + wrapAdjustment,
+            showStatus);
 
         return calculateWrappedPreviewWindow(
             preview,
@@ -682,15 +717,105 @@ namespace {
     // ─── Preview Rendering ───────────────────────────────────────────────────────
 
     /**
+     * @brief Holds the data required for a windowed preview view.
+     */
+    struct PreviewWindowData {
+        std::vector<size_t> local;
+        std::vector<size_t> global;
+        bool useWindowedView = false;
+    };
+
+    /**
+     * @brief Builds the local and global index mappings for a preview window.
+     */
+    PreviewWindowData buildPreviewWindowData(
+        const LivePreviewResult& preview,
+        const WindowSlice& win,
+        const std::vector<std::string>& source)
+    {
+        PreviewWindowData data;
+
+        if (!preview.identity) {
+            data.local.reserve(win.end - win.start);
+            data.global.reserve(win.end - win.start);
+
+            for (size_t i = win.start; i < win.end; ++i) {
+                data.local.push_back(preview.local[i]);
+
+                if (i < preview.global.size())
+                    data.global.push_back(preview.global[i]);
+            }
+
+            data.useWindowedView = true;
+        } else if (
+            g_livePreview.previewWindowRows > 0 &&
+            (win.end - win.start) < source.size())
+        {
+            data.local.reserve(win.end - win.start);
+            data.global.reserve(win.end - win.start);
+
+            for (size_t i = win.start; i < win.end; ++i) {
+                data.local.push_back(i);
+                data.global.push_back(resolveGlobalIndex(i));
+            }
+
+            data.useWindowedView = true;
+        }
+
+        return data;
+    }
+
+    /**
+     * @brief Prints preview navigation hints when scrolling is available.
+     */
+    void renderPreviewNavigationHints(
+        const WindowSlice& win,
+        size_t totalMatches,
+        size_t sourceSize)
+    {
+        // Keep the status predicate synchronized with calculatePreviewWindow().
+        const bool showStatus =
+            g_livePreview.previewWindowRows > 0 &&
+            totalMatches > 0 &&
+            totalMatches != sourceSize;
+
+        const bool canScrollUp = win.start > 0;
+        const bool canScrollDown = win.end < totalMatches;
+
+        const bool showScrollHintOnly =
+            !showStatus &&
+            g_livePreview.previewWindowRows > 0 &&
+            totalMatches > 0 &&
+            (canScrollUp || canScrollDown);
+
+        if (!showStatus && !showScrollHintOnly)
+            return;
+
+        const PrintListTheme ft = getListColors();
+
+        const char* const scrollHint =
+            canScrollUp && canScrollDown
+                ? "[PgUp] ↑ | [PgDn] ↓"
+                : (canScrollUp
+                       ? "[PgUp] ↑"
+                       : (canScrollDown ? "[PgDn] ↓" : ""));
+
+        if (*scrollHint != '\0') {
+            std::cout << "\r\033[K"
+                      << ft.head
+                      << "\n" << scrollHint << "\n";
+        }
+    }
+
+    /**
      * @brief Renders the visible portion of the live-filter preview.
      *
      * Builds a windowed StringListView when necessary, renders without pagination,
-     * and prints the preview status line.
+     * and prints the preview navigation hints.
      *
      * The status line is suppressed when the match set equals the full source
-     * list (no filtering is in effect, e.g. an empty query or a query that
-     * matches everything). The same predicate is used by calculatePreviewWindow()
-     * to reclaim the status-line row and skip status-wrap sizing.
+     * list. Navigation hints can still be displayed when a windowed preview
+     * supports scrolling.
      *
      * Two windowing cases exist:
      *   - non-identity match set: a view over the matching local indices;
@@ -713,47 +838,19 @@ namespace {
     {
         const std::vector<std::string>& source = *g_livePreview.sourceList;
 
-        std::vector<size_t> windowedLocal;
-        std::vector<size_t> windowedGlobal;
-        bool useWindowedView = false;
-
-        if (!preview.identity) {
-            windowedLocal.reserve(win.end - win.start);
-            windowedGlobal.reserve(win.end - win.start);
-
-            for (size_t i = win.start; i < win.end; ++i) {
-                windowedLocal.push_back(preview.local[i]);
-
-                if (i < preview.global.size())
-                    windowedGlobal.push_back(preview.global[i]);
-            }
-
-            useWindowedView = true;
-        } else if (
-            g_livePreview.previewWindowRows > 0 &&
-            (win.end - win.start) < source.size())
-        {
-            windowedLocal.reserve(win.end - win.start);
-            windowedGlobal.reserve(win.end - win.start);
-
-            for (size_t i = win.start; i < win.end; ++i) {
-                windowedLocal.push_back(i);
-                windowedGlobal.push_back(resolveGlobalIndex(i));
-            }
-
-            useWindowedView = true;
-        }
-
-        size_t previewPage = 0;
+        PreviewWindowData windowData =
+            buildPreviewWindowData(preview, win, source);
 
         {
-            const StringListView view = useWindowedView
-                ? StringListView(source, windowedLocal)
+            size_t previewPage = 0;
+
+            const StringListView view = windowData.useWindowedView
+                ? StringListView(source, windowData.local)
                 : StringListView(source);
 
             PreviewStackGuard stackGuard(
-                std::move(windowedGlobal),
-                useWindowedView);
+                std::move(windowData.global),
+                windowData.useWindowedView);
 
             UnpaginatedScope unpaginated;
 
@@ -773,36 +870,10 @@ namespace {
                 });
         }
 
-        // Keep this predicate in sync with calculatePreviewWindow(): the status
-        // line is only printed when the match set is a strict subset of the
-        // source list.
-        const bool showStatus =
-            g_livePreview.previewWindowRows > 0
-            && totalMatches > 0
-            && totalMatches != source.size();
-
-        const bool canScrollUp = win.start > 0;
-        const bool canScrollDown = win.end < totalMatches;
-        const bool showScrollHintOnly =
-            !showStatus
-            && g_livePreview.previewWindowRows > 0
-            && totalMatches > 0
-            && (canScrollUp || canScrollDown);
-
-        if (showStatus || showScrollHintOnly) {
-            const PrintListTheme ft = getListColors();
-
-            const char* const scrollHint =
-                canScrollUp && canScrollDown
-                    ? "[PgUp] ↑ | [PgDn] ↓"
-                    : (canScrollUp ? "[PgUp] ↑" : (canScrollDown ? "[PgDn] ↓" : ""));
-
-            if (*scrollHint != '\0') {
-                std::cout << "\r\033[K"
-                          << ft.head
-                          << "\n" << scrollHint << "\n";
-            }
-        }
+        renderPreviewNavigationHints(
+            win,
+            totalMatches,
+            source.size());
     }
 
     /**
