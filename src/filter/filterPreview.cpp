@@ -101,7 +101,7 @@ namespace {
         std::string lastQuery;
         std::vector<size_t> lastMatches;
 
-        // Windowed preview state.
+        // Effective preview page size: configured ITEMS_PER_PAGE or dynamic terminal height.
         size_t previewWindowRows = 12;
         size_t previewCursor = 0;
         size_t previewScrollOffset = 0;
@@ -185,17 +185,20 @@ namespace {
     }
 
     /**
-     * @brief Refreshes the preview window height from terminal dimensions.
+     * @brief Refreshes the preview window height using the configured sizing mode.
      *
-     * Writes the result of computeDynamicPreviewWindowRows() into
-     * @c g_livePreview.previewWindowRows.
+     * Uses GlobalState::ITEMS_PER_PAGE when it is greater than zero;
+     * otherwise calculates the available preview rows from terminal dimensions.
      *
      * @param extraReservedRows Additional rows reserved for wrapped content.
+     *        Only applies when using dynamic terminal-height sizing.
      */
     void refreshPreviewWindowHeight(size_t extraReservedRows = 0)
     {
         g_livePreview.previewWindowRows =
-            computeDynamicPreviewWindowRows(extraReservedRows);
+            GlobalState::ITEMS_PER_PAGE > 0
+                ? GlobalState::ITEMS_PER_PAGE
+                : computeDynamicPreviewWindowRows(extraReservedRows);
     }
 
     // ─── Preview Configuration ───────────────────────────────────────────────────
@@ -483,12 +486,12 @@ namespace {
     /**
      * @brief Calculates a preview window that accounts for wrapped item labels.
      *
-     * Starts with the available row budget and reduces the visible item count
-     * when the estimated physical height exceeds that budget.
+     * Starts with the configured or dynamically calculated preview row budget.
+     * When using dynamic terminal-height sizing, reduces the visible item count
+     * if the estimated physical height exceeds that budget.
      *
-     * @note When it shrinks the window, this function writes the reduced row
-     *       budget back into @c g_livePreview.previewWindowRows, so the reduced
-     *       height persists for subsequent frames and page-scroll sizing.
+     * When GlobalState::ITEMS_PER_PAGE is greater than zero, preserves the
+     * configured item count regardless of estimated label wrapping.
      *
      * @param preview Filtered preview result.
      * @param totalMatches Total number of matching entries.
@@ -526,7 +529,8 @@ namespace {
                 physicalItemRows += wrappedLineRows(approxCols, termCols);
             }
 
-            if (physicalItemRows > effectiveMaxRows) {
+            if (GlobalState::ITEMS_PER_PAGE == 0 &&
+                physicalItemRows > effectiveMaxRows) {
                 const size_t avgRowsPerItem =
                     std::max<size_t>(
                         1,
@@ -552,13 +556,11 @@ namespace {
     /**
      * @brief Calculates the visible live-preview window.
      *
-     * Determines available height from terminal dimensions, status-line wrapping,
-     * and estimated item-label wrapping. Also maintains a valid cursor and offset.
+     * Uses GlobalState::ITEMS_PER_PAGE when configured; otherwise determines
+     * available height from terminal dimensions, status-line wrapping, and
+     * estimated item-label wrapping.
      *
-     * Uses a fixed 64-item sample (from the top of the match set) to estimate the
-     * worst-case wrapped height per item, then reserves extra rows for the status
-     * line plus a 2x-per-extra-wrapped-row heuristic before delegating to
-     * calculateWrappedPreviewWindow().
+     * Maintains a valid cursor and scroll offset.
      *
      * @param preview Filtered preview result.
      * @param totalMatches Total number of matching entries.
@@ -581,7 +583,9 @@ namespace {
         const size_t sampleEnd =
             std::min(totalMatches, static_cast<size_t>(9999));
 
-        const size_t initialRows = computeDynamicPreviewWindowRows(0);
+        const size_t initialRows = GlobalState::ITEMS_PER_PAGE > 0
+            ? GlobalState::ITEMS_PER_PAGE
+            : computeDynamicPreviewWindowRows(0);
         const size_t sampleShown = std::min(totalMatches, initialRows);
 
         const std::string statusSample = (totalMatches > sampleShown)
@@ -859,7 +863,8 @@ namespace {
      * The cursor and scroll offset move together so computePreviewWindow() does
      * not reduce a page-sized movement to a single-row viewport adjustment.
      * The page size uses the effective preview height established by the latest
-     * rendering pass, which already accounts for wrapped labels.
+     * rendering pass, which reflects either ITEMS_PER_PAGE or available terminal
+     * height and accounts for wrapped labels when using dynamic sizing.
      *
      * When the full match set is already visible (count <= pageSize), the
      * function returns without moving; otherwise both the cursor and offset are
