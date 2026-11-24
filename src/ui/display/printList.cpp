@@ -393,7 +393,8 @@ namespace {
      * suppressed entirely when @p disablePagination is true. The pending-index
      * block is emitted only when @p showPendingIndices, @p hasPendingProcess,
      * and the queue is non-empty; its indices are colored with c.img in image
-     * mode and c.iso otherwise.
+     * mode and c.iso otherwise. When filtering is active, pending indices are
+     * marked with '^', including range boundaries (e.g. 1^-4^).
      */
     void appendFooterAndPending(std::string& output, bool disablePagination, std::size_t effectivePage,
                                 std::size_t totalPages, bool showPendingIndices, bool hasPendingProcess,
@@ -413,10 +414,25 @@ namespace {
                   .append(UI::Palette::BoldReset).append(c.bracketBg).append("]: ");
 
             output.append(!isImgMode ? c.iso : c.img);
+
+            const bool isFiltered = !filteringStack.empty();
+
             for (std::size_t i = 0; i < pendingIndices.size(); ++i) {
-                output.append(pendingIndices[i]);
+                const std::string& index = pendingIndices[i];
+
+                if (isFiltered) {
+                    for (char ch : index) {
+                        if (ch == '-') output.push_back('^');
+                        output.push_back(ch);
+                    }
+                    output.push_back('^');
+                } else {
+                    output.append(index);
+                }
+
                 if (i < pendingIndices.size() - 1) output.push_back(' ');
             }
+
             output.append(UI::Palette::Reset).append(UI::Palette::BoldReset).append("\n");
         }
     }
