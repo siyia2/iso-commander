@@ -394,7 +394,8 @@ namespace {
      * block is emitted only when @p showPendingIndices, @p hasPendingProcess,
      * and the queue is non-empty; its indices are colored with c.img in image
      * mode and c.iso otherwise. When filtering is active, pending indices are
-     * marked with '^', including range boundaries (e.g. 1^-4^).
+     * marked with '^'; ranges are enclosed in parentheses before the marker
+     * (e.g. (1-4)^), while individual indices use the standard notation (e.g. 7^).
      */
     void appendFooterAndPending(std::string& output, bool disablePagination, std::size_t effectivePage,
                                 std::size_t totalPages, bool showPendingIndices, bool hasPendingProcess,
@@ -421,11 +422,13 @@ namespace {
                 const std::string& index = pendingIndices[i];
 
                 if (isFiltered) {
-                    for (char ch : index) {
-                        if (ch == '-') output.push_back('^');
-                        output.push_back(ch);
+                    if (index.find('-') != std::string::npos) {
+                        output.push_back('(');
+                        output.append(index);
+                        output.append(")^");
+                    } else {
+                        output.append(index).push_back('^');
                     }
-                    output.push_back('^');
                 } else {
                     output.append(index);
                 }
