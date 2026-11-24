@@ -743,7 +743,7 @@ namespace {
             std::cout << "\r\033[K"
                       << ft.accent
                       << std::format(
-                             "\n[Matches ({}-{})/{}{}{}]",
+                             "\n[({}-{})/{}{}{}]",
                              shownStart,
                              shownEnd,
                              totalMatches,
