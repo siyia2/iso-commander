@@ -23,7 +23,7 @@
 #include <sys/stat.h>
 
 // Project Headers
-#include "isocmd/core/concurrency.h"
+#include "isocmd/core/threadCaps.h"
 #include "isocmd/ops/convert.h"
 #include "isocmd/ops/cpMvRm.h"
 #include "isocmd/input/inputHandling.h"
@@ -220,7 +220,7 @@ void processInputForMountOrUmount(const std::string& input,
     const std::string coloredProcess = operationColor + operationName + std::string(UI::Palette::BoldReset);
 
     ThreadPool& pool = getStaticThreadPool();
-    const size_t cap = isUnmount ? GlobalConcurrency::UMOUNT_THREAD_CAP : GlobalConcurrency::MOUNT_THREAD_CAP;
+    const size_t cap = isUnmount ? GlobalThreadCaps::UMOUNT_THREAD_CAP : GlobalThreadCaps::MOUNT_THREAD_CAP;
     const std::vector<std::vector<int>> indexChunks =
         partitionIndexChunks(selectedIndices.size(), pool.threadCount(), cap, selectedIndices);
 
@@ -399,7 +399,7 @@ namespace {
      * @return Worker thread count to allocate for chunking.
      */
     size_t computeTargetThreadCount(size_t taskCount, bool isDelete, size_t poolSize) {
-        const size_t cap = isDelete ? GlobalConcurrency::RM_THREAD_CAP : GlobalConcurrency::CPMV_THREAD_CAP;
+        const size_t cap = isDelete ? GlobalThreadCaps::RM_THREAD_CAP : GlobalThreadCaps::CPMV_THREAD_CAP;
         return std::max(size_t(2), std::min({taskCount, cap, poolSize}));
     }
 
@@ -775,7 +775,7 @@ void processInputForConversions(const std::string& input,
 
     ThreadPool& pool = getStaticThreadPool();
     const size_t numThreads = std::max(size_t(2),
-        std::min({processedIndices.size(), GlobalConcurrency::CONV_THREAD_CAP,
+        std::min({processedIndices.size(), GlobalThreadCaps::CONV_THREAD_CAP,
                   pool.threadCount()}));
 
     std::vector<std::string> filesToProcess;

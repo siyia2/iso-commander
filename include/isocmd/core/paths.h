@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef CORE_PATHS_H
-#define CORE_PATHS_H
+#ifndef PATHS_H
+#define PATHS_H
 
 // C++ Standard Library Headers
 #include <cstdint>
@@ -28,4 +28,4 @@ namespace GlobalState {
 
 } // namespace GlobalState
 
-#endif // CORE_PATHS_H
+#endif // PATHS_H

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef CONCURRENCY_H
-#define CONCURRENCY_H
+#ifndef THREADCAPS_H
+#define THREADCAPS_H
 
 // C++ Standard Library Headers
 #include <cstddef>
@@ -9,7 +9,7 @@
 //=======================================
 //     GLOBAL CONCURRENCY SETTINGS
 //=======================================
-namespace GlobalConcurrency {
+namespace GlobalThreadCaps {
 
     // Global cap for static threads
     inline std::size_t MAX_USEFUL_THREADS = 16;
@@ -34,4 +34,4 @@ namespace GlobalConcurrency {
 
 }
 
-#endif // CONCURRENCY_H
+#endif // THREADCAPS_H

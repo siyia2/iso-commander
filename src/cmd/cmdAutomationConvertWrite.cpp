@@ -25,7 +25,7 @@
 
 // Project Headers
 #include "isocmd/cmd/cmdAutomation.h"
-#include "isocmd/core/concurrency.h"
+#include "isocmd/core/threadCaps.h"
 #include "isocmd/core/cancellation.h"
 #include "isocmd/threadpool/threadpool.h"
 #include "isocmd/input/inputHandling.h"
@@ -206,7 +206,7 @@ static void runConvertWorkers(const std::vector<ConversionTask>& tasks,
 
     const size_t numThreads = std::min({
         tasks.size(),
-        GlobalConcurrency::CONV_THREAD_CAP,
+        GlobalThreadCaps::CONV_THREAD_CAP,
         poolSize
     });
 

@@ -166,13 +166,13 @@ void ThreadPool::shutdown() {
  *
  * Created on first use (thread-safe function-local static) with
  * `max(2, hardware_concurrency())` workers, capped at
- * GlobalConcurrency::MAX_USEFUL_THREADS.
+ * GlobalThreadCaps::MAX_USEFUL_THREADS.
  *
  * @return Reference to the shared pool; valid until program exit.
  */
 ThreadPool &getStaticThreadPool() {
     unsigned int maxThreads = std::max(2u, std::thread::hardware_concurrency());
     static ThreadPool instance(
-        std::min({static_cast<std::size_t>(maxThreads), GlobalConcurrency::MAX_USEFUL_THREADS}));
+        std::min({static_cast<std::size_t>(maxThreads), GlobalThreadCaps::MAX_USEFUL_THREADS}));
     return instance;
 }

@@ -23,7 +23,7 @@
 
 // Project Headers
 #include "isocmd/cmd/cmdAutomation.h"
-#include "isocmd/core/concurrency.h"
+#include "isocmd/core/threadCaps.h"
 #include "isocmd/input/inputHandling.h"
 #include "isocmd/ops/mount.h"
 #include "isocmd/ui/syncOutput.h"
@@ -255,7 +255,7 @@ static size_t runMountThreadPool(const std::vector<std::string>& files,
     const size_t poolSize = pool.threadCount();
     const size_t numThreads = std::min({
         files.size(),
-        GlobalConcurrency::MOUNT_THREAD_CAP,
+        GlobalThreadCaps::MOUNT_THREAD_CAP,
         poolSize
     });
 
@@ -358,7 +358,7 @@ static void showMountSummary(bool silentMode, bool showVerbose,
  * Files are sorted for deterministic task ordering.
  *
  * Mounting is performed concurrently using the static thread pool,
- * respecting GlobalConcurrency::MOUNT_THREAD_CAP and pool bounds.
+ * respecting GlobalThreadCaps::MOUNT_THREAD_CAP and pool bounds.
  * Workers dynamically claim tasks from a shared atomic index and mount
  * one ISO at a time.
  *
@@ -473,7 +473,7 @@ static void runUnmountWorkers(const std::vector<std::string>& paths,
     const size_t poolSize = pool.threadCount();
     const size_t numThreads = std::min({
         paths.size(),
-        GlobalConcurrency::UMOUNT_THREAD_CAP,
+        GlobalThreadCaps::UMOUNT_THREAD_CAP,
         poolSize
     });
 

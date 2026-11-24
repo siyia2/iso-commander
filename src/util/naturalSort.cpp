@@ -14,7 +14,7 @@
 #include <vector>
 
 // Project Headers
-#include "isocmd/core/concurrency.h"
+#include "isocmd/core/threadCaps.h"
 #include "isocmd/ui/display.h"
 #include "isocmd/core/globalMutexes.h"
 #include "isocmd/core/lists.h"
@@ -237,7 +237,7 @@ int naturalCompare(std::string_view a, std::string_view b) {
  * - Sorts the chunks concurrently using the application's static ThreadPool.
  * - Merges adjacent sorted chunks in parallel over multiple passes.
  * - Limits the number of concurrently used sorting threads through
- *   @c GlobalConcurrency::SORT_THREAD_CAP.
+ *   @c GlobalThreadCaps::SORT_THREAD_CAP.
  *
  * The comparator uses std::string_view when extracting filename components,
  * avoiding allocations and copies when @p namesOnly is enabled. Path
@@ -272,7 +272,7 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
 
     const size_t numThreads =
         std::min(pool.threadCount(),
-                 GlobalConcurrency::SORT_THREAD_CAP);
+                 GlobalThreadCaps::SORT_THREAD_CAP);
 
     const size_t n = files.size();
 

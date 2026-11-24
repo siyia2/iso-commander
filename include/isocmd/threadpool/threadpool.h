@@ -17,7 +17,7 @@
 #include <vector>
 
 // Project Headers
-#include "isocmd/core/concurrency.h"
+#include "isocmd/core/threadCaps.h"
 #include "isocmd/threadpool/lockFreeQueue.h"
 #include "isocmd/threadpool/moveOnlyTask.h"
 

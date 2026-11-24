@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef FILTERING_H
-#define FILTERING_H
+#ifndef FILTER_H
+#define FILTER_H
 
 // C++ Standard Library Headers
 #include <cstddef>
@@ -211,4 +211,4 @@ void refreshFilteredSourceIndices(
     std::vector<FilteringState>& filteringStack,
     const std::vector<std::string>& filteredFiles);
 
-#endif // FILTERING_H
+#endif // FILTER_H

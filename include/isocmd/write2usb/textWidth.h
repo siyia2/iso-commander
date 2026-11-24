@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef WRITE_TEXTWIDTH_H
-#define WRITE_TEXTWIDTH_H
+#ifndef TEXTWIDTH_H
+#define TEXTWIDTH_H
 
 // C++ Standard Library Headers
 #include <algorithm>
@@ -152,4 +152,4 @@ inline std::string truncateIsoName(const std::string& name, size_t maxCols) {
     return out;
 }
 
-#endif // WRITE_TEXTWIDTH_H
+#endif // TEXTWIDTH_H

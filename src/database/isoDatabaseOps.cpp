@@ -33,7 +33,7 @@
 
 // Project Headers
 #include "isocmd/core/caches.h"
-#include "isocmd/core/concurrency.h"
+#include "isocmd/core/threadCaps.h"
 #include "isocmd/core/globalMutexes.h"
 #include "isocmd/core/lists.h"
 #include "isocmd/core/paths.h"
@@ -55,7 +55,7 @@ namespace {
  * @brief Checks the existence of cached database paths in parallel using the static thread pool.
  *
  * Divides the workload into chunks across available worker threads (up to
- * GlobalConcurrency::CLEAN_THREAD_CAP) and checks each path using non-blocking file access checks.
+ * GlobalThreadCaps::CLEAN_THREAD_CAP) and checks each path using non-blocking file access checks.
  *
  * @param[in]  cache       Vector containing all path strings read from the database.
  * @param[out] pathExists  Reference to a vector of integers set to 1 if a path exists, or 0 if missing.
@@ -70,7 +70,7 @@ static size_t checkPathsParallel(
 
     const size_t numThread = std::min({
         pool.threadCount(),
-        static_cast<size_t>(GlobalConcurrency::CLEAN_THREAD_CAP),
+        static_cast<size_t>(GlobalThreadCaps::CLEAN_THREAD_CAP),
         cache.size()
     });
 

@@ -18,7 +18,7 @@
 #include <emmintrin.h>
 
 // Project Headers
-#include "isocmd/core/concurrency.h"
+#include "isocmd/core/threadCaps.h"
 #include "isocmd/threadpool/threadpool.h"
 #include "isocmd/filter/filter.h"
 #include "isocmd/util/stringManipulation.h"
@@ -461,7 +461,7 @@ static std::vector<size_t> collectChunkResults(std::vector<std::future<std::vect
  * SIMD substring search on a thread pool.
  *
  * The list is split into contiguous chunks, one per worker (bounded by the
- * pool size, the list size and @c GlobalConcurrency::FILTER_THREAD_CAP).
+ * pool size, the list size and @c GlobalThreadCaps::FILTER_THREAD_CAP).
  * Each worker tests its chunk and returns matching indices in ascending
  * order; chunks are concatenated in order, so the result is ascending
  * overall. If any worker throws, the first exception is rethrown after all
@@ -504,7 +504,7 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
     const size_t numThreads = std::min({
         pool.threadCount(),
         files.size(),
-        static_cast<size_t>(GlobalConcurrency::FILTER_THREAD_CAP)
+        static_cast<size_t>(GlobalThreadCaps::FILTER_THREAD_CAP)
     });
 
     const size_t chunkSize = (files.size() + numThreads - 1) / numThreads;
@@ -676,7 +676,7 @@ std::vector<size_t> filterFilesIndicesSubset(
     const size_t numThreads = std::min({
         pool.threadCount(),
         candidateIndices.size(),
-        static_cast<size_t>(GlobalConcurrency::FILTER_THREAD_CAP)
+        static_cast<size_t>(GlobalThreadCaps::FILTER_THREAD_CAP)
     });
 
     const size_t chunkSize =

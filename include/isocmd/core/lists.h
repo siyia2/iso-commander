@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef ISOLISTS_H
-#define ISOLISTS_H
+#ifndef LISTS_H
+#define LISTS_H
 
 // C++ Standard Library Headers
 #include <string>
@@ -19,4 +19,4 @@ namespace GlobalState {
 
 } // namespace GlobalState
 
-#endif // ISOLISTS_H
+#endif // LISTS_H
