@@ -438,7 +438,7 @@ namespace windowsWriter_engine::copy {
 			    filesystemWriteback, expectedChecksum ? &checksum : nullptr
 			);
 
-			if (!success) {
+			if (!success || GlobalState::g_operationCancelled.load()) {
 				// Drops dirty pages without writing them and frees any preallocation.
 				// Retry an interruption, but stop on a permanent cleanup error.
 				// The copy is already failed; never report completion in either case.

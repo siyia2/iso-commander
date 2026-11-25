@@ -839,15 +839,18 @@ namespace {
 		                const std::string& ntfsMnt,
 		                const std::string& fatMnt) {
 
-			if (isCancelled()) return false;
+    		if (isCancelled()) return false;
 
-			bool ok = true;
+    		bool ok = true;
 
-			if (isoType == IsoType::WindowsInstall)
-			    ok = disk::syncMount(ntfsMnt) && ok;
+    		if (isoType == IsoType::WindowsInstall)
+                ok = disk::syncMount(ntfsMnt) && ok;
 
-			ok = disk::syncMount(fatMnt) && ok;
-			return ok;
+    		if (isCancelled()) return false;
+
+    		ok = disk::syncMount(fatMnt) && ok;
+
+    		return ok && !isCancelled();
 
 		}
 
