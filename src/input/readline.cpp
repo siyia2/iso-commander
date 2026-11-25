@@ -18,6 +18,21 @@ import isocmd.core.uiState;
 import isocmd.input.inputHandling;
 import isocmd.input.readline;
 import isocmd.ui.display.themes;
+import isocmd.write2usb.util.writeTypes;
+
+namespace RetainAndRestoreReadlineBuffer {
+    std::string g_rl_pending_text = "";
+}
+
+PendingReadlineTextClearGuard::~PendingReadlineTextClearGuard() {
+    RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
+}
+
+namespace SettingsEditorRepaint {
+    std::function<void()> g_fn;
+    void set(std::function<void()> fn) { g_fn = std::move(fn); }
+    const std::function<void()>& get() { return g_fn; }
+}
 
 /**
  * @file readline_completion.cpp

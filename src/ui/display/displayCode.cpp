@@ -16,6 +16,7 @@ import isocmd.input.inputHandling;
 import isocmd.select.select;
 import isocmd.ui.interface.pausePrompts;
 import isocmd.ui.display.printList;
+import isocmd.ui.display.stringListView;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.display.themes;
 import isocmd.util.sort;

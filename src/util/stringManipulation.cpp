@@ -6,6 +6,21 @@ import std;
 import isocmd.core.caches;
 import isocmd.ui.display.display;
 
+namespace GlobalCaches {
+    thread_local std::unordered_map<
+        std::string,
+        std::string,
+        StringViewHash,
+        std::equal_to<>
+    > transformationCache;
+    thread_local std::unordered_map<
+        std::string,
+        std::tuple<std::string, std::string, std::string>,
+        StringViewHash,
+        std::equal_to<>
+    > cachedParsesForUmount;
+}
+
 /**
  * @brief Converts a string to lowercase in-place.
  * @param str The string to modify.

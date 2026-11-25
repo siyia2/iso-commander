@@ -3,7 +3,6 @@
 export module isocmd.input.readline;
 
 import std;
-import isocmd.write2usb.util.writeTypes;
 
 // extern "C++" keeps these declarations attached to the global module, so the
 // existing .cpp files keep defining them unchanged and symbol names stay the same.
@@ -73,16 +72,14 @@ namespace RetainAndRestoreReadlineBuffer {
     /// @brief Mode flag to determine if completion text should be persisted across Readline calls.
     inline int g_rl_complete_mode = 0;
     /// @brief Storage for the completed line text to be restored after a reset.
-    inline std::string g_rl_pending_text = "";
+    extern std::string g_rl_pending_text;
 }
 
 /**
  * @brief Clears pending Readline text when the guard goes out of scope.
  */
 struct PendingReadlineTextClearGuard {
-    ~PendingReadlineTextClearGuard() {
-        RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
-    }
+    ~PendingReadlineTextClearGuard();
 };
 
 /**
@@ -131,8 +128,7 @@ char** setting_value_completion_entry(const char* text, int start, int end);
  *
  * The hook is installed and removed around each Settings Editor prompt by
  * @c readlineWithRepaint (settingsEditor.cpp), so it is only ever live on
- * those screens. Because the variable and accessors are @c inline, every
- * translation unit shares the same object without an out-of-line definition.
+ * those screens. The callback and accessors are defined once in readline.cpp.
  *
  * @par Repaint callback contract
  * The stored callback is the same one the resize watcher runs, so it must end
@@ -145,13 +141,13 @@ char** setting_value_completion_entry(const char* text, int start, int end);
  */
 namespace SettingsEditorRepaint {
     /// @brief Active body-repaint callback; empty when no editor prompt is live.
-    inline std::function<void()> g_fn;
+    extern std::function<void()> g_fn;
 
     /// @brief Installs (or, with an empty function, clears) the hook.
-    inline void set(std::function<void()> fn) { g_fn = std::move(fn); }
+    void set(std::function<void()> fn);
 
     /// @brief Returns the active hook; empty when none is installed.
-    inline const std::function<void()>& get() { return g_fn; }
+    const std::function<void()>& get();
 }
 
 /** Hook for reloading readline async style. */

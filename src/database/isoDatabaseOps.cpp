@@ -25,6 +25,23 @@ import isocmd.ui.interface.pausePrompts;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.display.themes;
 
+namespace GlobalState {
+    std::vector<std::string> globalIsoFileList;
+    std::vector<std::string> binImgFilesCache;
+    std::vector<std::string> mdfMdsFilesCache;
+    std::vector<std::string> nrgFilesCache;
+    std::vector<std::string> chdFilesCache;
+    std::vector<std::string> daaGbiFilesCache;
+
+    extern const std::string databaseDirectory = std::string(std::getenv("HOME") ? std::getenv("HOME") : "").append("/.local/share/isocmd/database/");
+    extern const std::string databaseFilename  = "iso_commander_database.txt";
+    extern const std::string databaseFilePath  = std::string(databaseDirectory).append(databaseFilename);
+    extern const std::string historyFilePath   = std::string(databaseDirectory).append("iso_commander_path_database.txt");
+    extern const std::string filterHistoryFilePath = std::string(databaseDirectory).append("iso_commander_filter_database.txt");
+    extern const std::string configDirectory = std::string(std::getenv("HOME") ? std::getenv("HOME") : "").append("/.config/isocmd/");
+    extern const std::string configPath = std::string(configDirectory).append("config");
+}
+
 bool isValidDirectory(const std::string& path) {
     return std::filesystem::is_directory(path);
 }

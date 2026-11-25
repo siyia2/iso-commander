@@ -23,7 +23,7 @@ struct IsoPending {
     const std::vector<std::string>* source = nullptr;   // list the screen's source indices refer to
 };
 
-inline IsoPending g_isoPending;
+extern IsoPending g_isoPending;
 
 // ======================================================================
 // RAII Guards for Select Functions

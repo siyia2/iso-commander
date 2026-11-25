@@ -18,11 +18,9 @@
 #                          Much quicker edit-compile-link cycles; not for release use.
 #
 #  Requires GCC 15+ with libstdc++'s C++23 standard library module.
-#  Native std is cached outside the ordinary build tree; no header unit by default.
-#    make STD_HEADER_UNIT=1       opt in to the full header unit (GCC 16+)
+#  Native std is cached outside the ordinary build tree.
 #    make clean cache             discard build output and standard-library cache
 #    make cache                   discard cached standard-library artifacts only
-#    make clean-std-cache         alias for cache
 #    make V=1                     show full compiler command lines
 #    make install [BINDIR=/some/dir]
 # ============================================================================
@@ -48,18 +46,6 @@ ifeq ($(shell [ "$(GCC_MAJOR)" -ge 15 ] 2>/dev/null && echo 1),)
     $(error GCC 15 or newer with libstdc++ standard library modules is required)
 endif
 GCC_NATIVE_STD := $(shell [ "$(GCC_MAJOR)" -ge 16 ] && echo 1 || echo 0)
-# GCC 16+ can reuse the native header unit when compiling libstdc++ std.cc.
-STD_HEADER_UNIT ?= 0
-STD_HEADER_UNIT := $(STD_HEADER_UNIT)
-ifeq ($(filter 0 1,$(STD_HEADER_UNIT)),)
-    $(error STD_HEADER_UNIT must be 0 or 1)
-endif
-ifeq ($(STD_HEADER_UNIT),1)
-    ifneq ($(GCC_NATIVE_STD),1)
-        $(error STD_HEADER_UNIT=1 requires GCC 16 or newer)
-    endif
-endif
-
 # ---------- Verbosity ----------
 ifeq ($(V),1)
     Q :=
@@ -167,7 +153,7 @@ MOD_NAMES := $(foreach m,$(MODSRCS),$(subst /,.,$(patsubst $(MOD_DIR)/%.cppm,%,$
 # -MD below additionally tracks the actual installed headers and std.cc.
 STD_CACHE_ROOT := .std-cache
 STD_CACHE_KEY := $(shell { \
-    printf '%s\n' '$(CXX)' '$(GCC_VERSION)' '$(CPPFLAGS)' '$(CXXFLAGS)' 'STD_HEADER_UNIT=$(STD_HEADER_UNIT)' \
+    printf '%s\n' '$(CXX)' '$(GCC_VERSION)' '$(CPPFLAGS)' '$(CXXFLAGS)' \
         '$(CPATH)' '$(CPLUS_INCLUDE_PATH)' '$(C_INCLUDE_PATH)' '$(GCC_EXEC_PREFIX)' '$(COMPILER_PATH)' '$(PATH)'; \
     $(CXX) -dumpmachine; \
     stat -Lc '%n %d %i %s %y %z' "$$(command -v $(firstword $(CXX)))" "$$($(CXX) -print-prog-name=cc1plus)"; \
@@ -178,15 +164,6 @@ STD_MODULE_GCM := $(STD_CACHE_DIR)/std.gcm
 STD_MODULE_DEP := $(STD_CACHE_DIR)/std.d
 STD_MODULE_MAPPER := $(STD_CACHE_DIR)/std-module.map
 
-# GCC 16+ can translate standard includes to the full native header unit.
-# Do not generate a reduced umbrella: libstdc++ std.cc exports the whole library.
-ifeq ($(STD_HEADER_UNIT),1)
-    STD_GCM := $(STD_CACHE_DIR)/libstdcxx-header.gcm
-    STD_DEP := $(STD_CACHE_DIR)/libstdcxx-header.d
-    STD_MAPPER := $(STD_CACHE_DIR)/header.map
-    EARLY_MAPPER := $(OBJ_DIR)/early-modules.map
-endif
-
 # A changed compiler, build mode or flag set invalidates old objects and CMIs.
 # The stamp is rewritten only when the configuration actually changes.
 CONFIG_STAMP := $(OBJ_DIR)/compile.config
@@ -194,7 +171,7 @@ CONFIG_STAMP := $(OBJ_DIR)/compile.config
 FORCE:
 $(CONFIG_STAMP): FORCE Makefile
 	@mkdir -p $(@D)
-	@{ printf '%s\n' '$(CXX)' '$(shell $(CXX) --version 2>/dev/null | head -n 1)' '$(CPPFLAGS)' '$(CXXFLAGS)' '$(LDFLAGS)' '$(LIBS)' 'STD_HEADER_UNIT=$(STD_HEADER_UNIT)' '$(STD_CACHE_KEY)' '$(MOD_NAMES)'; } > $@.tmp
+	@{ printf '%s\n' '$(CXX)' '$(shell $(CXX) --version 2>/dev/null | head -n 1)' '$(CPPFLAGS)' '$(CXXFLAGS)' '$(LDFLAGS)' '$(LIBS)' '$(STD_CACHE_KEY)' '$(MOD_NAMES)'; } > $@.tmp
 	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
 
 # The executable is shared by the release/static/sanitizer build trees. Relink
@@ -219,10 +196,6 @@ endef
 # Both implementation and interface edits can change the import graph.
 # Refresh its timestamp even if the graph is unchanged, avoiding repeated scans.
 # One awk process reads every source, avoiding per-file shell pipelines.
-# Also identify independent interfaces with no imports and only a small
-# allowlist of non-importable C/C++ compatibility headers. They can compile
-# while GCC 16 builds the umbrella header unit. Unknown includes or imports
-# conservatively retain the header-unit dependency.
 # Prioritize independent interfaces during std compilation, then rank the
 # remaining work by estimated downstream critical path plus unique transitive
 # fan-out. Source line counts approximate cost; the graph and link order are
@@ -246,7 +219,7 @@ $(MODDEPS_MK): $(MODSRCS) $(SRCS) Makefile $(CONFIG_STAMP)
 	    } \
 	    printf "%s: %s\n", o, deps; \
 	    objects[++count] = o; cost[o] = 1 + lines / 200; \
-	    if (g != "") { module_gcm[o] = g; if (early) early_objects[o] = 1; if (deps == "") root_modules[o] = 1; } \
+	    if (g != "") { module_gcm[o] = g; if (deps == "") root_modules[o] = 1; } \
 	    n = split(deps, imports, /[[:space:]]+/); \
 	    for (i = 1; i <= n; ++i) { \
 	      dep = imports[i]; if (dep == "") continue; \
@@ -272,12 +245,9 @@ $(MODDEPS_MK): $(MODSRCS) $(SRCS) Makefile $(CONFIG_STAMP)
 	  } \
 	  BEGIN { \
 	    for (i = 1; i < ARGC; ++i) { \
-	      file = ARGV[i]; deps = ""; lines = 0; early = 1; \
+	      file = ARGV[i]; deps = ""; lines = 0; \
 	      while ((status = (getline line < file)) > 0) { \
 	        ++lines; \
-	        if (line ~ /^[[:space:]]*#[[:space:]]*(include|include_next|import)([[:space:]<"]|$$)/ && \
-	            line !~ /^[[:space:]]*#[[:space:]]*include[[:space:]]*<(stddef\.h|stdint\.h|sys\/types\.h)>[[:space:]]*$$/) early = 0; \
-	        if (line ~ /^[[:space:]]*(export[[:space:]]+)?import([[:space:]<":]|$$)/) early = 0; \
 	        if (line !~ /^[[:space:]]*(export[[:space:]]+)?import[[:space:]]+(std|isocmd[A-Za-z0-9_.]*);/) continue; \
 	        name = line; sub(/^[[:space:]]*(export[[:space:]]+)?import[[:space:]]+/, "", name); \
 	        sub(/;.*/, "", name); \
@@ -303,8 +273,6 @@ $(MODDEPS_MK): $(MODSRCS) $(SRCS) Makefile $(CONFIG_STAMP)
 	    } \
 	    printf "\nROOT_MODULE_OBJS :="; \
 	    for (i = 1; i <= count; ++i) if (root_modules[objects[i]]) printf " %s", objects[i]; \
-	    printf "\nEARLY_MODULE_OBJS :="; \
-	    for (i = 1; i <= count; ++i) if (early_objects[objects[i]]) printf " %s", objects[i]; \
 	    printf "\n"; \
 	  }' $(MODSRCS) $(SRCS) > "$$tmp"; \
 	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then \
@@ -312,20 +280,6 @@ $(MODDEPS_MK): $(MODSRCS) $(SRCS) Makefile $(CONFIG_STAMP)
 	else \
 	  mv -f "$$tmp" "$@"; \
 	fi
-
-# Keep the header-unit mapper independent from the named-module mapper.
-# GCC records the mapper file itself in -MD dependencies, so merely making
-# the full mapper order-only would still rebuild the umbrella unnecessarily.
-ifeq ($(STD_HEADER_UNIT),1)
-$(STD_MAPPER): Makefile
-	@mkdir -p $(@D)
-	@set -e; tmp="$@.tmp"; \
-	header=$$(printf '#include <bits/stdc++.h>\n' | $(CXX) $(filter-out -MMD -MP,$(CPPFLAGS)) $(filter-out -fmodules -fmodules-ts,$(CXXFLAGS)) -E -x c++ - | \
-	    awk '/^# 1 ".*\/bits\/stdc\+\+\.h"/ && !found { sub(/^# 1 "/, ""); sub(/".*/, ""); print; found=1 }'); \
-	test -n "$$header" || { echo "Cannot locate libstdc++ bits/stdc++.h" >&2; exit 1; }; \
-	printf '%s %s\n' "$$header" "$(STD_GCM)" > "$$tmp"; \
-	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp" && touch "$@"; else mv -f "$$tmp" "$@"; fi
-endif
 
 $(MAPPER): Makefile $(CONFIG_STAMP) $(STD_MODULE_MAPPER)
 	@mkdir -p $(@D) $(GCM_DIR)
@@ -339,33 +293,14 @@ $(MAPPER): Makefile $(CONFIG_STAMP) $(STD_MODULE_MAPPER)
 	  mv -f "$$tmp" "$@"; \
 	fi
 
-# Build the native header unit before any importer starts. -MD also tracks
-# libstdc++/libc headers, unlike the ordinary project-only -MMD dependency files.
-ifeq ($(STD_HEADER_UNIT),1)
-# The cache key covers the compiler and compile flags, not project module
-# names or linker options. Installed-header dependencies are tracked below.
-$(STD_GCM): Makefile $(STD_MAPPER)
-	@echo "  HDR     bits/stdc++.h"
-	@mkdir -p $(@D)
-	$(Q)rm -f $@
-	$(Q)set -e; trap 'rm -f $@ $(STD_DEP).tmp' EXIT; \
-	$(CXX) $(filter-out -MMD -MP,$(CPPFLAGS)) -MD -MP -MF $(STD_DEP).tmp -MT $@ -fmodule-mapper=$(STD_MAPPER) $(CXXFLAGS) -x c++-system-header -c bits/stdc++.h; \
-	mv -f $(STD_DEP).tmp $(STD_DEP); trap - EXIT
-# A missing dependency manifest cannot validate an existing cached unit.
-ifeq ($(wildcard $(STD_DEP)),)
-$(STD_GCM): FORCE
-endif
--include $(STD_DEP)
-endif
-
 # Build the actual libstdc++ module once; its object is linked exactly once.
 # -MD tracks installed standard-library sources and headers as well.
-$(STD_MODULE_MAPPER): Makefile $(STD_MAPPER)
+$(STD_MODULE_MAPPER): Makefile
 	@mkdir -p $(@D)
-	@{ printf '%s %s\n' std "$(STD_MODULE_GCM)"; $(if $(STD_MAPPER),cat "$(STD_MAPPER)",:); } > $@.tmp
+	@{ printf '%s %s\n' std "$(STD_MODULE_GCM)"; } > $@.tmp
 	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
 
-$(STD_MODULE_OBJ) $(STD_MODULE_GCM) &: Makefile $(STD_GCM) $(STD_MODULE_MAPPER)
+$(STD_MODULE_OBJ) $(STD_MODULE_GCM) &: Makefile $(STD_MODULE_MAPPER)
 	@echo "  MOD     std (libstdc++)"
 	@mkdir -p $(STD_CACHE_DIR)
 	$(Q)rm -f $(STD_MODULE_GCM) $(STD_MODULE_OBJ)
@@ -380,42 +315,22 @@ endif
 # ---------- Targets ----------
 .DEFAULT_GOAL := all
 .DELETE_ON_ERROR:
-.PHONY: all clean cache clean-std-cache install uninstall help
+.PHONY: all clean cache install uninstall help
 # Read the generated priority order before expanding the link prerequisites.
 # Do not regenerate the project dependency graph just to delete it.
 ifeq ($(strip $(MAKECMDGOALS)),)
 -include $(MODDEPS_MK)
-else ifneq ($(strip $(filter-out clean cache clean-std-cache help uninstall,$(MAKECMDGOALS))),)
+else ifneq ($(strip $(filter-out clean cache help uninstall,$(MAKECMDGOALS))),)
 -include $(MODDEPS_MK)
 endif
 # Preserve all current objects even on the initial parse with no graph yet.
 BUILD_OBJS = $(filter $(OBJS),$(SCHEDULED_OBJS)) $(filter-out $(SCHEDULED_OBJS),$(OBJS))
 # Launch the native std build first, then independent interfaces, then the
-# ranked importer graph. With the optional header unit, only the conservative
-# early subset may bypass the header-unit dependency.
-ifeq ($(STD_HEADER_UNIT),1)
-EARLY_OBJS := $(filter $(EARLY_MODULE_OBJS),$(BUILD_OBJS))
-STD_IMPORTER_OBJS := $(filter-out $(EARLY_OBJS),$(OBJS))
-$(STD_IMPORTER_OBJS): $(STD_GCM)
-# Use a named-module-only mapper for independent interfaces. With no header
-# mapping they cannot accidentally import the umbrella while it is being built.
-# The allowed compatibility headers are not GCC 16 auto-translation candidates.
-# Keep the normal mapper for all other objects; no unsupported compiler flags.
-ifneq ($(strip $(EARLY_OBJS)),)
-$(EARLY_MAPPER): Makefile $(CONFIG_STAMP)
-	@mkdir -p $(@D) $(GCM_DIR)
-	@set -e; tmp="$@.tmp"; \
-	{ $(foreach n,$(MOD_NAMES),echo "$(n) $(GCM_DIR)/$(n).gcm";) } > "$$tmp"; \
-	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp" && touch "$@"; else mv -f "$$tmp" "$@"; fi
-$(EARLY_OBJS): private MODFLAGS := -fmodule-mapper=$(EARLY_MAPPER)
-$(EARLY_OBJS): | $(EARLY_MAPPER)
-endif
-else
+# ranked importer graph.
 EARLY_OBJS := $(filter $(ROOT_MODULE_OBJS),$(BUILD_OBJS))
-endif
 all: $(TARGET)
 
-$(TARGET): $(STD_MODULE_OBJ) $(STD_MODULE_GCM) $(STD_GCM) $(EARLY_OBJS) $(filter-out $(EARLY_OBJS),$(BUILD_OBJS)) $(LINK_STAMP)
+$(TARGET): $(STD_MODULE_OBJ) $(STD_MODULE_GCM) $(EARLY_OBJS) $(filter-out $(EARLY_OBJS),$(BUILD_OBJS)) $(LINK_STAMP)
 	@echo "  LD      $@"
 	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(OBJS) -o $@ $(LIBS)
 
@@ -438,8 +353,6 @@ clean:
 cache:
 	rm -rf $(STD_CACHE_ROOT)
 
-clean-std-cache: cache
-
 install: $(TARGET)
 	mkdir -p $(BINDIR)
 	install -m 755 $(TARGET) $(BINDIR)
@@ -448,10 +361,9 @@ uninstall:
 	rm -f $(BINDIR)/$(TARGET)
 
 help:
-	@echo "Targets:  all (default)  clean  cache  clean-std-cache  install  uninstall  help"
+	@echo "Targets:  all (default)  clean  cache   install  uninstall  help"
 	@echo "Options:  STATIC=1  SANITIZE=1|2  FAST=1  V=1  BINDIR=<dir>  BUILD_DIR=<dir>"
-	@echo "          STD_HEADER_UNIT=0|1"
-	@echo "Defaults: STD_HEADER_UNIT=$(STD_HEADER_UNIT) (selected compiler: $(CXX))"
+	@echo "Compiler: $(CXX)"
 
 # Recover dependency files left by older Makefiles after failed GCC builds.
 # Ignore only files with synthetic module targets, and rebuild their objects

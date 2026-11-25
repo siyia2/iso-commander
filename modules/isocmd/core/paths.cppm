@@ -13,14 +13,14 @@ export extern "C++" {
 namespace GlobalState {
 
     // File Paths
-    inline const std::string databaseDirectory = std::string(std::getenv("HOME") ? std::getenv("HOME") : "").append("/.local/share/isocmd/database/");
-    inline const std::string databaseFilename  = "iso_commander_database.txt";
-    inline const std::string databaseFilePath  = std::string(databaseDirectory).append(databaseFilename);
-    inline const std::string historyFilePath   = std::string(databaseDirectory).append("iso_commander_path_database.txt");
-    inline const std::string filterHistoryFilePath = std::string(databaseDirectory).append("iso_commander_filter_database.txt");
+    extern const std::string databaseDirectory;
+    extern const std::string databaseFilename;
+    extern const std::string databaseFilePath;
+    extern const std::string historyFilePath;
+    extern const std::string filterHistoryFilePath;
 
-    inline const std::string configDirectory = std::string(std::getenv("HOME") ? std::getenv("HOME") : "").append("/.config/isocmd/");
-    inline const std::string configPath = std::string(configDirectory).append("config");
+    extern const std::string configDirectory;
+    extern const std::string configPath;
 
     // Configuration Limits
     inline int MAX_HISTORY_LINES         = 30;

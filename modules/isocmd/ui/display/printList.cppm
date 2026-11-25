@@ -3,13 +3,13 @@
 export module isocmd.ui.display.printList;
 
 import std;
-import isocmd.ui.display.stringListView;
 
 // extern "C++" keeps these declarations attached to the global module, so the
 // existing .cpp files keep defining them unchanged and symbol names stay the same.
 export extern "C++" {
 
 struct RefreshState;
+class StringListView;
 
 // ---- ui/display/printList ----
 

@@ -40,7 +40,7 @@ struct DrainingThreadManager {
 };
 
 // Global instances
-inline DrainingThreadManager g_drainingManager;
+extern DrainingThreadManager g_drainingManager;
 inline std::atomic<bool> g_drainingCancelled{false};
 
 // ---------- End of write2usb device draining manager ------------

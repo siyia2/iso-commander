@@ -15,6 +15,42 @@ import isocmd.write2usb.util.drainingState;
 import isocmd.write2usb.ui.write2usbUI;
 import isocmd.write2usb.util.writeTypes;
 
+// Constructor
+ProgressInfo::ProgressInfo(std::string filename, std::string device, std::string totalSize,
+             std::string sourcePath)
+    : filename(std::move(filename)),
+      device(std::move(device)),
+      totalSize(std::move(totalSize)),
+      sourcePath(std::move(sourcePath)) {}
+
+// Move Constructor
+ProgressInfo::ProgressInfo(ProgressInfo&& other) noexcept
+    : filename(std::move(other.filename)),
+      device(std::move(other.device)),
+      totalSize(std::move(other.totalSize)),
+      sourcePath(std::move(other.sourcePath)),
+      completed(other.completed.load()),
+      failed(other.failed.load()),
+      bytesWritten(other.bytesWritten.load()),
+      progress(other.progress.load()),
+      speed(other.speed.load()) {}
+
+// Move Assignment
+ProgressInfo& ProgressInfo::operator=(ProgressInfo&& other) noexcept {
+    if (this != &other) {
+        filename = std::move(other.filename);
+        device = std::move(other.device);
+        totalSize = std::move(other.totalSize);
+        sourcePath = std::move(other.sourcePath);
+        completed.store(other.completed.load());
+        failed.store(other.failed.load());
+        bytesWritten.store(other.bytesWritten.load());
+        progress.store(other.progress.load());
+        speed.store(other.speed.load());
+    }
+    return *this;
+}
+
 namespace fs = std::filesystem;
 
 // --------------------------------------------------------------------------- //

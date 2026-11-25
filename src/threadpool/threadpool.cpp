@@ -7,6 +7,18 @@ import isocmd.core.threadCaps;
 import isocmd.threadpool.moveOnlyTask;
 import isocmd.threadpool.threadpool;
 
+namespace GlobalThreadCaps {
+    std::size_t MAX_USEFUL_THREADS = 16;
+    std::size_t CPMV_THREAD_CAP   = 4;
+    std::size_t CONV_THREAD_CAP   = 4;
+    std::size_t MOUNT_THREAD_CAP  = 8;
+    std::size_t CLEAN_THREAD_CAP  = 4;
+    std::size_t UMOUNT_THREAD_CAP = 8;
+    std::size_t RM_THREAD_CAP     = 8;
+    std::size_t SORT_THREAD_CAP   = 2;
+    std::size_t FILTER_THREAD_CAP = 2;
+}
+
 namespace {
 
 // ─────────────────────────────────────────────────────────────────────────────

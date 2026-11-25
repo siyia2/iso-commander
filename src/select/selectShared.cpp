@@ -7,6 +7,8 @@ import isocmd.core.uiState;
 import isocmd.input.readline;
 import isocmd.select.selectShared;
 
+IsoPending g_isoPending;
+
 ReadlineKeybindingGuard::ReadlineKeybindingGuard() {
     setup_custom_keybindingsForSelect();
 }

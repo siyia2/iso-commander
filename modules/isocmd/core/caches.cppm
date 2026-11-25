@@ -27,13 +27,13 @@ struct StringViewHash {
 
 namespace GlobalCaches {
     // Thread-local caches
-    inline thread_local std::unordered_map<
+    extern thread_local std::unordered_map<
         std::string,
         std::string,
         StringViewHash,
         std::equal_to<>
     > transformationCache;
-    inline thread_local std::unordered_map<
+    extern thread_local std::unordered_map<
         std::string,
         std::tuple<std::string, std::string, std::string>,
         StringViewHash,

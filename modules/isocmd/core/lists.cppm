@@ -13,12 +13,12 @@ export extern "C++" {
 namespace GlobalState {
 
     // Global vector state
-    inline std::vector<std::string> globalIsoFileList;
-    inline std::vector<std::string> binImgFilesCache;
-    inline std::vector<std::string> mdfMdsFilesCache;
-    inline std::vector<std::string> nrgFilesCache;
-    inline std::vector<std::string> chdFilesCache;
-    inline std::vector<std::string> daaGbiFilesCache;
+    extern std::vector<std::string> globalIsoFileList;
+    extern std::vector<std::string> binImgFilesCache;
+    extern std::vector<std::string> mdfMdsFilesCache;
+    extern std::vector<std::string> nrgFilesCache;
+    extern std::vector<std::string> chdFilesCache;
+    extern std::vector<std::string> daaGbiFilesCache;
 
 } // namespace GlobalState
 
