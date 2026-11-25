@@ -69,7 +69,6 @@ void loadAndDisplayImageFiles(
     std::shared_ptr<RefreshState> state
 );
 
-
 // --- Input Processing & Action Handlers ---
 
 /// Processes a user selection for Mount or Unmount.
@@ -107,7 +106,6 @@ void writeToUsb(
     const std::string &input,
     const std::vector<std::string> &isoFiles
 );
-
 
 // --- Filtering & Pagination ---
 
@@ -175,7 +173,6 @@ void handleFilteringConvert2ISO(const std::string& inputString,
                                 const std::vector<std::string>& sourceFiles,
                                 const std::string& operation,
                                 FilterEntryContext ctx);
-
 
 // --- Utility & Cleanup ---
 

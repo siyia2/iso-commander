@@ -23,9 +23,9 @@ export extern "C++" {
  * @param processedIndices Set to store the final validated integer indices.
  */
 void tokenizeInput(
-    const std::string& input,
-    const std::vector<std::string>& isoFiles,
-    std::unordered_set<int>& processedIndices
+	const std::string& input,
+	const std::vector<std::string>& isoFiles,
+	std::unordered_set<int>& processedIndices
 );
 
 } // extern "C++"

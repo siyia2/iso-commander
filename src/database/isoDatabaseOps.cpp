@@ -26,29 +26,31 @@ import isocmd.ui.cli.syncOutput;
 import isocmd.ui.display.themes;
 
 namespace GlobalState {
-    std::vector<std::string> globalIsoFileList;
-    std::vector<std::string> binImgFilesCache;
-    std::vector<std::string> mdfMdsFilesCache;
-    std::vector<std::string> nrgFilesCache;
-    std::vector<std::string> chdFilesCache;
-    std::vector<std::string> daaGbiFilesCache;
+	std::vector<std::string> globalIsoFileList;
+	std::vector<std::string> binImgFilesCache;
+	std::vector<std::string> mdfMdsFilesCache;
+	std::vector<std::string> nrgFilesCache;
+	std::vector<std::string> chdFilesCache;
+	std::vector<std::string> daaGbiFilesCache;
 
-    extern const std::string databaseDirectory = std::string(std::getenv("HOME") ? std::getenv("HOME") : "").append("/.local/share/isocmd/database/");
-    extern const std::string databaseFilename  = "iso_commander_database.txt";
-    extern const std::string databaseFilePath  = std::string(databaseDirectory).append(databaseFilename);
-    extern const std::string historyFilePath   = std::string(databaseDirectory).append("iso_commander_path_database.txt");
-    extern const std::string filterHistoryFilePath = std::string(databaseDirectory).append("iso_commander_filter_database.txt");
-    extern const std::string configDirectory = std::string(std::getenv("HOME") ? std::getenv("HOME") : "").append("/.config/isocmd/");
-    extern const std::string configPath = std::string(configDirectory).append("config");
+	extern const std::string databaseDirectory = std::string(std::getenv("HOME") ? std::getenv("HOME") : "").append("/.local/share/isocmd/database/");
+	extern const std::string databaseFilename  = "iso_commander_database.txt";
+	extern const std::string databaseFilePath  = std::string(databaseDirectory).append(databaseFilename);
+	extern const std::string historyFilePath   = std::string(databaseDirectory).append("iso_commander_path_database.txt");
+	extern const std::string filterHistoryFilePath = std::string(databaseDirectory).append("iso_commander_filter_database.txt");
+	extern const std::string configDirectory = std::string(std::getenv("HOME") ? std::getenv("HOME") : "").append("/.config/isocmd/");
+	extern const std::string configPath = std::string(configDirectory).append("config");
 }
 
 bool isValidDirectory(const std::string& path) {
-    return std::filesystem::is_directory(path);
+
+	return std::filesystem::is_directory(path);
+
 }
 
 // Local ISO Database mutex
 namespace {
-    std::mutex dbFileMutex;
+	std::mutex dbFileMutex;
 }
 
 /**
@@ -65,44 +67,48 @@ static size_t checkPathsParallel(
     const std::vector<std::string>& cache,
     std::vector<int>& pathExists
 ) {
-    ThreadPool& pool = getStaticThreadPool();
-    std::atomic<size_t> existingCount{0};
 
-    const size_t numThread = std::min({
-        pool.threadCount(),
-        static_cast<size_t>(GlobalThreadCaps::CLEAN_THREAD_CAP),
-        cache.size()
-    });
+	ThreadPool& pool = getStaticThreadPool();
+	std::atomic<size_t> existingCount{0};
 
-    if (numThread == 0) return 0;
+	const size_t numThread = std::min({
+		pool.threadCount(),
+		static_cast<size_t>(GlobalThreadCaps::CLEAN_THREAD_CAP),
+		cache.size()
+	});
 
-    const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
-    std::vector<std::future<void>> futures;
-    futures.reserve(numThread);
+	if (numThread == 0) return 0;
 
-    for (size_t i = 0; i < numThread; ++i) {
-        const size_t start = i * chunkSize;
-        const size_t end   = std::min(cache.size(), start + chunkSize);
+	const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
+	std::vector<std::future<void>> futures;
+	futures.reserve(numThread);
 
-        if (start >= end) break;
+	for (size_t i = 0; i < numThread; ++i) {
+		const size_t start = i * chunkSize;
+		const size_t end   = std::min(cache.size(), start + chunkSize);
 
-        futures.emplace_back(
-            pool.enqueue([&cache, &pathExists, &existingCount, start, end] {
-                for (size_t j = start; j < end; ++j) {
-                    if (access(cache[j].c_str(), F_OK) == 0) {
-                        pathExists[j] = 1;
-                        existingCount.fetch_add(1, std::memory_order_relaxed);
-                    }
-                }
-            })
-        );
-    }
+		if (start >= end) break;
 
-    for (auto& future : futures) {
-        future.get();
-    }
+		futures.emplace_back(
+		    pool.enqueue([&cache, &pathExists, &existingCount, start, end] {
 
-    return existingCount.load();
+				for (size_t j = start; j < end; ++j) {
+					if (access(cache[j].c_str(), F_OK) == 0) {
+						pathExists[j] = 1;
+						existingCount.fetch_add(1, std::memory_order_relaxed);
+					}
+				}
+
+			})
+		);
+	}
+
+	for (auto& future : futures) {
+		future.get();
+	}
+
+	return existingCount.load();
+
 }
 
 /**
@@ -129,62 +135,66 @@ static bool writeAndRenameDatabase(
     size_t survivingCount,
     std::vector<std::string>& retained
 ) {
-    retained.clear();
-    retained.reserve(survivingCount);
 
-    size_t totalBufferSize = 0;
+	retained.clear();
+	retained.reserve(survivingCount);
 
-    for (size_t i = 0; i < cache.size(); ++i) {
-        if (pathExists[i]) {
-            totalBufferSize += cache[i].size() + 1;
-            retained.push_back(std::move(cache[i]));
-        }
-    }
+	size_t totalBufferSize = 0;
 
-    std::string buf;
-    buf.reserve(totalBufferSize);
+	for (size_t i = 0; i < cache.size(); ++i) {
+		if (pathExists[i]) {
+			totalBufferSize += cache[i].size() + 1;
+			retained.push_back(std::move(cache[i]));
+		}
+	}
 
-    for (const auto& path : retained) {
-        buf += path;
-        buf += '\n';
-    }
+	std::string buf;
+	buf.reserve(totalBufferSize);
 
-    std::string tmpPath =
-        (std::filesystem::path(dbPath).parent_path() /
-         "iso_commander_database_saved_XXXXXX").string();
+	for (const auto& path : retained) {
+		buf += path;
+		buf += '\n';
+	}
 
-    int tmpFd = mkstemp(tmpPath.data());
-    if (tmpFd == -1) return false;
+	std::string tmpPath =
+	    (std::filesystem::path(dbPath).parent_path() /
+	     "iso_commander_database_saved_XXXXXX").string();
 
-    auto cleanupTmp = [&]() {
-        close(tmpFd);
-        ::unlink(tmpPath.c_str());
-    };
+	int tmpFd = mkstemp(tmpPath.data());
+	if (tmpFd == -1) return false;
 
-    if (fchmod(tmpFd, 0644) == -1) {
-        cleanupTmp();
-        return false;
-    }
+	auto cleanupTmp = [&]() {
 
-    if (::write(tmpFd, buf.data(), buf.size()) !=
-        static_cast<ssize_t>(buf.size())) {
-        cleanupTmp();
-        return false;
-    }
+		close(tmpFd);
+		::unlink(tmpPath.c_str());
 
-    if (fsync(tmpFd) == -1) {
-        cleanupTmp();
-        return false;
-    }
+	};
 
-    close(tmpFd);
+	if (fchmod(tmpFd, 0644) == -1) {
+		cleanupTmp();
+		return false;
+	}
 
-    if (::rename(tmpPath.c_str(), dbPath.c_str()) == -1) {
-        ::unlink(tmpPath.c_str());
-        return false;
-    }
+	if (::write(tmpFd, buf.data(), buf.size()) !=
+	    static_cast<ssize_t>(buf.size())) {
+		cleanupTmp();
+		return false;
+	}
 
-    return true;
+	if (fsync(tmpFd) == -1) {
+		cleanupTmp();
+		return false;
+	}
+
+	close(tmpFd);
+
+	if (::rename(tmpPath.c_str(), dbPath.c_str()) == -1) {
+		::unlink(tmpPath.c_str());
+		return false;
+	}
+
+	return true;
+
 }
 
 /**
@@ -206,97 +216,103 @@ static bool writeAndRenameDatabase(
 void removeNonExistentPathsFromDatabase(
     std::vector<std::string>& globalIsoFileList
 ) {
-    std::vector<std::string> retained;
-    bool anyRemoved = false;
 
-    {
-        std::lock_guard<std::mutex> fileLock(dbFileMutex);
+	std::vector<std::string> retained;
+	bool anyRemoved = false;
 
-        int fd = open(GlobalState::databaseFilePath.c_str(), O_RDONLY);
+	{
+		std::lock_guard<std::mutex> fileLock(dbFileMutex);
 
-        if (fd == -1) {
-            if (errno == ENOENT) {
-                std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
-                globalIsoFileList.clear();
-            }
-            return;
-        }
+		int fd = open(GlobalState::databaseFilePath.c_str(), O_RDONLY);
 
-        struct FdGuard {
-            int fd;
+		if (fd == -1) {
+			if (errno == ENOENT) {
+				std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
+				globalIsoFileList.clear();
+			}
+			return;
+		}
 
-            ~FdGuard() {
-                if (fd != -1) {
-                    flock(fd, LOCK_UN);
-                    close(fd);
-                }
-            }
+		struct FdGuard {
+			int fd;
 
-            void release() {
-                fd = -1;
-            }
-        } fdGuard{fd};
+			~FdGuard() {
 
-        if (flock(fd, LOCK_SH) == -1) return;
+				if (fd != -1) {
+					flock(fd, LOCK_UN);
+					close(fd);
+				}
 
-        int dupFd = dup(fd);
-        if (dupFd == -1) return;
+			}
 
-        FILE* file = fdopen(dupFd, "r");
+			void release() {
 
-        if (!file) {
-            close(dupFd);
-            return;
-        }
+				fd = -1;
 
-        std::vector<std::string> cache;
-        char* linePtr = nullptr;
-        size_t len = 0;
+			}
+		} fdGuard{fd};
 
-        while (getline(&linePtr, &len, file) != -1) {
-            std::string line(linePtr);
+		if (flock(fd, LOCK_SH) == -1) return;
 
-            if (!line.empty() && line.back() == '\n') {
-                line.pop_back();
-            }
+		int dupFd = dup(fd);
+		if (dupFd == -1) return;
 
-            if (!line.empty()) {
-                cache.push_back(std::move(line));
-            }
-        }
+		FILE* file = fdopen(dupFd, "r");
 
-        free(linePtr);
-        fclose(file);
+		if (!file) {
+			close(dupFd);
+			return;
+		}
 
-        fdGuard.release();
-        flock(fd, LOCK_UN);
-        close(fd);
+		std::vector<std::string> cache;
+		char* linePtr = nullptr;
+		size_t len = 0;
 
-        if (cache.empty()) return;
+		while (getline(&linePtr, &len, file) != -1) {
+			std::string line(linePtr);
 
-        std::vector<int> pathExists(cache.size(), 0);
-        size_t existingCount = checkPathsParallel(cache, pathExists);
+			if (!line.empty() && line.back() == '\n') {
+				line.pop_back();
+			}
 
-        if (existingCount == cache.size()) return;
+			if (!line.empty()) {
+				cache.push_back(std::move(line));
+			}
+		}
 
-        if (!writeAndRenameDatabase(
-                GlobalState::databaseFilePath,
-                cache,
-                pathExists,
-                existingCount,
-                retained
-            )) {
-            return;
-        }
+		free(linePtr);
+		fclose(file);
 
-        anyRemoved = true;
-        GlobalState::isoListDirty.store(true);
-    }
+		fdGuard.release();
+		flock(fd, LOCK_UN);
+		close(fd);
 
-    if (anyRemoved) {
-        std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
-        globalIsoFileList = std::move(retained);
-    }
+		if (cache.empty()) return;
+
+		std::vector<int> pathExists(cache.size(), 0);
+		size_t existingCount = checkPathsParallel(cache, pathExists);
+
+		if (existingCount == cache.size()) return;
+
+		if (!writeAndRenameDatabase(
+		        GlobalState::databaseFilePath,
+		        cache,
+		        pathExists,
+		        existingCount,
+		        retained
+		    )) {
+			return;
+		}
+
+		anyRemoved = true;
+		GlobalState::isoListDirty.store(true);
+	}
+
+	if (anyRemoved) {
+		std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
+		globalIsoFileList = std::move(retained);
+	}
+
 }
 
 /**
@@ -309,25 +325,27 @@ void removeNonExistentPathsFromDatabase(
  * @return Number of non-empty lines, or -1 if the file cannot be opened.
  */
 static int countNonEmptyLines(const std::string& filePath) {
-    std::ifstream file(filePath);
 
-    if (!file.is_open()) {
-        std::cerr << "Unable to open file: " << filePath << std::endl;
-        return -1;
-    }
+	std::ifstream file(filePath);
 
-    int nonEmptyLineCount = 0;
-    std::string line;
+	if (!file.is_open()) {
+		std::cerr << "Unable to open file: " << filePath << std::endl;
+		return -1;
+	}
 
-    while (std::getline(file, line)) {
-        if (!line.empty() &&
-            line.find_first_not_of(" \t\n\r\f\v") != std::string::npos) {
-            ++nonEmptyLineCount;
-        }
-    }
+	int nonEmptyLineCount = 0;
+	std::string line;
 
-    file.close();
-    return nonEmptyLineCount;
+	while (std::getline(file, line)) {
+		if (!line.empty() &&
+		    line.find_first_not_of(" \t\n\r\f\v") != std::string::npos) {
+			++nonEmptyLineCount;
+		}
+	}
+
+	file.close();
+	return nonEmptyLineCount;
+
 }
 
 /**
@@ -337,190 +355,200 @@ static int countNonEmptyLines(const std::string& filePath) {
  *         HOME is not set.
  */
 std::string getHomeDirectory() {
-    const char* homeDir = getenv("HOME");
 
-    if (homeDir) {
-        return std::string(homeDir);
-    }
+	const char* homeDir = getenv("HOME");
 
-    return "";
+	if (homeDir) {
+		return std::string(homeDir);
+	}
+
+	return "";
+
 }
 
 namespace {
 
-    /**
-     * @brief Ensures the database directory exists and is a valid directory.
-     *
-     * @param dir Const reference to the filesystem path of the database directory.
-     * @return true if the directory exists and is valid, or was successfully created.
-     * @return false if creation failed or the path exists but is not a directory.
-     */
-    bool ensureDatabaseDirectory(const std::filesystem::path& dir) {
-        if (!std::filesystem::exists(dir) &&
-            !std::filesystem::create_directories(dir)) {
-            return false;
-        }
+	/**
+	 * @brief Ensures the database directory exists and is a valid directory.
+	 *
+	 * @param dir Const reference to the filesystem path of the database directory.
+	 * @return true if the directory exists and is valid, or was successfully created.
+	 * @return false if creation failed or the path exists but is not a directory.
+	 */
+	bool ensureDatabaseDirectory(const std::filesystem::path& dir) {
 
-        return std::filesystem::is_directory(dir);
-    }
+		if (!std::filesystem::exists(dir) &&
+		    !std::filesystem::create_directories(dir)) {
+			return false;
+		}
 
-    /**
-     * @brief Reads and parses existing ISO entries from the database file.
-     *
-     * Opens the database file in read-only mode, acquires a shared file lock (flock),
-     * and reads all lines into a vector of strings, stripping any carriage return characters.
-     *
-     * @param cachePath Const reference to the full filesystem path of the database file.
-     * @return Cached ISO paths, or an empty vector if the file doesn't exist or is empty.
-     */
-    std::vector<std::string> readExistingCache(
-        const std::filesystem::path& cachePath
-    ) {
-        std::vector<std::string> cache;
+		return std::filesystem::is_directory(dir);
 
-        int fd = open(cachePath.c_str(), O_RDONLY);
-        if (fd == -1) return cache;
+	}
 
-        if (flock(fd, LOCK_SH) == 0) {
-            struct stat fileStat;
+	/**
+	 * @brief Reads and parses existing ISO entries from the database file.
+	 *
+	 * Opens the database file in read-only mode, acquires a shared file lock (flock),
+	 * and reads all lines into a vector of strings, stripping any carriage return characters.
+	 *
+	 * @param cachePath Const reference to the full filesystem path of the database file.
+	 * @return Cached ISO paths, or an empty vector if the file doesn't exist or is empty.
+	 */
+	std::vector<std::string> readExistingCache(
+	    const std::filesystem::path& cachePath
+	) {
 
-            if (fstat(fd, &fileStat) == 0 && fileStat.st_size > 0) {
-                std::vector<char> buffer(fileStat.st_size);
+		std::vector<std::string> cache;
 
-                ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
+		int fd = open(cachePath.c_str(), O_RDONLY);
+		if (fd == -1) return cache;
 
-                if (bytesRead > 0 && bytesRead <= fileStat.st_size) {
-                    char* start = buffer.data();
-                    char* end = buffer.data() + bytesRead;
+		if (flock(fd, LOCK_SH) == 0) {
+			struct stat fileStat;
 
-                    while (start < end) {
-                        char* lineEnd = std::find(start, end, '\n');
-                        std::string line(start, lineEnd);
+			if (fstat(fd, &fileStat) == 0 && fileStat.st_size > 0) {
+				std::vector<char> buffer(fileStat.st_size);
 
-                        if (!line.empty() && line.back() == '\r') {
-                            line.pop_back();
-                        }
+				ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
 
-                        if (!line.empty()) {
-                            cache.push_back(std::move(line));
-                        }
+				if (bytesRead > 0 && bytesRead <= fileStat.st_size) {
+					char* start = buffer.data();
+					char* end = buffer.data() + bytesRead;
 
-                        start = (lineEnd < end) ? lineEnd + 1 : end;
-                    }
-                }
-            }
+					while (start < end) {
+						char* lineEnd = std::find(start, end, '\n');
+						std::string line(start, lineEnd);
 
-            flock(fd, LOCK_UN);
-        }
+						if (!line.empty() && line.back() == '\r') {
+							line.pop_back();
+						}
 
-        close(fd);
-        return cache;
-    }
+						if (!line.empty()) {
+							cache.push_back(std::move(line));
+						}
 
-    /**
-     * @brief Atomically replaces the database cache using a temporary file and rename.
-     *
-     * Trims the cache to GlobalState::maxDatabaseSize if necessary, serializes entries
-     * with newline separators, and writes them to a uniquely created temporary file
-     * in the destination directory using mkstemp with permissions 0644.
-     *
-     * Handles partial writes and EINTR, synchronizes the temporary file with fsync,
-     * checks close errors, and atomically replaces the destination using rename.
-     * Finally, synchronizes the parent directory to improve crash durability.
-     *
-     * @param cachePath Const reference to the destination cache file path.
-     * @param cache Reference to the cache strings to be written and trimmed.
-     * @return true if the replacement and parent-directory synchronization succeed.
-     * @return false if any operation fails.
-     */
-    bool atomicWriteCache(
-        const std::filesystem::path& cachePath,
-        std::vector<std::string>& cache
-    ) {
-        if (cache.size() > GlobalState::maxDatabaseSize) {
-            cache.erase(
-                cache.begin(),
-                cache.begin() + (cache.size() - GlobalState::maxDatabaseSize)
-            );
-        }
+						start = (lineEnd < end) ? lineEnd + 1 : end;
+					}
+				}
+			}
 
-        std::string output;
-        output.reserve(cache.size() * 64);
+			flock(fd, LOCK_UN);
+		}
 
-        for (const auto& entry : cache) {
-            output += entry;
-            output += '\n';
-        }
+		close(fd);
+		return cache;
 
-        const std::filesystem::path parentPath = cachePath.parent_path();
+	}
 
-        std::string tmpPath =
-            (parentPath / "iso_commander_database_saved_XXXXXX").string();
+	/**
+	 * @brief Atomically replaces the database cache using a temporary file and rename.
+	 *
+	 * Trims the cache to GlobalState::maxDatabaseSize if necessary, serializes entries
+	 * with newline separators, and writes them to a uniquely created temporary file
+	 * in the destination directory using mkstemp with permissions 0644.
+	 *
+	 * Handles partial writes and EINTR, synchronizes the temporary file with fsync,
+	 * checks close errors, and atomically replaces the destination using rename.
+	 * Finally, synchronizes the parent directory to improve crash durability.
+	 *
+	 * @param cachePath Const reference to the destination cache file path.
+	 * @param cache Reference to the cache strings to be written and trimmed.
+	 * @return true if the replacement and parent-directory synchronization succeed.
+	 * @return false if any operation fails.
+	 */
+	bool atomicWriteCache(
+	    const std::filesystem::path& cachePath,
+	    std::vector<std::string>& cache
+	) {
 
-        int tmpFd = mkstemp(tmpPath.data());
-        if (tmpFd == -1) return false;
+		if (cache.size() > GlobalState::maxDatabaseSize) {
+			cache.erase(
+			    cache.begin(),
+			    cache.begin() + (cache.size() - GlobalState::maxDatabaseSize)
+			);
+		}
 
-        auto cleanupTmp = [&]() {
-            if (tmpFd != -1) {
-                close(tmpFd);
-                tmpFd = -1;
-            }
+		std::string output;
+		output.reserve(cache.size() * 64);
 
-            unlink(tmpPath.c_str());
-        };
+		for (const auto& entry : cache) {
+			output += entry;
+			output += '\n';
+		}
 
-        if (fchmod(tmpFd, 0644) == -1) {
-            cleanupTmp();
-            return false;
-        }
+		const std::filesystem::path parentPath = cachePath.parent_path();
 
-        size_t written = 0;
+		std::string tmpPath =
+		    (parentPath / "iso_commander_database_saved_XXXXXX").string();
 
-        while (written < output.size()) {
-            ssize_t n = write(
-                tmpFd,
-                output.data() + written,
-                output.size() - written
-            );
+		int tmpFd = mkstemp(tmpPath.data());
+		if (tmpFd == -1) return false;
 
-            if (n == -1 && errno == EINTR) {
-                continue;
-            }
+		auto cleanupTmp = [&]() {
 
-            if (n <= 0) {
-                cleanupTmp();
-                return false;
-            }
+			if (tmpFd != -1) {
+				close(tmpFd);
+				tmpFd = -1;
+			}
 
-            written += static_cast<size_t>(n);
-        }
+			unlink(tmpPath.c_str());
 
-        if (fsync(tmpFd) == -1) {
-            cleanupTmp();
-            return false;
-        }
+		};
 
-        if (close(tmpFd) == -1) {
-            tmpFd = -1;
-            unlink(tmpPath.c_str());
-            return false;
-        }
+		if (fchmod(tmpFd, 0644) == -1) {
+			cleanupTmp();
+			return false;
+		}
 
-        tmpFd = -1;
+		size_t written = 0;
 
-        if (rename(tmpPath.c_str(), cachePath.c_str()) == -1) {
-            unlink(tmpPath.c_str());
-            return false;
-        }
+		while (written < output.size()) {
+			ssize_t n = write(
+			    tmpFd,
+			    output.data() + written,
+			    output.size() - written
+			);
 
-        int dirFd = open(parentPath.c_str(), O_RDONLY | O_DIRECTORY);
-        if (dirFd == -1) return false;
+			if (n == -1 && errno == EINTR) {
+				continue;
+			}
 
-        bool syncSuccess = fsync(dirFd) == 0;
-        close(dirFd);
+			if (n <= 0) {
+				cleanupTmp();
+				return false;
+			}
 
-        return syncSuccess;
-    }
+			written += static_cast<size_t>(n);
+		}
+
+		if (fsync(tmpFd) == -1) {
+			cleanupTmp();
+			return false;
+		}
+
+		if (close(tmpFd) == -1) {
+			tmpFd = -1;
+			unlink(tmpPath.c_str());
+			return false;
+		}
+
+		tmpFd = -1;
+
+		if (rename(tmpPath.c_str(), cachePath.c_str()) == -1) {
+			unlink(tmpPath.c_str());
+			return false;
+		}
+
+		int dirFd = open(parentPath.c_str(), O_RDONLY | O_DIRECTORY);
+		if (dirFd == -1) return false;
+
+		bool syncSuccess = fsync(dirFd) == 0;
+		close(dirFd);
+
+		return syncSuccess;
+
+	}
 
 } // namespace
 
@@ -542,54 +570,56 @@ bool saveToDatabase(
     const std::vector<std::string>& discoveredISO,
     bool* newISOFound
 ) {
-    if (newISOFound) {
-        *newISOFound = false;
-    }
 
-    std::filesystem::path cachePath = GlobalState::databaseDirectory;
-    cachePath /= GlobalState::databaseFilename;
+	if (newISOFound) {
+		*newISOFound = false;
+	}
 
-    if (!ensureDatabaseDirectory(GlobalState::databaseDirectory)) {
-        return false;
-    }
+	std::filesystem::path cachePath = GlobalState::databaseDirectory;
+	cachePath /= GlobalState::databaseFilename;
 
-    std::lock_guard<std::mutex> fileLock(dbFileMutex);
+	if (!ensureDatabaseDirectory(GlobalState::databaseDirectory)) {
+		return false;
+	}
 
-    std::vector<std::string> combinedCache = readExistingCache(cachePath);
-    const size_t oldSize = combinedCache.size();
+	std::lock_guard<std::mutex> fileLock(dbFileMutex);
 
-    // Reserve up front: no reallocation, so the string_views below stay valid.
-    combinedCache.reserve(oldSize + discoveredISO.size());
+	std::vector<std::string> combinedCache = readExistingCache(cachePath);
+	const size_t oldSize = combinedCache.size();
 
-    // Dedupe by view: no per-path string copies.
-    std::unordered_set<std::string_view> seen;
-    seen.reserve(oldSize + discoveredISO.size());
+	// Reserve up front: no reallocation, so the string_views below stay valid.
+	combinedCache.reserve(oldSize + discoveredISO.size());
 
-    for (const auto& s : combinedCache) {
-        seen.insert(s);
-    }
+	// Dedupe by view: no per-path string copies.
+	std::unordered_set<std::string_view> seen;
+	seen.reserve(oldSize + discoveredISO.size());
 
-    // Append new paths straight into combinedCache.
-    for (const auto& iso : discoveredISO) {
-        if (seen.insert(iso).second) {
-            combinedCache.push_back(iso);
-        }
-    }
+	for (const auto& s : combinedCache) {
+		seen.insert(s);
+	}
 
-    if (combinedCache.size() == oldSize) {
-        return false;
-    }
+	// Append new paths straight into combinedCache.
+	for (const auto& iso : discoveredISO) {
+		if (seen.insert(iso).second) {
+			combinedCache.push_back(iso);
+		}
+	}
 
-    if (!atomicWriteCache(cachePath, combinedCache)) {
-        return false;
-    }
+	if (combinedCache.size() == oldSize) {
+		return false;
+	}
 
-    if (newISOFound) {
-        *newISOFound = true;
-    }
+	if (!atomicWriteCache(cachePath, combinedCache)) {
+		return false;
+	}
 
-    GlobalState::isoListDirty.store(true);
-    return true;
+	if (newISOFound) {
+		*newISOFound = true;
+	}
+
+	GlobalState::isoListDirty.store(true);
+	return true;
+
 }
 
 /**
@@ -604,19 +634,21 @@ bool saveToDatabase(
  * @note Paths are assumed valid; no filesystem validation is performed.
  */
 void updateDatabaseAfterOperations(const std::string& filePathsStr) {
-    std::vector<std::string> allIsoFiles;
-    std::istringstream iss(filePathsStr);
-    std::string path;
 
-    while (std::getline(iss, path, ';')) {
-        if (!path.empty()) {
-            allIsoFiles.push_back(std::move(path));
-        }
-    }
+	std::vector<std::string> allIsoFiles;
+	std::istringstream iss(filePathsStr);
+	std::string path;
 
-    if (!allIsoFiles.empty()) {
-        saveToDatabase(allIsoFiles, nullptr);
-    }
+	while (std::getline(iss, path, ';')) {
+		if (!path.empty()) {
+			allIsoFiles.push_back(std::move(path));
+		}
+	}
+
+	if (!allIsoFiles.empty()) {
+		saveToDatabase(allIsoFiles, nullptr);
+	}
+
 }
 
 /**
@@ -631,55 +663,57 @@ void updateDatabaseAfterOperations(const std::string& filePathsStr) {
  * @param outList Reference to vector that will receive the loaded ISO paths.
  */
 void loadFromDatabase(std::vector<std::string>& outList) {
-    std::lock_guard<std::mutex> fileLock(dbFileMutex);
 
-    int fd = open(GlobalState::databaseFilePath.c_str(), O_RDONLY);
-    if (fd == -1) return;
+	std::lock_guard<std::mutex> fileLock(dbFileMutex);
 
-    if (flock(fd, LOCK_SH) == -1) {
-        close(fd);
-        return;
-    }
+	int fd = open(GlobalState::databaseFilePath.c_str(), O_RDONLY);
+	if (fd == -1) return;
 
-    struct stat fileStat;
+	if (flock(fd, LOCK_SH) == -1) {
+		close(fd);
+		return;
+	}
 
-    if (fstat(fd, &fileStat) == -1 || fileStat.st_size == 0) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        outList.clear();
-        return;
-    }
+	struct stat fileStat;
 
-    std::vector<char> buffer(fileStat.st_size);
-    ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
+	if (fstat(fd, &fileStat) == -1 || fileStat.st_size == 0) {
+		flock(fd, LOCK_UN);
+		close(fd);
+		outList.clear();
+		return;
+	}
 
-    flock(fd, LOCK_UN);
-    close(fd);
+	std::vector<char> buffer(fileStat.st_size);
+	ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
 
-    if (bytesRead <= 0 || bytesRead > fileStat.st_size) {
-        return;
-    }
+	flock(fd, LOCK_UN);
+	close(fd);
 
-    std::vector<std::string> loadedFiles;
-    char* start = buffer.data();
-    char* end = buffer.data() + bytesRead;
+	if (bytesRead <= 0 || bytesRead > fileStat.st_size) {
+		return;
+	}
 
-    while (start < end) {
-        char* lineEnd = std::find(start, end, '\n');
-        std::string line(start, lineEnd);
+	std::vector<std::string> loadedFiles;
+	char* start = buffer.data();
+	char* end = buffer.data() + bytesRead;
 
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
+	while (start < end) {
+		char* lineEnd = std::find(start, end, '\n');
+		std::string line(start, lineEnd);
 
-        if (!line.empty()) {
-            loadedFiles.push_back(std::move(line));
-        }
+		if (!line.empty() && line.back() == '\r') {
+			line.pop_back();
+		}
 
-        start = (lineEnd < end) ? lineEnd + 1 : end;
-    }
+		if (!line.empty()) {
+			loadedFiles.push_back(std::move(line));
+		}
 
-    outList = std::move(loadedFiles);
+		start = (lineEnd < end) ? lineEnd + 1 : end;
+	}
+
+	outList = std::move(loadedFiles);
+
 }
 
 /**
@@ -697,103 +731,107 @@ void displayDatabaseStatistics(
     const std::string& databaseFilePath,
     std::uintmax_t maxDatabaseSize
 ) {
-    signal(SIGINT, SIG_IGN);
-    disable_ctrl_d();
 
-    auto render = [&] {
-        SyncOutput sync;
-        clearScrollBuffer();
+	signal(SIGINT, SIG_IGN);
+	disable_ctrl_d();
 
-        auto [label, accent, warning, error, reset, path,
-              highlight, data, str] = resolveDatabaseTheme();
+	auto render = [&] {
 
-        (void)path;
-        (void)highlight;
+		SyncOutput sync;
+		clearScrollBuffer();
 
-        try {
-            for (const auto& filePath : {
-                    GlobalState::databaseFilePath,
-                    GlobalState::historyFilePath,
-                    GlobalState::filterHistoryFilePath
-                }) {
-                if (!std::filesystem::exists(filePath)) {
-                    std::ofstream createFile(filePath);
-                }
-            }
+		auto [label, accent, warning, error, reset, path,
+		      highlight, data, str] = resolveDatabaseTheme();
 
-            std::cout << "\n" << accent << "=== ISO Database ==="
-                      << reset << "\n";
+		(void)path;
+		(void)highlight;
 
-            std::uintmax_t fileSizeInBytes =
-                std::filesystem::file_size(databaseFilePath);
+		try {
+			for (const auto& filePath : {
+					GlobalState::databaseFilePath,
+					GlobalState::historyFilePath,
+					GlobalState::filterHistoryFilePath
+				}) {
+				if (!std::filesystem::exists(filePath)) {
+					std::ofstream createFile(filePath);
+				}
+			}
 
-            double fileSizeInKB = fileSizeInBytes / 1024.0;
-            double cachesizeInKb = maxDatabaseSize / 1024.0;
-            double usagePercentage =
-                (fileSizeInBytes * 100.0) / maxDatabaseSize;
+			std::cout << "\n" << accent << "=== ISO Database ==="
+			          << reset << "\n";
 
-            std::cout
-                << "\n" << label << "Capacity: "
-                << data << std::fixed << std::setprecision(0)
-                << fileSizeInKB << "KB/" << cachesizeInKb
-                << "KB (" << std::setprecision(1)
-                << usagePercentage << "%)"
-                << "\n" << label << "Entries: "
-                << data << countNonEmptyLines(GlobalState::databaseFilePath)
-                << "\n" << label << "Location: "
-                << data << "'" << databaseFilePath << "'"
-                << reset << "\n";
+			std::uintmax_t fileSizeInBytes =
+			    std::filesystem::file_size(databaseFilePath);
 
-            std::cout
-                << "\n" << accent << "=== History Database ==="
-                << reset << "\n"
-                << "\n" << label << "FolderPath Entries: "
-                << data << countNonEmptyLines(GlobalState::historyFilePath)
-                << "/" << GlobalState::MAX_HISTORY_LINES
-                << "\n" << label << "Location: "
-                << data << "'" << GlobalState::historyFilePath << "'"
-                << "\n\n" << label << "FilterTerm Entries: "
-                << data << countNonEmptyLines(GlobalState::filterHistoryFilePath)
-                << "/" << GlobalState::MAX_HISTORY_PATTERN_LINES
-                << "\n" << label << "Location: "
-                << data << "'" << GlobalState::filterHistoryFilePath << "'"
-                << std::endl;
+			double fileSizeInKB = fileSizeInBytes / 1024.0;
+			double cachesizeInKb = maxDatabaseSize / 1024.0;
+			double usagePercentage =
+			    (fileSizeInBytes * 100.0) / maxDatabaseSize;
 
-            std::cout << "\n" << accent << "=== Buffered Entries ==="
-                      << reset << "\n";
+			std::cout
+			    << "\n" << label << "Capacity: "
+			    << data << std::fixed << std::setprecision(0)
+			    << fileSizeInKB << "KB/" << cachesizeInKb
+			    << "KB (" << std::setprecision(1)
+			    << usagePercentage << "%)"
+			    << "\n" << label << "Entries: "
+			    << data << countNonEmptyLines(GlobalState::databaseFilePath)
+			    << "\n" << label << "Location: "
+			    << data << "'" << databaseFilePath << "'"
+			    << reset << "\n";
 
-            std::cout
-                << str << "\nSTR → RAM: " << data
-                << (GlobalCaches::transformationCache.size() +
-                    GlobalCaches::cachedParsesForUmount.size())
-                << "\n";
+			std::cout
+			    << "\n" << accent << "=== History Database ==="
+			    << reset << "\n"
+			    << "\n" << label << "FolderPath Entries: "
+			    << data << countNonEmptyLines(GlobalState::historyFilePath)
+			    << "/" << GlobalState::MAX_HISTORY_LINES
+			    << "\n" << label << "Location: "
+			    << data << "'" << GlobalState::historyFilePath << "'"
+			    << "\n\n" << label << "FilterTerm Entries: "
+			    << data << countNonEmptyLines(GlobalState::filterHistoryFilePath)
+			    << "/" << GlobalState::MAX_HISTORY_PATTERN_LINES
+			    << "\n" << label << "Location: "
+			    << data << "'" << GlobalState::filterHistoryFilePath << "'"
+			    << std::endl;
 
-            std::cout
-                << "\n" << label << "ISO → RAM: "
-                << data << GlobalState::globalIsoFileList.size() << "\n";
+			std::cout << "\n" << accent << "=== Buffered Entries ==="
+			          << reset << "\n";
 
-            std::cout
-                << "\n" << path << "BIN/IMG → RAM: "
-                << data << GlobalState::binImgFilesCache.size() << "\n"
-                << path << "DAA/GBI → RAM: "
-                << data << GlobalState::daaGbiFilesCache.size() << "\n"
-                << path << "CHD → RAM: "
-                << data << GlobalState::chdFilesCache.size() << "\n"
-                << path << "MDF → RAM: "
-                << data << GlobalState::mdfMdsFilesCache.size() << "\n"
-                << path << "NRG → RAM: "
-                << data << GlobalState::nrgFilesCache.size() << "\n";
+			std::cout
+			    << str << "\nSTR → RAM: " << data
+			    << (GlobalCaches::transformationCache.size() +
+			        GlobalCaches::cachedParsesForUmount.size())
+			    << "\n";
 
-        } catch (const std::filesystem::filesystem_error& e) {
-            std::cerr
-                << "\n" << error
-                << "Error: Unable to access configuration file: "
-                << warning << "'" << GlobalState::configPath << "'"
-                << error << ".\n" << reset;
-        }
-    };
+			std::cout
+			    << "\n" << label << "ISO → RAM: "
+			    << data << GlobalState::globalIsoFileList.size() << "\n";
 
-    pressEnterToReturnWithRepaint(render);
+			std::cout
+			    << "\n" << path << "BIN/IMG → RAM: "
+			    << data << GlobalState::binImgFilesCache.size() << "\n"
+			    << path << "DAA/GBI → RAM: "
+			    << data << GlobalState::daaGbiFilesCache.size() << "\n"
+			    << path << "CHD → RAM: "
+			    << data << GlobalState::chdFilesCache.size() << "\n"
+			    << path << "MDF → RAM: "
+			    << data << GlobalState::mdfMdsFilesCache.size() << "\n"
+			    << path << "NRG → RAM: "
+			    << data << GlobalState::nrgFilesCache.size() << "\n";
+
+		} catch (const std::filesystem::filesystem_error& e) {
+			std::cerr
+			    << "\n" << error
+			    << "Error: Unable to access configuration file: "
+			    << warning << "'" << GlobalState::configPath << "'"
+			    << error << ".\n" << reset;
+		}
+
+	};
+
+	pressEnterToReturnWithRepaint(render);
+
 }
 
 /**
@@ -809,73 +847,79 @@ void dispatchDatabaseCommands(
     std::string& inputSearch,
     const std::function<void()>& repaintHeader
 ) {
-    signal(SIGINT, SIG_IGN);
-    disable_ctrl_d();
 
-    auto db = resolveDatabaseTheme();
+	signal(SIGINT, SIG_IGN);
+	disable_ctrl_d();
 
-    if (inputSearch == "*stats") {
-        displayDatabaseStatistics(
-            GlobalState::databaseFilePath,
-            GlobalState::maxDatabaseSize
-        );
-    } else if (inputSearch == "!clr") {
-        std::ofstream ofs(
-            GlobalState::databaseFilePath,
-            std::ofstream::out | std::ofstream::trunc
-        );
+	auto db = resolveDatabaseTheme();
 
-        if (!ofs) {
-            auto render = [&] {
-                SyncOutput sync;
-                clearScrollBuffer();
+	if (inputSearch == "*stats") {
+		displayDatabaseStatistics(
+		    GlobalState::databaseFilePath,
+		    GlobalState::maxDatabaseSize
+		);
+	} else if (inputSearch == "!clr") {
+		std::ofstream ofs(
+		    GlobalState::databaseFilePath,
+		    std::ofstream::out | std::ofstream::trunc
+		);
 
-                // Screen was just cleared, so the header is always needed here.
-                if (repaintHeader) {
-                    repaintHeader();
-                }
+		if (!ofs) {
+			auto render = [&] {
 
-                std::cerr
-                    << "\n" << db.error
-                    << "Error clearing ISO database: "
-                    << db.warning << "File missing or inaccessible"
-                    << db.error << ".\033[J" << std::endl;
-            };
+				SyncOutput sync;
+				clearScrollBuffer();
 
-            pressEnterToContinueWithRepaint(render);
-        } else {
-            ofs.close();
-            GlobalCaches::transformationCache.clear();
+				// Screen was just cleared, so the header is always needed here.
+				if (repaintHeader) {
+					repaintHeader();
+				}
 
-            bool firstDraw = true;
+				std::cerr
+				    << "\n" << db.error
+				    << "Error clearing ISO database: "
+				    << db.warning << "File missing or inaccessible"
+				    << db.error << ".\033[J" << std::endl;
 
-            auto render = [&] {
-                SyncOutput sync;
+			};
 
-                if (!firstDraw && repaintHeader) {
-                    repaintHeader();
-                }
+			pressEnterToContinueWithRepaint(render);
+		} else {
+			ofs.close();
+			GlobalCaches::transformationCache.clear();
 
-                firstDraw = false;
+			bool firstDraw = true;
 
-                std::cout
-                    << "\n" << db.highlight
-                    << "ISO database cleared successfully."
-                    << "\033[J" << std::endl;
-            };
+			auto render = [&] {
 
-            pressEnterToContinueWithRepaint(render);
+				SyncOutput sync;
 
-            std::vector<std::string>().swap(
-                GlobalState::globalIsoFileList
-            );
-        }
-    } else if (
-        inputSearch == "!clr_paths" ||
-        inputSearch == "!clr_filter"
-    ) {
-        clearHistory(inputSearch, repaintHeader);
-    }
+				if (!firstDraw && repaintHeader) {
+					repaintHeader();
+				}
 
-    return;
+				firstDraw = false;
+
+				std::cout
+				    << "\n" << db.highlight
+				    << "ISO database cleared successfully."
+				    << "\033[J" << std::endl;
+
+			};
+
+			pressEnterToContinueWithRepaint(render);
+
+			std::vector<std::string>().swap(
+			    GlobalState::globalIsoFileList
+			);
+		}
+	} else if (
+	    inputSearch == "!clr_paths" ||
+	    inputSearch == "!clr_filter"
+	) {
+		clearHistory(inputSearch, repaintHeader);
+	}
+
+	return;
+
 }

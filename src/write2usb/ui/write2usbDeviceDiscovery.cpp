@@ -19,99 +19,107 @@ namespace fs = std::filesystem;
  * @return Model name, or "Unknown Drive" if the file is absent or empty.
  */
 std::string getDriveName(const std::string& device, const DeviceDiscoveryPaths& paths) {
-    std::string deviceName = device.substr(device.find_last_of('/') + 1);
-    const auto sysfsPath = paths.sysBlock / deviceName / "device/model";
 
-    std::ifstream modelFile(sysfsPath);
-    std::string driveName;
+	std::string deviceName = device.substr(device.find_last_of('/') + 1);
+	const auto sysfsPath = paths.sysBlock / deviceName / "device/model";
 
-    if (modelFile.is_open()) {
-        std::getline(modelFile, driveName);
-        driveName.erase(0, driveName.find_first_not_of(" \t"));
-        driveName.erase(driveName.find_last_not_of(" \t") + 1);
-    }
+	std::ifstream modelFile(sysfsPath);
+	std::string driveName;
 
-    return driveName.empty() ? "Unknown Drive" : driveName;
+	if (modelFile.is_open()) {
+		std::getline(modelFile, driveName);
+		driveName.erase(0, driveName.find_first_not_of(" \t"));
+		driveName.erase(driveName.find_last_not_of(" \t") + 1);
+	}
+
+	return driveName.empty() ? "Unknown Drive" : driveName;
+
 }
 
 namespace {
 
-    /**
-     * @brief Reads and right-trims the first line of a sysfs attribute file.
-     *
-     * @param attributePath Full path to the sysfs attribute file to read.
-     * @return Trimmed string contents of the first line, or std::nullopt on read failure.
-     */
-    static std::optional<std::string> readTrimmedSysfsAttribute(const fs::path& attributePath) {
-        std::ifstream file(attributePath);
-        std::string value;
-        if (!file || !std::getline(file, value)) {
-            return std::nullopt;
-        }
+	/**
+	 * @brief Reads and right-trims the first line of a sysfs attribute file.
+	 *
+	 * @param attributePath Full path to the sysfs attribute file to read.
+	 * @return Trimmed string contents of the first line, or std::nullopt on read failure.
+	 */
+	static std::optional<std::string> readTrimmedSysfsAttribute(const fs::path& attributePath) {
 
-        while (!value.empty() &&
-               std::isspace(static_cast<unsigned char>(value.back()))) {
-            value.pop_back();
-        }
+		std::ifstream file(attributePath);
+		std::string value;
+		if (!file || !std::getline(file, value)) {
+			return std::nullopt;
+		}
 
-        return value;
-    }
+		while (!value.empty() &&
+		       std::isspace(static_cast<unsigned char>(value.back()))) {
+			value.pop_back();
+		}
 
-    /**
-     * @brief Resolves a device path under /dev/ to its /sys/block entry path.
-     *
-     * Validates the input prefix, resolves symlinks to a canonical device node,
-     * and verifies that a corresponding /sys/block/<name> entry exists.
-     *
-     * @param devicePath Block-device path (must start with /dev/).
-     * @param ec Output error code populated on filesystem errors.
-     * @return Canonical path under /sys/block if valid and existing, otherwise std::nullopt.
-     */
-    static std::optional<fs::path> resolveSysBlockPath(const std::string& devicePath,
-                                                       std::error_code& ec, const DeviceDiscoveryPaths& paths) {
-        const auto prefix = paths.dev.string() + "/";
-        if (devicePath.size() <= prefix.size() || devicePath.rfind(prefix, 0) != 0) {
-            return std::nullopt;
-        }
+		return value;
 
-        const fs::path devNode = fs::canonical(devicePath, ec);
-        if (ec) {
-            return std::nullopt;
-        }
+	}
 
-        const std::string name = devNode.filename().string();
-        if (name.empty()) {
-            return std::nullopt;
-        }
+	/**
+	 * @brief Resolves a device path under /dev/ to its /sys/block entry path.
+	 *
+	 * Validates the input prefix, resolves symlinks to a canonical device node,
+	 * and verifies that a corresponding /sys/block/<name> entry exists.
+	 *
+	 * @param devicePath Block-device path (must start with /dev/).
+	 * @param ec Output error code populated on filesystem errors.
+	 * @return Canonical path under /sys/block if valid and existing, otherwise std::nullopt.
+	 */
+	static std::optional<fs::path> resolveSysBlockPath(const std::string& devicePath,
+	                                                   std::error_code& ec, const DeviceDiscoveryPaths& paths) {
 
-        const fs::path sysPath = paths.sysBlock / name;
-        if (!fs::exists(sysPath, ec) || ec) {
-            return std::nullopt;
-        }
+		const auto prefix = paths.dev.string() + "/";
+		if (devicePath.size() <= prefix.size() || devicePath.rfind(prefix, 0) != 0) {
+			return std::nullopt;
+		}
 
-        return sysPath;
-    }
+		const fs::path devNode = fs::canonical(devicePath, ec);
+		if (ec) {
+			return std::nullopt;
+		}
 
-    /**
-     * @brief Walks up a canonical sysfs path looking for a USB device node.
-     *
-     * Identifies a USB device ancestor by checking for the presence of an
-     * "idVendor" file at each directory level up to the root path.
-     *
-     * @param canonicalSysPath Canonical path within the sysfs hierarchy.
-     * @param ec Working error code cleared across filesystem probes.
-     * @return true if an ancestor directory contains "idVendor", false otherwise.
-     */
-    static bool hasUsbVendorAncestor(const fs::path& canonicalSysPath, std::error_code& ec) {
-        for (fs::path p = canonicalSysPath; p != p.root_path(); p = p.parent_path()) {
-            if (fs::exists(p / "idVendor", ec)) {
-                return true;
-            }
-            ec.clear();
-        }
+		const std::string name = devNode.filename().string();
+		if (name.empty()) {
+			return std::nullopt;
+		}
 
-        return false;
-    }
+		const fs::path sysPath = paths.sysBlock / name;
+		if (!fs::exists(sysPath, ec) || ec) {
+			return std::nullopt;
+		}
+
+		return sysPath;
+
+	}
+
+	/**
+	 * @brief Walks up a canonical sysfs path looking for a USB device node.
+	 *
+	 * Identifies a USB device ancestor by checking for the presence of an
+	 * "idVendor" file at each directory level up to the root path.
+	 *
+	 * @param canonicalSysPath Canonical path within the sysfs hierarchy.
+	 * @param ec Working error code cleared across filesystem probes.
+	 * @return true if an ancestor directory contains "idVendor", false otherwise.
+	 */
+	static bool hasUsbVendorAncestor(const fs::path& canonicalSysPath, std::error_code& ec) {
+
+		for (fs::path p = canonicalSysPath; p != p.root_path(); p = p.parent_path()) {
+			if (fs::exists(p / "idVendor", ec)) {
+				return true;
+			}
+			ec.clear();
+		}
+
+		return false;
+
+	}
 
 } // namespace
 
@@ -127,28 +135,30 @@ namespace {
  * @return true if the device is a removable USB block device.
  */
 bool isFlashDrive(const std::string& devicePath, const DeviceDiscoveryPaths& paths) {
-    try {
-        std::error_code ec;
 
-        const auto sysPath = resolveSysBlockPath(devicePath, ec, paths);
-        if (!sysPath) {
-            return false;
-        }
+	try {
+		std::error_code ec;
 
-        const auto removableValue = readTrimmedSysfsAttribute(*sysPath / "removable");
-        if (!removableValue || *removableValue != "1") {
-            return false;
-        }
+		const auto sysPath = resolveSysBlockPath(devicePath, ec, paths);
+		if (!sysPath) {
+			return false;
+		}
 
-        const fs::path resolved = fs::canonical(*sysPath, ec);
-        if (ec) {
-            return false;
-        }
+		const auto removableValue = readTrimmedSysfsAttribute(*sysPath / "removable");
+		if (!removableValue || *removableValue != "1") {
+			return false;
+		}
 
-        return hasUsbVendorAncestor(resolved, ec);
-    } catch (...) {
-        return false;
-    }
+		const fs::path resolved = fs::canonical(*sysPath, ec);
+		if (ec) {
+			return false;
+		}
+
+		return hasUsbVendorAncestor(resolved, ec);
+	} catch (...) {
+		return false;
+	}
+
 }
 
 /**
@@ -161,39 +171,41 @@ bool isFlashDrive(const std::string& devicePath, const DeviceDiscoveryPaths& pat
  * @return Absolute device paths such as /dev/sdb.
  */
 std::vector<std::string> getRemovableDevices(const DeviceDiscoveryPaths& paths) {
-    std::vector<std::string> devices;
 
-    try {
-        for (const auto& entry : fs::directory_iterator(paths.sysBlock)) {
-            const std::string deviceName = entry.path().filename().string();
+	std::vector<std::string> devices;
 
-            if (deviceName.rfind("loop", 0) == 0 ||
-                deviceName.rfind("ram",  0) == 0 ||
-                deviceName.rfind("zram", 0) == 0) {
-                continue;
-            }
+	try {
+		for (const auto& entry : fs::directory_iterator(paths.sysBlock)) {
+			const std::string deviceName = entry.path().filename().string();
 
-            if (!deviceName.empty() && std::isdigit(static_cast<unsigned char>(deviceName.back()))) {
-                continue;
-            }
+			if (deviceName.rfind("loop", 0) == 0 ||
+			    deviceName.rfind("ram",  0) == 0 ||
+			    deviceName.rfind("zram", 0) == 0) {
+				continue;
+			}
 
-            std::ifstream removableFile(entry.path() / "removable");
-            std::string removable;
-            if (!(removableFile >> removable) || removable != "1") {
-                continue;
-            }
+			if (!deviceName.empty() && std::isdigit(static_cast<unsigned char>(deviceName.back()))) {
+				continue;
+			}
 
-            const std::string devPath = (paths.dev / deviceName).string();
+			std::ifstream removableFile(entry.path() / "removable");
+			std::string removable;
+			if (!(removableFile >> removable) || removable != "1") {
+				continue;
+			}
 
-            if (isFlashDrive(devPath, paths)) {
-                devices.push_back(devPath);
-            }
-        }
-    } catch (const fs::filesystem_error& e) {
-        std::cerr << "Filesystem error: " << e.what() << '\n';
-    }
+			const std::string devPath = (paths.dev / deviceName).string();
 
-    return devices;
+			if (isFlashDrive(devPath, paths)) {
+				devices.push_back(devPath);
+			}
+		}
+	} catch (const fs::filesystem_error& e) {
+		std::cerr << "Filesystem error: " << e.what() << '\n';
+	}
+
+	return devices;
+
 }
 
 /**
@@ -207,42 +219,63 @@ std::vector<std::string> getRemovableDevices(const DeviceDiscoveryPaths& paths) 
  * @return true if the device or a partition of it is mounted.
  */
 bool isDeviceMounted(const std::string& device, const DeviceDiscoveryPaths& paths) {
-    std::ifstream mountsFile(paths.mounts);
-    if (!mountsFile.is_open()) {
-        return false;
-    }
 
-    std::string line;
-    std::string deviceName = device;
+	std::ifstream mountsFile(paths.mounts);
+	if (!mountsFile.is_open()) {
+		return false;
+	}
 
-    const auto prefix = paths.dev.string() + "/";
-    if (deviceName.rfind(prefix, 0) == 0) {
-        deviceName = deviceName.substr(prefix.size());
-    }
+	std::string line;
+	std::string deviceName = device;
 
-    while (std::getline(mountsFile, line)) {
-        std::istringstream iss(line);
-        std::string mountDevice;
-        iss >> mountDevice;
+	const auto prefix = paths.dev.string() + "/";
+	if (deviceName.rfind(prefix, 0) == 0) {
+		deviceName = deviceName.substr(prefix.size());
+	}
 
-        if (mountDevice.rfind(prefix, 0) == 0) {
-            mountDevice = mountDevice.substr(prefix.size());
-        }
+	while (std::getline(mountsFile, line)) {
+		std::istringstream iss(line);
+		std::string mountDevice;
+		iss >> mountDevice;
 
-        if (mountDevice == deviceName ||
-            (mountDevice.find(deviceName) == 0 &&
-             std::isdigit(static_cast<unsigned char>(mountDevice[deviceName.length()])))) {
-            mountsFile.close();
-            return true;
-        }
-    }
+		if (mountDevice.rfind(prefix, 0) == 0) {
+			mountDevice = mountDevice.substr(prefix.size());
+		}
 
-    mountsFile.close();
-    return false;
+		if (mountDevice == deviceName ||
+		    (mountDevice.find(deviceName) == 0 &&
+		     std::isdigit(static_cast<unsigned char>(mountDevice[deviceName.length()])))) {
+			mountsFile.close();
+			return true;
+		}
+	}
+
+	mountsFile.close();
+	return false;
+
 }
 
 // Production entry points retain their original system paths.
-std::string getDriveName(const std::string& device) { return getDriveName(device, {}); }
-bool isFlashDrive(const std::string& device) { return isFlashDrive(device, {}); }
-std::vector<std::string> getRemovableDevices() { return getRemovableDevices({}); }
-bool isDeviceMounted(const std::string& device) { return isDeviceMounted(device, {}); }
+std::string getDriveName(const std::string& device) {
+
+	return getDriveName(device, {});
+
+}
+
+bool isFlashDrive(const std::string& device) {
+
+	return isFlashDrive(device, {});
+
+}
+
+std::vector<std::string> getRemovableDevices() {
+
+	return getRemovableDevices({});
+
+}
+
+bool isDeviceMounted(const std::string& device) {
+
+	return isDeviceMounted(device, {});
+
+}

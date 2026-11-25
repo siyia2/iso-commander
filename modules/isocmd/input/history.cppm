@@ -13,6 +13,6 @@ export extern "C++" {
 void loadHistory(bool& filterHistory);
 void saveHistory(bool& filterHistory);
 void clearHistory(const std::string& inputSearch,
-                  const std::function<void()>& repaintHeader);
+				  const std::function<void()>& repaintHeader);
 
 } // extern "C++"

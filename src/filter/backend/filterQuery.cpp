@@ -48,44 +48,44 @@ import isocmd.util.stringManipulation;
 static bool simdSearchExists(std::string_view text, std::string_view pattern)
 {
 
-    const size_t n = text.size();
-    const size_t m = pattern.size();
-    if (m == 0 || m > n) return false;
+	const size_t n = text.size();
+	const size_t m = pattern.size();
+	if (m == 0 || m > n) return false;
 
-    if (m == 1) {
-        return std::memchr(text.data(), pattern[0], n) != nullptr;
-    }
+	if (m == 1) {
+		return std::memchr(text.data(), pattern[0], n) != nullptr;
+	}
 
-    const char* const t = text.data();
-    const char* const p = pattern.data();
-    const __m128i first = _mm_set1_epi8(p[0]);
-    const __m128i last = _mm_set1_epi8(p[m - 1]);
-    size_t i = 0;
+	const char* const t = text.data();
+	const char* const p = pattern.data();
+	const __m128i first = _mm_set1_epi8(p[0]);
+	const __m128i last = _mm_set1_epi8(p[m - 1]);
+	size_t i = 0;
 
-    for (; i + m + 15 <= n; i += 16) {
-        const __m128i a = _mm_loadu_si128(reinterpret_cast<const __m128i*>(t + i));
-        const __m128i b = _mm_loadu_si128(reinterpret_cast<const __m128i*>(t + i + m - 1));
-        unsigned mask = static_cast<unsigned>(_mm_movemask_epi8(
-            _mm_and_si128(_mm_cmpeq_epi8(a, first), _mm_cmpeq_epi8(b, last))));
+	for (; i + m + 15 <= n; i += 16) {
+		const __m128i a = _mm_loadu_si128(reinterpret_cast<const __m128i*>(t + i));
+		const __m128i b = _mm_loadu_si128(reinterpret_cast<const __m128i*>(t + i + m - 1));
+		unsigned mask = static_cast<unsigned>(_mm_movemask_epi8(
+		    _mm_and_si128(_mm_cmpeq_epi8(a, first), _mm_cmpeq_epi8(b, last))));
 
-        while (mask != 0) {
-            const unsigned bit = static_cast<unsigned>(__builtin_ctz(mask));
-            // First and last bytes already match; compare the middle (m - 2 bytes).
-            if (std::memcmp(t + i + bit + 1, p + 1, m - 2) == 0) return true;
-            mask &= mask - 1;
-        }
-    }
+		while (mask != 0) {
+			const unsigned bit = static_cast<unsigned>(__builtin_ctz(mask));
+			// First and last bytes already match; compare the middle (m - 2 bytes).
+			if (std::memcmp(t + i + bit + 1, p + 1, m - 2) == 0) return true;
+			mask &= mask - 1;
+		}
+	}
 
-    // Scalar tail for the remaining start positions.
-    for (; i + m <= n; ++i) {
-        if (t[i] == p[0] && std::memcmp(t + i + 1, p + 1, m - 1) == 0) return true;
-    }
+	// Scalar tail for the remaining start positions.
+	for (; i + m <= n; ++i) {
+		if (t[i] == p[0] && std::memcmp(t + i + 1, p + 1, m - 1) == 0) return true;
+	}
 
-    return false;
+	return false;
+
 }
 
 // ─── Query parsing ───────────────────────────────────────────────────────────
-
 
 /**
  * @brief True if @p query ends in an unpaired backslash, i.e. an escape
@@ -94,10 +94,12 @@ static bool simdSearchExists(std::string_view text, std::string_view pattern)
  * dangling.
  */
 bool hasDanglingBackslash(const std::string& query) {
-    size_t run = 0;
-    for (size_t i = query.size(); i > 0 && query[i - 1] == '\\'; --i)
-        ++run;
-    return (run % 2) == 1;
+
+	size_t run = 0;
+	for (size_t i = query.size(); i > 0 && query[i - 1] == '\\'; --i)
+	    ++run;
+	return (run % 2) == 1;
+
 }
 
 /**
@@ -106,7 +108,9 @@ bool hasDanglingBackslash(const std::string& query) {
  * @return True if the character can be escaped by a backslash, false otherwise.
  */
 static inline bool isEscapableChar(char c) {
-    return c == '&' || c == ';' || c == '!' || c == '\\';
+
+	return c == '&' || c == ';' || c == '!' || c == '\\';
+
 }
 
 /**
@@ -117,25 +121,27 @@ static inline bool isEscapableChar(char c) {
  * @param group Reference to the active QueryGroup being built.
  */
 static void finishTerm(std::string& term, bool& negate, QueryGroup& group) {
-    const bool wasNegated = negate;
-    negate = false;    // reset even when the term is empty (a lone "!")
-    if (term.empty())
-        return;
 
-    QueryToken qt;
-    qt.original        = std::move(term);
-    qt.negated         = wasNegated;
-    qt.isCaseSensitive = std::any_of(
-        qt.original.begin(), qt.original.end(),
-        [](unsigned char c) { return std::isupper(c); });
+	const bool wasNegated = negate;
+	negate = false;    // reset even when the term is empty (a lone "!")
+	if (term.empty())
+	    return;
 
-    if (!qt.isCaseSensitive) {
-        qt.lower = qt.original;
-        toLowerInPlace(qt.lower);
-    }
+	QueryToken qt;
+	qt.original        = std::move(term);
+	qt.negated         = wasNegated;
+	qt.isCaseSensitive = std::any_of(
+	    qt.original.begin(), qt.original.end(),
+	    [](unsigned char c) { return std::isupper(c); });
 
-    group.push_back(std::move(qt));
-    term.clear();
+	if (!qt.isCaseSensitive) {
+		qt.lower = qt.original;
+		toLowerInPlace(qt.lower);
+	}
+
+	group.push_back(std::move(qt));
+	term.clear();
+
 }
 
 /**
@@ -146,11 +152,13 @@ static void finishTerm(std::string& term, bool& negate, QueryGroup& group) {
  * @param groups Reference to the vector of QueryGroups.
  */
 static void finishGroup(std::string& term, bool& negate, QueryGroup& group, std::vector<QueryGroup>& groups) {
-    finishTerm(term, negate, group);
-    if (!group.empty()) {
-        groups.push_back(std::move(group));
-        group.clear();
-    }
+
+	finishTerm(term, negate, group);
+	if (!group.empty()) {
+		groups.push_back(std::move(group));
+		group.clear();
+	}
+
 }
 
 /**
@@ -166,30 +174,32 @@ static void finishGroup(std::string& term, bool& negate, QueryGroup& group, std:
 static void processQueryChar(const std::string& query, size_t& i,
                              std::string& term, bool& negate, bool& sawOr,
                              QueryGroup& group, std::vector<QueryGroup>& groups) {
-    const char c = query[i];
 
-    // A backslash with nothing after it is a dangling escape (mid-typing,
-    // or backspaced onto it). It has no delimiter to escape, so ignore it
-    // instead of searching for a literal '\'.
-    if (c == '\\' && i + 1 == query.size())
-        return;
+	const char c = query[i];
 
-    // Backslash escapes only '&', ';', '!' and '\' itself. A backslash
-    // before any other character remains part of the search term.
-    if (c == '\\' && i + 1 < query.size() && isEscapableChar(query[i + 1])) {
-        term.push_back(query[++i]);
-    } else if (c == '&') {
-        finishTerm(term, negate, group);
-    } else if (c == ';') {
-        sawOr = true;
-        finishGroup(term, negate, group, groups);
-    } else if (c == '!' && term.empty() && !negate) {
-        // Unescaped '!' at the start of a term: negate it. Any later '!'
-        // in the same term (including a second leading one) is literal.
-        negate = true;
-    } else {
-        term.push_back(c);
-    }
+	// A backslash with nothing after it is a dangling escape (mid-typing,
+	// or backspaced onto it). It has no delimiter to escape, so ignore it
+	// instead of searching for a literal '\'.
+	if (c == '\\' && i + 1 == query.size())
+	    return;
+
+	// Backslash escapes only '&', ';', '!' and '\' itself. A backslash
+	// before any other character remains part of the search term.
+	if (c == '\\' && i + 1 < query.size() && isEscapableChar(query[i + 1])) {
+		term.push_back(query[++i]);
+	} else if (c == '&') {
+		finishTerm(term, negate, group);
+	} else if (c == ';') {
+		sawOr = true;
+		finishGroup(term, negate, group, groups);
+	} else if (c == '!' && term.empty() && !negate) {
+		// Unescaped '!' at the start of a term: negate it. Any later '!'
+		// in the same term (including a second leading one) is literal.
+		negate = true;
+	} else {
+		term.push_back(c);
+	}
+
 }
 
 /**
@@ -237,25 +247,27 @@ static void processQueryChar(const std::string& query, size_t& i,
  */
 std::vector<QueryGroup> buildQueryGroups(const std::string& query,
                                          bool* trailingEmptyGroup) {
-    std::vector<QueryGroup> groups;
-    QueryGroup group;
-    std::string term;
-    bool negate = false;   // the term currently being built started with an unescaped '!'
-    bool sawOr  = false;   // at least one unescaped ';' has been seen
-    term.reserve(query.size());
 
-    for (size_t i = 0; i < query.size(); ++i) {
-        processQueryChar(query, i, term, negate, sawOr, group, groups);
-    }
+	std::vector<QueryGroup> groups;
+	QueryGroup group;
+	std::string term;
+	bool negate = false;   // the term currently being built started with an unescaped '!'
+	bool sawOr  = false;   // at least one unescaped ';' has been seen
+	term.reserve(query.size());
 
-    // The last OR-branch is still empty if nothing has accumulated since the
-    // final ';' (checked before finishGroup() flushes it). A pending '!' with
-    // no text yet counts as a started term, so "clon;!" is not an empty branch.
-    if (trailingEmptyGroup)
-        *trailingEmptyGroup = sawOr && group.empty() && term.empty() && !negate;
+	for (size_t i = 0; i < query.size(); ++i) {
+		processQueryChar(query, i, term, negate, sawOr, group, groups);
+	}
 
-    finishGroup(term, negate, group, groups);
-    return groups;
+	// The last OR-branch is still empty if nothing has accumulated since the
+	// final ';' (checked before finishGroup() flushes it). A pending '!' with
+	// no text yet counts as a started term, so "clon;!" is not an empty branch.
+	if (trailingEmptyGroup)
+	    *trailingEmptyGroup = sawOr && group.empty() && term.empty() && !negate;
+
+	finishGroup(term, negate, group, groups);
+	return groups;
+
 }
 
 /**
@@ -263,10 +275,12 @@ std::vector<QueryGroup> buildQueryGroups(const std::string& query,
  * lowercased copy of each entry is needed to evaluate the query.
  */
 static bool groupsNeedLower(const std::vector<QueryGroup>& groups) {
-    for (const auto& group : groups)
-        for (const auto& qt : group)
-            if (!qt.isCaseSensitive) return true;
-    return false;
+
+	for (const auto& group : groups)
+	    for (const auto& qt : group)
+	        if (!qt.isCaseSensitive) return true;
+	return false;
+
 }
 
 /**
@@ -278,10 +292,12 @@ static bool groupsNeedLower(const std::vector<QueryGroup>& groups) {
  * therefore never narrows incrementally from a negated query.
  */
 bool groupsHaveNegation(const std::vector<QueryGroup>& groups) {
-    for (const auto& group : groups)
-        for (const auto& qt : group)
-            if (qt.negated) return true;
-    return false;
+
+	for (const auto& group : groups)
+	    for (const auto& qt : group)
+	        if (qt.negated) return true;
+	return false;
+
 }
 
 /**
@@ -307,40 +323,44 @@ static bool matchesAnyGroup(const std::vector<QueryGroup>& groups,
                                    const std::string& file,
                                    const std::string* fileLower)
 {
-    const auto termHit = [&](const QueryToken& qt) {
-        return qt.isCaseSensitive
-            ? simdSearchExists(file, qt.original)
-            : simdSearchExists(*fileLower, qt.lower);
-    };
 
-    // Pass 1: global exclusions. Also notes whether any positive term exists.
-    bool hasPositive = false;
-    for (const auto& group : groups) {
-        for (const auto& qt : group) {
-            if (qt.negated) {
-                if (termHit(qt)) return false;
-            } else {
-                hasPositive = true;
-            }
-        }
-    }
-    if (!hasPositive) return true;   // exclusion-only query
+	const auto termHit = [&](const QueryToken& qt) {
 
-    // Pass 2: OR over groups, AND over each group's positive terms.
-    for (const auto& group : groups) {
-        bool groupHasPositive = false;
-        bool allMatch = true;
-        for (const auto& qt : group) {
-            if (qt.negated) continue;
-            groupHasPositive = true;
-            if (!termHit(qt)) {
-                allMatch = false;
-                break;
-            }
-        }
-        if (groupHasPositive && allMatch) return true;
-    }
-    return false;
+		return qt.isCaseSensitive
+		    ? simdSearchExists(file, qt.original)
+		    : simdSearchExists(*fileLower, qt.lower);
+
+	};
+
+	// Pass 1: global exclusions. Also notes whether any positive term exists.
+	bool hasPositive = false;
+	for (const auto& group : groups) {
+		for (const auto& qt : group) {
+			if (qt.negated) {
+				if (termHit(qt)) return false;
+			} else {
+				hasPositive = true;
+			}
+		}
+	}
+	if (!hasPositive) return true;   // exclusion-only query
+
+	// Pass 2: OR over groups, AND over each group's positive terms.
+	for (const auto& group : groups) {
+		bool groupHasPositive = false;
+		bool allMatch = true;
+		for (const auto& qt : group) {
+			if (qt.negated) continue;
+			groupHasPositive = true;
+			if (!termHit(qt)) {
+				allMatch = false;
+				break;
+			}
+		}
+		if (groupHasPositive && allMatch) return true;
+	}
+	return false;
+
 }
 
 // ─── Core filter engine ──────────────────────────────────────────────────────
@@ -353,9 +373,11 @@ static bool matchesAnyGroup(const std::vector<QueryGroup>& groups,
  */
 static std::vector<size_t> makeAscendingIndices(size_t count)
 {
-    std::vector<size_t> indices(count);
-    std::iota(indices.begin(), indices.end(), 0);
-    return indices;
+
+	std::vector<size_t> indices(count);
+	std::iota(indices.begin(), indices.end(), 0);
+	return indices;
+
 }
 
 /**
@@ -378,32 +400,34 @@ static std::vector<size_t> filterChunkIndices(const std::vector<std::string>& fi
                                               const std::vector<std::string>* precomputedLower,
                                               bool useCachedLower)
 {
-    std::vector<size_t> localMatches;
-    localMatches.reserve((end - start) / 4);
 
-    std::string fileLowerScratch;
-    if (needLower && !useCachedLower)
-        fileLowerScratch.reserve(256);
+	std::vector<size_t> localMatches;
+	localMatches.reserve((end - start) / 4);
 
-    for (size_t j = start; j < end; ++j) {
-        const std::string& file = files[j];
+	std::string fileLowerScratch;
+	if (needLower && !useCachedLower)
+	    fileLowerScratch.reserve(256);
 
-        const std::string* fileLower = nullptr;
-        if (needLower) {
-            if (useCachedLower) {
-                fileLower = &(*precomputedLower)[j];
-            } else {
-                fileLowerScratch = file;
-                toLowerInPlace(fileLowerScratch);
-                fileLower = &fileLowerScratch;
-            }
-        }
+	for (size_t j = start; j < end; ++j) {
+		const std::string& file = files[j];
 
-        if (matchesAnyGroup(queryGroups, file, fileLower))
-            localMatches.push_back(j);
-    }
+		const std::string* fileLower = nullptr;
+		if (needLower) {
+			if (useCachedLower) {
+				fileLower = &(*precomputedLower)[j];
+			} else {
+				fileLowerScratch = file;
+				toLowerInPlace(fileLowerScratch);
+				fileLower = &fileLowerScratch;
+			}
+		}
 
-    return localMatches;
+		if (matchesAnyGroup(queryGroups, file, fileLower))
+		    localMatches.push_back(j);
+	}
+
+	return localMatches;
+
 }
 
 /**
@@ -419,27 +443,29 @@ static std::vector<size_t> filterChunkIndices(const std::vector<std::string>& fi
 static std::vector<size_t> collectChunkResults(std::vector<std::future<std::vector<size_t>>>& futures,
                                                size_t totalFiles)
 {
-    std::vector<size_t> filteredIndices;
-    filteredIndices.reserve(totalFiles);
 
-    std::exception_ptr firstException;
+	std::vector<size_t> filteredIndices;
+	filteredIndices.reserve(totalFiles);
 
-    for (auto& fut : futures) {
-        try {
-            auto chunk = fut.get();
-            filteredIndices.insert(filteredIndices.end(),
-                                   std::make_move_iterator(chunk.begin()),
-                                   std::make_move_iterator(chunk.end()));
-        } catch (...) {
-            if (!firstException)
-                firstException = std::current_exception();
-        }
-    }
+	std::exception_ptr firstException;
 
-    if (firstException)
-        std::rethrow_exception(firstException);
+	for (auto& fut : futures) {
+		try {
+			auto chunk = fut.get();
+			filteredIndices.insert(filteredIndices.end(),
+			                       std::make_move_iterator(chunk.begin()),
+			                       std::make_move_iterator(chunk.end()));
+		} catch (...) {
+			if (!firstException)
+			    firstException = std::current_exception();
+		}
+	}
 
-    return filteredIndices;
+	if (firstException)
+	    std::rethrow_exception(firstException);
+
+	return filteredIndices;
+
 }
 
 /**
@@ -473,45 +499,49 @@ static std::vector<size_t> collectChunkResults(std::vector<std::future<std::vect
 std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query,
                                        const std::vector<std::string>* precomputedLower)
 {
-    if (files.empty() || query.empty()) return {};
 
-    const std::vector<QueryGroup> queryGroups = buildQueryGroups(query);
-    if (queryGroups.empty())
-        return makeAscendingIndices(files.size());
+	if (files.empty() || query.empty()) return {};
 
-    const bool needLower = groupsNeedLower(queryGroups);
+	const std::vector<QueryGroup> queryGroups = buildQueryGroups(query);
+	if (queryGroups.empty())
+	    return makeAscendingIndices(files.size());
 
-    // Only trust a caller-supplied lowercase cache if it lines up with `files`;
-    // otherwise fall back to lowercasing inline so a stale/mismatched cache
-    // can never produce wrong indices.
-    const bool useCachedLower = precomputedLower && precomputedLower->size() == files.size();
+	const bool needLower = groupsNeedLower(queryGroups);
 
-    ThreadPool&  pool       = getStaticThreadPool();
-    const size_t numThreads = std::min({
-        pool.threadCount(),
-        files.size(),
-        static_cast<size_t>(GlobalThreadCaps::FILTER_THREAD_CAP)
-    });
+	// Only trust a caller-supplied lowercase cache if it lines up with `files`;
+	// otherwise fall back to lowercasing inline so a stale/mismatched cache
+	// can never produce wrong indices.
+	const bool useCachedLower = precomputedLower && precomputedLower->size() == files.size();
 
-    const size_t chunkSize = (files.size() + numThreads - 1) / numThreads;
+	ThreadPool&  pool       = getStaticThreadPool();
+	const size_t numThreads = std::min({
+		pool.threadCount(),
+		files.size(),
+		static_cast<size_t>(GlobalThreadCaps::FILTER_THREAD_CAP)
+	});
 
-    std::vector<std::future<std::vector<size_t>>> futures;
-    futures.reserve(numThreads);
+	const size_t chunkSize = (files.size() + numThreads - 1) / numThreads;
 
-    for (size_t i = 0; i < numThreads; ++i) {
-        const size_t start = i * chunkSize;
-        const size_t end   = std::min(files.size(), start + chunkSize);
-        if (start >= end) break;
+	std::vector<std::future<std::vector<size_t>>> futures;
+	futures.reserve(numThreads);
 
-        futures.emplace_back(pool.enqueue(
-            [&files, start, end, needLower, &queryGroups, precomputedLower, useCachedLower]() {
-                return filterChunkIndices(files, start, end, needLower, queryGroups,
-                                          precomputedLower, useCachedLower);
-            }
-        ));
-    }
+	for (size_t i = 0; i < numThreads; ++i) {
+		const size_t start = i * chunkSize;
+		const size_t end   = std::min(files.size(), start + chunkSize);
+		if (start >= end) break;
 
-    return collectChunkResults(futures, files.size());
+		futures.emplace_back(pool.enqueue(
+		    [&files, start, end, needLower, &queryGroups, precomputedLower, useCachedLower]() {
+
+				return filterChunkIndices(files, start, end, needLower, queryGroups,
+				                          precomputedLower, useCachedLower);
+
+			}
+		));
+	}
+
+	return collectChunkResults(futures, files.size());
+
 }
 
 /**
@@ -539,35 +569,37 @@ static std::vector<size_t> filterSubsetChunk(
     const std::vector<std::string>* precomputedLower,
     const bool useCachedLower)
 {
-    std::vector<size_t> localMatches;
-    localMatches.reserve((end - start) / 4);
 
-    std::string fileLowerScratch;
-    if (needLower && !useCachedLower)
-        fileLowerScratch.reserve(256);
+	std::vector<size_t> localMatches;
+	localMatches.reserve((end - start) / 4);
 
-    for (size_t candidatePos = start; candidatePos < end; ++candidatePos) {
-        const size_t fileIndex = candidateIndices[candidatePos];
-        const std::string& file = files[fileIndex];
+	std::string fileLowerScratch;
+	if (needLower && !useCachedLower)
+	    fileLowerScratch.reserve(256);
 
-        const std::string* fileLower = nullptr;
-        if (needLower) {
-            if (useCachedLower) {
-                fileLower = &(*precomputedLower)[fileIndex];
-            } else {
-                fileLowerScratch = file;
-                toLowerInPlace(fileLowerScratch);
-                fileLower = &fileLowerScratch;
-            }
-        }
+	for (size_t candidatePos = start; candidatePos < end; ++candidatePos) {
+		const size_t fileIndex = candidateIndices[candidatePos];
+		const std::string& file = files[fileIndex];
 
-        if (matchesAnyGroup(queryGroups, file, fileLower)) {
-            // Preserve the original index into `files`.
-            localMatches.push_back(fileIndex);
-        }
-    }
+		const std::string* fileLower = nullptr;
+		if (needLower) {
+			if (useCachedLower) {
+				fileLower = &(*precomputedLower)[fileIndex];
+			} else {
+				fileLowerScratch = file;
+				toLowerInPlace(fileLowerScratch);
+				fileLower = &fileLowerScratch;
+			}
+		}
 
-    return localMatches;
+		if (matchesAnyGroup(queryGroups, file, fileLower)) {
+			// Preserve the original index into `files`.
+			localMatches.push_back(fileIndex);
+		}
+	}
+
+	return localMatches;
+
 }
 
 /**
@@ -582,29 +614,31 @@ static std::vector<size_t> collectSubsetResults(
     std::vector<std::future<std::vector<size_t>>>& futures,
     const size_t maxMatches)
 {
-    std::vector<size_t> filteredIndices;
-    filteredIndices.reserve(maxMatches);
 
-    std::exception_ptr firstException;
+	std::vector<size_t> filteredIndices;
+	filteredIndices.reserve(maxMatches);
 
-    for (auto& fut : futures) {
-        try {
-            auto chunk = fut.get();
+	std::exception_ptr firstException;
 
-            filteredIndices.insert(
-                filteredIndices.end(),
-                std::make_move_iterator(chunk.begin()),
-                std::make_move_iterator(chunk.end()));
-        } catch (...) {
-            if (!firstException)
-                firstException = std::current_exception();
-        }
-    }
+	for (auto& fut : futures) {
+		try {
+			auto chunk = fut.get();
 
-    if (firstException)
-        std::rethrow_exception(firstException);
+			filteredIndices.insert(
+			    filteredIndices.end(),
+			    std::make_move_iterator(chunk.begin()),
+			    std::make_move_iterator(chunk.end()));
+		} catch (...) {
+			if (!firstException)
+			    firstException = std::current_exception();
+		}
+	}
 
-    return filteredIndices;
+	if (firstException)
+	    std::rethrow_exception(firstException);
+
+	return filteredIndices;
+
 }
 
 /**
@@ -646,50 +680,54 @@ std::vector<size_t> filterFilesIndicesSubset(
     const std::string& query,
     const std::vector<std::string>* precomputedLower)
 {
-    if (files.empty() || candidateIndices.empty() || query.empty())
-        return {};
 
-    const std::vector<QueryGroup> queryGroups = buildQueryGroups(query);
-    if (queryGroups.empty())
-        return candidateIndices;
+	if (files.empty() || candidateIndices.empty() || query.empty())
+	    return {};
 
-    const bool needLower = groupsNeedLower(queryGroups);
-    const bool useCachedLower =
-        precomputedLower && precomputedLower->size() == files.size();
+	const std::vector<QueryGroup> queryGroups = buildQueryGroups(query);
+	if (queryGroups.empty())
+	    return candidateIndices;
 
-    ThreadPool& pool = getStaticThreadPool();
+	const bool needLower = groupsNeedLower(queryGroups);
+	const bool useCachedLower =
+	    precomputedLower && precomputedLower->size() == files.size();
 
-    const size_t numThreads = std::min({
-        pool.threadCount(),
-        candidateIndices.size(),
-        static_cast<size_t>(GlobalThreadCaps::FILTER_THREAD_CAP)
-    });
+	ThreadPool& pool = getStaticThreadPool();
 
-    const size_t chunkSize =
-        (candidateIndices.size() + numThreads - 1) / numThreads;
+	const size_t numThreads = std::min({
+		pool.threadCount(),
+		candidateIndices.size(),
+		static_cast<size_t>(GlobalThreadCaps::FILTER_THREAD_CAP)
+	});
 
-    std::vector<std::future<std::vector<size_t>>> futures;
-    futures.reserve(numThreads);
+	const size_t chunkSize =
+	    (candidateIndices.size() + numThreads - 1) / numThreads;
 
-    for (size_t i = 0; i < numThreads; ++i) {
-        const size_t start = i * chunkSize;
-        const size_t end   = std::min(candidateIndices.size(),
-                                      start + chunkSize);
+	std::vector<std::future<std::vector<size_t>>> futures;
+	futures.reserve(numThreads);
 
-        if (start >= end)
-            break;
+	for (size_t i = 0; i < numThreads; ++i) {
+		const size_t start = i * chunkSize;
+		const size_t end   = std::min(candidateIndices.size(),
+		                              start + chunkSize);
 
-        futures.emplace_back(pool.enqueue(
-            [&files, &candidateIndices, start, end,
-             &queryGroups, needLower, precomputedLower,
-             useCachedLower]() -> std::vector<size_t> {
-                return filterSubsetChunk(
-                    files, candidateIndices, start, end,
-                    queryGroups, needLower, precomputedLower,
-                    useCachedLower);
-            }
-        ));
-    }
+		if (start >= end)
+		    break;
 
-    return collectSubsetResults(futures, candidateIndices.size());
+		futures.emplace_back(pool.enqueue(
+		    [&files, &candidateIndices, start, end,
+		     &queryGroups, needLower, precomputedLower,
+		     useCachedLower]() -> std::vector<size_t> {
+
+				return filterSubsetChunk(
+				    files, candidateIndices, start, end,
+				    queryGroups, needLower, precomputedLower,
+				    useCachedLower);
+
+			}
+		));
+	}
+
+	return collectSubsetResults(futures, candidateIndices.size());
+
 }

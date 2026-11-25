@@ -34,42 +34,44 @@ import isocmd.ui.display.themes;
  *               least one line starting with '/'.
  */
 bool isHistoryFileEmpty(const std::string& filePath) {
-    struct stat fileInfo;
-    if (stat(filePath.c_str(), &fileInfo) != 0) {
-        return true;
-    }
 
-    if (fileInfo.st_size == 0) {
-        return true;
-    }
+	struct stat fileInfo;
+	if (stat(filePath.c_str(), &fileInfo) != 0) {
+		return true;
+	}
 
-    std::ifstream file(filePath);
-    if (!file.is_open()) {
-        return true;
-    }
+	if (fileInfo.st_size == 0) {
+		return true;
+	}
 
-    bool hasNonWhitespace = false;
-    bool hasEntryStartingWithSlash = false;
-    std::string line;
+	std::ifstream file(filePath);
+	if (!file.is_open()) {
+		return true;
+	}
 
-    while (std::getline(file, line)) {
-        for (char ch : line) {
-            if (!std::isspace(static_cast<unsigned char>(ch))) {
-                hasNonWhitespace = true;
-                break;
-            }
-        }
+	bool hasNonWhitespace = false;
+	bool hasEntryStartingWithSlash = false;
+	std::string line;
 
-        if (!line.empty() && line[0] == '/') {
-            hasEntryStartingWithSlash = true;
-        }
-    }
+	while (std::getline(file, line)) {
+		for (char ch : line) {
+			if (!std::isspace(static_cast<unsigned char>(ch))) {
+				hasNonWhitespace = true;
+				break;
+			}
+		}
 
-    if (!hasNonWhitespace || !hasEntryStartingWithSlash) {
-        return true;
-    }
+		if (!line.empty() && line[0] == '/') {
+			hasEntryStartingWithSlash = true;
+		}
+	}
 
-    return false;
+	if (!hasNonWhitespace || !hasEntryStartingWithSlash) {
+		return true;
+	}
+
+	return false;
+
 }
 
 /**
@@ -89,40 +91,42 @@ bool isHistoryFileEmpty(const std::string& filePath) {
  * @param filterHistory True for filter history, false for path history.
  */
 void loadHistory(bool& filterHistory) {
-    clear_history();
-    std::string targetFilePath = !filterHistory ? GlobalState::historyFilePath : GlobalState::filterHistoryFilePath;
-    size_t maxLines = !filterHistory ? GlobalState::MAX_HISTORY_LINES : GlobalState::MAX_HISTORY_PATTERN_LINES;
-    if (maxLines == 0) return;
 
-    if (!std::filesystem::exists(targetFilePath)) {
-        return;
-    }
+	clear_history();
+	std::string targetFilePath = !filterHistory ? GlobalState::historyFilePath : GlobalState::filterHistoryFilePath;
+	size_t maxLines = !filterHistory ? GlobalState::MAX_HISTORY_LINES : GlobalState::MAX_HISTORY_PATTERN_LINES;
+	if (maxLines == 0) return;
 
-    int fd = open(targetFilePath.c_str(), O_RDONLY);
-    if (fd == -1) return;
+	if (!std::filesystem::exists(targetFilePath)) {
+		return;
+	}
 
-    if (flock(fd, LOCK_SH) == -1) {
-        close(fd);
-        return;
-    }
+	int fd = open(targetFilePath.c_str(), O_RDONLY);
+	if (fd == -1) return;
 
-    FILE* f = fdopen(fd, "r");
-    if (f) {
-        char buf[4096];
-        while (fgets(buf, sizeof(buf), f)) {
-            std::string line(buf);
-            if (!line.empty() && line.back() == '\n')
-                line.pop_back();
-            if (!line.empty()) {
-                add_history(line.c_str());
-            }
-        }
-        flock(fd, LOCK_UN);
-        fclose(f);
-    } else {
-        flock(fd, LOCK_UN);
-        close(fd);
-    }
+	if (flock(fd, LOCK_SH) == -1) {
+		close(fd);
+		return;
+	}
+
+	FILE* f = fdopen(fd, "r");
+	if (f) {
+		char buf[4096];
+		while (fgets(buf, sizeof(buf), f)) {
+			std::string line(buf);
+			if (!line.empty() && line.back() == '\n')
+			    line.pop_back();
+			if (!line.empty()) {
+				add_history(line.c_str());
+			}
+		}
+		flock(fd, LOCK_UN);
+		fclose(f);
+	} else {
+		flock(fd, LOCK_UN);
+		close(fd);
+	}
+
 }
 
 /**
@@ -134,10 +138,12 @@ void loadHistory(bool& filterHistory) {
  * @param filePath Target file path whose parent directory should be checked.
  */
 static void ensureParentDirectoryExists(const std::string& filePath) {
-    const std::filesystem::path dirPath = std::filesystem::path(filePath).parent_path();
-    if (!dirPath.empty() && !std::filesystem::exists(dirPath)) {
-        std::filesystem::create_directories(dirPath);
-    }
+
+	const std::filesystem::path dirPath = std::filesystem::path(filePath).parent_path();
+	if (!dirPath.empty() && !std::filesystem::exists(dirPath)) {
+		std::filesystem::create_directories(dirPath);
+	}
+
 }
 
 /**
@@ -152,23 +158,25 @@ static void ensureParentDirectoryExists(const std::string& filePath) {
  * @return Valid locked file descriptor on success, or `-1` on failure.
  */
 static int openAndLockTruncatedFile(const std::string& filePath) {
-    const int fd = open(filePath.c_str(), O_WRONLY | O_CREAT, 0644);
-    if (fd == -1) {
-        return -1;
-    }
 
-    if (flock(fd, LOCK_EX) == -1) {
-        close(fd);
-        return -1;
-    }
+	const int fd = open(filePath.c_str(), O_WRONLY | O_CREAT, 0644);
+	if (fd == -1) {
+		return -1;
+	}
 
-    if (ftruncate(fd, 0) == -1) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        return -1;
-    }
+	if (flock(fd, LOCK_EX) == -1) {
+		close(fd);
+		return -1;
+	}
 
-    return fd;
+	if (ftruncate(fd, 0) == -1) {
+		flock(fd, LOCK_UN);
+		close(fd);
+		return -1;
+	}
+
+	return fd;
+
 }
 
 /**
@@ -182,40 +190,42 @@ static int openAndLockTruncatedFile(const std::string& filePath) {
  * @return Vector of history lines ordered from oldest to newest.
  */
 static std::vector<std::string> collectUniqueHistoryLines(size_t maxLines) {
-    std::vector<std::string> finalLines;
-    HIST_ENTRY** histList = history_list();
-    if (!histList || maxLines == 0) {
-        return finalLines;
-    }
 
-    int count = 0;
-    while (histList[count]) {
-        ++count;
-    }
+	std::vector<std::string> finalLines;
+	HIST_ENTRY** histList = history_list();
+	if (!histList || maxLines == 0) {
+		return finalLines;
+	}
 
-    std::unordered_set<std::string> seen;
-    seen.reserve(maxLines);
+	int count = 0;
+	while (histList[count]) {
+		++count;
+	}
 
-    for (int i = count - 1; i >= 0; --i) {
-        if (!histList[i] || !histList[i]->line) {
-            continue;
-        }
+	std::unordered_set<std::string> seen;
+	seen.reserve(maxLines);
 
-        std::string line(histList[i]->line);
-        if (line.empty()) {
-            continue;
-        }
+	for (int i = count - 1; i >= 0; --i) {
+		if (!histList[i] || !histList[i]->line) {
+			continue;
+		}
 
-        if (seen.insert(line).second) {
-            finalLines.push_back(std::move(line));
-            if (finalLines.size() >= maxLines) {
-                break;
-            }
-        }
-    }
+		std::string line(histList[i]->line);
+		if (line.empty()) {
+			continue;
+		}
 
-    std::reverse(finalLines.begin(), finalLines.end());
-    return finalLines;
+		if (seen.insert(line).second) {
+			finalLines.push_back(std::move(line));
+			if (finalLines.size() >= maxLines) {
+				break;
+			}
+		}
+	}
+
+	std::reverse(finalLines.begin(), finalLines.end());
+	return finalLines;
+
 }
 
 /**
@@ -229,20 +239,22 @@ static std::vector<std::string> collectUniqueHistoryLines(size_t maxLines) {
  * @param lines Lines to write to the file.
  */
 static void writeLinesAndUnlock(int fd, const std::vector<std::string>& lines) {
-    FILE* f = fdopen(fd, "w");
-    if (!f) {
-        flock(fd, LOCK_UN);
-        close(fd);
-        return;
-    }
 
-    for (const auto& line : lines) {
-        fprintf(f, "%s\n", line.c_str());
-    }
+	FILE* f = fdopen(fd, "w");
+	if (!f) {
+		flock(fd, LOCK_UN);
+		close(fd);
+		return;
+	}
 
-    fflush(f);
-    flock(fd, LOCK_UN);
-    fclose(f);
+	for (const auto& line : lines) {
+		fprintf(f, "%s\n", line.c_str());
+	}
+
+	fflush(f);
+	flock(fd, LOCK_UN);
+	fclose(f);
+
 }
 
 /**
@@ -266,25 +278,27 @@ static void writeLinesAndUnlock(int fd, const std::vector<std::string>& lines) {
  * @param filterHistory True for filter history, false for path history.
  */
 void saveHistory(bool& filterHistory) {
-    const std::string& targetFilePath =
-        !filterHistory ? GlobalState::historyFilePath : GlobalState::filterHistoryFilePath;
-    const size_t maxLines =
-        !filterHistory ? GlobalState::MAX_HISTORY_LINES : GlobalState::MAX_HISTORY_PATTERN_LINES;
 
-    if (maxLines == 0) {
-        clear_history();
-        return;
-    }
+	const std::string& targetFilePath =
+	    !filterHistory ? GlobalState::historyFilePath : GlobalState::filterHistoryFilePath;
+	const size_t maxLines =
+	    !filterHistory ? GlobalState::MAX_HISTORY_LINES : GlobalState::MAX_HISTORY_PATTERN_LINES;
 
-    ensureParentDirectoryExists(targetFilePath);
+	if (maxLines == 0) {
+		clear_history();
+		return;
+	}
 
-    const int fd = openAndLockTruncatedFile(targetFilePath);
-    if (fd == -1) {
-        return;
-    }
+	ensureParentDirectoryExists(targetFilePath);
 
-    const std::vector<std::string> finalLines = collectUniqueHistoryLines(maxLines);
-    writeLinesAndUnlock(fd, finalLines);
+	const int fd = openAndLockTruncatedFile(targetFilePath);
+	if (fd == -1) {
+		return;
+	}
+
+	const std::vector<std::string> finalLines = collectUniqueHistoryLines(maxLines);
+	writeLinesAndUnlock(fd, finalLines);
+
 }
 
 /**
@@ -318,56 +332,62 @@ void saveHistory(bool& filterHistory) {
  */
 void clearHistory(const std::string& inputSearch,
                   const std::function<void()>& repaintHeader) {
-    signal(SIGINT, SIG_IGN);
-    disable_ctrl_d();
 
-    auto hc = resolveDatabaseTheme();
+	signal(SIGINT, SIG_IGN);
+	disable_ctrl_d();
 
-    const std::string basePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/";
-    std::string filePath;
-    std::string historyType;
+	auto hc = resolveDatabaseTheme();
 
-    if (inputSearch == "!clr_paths") {
-        filePath = basePath + "iso_commander_path_database.txt";
-        historyType = "FolderPath";
-    } else if (inputSearch == "!clr_filter") {
-        filePath = basePath + "iso_commander_filter_database.txt";
-        historyType = "FilterTerm";
-    } else {
-        std::cerr << "\n" << (hc.error) << "Invalid command: "
-                  << (hc.warning) << "'" << inputSearch << "'"
-                  << (hc.error) << ".\033[J" << std::endl;
-        return;
-    }
+	const std::string basePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/";
+	std::string filePath;
+	std::string historyType;
 
-    // First draw: the prompt is still on screen. Later draws
-    // (resize repaints) come after a clear, so redraw the header.
-    bool firstDraw = true;
+	if (inputSearch == "!clr_paths") {
+		filePath = basePath + "iso_commander_path_database.txt";
+		historyType = "FolderPath";
+	} else if (inputSearch == "!clr_filter") {
+		filePath = basePath + "iso_commander_filter_database.txt";
+		historyType = "FilterTerm";
+	} else {
+		std::cerr << "\n" << (hc.error) << "Invalid command: "
+		          << (hc.warning) << "'" << inputSearch << "'"
+		          << (hc.error) << ".\033[J" << std::endl;
+		return;
+	}
 
-    std::ofstream ofs(filePath, std::ofstream::out | std::ofstream::trunc);
-    if (!ofs) {
-        auto render = [&] {
-            SyncOutput sync;
-            if (!firstDraw && repaintHeader) repaintHeader();
-            firstDraw = false;
+	// First draw: the prompt is still on screen. Later draws
+	// (resize repaints) come after a clear, so redraw the header.
+	bool firstDraw = true;
 
-            std::cerr << "\n" << (hc.error)
-                      << "Error clearing " << historyType << " database: "
-                      << (hc.warning) << "File missing or inaccessible" << (hc.error) << "." << "\033[J" << std::endl;
-        };
-        pressEnterToContinueWithRepaint(render);
-    } else {
-        ofs.close();
-        clear_history();
+	std::ofstream ofs(filePath, std::ofstream::out | std::ofstream::trunc);
+	if (!ofs) {
+		auto render = [&] {
 
-        auto render = [&] {
-            SyncOutput sync;
-            if (!firstDraw && repaintHeader) repaintHeader();
-            firstDraw = false;
+			SyncOutput sync;
+			if (!firstDraw && repaintHeader) repaintHeader();
+			firstDraw = false;
 
-            std::cout << "\n" << (hc.highlight)
-                      << historyType << " database cleared successfully.\033[J" << std::endl;
-        };
-        pressEnterToContinueWithRepaint(render);
-    }
+			std::cerr << "\n" << (hc.error)
+			          << "Error clearing " << historyType << " database: "
+			          << (hc.warning) << "File missing or inaccessible" << (hc.error) << "." << "\033[J" << std::endl;
+
+		};
+		pressEnterToContinueWithRepaint(render);
+	} else {
+		ofs.close();
+		clear_history();
+
+		auto render = [&] {
+
+			SyncOutput sync;
+			if (!firstDraw && repaintHeader) repaintHeader();
+			firstDraw = false;
+
+			std::cout << "\n" << (hc.highlight)
+			          << historyType << " database cleared successfully.\033[J" << std::endl;
+
+		};
+		pressEnterToContinueWithRepaint(render);
+	}
+
 }

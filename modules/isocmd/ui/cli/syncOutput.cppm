@@ -33,11 +33,11 @@ inline constexpr std::string_view kSyncEnd               = "\033[?2026l";
  * `SyncOutput` objects around code that mixes `std::cout` and `std::cerr`.
  */
 struct SyncOutput {
-    SyncOutput();
-    ~SyncOutput();
+	SyncOutput();
+	~SyncOutput();
 
-    SyncOutput(const SyncOutput&)            = delete;
-    SyncOutput& operator=(const SyncOutput&) = delete;
+	SyncOutput(const SyncOutput&)            = delete;
+	SyncOutput& operator=(const SyncOutput&) = delete;
 };
 
 } // extern "C++"

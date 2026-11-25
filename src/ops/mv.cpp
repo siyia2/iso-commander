@@ -1,5 +1,3 @@
-
-
 import std;
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -28,118 +26,120 @@ bool performMoveOperation(
     std::size_t fileSize
 )
 {
-    const bool cancelled =
-        GlobalState::g_operationCancelled.load(std::memory_order_acquire);
 
-    if (cancelled) {
-        logOperationResult(
-            ctx, false, true, {}, "moving",
-            paths.srcDir, paths.srcFile,
-            paths.destDirProcessed, paths.destFile
-        );
-        return false;
-    }
+	const bool cancelled =
+	    GlobalState::g_operationCancelled.load(std::memory_order_acquire);
 
-    std::error_code ec;
-    std::filesystem::rename(paths.srcPath, paths.destPath, ec);
+	if (cancelled) {
+		logOperationResult(
+		    ctx, false, true, {}, "moving",
+		    paths.srcDir, paths.srcFile,
+		    paths.destDirProcessed, paths.destFile
+		);
+		return false;
+	}
 
-    if (!ec) {
-        if (ctx.completedBytes) {
-            ctx.completedBytes->fetch_add(
-                fileSize,
-                std::memory_order_relaxed
-            );
-        }
+	std::error_code ec;
+	std::filesystem::rename(paths.srcPath, paths.destPath, ec);
 
-        if (ctx.changeOwnership) {
-            ctx.changeOwnership(paths.destPath);
-        }
+	if (!ec) {
+		if (ctx.completedBytes) {
+			ctx.completedBytes->fetch_add(
+			    fileSize,
+			    std::memory_order_relaxed
+			);
+		}
 
-        logOperationResult(
-            ctx, true, false, {}, "moving",
-            paths.srcDir, paths.srcFile,
-            paths.destDirProcessed, paths.destFile
-        );
-        return true;
-    }
+		if (ctx.changeOwnership) {
+			ctx.changeOwnership(paths.destPath);
+		}
 
-    // Cross-device fallback.
-    ec.clear();
+		logOperationResult(
+		    ctx, true, false, {}, "moving",
+		    paths.srcDir, paths.srcFile,
+		    paths.destDirProcessed, paths.destFile
+		);
+		return true;
+	}
 
-    const bool success = bufferedCopyWithProgress(
-        paths.srcPath,
-        paths.destPath,
-        ctx.completedBytes,
-        ec
-    );
+	// Cross-device fallback.
+	ec.clear();
 
-    if (success) {
-        std::error_code deleteEc;
+	const bool success = bufferedCopyWithProgress(
+	    paths.srcPath,
+	    paths.destPath,
+	    ctx.completedBytes,
+	    ec
+	);
 
-        if (!std::filesystem::remove(paths.srcPath, deleteEc)) {
-            const MainTheme* theme = getActiveTheme();
-            const bool isOriginal = (globalTheme == "original");
+	if (success) {
+		std::error_code deleteEc;
 
-            const std::string_view errLabel =
-                isOriginal ? UI::Palette::Red : theme->secondary;
+		if (!std::filesystem::remove(paths.srcPath, deleteEc)) {
+			const MainTheme* theme = getActiveTheme();
+			const bool isOriginal = (globalTheme == "original");
 
-            const std::string_view errPath =
-                isOriginal ? UI::Palette::Yellow : theme->warning;
+			const std::string_view errLabel =
+			    isOriginal ? UI::Palette::Red : theme->secondary;
 
-            const std::string displaySrc =
-                buildDisplaySrc(paths.srcDir, paths.srcFile);
+			const std::string_view errPath =
+			    isOriginal ? UI::Palette::Yellow : theme->warning;
 
-            std::string msg;
-            msg.reserve(160 + displaySrc.size() + deleteEc.message().size());
+			const std::string displaySrc =
+			    buildDisplaySrc(paths.srcDir, paths.srcFile);
 
-            msg.append(errLabel)
-               .append("Move completed but failed to remove source file: ")
-               .append(errPath)
-               .append("'")
-               .append(displaySrc)
-               .append("'")
-               .append(UI::Palette::BoldReset)
-               .append(errLabel)
-               .append(" - ")
-               .append(deleteEc.message())
-               .append(UI::Palette::BoldReset);
+			std::string msg;
+			msg.reserve(160 + displaySrc.size() + deleteEc.message().size());
 
-            ctx.reporter.addError(std::move(msg));
+			msg.append(errLabel)
+			   .append("Move completed but failed to remove source file: ")
+			   .append(errPath)
+			   .append("'")
+			   .append(displaySrc)
+			   .append("'")
+			   .append(UI::Palette::BoldReset)
+			   .append(errLabel)
+			   .append(" - ")
+			   .append(deleteEc.message())
+			   .append(UI::Palette::BoldReset);
 
-            if (ctx.completedTasks) {
-                ctx.completedTasks->fetch_add(
-                    1,
-                    std::memory_order_acq_rel
-                );
-            }
+			ctx.reporter.addError(std::move(msg));
 
-            return true; // The destination copy succeeded.
-        }
+			if (ctx.completedTasks) {
+				ctx.completedTasks->fetch_add(
+				    1,
+				    std::memory_order_acq_rel
+				);
+			}
 
-        if (ctx.changeOwnership) {
-            ctx.changeOwnership(paths.destPath);
-        }
+			return true; // The destination copy succeeded.
+		}
 
-        logOperationResult(
-            ctx, true, false, {}, "moving",
-            paths.srcDir, paths.srcFile,
-            paths.destDirProcessed, paths.destFile
-        );
+		if (ctx.changeOwnership) {
+			ctx.changeOwnership(paths.destPath);
+		}
 
-        return true;
-    }
+		logOperationResult(
+		    ctx, true, false, {}, "moving",
+		    paths.srcDir, paths.srcFile,
+		    paths.destDirProcessed, paths.destFile
+		);
 
-    logOperationResult(
-        ctx,
-        false,
-        GlobalState::g_operationCancelled.load(std::memory_order_acquire),
-        ec,
-        "moving",
-        paths.srcDir,
-        paths.srcFile,
-        paths.destDirProcessed,
-        paths.destFile
-    );
+		return true;
+	}
 
-    return false;
+	logOperationResult(
+	    ctx,
+	    false,
+	    GlobalState::g_operationCancelled.load(std::memory_order_acquire),
+	    ec,
+	    "moving",
+	    paths.srcDir,
+	    paths.srcFile,
+	    paths.destDirProcessed,
+	    paths.destFile
+	);
+
+	return false;
+
 }

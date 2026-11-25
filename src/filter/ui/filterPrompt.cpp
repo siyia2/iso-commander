@@ -23,8 +23,8 @@ import isocmd.ui.display.themes;
 
 namespace AnsiEscape {
 
-    // From the row below a prompt back onto the prompt row, cleared.
-    constexpr const char* REWIND_TO_PROMPT_ROW = "\033[1A\r\033[K";
+	// From the row below a prompt back onto the prompt row, cleared.
+	constexpr const char* REWIND_TO_PROMPT_ROW = "\033[1A\r\033[K";
 
 } // namespace AnsiEscape
 
@@ -63,14 +63,16 @@ static void saveQueryToHistory(
     bool& filterHistory,
     bool alreadyLoaded = false)
 {
-    filterHistory = true;
 
-    if (!alreadyLoaded)
-        loadHistory(filterHistory);
+	filterHistory = true;
 
-    add_history(query.c_str());
-    saveHistory(filterHistory);
-    clear_history();
+	if (!alreadyLoaded)
+	    loadHistory(filterHistory);
+
+	add_history(query.c_str());
+	saveHistory(filterHistory);
+	clear_history();
+
 }
 
 // ─── Resize Handling ─────────────────────────────────────────────────────────
@@ -98,40 +100,42 @@ static void repaintOnResize(
     FilterContext& ctx,
     const std::vector<std::string>& previewSource)
 {
-    if (repaintLivePreviewOnResizeIfConfigured())
-        return;
 
-    if (ctx.pendingIndices &&
-        ctx.hasPendingProcess &&
-        ctx.state &&
-        !ctx.listType.empty()) {
-        size_t page = ctx.currentPage;
+	if (repaintLivePreviewOnResizeIfConfigured())
+	    return;
 
-        printList(
-            StringListView(previewSource),
-            ctx.listType,
-            ctx.listSubType,
-            PrintListContext{
-                .pendingIndices = *ctx.pendingIndices,
-                .hasPendingProcess = *ctx.hasPendingProcess,
-                .currentPage = page,
-                .state = ctx.state,
-                .clearFirst = true,
-                .showPendingIndices = true,
-                .showSourceIndices = false
-            });
+	if (ctx.pendingIndices &&
+	    ctx.hasPendingProcess &&
+	    ctx.state &&
+	    !ctx.listType.empty()) {
+		size_t page = ctx.currentPage;
 
-    } else if (ctx.repaintList) {
-        const std::string savedLine(
-            rl_line_buffer ? rl_line_buffer : "");
+		printList(
+		    StringListView(previewSource),
+		    ctx.listType,
+		    ctx.listSubType,
+		    PrintListContext{
+				.pendingIndices = *ctx.pendingIndices,
+				.hasPendingProcess = *ctx.hasPendingProcess,
+				.currentPage = page,
+				.state = ctx.state,
+				.clearFirst = true,
+				.showPendingIndices = true,
+				.showSourceIndices = false
+			});
 
-        const int savedPoint = rl_point;
+	} else if (ctx.repaintList) {
+		const std::string savedLine(
+		    rl_line_buffer ? rl_line_buffer : "");
 
-        ctx.repaintList();
+		const int savedPoint = rl_point;
 
-        rl_replace_line(savedLine.c_str(), 1);
-        rl_point = std::min(savedPoint, rl_end);
-    }
+		ctx.repaintList();
+
+		rl_replace_line(savedLine.c_str(), 1);
+		rl_point = std::min(savedPoint, rl_end);
+	}
+
 }
 
 // ─── Cancellation ────────────────────────────────────────────────────────────
@@ -153,13 +157,15 @@ static void handleFilterCancel(
     const RlLine& raw,
     FilterContext& ctx)
 {
-    if (!raw)
-        std::cout << "\n";
 
-    if (livePreviewWasRepainted())
-        ctx.needsClrScrn = true;
+	if (!raw)
+	    std::cout << "\n";
 
-    clear_history();
+	if (livePreviewWasRepainted())
+	    ctx.needsClrScrn = true;
+
+	clear_history();
+
 }
 
 // ─── Interactive Filter Driver ────────────────────────────────────────────────
@@ -194,58 +200,66 @@ static void runFilterLoop(
     const std::function<void()>& onSuccess,
     const std::function<void()>& onEmptyInput = nullptr)
 {
-    auto tryFilter = [&](const std::string& query) -> bool {
-        return applyFilterCore(query, ctx);
-    };
 
-    auto defaultEmptyInput = [&]() {
-        ctx.needsClrScrn = false;
-    };
+	auto tryFilter = [&](const std::string& query) -> bool {
 
-    const auto& handleEmpty =
-        onEmptyInput ? onEmptyInput : defaultEmptyInput;
+		return applyFilterCore(query, ctx);
 
-    (void)handleEmpty;
+	};
 
-    std::cout << AnsiEscape::REWIND_TO_PROMPT_ROW;
+	auto defaultEmptyInput = [&]() {
 
-    ctx.filterHistory = true;
-    loadHistory(ctx.filterHistory);
+		ctx.needsClrScrn = false;
 
-    // Installs the preview Readline hook and restores it on scope exit.
-    LivePreviewReadlineGuard livePreviewGuard;
+	};
 
-    const std::vector<std::string>& previewSource =
-        ctx.sourceOverride ? *ctx.sourceOverride : ctx.files;
+	const auto& handleEmpty =
+	    onEmptyInput ? onEmptyInput : defaultEmptyInput;
 
-    configureLivePreview(ctx, previewSource);
+	(void)handleEmpty;
 
-    const auto resizeRepaint = [&]() {
-        repaintOnResize(ctx, previewSource);
-    };
+	std::cout << AnsiEscape::REWIND_TO_PROMPT_ROW;
 
-    while (true) {
-        resetLivePreviewIteration();
+	ctx.filterHistory = true;
+	loadHistory(ctx.filterHistory);
 
-        RlLine raw = readlineWithResize(promptText, resizeRepaint);
+	// Installs the preview Readline hook and restores it on scope exit.
+	LivePreviewReadlineGuard livePreviewGuard;
 
-        deactivateLivePreview();
+	const std::vector<std::string>& previewSource =
+	    ctx.sourceOverride ? *ctx.sourceOverride : ctx.files;
 
-        if (!raw || raw.get()[0] == 27) {
-            handleFilterCancel(raw, ctx);
-            break;
-        }
+	configureLivePreview(ctx, previewSource);
 
-        std::string query(raw.get());
+	const auto resizeRepaint = [&]() {
 
-        if (tryFilter(query)) {
-            saveQueryToHistory(query, ctx.filterHistory, true);
-            onSuccess();
-            break;
-        }
+		repaintOnResize(ctx, previewSource);
 
-        std::cout << AnsiEscape::REWIND_TO_PROMPT_ROW;
-    }
+	};
+
+	while (true) {
+		resetLivePreviewIteration();
+
+		RlLine raw = readlineWithResize(promptText, resizeRepaint);
+
+		deactivateLivePreview();
+
+		if (!raw || raw.get()[0] == 27) {
+			handleFilterCancel(raw, ctx);
+			break;
+		}
+
+		std::string query(raw.get());
+
+		if (tryFilter(query)) {
+			saveQueryToHistory(query, ctx.filterHistory, true);
+			onSuccess();
+			break;
+		}
+
+		std::cout << AnsiEscape::REWIND_TO_PROMPT_ROW;
+	}
+
 }
 
 // ─── Shared Filter Workflow ──────────────────────────────────────────────────
@@ -272,67 +286,75 @@ static bool runSharedFilterFlow(
     const std::string& inputString,
     const FilterCallConfig& cfg)
 {
-    if (inputString != "/")
-        return false;
 
-    GlobalState::g_suppressPendingRefresh.store(true);
+	if (inputString != "/")
+	    return false;
 
-    std::shared_ptr<void> suppressGuard(
-        nullptr,
-        [](void*) {
-            GlobalState::g_suppressPendingRefresh.store(false);
-        });
+	GlobalState::g_suppressPendingRefresh.store(true);
 
-    rl_bind_keyseq(
-        "\x1b[5~",
-        rl_named_function("previous-history"));
+	std::shared_ptr<void> suppressGuard(
+	    nullptr,
+	    [](void*) {
 
-    rl_bind_keyseq(
-        "\x1b[6~",
-        rl_named_function("next-history"));
+			GlobalState::g_suppressPendingRefresh.store(false);
 
-    reset_custom_keybindingsForSelect();
+		});
 
-    rl_bind_keyseq("\x1b", exit_handler);
+	rl_bind_keyseq(
+	    "\x1b[5~",
+	    rl_named_function("previous-history"));
 
-    const ReadlineAndPromptTheme ft = getFilterTheme("", false);
+	rl_bind_keyseq(
+	    "\x1b[6~",
+	    rl_named_function("next-history"));
 
-    std::string prompt(ft.filter);
-    prompt.append("Filter: ").append(ft.reset);
+	reset_custom_keybindingsForSelect();
 
-    FilterContext ctx{
-        *cfg.files,
-        *cfg.isFiltered,
-        *cfg.needsClrScrn,
-        *cfg.filterHistory,
-        *cfg.currentPage
-    };
+	rl_bind_keyseq("\x1b", exit_handler);
 
-    if (cfg.sourceOverride) {
-        ctx.sourceOverride = cfg.sourceOverride;
-        ctx.isUnmount = cfg.isUnmount;
-        ctx.toggleFullListUmount = cfg.toggleFullList;
-    }
+	const ReadlineAndPromptTheme ft = getFilterTheme("", false);
 
-    ctx.listType = cfg.listType;
-    ctx.listSubType = cfg.listSubType;
-    ctx.pendingIndices = cfg.pendingIndices;
-    ctx.hasPendingProcess = cfg.hasPendingProcess;
-    ctx.state = cfg.state;
-    ctx.repaintList = cfg.repaintList;
+	std::string prompt(ft.filter);
+	prompt.append("Filter: ").append(ft.reset);
 
-    auto onEmptyInput = [&]() {
-        *cfg.needsClrScrn = *cfg.isFiltered;
-    };
+	FilterContext ctx{
+		*cfg.files,
+		*cfg.isFiltered,
+		*cfg.needsClrScrn,
+		*cfg.filterHistory,
+		*cfg.currentPage
+	};
 
-    auto onSort = [&]() {
-        if (cfg.need2Sort)
-            *cfg.need2Sort = true;
-    };
+	if (cfg.sourceOverride) {
+		ctx.sourceOverride = cfg.sourceOverride;
+		ctx.isUnmount = cfg.isUnmount;
+		ctx.toggleFullListUmount = cfg.toggleFullList;
+	}
 
-    runFilterLoop(prompt, ctx, onSort, onEmptyInput);
+	ctx.listType = cfg.listType;
+	ctx.listSubType = cfg.listSubType;
+	ctx.pendingIndices = cfg.pendingIndices;
+	ctx.hasPendingProcess = cfg.hasPendingProcess;
+	ctx.state = cfg.state;
+	ctx.repaintList = cfg.repaintList;
 
-    return true;
+	auto onEmptyInput = [&]() {
+
+		*cfg.needsClrScrn = *cfg.isFiltered;
+
+	};
+
+	auto onSort = [&]() {
+
+		if (cfg.need2Sort)
+		    *cfg.need2Sort = true;
+
+	};
+
+	runFilterLoop(prompt, ctx, onSort, onEmptyInput);
+
+	return true;
+
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -370,34 +392,36 @@ bool handleFilteringForISO(
     bool isUnmount,
     FilterEntryContext ctx)
 {
-    // Always search the original list, never the previous filter's result.
-    const std::vector<std::string>& baseSource =
-        isUnmount ? isoDirs : GlobalState::globalIsoFileList;
 
-    FilterCallConfig cfg{
-        .files = &filteredFiles,
-        .sourceOverride = &baseSource,
-        .operation = operation,
-        .operationColor = operationColor,
-        .isFiltered = ctx.isFiltered,
-        .needsClrScrn = ctx.needsClrScrn,
-        .filterHistory = ctx.filterHistory,
-        .currentPage = ctx.currentPage,
-        .isUnmount = isUnmount,
-        .toggleFullList = displayConfig::toggleFullListUmount
-    };
+	// Always search the original list, never the previous filter's result.
+	const std::vector<std::string>& baseSource =
+	    isUnmount ? isoDirs : GlobalState::globalIsoFileList;
 
-    if (ctx.state) {
-        cfg.listType = isUnmount ? "MOUNTED_ISOS" : "ISO_FILES";
-        cfg.listSubType = isUnmount ? "" : ctx.state->listSubtype;
-        cfg.pendingIndices = &ctx.state->pendingIndices;
-        cfg.hasPendingProcess = &ctx.state->hasPendingProcess;
-        cfg.state = ctx.state;
-    }
+	FilterCallConfig cfg{
+		.files = &filteredFiles,
+		.sourceOverride = &baseSource,
+		.operation = operation,
+		.operationColor = operationColor,
+		.isFiltered = ctx.isFiltered,
+		.needsClrScrn = ctx.needsClrScrn,
+		.filterHistory = ctx.filterHistory,
+		.currentPage = ctx.currentPage,
+		.isUnmount = isUnmount,
+		.toggleFullList = displayConfig::toggleFullListUmount
+	};
 
-    cfg.repaintList = std::move(ctx.repaintList);
+	if (ctx.state) {
+		cfg.listType = isUnmount ? "MOUNTED_ISOS" : "ISO_FILES";
+		cfg.listSubType = isUnmount ? "" : ctx.state->listSubtype;
+		cfg.pendingIndices = &ctx.state->pendingIndices;
+		cfg.hasPendingProcess = &ctx.state->hasPendingProcess;
+		cfg.state = ctx.state;
+	}
 
-    return runSharedFilterFlow(inputString, cfg);
+	cfg.repaintList = std::move(ctx.repaintList);
+
+	return runSharedFilterFlow(inputString, cfg);
+
 }
 
 /**
@@ -430,27 +454,29 @@ void handleFilteringConvert2ISO(
     const std::string& operation,
     FilterEntryContext ctx)
 {
-    FilterCallConfig cfg{
-        .files = &files,
-        .sourceOverride = &sourceFiles,
-        .operation = operation,
-        .operationColor = UI::Palette::Orange,
-        .isFiltered = ctx.isFiltered,
-        .needsClrScrn = ctx.needsClrScrn,
-        .filterHistory = ctx.filterHistory,
-        .need2Sort = ctx.need2Sort,
-        .currentPage = ctx.currentPage
-    };
 
-    if (ctx.state) {
-        cfg.listType = "IMAGE_FILES";
-        cfg.listSubType = "convert2iso";
-        cfg.pendingIndices = ctx.pendingIndices;
-        cfg.hasPendingProcess = ctx.hasPendingProcess;
-        cfg.state = ctx.state;
-    }
+	FilterCallConfig cfg{
+		.files = &files,
+		.sourceOverride = &sourceFiles,
+		.operation = operation,
+		.operationColor = UI::Palette::Orange,
+		.isFiltered = ctx.isFiltered,
+		.needsClrScrn = ctx.needsClrScrn,
+		.filterHistory = ctx.filterHistory,
+		.need2Sort = ctx.need2Sort,
+		.currentPage = ctx.currentPage
+	};
 
-    cfg.repaintList = std::move(ctx.repaintList);
+	if (ctx.state) {
+		cfg.listType = "IMAGE_FILES";
+		cfg.listSubType = "convert2iso";
+		cfg.pendingIndices = ctx.pendingIndices;
+		cfg.hasPendingProcess = ctx.hasPendingProcess;
+		cfg.state = ctx.state;
+	}
 
-    runSharedFilterFlow(inputString, cfg);
+	cfg.repaintList = std::move(ctx.repaintList);
+
+	runSharedFilterFlow(inputString, cfg);
+
 }

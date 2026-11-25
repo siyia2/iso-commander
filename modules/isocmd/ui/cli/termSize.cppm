@@ -18,8 +18,8 @@ export extern "C++" {
  * fits in 32 bits and the packed representation described there is lossless.
  */
 struct TermSize {
-    std::size_t cols;
-    std::size_t rows;
+	std::size_t cols;
+	std::size_t rows;
 };
 
 /**
@@ -54,7 +54,9 @@ TermSize terminalSize();
  * @return The terminal width in columns, or @c 0 if it has never been known.
  */
 inline std::size_t terminalColumns() {
-    return terminalSize().cols;
+
+	return terminalSize().cols;
+
 }
 
 // ------------------------------------------------------------------------- //

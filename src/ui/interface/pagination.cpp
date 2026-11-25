@@ -30,117 +30,127 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
 
 namespace {
 
-    /**
-     * @brief Handles 'PgDn' (next page) and 'PgUp' (previous page) navigation commands.
-     *
-     * @param command The input command string from the user.
-     * @param totalPages The total number of available pages.
-     * @param currentPage Reference to the current page index, updated if navigation occurs.
-     * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
-     * @return true if the command was a pagination command and successfully handled; false otherwise.
-     */
-    bool handlePaginationCommand(const std::string& command, size_t totalPages, size_t& currentPage, bool& needsClrScrn) {
-        if (command == "PgDn") {
-            if (totalPages > 0 && currentPage < totalPages - 1)
-                currentPage++;
-            needsClrScrn = true;
-            return true;
-        }
-        if (command == "PgUp") {
-            if (currentPage > 0)
-                currentPage--;
-            needsClrScrn = true;
-            return true;
-        }
-        return false;
-    }
+	/**
+	 * @brief Handles 'PgDn' (next page) and 'PgUp' (previous page) navigation commands.
+	 *
+	 * @param command The input command string from the user.
+	 * @param totalPages The total number of available pages.
+	 * @param currentPage Reference to the current page index, updated if navigation occurs.
+	 * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
+	 * @return true if the command was a pagination command and successfully handled; false otherwise.
+	 */
+	bool handlePaginationCommand(const std::string& command, size_t totalPages, size_t& currentPage, bool& needsClrScrn) {
 
-    /**
-     * @brief Handles 'g<num>' direct page-jump commands.
-     *
-     * @param command The input command string from the user.
-     * @param totalPages The total number of available pages.
-     * @param currentPage Reference to the current page index, updated if jump is valid.
-     * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
-     * @return true if the command matched the go-to pattern and was handled; false otherwise.
-     */
-    bool handleGoToCommand(const std::string& command, size_t totalPages, size_t& currentPage, bool& needsClrScrn) {
-        if (command.size() >= 2 && command[0] == 'g' && std::isdigit(command[1])) {
-            try {
-                int pageNum = std::stoi(command.substr(1)) - 1;
-                if (totalPages > 0 && pageNum >= 0 && pageNum < static_cast<int>(totalPages)) {
-                    currentPage = pageNum;
-                    needsClrScrn = true;
-                }
-            } catch (...) {}
-            return true;
-        }
-        return false;
-    }
+		if (command == "PgDn") {
+			if (totalPages > 0 && currentPage < totalPages - 1)
+			    currentPage++;
+			needsClrScrn = true;
+			return true;
+		}
+		if (command == "PgUp") {
+			if (currentPage > 0)
+			    currentPage--;
+			needsClrScrn = true;
+			return true;
+		}
+		return false;
 
-    /**
-     * @brief Handles the '?' help command, updating ISO list state and triggering help selections.
-     *
-     * @param isUnmount Flag indicating whether the current operation is 'umount'.
-     * @param isMount Flag indicating whether the current operation is 'mount'.
-     * @param isAtISOList Pointer to an atomic boolean tracking ISO list position state.
-     * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
-     */
-    void handleHelpCommand(bool isUnmount, bool isMount, std::atomic<bool>* isAtISOList, bool& needsClrScrn) {
-        bool isAtISOListForHelp = isAtISOList ? isAtISOList->load() : false;
-        if (isAtISOList) isAtISOList->store(false);
-        helpSelections(isAtISOListForHelp, isUnmount, isMount);
-        GlobalState::g_filteringIndicator.store(false);
-        needsClrScrn = true;
-    }
+	}
 
-    /**
-     * @brief Handles the '*' filename-only toggle command and refreshes sorting/filtering indices.
-     *
-     * @param isUnmount Flag indicating whether the current operation is 'umount' (disables toggle).
-     * @param isFiltered Flag indicating if the current file list is filtered.
-     * @param isConversion Flag indicating if the current operation is an ISO conversion.
-     * @param need2Sort Reference to a flag indicating whether sorting needs to be re-run.
-     * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
-     * @param filteredFiles Reference to the vector storing filtered files.
-     */
-    void handleToggleNamesCommand(bool isUnmount, bool isFiltered, bool isConversion, bool& need2Sort, bool& needsClrScrn, std::vector<std::string>& filteredFiles) {
-        if (!isUnmount) {
-            displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
-            sortAfterFilenamesOnlyFlag();
+	/**
+	 * @brief Handles 'g<num>' direct page-jump commands.
+	 *
+	 * @param command The input command string from the user.
+	 * @param totalPages The total number of available pages.
+	 * @param currentPage Reference to the current page index, updated if jump is valid.
+	 * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
+	 * @return true if the command matched the go-to pattern and was handled; false otherwise.
+	 */
+	bool handleGoToCommand(const std::string& command, size_t totalPages, size_t& currentPage, bool& needsClrScrn) {
 
-            if (isFiltered && !filteringStack.empty()) {
-                refreshFilteredSourceIndices(
-                    GlobalState::globalIsoFileList,
-                    filteringStack,
-                    filteredFiles
-                );
-            }
-        }
+		if (command.size() >= 2 && command[0] == 'g' && std::isdigit(command[1])) {
+			try {
+				int pageNum = std::stoi(command.substr(1)) - 1;
+				if (totalPages > 0 && pageNum >= 0 && pageNum < static_cast<int>(totalPages)) {
+					currentPage = pageNum;
+					needsClrScrn = true;
+				}
+			} catch (...) {}
+			return true;
+		}
+		return false;
 
-        if (isConversion) {
-            need2Sort = true;
-        }
-        needsClrScrn = true;
-    }
+	}
 
-    /**
-     * @brief Handles the '~' full-path display toggle command based on the active operation context.
-     *
-     * @param isMount Flag indicating whether the current operation is 'mount'.
-     * @param isUnmount Flag indicating whether the current operation is 'umount'.
-     * @param isWrite Flag indicating whether the current operation is 'write2usb'.
-     * @param isConversion Flag indicating whether the current operation is an ISO conversion.
-     * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
-     */
-    void handleToggleFullListCommand(bool isMount, bool isUnmount, bool isWrite, bool isConversion, bool& needsClrScrn) {
-        if      (isMount      && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListMount       = !displayConfig::toggleFullListMount;
-        else if (isUnmount)                                       displayConfig::toggleFullListUmount      = !displayConfig::toggleFullListUmount;
-        else if (isWrite      && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListWrite2usb   = !displayConfig::toggleFullListWrite2usb;
-        else if (isConversion && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListConvert2iso = !displayConfig::toggleFullListConvert2iso;
-        else if               (!displayConfig::toggleNamesOnly)   displayConfig::toggleFullListCpMvRm      = !displayConfig::toggleFullListCpMvRm;
-        needsClrScrn = true;
-    }
+	/**
+	 * @brief Handles the '?' help command, updating ISO list state and triggering help selections.
+	 *
+	 * @param isUnmount Flag indicating whether the current operation is 'umount'.
+	 * @param isMount Flag indicating whether the current operation is 'mount'.
+	 * @param isAtISOList Pointer to an atomic boolean tracking ISO list position state.
+	 * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
+	 */
+	void handleHelpCommand(bool isUnmount, bool isMount, std::atomic<bool>* isAtISOList, bool& needsClrScrn) {
+
+		bool isAtISOListForHelp = isAtISOList ? isAtISOList->load() : false;
+		if (isAtISOList) isAtISOList->store(false);
+		helpSelections(isAtISOListForHelp, isUnmount, isMount);
+		GlobalState::g_filteringIndicator.store(false);
+		needsClrScrn = true;
+
+	}
+
+	/**
+	 * @brief Handles the '*' filename-only toggle command and refreshes sorting/filtering indices.
+	 *
+	 * @param isUnmount Flag indicating whether the current operation is 'umount' (disables toggle).
+	 * @param isFiltered Flag indicating if the current file list is filtered.
+	 * @param isConversion Flag indicating if the current operation is an ISO conversion.
+	 * @param need2Sort Reference to a flag indicating whether sorting needs to be re-run.
+	 * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
+	 * @param filteredFiles Reference to the vector storing filtered files.
+	 */
+	void handleToggleNamesCommand(bool isUnmount, bool isFiltered, bool isConversion, bool& need2Sort, bool& needsClrScrn, std::vector<std::string>& filteredFiles) {
+
+		if (!isUnmount) {
+			displayConfig::toggleNamesOnly = !displayConfig::toggleNamesOnly;
+			sortAfterFilenamesOnlyFlag();
+
+			if (isFiltered && !filteringStack.empty()) {
+				refreshFilteredSourceIndices(
+				    GlobalState::globalIsoFileList,
+				    filteringStack,
+				    filteredFiles
+				);
+			}
+		}
+
+		if (isConversion) {
+			need2Sort = true;
+		}
+		needsClrScrn = true;
+
+	}
+
+	/**
+	 * @brief Handles the '~' full-path display toggle command based on the active operation context.
+	 *
+	 * @param isMount Flag indicating whether the current operation is 'mount'.
+	 * @param isUnmount Flag indicating whether the current operation is 'umount'.
+	 * @param isWrite Flag indicating whether the current operation is 'write2usb'.
+	 * @param isConversion Flag indicating whether the current operation is an ISO conversion.
+	 * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
+	 */
+	void handleToggleFullListCommand(bool isMount, bool isUnmount, bool isWrite, bool isConversion, bool& needsClrScrn) {
+
+		if      (isMount      && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListMount       = !displayConfig::toggleFullListMount;
+		else if (isUnmount)                                       displayConfig::toggleFullListUmount      = !displayConfig::toggleFullListUmount;
+		else if (isWrite      && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListWrite2usb   = !displayConfig::toggleFullListWrite2usb;
+		else if (isConversion && !displayConfig::toggleNamesOnly) displayConfig::toggleFullListConvert2iso = !displayConfig::toggleFullListConvert2iso;
+		else if               (!displayConfig::toggleNamesOnly)   displayConfig::toggleFullListCpMvRm      = !displayConfig::toggleFullListCpMvRm;
+		needsClrScrn = true;
+
+	}
 
 } // namespace
 
@@ -168,41 +178,42 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
                                      bool& need2Sort, std::atomic<bool>* isAtISOList,
                                      std::vector<std::string>& filteredFiles) {
 
-    const bool isMount      = (operation == "mount");
-    const bool isUnmount    = (operation == "umount");
-    const bool isWrite      = (operation == "write2usb");
-    const bool isConversion = (operation == "ccd2iso" || operation == "mdf2iso" ||
-                                operation == "nrg2iso" || operation == "chd2iso" ||
-                                operation == "daa2iso");
+	const bool isMount      = (operation == "mount");
+	const bool isUnmount    = (operation == "umount");
+	const bool isWrite      = (operation == "write2usb");
+	const bool isConversion = (operation == "ccd2iso" || operation == "mdf2iso" ||
+	                            operation == "nrg2iso" || operation == "chd2iso" ||
+	                            operation == "daa2iso");
 
-    if (command.find("//") != std::string::npos)
-        return true;
+	if (command.find("//") != std::string::npos)
+	    return true;
 
-    if (totalPages > 0 && currentPage >= totalPages)
-        currentPage = totalPages - 1;
+	if (totalPages > 0 && currentPage >= totalPages)
+	    currentPage = totalPages - 1;
 
-    if (handlePaginationCommand(command, totalPages, currentPage, needsClrScrn))
-        return true;
+	if (handlePaginationCommand(command, totalPages, currentPage, needsClrScrn))
+	    return true;
 
-    if (handleGoToCommand(command, totalPages, currentPage, needsClrScrn))
-        return true;
+	if (handleGoToCommand(command, totalPages, currentPage, needsClrScrn))
+	    return true;
 
-    if (command == "?") {
-        handleHelpCommand(isUnmount, isMount, isAtISOList, needsClrScrn);
-        return true;
-    }
+	if (command == "?") {
+		handleHelpCommand(isUnmount, isMount, isAtISOList, needsClrScrn);
+		return true;
+	}
 
-    if (command == "*") {
-        handleToggleNamesCommand(isUnmount, isFiltered, isConversion, need2Sort, needsClrScrn, filteredFiles);
-        return true;
-    }
+	if (command == "*") {
+		handleToggleNamesCommand(isUnmount, isFiltered, isConversion, need2Sort, needsClrScrn, filteredFiles);
+		return true;
+	}
 
-    if (command == "~") {
-        handleToggleFullListCommand(isMount, isUnmount, isWrite, isConversion, needsClrScrn);
-        return true;
-    }
+	if (command == "~") {
+		handleToggleFullListCommand(isMount, isUnmount, isWrite, isConversion, needsClrScrn);
+		return true;
+	}
 
-    return false;
+	return false;
+
 }
 
 /**
@@ -224,42 +235,44 @@ static void drawPaginatedPage(const std::vector<std::string>& entries,
                        size_t totalPages,
                        const PrintListTheme& c,
                        bool withErrors) {
-    const size_t totalEntries = entries.size();
-    const size_t start = disablePagination ? 0 : (currentPage * GlobalState::ITEMS_PER_PAGE);
-    const size_t end = disablePagination ? totalEntries : std::min(start + GlobalState::ITEMS_PER_PAGE, totalEntries);
 
-    SyncOutput sync;
+	const size_t totalEntries = entries.size();
+	const size_t start = disablePagination ? 0 : (currentPage * GlobalState::ITEMS_PER_PAGE);
+	const size_t end = disablePagination ? totalEntries : std::min(start + GlobalState::ITEMS_PER_PAGE, totalEntries);
 
-    clearScrollBuffer();
-    if (withErrors) displayErrors();
+	SyncOutput sync;
 
-    // 1. One newline above the list
-    std::cout << "\n";
+	clearScrollBuffer();
+	if (withErrors) displayErrors();
 
-    // 2. Pagination header (only if enabled)
-    if (!disablePagination) {
-        std::cout << c.head << "Page "
-                  << c.accent << (currentPage + 1)
-                  << c.head << "/" << c.num << totalPages
-                  << c.head << " (Items ("
-                  << c.accent << (start + 1) << "-" << end
-                  << c.head << ")/" << c.num << totalEntries
-                  << c.head << ")"
-                  << UI::Palette::BoldReset << "\n\n";
-    }
+	// 1. One newline above the list
+	std::cout << "\n";
 
-    // 3. Entries, directly to stdout
-    for (size_t i = start; i < end; ++i) {
-        std::cout << entries[i];
-    }
+	// 2. Pagination header (only if enabled)
+	if (!disablePagination) {
+		std::cout << c.head << "Page "
+		          << c.accent << (currentPage + 1)
+		          << c.head << "/" << c.num << totalPages
+		          << c.head << " (Items ("
+		          << c.accent << (start + 1) << "-" << end
+		          << c.head << ")/" << c.num << totalEntries
+		          << c.head << ")"
+		          << UI::Palette::BoldReset << "\n\n";
+	}
 
-    // 4. Pagination footer (only if enabled and more than one page)
-    if (!disablePagination && totalPages > 1) {
-        std::cout << "\n" << c.head;
-        if (currentPage > 0)               std::cout << "[PgUp] Prev | ";
-        if (currentPage < totalPages - 1)  std::cout << "[PgDn] Next | ";
-        std::cout << "[g#] ↵ GoTo" << UI::Palette::BoldReset << "\n";
-    }
+	// 3. Entries, directly to stdout
+	for (size_t i = start; i < end; ++i) {
+		std::cout << entries[i];
+	}
+
+	// 4. Pagination footer (only if enabled and more than one page)
+	if (!disablePagination && totalPages > 1) {
+		std::cout << "\n" << c.head;
+		if (currentPage > 0)               std::cout << "[PgUp] Prev | ";
+		if (currentPage < totalPages - 1)  std::cout << "[PgDn] Next | ";
+		std::cout << "[g#] ↵ GoTo" << UI::Palette::BoldReset << "\n";
+	}
+
 }
 
 /**
@@ -281,40 +294,42 @@ static bool handleNavigation(const std::string& userInput,
                              size_t totalPages,
                              size_t& currentPage,
                              bool& isPageTurn) {
-    if (userInput.empty()) return false;
 
-    if (userInput.size() >= 2 &&
-        userInput[0] == 'g' &&
-        std::isdigit(static_cast<unsigned char>(userInput[1]))) {
-        try {
-            const size_t requestedPage = std::stoul(userInput.substr(1));
+	if (userInput.empty()) return false;
 
-            if (requestedPage >= 1 && requestedPage <= totalPages) {
-                currentPage = requestedPage - 1;
-                isPageTurn = true;
-            }
-        } catch (...) {}
+	if (userInput.size() >= 2 &&
+	    userInput[0] == 'g' &&
+	    std::isdigit(static_cast<unsigned char>(userInput[1]))) {
+		try {
+			const size_t requestedPage = std::stoul(userInput.substr(1));
 
-        return true;
-    }
-    else if (userInput == "PgDn") {
-        if (totalPages > 0 && currentPage < totalPages - 1) {
-            ++currentPage;
-            isPageTurn = true;
-        }
+			if (requestedPage >= 1 && requestedPage <= totalPages) {
+				currentPage = requestedPage - 1;
+				isPageTurn = true;
+			}
+		} catch (...) {}
 
-        return true;
-    }
-    else if (userInput == "PgUp") {
-        if (currentPage > 0) {
-            --currentPage;
-            isPageTurn = true;
-        }
+		return true;
+	}
+	else if (userInput == "PgDn") {
+		if (totalPages > 0 && currentPage < totalPages - 1) {
+			++currentPage;
+			isPageTurn = true;
+		}
 
-        return true;
-    }
+		return true;
+	}
+	else if (userInput == "PgUp") {
+		if (currentPage > 0) {
+			--currentPage;
+			isPageTurn = true;
+		}
 
-    return false;
+		return true;
+	}
+
+	return false;
+
 }
 
 /**
@@ -349,43 +364,48 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                                    size_t& currentPage,
                                    bool disableTabCompletion) {
 
-    const PrintListTheme c = getListColors();
+	const PrintListTheme c = getListColors();
 
-    bool disablePagination = (GlobalState::ITEMS_PER_PAGE <= 0 || entries.size() <= GlobalState::ITEMS_PER_PAGE);
-    size_t totalEntries = entries.size();
-    size_t totalPages = disablePagination ? 1 : ((totalEntries + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE);
+	bool disablePagination = (GlobalState::ITEMS_PER_PAGE <= 0 || entries.size() <= GlobalState::ITEMS_PER_PAGE);
+	size_t totalEntries = entries.size();
+	size_t totalPages = disablePagination ? 1 : ((totalEntries + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE);
 
-    auto drawPage = [&](bool withErrors) {
-        drawPaginatedPage(entries, currentPage, disablePagination, totalPages, c, withErrors);
-    };
+	auto drawPage = [&](bool withErrors) {
 
-    while (true) {
-        if (setupEnvironmentFn) setupEnvironmentFn();
+		drawPaginatedPage(entries, currentPage, disablePagination, totalPages, c, withErrors);
 
-        drawPage(true);
+	};
 
-        const std::string finalPrompt = promptPrefix + promptSuffix;
+	while (true) {
+		if (setupEnvironmentFn) setupEnvironmentFn();
 
-        const auto repaint = [&] {
-            drawPage(false);
-            std::cout << promptHeaderForRepaint(finalPrompt) << "\n";
-            repaintCompletionListing();
-            std::cout << "\033[A";
-        };
+		drawPage(true);
 
-        RlLine input = readlineWithResize(
-            finalPrompt, repaint, disableTabCompletion
-        );
+		const std::string finalPrompt = promptPrefix + promptSuffix;
 
-        if (!input.get()) return "EOF_SIGNAL";
+		const auto repaint = [&] {
 
-        std::string userInput = trimWhitespace(input.get());
+			drawPage(false);
+			std::cout << promptHeaderForRepaint(finalPrompt) << "\n";
+			repaintCompletionListing();
+			std::cout << "\033[A";
 
-        if (handleNavigation(userInput, totalPages, currentPage, isPageTurn)) {
-            continue;
-        }
+		};
 
-        isPageTurn = false;
-        return userInput;
-    }
+		RlLine input = readlineWithResize(
+		    finalPrompt, repaint, disableTabCompletion
+		);
+
+		if (!input.get()) return "EOF_SIGNAL";
+
+		std::string userInput = trimWhitespace(input.get());
+
+		if (handleNavigation(userInput, totalPages, currentPage, isPageTurn)) {
+			continue;
+		}
+
+		isPageTurn = false;
+		return userInput;
+	}
+
 }

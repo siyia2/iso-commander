@@ -30,51 +30,55 @@ static void runUnmountWorkers(const std::vector<std::string>& paths,
                               std::atomic<size_t>& completedTasks,
                               std::atomic<size_t>& failedTasks,
                               std::atomic<size_t>& nextTask) {
-    ThreadPool& pool = getStaticThreadPool();
-    const size_t poolSize = pool.threadCount();
-    const size_t numThreads = std::min({
-        paths.size(),
-        GlobalThreadCaps::UMOUNT_THREAD_CAP,
-        poolSize
-    });
 
-    std::vector<std::future<void>> futures;
-    futures.reserve(numThreads);
+	ThreadPool& pool = getStaticThreadPool();
+	const size_t poolSize = pool.threadCount();
+	const size_t numThreads = std::min({
+		paths.size(),
+		GlobalThreadCaps::UMOUNT_THREAD_CAP,
+		poolSize
+	});
 
-    for (size_t t = 0; t < numThreads; ++t) {
-        futures.emplace_back(pool.enqueue(
-            [&paths, &nextTask,
-             &completedBytes, &completedTasks, &failedTasks,
-             silentMode]() {
-                // Stop claiming new items on Ctrl+C so the bar ends at once;
-                // unclaimed items are marked as cancelled after the bar.
-                while (!GlobalState::g_operationCancelled.load()) {
-                    const size_t i = nextTask.fetch_add(1);
+	std::vector<std::future<void>> futures;
+	futures.reserve(numThreads);
 
-                    if (i >= paths.size())
-                        break;
+	for (size_t t = 0; t < numThreads; ++t) {
+		futures.emplace_back(pool.enqueue(
+		    [&paths, &nextTask,
+		     &completedBytes, &completedTasks, &failedTasks,
+		     silentMode]() {
 
-                    unmountISO(std::vector<std::string>{paths[i]},
-                               &completedTasks, &failedTasks,
-                               silentMode);
+				// Stop claiming new items on Ctrl+C so the bar ends at once;
+				// unclaimed items are marked as cancelled after the bar.
+				while (!GlobalState::g_operationCancelled.load()) {
+					const size_t i = nextTask.fetch_add(1);
 
-                    completedBytes.fetch_add(1);
-                }
-            }));
-    }
+					if (i >= paths.size())
+					    break;
 
-    for (auto& future : futures)
-        future.wait();
+					unmountISO(std::vector<std::string>{paths[i]},
+					           &completedTasks, &failedTasks,
+					           silentMode);
+
+					completedBytes.fetch_add(1);
+				}
+
+			}));
+	}
+
+	for (auto& future : futures)
+	    future.wait();
+
 }
 
 /**
  * @brief Holds the aggregated results and execution state from collecting and validating ISO mount points.
  */
 struct CollectionResult {
-    std::unordered_set<std::string> mountPoints;
-    bool hasErrors = false;
-    bool cancelled = false;
-    bool abortImmediately = false;
+	std::unordered_set<std::string> mountPoints;
+	bool hasErrors = false;
+	bool cancelled = false;
+	bool abortImmediately = false;
 };
 
 /**
@@ -88,13 +92,15 @@ struct CollectionResult {
 static bool checkCancellation(const ParsedArgs& args,
                               CollectionResult& res,
                               const char* message = "Operation cancelled by user.") {
-    if (GlobalState::g_operationCancelled.load()) {
-        verboseWarn(args.silentMode, message);
-        res.cancelled = true;
-        res.abortImmediately = true;
-        return true;
-    }
-    return false;
+
+	if (GlobalState::g_operationCancelled.load()) {
+		verboseWarn(args.silentMode, message);
+		res.cancelled = true;
+		res.abortImmediately = true;
+		return true;
+	}
+	return false;
+
 }
 
 /**
@@ -107,24 +113,26 @@ static bool checkCancellation(const ParsedArgs& args,
 static void collectFromMnt(const fs::path& mntPath,
                            const ParsedArgs& args,
                            CollectionResult& res) {
-    disableInput();
-    verboseInfo(args.silentMode,
-                std::string("Scanning ")
-                .append(mntPath.string())
-                .append(" for ISO mount points (surface scan)..."));
 
-    try {
-        for (const auto& entry : fs::directory_iterator(mntPath)) {
-            if (GlobalState::g_operationCancelled.load())
-                return;
+	disableInput();
+	verboseInfo(args.silentMode,
+	            std::string("Scanning ")
+	            .append(mntPath.string())
+	            .append(" for ISO mount points (surface scan)..."));
 
-            if (entry.is_directory())
-                res.mountPoints.insert(fs::canonical(entry.path()).string());
-        }
-    } catch (const fs::filesystem_error& e) {
-        if (e.code() != std::errc::no_such_file_or_directory)
-            res.hasErrors = true;
-    }
+	try {
+		for (const auto& entry : fs::directory_iterator(mntPath)) {
+			if (GlobalState::g_operationCancelled.load())
+			    return;
+
+			if (entry.is_directory())
+			    res.mountPoints.insert(fs::canonical(entry.path()).string());
+		}
+	} catch (const fs::filesystem_error& e) {
+		if (e.code() != std::errc::no_such_file_or_directory)
+		    res.hasErrors = true;
+	}
+
 }
 
 /**
@@ -137,40 +145,42 @@ static void collectFromMnt(const fs::path& mntPath,
 static void processUserPath(const std::string& rawPath,
                             const ParsedArgs& args,
                             CollectionResult& res) {
-    fs::path path(rawPath);
-    try {
-        if (fs::exists(path) && fs::is_directory(path)) {
-            const std::string canonical = fs::canonical(path).string();
 
-            if (canonical == "/mnt/ISOs") {
-                collectFromMnt(path, args, res);
-            } else if (canonical.rfind("/mnt/ISOs/", 0) == 0) {
-                res.mountPoints.insert(canonical);
-            } else {
-                warnMsg(args.silentMode,
-                        "is not allowed. Only /mnt/ISOs or /mnt/ISOs/isoFolder are valid.",
-                        rawPath);
-                res.hasErrors = true;
-            }
-        } else {
-            fs::path candidate = path.is_relative()
-                ? fs::path("/mnt/ISOs") / path.filename()
-                : path;
+	fs::path path(rawPath);
+	try {
+		if (fs::exists(path) && fs::is_directory(path)) {
+			const std::string canonical = fs::canonical(path).string();
 
-            if (fs::exists(candidate) && fs::is_directory(candidate)) {
-                res.mountPoints.insert(fs::canonical(candidate).string());
-            } else {
-                warnMsg(args.silentMode,
-                        "does not exist or is not a valid mount point, skipping.",
-                        rawPath);
-                res.hasErrors = true;
-            }
-        }
-    } catch (const fs::filesystem_error& e) {
-        warnMsg(args.silentMode,
-                std::string("Error processing path: ") + e.what(), rawPath);
-        res.hasErrors = true;
-    }
+			if (canonical == "/mnt/ISOs") {
+				collectFromMnt(path, args, res);
+			} else if (canonical.rfind("/mnt/ISOs/", 0) == 0) {
+				res.mountPoints.insert(canonical);
+			} else {
+				warnMsg(args.silentMode,
+				        "is not allowed. Only /mnt/ISOs or /mnt/ISOs/isoFolder are valid.",
+				        rawPath);
+				res.hasErrors = true;
+			}
+		} else {
+			fs::path candidate = path.is_relative()
+			    ? fs::path("/mnt/ISOs") / path.filename()
+			    : path;
+
+			if (fs::exists(candidate) && fs::is_directory(candidate)) {
+				res.mountPoints.insert(fs::canonical(candidate).string());
+			} else {
+				warnMsg(args.silentMode,
+				        "does not exist or is not a valid mount point, skipping.",
+				        rawPath);
+				res.hasErrors = true;
+			}
+		}
+	} catch (const fs::filesystem_error& e) {
+		warnMsg(args.silentMode,
+		        std::string("Error processing path: ") + e.what(), rawPath);
+		res.hasErrors = true;
+	}
+
 }
 
 /**
@@ -189,30 +199,32 @@ static void processUserPath(const std::string& rawPath,
  * @throws fs::filesystem_error If underlying filesystem canonicalization or iteration fails unrecoverably.
  */
 static CollectionResult collectMountPoints(const ParsedArgs& args) {
-    CollectionResult res;
 
-    const bool scanAllMnt = args.paths.empty() ||
-        (args.paths.size() == 1 && args.paths[0] == "all");
+	CollectionResult res;
 
-    if (scanAllMnt) {
-        collectFromMnt("/mnt/ISOs", args, res);
-        checkCancellation(args, res);
-        return res;
-    }
+	const bool scanAllMnt = args.paths.empty() ||
+	    (args.paths.size() == 1 && args.paths[0] == "all");
 
-    for (const auto& rawPath : args.paths) {
-        if (checkCancellation(args, res)) {
-            break;
-        }
-        processUserPath(rawPath, args, res);
-    }
+	if (scanAllMnt) {
+		collectFromMnt("/mnt/ISOs", args, res);
+		checkCancellation(args, res);
+		return res;
+	}
 
-    if (GlobalState::g_operationCancelled.load() && !res.cancelled) {
-        verboseWarn(args.silentMode, "Umount operation cancelled by user.");
-        res.cancelled = true;
-    }
+	for (const auto& rawPath : args.paths) {
+		if (checkCancellation(args, res)) {
+			break;
+		}
+		processUserPath(rawPath, args, res);
+	}
 
-    return res;
+	if (GlobalState::g_operationCancelled.load() && !res.cancelled) {
+		verboseWarn(args.silentMode, "Umount operation cancelled by user.");
+		res.cancelled = true;
+	}
+
+	return res;
+
 }
 
 /**
@@ -235,22 +247,24 @@ static std::thread startProgressThread(
     std::atomic<bool>& isComplete,
     bool& showVerbose
 ) {
-    std::ostringstream hdr;
-    hdr << "\n" << color << " Processing "
-        << (totalTasks == 1 ? "task for " : "tasks for ")
-        << UI::Palette::Yellow << "umount" << color << "... ("
-        << UI::Palette::Red << "Ctrl+c"
-        << color << ":cancel)\n";
-    const std::string header = hdr.str();
 
-    clearScrollBuffer();
-    std::cout << header;
+	std::ostringstream hdr;
+	hdr << "\n" << color << " Processing "
+	    << (totalTasks == 1 ? "task for " : "tasks for ")
+	    << UI::Palette::Yellow << "umount" << color << "... ("
+	    << UI::Palette::Red << "Ctrl+c"
+	    << color << ":cancel)\n";
+	const std::string header = hdr.str();
 
-    return launchProgressBar(
-        &completedBytes, totalTasks,
-        &completedTasks, &failedTasks, totalTasks,
-        &isComplete, &showVerbose,
-        coloredProcess, header);
+	clearScrollBuffer();
+	std::cout << header;
+
+	return launchProgressBar(
+	    &completedBytes, totalTasks,
+	    &completedTasks, &failedTasks, totalTasks,
+	    &isComplete, &showVerbose,
+	    coloredProcess, header);
+
 }
 
 /**
@@ -268,12 +282,14 @@ static void handleCancelledRemainder(
     std::atomic<size_t>& failedTasks,
     bool silentMode
 ) {
-    const size_t first = std::min(nextTask.load(), paths.size());
-    if (first < paths.size()) {
-        unmountISO(
-            std::vector<std::string>(paths.begin() + first, paths.end()),
-            &completedTasks, &failedTasks, silentMode);
-    }
+
+	const size_t first = std::min(nextTask.load(), paths.size());
+	if (first < paths.size()) {
+		unmountISO(
+		    std::vector<std::string>(paths.begin() + first, paths.end()),
+		    &completedTasks, &failedTasks, silentMode);
+	}
+
 }
 
 /**
@@ -285,23 +301,27 @@ static void printVerboseUnmountSummary(
     const std::atomic<size_t>& completedTasks,
     const std::atomic<size_t>& failedTasks
 ) {
-    SyncOutput sync;
-    clearScrollBuffer();
-    std::cout << "\n";
 
-    auto printUmountLine = [](std::string_view msg) {
-        std::cout << msg << UI::Palette::BoldReset << "\n";
-    };
-    for (const auto& msg : verboseSets.operationCompleted) printUmountLine(msg);
-    forEachUmountLine(true, printUmountLine);
+	SyncOutput sync;
+	clearScrollBuffer();
+	std::cout << "\n";
 
-    for (const auto& msg : verboseSets.operationFailed) printUmountLine(msg);
-    forEachUmountLine(false, printUmountLine);
+	auto printUmountLine = [](std::string_view msg) {
 
-    std::cout << "\nUnmount summary:\n"
-              << " Successful: " << completedTasks.load() << "\n"
-              << " Failed:     " << failedTasks.load()
-              << UI::Palette::Reset << "\n\n";
+		std::cout << msg << UI::Palette::BoldReset << "\n";
+
+	};
+	for (const auto& msg : verboseSets.operationCompleted) printUmountLine(msg);
+	forEachUmountLine(true, printUmountLine);
+
+	for (const auto& msg : verboseSets.operationFailed) printUmountLine(msg);
+	forEachUmountLine(false, printUmountLine);
+
+	std::cout << "\nUnmount summary:\n"
+	          << " Successful: " << completedTasks.load() << "\n"
+	          << " Failed:     " << failedTasks.load()
+	          << UI::Palette::Reset << "\n\n";
+
 }
 
 /**
@@ -311,8 +331,10 @@ static void printVerboseUnmountSummary(
  * @return int Returns `0` when no failures, validation errors, or cancellations occurred; `1` otherwise.
  */
 static int computeUnmountExitCode(size_t failedTasks, bool hasErrors) {
-    return (failedTasks == 0 && !hasErrors &&
-            !GlobalState::g_operationCancelled.load()) ? 0 : 1;
+
+	return (failedTasks == 0 && !hasErrors &&
+	        !GlobalState::g_operationCancelled.load()) ? 0 : 1;
+
 }
 
 /**
@@ -334,66 +356,68 @@ static int computeUnmountExitCode(size_t failedTasks, bool hasErrors) {
 static int executeUnmounts(const std::unordered_set<std::string>& mountPoints,
                            const ParsedArgs& args,
                            bool hasErrors) {
-    if (mountPoints.empty()) {
-        if (GlobalState::g_operationCancelled.load())
-            return 1;
-        verboseWarn(args.silentMode, "No ISO mount points found to unmount.");
-        return hasErrors ? 1 : 0;
-    }
 
-    verboseInfo(args.silentMode,
-                std::string("Located ")
-                .append(std::to_string(mountPoints.size()))
-                .append(" mount point")
-                .append(mountPoints.size() == 1 ? "" : "s")
-                .append("; Attempting to unmount...\n"));
+	if (mountPoints.empty()) {
+		if (GlobalState::g_operationCancelled.load())
+		    return 1;
+		verboseWarn(args.silentMode, "No ISO mount points found to unmount.");
+		return hasErrors ? 1 : 0;
+	}
 
-    std::atomic<size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
-    std::atomic<bool> isComplete{false};
-    bool showVerbose = false;
+	verboseInfo(args.silentMode,
+	            std::string("Located ")
+	            .append(std::to_string(mountPoints.size()))
+	            .append(" mount point")
+	            .append(mountPoints.size() == 1 ? "" : "s")
+	            .append("; Attempting to unmount...\n"));
 
-    // Sort for deterministic processing order.
-    std::vector<std::string> paths(mountPoints.begin(), mountPoints.end());
-    std::sort(paths.begin(), paths.end());
-    const size_t totalTasks = paths.size();
+	std::atomic<size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
+	std::atomic<bool> isComplete{false};
+	bool showVerbose = false;
 
-    // Start the progress bar unless output is silent.
-    std::thread barThread;
-    const std::string coloredProcess =
-            std::string(UI::Palette::Yellow) + "umount" + std::string(UI::Palette::BoldReset);
+	// Sort for deterministic processing order.
+	std::vector<std::string> paths(mountPoints.begin(), mountPoints.end());
+	std::sort(paths.begin(), paths.end());
+	const size_t totalTasks = paths.size();
 
-    if (!args.silentMode) {
-        barThread = startProgressThread(
-            totalTasks, coloredProcess,
-            completedBytes, completedTasks, failedTasks,
-            isComplete, showVerbose);
-    }
+	// Start the progress bar unless output is silent.
+	std::thread barThread;
+	const std::string coloredProcess =
+	        std::string(UI::Palette::Yellow) + "umount" + std::string(UI::Palette::BoldReset);
 
-    std::atomic<size_t> nextTask{0};
-    runUnmountWorkers(paths, args.silentMode, completedBytes, completedTasks, failedTasks, nextTask);
+	if (!args.silentMode) {
+		barThread = startProgressThread(
+		    totalTasks, coloredProcess,
+		    completedBytes, completedTasks, failedTasks,
+		    isComplete, showVerbose);
+	}
 
-    isComplete.store(true, std::memory_order_release);
+	std::atomic<size_t> nextTask{0};
+	runUnmountWorkers(paths, args.silentMode, completedBytes, completedTasks, failedTasks, nextTask);
 
-    if (barThread.joinable())
-        barThread.join();
+	isComplete.store(true, std::memory_order_release);
 
-    // After a cancel, mark the mount points no worker claimed as cancelled.
-    if (GlobalState::g_operationCancelled.load()) {
-        handleCancelledRemainder(paths, nextTask, completedTasks, failedTasks, args.silentMode);
-    }
+	if (barThread.joinable())
+	    barThread.join();
 
-    // Clean up the parent directory after all unmount workers finish.
-    {
-        std::error_code ec;
-        fs::remove("/mnt/ISOs", ec);
-    }
+	// After a cancel, mark the mount points no worker claimed as cancelled.
+	if (GlobalState::g_operationCancelled.load()) {
+		handleCancelledRemainder(paths, nextTask, completedTasks, failedTasks, args.silentMode);
+	}
 
-    // Show detailed output only if requested through the progress prompt.
-    if (!args.silentMode && showVerbose) {
-        printVerboseUnmountSummary(completedTasks, failedTasks);
-    }
+	// Clean up the parent directory after all unmount workers finish.
+	{
+		std::error_code ec;
+		fs::remove("/mnt/ISOs", ec);
+	}
 
-    return computeUnmountExitCode(failedTasks.load(), hasErrors);
+	// Show detailed output only if requested through the progress prompt.
+	if (!args.silentMode && showVerbose) {
+		printVerboseUnmountSummary(completedTasks, failedTasks);
+	}
+
+	return computeUnmountExitCode(failedTasks.load(), hasErrors);
+
 }
 
 /**
@@ -410,15 +434,17 @@ static int executeUnmounts(const std::unordered_set<std::string>& mountPoints,
  *               or the task is cancelled by the user.
  */
 int handleUmount(const ParsedArgs& args) {
-    if (geteuid() != 0) {
-        errMsg("Root privileges required for unmounting ISOs.");
-        return 1;
-    }
 
-    CollectionResult res = collectMountPoints(args);
-    if (res.abortImmediately) {
-        return 1;
-    }
+	if (geteuid() != 0) {
+		errMsg("Root privileges required for unmounting ISOs.");
+		return 1;
+	}
 
-    return executeUnmounts(res.mountPoints, args, res.hasErrors);
+	CollectionResult res = collectMountPoints(args);
+	if (res.abortImmediately) {
+		return 1;
+	}
+
+	return executeUnmounts(res.mountPoints, args, res.hasErrors);
+
 }

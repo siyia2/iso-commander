@@ -29,7 +29,6 @@ struct ProgressInfo;
 
 // ------------------- Windows ISO writer (windowsWriter.cpp) -------------------
 
-
 /**
  * @brief Writes a Windows-family ISO to a block device by partitioning,
  *        formatting and copying files.

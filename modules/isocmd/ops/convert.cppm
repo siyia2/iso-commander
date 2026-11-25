@@ -20,12 +20,12 @@ export extern "C++" {
  *       must also be non-null.
  */
 struct ConversionBatchData {
-    std::atomic<std::size_t>* completedBytes = nullptr;
-    std::atomic<std::size_t>* completedTasks = nullptr;
-    std::atomic<std::size_t>* failedTasks = nullptr;
+	std::atomic<std::size_t>* completedBytes = nullptr;
+	std::atomic<std::size_t>* completedTasks = nullptr;
+	std::atomic<std::size_t>* failedTasks = nullptr;
 
-    std::vector<std::string>* successfulOutputPaths = nullptr;
-    std::mutex* outPathsMutex = nullptr;
+	std::vector<std::string>* successfulOutputPaths = nullptr;
+	std::mutex* outPathsMutex = nullptr;
 };
 
 /**
@@ -40,10 +40,10 @@ struct ConversionBatchData {
  *       from any translation unit without pulling in project globals.
  */
 struct ConversionMode {
-    bool mdf = false; ///< @c true selects the MDF/MDS backend (@c convertMdfToIso).
-    bool nrg = false; ///< @c true selects the NRG backend (@c convertNrgToIso).
-    bool chd = false; ///< @c true selects the CHD backend (@c convertChdToIso).
-    bool daa = false; ///< @c true selects the DAA/GBI backend (@c convertDaaToIso).
+	bool mdf = false; ///< @c true selects the MDF/MDS backend (@c convertMdfToIso).
+	bool nrg = false; ///< @c true selects the NRG backend (@c convertNrgToIso).
+	bool chd = false; ///< @c true selects the CHD backend (@c convertChdToIso).
+	bool daa = false; ///< @c true selects the DAA/GBI backend (@c convertDaaToIso).
 };
 
 /**

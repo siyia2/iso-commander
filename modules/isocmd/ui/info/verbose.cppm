@@ -36,9 +36,9 @@ enum class MountRecKind : uint8_t { Completed, Skipped, Failed };
  * (interned), and unused for Skipped records.
  */
 struct MountRecord {
-    std::string  isoPath;
-    const char*  code = nullptr;
-    MountRecKind kind = MountRecKind::Completed;
+	std::string  isoPath;
+	const char*  code = nullptr;
+	MountRecKind kind = MountRecKind::Completed;
 };
 
 /**
@@ -48,9 +48,9 @@ struct MountRecord {
  * "root_error"; the line is built from it and @c mountPoint when printed.
  */
 struct UmountRecord {
-    std::string mountPoint;
-    const char* messageKey = nullptr;
-    bool        completed  = false;
+	std::string mountPoint;
+	const char* messageKey = nullptr;
+	bool        completed  = false;
 };
 
 /// Number of stored unmount records (completed or failed).
@@ -87,12 +87,12 @@ void forEachMountLine(MountRecKind kind, const std::function<void(std::string_vi
  * All concurrent writes must be protected by GlobalMutexes::globalSetsMutex.
  */
 struct VerboseSets {
-    std::unordered_set<std::string> operationCompleted;
-    std::unordered_set<std::string> operationFailed;
-    std::unordered_set<std::string> operationSkipped;
-    std::unordered_set<std::string> uniqueErrorTokenMessages;
-    std::vector<MountRecord>        mountRecords; ///< Mount results; formatted at print time.
-    std::vector<UmountRecord>       umountRecords; ///< Unmount results; formatted at print time.
+	std::unordered_set<std::string> operationCompleted;
+	std::unordered_set<std::string> operationFailed;
+	std::unordered_set<std::string> operationSkipped;
+	std::unordered_set<std::string> uniqueErrorTokenMessages;
+	std::vector<MountRecord>        mountRecords; ///< Mount results; formatted at print time.
+	std::vector<UmountRecord>       umountRecords; ///< Unmount results; formatted at print time.
 };
 
 extern VerboseSets verboseSets;
@@ -118,7 +118,6 @@ std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& e
  */
 void displayErrors();
 
-
 // --- Search & Discovery ---
 
 /**
@@ -134,32 +133,32 @@ void displayErrors();
  *          "consumed" after the call.
  */
 struct ImageSearchRequest {
-    std::string fileExtension;                                    ///< Target format label (e.g. ".bin/.img").
-    std::unordered_set<std::string>& fileNames;                   ///< Files discovered this run.
-    std::unordered_set<std::string>& invalidDirectoryPaths;       ///< Invalid paths; cleared by the call.
-    std::unordered_set<std::string>& processedErrorsFind;         ///< Deduplicated traversal errors; cleared by the call.
-    const std::vector<std::string>& directoryPaths;               ///< Base directories traversed.
-    const std::vector<std::string>& files;                        ///< Current working cache.
-    bool newFilesFound;                                           ///< Whether the scan produced new files.
-    bool list;                                                    ///< Suppresses the "no new files" / "cache empty" branches.
-    int currentCacheOld;                                          ///< Cache count before this search.
-    const std::atomic<size_t>& totalFiles;                        ///< Aggregate regular-file count from findFiles().
-    std::int64_t start_time_ns;                                   ///< Search start (see monotonicNowNs()); used for elapsed time.
+	std::string fileExtension;                                    ///< Target format label (e.g. ".bin/.img").
+	std::unordered_set<std::string>& fileNames;                   ///< Files discovered this run.
+	std::unordered_set<std::string>& invalidDirectoryPaths;       ///< Invalid paths; cleared by the call.
+	std::unordered_set<std::string>& processedErrorsFind;         ///< Deduplicated traversal errors; cleared by the call.
+	const std::vector<std::string>& directoryPaths;               ///< Base directories traversed.
+	const std::vector<std::string>& files;                        ///< Current working cache.
+	bool newFilesFound;                                           ///< Whether the scan produced new files.
+	bool list;                                                    ///< Suppresses the "no new files" / "cache empty" branches.
+	int currentCacheOld;                                          ///< Cache count before this search.
+	const std::atomic<size_t>& totalFiles;                        ///< Aggregate regular-file count from findFiles().
+	std::int64_t start_time_ns;                                   ///< Search start (see monotonicNowNs()); used for elapsed time.
 };
 
 struct DatabaseRefreshReport {
-    size_t totalProcessed = 0;
-    int deltaCount = 0;
-    double totalElapsed = 0.0;
+	size_t totalProcessed = 0;
+	int deltaCount = 0;
+	double totalElapsed = 0.0;
 
-    bool hasValidPaths = false;
-    bool hasIsoFiles = false;
-    bool newISOFound = false;
-    bool saveSuccess = false;
-    bool cancelled = false;
+	bool hasValidPaths = false;
+	bool hasIsoFiles = false;
+	bool newISOFound = false;
+	bool saveSuccess = false;
+	bool cancelled = false;
 
-    std::unordered_set<std::string> invalidPaths;
-    std::unordered_set<std::string> uniqueErrorMessages;
+	std::unordered_set<std::string> invalidPaths;
+	std::unordered_set<std::string> uniqueErrorMessages;
 };
 
 /**
@@ -197,7 +196,6 @@ void verboseImageSearchResults(
     const std::function<void()>& repaintCallerHeader = {}
 );
 
-
 // --- Database ---
 
 /**
@@ -208,13 +206,13 @@ void verboseImageSearchResults(
  * `saveToDatabase()` and may be mutated.
  */
 struct DatabaseRefreshResult {
-    std::vector<std::string>& allIsoFiles;                     ///< Discovered ISO paths to be saved.
-    std::vector<std::string>& validPaths;                      ///< Base directories successfully traversed.
-    std::unordered_set<std::string>& invalidPaths;             ///< Directories skipped due to permissions or existence errors.
-    std::unordered_set<std::string>& uniqueErrorMessages;      ///< Deduplicated system-level I/O errors.
-    std::atomic<size_t>& totalFiles;                           ///< Atomic count of files scanned.
-    bool& newISOFound;                                         ///< On entry, whether the scan produced delta changes; may be mutated by the save step.
-    std::int64_t start_time_ns;                                ///< Refresh origin (see monotonicNowNs()); used for elapsed time.
+	std::vector<std::string>& allIsoFiles;                     ///< Discovered ISO paths to be saved.
+	std::vector<std::string>& validPaths;                      ///< Base directories successfully traversed.
+	std::unordered_set<std::string>& invalidPaths;             ///< Directories skipped due to permissions or existence errors.
+	std::unordered_set<std::string>& uniqueErrorMessages;      ///< Deduplicated system-level I/O errors.
+	std::atomic<size_t>& totalFiles;                           ///< Atomic count of files scanned.
+	bool& newISOFound;                                         ///< On entry, whether the scan produced delta changes; may be mutated by the save step.
+	std::int64_t start_time_ns;                                ///< Refresh origin (see monotonicNowNs()); used for elapsed time.
 };
 
 /**

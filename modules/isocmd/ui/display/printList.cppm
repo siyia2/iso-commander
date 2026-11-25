@@ -17,16 +17,16 @@ class StringListView;
  * @brief Holds the state and options required for printList.
  */
 struct PrintListContext {
-    std::vector<std::string>& pendingIndices;
-    bool& hasPendingProcess;
-    std::size_t& currentPage;
-    std::shared_ptr<RefreshState> state;
+	std::vector<std::string>& pendingIndices;
+	bool& hasPendingProcess;
+	std::size_t& currentPage;
+	std::shared_ptr<RefreshState> state;
 
-    bool clearFirst = true;
-    bool showPendingIndices = true;
-    bool showSourceIndices = true;
+	bool clearFirst = true;
+	bool showPendingIndices = true;
+	bool showSourceIndices = true;
 
-    std::size_t displayIndexOffset = 0;
+	std::size_t displayIndexOffset = 0;
 };
 
 /**

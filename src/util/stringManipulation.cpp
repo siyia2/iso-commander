@@ -7,18 +7,18 @@ import isocmd.core.caches;
 import isocmd.ui.display.display;
 
 namespace GlobalCaches {
-    thread_local std::unordered_map<
-        std::string,
-        std::string,
-        StringViewHash,
-        std::equal_to<>
-    > transformationCache;
-    thread_local std::unordered_map<
-        std::string,
-        std::tuple<std::string, std::string, std::string>,
-        StringViewHash,
-        std::equal_to<>
-    > cachedParsesForUmount;
+	thread_local std::unordered_map<
+	    std::string,
+	    std::string,
+	    StringViewHash,
+	    std::equal_to<>
+	> transformationCache;
+	thread_local std::unordered_map<
+	    std::string,
+	    std::tuple<std::string, std::string, std::string>,
+	    StringViewHash,
+	    std::equal_to<>
+	> cachedParsesForUmount;
 }
 
 /**
@@ -26,9 +26,11 @@ namespace GlobalCaches {
  * @param str The string to modify.
  */
 void toLowerInPlace(std::string& str) {
-    for (char& c : str) {
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
+
+	for (char& c : str) {
+		c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+	}
+
 }
 
 /**
@@ -38,10 +40,12 @@ void toLowerInPlace(std::string& str) {
  * @return true if the full path should be displayed without shortening, false otherwise.
  */
 static bool shouldShowFullPath(const std::string& location) {
-    return (displayConfig::toggleFullListMount && location == "mount") ||
-           (displayConfig::toggleFullListCpMvRm && location == "cp_mv_rm") ||
-           (displayConfig::toggleFullListConvert2iso && location == "convert2iso") ||
-           (displayConfig::toggleFullListWrite2usb && location == "write2usb");
+
+	return (displayConfig::toggleFullListMount && location == "mount") ||
+	       (displayConfig::toggleFullListCpMvRm && location == "cp_mv_rm") ||
+	       (displayConfig::toggleFullListConvert2iso && location == "convert2iso") ||
+	       (displayConfig::toggleFullListWrite2usb && location == "write2usb");
+
 }
 
 /**
@@ -55,40 +59,42 @@ static bool shouldShowFullPath(const std::string& location) {
  * @return std::string The processed and shortened directory string.
  */
 static std::string shortenDirectory(std::string_view originalDir) {
-    std::string processedDir;
-    processedDir.reserve(originalDir.size());
 
-    size_t start = 0;
-    while (start < originalDir.size()) {
-        auto end = originalDir.find_first_of('/', start);
-        if (end == std::string_view::npos) {
-            end = originalDir.size();
-        }
+	std::string processedDir;
+	processedDir.reserve(originalDir.size());
 
-        std::string_view component = originalDir.substr(start, end - start);
-        size_t truncatePos = std::min<size_t>(16, component.size());
+	size_t start = 0;
+	while (start < originalDir.size()) {
+		auto end = originalDir.find_first_of('/', start);
+		if (end == std::string_view::npos) {
+			end = originalDir.size();
+		}
 
-        for (size_t i = 0; i < truncatePos; ++i) {
-            char c = component[i];
-            // Truncate at first special character
-            if (c == ' ' || c == '-' || c == '_' || c == '.') {
-                if (i == 0 && component.size() > 1) {
-                    continue; // Allow hidden files/directories starting with '.'
-                }
-                truncatePos = i;
-                break;
-            }
-        }
+		std::string_view component = originalDir.substr(start, end - start);
+		size_t truncatePos = std::min<size_t>(16, component.size());
 
-        processedDir.append(component.substr(0, truncatePos));
+		for (size_t i = 0; i < truncatePos; ++i) {
+			char c = component[i];
+			// Truncate at first special character
+			if (c == ' ' || c == '-' || c == '_' || c == '.') {
+				if (i == 0 && component.size() > 1) {
+					continue; // Allow hidden files/directories starting with '.'
+				}
+				truncatePos = i;
+				break;
+			}
+		}
 
-        if (end < originalDir.size()) {
-            processedDir.push_back('/');
-        }
-        start = end + 1;
-    }
+		processedDir.append(component.substr(0, truncatePos));
 
-    return processedDir;
+		if (end < originalDir.size()) {
+			processedDir.push_back('/');
+		}
+		start = end + 1;
+	}
+
+	return processedDir;
+
 }
 
 /**
@@ -111,39 +117,41 @@ static std::string shortenDirectory(std::string_view originalDir) {
  *       or the 'GlobalCaches::transformationCache' (if shortened).
  */
 std::pair<std::string_view, std::string_view> extractDirectoryAndFilename(std::string_view path, const std::string& location) {
-    const auto lastSlashPos = path.find_last_of('/');
 
-    // 1. Filename is always a slice of the input path
-    const std::string_view filename = (lastSlashPos == std::string_view::npos) ?
-                                       path : path.substr(lastSlashPos + 1);
+	const auto lastSlashPos = path.find_last_of('/');
 
-    if (lastSlashPos == std::string_view::npos) {
-        return {"", filename};
-    }
+	// 1. Filename is always a slice of the input path
+	const std::string_view filename = (lastSlashPos == std::string_view::npos) ?
+	                                   path : path.substr(lastSlashPos + 1);
 
-    const std::string_view originalDir = path.substr(0, lastSlashPos);
+	if (lastSlashPos == std::string_view::npos) {
+		return {"", filename};
+	}
 
-    // 2. Check for "Full Path" flags (no processing needed)
-    if (shouldShowFullPath(location)) {
-        return {originalDir, filename};
-    }
+	const std::string_view originalDir = path.substr(0, lastSlashPos);
 
-    // 3. Fast-Path: Transparent Cache Lookup
-    if (auto it = GlobalCaches::transformationCache.find(originalDir);
-        it != GlobalCaches::transformationCache.end()) {
-        return {std::string_view(it->second), filename};
-    }
+	// 2. Check for "Full Path" flags (no processing needed)
+	if (shouldShowFullPath(location)) {
+		return {originalDir, filename};
+	}
 
-    // 4. Slow-Path: Process and Shorten (Executes once per unique directory)
-    std::string processedDir = shortenDirectory(originalDir);
+	// 3. Fast-Path: Transparent Cache Lookup
+	if (auto it = GlobalCaches::transformationCache.find(originalDir);
+		it != GlobalCaches::transformationCache.end()) {
+		return {std::string_view(it->second), filename};
+	}
 
-    // 5. Store result in cache and return a view of it
-    auto [it, inserted] = GlobalCaches::transformationCache.emplace(
-        std::string(originalDir),
-        std::move(processedDir)
-    );
+	// 4. Slow-Path: Process and Shorten (Executes once per unique directory)
+	std::string processedDir = shortenDirectory(originalDir);
 
-    return {std::string_view(it->second), filename};
+	// 5. Store result in cache and return a view of it
+	auto [it, inserted] = GlobalCaches::transformationCache.emplace(
+	    std::string(originalDir),
+	    std::move(processedDir)
+	);
+
+	return {std::string_view(it->second), filename};
+
 }
 
 /**
@@ -155,42 +163,44 @@ std::pair<std::string_view, std::string_view> extractDirectoryAndFilename(std::s
  * @return A tuple of {DirectoryISOs/Part, FilenamePart, ~HashPart}.
  */
 std::tuple<std::string_view, std::string_view, std::string_view> parseMountPointComponents(std::string_view dir) {
-    static constexpr std::string_view kDelim = "ISOs/";
 
-    // 1. Transparent lookup: 0 allocations to check the cache
-    if (auto it = GlobalCaches::cachedParsesForUmount.find(dir);
-             it != GlobalCaches::cachedParsesForUmount.end()) {
-        const auto& [d, f, h] = it->second;
-        return {d, f, h}; // Implicitly converts std::string to std::string_view
-    }
+	static constexpr std::string_view kDelim = "ISOs/";
 
-    // 2. Logic: Find positions using string_view (no copies)
-    size_t delimPos = dir.find(kDelim);
-    if (delimPos == std::string_view::npos) {
-        auto& stored = GlobalCaches::cachedParsesForUmount[std::string(dir)] = {std::string(dir), "", ""};
-        return {std::get<0>(stored), "", ""};
-    }
+	// 1. Transparent lookup: 0 allocations to check the cache
+	if (auto it = GlobalCaches::cachedParsesForUmount.find(dir);
+			 it != GlobalCaches::cachedParsesForUmount.end()) {
+		const auto& [d, f, h] = it->second;
+		return {d, f, h}; // Implicitly converts std::string to std::string_view
+	}
 
-    size_t lastTildePos = dir.find_last_of('~');
-    size_t afterDelim = delimPos + kDelim.size();
+	// 2. Logic: Find positions using string_view (no copies)
+	size_t delimPos = dir.find(kDelim);
+	if (delimPos == std::string_view::npos) {
+		auto& stored = GlobalCaches::cachedParsesForUmount[std::string(dir)] = {std::string(dir), "", ""};
+		return {std::get<0>(stored), "", ""};
+	}
 
-    std::string directoryPart(dir.substr(0, afterDelim));
-    std::string filenamePart;
-    std::string hashPart;
+	size_t lastTildePos = dir.find_last_of('~');
+	size_t afterDelim = delimPos + kDelim.size();
 
-    if (lastTildePos == std::string_view::npos || lastTildePos <= afterDelim - 1) {
-        filenamePart = std::string(dir.substr(afterDelim));
-    } else {
-        filenamePart = std::string(dir.substr(afterDelim, lastTildePos - afterDelim));
-        hashPart = std::string(dir.substr(lastTildePos));
-    }
+	std::string directoryPart(dir.substr(0, afterDelim));
+	std::string filenamePart;
+	std::string hashPart;
 
-    // 3. Store in cache once
-    auto& stored = GlobalCaches::cachedParsesForUmount[std::string(dir)] =
-                   {std::move(directoryPart), std::move(filenamePart), std::move(hashPart)};
+	if (lastTildePos == std::string_view::npos || lastTildePos <= afterDelim - 1) {
+		filenamePart = std::string(dir.substr(afterDelim));
+	} else {
+		filenamePart = std::string(dir.substr(afterDelim, lastTildePos - afterDelim));
+		hashPart = std::string(dir.substr(lastTildePos));
+	}
 
-    // 4. Return views of the strings now owned by the cache
-    return {std::get<0>(stored), std::get<1>(stored), std::get<2>(stored)};
+	// 3. Store in cache once
+	auto& stored = GlobalCaches::cachedParsesForUmount[std::string(dir)] =
+	               {std::move(directoryPart), std::move(filenamePart), std::move(hashPart)};
+
+	// 4. Return views of the strings now owned by the cache
+	return {std::get<0>(stored), std::get<1>(stored), std::get<2>(stored)};
+
 }
 
 /**
@@ -199,26 +209,28 @@ std::tuple<std::string_view, std::string_view, std::string_view> parseMountPoint
  * @return A cleaned version of the string.
  */
 std::string trimWhitespace(const std::string& str) {
-    size_t first = str.find_first_not_of(" \t\n\r\f\v");
-    if (first == std::string::npos) return "";
-    size_t last = str.find_last_not_of(" \t\n\r\f\v");
 
-    std::string trimmed = str.substr(first, (last - first + 1));
-    std::string result;
-    result.reserve(trimmed.size());
+	size_t first = str.find_first_not_of(" \t\n\r\f\v");
+	if (first == std::string::npos) return "";
+	size_t last = str.find_last_not_of(" \t\n\r\f\v");
 
-    for (size_t i = 0; i < trimmed.length(); ++i) {
-        if (trimmed[i] == ' ') {
-            // Check neighbors to see if we are adjacent to a semicolon
-            bool adjSemicolon = (i + 1 < trimmed.length() && trimmed[i + 1] == ';') ||
-                                (i > 0 && trimmed[i - 1] == ';');
-            if (!adjSemicolon) {
-                result += ' ';
-            }
-        } else {
-            result += trimmed[i];
-        }
-    }
+	std::string trimmed = str.substr(first, (last - first + 1));
+	std::string result;
+	result.reserve(trimmed.size());
 
-    return result;
+	for (size_t i = 0; i < trimmed.length(); ++i) {
+		if (trimmed[i] == ' ') {
+			// Check neighbors to see if we are adjacent to a semicolon
+			bool adjSemicolon = (i + 1 < trimmed.length() && trimmed[i + 1] == ';') ||
+			                    (i > 0 && trimmed[i - 1] == ';');
+			if (!adjSemicolon) {
+				result += ' ';
+			}
+		} else {
+			result += trimmed[i];
+		}
+	}
+
+	return result;
+
 }

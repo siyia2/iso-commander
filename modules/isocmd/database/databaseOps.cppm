@@ -38,14 +38,14 @@ bool isValidDirectory(const std::string& path);
  * @param promptFlag            Whether interactive prompts are enabled.
  */
 void traverse(
-    const std::filesystem::path& path,
-    std::vector<std::string>& isoFiles,
-    std::unordered_set<std::string>& uniqueErrorMessages,
-    std::atomic<std::size_t>& totalFiles,
-    std::mutex& traverseFilesMutex,
-    std::mutex& traverseErrorsMutex,
-    int maxDepth,
-    bool promptFlag
+	const std::filesystem::path& path,
+	std::vector<std::string>& isoFiles,
+	std::unordered_set<std::string>& uniqueErrorMessages,
+	std::atomic<std::size_t>& totalFiles,
+	std::mutex& traverseFilesMutex,
+	std::mutex& traverseErrorsMutex,
+	int maxDepth,
+	bool promptFlag
 );
 
 // --- Database Synchronization ---
@@ -67,8 +67,8 @@ void loadFromDatabase(std::vector<std::string>& globalIsoFileList);
  * @return true if new entries were successfully saved; false otherwise.
  */
 bool saveToDatabase(
-    const std::vector<std::string>& globalIsoFileList,
-    bool* newISOFound
+	const std::vector<std::string>& globalIsoFileList,
+	bool* newISOFound
 );
 
 /**
@@ -80,10 +80,10 @@ bool saveToDatabase(
  * @param newISOFound   Output flag indicating whether new ISO entries were found.
  */
 void refreshForDatabase(
-    bool promptFlag,
-    int maxDepth,
-    bool filterHistory,
-    bool& newISOFound
+	bool promptFlag,
+	int maxDepth,
+	bool filterHistory,
+	bool& newISOFound
 );
 
 /**
@@ -95,7 +95,7 @@ void refreshForDatabase(
  * @param globalIsoFileList In-memory ISO path list to synchronize.
  */
 void removeNonExistentPathsFromDatabase(
-    std::vector<std::string>& globalIsoFileList
+	std::vector<std::string>& globalIsoFileList
 );
 
 // --- Background Import ---

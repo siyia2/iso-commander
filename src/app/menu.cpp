@@ -27,33 +27,36 @@ import isocmd.ui.display.themes;
  */
 void print_ascii() {
 
-    auto rgb = [](int r, int g, int b) -> std::string {
-        return "\033[38;2;" + std::to_string(r) + ";" +
-               std::to_string(g) + ";" + std::to_string(b) + "m";
-    };
+	auto rgb = [](int r, int g, int b) -> std::string {
 
-    const std::string reset = "\033[0m";
+		return "\033[38;2;" + std::to_string(r) + ";" +
+		       std::to_string(g) + ";" + std::to_string(b) + "m";
 
-    // True flame gradient sampled from real fire photography
-    std::string rows[] = {
-        rgb(255, 255, 240),  // row 0: near-white (hottest tips)
-        rgb(255, 248, 150),  // row 1: pale lemon
-        rgb(255, 220,  50),  // row 2: bright yellow
-        rgb(255, 165,   0),  // row 3: orange
-        rgb(240,  80,   0),  // row 4: red-orange
-        rgb(200,  20,   0),  // row 5: bright red
-        rgb(175,  20,  15),  // row 6: rich crimson
-        rgb(110,  10,   5),  // row 7: burnt maroon
-    };
+	};
 
-    std::cout << rows[0] << R"((   (       )            )    *      *              ) (         ( )" << "\n";
-    std::cout << rows[1] << R"( )\ ))\ ) ( /(     (  ( /(  (  `   (  `    (     ( /( )\ )      )\ ) )" << "\n";
-    std::cout << rows[2] << R"((()/(()/( )\())    )\ )\()) )\))(  )\))(   )\    )\()(()/(  (  (()/( )" << "\n";
-    std::cout << rows[3] << R"( /(_)/(_)((_)\   (((_((_)\ ((_)()\((_)()((((_)( ((_)\ /(_)) )\  /(_)) )" << "\n";
-    std::cout << rows[4] << R"((_))(_))   ((_)  )\___ ((_)(_()((_(_()((_)\ _ )\ _((_(_))_ ((_)(_)) )" << "\n";
-    std::cout << rows[5] << R"(|_ _/ __| / _ \ ((/ __/ _ \|  \/  |  \/  (_)_\(_| \| ||   \| __| _ \ )" << "\n";
-    std::cout << rows[6] << R"( | |\__ \| (_) | | (_| (_) | |\/| | |\/| |/ _ \ | .` || |) | _||   / )" << "\n";
-    std::cout << rows[7] << R"(|___|___/ \___/   \___\___/|_|  |_|_|  |_/_/ \_\|_|\_||___/|___|_|_\ )" << "\n\n" << reset;
+	const std::string reset = "\033[0m";
+
+	// True flame gradient sampled from real fire photography
+	std::string rows[] = {
+		rgb(255, 255, 240),  // row 0: near-white (hottest tips)
+		rgb(255, 248, 150),  // row 1: pale lemon
+		rgb(255, 220,  50),  // row 2: bright yellow
+		rgb(255, 165,   0),  // row 3: orange
+		rgb(240,  80,   0),  // row 4: red-orange
+		rgb(200,  20,   0),  // row 5: bright red
+		rgb(175,  20,  15),  // row 6: rich crimson
+		rgb(110,  10,   5),  // row 7: burnt maroon
+	};
+
+	std::cout << rows[0] << R"((   (       )            )    *      *              ) (         ( )" << "\n";
+	std::cout << rows[1] << R"( )\ ))\ ) ( /(     (  ( /(  (  `   (  `    (     ( /( )\ )      )\ ) )" << "\n";
+	std::cout << rows[2] << R"((()/(()/( )\())    )\ )\()) )\))(  )\))(   )\    )\()(()/(  (  (()/( )" << "\n";
+	std::cout << rows[3] << R"( /(_)/(_)((_)\   (((_((_)\ ((_)()\((_)()((((_)( ((_)\ /(_)) )\  /(_)) )" << "\n";
+	std::cout << rows[4] << R"((_))(_))   ((_)  )\___ ((_)(_()((_(_()((_)\ _ )\ _((_(_))_ ((_)(_)) )" << "\n";
+	std::cout << rows[5] << R"(|_ _/ __| / _ \ ((/ __/ _ \|  \/  |  \/  (_)_\(_| \| ||   \| __| _ \ )" << "\n";
+	std::cout << rows[6] << R"( | |\__ \| (_) | | (_| (_) | |\/| | |\/| |/ _ \ | .` || |) | _||   / )" << "\n";
+	std::cout << rows[7] << R"(|___|___/ \___/   \___\___/|_|  |_|_|  |_/_/ \_\|_|\_||___/|___|_|_\ )" << "\n\n" << reset;
+
 }
 
 // Forward declaration; definition and documentation live in select.cpp.
@@ -101,79 +104,82 @@ void submenu1(std::atomic<bool>& isAtISOList,
     std::shared_ptr<RefreshState> refreshState,
     std::vector<std::thread>& backgroundThreads) {
 
-    // Draws the menu box, ending on the line after it (NOT the blank line
-    // before the prompt). Also used as the resize repaint; the blank line
-    // comes from the caller / the watcher.
-    auto drawMenu = [] {
-        SyncOutput sync;
-        clearScrollBuffer();
+	// Draws the menu box, ending on the line after it (NOT the blank line
+	// before the prompt). Also used as the resize repaint; the blank line
+	// comes from the caller / the watcher.
+	auto drawMenu = [] {
 
-        std::cout << color << "+----------------------+\n"
-                  << "|      ManageISO        |\n"
-                  << "+----------------------+\n"
-                  << "| 1. Mount             |\n"
-                  << "+----------------------+\n"
-                  << "| 2. Unmount           |\n"
-                  << "+----------------------+\n"
-                  << "| 3. Delete            |\n"
-                  << "+----------------------+\n"
-                  << "| 4. Move              |\n"
-                  << "+----------------------+\n"
-                  << "| 5. Copy              |\n"
-                  << "+----------------------+\n"
-                  << "| 6. Write             |\n"
-                  << "+----------------------+" << "\n";
-    };
+		SyncOutput sync;
+		clearScrollBuffer();
 
-    while (true) {
-        rl_bind_key('\f', prevent_readline_keybindings);
-        rl_bind_key('\t', prevent_readline_keybindings);
+		std::cout << color << "+----------------------+\n"
+		          << "|      ManageISO        |\n"
+		          << "+----------------------+\n"
+		          << "| 1. Mount             |\n"
+		          << "+----------------------+\n"
+		          << "| 2. Unmount           |\n"
+		          << "+----------------------+\n"
+		          << "| 3. Delete            |\n"
+		          << "+----------------------+\n"
+		          << "| 4. Move              |\n"
+		          << "+----------------------+\n"
+		          << "| 5. Copy              |\n"
+		          << "+----------------------+\n"
+		          << "| 6. Write             |\n"
+		          << "+----------------------+" << "\n";
 
-        isAtISOList.store(false);
-        drawMenu();
-        std::cout << "\n";   // blank line before the prompt
+	};
 
-        const ReadlineAndPromptTheme pt = getPromptTheme();
-        const std::string prompt = std::string(pt.primary) +
-                                   "Enter choice [1-6]: " +
-                                   std::string(pt.reset);
+	while (true) {
+		rl_bind_key('\f', prevent_readline_keybindings);
+		rl_bind_key('\t', prevent_readline_keybindings);
 
-        RlLine input = readlineWithResize(prompt, drawMenu);
+		isAtISOList.store(false);
+		drawMenu();
+		std::cout << "\n";   // blank line before the prompt
 
-        if (!input || input.get()[0] == 27) {
-            break;
-        }
+		const ReadlineAndPromptTheme pt = getPromptTheme();
+		const std::string prompt = std::string(pt.primary) +
+		                           "Enter choice [1-6]: " +
+		                           std::string(pt.reset);
 
-        std::string choice(input.get());
-        if (choice.length() == 1) {
-            switch (choice[0]) {
-                case '1':
-                    clearScrollBuffer();
-                    selectForIsoFiles("mount", isAtISOList, backgroundThreads, refreshState);
-                    break;
-                case '2':
-                    clearScrollBuffer();
-                    selectForIsoFiles("umount", isAtISOList, backgroundThreads, refreshState);
-                    break;
-                case '3':
-                    clearScrollBuffer();
-                    selectForIsoFiles("rm", isAtISOList, backgroundThreads, refreshState);
-                    break;
-                case '4':
-                    clearScrollBuffer();
-                    selectForIsoFiles("mv", isAtISOList, backgroundThreads, refreshState);
-                    break;
-                case '5':
-                    clearScrollBuffer();
-                    selectForIsoFiles("cp", isAtISOList, backgroundThreads, refreshState);
-                    break;
-                case '6':
-                    clearScrollBuffer();
-                    selectForIsoFiles("write2usb", isAtISOList, backgroundThreads, refreshState);
-                    break;
-            }
-        }
-    }
+		RlLine input = readlineWithResize(prompt, drawMenu);
+
+		if (!input || input.get()[0] == 27) {
+			break;
+		}
+
+		std::string choice(input.get());
+		if (choice.length() == 1) {
+			switch (choice[0]) {
+				case '1':
+				    clearScrollBuffer();
+					selectForIsoFiles("mount", isAtISOList, backgroundThreads, refreshState);
+					break;
+				case '2':
+				    clearScrollBuffer();
+					selectForIsoFiles("umount", isAtISOList, backgroundThreads, refreshState);
+					break;
+				case '3':
+				    clearScrollBuffer();
+					selectForIsoFiles("rm", isAtISOList, backgroundThreads, refreshState);
+					break;
+				case '4':
+				    clearScrollBuffer();
+					selectForIsoFiles("mv", isAtISOList, backgroundThreads, refreshState);
+					break;
+				case '5':
+				    clearScrollBuffer();
+					selectForIsoFiles("cp", isAtISOList, backgroundThreads, refreshState);
+					break;
+				case '6':
+				    clearScrollBuffer();
+					selectForIsoFiles("write2usb", isAtISOList, backgroundThreads, refreshState);
+					break;
+			}
+		}
+	}
+
 }
 
 // Forward declaration; definition and documentation live in the conversion
@@ -209,71 +215,74 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
  */
 void submenu2(std::shared_ptr<RefreshState> state) {
 
-    // Same layout rule as submenu1: ends one line short of the blank line.
-    auto drawMenu = [] {
-        SyncOutput sync;
-        clearScrollBuffer();
+	// Same layout rule as submenu1: ends one line short of the blank line.
+	auto drawMenu = [] {
 
-        std::cout << color << "+------------------------+  \n"
-                  << "|      Convert2ISO        |\n"
-                  << "+------------------------+\n"
-                  << "| 1. CCD2ISO++           |\n"
-                  << "+------------------------+\n"
-                  << "| 2. CHD2ISO++           |\n"
-                  << "+------------------------+\n"
-                  << "| 3. DAA2ISO++           |\n"
-                  << "+------------------------+\n"
-                  << "| 4. MDF2ISO++           |\n"
-                  << "+------------------------+\n"
-                  << "| 5. NRG2ISO++           |\n"
-                  << "+------------------------+" << "\n";
-    };
+		SyncOutput sync;
+		clearScrollBuffer();
 
-    while (true) {
-        rl_bind_key('\f', prevent_readline_keybindings);
-        rl_bind_key('\t', prevent_readline_keybindings);
+		std::cout << color << "+------------------------+  \n"
+		          << "|      Convert2ISO        |\n"
+		          << "+------------------------+\n"
+		          << "| 1. CCD2ISO++           |\n"
+		          << "+------------------------+\n"
+		          << "| 2. CHD2ISO++           |\n"
+		          << "+------------------------+\n"
+		          << "| 3. DAA2ISO++           |\n"
+		          << "+------------------------+\n"
+		          << "| 4. MDF2ISO++           |\n"
+		          << "+------------------------+\n"
+		          << "| 5. NRG2ISO++           |\n"
+		          << "+------------------------+" << "\n";
 
-        drawMenu();
-        std::cout << "\n";   // blank line before the prompt
+	};
 
-        const ReadlineAndPromptTheme pt = getPromptTheme();
-        const std::string prompt = std::string(pt.primary) +
-                                   "Enter choice [1-5]: " +
-                                   std::string(pt.reset);
+	while (true) {
+		rl_bind_key('\f', prevent_readline_keybindings);
+		rl_bind_key('\t', prevent_readline_keybindings);
 
-        RlLine input = readlineWithResize(prompt, drawMenu);
+		drawMenu();
+		std::cout << "\n";   // blank line before the prompt
 
-        if (!input || input.get()[0] == 27) {
-            break;
-        }
+		const ReadlineAndPromptTheme pt = getPromptTheme();
+		const std::string prompt = std::string(pt.primary) +
+		                           "Enter choice [1-5]: " +
+		                           std::string(pt.reset);
 
-        std::string choice(input.get());
-        std::string operation;
-        if (choice.length() == 1) {
-            switch (choice[0]) {
-                case '1':
-                    operation = "bin";
-                    promptSearchBinImgChdDaaMdfNrg(operation, state);
-                    break;
-                case '2':
-                    operation = "chd";
-                    promptSearchBinImgChdDaaMdfNrg(operation, state);
-                    break;
-                case '3':
-                    operation = "daa";
-                    promptSearchBinImgChdDaaMdfNrg(operation, state);
-                    break;
-                case '4':
-                    operation = "mdf";
-                    promptSearchBinImgChdDaaMdfNrg(operation, state);
-                    break;
-                case '5':
-                    operation = "nrg";
-                    promptSearchBinImgChdDaaMdfNrg(operation, state);
-                    break;
-            }
-        }
-    }
+		RlLine input = readlineWithResize(prompt, drawMenu);
+
+		if (!input || input.get()[0] == 27) {
+			break;
+		}
+
+		std::string choice(input.get());
+		std::string operation;
+		if (choice.length() == 1) {
+			switch (choice[0]) {
+				case '1':
+				    operation = "bin";
+					promptSearchBinImgChdDaaMdfNrg(operation, state);
+					break;
+				case '2':
+				    operation = "chd";
+					promptSearchBinImgChdDaaMdfNrg(operation, state);
+					break;
+				case '3':
+				    operation = "daa";
+					promptSearchBinImgChdDaaMdfNrg(operation, state);
+					break;
+				case '4':
+				    operation = "mdf";
+					promptSearchBinImgChdDaaMdfNrg(operation, state);
+					break;
+				case '5':
+				    operation = "nrg";
+					promptSearchBinImgChdDaaMdfNrg(operation, state);
+					break;
+			}
+		}
+	}
+
 }
 
 /**
@@ -285,19 +294,21 @@ void submenu2(std::shared_ptr<RefreshState> state) {
  * prompt — callers (drawMainMenu and the resize watcher) own that spacing.
  */
 void printMenu() {
-    std::cout << color << "+----------------------+\n"
-              << "|      Main Menu        |\n"
-              << "+----------------------+\n"
-              << "| 1. ManageISO         |\n"
-              << "+----------------------+\n"
-              << "| 2. Convert2ISO       |\n"
-              << "+----------------------+\n"
-              << "| 3. ImportISO         |\n"
-              << "+----------------------+\n"
-              << "| 4. Settings          |\n"
-              << "+----------------------+\n"
-              << "| 5. Exit              |\n"
-              << "+----------------------+" << "\n";
+
+	std::cout << color << "+----------------------+\n"
+	          << "|      Main Menu        |\n"
+	          << "+----------------------+\n"
+	          << "| 1. ManageISO         |\n"
+	          << "+----------------------+\n"
+	          << "| 2. Convert2ISO       |\n"
+	          << "+----------------------+\n"
+	          << "| 3. ImportISO         |\n"
+	          << "+----------------------+\n"
+	          << "| 4. Settings          |\n"
+	          << "+----------------------+\n"
+	          << "| 5. Exit              |\n"
+	          << "+----------------------+" << "\n";
+
 }
 
 /**
@@ -313,10 +324,12 @@ void printMenu() {
  * resize-watcher and Readline event-hook contexts.
  */
 void drawMainMenu() {
-    SyncOutput sync;
-    clearScrollBuffer();
-    print_ascii();
-    printMenu();
+
+	SyncOutput sync;
+	clearScrollBuffer();
+	print_ascii();
+	printMenu();
+
 }
 
 /**
@@ -367,38 +380,40 @@ void drawMainMenu() {
  * @return Always 0, per the @c rl_event_hook / @c rl_hook_func_t contract.
  */
 int checkPendingRefresh() {
-    if (GlobalState::g_suppressPendingRefresh.load()) return 0; // don't consume; retry later
 
-    PendingRefreshKind kind = GlobalState::g_pendingRefreshKind.exchange(PendingRefreshKind::None);
-    if (kind == PendingRefreshKind::None) return 0;
+	if (GlobalState::g_suppressPendingRefresh.load()) return 0; // don't consume; retry later
 
-    // Validate at consumption time: the publisher's flag check can go stale
-    // before this hook runs (e.g. the user left the screen in between).
-    if (kind == PendingRefreshKind::MainMenu && !GlobalState::isAtMain.load())    return 0;
-    if (kind == PendingRefreshKind::IsoList  && !GlobalState::isAtISOList.load()) return 0;
+	PendingRefreshKind kind = GlobalState::g_pendingRefreshKind.exchange(PendingRefreshKind::None);
+	if (kind == PendingRefreshKind::None) return 0;
 
-    if (kind == PendingRefreshKind::MainMenu) {
-        drawMainMenu();
-        std::cout << "\n" << std::flush;
-        rl_on_new_line();
-        rl_redisplay();
-    } else if (kind == PendingRefreshKind::IsoList) {
-        std::shared_ptr<RefreshState> state;
-        {
-            std::lock_guard<std::mutex> lk(GlobalMutexes::readLineMutex);
-            state = GlobalState::g_pendingRefreshState;
-        }
-        if (state) {
-            SyncOutput sync;
-            loadAndDisplayIso(state->filteredFiles, state->isFiltered, state->listSubtype,
-                              state->umountMvRmBreak, state->pendingIndices, state->hasPendingProcess,
-                              state->currentPage, state->originalPage, state);
-            std::cout << "\n" << std::flush;
-            rl_on_new_line();
-            rl_redisplay();
-        }
-    }
-    return 0;
+	// Validate at consumption time: the publisher's flag check can go stale
+	// before this hook runs (e.g. the user left the screen in between).
+	if (kind == PendingRefreshKind::MainMenu && !GlobalState::isAtMain.load())    return 0;
+	if (kind == PendingRefreshKind::IsoList  && !GlobalState::isAtISOList.load()) return 0;
+
+	if (kind == PendingRefreshKind::MainMenu) {
+		drawMainMenu();
+		std::cout << "\n" << std::flush;
+		rl_on_new_line();
+		rl_redisplay();
+	} else if (kind == PendingRefreshKind::IsoList) {
+		std::shared_ptr<RefreshState> state;
+		{
+			std::lock_guard<std::mutex> lk(GlobalMutexes::readLineMutex);
+			state = GlobalState::g_pendingRefreshState;
+		}
+		if (state) {
+			SyncOutput sync;
+			loadAndDisplayIso(state->filteredFiles, state->isFiltered, state->listSubtype,
+			                  state->umountMvRmBreak, state->pendingIndices, state->hasPendingProcess,
+			                  state->currentPage, state->originalPage, state);
+			std::cout << "\n" << std::flush;
+			rl_on_new_line();
+			rl_redisplay();
+		}
+	}
+	return 0;
+
 }
 
 /**
@@ -432,16 +447,20 @@ int checkPendingRefresh() {
  */
 void monitorAndClearMessage(std::shared_ptr<RefreshState> state, std::atomic<bool>& messageActive,
                             std::atomic<bool>& stopSignal, std::atomic<bool>& isAtMain) {
-    if (state) {
-        std::unique_lock<std::mutex> lock(state->importMutex);
-        state->importCV.wait(lock, [&] {
-            return !state->isImportRunning.load() || stopSignal.load();
-        });
-    }
-    if (messageActive.load() && !stopSignal.load() && isAtMain.load()) {
-        messageActive.store(false);
-        GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::MainMenu);
-    }
+
+	if (state) {
+		std::unique_lock<std::mutex> lock(state->importMutex);
+		state->importCV.wait(lock, [&] {
+
+			return !state->isImportRunning.load() || stopSignal.load();
+
+		});
+	}
+	if (messageActive.load() && !stopSignal.load() && isAtMain.load()) {
+		messageActive.store(false);
+		GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::MainMenu);
+	}
+
 }
 
 /**
@@ -473,18 +492,20 @@ void clearMessageAfterTimeoutInMain(int timeoutTicks, std::atomic<bool>& isAtMai
                                     std::shared_ptr<RefreshState> state,
                                     std::atomic<bool>& messageActive,
                                     std::atomic<bool>& stopMessage) {
-    int elapsed = 0;
-    while (elapsed < timeoutTicks) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        elapsed++;
-        if (stopMessage.load()) return;
-    }
-    if (!(state && state->isImportRunning.load())) {
-        if (messageActive.load() && isAtMain.load()) {
-            messageActive.store(false);
-            GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::MainMenu);
-        }
-    }
+
+	int elapsed = 0;
+	while (elapsed < timeoutTicks) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+		elapsed++;
+		if (stopMessage.load()) return;
+	}
+	if (!(state && state->isImportRunning.load())) {
+		if (messageActive.load() && isAtMain.load()) {
+			messageActive.store(false);
+			GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::MainMenu);
+		}
+	}
+
 }
 
 /**
@@ -500,5 +521,7 @@ void clearMessageAfterTimeoutInMain(int timeoutTicks, std::atomic<bool>& isAtMai
  * line-editing state inconsistent.
  */
 void clearScrollBuffer() {
-    std::cout << "\033[2J\033[3J\033[H\033[0m";
+
+	std::cout << "\033[2J\033[3J\033[H\033[0m";
+
 }

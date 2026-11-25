@@ -15,22 +15,26 @@ export extern "C++" {
  * @brief RAII wrapper that stops and joins a background thread on destruction.
  */
 struct ThreadGuard {
-    std::thread&       thread;
-    std::atomic<bool>& active;
+	std::thread&       thread;
+	std::atomic<bool>& active;
 
-    ThreadGuard(std::thread& t, std::atomic<bool>& a) : thread(t), active(a) {}
+	ThreadGuard(std::thread& t, std::atomic<bool>& a) : thread(t), active(a) {}
 
-    ThreadGuard(const ThreadGuard&)            = delete;
-    ThreadGuard& operator=(const ThreadGuard&) = delete;
+	ThreadGuard(const ThreadGuard&)            = delete;
+	ThreadGuard& operator=(const ThreadGuard&) = delete;
 
-    ~ThreadGuard() {
-        stop();
-    }
+	~ThreadGuard() {
 
-    void stop() {
-        active.store(false);
-        if (thread.joinable()) thread.join();
-    }
+		stop();
+
+	}
+
+	void stop() {
+
+		active.store(false);
+		if (thread.joinable()) thread.join();
+
+	}
 };
 
 } // extern "C++"

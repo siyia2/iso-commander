@@ -59,82 +59,83 @@ bool convertNrgToIso(
     const std::string& outputFile,
     std::atomic<size_t>* completedBytes) {
 
-    if (GlobalState::g_operationCancelled.load()) {
-        GlobalState::g_operationCancelled.store(true);
-        return false;
-    }
+	if (GlobalState::g_operationCancelled.load()) {
+		GlobalState::g_operationCancelled.store(true);
+		return false;
+	}
 
-    std::ifstream nrgFile(inputFile, std::ios::binary);
-    if (!nrgFile) {
-        return false;
-    }
+	std::ifstream nrgFile(inputFile, std::ios::binary);
+	if (!nrgFile) {
+		return false;
+	}
 
-    nrgFile.seekg(0, std::ios::end);
-    nrgFile.seekg(0, std::ios::beg);
+	nrgFile.seekg(0, std::ios::end);
+	nrgFile.seekg(0, std::ios::beg);
 
-    constexpr size_t ISO_CHECK_OFFSET = 16 * 2048;
+	constexpr size_t ISO_CHECK_OFFSET = 16 * 2048;
 
-    char isoBuf[8];
-    nrgFile.seekg(ISO_CHECK_OFFSET);
-    nrgFile.read(isoBuf, 8);
+	char isoBuf[8];
+	nrgFile.seekg(ISO_CHECK_OFFSET);
+	nrgFile.read(isoBuf, 8);
 
-    if (std::memcmp(isoBuf, "\x01" "CD001" "\x01\x00", 8) == 0) {
-        return false;
-    }
+	if (std::memcmp(isoBuf, "\x01" "CD001" "\x01\x00", 8) == 0) {
+		return false;
+	}
 
-    nrgFile.clear();
-    nrgFile.seekg(307200, std::ios::beg);
+	nrgFile.clear();
+	nrgFile.seekg(307200, std::ios::beg);
 
-    if (GlobalState::g_operationCancelled.load()) {
-        GlobalState::g_operationCancelled.store(true);
-        return false;
-    }
+	if (GlobalState::g_operationCancelled.load()) {
+		GlobalState::g_operationCancelled.store(true);
+		return false;
+	}
 
-    std::ofstream isoFile(outputFile, std::ios::binary);
-    if (!isoFile) {
-        return false;
-    }
+	std::ofstream isoFile(outputFile, std::ios::binary);
+	if (!isoFile) {
+		return false;
+	}
 
-    constexpr size_t BUFFER_SIZE = 1024 * 1024;
-    std::vector<char> buffer(BUFFER_SIZE);
+	constexpr size_t BUFFER_SIZE = 1024 * 1024;
+	std::vector<char> buffer(BUFFER_SIZE);
 
-    while (nrgFile) {
-        if (GlobalState::g_operationCancelled.load()) {
-            isoFile.close();
-            fs::remove(outputFile);
-            GlobalState::g_operationCancelled.store(true);
-            return false;
-        }
+	while (nrgFile) {
+		if (GlobalState::g_operationCancelled.load()) {
+			isoFile.close();
+			fs::remove(outputFile);
+			GlobalState::g_operationCancelled.store(true);
+			return false;
+		}
 
-        nrgFile.read(buffer.data(), BUFFER_SIZE);
-        const std::streamsize bytesRead = nrgFile.gcount();
+		nrgFile.read(buffer.data(), BUFFER_SIZE);
+		const std::streamsize bytesRead = nrgFile.gcount();
 
-        if (bytesRead > 0) {
-            if (GlobalState::g_operationCancelled.load()) {
-                isoFile.close();
-                fs::remove(outputFile);
-                GlobalState::g_operationCancelled.store(true);
-                return false;
-            }
+		if (bytesRead > 0) {
+			if (GlobalState::g_operationCancelled.load()) {
+				isoFile.close();
+				fs::remove(outputFile);
+				GlobalState::g_operationCancelled.store(true);
+				return false;
+			}
 
-            if (!isoFile.write(buffer.data(), bytesRead)) {
-                isoFile.close();
-                fs::remove(outputFile);
-                return false;
-            }
+			if (!isoFile.write(buffer.data(), bytesRead)) {
+				isoFile.close();
+				fs::remove(outputFile);
+				return false;
+			}
 
-            if (completedBytes) {
-                completedBytes->fetch_add(
-                    static_cast<size_t>(bytesRead),
-                    std::memory_order_relaxed
-                );
-            }
-        }
+			if (completedBytes) {
+				completedBytes->fetch_add(
+				    static_cast<size_t>(bytesRead),
+				    std::memory_order_relaxed
+				);
+			}
+		}
 
-        if (nrgFile.eof() || nrgFile.fail()) {
-            break;
-        }
-    }
+		if (nrgFile.eof() || nrgFile.fail()) {
+			break;
+		}
+	}
 
-    return true;
+	return true;
+
 }

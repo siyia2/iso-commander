@@ -42,52 +42,56 @@ export extern "C++" {
  */
 class ProgressBarSizeWatcher {
 public:
-    /// Creates the watcher and installs the SIGWINCH handler.
-    ProgressBarSizeWatcher();
-    ~ProgressBarSizeWatcher();
+	/// Creates the watcher and installs the SIGWINCH handler.
+	ProgressBarSizeWatcher();
+	~ProgressBarSizeWatcher();
 
-    ProgressBarSizeWatcher(const ProgressBarSizeWatcher&) = delete;
-    ProgressBarSizeWatcher& operator=(const ProgressBarSizeWatcher&) = delete;
+	ProgressBarSizeWatcher(const ProgressBarSizeWatcher&) = delete;
+	ProgressBarSizeWatcher& operator=(const ProgressBarSizeWatcher&) = delete;
 
-    /**
-     * @brief Returns the last known good terminal dimensions.
-     *
-     * Re-reads the terminal only when SIGWINCH has marked the size dirty
-     * or fallback polling is active.
-     */
-    TermSize get();
+	/**
+	 * @brief Returns the last known good terminal dimensions.
+	 *
+	 * Re-reads the terminal only when SIGWINCH has marked the size dirty
+	 * or fallback polling is active.
+	 */
+	TermSize get();
 
-    /**
-     * @brief Forces a synchronous terminal-size query.
-     *
-     * Useful immediately before printing the final report.
-     */
-    TermSize refresh();
+	/**
+	 * @brief Forces a synchronous terminal-size query.
+	 *
+	 * Useful immediately before printing the final report.
+	 */
+	TermSize refresh();
 
-    /// Read end of the self-pipe for poll(), or -1 if unavailable.
-    int wakeFd() const { return wake_[0]; }
+	/// Read end of the self-pipe for poll(), or -1 if unavailable.
+	int wakeFd() const {
 
-    /// Empties the self-pipe after poll() reports it readable.
-    void drainWake() const;
+		return wake_[0];
 
-    /**
-     * @brief Restores the previous SIGWINCH handler and closes the pipe.
-     *
-     * Safe to call more than once.
-     */
-    void stop();
+	}
+
+	/// Empties the self-pipe after poll() reports it readable.
+	void drainWake() const;
+
+	/**
+	 * @brief Restores the previous SIGWINCH handler and closes the pipe.
+	 *
+	 * Safe to call more than once.
+	 */
+	void stop();
 
 private:
-    bool update();
-    void closeWake();
-    TermSize unpack() const;
+	bool update();
+	void closeWake();
+	TermSize unpack() const;
 
-    std::atomic<std::uint64_t> packed_{(std::uint64_t{80} << 32) | 24u};
+	std::atomic<std::uint64_t> packed_{(std::uint64_t{80} << 32) | 24u};
 
-    int wake_[2] = {-1, -1};
+	int wake_[2] = {-1, -1};
 
-    bool installed_ = false;
-    bool polling_ = false;
+	bool installed_ = false;
+	bool polling_ = false;
 };
 
 } // extern "C++"

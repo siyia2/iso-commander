@@ -43,11 +43,13 @@ namespace fs = std::filesystem;
  * @return Const reference to the selected cache vector.
  */
 static const std::vector<std::string>& selectCache(const RamCacheStore& store, CacheMode mode) {
-    if (mode.daa) return store.daaGbi;
-    if (mode.chd) return store.chd;
-    if (mode.mdf) return store.mdfMds;
-    if (mode.nrg) return store.nrg;
-    return store.binImg;
+
+	if (mode.daa) return store.daaGbi;
+	if (mode.chd) return store.chd;
+	if (mode.mdf) return store.mdfMds;
+	if (mode.nrg) return store.nrg;
+	return store.binImg;
+
 }
 
 /**
@@ -76,37 +78,41 @@ static void ramCacheList(std::vector<std::string>& files,
                          const RamCacheStore& store,
                          CacheMode mode,
                          const std::function<void()>& repaintHeader) {
-    signal(SIGINT, SIG_IGN);
-    disable_ctrl_d();
 
-    const VerboseAndDatabaseTheme dt = getDatabaseTheme();
-    const auto& activeCache = selectCache(store, mode);
+	signal(SIGINT, SIG_IGN);
+	disable_ctrl_d();
 
-    if (!list) {
-        return;
-    }
+	const VerboseAndDatabaseTheme dt = getDatabaseTheme();
+	const auto& activeCache = selectCache(store, mode);
 
-    if (activeCache.empty()) {
-        bool firstDraw = true;
+	if (!list) {
+		return;
+	}
 
-        auto render = [&] {
-            SyncOutput sync;
+	if (activeCache.empty()) {
+		bool firstDraw = true;
 
-            if (!firstDraw && repaintHeader) repaintHeader();
-            firstDraw = false;
+		auto render = [&] {
 
-            std::cout << "\n" << dt.yellow << "No cached " << fileExtension
-                      << " entries to display.\033[J"
-                      << dt.reset << "\n";
-        };
-        pressEnterToContinueWithRepaint(render);
+			SyncOutput sync;
 
-        files.clear();
-        clearScrollBuffer();
-        return;
-    }
+			if (!firstDraw && repaintHeader) repaintHeader();
+			firstDraw = false;
 
-    files = activeCache;
+			std::cout << "\n" << dt.yellow << "No cached " << fileExtension
+			          << " entries to display.\033[J"
+			          << dt.reset << "\n";
+
+		};
+		pressEnterToContinueWithRepaint(render);
+
+		files.clear();
+		clearScrollBuffer();
+		return;
+	}
+
+	files = activeCache;
+
 }
 
 /**
@@ -124,59 +130,62 @@ static void ramCacheList(std::vector<std::string>& files,
  */
 static void clearRamCache(bool& modeMdf, bool& modeNrg, bool& modeChd, bool& modeDaa,
                    const std::function<void()>& repaintHeader) {
-    signal(SIGINT, SIG_IGN);
-    disable_ctrl_d();
 
-    const VerboseAndDatabaseTheme dt = getDatabaseTheme();
+	signal(SIGINT, SIG_IGN);
+	disable_ctrl_d();
 
-    std::string cacheType;
-    bool cacheIsEmpty = false;
+	const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
-    if (modeDaa) {
-        cacheType = "DAA/GBI";
-        cacheIsEmpty = GlobalState::daaGbiFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::daaGbiFilesCache);
-    } else if (modeChd) {
-        cacheType = "CHD";
-        cacheIsEmpty = GlobalState::chdFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::chdFilesCache);
-    } else if (modeMdf) {
-        cacheType = "MDF";
-        cacheIsEmpty = GlobalState::mdfMdsFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::mdfMdsFilesCache);
-    } else if (modeNrg) {
-        cacheType = "NRG";
-        cacheIsEmpty = GlobalState::nrgFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::nrgFilesCache);
-    } else {
-        cacheType = "BIN/IMG";
-        cacheIsEmpty = GlobalState::binImgFilesCache.empty();
-        if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::binImgFilesCache);
-    }
+	std::string cacheType;
+	bool cacheIsEmpty = false;
 
-    bool firstDraw = true;
+	if (modeDaa) {
+		cacheType = "DAA/GBI";
+		cacheIsEmpty = GlobalState::daaGbiFilesCache.empty();
+		if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::daaGbiFilesCache);
+	} else if (modeChd) {
+		cacheType = "CHD";
+		cacheIsEmpty = GlobalState::chdFilesCache.empty();
+		if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::chdFilesCache);
+	} else if (modeMdf) {
+		cacheType = "MDF";
+		cacheIsEmpty = GlobalState::mdfMdsFilesCache.empty();
+		if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::mdfMdsFilesCache);
+	} else if (modeNrg) {
+		cacheType = "NRG";
+		cacheIsEmpty = GlobalState::nrgFilesCache.empty();
+		if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::nrgFilesCache);
+	} else {
+		cacheType = "BIN/IMG";
+		cacheIsEmpty = GlobalState::binImgFilesCache.empty();
+		if (!cacheIsEmpty) std::vector<std::string>().swap(GlobalState::binImgFilesCache);
+	}
 
-        auto render = [&, cacheType, cacheIsEmpty] {
-            SyncOutput sync;
+	bool firstDraw = true;
 
-            if (!firstDraw && repaintHeader) repaintHeader();
-            firstDraw = false;
+		auto render = [&, cacheType, cacheIsEmpty] {
 
-            if (cacheIsEmpty) {
-                std::cout << "\n" << dt.yellow << cacheType
-                          << " cache is empty. Nothing to clear.\033[J"
-                          << dt.reset << "\n";
-            } else {
-                std::cout << "\n" << dt.green << cacheType
-                          << " cache cleared.\033[J"
-                          << dt.reset << "\n";
-            }
-        };
+			SyncOutput sync;
 
+			if (!firstDraw && repaintHeader) repaintHeader();
+			firstDraw = false;
 
-    pressEnterToContinueWithRepaint(render);
+			if (cacheIsEmpty) {
+				std::cout << "\n" << dt.yellow << cacheType
+				          << " cache is empty. Nothing to clear.\033[J"
+				          << dt.reset << "\n";
+			} else {
+				std::cout << "\n" << dt.green << cacheType
+				          << " cache cleared.\033[J"
+				          << dt.reset << "\n";
+			}
 
-    clearScrollBuffer();
+		};
+
+	pressEnterToContinueWithRepaint(render);
+
+	clearScrollBuffer();
+
 }
 
 void toLowerInPlace(std::string& str);
@@ -196,49 +205,51 @@ void toLowerInPlace(std::string& str);
  * @return true if @p entry passes the active format filter.
  */
 static bool blacklist(const std::filesystem::path& entry, const bool& blacklistMdf, const bool& blacklistNrg, const bool& blacklistChd, const bool& blacklistDaa) {
-    const std::string filenameLower = entry.filename().string();
-    const std::string ext = entry.extension().string();
-    std::string extLower = ext;
-    toLowerInPlace(extLower);
 
-    if (blacklistDaa) {
-        if (!(extLower == ".daa" || extLower == ".gbi")) {
-            return false;
-        }
-    }
-    else if (blacklistChd) {
-        if (extLower != ".chd") {
-            return false;
-        }
-    }
-    else if (blacklistMdf) {
-        if (extLower != ".mdf") {
-            return false;
-        }
-    }
-    else if (blacklistNrg) {
-        if (extLower != ".nrg") {
-            return false;
-        }
-    }
-    else { // default BIN/IMG mode
-        if (!(extLower == ".bin" || extLower == ".img")) {
-            return false;
-        }
-    }
+	const std::string filenameLower = entry.filename().string();
+	const std::string ext = entry.extension().string();
+	std::string extLower = ext;
+	toLowerInPlace(extLower);
 
-    std::unordered_set<std::string> blacklistKeywords = {};
+	if (blacklistDaa) {
+		if (!(extLower == ".daa" || extLower == ".gbi")) {
+			return false;
+		}
+	}
+	else if (blacklistChd) {
+		if (extLower != ".chd") {
+			return false;
+		}
+	}
+	else if (blacklistMdf) {
+		if (extLower != ".mdf") {
+			return false;
+		}
+	}
+	else if (blacklistNrg) {
+		if (extLower != ".nrg") {
+			return false;
+		}
+	}
+	else { // default BIN/IMG mode
+		if (!(extLower == ".bin" || extLower == ".img")) {
+			return false;
+		}
+	}
 
-    std::string filenameLowerNoExt = filenameLower;
-    filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size());
+	std::unordered_set<std::string> blacklistKeywords = {};
 
-    for (const auto& keyword : blacklistKeywords) {
-        if (filenameLowerNoExt.find(keyword) != std::string::npos) {
-            return false;
-        }
-    }
+	std::string filenameLowerNoExt = filenameLower;
+	filenameLowerNoExt.erase(filenameLowerNoExt.size() - ext.size());
 
-    return true;
+	for (const auto& keyword : blacklistKeywords) {
+		if (filenameLowerNoExt.find(keyword) != std::string::npos) {
+			return false;
+		}
+	}
+
+	return true;
+
 }
 
 /**
@@ -248,11 +259,13 @@ static bool blacklist(const std::filesystem::path& entry, const bool& blacklistM
  * @return Uppercase format label used in progress and status messages.
  */
 static std::string getModeLabel(const std::string& mode) {
-    if (mode == "mdf") return "MDF";
-    if (mode == "nrg") return "NRG";
-    if (mode == "chd") return "CHD";
-    if (mode == "daa") return "DAA/GBI";
-    return "BIN/IMG";
+
+	if (mode == "mdf") return "MDF";
+	if (mode == "nrg") return "NRG";
+	if (mode == "chd") return "CHD";
+	if (mode == "daa") return "DAA/GBI";
+	return "BIN/IMG";
+
 }
 
 /**
@@ -265,18 +278,20 @@ static std::string getModeLabel(const std::string& mode) {
  * @return Set of previously cached file paths for fast lookup.
  */
 static std::unordered_set<std::string> buildCacheLookupSet(const std::string& mode) {
-    std::unordered_set<std::string> cacheSet;
-    std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
 
-    const std::vector<std::string>& cache =
-        (mode == "nrg") ? GlobalState::nrgFilesCache :
-        (mode == "mdf") ? GlobalState::mdfMdsFilesCache :
-        (mode == "chd") ? GlobalState::chdFilesCache :
-        (mode == "daa") ? GlobalState::daaGbiFilesCache :
-                          GlobalState::binImgFilesCache;
+	std::unordered_set<std::string> cacheSet;
+	std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
 
-    cacheSet.insert(cache.begin(), cache.end());
-    return cacheSet;
+	const std::vector<std::string>& cache =
+	    (mode == "nrg") ? GlobalState::nrgFilesCache :
+	    (mode == "mdf") ? GlobalState::mdfMdsFilesCache :
+	    (mode == "chd") ? GlobalState::chdFilesCache :
+	    (mode == "daa") ? GlobalState::daaGbiFilesCache :
+	                      GlobalState::binImgFilesCache;
+
+	cacheSet.insert(cache.begin(), cache.end());
+	return cacheSet;
+
 }
 
 /**
@@ -295,13 +310,15 @@ static void recordCancellationNotice(const std::string& mode,
                                    const VerboseAndDatabaseTheme& dt,
                                    std::atomic<bool>& cancelledMessageAdded,
                                    std::unordered_set<std::string>& processedErrorsFind) {
-    std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
 
-    if (!cancelledMessageAdded.exchange(true)) {
-        processedErrorsFind.clear();
-        processedErrorsFind.insert(dt.yellow + getModeLabel(mode) +
-                                   " search interrupted by user\n\n" + dt.reset);
-    }
+	std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
+
+	if (!cancelledMessageAdded.exchange(true)) {
+		processedErrorsFind.clear();
+		processedErrorsFind.insert(dt.yellow + getModeLabel(mode) +
+		                           " search interrupted by user\n\n" + dt.reset);
+	}
+
 }
 
 /**
@@ -310,11 +327,13 @@ static void recordCancellationNotice(const std::string& mode,
  * @param totalFiles Shared atomic counter of regular files visited.
  */
 static void updateProgressCounter(std::atomic<std::size_t>& totalFiles) {
-    const std::uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
-    if (val % 100 == 0) {
-        std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
-        std::cout << "\r" << color << "Total files processed: " << val << std::flush;
-    }
+
+	const std::uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
+	if (val % 100 == 0) {
+		std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
+		std::cout << "\r" << color << "Total files processed: " << val << std::flush;
+	}
+
 }
 
 /**
@@ -332,12 +351,14 @@ static void tryRecordDiscoveredFile(const std::filesystem::directory_entry& entr
                                     const std::unordered_set<std::string>& cacheSet,
                                     std::unordered_set<std::string>& localFileNames,
                                     const std::function<void(const std::string&, const std::string&)>& callback) {
-    const std::string fileName = entry.path().string();
 
-    std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
-    if (!cacheSet.contains(fileName) && localFileNames.insert(fileName).second) {
-        callback(fileName, entry.path().parent_path().string());
-    }
+	const std::string fileName = entry.path().string();
+
+	std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
+	if (!cacheSet.contains(fileName) && localFileNames.insert(fileName).second) {
+		callback(fileName, entry.path().parent_path().string());
+	}
+
 }
 
 /**
@@ -366,44 +387,46 @@ static std::unordered_set<std::string> processPaths(const std::string& path, con
                                                     const std::function<void(const std::string&, const std::string&)>& callback,
                                                     std::unordered_set<std::string>& processedErrorsFind,
                                                     std::atomic<std::size_t>& totalFiles) {
-    const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
-    std::unordered_set<std::string> localFileNames;
-    std::atomic<bool> g_CancelledMessageAdded{false};
+	const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
-    disableInput();
+	std::unordered_set<std::string> localFileNames;
+	std::atomic<bool> g_CancelledMessageAdded{false};
 
-    try {
-        const bool blacklistMdf = (mode == "mdf");
-        const bool blacklistNrg = (mode == "nrg");
-        const bool blacklistChd = (mode == "chd");
-        const bool blacklistDaa = (mode == "daa");
+	disableInput();
 
-        const std::unordered_set<std::string> cacheSet = buildCacheLookupSet(mode);
+	try {
+		const bool blacklistMdf = (mode == "mdf");
+		const bool blacklistNrg = (mode == "nrg");
+		const bool blacklistChd = (mode == "chd");
+		const bool blacklistDaa = (mode == "daa");
 
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-            if (GlobalState::g_operationCancelled.load()) {
-                recordCancellationNotice(mode, dt, g_CancelledMessageAdded, processedErrorsFind);
-                break;
-            }
+		const std::unordered_set<std::string> cacheSet = buildCacheLookupSet(mode);
 
-            if (!entry.is_regular_file()) {
-                continue;
-            }
+		for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+			if (GlobalState::g_operationCancelled.load()) {
+				recordCancellationNotice(mode, dt, g_CancelledMessageAdded, processedErrorsFind);
+				break;
+			}
 
-            updateProgressCounter(totalFiles);
+			if (!entry.is_regular_file()) {
+				continue;
+			}
 
-            if (blacklist(entry, blacklistMdf, blacklistNrg, blacklistChd, blacklistDaa)) {
-                tryRecordDiscoveredFile(entry, cacheSet, localFileNames, callback);
-            }
-        }
-    } catch (const std::filesystem::filesystem_error& e) {
-        std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
-        processedErrorsFind.insert(dt.red + "Error traversing path: " + path + " - " +
-                                   e.what() + dt.reset);
-    }
+			updateProgressCounter(totalFiles);
 
-    return localFileNames;
+			if (blacklist(entry, blacklistMdf, blacklistNrg, blacklistChd, blacklistDaa)) {
+				tryRecordDiscoveredFile(entry, cacheSet, localFileNames, callback);
+			}
+		}
+	} catch (const std::filesystem::filesystem_error& e) {
+		std::lock_guard<std::mutex> lock(GlobalMutexes::globalSetsMutex);
+		processedErrorsFind.insert(dt.red + "Error traversing path: " + path + " - " +
+		                           e.what() + dt.reset);
+	}
+
+	return localFileNames;
+
 }
 
 /**
@@ -414,23 +437,25 @@ static std::unordered_set<std::string> processPaths(const std::string& path, con
  * @return Pointer to the matched format cache vector, or nullptr if unsupported.
  */
 static std::vector<std::string>* getCacheForMode(const std::string& mode, int& currentCacheOld) {
-    if (mode == "bin") {
-        currentCacheOld = GlobalState::binImgFilesCache.size();
-        return &GlobalState::binImgFilesCache;
-    } else if (mode == "mdf") {
-        currentCacheOld = GlobalState::mdfMdsFilesCache.size();
-        return &GlobalState::mdfMdsFilesCache;
-    } else if (mode == "nrg") {
-        currentCacheOld = GlobalState::nrgFilesCache.size();
-        return &GlobalState::nrgFilesCache;
-    } else if (mode == "chd") {
-        currentCacheOld = GlobalState::chdFilesCache.size();
-        return &GlobalState::chdFilesCache;
-    } else if (mode == "daa") {
-        currentCacheOld = GlobalState::daaGbiFilesCache.size();
-        return &GlobalState::daaGbiFilesCache;
-    }
-    return nullptr;
+
+	if (mode == "bin") {
+		currentCacheOld = GlobalState::binImgFilesCache.size();
+		return &GlobalState::binImgFilesCache;
+	} else if (mode == "mdf") {
+		currentCacheOld = GlobalState::mdfMdsFilesCache.size();
+		return &GlobalState::mdfMdsFilesCache;
+	} else if (mode == "nrg") {
+		currentCacheOld = GlobalState::nrgFilesCache.size();
+		return &GlobalState::nrgFilesCache;
+	} else if (mode == "chd") {
+		currentCacheOld = GlobalState::chdFilesCache.size();
+		return &GlobalState::chdFilesCache;
+	} else if (mode == "daa") {
+		currentCacheOld = GlobalState::daaGbiFilesCache.size();
+		return &GlobalState::daaGbiFilesCache;
+	}
+	return nullptr;
+
 }
 
 /**
@@ -440,32 +465,36 @@ static std::vector<std::string>* getCacheForMode(const std::string& mode, int& c
  * @return Filtered vector of unique, non-redundant paths.
  */
 static std::vector<std::string> normalizeAndFilterPaths(const std::vector<std::string>& inputPaths) {
-    auto normalizePath = [](const std::string& p) {
-        std::string n = fs::path(p).lexically_normal().string();
-        if (n.size() > 1 && n.back() == '/')
-            n.pop_back();
-        return n;
-    };
 
-    std::unordered_set<std::string> uniqueNormalizedPaths;
-    std::vector<std::string> normalizedPaths;
+	auto normalizePath = [](const std::string& p) {
 
-    for (const auto& originalPath : inputPaths) {
-        std::string norm = normalizePath(originalPath);
-        if (uniqueNormalizedPaths.insert(norm).second) {
-            normalizedPaths.push_back(norm);
-        }
-    }
+		std::string n = fs::path(p).lexically_normal().string();
+		if (n.size() > 1 && n.back() == '/')
+		    n.pop_back();
+		return n;
 
-    std::sort(normalizedPaths.begin(), normalizedPaths.end());
+	};
 
-    std::vector<std::string> filteredPaths;
-    for (const auto& p : normalizedPaths) {
-        if (filteredPaths.empty() || !p.starts_with(filteredPaths.back() + "/")) {
-            filteredPaths.push_back(p);
-        }
-    }
-    return filteredPaths;
+	std::unordered_set<std::string> uniqueNormalizedPaths;
+	std::vector<std::string> normalizedPaths;
+
+	for (const auto& originalPath : inputPaths) {
+		std::string norm = normalizePath(originalPath);
+		if (uniqueNormalizedPaths.insert(norm).second) {
+			normalizedPaths.push_back(norm);
+		}
+	}
+
+	std::sort(normalizedPaths.begin(), normalizedPaths.end());
+
+	std::vector<std::string> filteredPaths;
+	for (const auto& p : normalizedPaths) {
+		if (filteredPaths.empty() || !p.starts_with(filteredPaths.back() + "/")) {
+			filteredPaths.push_back(p);
+		}
+	}
+	return filteredPaths;
+
 }
 
 /**
@@ -487,30 +516,34 @@ static void scanPathsParallel(const std::vector<std::string>& filteredPaths,
                               std::unordered_set<std::string>& processedErrorsFind,
                               std::atomic<std::size_t>& totalFiles,
                               std::unordered_set<std::string>& fileNames) {
-    auto& pool = getStaticThreadPool();
-    std::vector<std::future<std::unordered_set<std::string>>> threadFutures;
 
-    for (const auto& path : filteredPaths) {
-        std::string pathCopy = path;
-        threadFutures.push_back(pool.enqueue(
-            [path = std::move(pathCopy), &mode, &callback, &processedErrorsFind, &totalFiles]()
-                -> std::unordered_set<std::string> {
-                return processPaths(path, mode, callback, processedErrorsFind, totalFiles);
-            }));
-    }
+	auto& pool = getStaticThreadPool();
+	std::vector<std::future<std::unordered_set<std::string>>> threadFutures;
 
-    for (auto& future : threadFutures) {
-        if (future.valid()) {
-            future.wait();
-        }
-    }
+	for (const auto& path : filteredPaths) {
+		std::string pathCopy = path;
+		threadFutures.push_back(pool.enqueue(
+		    [path = std::move(pathCopy), &mode, &callback, &processedErrorsFind, &totalFiles]()
+		        -> std::unordered_set<std::string> {
 
-    for (auto& future : threadFutures) {
-        if (future.valid()) {
-            std::unordered_set<std::string> threadResult = future.get();
-            fileNames.insert(threadResult.begin(), threadResult.end());
-        }
-    }
+				return processPaths(path, mode, callback, processedErrorsFind, totalFiles);
+
+			}));
+	}
+
+	for (auto& future : threadFutures) {
+		if (future.valid()) {
+			future.wait();
+		}
+	}
+
+	for (auto& future : threadFutures) {
+		if (future.valid()) {
+			std::unordered_set<std::string> threadResult = future.get();
+			fileNames.insert(threadResult.begin(), threadResult.end());
+		}
+	}
+
 }
 
 /**
@@ -521,21 +554,23 @@ static void scanPathsParallel(const std::vector<std::string>& filteredPaths,
  */
 static void updateCacheAndFinalize(std::vector<std::string>* currentCache,
                                   const std::unordered_set<std::string>& fileNames) {
-    std::unordered_set<std::string> currentCacheSet(currentCache->begin(), currentCache->end());
-    std::vector<std::string> newFiles;
 
-    for (const auto& fileName : fileNames) {
-        if (currentCacheSet.insert(fileName).second) {
-            newFiles.push_back(fileName);
-        }
-    }
+	std::unordered_set<std::string> currentCacheSet(currentCache->begin(), currentCache->end());
+	std::vector<std::string> newFiles;
 
-    if (!newFiles.empty()) {
-        currentCache->insert(currentCache->end(), newFiles.begin(), newFiles.end());
-    }
+	for (const auto& fileName : fileNames) {
+		if (currentCacheSet.insert(fileName).second) {
+			newFiles.push_back(fileName);
+		}
+	}
 
-    flushStdin();
-    restoreInput();
+	if (!newFiles.empty()) {
+		currentCache->insert(currentCache->end(), newFiles.begin(), newFiles.end());
+	}
+
+	flushStdin();
+	restoreInput();
+
 }
 
 /**
@@ -568,33 +603,35 @@ static std::vector<std::string> findFiles(const std::vector<std::string>& inputP
                                    const std::function<void(const std::string&, const std::string&)>& callback,
                                    std::unordered_set<std::string>& processedErrorsFind,
                                    std::atomic<std::size_t>& totalFiles) {
-    setupSignalHandlerCancellations();
-    GlobalState::g_operationCancelled.store(false);
-    disableInput();
 
-    std::vector<std::string>* currentCache = getCacheForMode(mode, currentCacheOld);
-    if (!currentCache) {
-        restoreInput();
-        return {};
-    }
+	setupSignalHandlerCancellations();
+	GlobalState::g_operationCancelled.store(false);
+	disableInput();
 
-    std::vector<std::string> filteredPaths = normalizeAndFilterPaths(inputPaths);
-    if (filteredPaths.empty()) {
-        flushStdin();
-        restoreInput();
-        return *currentCache;
-    }
+	std::vector<std::string>* currentCache = getCacheForMode(mode, currentCacheOld);
+	if (!currentCache) {
+		restoreInput();
+		return {};
+	}
 
-    scanPathsParallel(filteredPaths, mode, callback, processedErrorsFind, totalFiles, fileNames);
+	std::vector<std::string> filteredPaths = normalizeAndFilterPaths(inputPaths);
+	if (filteredPaths.empty()) {
+		flushStdin();
+		restoreInput();
+		return *currentCache;
+	}
 
-    {
-        std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
-        std::cout << "\r" << color << "Total files processed: " << totalFiles.load() << std::flush;
-    }
+	scanPathsParallel(filteredPaths, mode, callback, processedErrorsFind, totalFiles, fileNames);
 
-    updateCacheAndFinalize(currentCache, fileNames);
+	{
+		std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
+		std::cout << "\r" << color << "Total files processed: " << totalFiles.load() << std::flush;
+	}
 
-    return *currentCache;
+	updateCacheAndFinalize(currentCache, fileNames);
+
+	return *currentCache;
+
 }
 
 void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files, bool& list, std::shared_ptr<RefreshState> state);
@@ -625,48 +662,50 @@ static bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input
                                                         bool& list,
                                                         std::shared_ptr<RefreshState> state,
                                                         const std::function<void()>& repaintHeader) {
-    if (input == "*stats") {
-        displayDatabaseStatistics(GlobalState::databaseFilePath, GlobalState::maxDatabaseSize);
-        return true;
-    }
-    if (input == "!clr_paths" || input == "!clr_filter") {
-        clearHistory(input, repaintHeader);
-        return true;
-    }
-    if (input == "?") {
-        bool isCpMv = false, import2ISO = false;
-        helpSearches(isCpMv, import2ISO, false);
-        return true;
-    }
-    if (input == "!clr") {
-        clearRamCache(mode.mdf, mode.nrg, mode.chd, mode.daa, repaintHeader);
-        return true;
-    }
-    if (input == "ls") {
-        list = true;
-        const RamCacheStore store{
-            GlobalState::binImgFilesCache,
-            GlobalState::mdfMdsFilesCache,
-            GlobalState::nrgFilesCache,
-            GlobalState::chdFilesCache,
-            GlobalState::daaGbiFilesCache,
-        };
 
-        ramCacheList(files, list, fileExtension, store, mode, repaintHeader);
-        if (!files.empty()) {
-            selectForImageFiles(fileType, files, list, state);
-        }
-        return true;
-    }
-    return false;
+	if (input == "*stats") {
+		displayDatabaseStatistics(GlobalState::databaseFilePath, GlobalState::maxDatabaseSize);
+		return true;
+	}
+	if (input == "!clr_paths" || input == "!clr_filter") {
+		clearHistory(input, repaintHeader);
+		return true;
+	}
+	if (input == "?") {
+		bool isCpMv = false, import2ISO = false;
+		helpSearches(isCpMv, import2ISO, false);
+		return true;
+	}
+	if (input == "!clr") {
+		clearRamCache(mode.mdf, mode.nrg, mode.chd, mode.daa, repaintHeader);
+		return true;
+	}
+	if (input == "ls") {
+		list = true;
+		const RamCacheStore store{
+			GlobalState::binImgFilesCache,
+			GlobalState::mdfMdsFilesCache,
+			GlobalState::nrgFilesCache,
+			GlobalState::chdFilesCache,
+			GlobalState::daaGbiFilesCache,
+		};
+
+		ramCacheList(files, list, fileExtension, store, mode, repaintHeader);
+		if (!files.empty()) {
+			selectForImageFiles(fileType, files, list, state);
+		}
+		return true;
+	}
+	return false;
+
 }
 
 /**
  * @brief Configuration structure representing a disc-image file type and its extension.
  */
 struct FileTypeConfig {
-    std::string extension;
-    std::string name;
+	std::string extension;
+	std::string name;
 };
 
 /**
@@ -675,14 +714,16 @@ struct FileTypeConfig {
  * @return const std::unordered_map<std::string, FileTypeConfig>& Reference to the file type map.
  */
 static const std::unordered_map<std::string, FileTypeConfig>& getFileTypeMap() {
-    static const std::unordered_map<std::string, FileTypeConfig> fileTypeMap = {
-        {"bin", {".bin/.img", "BIN/IMG"}},
-        {"mdf", {".mdf",      "MDF"    }},
-        {"nrg", {".nrg",      "NRG"    }},
-        {"chd", {".chd",      "CHD"    }},
-        {"daa", {".daa/.gbi", "DAA/GBI"}}
-    };
-    return fileTypeMap;
+
+	static const std::unordered_map<std::string, FileTypeConfig> fileTypeMap = {
+		{"bin", {".bin/.img", "BIN/IMG"}},
+		{"mdf", {".mdf",      "MDF"    }},
+		{"nrg", {".nrg",      "NRG"    }},
+		{"chd", {".chd",      "CHD"    }},
+		{"daa", {".daa/.gbi", "DAA/GBI"}}
+	};
+	return fileTypeMap;
+
 }
 
 /**
@@ -693,25 +734,27 @@ static const std::unordered_map<std::string, FileTypeConfig>& getFileTypeMap() {
  * @return std::string  The formatted and ANSI-coded readline prompt string.
  */
 static std::string buildSearchPrompt(const VerboseAndDatabaseTheme& dt, const std::string& fileExtension) {
-    std::string prompt("\001");
-    prompt
-        .append(dt.green)
-        .append("\002FolderPaths\001")
-        .append(dt.blue)
-        .append("\002 ↵ to search for \001")
-        .append(dt.orange)
-        .append("\002")
-        .append(fileExtension)
-        .append("\001")
-        .append(dt.blue)
-        .append("\002 entries and cache in \001")
-        .append(dt.yellow)
-        .append("\002RAM\001")
-        .append(dt.blue)
-        .append("\002, ? for help:\n\001")
-        .append(dt.reset)
-        .append("\002");
-    return prompt;
+
+	std::string prompt("\001");
+	prompt
+	    .append(dt.green)
+	    .append("\002FolderPaths\001")
+	    .append(dt.blue)
+	    .append("\002 ↵ to search for \001")
+	    .append(dt.orange)
+	    .append("\002")
+	    .append(fileExtension)
+	    .append("\001")
+	    .append(dt.blue)
+	    .append("\002 entries and cache in \001")
+	    .append(dt.yellow)
+	    .append("\002RAM\001")
+	    .append(dt.blue)
+	    .append("\002, ? for help:\n\001")
+	    .append(dt.reset)
+	    .append("\002");
+	return prompt;
+
 }
 
 /**
@@ -724,27 +767,29 @@ static std::string buildSearchPrompt(const VerboseAndDatabaseTheme& dt, const st
  * @param resetColor The theme color reset code.
  */
 static void printRepaintedCallerPrompt(const std::string& header, const std::string& typedLine, const std::string& resetColor) {
-    std::cout << header;
 
-    // Make sure the typed line starts on a new line: find the last
-    // visible character of the header, skipping trailing ANSI SGR
-    // sequences (e.g. "\033[0m") and readline's \001/\002 markers.
-    std::size_t end = header.size();
-    while (end > 0) {
-        const char c = header[end - 1];
-        if (c == '\001' || c == '\002') { --end; continue; }
-        if (c == 'm') {
-            const std::size_t esc = header.rfind('\033', end - 1);
-            if (esc != std::string::npos && esc + 1 < end && header[esc + 1] == '[') {
-                end = esc;
-                continue;
-            }
-        }
-        break;
-    }
-    if (end == 0 || header[end - 1] != '\n') std::cout << "\n";
+	std::cout << header;
 
-    std::cout << UI::Palette::BoldReset << typedLine << resetColor << "\n";
+	// Make sure the typed line starts on a new line: find the last
+	// visible character of the header, skipping trailing ANSI SGR
+	// sequences (e.g. "\033[0m") and readline's \001/\002 markers.
+	std::size_t end = header.size();
+	while (end > 0) {
+		const char c = header[end - 1];
+		if (c == '\001' || c == '\002') { --end; continue; }
+		if (c == 'm') {
+			const std::size_t esc = header.rfind('\033', end - 1);
+			if (esc != std::string::npos && esc + 1 < end && header[esc + 1] == '[') {
+				end = esc;
+				continue;
+			}
+		}
+		break;
+	}
+	if (end == 0 || header[end - 1] != '\n') std::cout << "\n";
+
+	std::cout << UI::Palette::BoldReset << typedLine << resetColor << "\n";
+
 }
 
 /**
@@ -755,15 +800,17 @@ static void printRepaintedCallerPrompt(const std::string& header, const std::str
  * readline history.
  */
 static void initializeIterationState() {
-    enable_ctrl_d();
-    setupSignalHandlerCancellations();
-    rl_attempted_completion_function = my_special_completion_entry;
-    setup_custom_keybindingsForSearches();
-    GlobalState::g_operationCancelled.store(false);
-    clearScrollBuffer();
-    bool filterHistory = false;
-    loadHistory(filterHistory);
-    RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 1;
+
+	enable_ctrl_d();
+	setupSignalHandlerCancellations();
+	rl_attempted_completion_function = my_special_completion_entry;
+	setup_custom_keybindingsForSearches();
+	GlobalState::g_operationCancelled.store(false);
+	clearScrollBuffer();
+	bool filterHistory = false;
+	loadHistory(filterHistory);
+	RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 1;
+
 }
 
 /**
@@ -780,20 +827,22 @@ static void parseAndValidateDirectories(
     std::unordered_set<std::string>& invalidDirectoryPaths,
     std::string& cleanedInput
 ) {
-    std::istringstream ss(inputSearch);
-    std::string path;
-    std::unordered_set<std::string> uniquePaths;
-    while (std::getline(ss, path, ';')) {
-        if (!path.empty() && uniquePaths.insert(path).second) {
-            if (isValidDirectory(path)) {
-                directoryPaths.push_back(path);
-                if (!cleanedInput.empty()) cleanedInput += ';';
-                cleanedInput += path;
-            } else {
-                invalidDirectoryPaths.insert(path);
-            }
-        }
-    }
+
+	std::istringstream ss(inputSearch);
+	std::string path;
+	std::unordered_set<std::string> uniquePaths;
+	while (std::getline(ss, path, ';')) {
+		if (!path.empty() && uniquePaths.insert(path).second) {
+			if (isValidDirectory(path)) {
+				directoryPaths.push_back(path);
+				if (!cleanedInput.empty()) cleanedInput += ';';
+				cleanedInput += path;
+			} else {
+				invalidDirectoryPaths.insert(path);
+			}
+		}
+	}
+
 }
 
 /**
@@ -813,118 +862,124 @@ static void parseAndValidateDirectories(
  * @param state          Shared refresh state forwarded to file selection.
  */
 void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shared_ptr<RefreshState> state) {
-    PendingReadlineTextClearGuard pendingTextGuard;
 
-    const auto& fileTypeMap = getFileTypeMap();
-    const auto configIt = fileTypeMap.find(fileTypeChoice);
-    const VerboseAndDatabaseTheme dt = getDatabaseTheme();
+	PendingReadlineTextClearGuard pendingTextGuard;
 
-    if (configIt == fileTypeMap.end()) {
-        std::cout << dt.red << "Invalid file type choice. Supported types: BIN/IMG, MDF, NRG, CHD, DAA" << dt.reset << "\n";
-        return;
-    }
+	const auto& fileTypeMap = getFileTypeMap();
+	const auto configIt = fileTypeMap.find(fileTypeChoice);
+	const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
-    const std::string& fileType      = fileTypeChoice;
-    const std::string& fileExtension = configIt->second.extension;
-    const bool modeMdf = (fileType == "mdf");
-    const bool modeNrg = (fileType == "nrg");
-    const bool modeChd = (fileType == "chd");
-    const bool modeDaa = (fileType == "daa");
+	if (configIt == fileTypeMap.end()) {
+		std::cout << dt.red << "Invalid file type choice. Supported types: BIN/IMG, MDF, NRG, CHD, DAA" << dt.reset << "\n";
+		return;
+	}
 
-    std::vector<std::string> files;
-    files.reserve(1000);
+	const std::string& fileType      = fileTypeChoice;
+	const std::string& fileExtension = configIt->second.extension;
+	const bool modeMdf = (fileType == "mdf");
+	const bool modeNrg = (fileType == "nrg");
+	const bool modeChd = (fileType == "chd");
+	const bool modeDaa = (fileType == "daa");
 
-    while (true) {
-        int currentCacheOld = 0;
-        std::vector<std::string> directoryPaths;
-        std::unordered_set<std::string> invalidDirectoryPaths, processedErrorsFind;
-        std::atomic<std::size_t> totalFiles{0};
-        std::string cleanedInput;
-        bool filterHistory = false;
+	std::vector<std::string> files;
+	files.reserve(1000);
 
-        initializeIterationState();
-        SearchReadlineGuard guard;
-        RestoreReadlineBuffer();
+	while (true) {
+		int currentCacheOld = 0;
+		std::vector<std::string> directoryPaths;
+		std::unordered_set<std::string> invalidDirectoryPaths, processedErrorsFind;
+		std::atomic<std::size_t> totalFiles{0};
+		std::string cleanedInput;
+		bool filterHistory = false;
 
-        const std::string prompt = buildSearchPrompt(dt, fileExtension);
+		initializeIterationState();
+		SearchReadlineGuard guard;
+		RestoreReadlineBuffer();
 
-        const auto repaintPrompt = [&] {
-            SyncOutput sync;
-            clearScrollBuffer();
-            std::cout << promptHeaderForRepaint(prompt) << "\n";
-            repaintCompletionListing();
-            std::cout << "\033[A";
-        };
+		const std::string prompt = buildSearchPrompt(dt, fileExtension);
 
-        std::string typedLine;
-        const auto repaintCallerPrompt = [&] {
-            printRepaintedCallerPrompt(promptHeaderForRepaint(prompt), typedLine, dt.reset);
-        };
+		const auto repaintPrompt = [&] {
 
-        RlLine searchQuery = readlineWithResize(prompt, repaintPrompt);
-        if (!searchQuery) return;
+			SyncOutput sync;
+			clearScrollBuffer();
+			std::cout << promptHeaderForRepaint(prompt) << "\n";
+			repaintCompletionListing();
+			std::cout << "\033[A";
 
-        typedLine = searchQuery.get();
+		};
 
-        armPendingInputRestore();
-        rl_startup_hook = nullptr;
+		std::string typedLine;
+		const auto repaintCallerPrompt = [&] {
 
-        const std::string inputSearch = trimWhitespace(searchQuery.get());
-        if (inputSearch == "\x1b") return;
-        if (inputSearch.find_first_not_of(" \t\n\r") == std::string::npos) continue;
+			printRepaintedCallerPrompt(promptHeaderForRepaint(prompt), typedLine, dt.reset);
 
-        bool list = false;
-        if (dispatchSpecialCommandForBinImgMdfNrgSearch(
-                inputSearch,
-                CacheMode{modeMdf, modeNrg, modeChd, modeDaa},
-                fileExtension,
-                files,
-                fileType,
-                list,
-                state,
-                repaintCallerPrompt))
-            continue;
+		};
 
-        std::cout << " \n\033[3H\033[J\n";
+		RlLine searchQuery = readlineWithResize(prompt, repaintPrompt);
+		if (!searchQuery) return;
 
-        parseAndValidateDirectories(inputSearch, directoryPaths, invalidDirectoryPaths, cleanedInput);
+		typedLine = searchQuery.get();
 
-        bool newFilesFound = false;
-        const auto start_time = monotonicNowNs();
+		armPendingInputRestore();
+		rl_startup_hook = nullptr;
 
-        std::unordered_set<std::string> fileNames;
-        files = findFiles(directoryPaths, fileNames, currentCacheOld, fileType,
-                          [&](const std::string&, const std::string&) { newFilesFound = true; },
-                          processedErrorsFind, totalFiles);
+		const std::string inputSearch = trimWhitespace(searchQuery.get());
+		if (inputSearch == "\x1b") return;
+		if (inputSearch.find_first_not_of(" \t\n\r") == std::string::npos) continue;
 
-        try {
-            if (!directoryPaths.empty()) {
-                add_history(cleanedInput.c_str());
-                saveHistory(filterHistory);
-            }
-        } catch (const std::exception& e) {
-            std::cerr << "\n\n" << dt.red << "Unable to access local database: " << e.what()
-                      << dt.reset << std::endl;
-        }
+		bool list = false;
+		if (dispatchSpecialCommandForBinImgMdfNrgSearch(
+		        inputSearch,
+		        CacheMode{modeMdf, modeNrg, modeChd, modeDaa},
+		        fileExtension,
+		        files,
+		        fileType,
+		        list,
+		        state,
+		        repaintCallerPrompt))
+		    continue;
 
-        ImageSearchRequest req{
-            .fileExtension         = fileExtension,
-            .fileNames             = fileNames,
-            .invalidDirectoryPaths = invalidDirectoryPaths,
-            .processedErrorsFind   = processedErrorsFind,
-            .directoryPaths        = directoryPaths,
-            .files                 = files,
-            .newFilesFound         = newFilesFound,
-            .list                  = list,
-            .currentCacheOld       = currentCacheOld,
-            .totalFiles            = totalFiles,
-            .start_time_ns         = start_time,
-        };
-        verboseImageSearchResults(req, repaintCallerPrompt);
+		std::cout << " \n\033[3H\033[J\n";
 
-        if (!newFilesFound) continue;
+		parseAndValidateDirectories(inputSearch, directoryPaths, invalidDirectoryPaths, cleanedInput);
 
-        if (!files.empty() && !GlobalState::g_operationCancelled.load())
-            selectForImageFiles(fileType, files, list, state);
-    }
+		bool newFilesFound = false;
+		const auto start_time = monotonicNowNs();
+
+		std::unordered_set<std::string> fileNames;
+		files = findFiles(directoryPaths, fileNames, currentCacheOld, fileType,
+		                  [&](const std::string&, const std::string&) { newFilesFound = true; },
+		                  processedErrorsFind, totalFiles);
+
+		try {
+			if (!directoryPaths.empty()) {
+				add_history(cleanedInput.c_str());
+				saveHistory(filterHistory);
+			}
+		} catch (const std::exception& e) {
+			std::cerr << "\n\n" << dt.red << "Unable to access local database: " << e.what()
+			          << dt.reset << std::endl;
+		}
+
+		ImageSearchRequest req{
+			.fileExtension         = fileExtension,
+			.fileNames             = fileNames,
+			.invalidDirectoryPaths = invalidDirectoryPaths,
+			.processedErrorsFind   = processedErrorsFind,
+			.directoryPaths        = directoryPaths,
+			.files                 = files,
+			.newFilesFound         = newFilesFound,
+			.list                  = list,
+			.currentCacheOld       = currentCacheOld,
+			.totalFiles            = totalFiles,
+			.start_time_ns         = start_time,
+		};
+		verboseImageSearchResults(req, repaintCallerPrompt);
+
+		if (!newFilesFound) continue;
+
+		if (!files.empty() && !GlobalState::g_operationCancelled.load())
+		    selectForImageFiles(fileType, files, list, state);
+	}
+
 }

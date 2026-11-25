@@ -26,7 +26,6 @@ std::pair<std::string_view, std::string_view> extractDirectoryAndFilename(std::s
  */
 std::tuple<std::string_view, std::string_view, std::string_view> parseMountPointComponents(std::string_view dir);
 
-
 // --- Content Cleaning & Transformation ---
 
 /**

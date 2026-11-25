@@ -27,12 +27,14 @@ std::vector<FilteringState> filteringStack;
  * @return The corresponding index into globalIsoFileList.
  */
 std::size_t resolveGlobalIndex(std::size_t localIdx) {
-    if (!filteringStack.empty()) {
-        const auto& top = filteringStack.back().originalIndices;
-        if (localIdx < top.size())
-            return top[localIdx];
-    }
-    return localIdx;
+
+	if (!filteringStack.empty()) {
+		const auto& top = filteringStack.back().originalIndices;
+		if (localIdx < top.size())
+		    return top[localIdx];
+	}
+	return localIdx;
+
 }
 
 /**
@@ -45,15 +47,17 @@ std::size_t resolveGlobalIndex(std::size_t localIdx) {
  * @return The entry's basename with any trailing "~hash" suffix removed.
  */
 std::string extractUnmountKey(const std::string& path) {
-    std::size_t lastSlash = path.find_last_of('/');
-    std::string name = (lastSlash != std::string::npos)
-        ? path.substr(lastSlash + 1)
-        : path;
 
-    std::size_t lastTilde = name.find_last_of('~');
-    return (lastTilde != std::string::npos)
-        ? name.substr(0, lastTilde)
-        : name;
+	std::size_t lastSlash = path.find_last_of('/');
+	std::string name = (lastSlash != std::string::npos)
+	    ? path.substr(lastSlash + 1)
+	    : path;
+
+	std::size_t lastTilde = name.find_last_of('~');
+	return (lastTilde != std::string::npos)
+	    ? name.substr(0, lastTilde)
+	    : name;
+
 }
 
 /**
@@ -72,16 +76,18 @@ static std::string formatSearchCandidate(
     bool useNameOnly,
     bool useUnmountKey)
 {
-    if (useUnmountKey)
-        return extractUnmountKey(path);
 
-    if (!useNameOnly)
-        return path;
+	if (useUnmountKey)
+	    return extractUnmountKey(path);
 
-    const std::size_t lastSlash = path.find_last_of('/');
-    return (lastSlash != std::string::npos)
-        ? path.substr(lastSlash + 1)
-        : path;
+	if (!useNameOnly)
+	    return path;
+
+	const std::size_t lastSlash = path.find_last_of('/');
+	return (lastSlash != std::string::npos)
+	    ? path.substr(lastSlash + 1)
+	    : path;
+
 }
 
 /**
@@ -107,32 +113,34 @@ static bool collectFilterMatches(
     std::vector<std::string>& outFiltered,
     std::vector<std::size_t>& outIndices)
 {
-    std::vector<std::size_t> matchedIndices;
 
-    if (useNameOnly || useUnmountKey) {
-        std::vector<std::string> derived;
-        derived.reserve(sourceList.size());
+	std::vector<std::size_t> matchedIndices;
 
-        for (const auto& path : sourceList)
-            derived.push_back(formatSearchCandidate(path, useNameOnly, useUnmountKey));
+	if (useNameOnly || useUnmountKey) {
+		std::vector<std::string> derived;
+		derived.reserve(sourceList.size());
 
-        matchedIndices = filterFilesIndices(derived, searchString);
-    } else {
-        matchedIndices = filterFilesIndices(sourceList, searchString);
-    }
+		for (const auto& path : sourceList)
+		    derived.push_back(formatSearchCandidate(path, useNameOnly, useUnmountKey));
 
-    if (matchedIndices.empty())
-        return false;
+		matchedIndices = filterFilesIndices(derived, searchString);
+	} else {
+		matchedIndices = filterFilesIndices(sourceList, searchString);
+	}
 
-    outFiltered.reserve(matchedIndices.size());
-    outIndices.reserve(matchedIndices.size());
+	if (matchedIndices.empty())
+	    return false;
 
-    for (std::size_t idx : matchedIndices) {
-        outFiltered.push_back(sourceList[idx]);
-        outIndices.push_back(idx);
-    }
+	outFiltered.reserve(matchedIndices.size());
+	outIndices.reserve(matchedIndices.size());
 
-    return true;
+	for (std::size_t idx : matchedIndices) {
+		outFiltered.push_back(sourceList[idx]);
+		outIndices.push_back(idx);
+	}
+
+	return true;
+
 }
 
 /**
@@ -157,26 +165,28 @@ static void commitFilteredResults(
     std::vector<std::string>&& filteredFiles,
     const std::vector<std::size_t>& matchedIndices)
 {
-    ctx.currentPage  = 0;
-    ctx.needsClrScrn = true;
-    ctx.files        = std::move(filteredFiles);
 
-    // Every commit searches the original source, so previous levels are no
-    // longer part of the current match. Drop them to keep the stack a single
-    // description of the active filter.
-    filteringStack.clear();
+	ctx.currentPage  = 0;
+	ctx.needsClrScrn = true;
+	ctx.files        = std::move(filteredFiles);
 
-    FilteringState newState;
-    newState.originalIndices.reserve(matchedIndices.size());
-    newState.query      = searchString;
-    newState.namesOnly  = useNameOnly;
-    newState.isFiltered = true;
+	// Every commit searches the original source, so previous levels are no
+	// longer part of the current match. Drop them to keep the stack a single
+	// description of the active filter.
+	filteringStack.clear();
 
-    for (std::size_t idx : matchedIndices)
-        newState.originalIndices.push_back(resolveGlobalIndex(idx));
+	FilteringState newState;
+	newState.originalIndices.reserve(matchedIndices.size());
+	newState.query      = searchString;
+	newState.namesOnly  = useNameOnly;
+	newState.isFiltered = true;
 
-    filteringStack.push_back(std::move(newState));
-    ctx.isFiltered = true;
+	for (std::size_t idx : matchedIndices)
+	    newState.originalIndices.push_back(resolveGlobalIndex(idx));
+
+	filteringStack.push_back(std::move(newState));
+	ctx.isFiltered = true;
+
 }
 
 /**
@@ -202,40 +212,42 @@ static void commitFilteredResults(
  *         without pushing a new level, when the query matches every entry.
  */
 bool applyFilterCore(const std::string& searchString, FilterContext& ctx) {
-    if (searchString.empty())
-        return false;
 
-    const std::vector<std::string>& sourceList =
-        ctx.sourceOverride ? *ctx.sourceOverride : ctx.files;
+	if (searchString.empty())
+	    return false;
 
-    const bool useNameOnly   = displayConfig::toggleNamesOnly && !ctx.isUnmount;
-    const bool useUnmountKey = ctx.isUnmount && !ctx.toggleFullListUmount;
+	const std::vector<std::string>& sourceList =
+	    ctx.sourceOverride ? *ctx.sourceOverride : ctx.files;
 
-    std::vector<std::string> tempFiltered;
-    std::vector<std::size_t> tempIndices;
+	const bool useNameOnly   = displayConfig::toggleNamesOnly && !ctx.isUnmount;
+	const bool useUnmountKey = ctx.isUnmount && !ctx.toggleFullListUmount;
 
-    if (!collectFilterMatches(
-            sourceList,
-            searchString,
-            useNameOnly,
-            useUnmountKey,
-            tempFiltered,
-            tempIndices)) {
-        return false;
-    }
+	std::vector<std::string> tempFiltered;
+	std::vector<std::size_t> tempIndices;
 
-    if (tempFiltered.empty())
-        return false;
+	if (!collectFilterMatches(
+	        sourceList,
+	        searchString,
+	        useNameOnly,
+	        useUnmountKey,
+	        tempFiltered,
+	        tempIndices)) {
+		return false;
+	}
 
-    if (tempFiltered.size() == sourceList.size())
-        return true; // Matches everything: nothing to filter.
+	if (tempFiltered.empty())
+	    return false;
 
-    commitFilteredResults(
-        searchString,
-        ctx,
-        useNameOnly,
-        std::move(tempFiltered),
-        tempIndices);
+	if (tempFiltered.size() == sourceList.size())
+	    return true; // Matches everything: nothing to filter.
 
-    return true;
+	commitFilteredResults(
+	    searchString,
+	    ctx,
+	    useNameOnly,
+	    std::move(tempFiltered),
+	    tempIndices);
+
+	return true;
+
 }

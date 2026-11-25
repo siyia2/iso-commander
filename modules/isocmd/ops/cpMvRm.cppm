@@ -29,22 +29,22 @@ namespace fs = std::filesystem;
  *        move, and remove prompts.
  */
 struct CpMvPromptContext {
-    // Inputs
-    const std::vector<std::string>& isoFiles;        ///< Candidate ISO file paths or names
-    const std::vector<std::vector<int>>& indexChunks; ///< Index chunks used to build the displayed entries
+	// Inputs
+	const std::vector<std::string>& isoFiles;        ///< Candidate ISO file paths or names
+	const std::vector<std::vector<int>>& indexChunks; ///< Index chunks used to build the displayed entries
 
-    // Prompt appearance & operation flags
-    std::string operationColor;                       ///< ANSI color code for the active operation
-    std::string operationDescription;                 ///< Human-readable operation label for prompts
-    bool isDelete = false;                            ///< True when performing a delete/remove operation
-    bool isCopy = false;                              ///< True when performing a copy operation
+	// Prompt appearance & operation flags
+	std::string operationColor;                       ///< ANSI color code for the active operation
+	std::string operationDescription;                 ///< Human-readable operation label for prompts
+	bool isDelete = false;                            ///< True when performing a delete/remove operation
+	bool isCopy = false;                              ///< True when performing a copy operation
 
-    // Mutable state & outputs updated during the prompt loop
-    std::string userDestDir;                          ///< Destination directory entered by the user
-    bool umountMvRmBreak = false;                     ///< Set when an unmount condition aborts the prompt
-    bool filterHistory = false;                       ///< Enables history filtering for destination input
-    bool abortDel = false;                            ///< Set when the user aborts a delete prompt
-    bool overwriteExisting = false;                   ///< Allows overwriting existing destination files
+	// Mutable state & outputs updated during the prompt loop
+	std::string userDestDir;                          ///< Destination directory entered by the user
+	bool umountMvRmBreak = false;                     ///< Set when an unmount condition aborts the prompt
+	bool filterHistory = false;                       ///< Enables history filtering for destination input
+	bool abortDel = false;                            ///< Set when the user aborts a delete prompt
+	bool overwriteExisting = false;                   ///< Allows overwriting existing destination files
 };
 
 /**
@@ -64,12 +64,12 @@ enum class TransferOp { Copy, Move };
  * operation so the same six fields are not redeclared in each of them.
  */
 struct TransferPaths {
-    const fs::path& srcPath;                          ///< Full source filesystem path
-    const fs::path& destPath;                         ///< Full destination filesystem path
-    std::string_view srcDir;                          ///< Source directory for display/logging
-    std::string_view srcFile;                         ///< Source filename for display/logging
-    std::string_view destDirProcessed;                ///< Processed destination directory for display/logging
-    std::string_view destFile;                        ///< Destination filename for display/logging
+	const fs::path& srcPath;                          ///< Full source filesystem path
+	const fs::path& destPath;                         ///< Full destination filesystem path
+	std::string_view srcDir;                          ///< Source directory for display/logging
+	std::string_view srcFile;                         ///< Source filename for display/logging
+	std::string_view destDirProcessed;                ///< Processed destination directory for display/logging
+	std::string_view destFile;                        ///< Destination filename for display/logging
 };
 
 /**
@@ -80,8 +80,8 @@ struct TransferPaths {
  * afterwards to decide whether the source may be removed after a move.
  */
 struct MultiDestState {
-    int validDestinations = 0;                      ///< Incremented for each non-same-file destination
-    bool atLeastOneCopySucceeded = false;             ///< Set when at least one multi-dest move copy succeeds
+	int validDestinations = 0;                      ///< Incremented for each non-same-file destination
+	bool atLeastOneCopySucceeded = false;             ///< Set when at least one multi-dest move copy succeeds
 };
 
 /**
@@ -89,14 +89,14 @@ struct MultiDestState {
  * @brief Inputs for validating and dispatching one copy/move destination.
  */
 struct DestinationCheckParams {
-    TransferPaths paths;                              ///< Source/destination paths and display strings
-    TransferOp op = TransferOp::Copy;                 ///< Copy or move
-    bool overwriteExisting = false;                   ///< True if existing destinations may be overwritten
-    size_t fileSize = 0;                              ///< Source file size in bytes
-    size_t destDirCount = 0;                          ///< Number of destination directories targeted
-    MultiDestState& state;                            ///< Mutable tracking state shared across a file's destinations
-    std::vector<std::string>* successfulDestPaths = nullptr; ///< Optional: collects destination paths of successful operations
-    std::mutex* destPathsMutex = nullptr;             ///< Optional: protects @c successfulDestPaths
+	TransferPaths paths;                              ///< Source/destination paths and display strings
+	TransferOp op = TransferOp::Copy;                 ///< Copy or move
+	bool overwriteExisting = false;                   ///< True if existing destinations may be overwritten
+	size_t fileSize = 0;                              ///< Source file size in bytes
+	size_t destDirCount = 0;                          ///< Number of destination directories targeted
+	MultiDestState& state;                            ///< Mutable tracking state shared across a file's destinations
+	std::vector<std::string>* successfulDestPaths = nullptr; ///< Optional: collects destination paths of successful operations
+	std::mutex* destPathsMutex = nullptr;             ///< Optional: protects @c successfulDestPaths
 };
 
 /**
@@ -106,7 +106,7 @@ struct DestinationCheckParams {
  * Use in functions that bind '\f' but do not modify '\t' to ensure scope integrity.
  */
 struct RlFormFeedGuard {
-    ~RlFormFeedGuard();
+	~RlFormFeedGuard();
 };
 
 /**
@@ -117,7 +117,7 @@ struct RlFormFeedGuard {
  * Fires only when the guarded call returns, not on in-loop page turns.
  */
 struct RlKeyBindGuard {
-    ~RlKeyBindGuard();
+	~RlKeyBindGuard();
 };
 
 /**
@@ -125,9 +125,9 @@ struct RlKeyBindGuard {
  * @brief RAII guard to preserve the state of @c g_rl_complete_mode.
  */
 struct RlCompleteModeGuard {
-    int saved; ///< Saved value of @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode
-    RlCompleteModeGuard();
-    ~RlCompleteModeGuard();
+	int saved; ///< Saved value of @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode
+	RlCompleteModeGuard();
+	~RlCompleteModeGuard();
 };
 
 /**
@@ -137,7 +137,7 @@ struct RlCompleteModeGuard {
  * Prevents stale hooks from persisting into subsequent Readline calls.
  */
 struct RlStartupHookGuard {
-    ~RlStartupHookGuard();
+	~RlStartupHookGuard();
 };
 
 // ======================================================================
@@ -157,50 +157,50 @@ struct RlStartupHookGuard {
  */
 class BatchReporter {
 public:
-    /**
-     * @brief Constructs a batched reporter tied to global sets.
-     * @param globalIsos   Reference to the global completed operations set.
-     * @param globalErrors Reference to the global failed operations set.
-     * @param mutex        Mutex protecting both global sets.
-     * @param batchSize    Number of messages to accumulate before auto-flushing.
-     */
-    BatchReporter(std::unordered_set<std::string>& globalIsos,
-                  std::unordered_set<std::string>& globalErrors,
-                  std::mutex& mutex,
-                  size_t batchSize = 50);
+	/**
+	 * @brief Constructs a batched reporter tied to global sets.
+	 * @param globalIsos   Reference to the global completed operations set.
+	 * @param globalErrors Reference to the global failed operations set.
+	 * @param mutex        Mutex protecting both global sets.
+	 * @param batchSize    Number of messages to accumulate before auto-flushing.
+	 */
+	BatchReporter(std::unordered_set<std::string>& globalIsos,
+	              std::unordered_set<std::string>& globalErrors,
+	              std::mutex& mutex,
+	              size_t batchSize = 50);
 
-    /**
-     * @brief Buffers a success message and flushes if the batch size is reached.
-     * @param msg The formatted success message to add.
-     */
-    void addSuccess(std::string msg);
+	/**
+	 * @brief Buffers a success message and flushes if the batch size is reached.
+	 * @param msg The formatted success message to add.
+	 */
+	void addSuccess(std::string msg);
 
-    /**
-     * @brief Buffers an error message and flushes if the batch size is reached.
-     * @param msg The formatted error message to add.
-     */
-    void addError(std::string msg);
+	/**
+	 * @brief Buffers an error message and flushes if the batch size is reached.
+	 * @param msg The formatted error message to add.
+	 */
+	void addError(std::string msg);
 
-    /**
-     * @brief Immediately flushes all buffered messages to the global sets.
-     * @details Must be called when the worker thread finishes processing
-     *          to ensure no messages remain in local buffers.
-     */
-    void flush();
+	/**
+	 * @brief Immediately flushes all buffered messages to the global sets.
+	 * @details Must be called when the worker thread finishes processing
+	 *          to ensure no messages remain in local buffers.
+	 */
+	void flush();
 
 private:
-    /**
-     * @brief Checks if either local buffer has reached the batch threshold
-     *        and flushes if so.
-     */
-    void tryFlush();
+	/**
+	 * @brief Checks if either local buffer has reached the batch threshold
+	 *        and flushes if so.
+	 */
+	void tryFlush();
 
-    std::vector<std::string> localIsos_;            ///< Thread-local success buffer
-    std::vector<std::string> localErrors_;          ///< Thread-local error buffer
-    std::unordered_set<std::string>& globalIsos_;   ///< Global completed set
-    std::unordered_set<std::string>& globalErrors_; ///< Global failed set
-    std::mutex& mutex_;                             ///< Protects global sets
-    const size_t batchSize_;                        ///< Flush threshold
+	std::vector<std::string> localIsos_;            ///< Thread-local success buffer
+	std::vector<std::string> localErrors_;          ///< Thread-local error buffer
+	std::unordered_set<std::string>& globalIsos_;   ///< Global completed set
+	std::unordered_set<std::string>& globalErrors_; ///< Global failed set
+	std::mutex& mutex_;                             ///< Protects global sets
+	const size_t batchSize_;                        ///< Flush threshold
 };
 
 /**
@@ -213,14 +213,14 @@ private:
  * Thread-local; one instance per worker thread.
  */
 struct OperationContext {
-    BatchReporter& reporter;                               ///< Batched message output
-    std::atomic<size_t>* completedTasks = nullptr;         ///< Successful operation counter
-    std::atomic<size_t>* failedTasks    = nullptr;         ///< Failed operation counter
-    std::atomic<bool>&   operationSuccessful;              ///< Set to false on any failure
-    /// Optional callback to chown newly created files to the real user.
-    std::function<void(const std::filesystem::path&)> changeOwnership;
-    /// Bytes processed counter (copy/move/delete progress). Optional.
-    std::atomic<size_t>* completedBytes = nullptr;
+	BatchReporter& reporter;                               ///< Batched message output
+	std::atomic<size_t>* completedTasks = nullptr;         ///< Successful operation counter
+	std::atomic<size_t>* failedTasks    = nullptr;         ///< Failed operation counter
+	std::atomic<bool>&   operationSuccessful;              ///< Set to false on any failure
+	/// Optional callback to chown newly created files to the real user.
+	std::function<void(const std::filesystem::path&)> changeOwnership;
+	/// Bytes processed counter (copy/move/delete progress). Optional.
+	std::atomic<size_t>* completedBytes = nullptr;
 };
 
 /**
@@ -246,8 +246,6 @@ std::vector<std::string> generateIsoEntries(
     const std::vector<std::string>& isoFiles
 );
 
-
-
 /**
  * @brief Resolves the real (invoking) user and group IDs and names.
  */
@@ -257,7 +255,6 @@ void getRealUserId(
     std::string& real_username,
     std::string& real_groupname
 );
-
 
 /**
  * @brief Copies a file to a temporary destination and renames it on success.

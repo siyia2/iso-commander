@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <stdio.h>
@@ -34,84 +33,90 @@ bool handleDeleteOperation(
     bool& abortDel
 )
 {
-    PendingReadlineTextClearGuard pendingTextGuard;
 
-    rl_attempted_completion_function = nullptr;
+	PendingReadlineTextClearGuard pendingTextGuard;
 
-    reset_custom_keybindingsForRm();
-    rl_bind_keyseq("\\e", exit_handler);
+	rl_attempted_completion_function = nullptr;
 
-    const CpMvRmColors colors = getCpMvRmColors();
+	reset_custom_keybindingsForRm();
+	rl_bind_keyseq("\\e", exit_handler);
 
-    std::string green = "\001" + std::string(colors.prompt_green) + "\002";
-    std::string blue  = "\001" + std::string(colors.prompt_blue) + "\002";
-    std::string red   = "\001" + std::string(UI::Palette::Red) + "\002";
-    std::string reset = "\001" + std::string(UI::Palette::BoldReset) + "\002";
+	const CpMvRmColors colors = getCpMvRmColors();
 
-    std::vector<std::string> entries =
-        generateIsoEntries(indexChunks, isoFiles);
+	std::string green = "\001" + std::string(colors.prompt_green) + "\002";
+	std::string blue  = "\001" + std::string(colors.prompt_blue) + "\002";
+	std::string red   = "\001" + std::string(UI::Palette::Red) + "\002";
+	std::string reset = "\001" + std::string(UI::Palette::BoldReset) + "\002";
 
-    sortFilesCaseInsensitive(entries);
+	std::vector<std::string> entries =
+	    generateIsoEntries(indexChunks, isoFiles);
 
-    const std::string promptPrefix = "\n";
+	sortFilesCaseInsensitive(entries);
 
-    std::string promptSuffix(blue);
-    promptSuffix.append("The selected ").append(green).append("ISO").append(blue)
-                .append(" will be ").append(red).append("*PERMANENTLY DELETED*")
-                .append(blue).append(". Proceed? (y/n): ").append(reset);
+	const std::string promptPrefix = "\n";
 
-    bool isPageTurn = false;
+	std::string promptSuffix(blue);
+	promptSuffix.append("The selected ").append(green).append("ISO").append(blue)
+	            .append(" will be ").append(red).append("*PERMANENTLY DELETED*")
+	            .append(blue).append(". Proceed? (y/n): ").append(reset);
 
-    auto setupEnv = [&]() {
-        RestoreReadlineBuffer();
+	bool isPageTurn = false;
 
-        rl_bind_key('\f', [](int count, int key) -> int {
-            clear_screen_and_buffer(count, key);
-            rl_on_new_line();
-            rl_replace_line("", 0);
-            rl_done = 1;
-            return 0;
-        });
-    };
+	auto setupEnv = [&]() {
 
-    std::size_t currentPage = 0;
+		RestoreReadlineBuffer();
 
-    while (true) {
-        std::string userInput;
+		rl_bind_key('\f', [](int count, int key) -> int {
 
-        {
-            RlKeyBindGuard keyGuard;
+			clear_screen_and_buffer(count, key);
+			rl_on_new_line();
+			rl_replace_line("", 0);
+			rl_done = 1;
+			return 0;
 
-            userInput = handlePaginatedDisplay(
-                entries,
-                promptPrefix,
-                promptSuffix,
-                setupEnv,
-                isPageTurn,
-                currentPage,
-                true
-            );
-        }
+		});
 
-        if (userInput == "EOF_SIGNAL") {
-            umountMvRmBreak = false;
-            abortDel = true;
-            return false;
-        }
+	};
 
-        if (!isPageTurn && !userInput.empty()) {
-            const std::string choice = trimWhitespace(userInput);
+	std::size_t currentPage = 0;
 
-            if (choice == "Y" || choice == "y") {
-                umountMvRmBreak = true;
-                return true;
-            }
+	while (true) {
+		std::string userInput;
 
-            umountMvRmBreak = false;
-            abortDel = true;
-            return false;
-        }
-    }
+		{
+			RlKeyBindGuard keyGuard;
+
+			userInput = handlePaginatedDisplay(
+			    entries,
+			    promptPrefix,
+			    promptSuffix,
+			    setupEnv,
+			    isPageTurn,
+			    currentPage,
+			    true
+			);
+		}
+
+		if (userInput == "EOF_SIGNAL") {
+			umountMvRmBreak = false;
+			abortDel = true;
+			return false;
+		}
+
+		if (!isPageTurn && !userInput.empty()) {
+			const std::string choice = trimWhitespace(userInput);
+
+			if (choice == "Y" || choice == "y") {
+				umountMvRmBreak = true;
+				return true;
+			}
+
+			umountMvRmBreak = false;
+			abortDel = true;
+			return false;
+		}
+	}
+
 }
 
 /**
@@ -135,95 +140,97 @@ void performDeleteOperation(
     std::size_t fileSize
 )
 {
-    const CpMvRmColors colors = getCpMvRmColors();
-    const std::string displaySrc = buildDisplaySrc(srcDir, srcFile);
 
-    if (GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
-        std::string msg;
-        msg.reserve(128 + displaySrc.size());
+	const CpMvRmColors colors = getCpMvRmColors();
+	const std::string displaySrc = buildDisplaySrc(srcDir, srcFile);
 
-        msg.append(colors.error_label)
-           .append("Error deleting: ")
-           .append(colors.error_path)
-           .append("'")
-           .append(displaySrc)
-           .append("'")
-           .append(UI::Palette::BoldReset)
-           .append(colors.error_label)
-           .append(": Cancelled.")
-           .append(UI::Palette::BoldReset);
+	if (GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
+		std::string msg;
+		msg.reserve(128 + displaySrc.size());
 
-        ctx.reporter.addError(std::move(msg));
+		msg.append(colors.error_label)
+		   .append("Error deleting: ")
+		   .append(colors.error_path)
+		   .append("'")
+		   .append(displaySrc)
+		   .append("'")
+		   .append(UI::Palette::BoldReset)
+		   .append(colors.error_label)
+		   .append(": Cancelled.")
+		   .append(UI::Palette::BoldReset);
 
-        if (ctx.failedTasks) {
-            ctx.failedTasks->fetch_add(1, std::memory_order_acq_rel);
-        }
+		ctx.reporter.addError(std::move(msg));
 
-        ctx.operationSuccessful.store(false, std::memory_order_release);
-        return;
-    }
+		if (ctx.failedTasks) {
+			ctx.failedTasks->fetch_add(1, std::memory_order_acq_rel);
+		}
 
-    std::error_code ec;
+		ctx.operationSuccessful.store(false, std::memory_order_release);
+		return;
+	}
 
-    if (fs::remove(srcPath, ec)) {
-        if (ctx.completedBytes) {
-            ctx.completedBytes->fetch_add(
-                fileSize,
-                std::memory_order_relaxed
-            );
-        }
+	std::error_code ec;
 
-        std::string msg;
-        msg.reserve(
-            2 * colors.success_label.size() +
-            colors.success_path.size() +
-            displaySrc.size() +
-            2 * UI::Palette::BoldReset.size() +
-            16
-        );
+	if (fs::remove(srcPath, ec)) {
+		if (ctx.completedBytes) {
+			ctx.completedBytes->fetch_add(
+			    fileSize,
+			    std::memory_order_relaxed
+			);
+		}
 
-        msg.append(colors.success_label)
-           .append("Deleted: ")
-           .append(colors.success_path)
-           .append("'")
-           .append(displaySrc)
-           .append("'")
-           .append(UI::Palette::BoldReset)
-           .append(colors.success_label)
-           .append(".")
-           .append(UI::Palette::BoldReset);
+		std::string msg;
+		msg.reserve(
+		    2 * colors.success_label.size() +
+		    colors.success_path.size() +
+		    displaySrc.size() +
+		    2 * UI::Palette::BoldReset.size() +
+		    16
+		);
 
-        ctx.reporter.addSuccess(std::move(msg));
+		msg.append(colors.success_label)
+		   .append("Deleted: ")
+		   .append(colors.success_path)
+		   .append("'")
+		   .append(displaySrc)
+		   .append("'")
+		   .append(UI::Palette::BoldReset)
+		   .append(colors.success_label)
+		   .append(".")
+		   .append(UI::Palette::BoldReset);
 
-        if (ctx.completedTasks) {
-            ctx.completedTasks->fetch_add(1, std::memory_order_acq_rel);
-        }
-    } else {
-        std::string msg;
-        msg.reserve(
-            128 + displaySrc.size() +
-            (ec ? ec.message().size() : 20)
-        );
+		ctx.reporter.addSuccess(std::move(msg));
 
-        msg.append(colors.error_label)
-           .append("Error deleting: ")
-           .append(colors.error_path)
-           .append("'")
-           .append(displaySrc)
-           .append("'")
-           .append(UI::Palette::BoldReset)
-           .append(colors.error_label)
-           .append(": ")
-           .append(ec ? ec.message() : "File not found")
-           .append(".")
-           .append(UI::Palette::BoldReset);
+		if (ctx.completedTasks) {
+			ctx.completedTasks->fetch_add(1, std::memory_order_acq_rel);
+		}
+	} else {
+		std::string msg;
+		msg.reserve(
+		    128 + displaySrc.size() +
+		    (ec ? ec.message().size() : 20)
+		);
 
-        ctx.reporter.addError(std::move(msg));
+		msg.append(colors.error_label)
+		   .append("Error deleting: ")
+		   .append(colors.error_path)
+		   .append("'")
+		   .append(displaySrc)
+		   .append("'")
+		   .append(UI::Palette::BoldReset)
+		   .append(colors.error_label)
+		   .append(": ")
+		   .append(ec ? ec.message() : "File not found")
+		   .append(".")
+		   .append(UI::Palette::BoldReset);
 
-        if (ctx.failedTasks) {
-            ctx.failedTasks->fetch_add(1, std::memory_order_acq_rel);
-        }
+		ctx.reporter.addError(std::move(msg));
 
-        ctx.operationSuccessful.store(false, std::memory_order_release);
-    }
+		if (ctx.failedTasks) {
+			ctx.failedTasks->fetch_add(1, std::memory_order_acq_rel);
+		}
+
+		ctx.operationSuccessful.store(false, std::memory_order_release);
+	}
+
 }

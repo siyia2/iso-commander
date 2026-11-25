@@ -30,19 +30,21 @@ import isocmd.ui.display.themes;
 static std::string buildOperationLabel(const bool modeMdf, const bool modeNrg,
                                        const bool modeChd, const bool modeDaa)
 {
-    const std::pair<bool, const char*> modes[] = {
-        {modeMdf, "mdf2iso"},
-        {modeNrg, "nrg2iso"},
-        {modeChd, "chd2iso"},
-        {modeDaa, "daa2iso"},
-    };
 
-    const char* name = "ccd2iso";
-    for (const auto& [enabled, label] : modes) {
-        if (enabled) { name = label; break; }
-    }
+	const std::pair<bool, const char*> modes[] = {
+		{modeMdf, "mdf2iso"},
+		{modeNrg, "nrg2iso"},
+		{modeChd, "chd2iso"},
+		{modeDaa, "daa2iso"},
+	};
 
-    return std::string(UI::Palette::Orange) + name + std::string(color);
+	const char* name = "ccd2iso";
+	for (const auto& [enabled, label] : modes) {
+		if (enabled) { name = label; break; }
+	}
+
+	return std::string(UI::Palette::Orange) + name + std::string(color);
+
 }
 
 /**
@@ -64,12 +66,14 @@ static void conversionWorker(const std::vector<std::string>& fileList,
                              const ConversionMode& mode,
                              const ConversionBatchData& batchData)
 {
-    for (size_t i; (i = nextIndex.fetch_add(1)) < indices.size();) {
-        convertToISO(
-            {fileList[indices[i] - 1]},
-            mode,
-            batchData);
-    }
+
+	for (size_t i; (i = nextIndex.fetch_add(1)) < indices.size();) {
+		convertToISO(
+		    {fileList[indices[i] - 1]},
+		    mode,
+		    batchData);
+	}
+
 }
 
 /**
@@ -83,14 +87,16 @@ static void conversionWorker(const std::vector<std::string>& fileList,
 static void updateDatabaseForSuccessfulPaths(
     const std::vector<std::string>& successfulOutputPaths)
 {
-    if (successfulOutputPaths.empty()) return;
 
-    std::string exactPaths;
-    for (const auto& outPath : successfulOutputPaths) {
-        if (!exactPaths.empty()) exactPaths += ';';
-        exactPaths += outPath;
-    }
-    updateDatabaseAfterOperations(exactPaths);
+	if (successfulOutputPaths.empty()) return;
+
+	std::string exactPaths;
+	for (const auto& outPath : successfulOutputPaths) {
+		if (!exactPaths.empty()) exactPaths += ';';
+		exactPaths += outPath;
+	}
+	updateDatabaseAfterOperations(exactPaths);
+
 }
 
 /**
@@ -137,104 +143,111 @@ void processInputForConversions(const std::string& input,
                                  bool& verbose
                                  )
 {
-    std::vector<std::string> successfulOutputPaths;
-    std::mutex outPathsMutex;
 
-    setupSignalHandlerCancellations();
+	std::vector<std::string> successfulOutputPaths;
+	std::mutex outPathsMutex;
 
-    const MainTheme* theme = getActiveTheme();
-    const bool isOrig = (globalTheme == "original");
+	setupSignalHandlerCancellations();
 
-    GlobalState::g_operationCancelled.store(false);
-    std::unordered_set<int> processedIndices;
+	const MainTheme* theme = getActiveTheme();
+	const bool isOrig = (globalTheme == "original");
 
-    if (!(input.empty() || std::all_of(input.begin(), input.end(), [](unsigned char ch) {
-    return std::isspace(ch);}))) {
-        tokenizeInput(input, fileList, processedIndices);
-    } else return;
+	GlobalState::g_operationCancelled.store(false);
+	std::unordered_set<int> processedIndices;
 
-    if (processedIndices.empty()) {
-        auto render = [&] {
-            SyncOutput sync;
-            clearScrollBuffer();
-            std::cout << "\n" << (isOrig ? UI::Palette::Red : theme->secondary)
-                      << "No valid input provided." << UI::Palette::BoldReset << "\n";
-        };
+	if (!(input.empty() || std::all_of(input.begin(), input.end(), [](unsigned char ch) {
 
-        pressEnterToReturnWithRepaint(render);
-        return;
-    }
+	return std::isspace(ch);}))) {
+		tokenizeInput(input, fileList, processedIndices);
+	} else return;
 
-    ThreadPool& pool = getStaticThreadPool();
-    const size_t numThreads = std::max(size_t(2),
-        std::min({processedIndices.size(), GlobalThreadCaps::CONV_THREAD_CAP,
-                  pool.threadCount()}));
+	if (processedIndices.empty()) {
+		auto render = [&] {
 
-    std::vector<std::string> filesToProcess;
-    filesToProcess.reserve(processedIndices.size());
-    for (int idx : processedIndices)
-        filesToProcess.push_back(fileList[idx - 1]);
-    const size_t totalBytes = calculateTotalBytesForConversions(
-        filesToProcess, modeMdf, modeNrg, modeChd, modeDaa);
+			SyncOutput sync;
+			clearScrollBuffer();
+			std::cout << "\n" << (isOrig ? UI::Palette::Red : theme->secondary)
+			          << "No valid input provided." << UI::Palette::BoldReset << "\n";
 
-    const size_t totalTasks = processedIndices.size();
-    const std::string suffix = (totalTasks > 1 ? "tasks" : "task");
-    const std::string operation =
-        buildOperationLabel(modeMdf, modeNrg, modeChd, modeDaa);
+		};
 
-    clearScrollBuffer();
-    std::ostringstream hdr;
-    hdr << "\n" << color << " Processing " << suffix << " for "
-        << operation << color << "... ("
-        << UI::Palette::Red << "Ctrl+c"
-        << color << ":cancel)\n";
-    const std::string header = hdr.str();
-    std::cout << header;
+		pressEnterToReturnWithRepaint(render);
+		return;
+	}
 
-    std::atomic<size_t> completedBytes(0);
-    std::atomic<size_t> completedTasks(0);
-    std::atomic<size_t> failedTasks(0);
-    std::atomic<bool>   isProcessingComplete(false);
+	ThreadPool& pool = getStaticThreadPool();
+	const size_t numThreads = std::max(size_t(2),
+	    std::min({processedIndices.size(), GlobalThreadCaps::CONV_THREAD_CAP,
+			      pool.threadCount()}));
 
-    std::thread progressThread = launchProgressBar(
-        &completedBytes, totalBytes,
-        &completedTasks, &failedTasks, totalTasks,
-        &isProcessingComplete, &verbose, operation, header);
+	std::vector<std::string> filesToProcess;
+	filesToProcess.reserve(processedIndices.size());
+	for (int idx : processedIndices)
+	    filesToProcess.push_back(fileList[idx - 1]);
+	const size_t totalBytes = calculateTotalBytesForConversions(
+	    filesToProcess, modeMdf, modeNrg, modeChd, modeDaa);
 
-    const std::vector<int> indices(processedIndices.begin(), processedIndices.end());
-    std::atomic<size_t> nextIndex(0);
+	const size_t totalTasks = processedIndices.size();
+	const std::string suffix = (totalTasks > 1 ? "tasks" : "task");
+	const std::string operation =
+	    buildOperationLabel(modeMdf, modeNrg, modeChd, modeDaa);
 
-    std::vector<std::future<void>> futures;
-    futures.reserve(numThreads);
+	clearScrollBuffer();
+	std::ostringstream hdr;
+	hdr << "\n" << color << " Processing " << suffix << " for "
+	    << operation << color << "... ("
+	    << UI::Palette::Red << "Ctrl+c"
+	    << color << ":cancel)\n";
+	const std::string header = hdr.str();
+	std::cout << header;
 
-    const ConversionMode mode{
-        .mdf = modeMdf,
-        .nrg = modeNrg,
-        .chd = modeChd,
-        .daa = modeDaa
-    };
+	std::atomic<size_t> completedBytes(0);
+	std::atomic<size_t> completedTasks(0);
+	std::atomic<size_t> failedTasks(0);
+	std::atomic<bool>   isProcessingComplete(false);
 
-    const ConversionBatchData batchData{
-        .completedBytes = &completedBytes,
-        .completedTasks = &completedTasks,
-        .failedTasks = &failedTasks,
-        .successfulOutputPaths = &successfulOutputPaths,
-        .outPathsMutex = &outPathsMutex
-    };
+	std::thread progressThread = launchProgressBar(
+	    &completedBytes, totalBytes,
+	    &completedTasks, &failedTasks, totalTasks,
+	    &isProcessingComplete, &verbose, operation, header);
 
-    for (size_t t = 0; t < numThreads; ++t) {
-        futures.emplace_back(pool.enqueue(
-            [&fileList, &indices, &nextIndex, mode, batchData]() {
-                conversionWorker(fileList, indices, nextIndex, mode, batchData);
-            }));
-    }
+	const std::vector<int> indices(processedIndices.begin(), processedIndices.end());
+	std::atomic<size_t> nextIndex(0);
 
-    for (auto& future : futures)
-        future.wait();
+	std::vector<std::future<void>> futures;
+	futures.reserve(numThreads);
 
-    isProcessingComplete.store(true);
-    signal(SIGINT, SIG_IGN);
-    progressThread.join();
+	const ConversionMode mode{
+		.mdf = modeMdf,
+		.nrg = modeNrg,
+		.chd = modeChd,
+		.daa = modeDaa
+	};
 
-    updateDatabaseForSuccessfulPaths(successfulOutputPaths);
+	const ConversionBatchData batchData{
+		.completedBytes = &completedBytes,
+		.completedTasks = &completedTasks,
+		.failedTasks = &failedTasks,
+		.successfulOutputPaths = &successfulOutputPaths,
+		.outPathsMutex = &outPathsMutex
+	};
+
+	for (size_t t = 0; t < numThreads; ++t) {
+		futures.emplace_back(pool.enqueue(
+		    [&fileList, &indices, &nextIndex, mode, batchData]() {
+
+				conversionWorker(fileList, indices, nextIndex, mode, batchData);
+
+			}));
+	}
+
+	for (auto& future : futures)
+	    future.wait();
+
+	isProcessingComplete.store(true);
+	signal(SIGINT, SIG_IGN);
+	progressThread.join();
+
+	updateDatabaseForSuccessfulPaths(successfulOutputPaths);
+
 }

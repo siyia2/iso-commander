@@ -32,7 +32,6 @@ bool liveFilteringSet(const std::string& filePath);
 // Validation for history state
 bool isHistoryFileEmpty(const std::string& filePath);
 
-
 /**
  * USER INTERFACE & NAVIGATION
  * Functions responsible for rendering the visual state and managing submenus.
@@ -53,7 +52,6 @@ void submenu1(
 void submenu2(
     std::shared_ptr<RefreshState> state
 );
-
 
 /**
  * ASYNCHRONOUS UI MONITORING
@@ -76,7 +74,6 @@ void monitorAndClearMessage(
     std::atomic<bool>& stopSignal,
     std::atomic<bool>& isAtMain
 );
-
 
 /**
  * EXTERNAL COMMAND INTERFACE

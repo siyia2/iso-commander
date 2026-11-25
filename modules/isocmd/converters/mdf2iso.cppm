@@ -39,7 +39,6 @@ export extern "C++" {
     59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
-
 /**
  * @struct MdfTypeInfo
  * @brief Stores the detected sector layout parameters of an MDF disc image.
@@ -48,24 +47,24 @@ export extern "C++" {
  * raw MDF sectors, including sector headers and trailing ECC/subchannel data.
  */
 struct MdfTypeInfo {
-    size_t seek_ecc;    ///< Number of bytes to skip after the sector payload.
-    size_t sector_size; ///< Total size of each raw sector in bytes.
-    size_t sector_data; ///< Number of user-data bytes extracted per sector.
-    size_t seek_head;   ///< Number of header bytes to skip before the payload.
+	size_t seek_ecc;    ///< Number of bytes to skip after the sector payload.
+	size_t sector_size; ///< Total size of each raw sector in bytes.
+	size_t sector_data; ///< Number of user-data bytes extracted per sector.
+	size_t seek_head;   ///< Number of header bytes to skip before the payload.
 
-    /**
-     * @brief Initializes all sector layout parameters to zero.
-     */
-    MdfTypeInfo()
-        : seek_ecc(0),
-          sector_size(0),
-          sector_data(0),
-          seek_head(0) {}
+	/**
+	 * @brief Initializes all sector layout parameters to zero.
+	 */
+	MdfTypeInfo()
+	    : seek_ecc(0),
+	      sector_size(0),
+	      sector_data(0),
+	      seek_head(0) {}
 
-    /**
-    * @brief Detects the MDF sector layout by examining CD-ROM sync patterns.
-    */
-    bool determineMdfType(std::ifstream& mdfFile);
+	/**
+	 * @brief Detects the MDF sector layout by examining CD-ROM sync patterns.
+	 */
+	bool determineMdfType(std::ifstream& mdfFile);
 };
 
 } // extern "C++"

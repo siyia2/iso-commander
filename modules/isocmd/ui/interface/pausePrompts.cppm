@@ -38,8 +38,6 @@ export extern "C++" {
  * prefer the repaint-aware variants.
  */
 
-
-
 /**
  * @brief Repaint-aware variant of @c pressEnterToTry.
  *

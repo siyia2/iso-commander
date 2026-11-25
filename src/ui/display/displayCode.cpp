@@ -46,94 +46,102 @@ const std::string MOUNTED_ISO_PATH = "/mnt/ISOs";
 
 namespace {
 
-    /**
-     * @brief Applies a freshly loaded ISO list to the global state and updates filtering.
-     *
-     * Captures previous paths when a filter is active so newly discovered entries
-     * can be evaluated incrementally while preserving existing filtered results.
-     * Resets @p currentPage to @p originalPage when unfiltered.
-     *
-     * @param freshList     Newly loaded ISO paths retrieved from the database.
-     * @param filteredFiles Currently filtered files; updated via @c refreshFilterKeepingResults.
-     * @param isFiltered    Whether a filter is currently active.
-     * @param currentPage   Current pagination index; reset to @p originalPage when unfiltered.
-     * @param originalPage  Target page index when reloading without an active filter.
-     */
-    void applyReloadedIsoList(std::vector<std::string>& freshList,
-                               std::vector<std::string>& filteredFiles,
-                               bool& isFiltered,
-                               size_t& currentPage,
-                               size_t originalPage) {
-        std::unordered_set<std::string> oldPaths;
-        if (isFiltered) {
-            oldPaths.reserve(GlobalState::globalIsoFileList.size());
-            oldPaths.insert(GlobalState::globalIsoFileList.begin(),
-                            GlobalState::globalIsoFileList.end());
-        }
+	/**
+	 * @brief Applies a freshly loaded ISO list to the global state and updates filtering.
+	 *
+	 * Captures previous paths when a filter is active so newly discovered entries
+	 * can be evaluated incrementally while preserving existing filtered results.
+	 * Resets @p currentPage to @p originalPage when unfiltered.
+	 *
+	 * @param freshList     Newly loaded ISO paths retrieved from the database.
+	 * @param filteredFiles Currently filtered files; updated via @c refreshFilterKeepingResults.
+	 * @param isFiltered    Whether a filter is currently active.
+	 * @param currentPage   Current pagination index; reset to @p originalPage when unfiltered.
+	 * @param originalPage  Target page index when reloading without an active filter.
+	 */
+	void applyReloadedIsoList(std::vector<std::string>& freshList,
+	                           std::vector<std::string>& filteredFiles,
+	                           bool& isFiltered,
+	                           size_t& currentPage,
+	                           size_t originalPage) {
 
-        GlobalState::globalIsoFileList = std::move(freshList);
+		std::unordered_set<std::string> oldPaths;
+		if (isFiltered) {
+			oldPaths.reserve(GlobalState::globalIsoFileList.size());
+			oldPaths.insert(GlobalState::globalIsoFileList.begin(),
+			                GlobalState::globalIsoFileList.end());
+		}
 
-        // Only reset to originalPage if we are NOT actively filtered
-        if (!isFiltered) {
-            currentPage = originalPage;
-        }
+		GlobalState::globalIsoFileList = std::move(freshList);
 
-        sortFilesCaseInsensitive(GlobalState::globalIsoFileList);
+		// Only reset to originalPage if we are NOT actively filtered
+		if (!isFiltered) {
+			currentPage = originalPage;
+		}
 
-        // Keep what is already shown; test only newly found ISOs.
-        refreshFilterKeepingResults(GlobalState::globalIsoFileList, oldPaths,
-                                    filteringStack, filteredFiles, isFiltered);
-    }
+		sortFilesCaseInsensitive(GlobalState::globalIsoFileList);
 
-    /**
-     * @brief Synchronizes staged selection indices or clears pending state on reload.
-     *
-     * Projects staged selection paths onto the current list when an import/select
-     * screen is active; otherwise clears pending indices and state on a reload.
-     *
-     * @param pendingIndices    Indices currently marked for processing.
-     * @param hasPendingProcess Whether a process is staged.
-     * @param needToReload      Whether a database reload occurred during this cycle.
-     * @param state             Shared refresh state used to check active import status.
-     */
-    void reconcilePendingSelection(std::vector<std::string>& pendingIndices,
-                                     bool& hasPendingProcess,
-                                     bool needToReload,
-                                     const std::shared_ptr<RefreshState>& state) {
-        // Staged selection: project the paths onto the final (reloaded, sorted)
-        // list. With no select screen active, keep the old behaviour of
-        // dropping pending state on a reload.
-        const bool pendingTracked = syncIsoPendingDisplay(
-            pendingIndices, hasPendingProcess,
-            state && state->isImportRunning.load(std::memory_order_acquire));
+		// Keep what is already shown; test only newly found ISOs.
+		refreshFilterKeepingResults(GlobalState::globalIsoFileList, oldPaths,
+		                            filteringStack, filteredFiles, isFiltered);
 
-        if (!pendingTracked && needToReload) {
-            pendingIndices.clear();
-            hasPendingProcess = false;
-        }
-    }
+	}
 
-    /**
-     * @brief Renders an empty-database notice and blocks until the user acknowledges.
-     *
-     * Clears the scroll buffer, prints the empty-database prompt using the current
-     * list color theme, and delegates blocking/repaint handling to
-     * @c pressEnterToReturnWithRepaint.
-     *
-     * @note The lambda uses @c std::cout (not @c std::cerr) and emits via the
-     *       SyncOutput scope for atomic presentation with the repaint.
-     */
-    void handleEmptyIsoDatabase() {
-        auto render = [] {
-            const PrintListTheme c = getListColors();
-            SyncOutput sync;
-            clearScrollBuffer();
-            std::cout << c.num << "\nISO database is empty. Choose 'ImportISO' from the Main Menu."
-                      << c.dir << "\n";
-        };
+	/**
+	 * @brief Synchronizes staged selection indices or clears pending state on reload.
+	 *
+	 * Projects staged selection paths onto the current list when an import/select
+	 * screen is active; otherwise clears pending indices and state on a reload.
+	 *
+	 * @param pendingIndices    Indices currently marked for processing.
+	 * @param hasPendingProcess Whether a process is staged.
+	 * @param needToReload      Whether a database reload occurred during this cycle.
+	 * @param state             Shared refresh state used to check active import status.
+	 */
+	void reconcilePendingSelection(std::vector<std::string>& pendingIndices,
+	                                 bool& hasPendingProcess,
+	                                 bool needToReload,
+	                                 const std::shared_ptr<RefreshState>& state) {
 
-        pressEnterToReturnWithRepaint(render);
-    }
+		// Staged selection: project the paths onto the final (reloaded, sorted)
+		// list. With no select screen active, keep the old behaviour of
+		// dropping pending state on a reload.
+		const bool pendingTracked = syncIsoPendingDisplay(
+		    pendingIndices, hasPendingProcess,
+		    state && state->isImportRunning.load(std::memory_order_acquire));
+
+		if (!pendingTracked && needToReload) {
+			pendingIndices.clear();
+			hasPendingProcess = false;
+		}
+
+	}
+
+	/**
+	 * @brief Renders an empty-database notice and blocks until the user acknowledges.
+	 *
+	 * Clears the scroll buffer, prints the empty-database prompt using the current
+	 * list color theme, and delegates blocking/repaint handling to
+	 * @c pressEnterToReturnWithRepaint.
+	 *
+	 * @note The lambda uses @c std::cout (not @c std::cerr) and emits via the
+	 *       SyncOutput scope for atomic presentation with the repaint.
+	 */
+	void handleEmptyIsoDatabase() {
+
+		auto render = [] {
+
+			const PrintListTheme c = getListColors();
+			SyncOutput sync;
+			clearScrollBuffer();
+			std::cout << c.num << "\nISO database is empty. Choose 'ImportISO' from the Main Menu."
+			          << c.dir << "\n";
+
+		};
+
+		pressEnterToReturnWithRepaint(render);
+
+	}
 
 } // namespace
 
@@ -192,58 +200,60 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles,
                      size_t& currentPage,
                      size_t& originalPage,
                      std::shared_ptr<RefreshState> state) {
-    signal(SIGINT, SIG_IGN);
-    disable_ctrl_d();
 
-    const bool needToReload = GlobalState::isoListDirty.exchange(false);
-    std::vector<std::string> freshList;
+	signal(SIGINT, SIG_IGN);
+	disable_ctrl_d();
 
-    if (needToReload) {
-        loadFromDatabase(freshList);
-    }
+	const bool needToReload = GlobalState::isoListDirty.exchange(false);
+	std::vector<std::string> freshList;
 
-    bool isEmpty = false;
-    {
-        std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
+	if (needToReload) {
+		loadFromDatabase(freshList);
+	}
 
-        if (needToReload) {
-            applyReloadedIsoList(freshList, filteredFiles, isFiltered, currentPage, originalPage);
-        }
+	bool isEmpty = false;
+	{
+		std::lock_guard<std::mutex> lock(GlobalMutexes::updateListMutex);
 
-        if (GlobalState::needSortingAfterflno) {
-            sortFilesCaseInsensitive(GlobalState::globalIsoFileList);
-            GlobalState::needSortingAfterflno = false;
-        }
+		if (needToReload) {
+			applyReloadedIsoList(freshList, filteredFiles, isFiltered, currentPage, originalPage);
+		}
 
-        if (umountMvRmBreak) {
-            filteringStack.clear();
-            filteredFiles.clear();
-            isFiltered = false;
-        }
+		if (GlobalState::needSortingAfterflno) {
+			sortFilesCaseInsensitive(GlobalState::globalIsoFileList);
+			GlobalState::needSortingAfterflno = false;
+		}
 
-        reconcilePendingSelection(pendingIndices, hasPendingProcess, needToReload, state);
+		if (umountMvRmBreak) {
+			filteringStack.clear();
+			filteredFiles.clear();
+			isFiltered = false;
+		}
 
-        // Use either the recently refreshed filteredFiles or the global master list.
-        printList(
-            isFiltered ? filteredFiles : GlobalState::globalIsoFileList,
-            "ISO_FILES",
-            listSubType,
-            PrintListContext{
-                .pendingIndices = pendingIndices,
-                .hasPendingProcess = hasPendingProcess,
-                .currentPage = currentPage,
-                .state = state
-            });
+		reconcilePendingSelection(pendingIndices, hasPendingProcess, needToReload, state);
 
-        isEmpty = GlobalState::globalIsoFileList.empty();
-    }
+		// Use either the recently refreshed filteredFiles or the global master list.
+		printList(
+		    isFiltered ? filteredFiles : GlobalState::globalIsoFileList,
+		    "ISO_FILES",
+		    listSubType,
+		    PrintListContext{
+				.pendingIndices = pendingIndices,
+				.hasPendingProcess = hasPendingProcess,
+				.currentPage = currentPage,
+				.state = state
+			});
 
-    if (isEmpty) {
-        handleEmptyIsoDatabase();
-        return false;
-    }
+		isEmpty = GlobalState::globalIsoFileList.empty();
+	}
 
-    return true;
+	if (isEmpty) {
+		handleEmptyIsoDatabase();
+		return false;
+	}
+
+	return true;
+
 }
 
 // =============================================================================
@@ -252,158 +262,168 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles,
 
 namespace {
 
-    /**
-     * @brief Scans and case-insensitively sorts subdirectories under @ref MOUNTED_ISO_PATH.
-     *
-     * Stops early if directory iteration encounters a filesystem error, matching
-     * @c std::filesystem::directory_iterator error-code handling.
-     *
-     * @return Sorted list of mounted ISO directory paths.
-     */
-    std::vector<std::string> scanAndSortMountedIsoDirs() {
-        std::vector<std::string> dirs;
-        std::error_code ec;
+	/**
+	 * @brief Scans and case-insensitively sorts subdirectories under @ref MOUNTED_ISO_PATH.
+	 *
+	 * Stops early if directory iteration encounters a filesystem error, matching
+	 * @c std::filesystem::directory_iterator error-code handling.
+	 *
+	 * @return Sorted list of mounted ISO directory paths.
+	 */
+	std::vector<std::string> scanAndSortMountedIsoDirs() {
 
-        for (const auto& entry : std::filesystem::directory_iterator(MOUNTED_ISO_PATH, ec)) {
-            if (ec) {
-                break;
-            }
-            if (entry.is_directory()) {
-                dirs.push_back(entry.path().string());
-            }
-        }
+		std::vector<std::string> dirs;
+		std::error_code ec;
 
-        sortFilesCaseInsensitive(dirs);
-        return dirs;
-    }
+		for (const auto& entry : std::filesystem::directory_iterator(MOUNTED_ISO_PATH, ec)) {
+			if (ec) {
+				break;
+			}
+			if (entry.is_directory()) {
+				dirs.push_back(entry.path().string());
+			}
+		}
 
-    /**
-     * @brief Refreshes the cached mounted ISO list when directory metadata changes.
-     *
-     * Compares @c st_mtime and @c st_nlink against the previous @c stat snapshot.
-     * If @ref MOUNTED_ISO_PATH is missing or inaccessible, resets the cache and
-     * reports no directory list change.
-     *
-     * A rescan runs only when the metadata changed. The rescan result replaces
-     * the cache only when the new directory list actually differs in size or
-     * content, so a metadata-only change (e.g. an mtime bump from an unrelated
-     * write inside the directory) yields @c false and leaves the cache intact.
-     *
-     * @param[in,out] lastDirStat    Cached filesystem metadata for @ref MOUNTED_ISO_PATH.
-     * @param[in,out] lastSortedDirs Cached sorted directory paths.
-     * @param[in,out] lastIsoCount   Cached count of entries in @p lastSortedDirs.
-     * @return @c true if @p lastSortedDirs was updated with new contents; @c false otherwise.
-     */
-    bool refreshMountedIsoCache(struct stat& lastDirStat,
-                                std::vector<std::string>& lastSortedDirs,
-                                size_t& lastIsoCount) {
-        struct stat currentDirStat{};
-        if (stat(MOUNTED_ISO_PATH.c_str(), &currentDirStat) != 0) {
-            lastSortedDirs.clear();
-            lastIsoCount = 0;
-            lastDirStat = {};
-            return false;
-        }
+		sortFilesCaseInsensitive(dirs);
+		return dirs;
 
-        const bool metaChanged = (currentDirStat.st_mtime != lastDirStat.st_mtime ||
-                                  currentDirStat.st_nlink != lastDirStat.st_nlink);
-        if (!metaChanged) {
-            return false;
-        }
+	}
 
-        std::vector<std::string> newIsoDirs = scanAndSortMountedIsoDirs();
-        lastDirStat = currentDirStat;
+	/**
+	 * @brief Refreshes the cached mounted ISO list when directory metadata changes.
+	 *
+	 * Compares @c st_mtime and @c st_nlink against the previous @c stat snapshot.
+	 * If @ref MOUNTED_ISO_PATH is missing or inaccessible, resets the cache and
+	 * reports no directory list change.
+	 *
+	 * A rescan runs only when the metadata changed. The rescan result replaces
+	 * the cache only when the new directory list actually differs in size or
+	 * content, so a metadata-only change (e.g. an mtime bump from an unrelated
+	 * write inside the directory) yields @c false and leaves the cache intact.
+	 *
+	 * @param[in,out] lastDirStat    Cached filesystem metadata for @ref MOUNTED_ISO_PATH.
+	 * @param[in,out] lastSortedDirs Cached sorted directory paths.
+	 * @param[in,out] lastIsoCount   Cached count of entries in @p lastSortedDirs.
+	 * @return @c true if @p lastSortedDirs was updated with new contents; @c false otherwise.
+	 */
+	bool refreshMountedIsoCache(struct stat& lastDirStat,
+	                            std::vector<std::string>& lastSortedDirs,
+	                            size_t& lastIsoCount) {
 
-        if (newIsoDirs.size() != lastIsoCount || newIsoDirs != lastSortedDirs) {
-            lastSortedDirs = std::move(newIsoDirs);
-            lastIsoCount = lastSortedDirs.size();
-            return true;
-        }
+		struct stat currentDirStat{};
+		if (stat(MOUNTED_ISO_PATH.c_str(), &currentDirStat) != 0) {
+			lastSortedDirs.clear();
+			lastIsoCount = 0;
+			lastDirStat = {};
+			return false;
+		}
 
-        return false;
-    }
+		const bool metaChanged = (currentDirStat.st_mtime != lastDirStat.st_mtime ||
+		                          currentDirStat.st_nlink != lastDirStat.st_nlink);
+		if (!metaChanged) {
+			return false;
+		}
 
-    /**
-     * @brief Displays the empty-mount warning, waits for acknowledgment, and clears caches.
-     *
-     * Resolves the warning color once using the active theme and @c globalTheme,
-     * blocks on @ref pressEnterToReturnWithRepaint, and releases static and parse
-     * caches after the prompt returns.
-     *
-     * @note This path emits to @c std::cerr (contrast with handleEmptyIsoDatabase,
-     *       which uses @c std::cout). The "original" theme uses Yellow; other
-     *       themes use @c theme->warning.
-     *
-     * @param[in,out] lastSortedDirs Static cached directory list to swap-clear.
-     * @param[in,out] lastIsoCount   Static cached directory count to reset to zero.
-     */
-    void handleEmptyMountedIsos(std::vector<std::string>& lastSortedDirs, size_t& lastIsoCount) {
-        const MainTheme* theme = getActiveTheme();
-        const bool isOriginal = (globalTheme == "original");
+		std::vector<std::string> newIsoDirs = scanAndSortMountedIsoDirs();
+		lastDirStat = currentDirStat;
 
-        const std::string_view warnColor = isOriginal ? UI::Palette::Yellow : theme->warning;
-        const std::string_view reset = UI::Palette::BoldReset;
+		if (newIsoDirs.size() != lastIsoCount || newIsoDirs != lastSortedDirs) {
+			lastSortedDirs = std::move(newIsoDirs);
+			lastIsoCount = lastSortedDirs.size();
+			return true;
+		}
 
-        auto render = [&] {
-            SyncOutput sync;
-            clearScrollBuffer();
-            std::cerr << "\n" << warnColor
-                      << "No paths matching the '/mnt/ISOs/{isoDirName}' pattern found."
-                      << reset << "\n";
-        };
+		return false;
 
-        pressEnterToReturnWithRepaint(render);
+	}
 
-        std::vector<std::string>().swap(lastSortedDirs);
-        lastIsoCount = 0;
-        GlobalCaches::cachedParsesForUmount.clear();
-    }
+	/**
+	 * @brief Displays the empty-mount warning, waits for acknowledgment, and clears caches.
+	 *
+	 * Resolves the warning color once using the active theme and @c globalTheme,
+	 * blocks on @ref pressEnterToReturnWithRepaint, and releases static and parse
+	 * caches after the prompt returns.
+	 *
+	 * @note This path emits to @c std::cerr (contrast with handleEmptyIsoDatabase,
+	 *       which uses @c std::cout). The "original" theme uses Yellow; other
+	 *       themes use @c theme->warning.
+	 *
+	 * @param[in,out] lastSortedDirs Static cached directory list to swap-clear.
+	 * @param[in,out] lastIsoCount   Static cached directory count to reset to zero.
+	 */
+	void handleEmptyMountedIsos(std::vector<std::string>& lastSortedDirs, size_t& lastIsoCount) {
 
-    /**
-     * @brief Updates filter state and synchronizes pending selection indices after a refresh.
-     *
-     * Resets the filter stack and view (clearing @p filteredFiles and setting
-     * @p isFiltered to @c false) when the filtered list has caught up with the
-     * full list (equal sizes) or when @p umountMvRmBreak forces it. On that
-     * reset @p originalPage receives the current page so the full list can be
-     * restored at the same position.
-     *
-     * @note @p currentPage is taken by value and only forwarded into
-     *       @p originalPage; it is not modified here.
-     *
-     * @param[in]     isoDirs           Current list of mounted ISO directories.
-     * @param[in,out] filteredFiles     Filtered entries; cleared when filter state resets.
-     * @param[in,out] isFiltered        Active filter flag; reset to @c false on reset.
-     * @param[in]     umountMvRmBreak   Forces a filter reset when @c true.
-     * @param[in,out] pendingIndices    Staged selection indices updated via @c syncIsoPendingDisplay.
-     * @param[in,out] hasPendingProcess Staged-process state flag updated alongside @p pendingIndices.
-     * @param[in]     currentPage       Active page index saved on filter reset.
-     * @param[out]    originalPage      Receives @p currentPage when filter state is reset.
-     * @param[in]     dirsChanged       Whether the mounted directory list changed this pass.
-     */
-    void syncFilterAndPendingSelection(const std::vector<std::string>& isoDirs,
-                                       std::vector<std::string>& filteredFiles,
-                                       bool& isFiltered,
-                                       bool umountMvRmBreak,
-                                       std::vector<std::string>& pendingIndices,
-                                       bool& hasPendingProcess,
-                                       size_t currentPage,
-                                       size_t& originalPage,
-                                       bool dirsChanged) {
-        if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {
-            originalPage = currentPage;
-            filteringStack.clear();
-            isFiltered = false;
-            filteredFiles.clear();
-        }
+		const MainTheme* theme = getActiveTheme();
+		const bool isOriginal = (globalTheme == "original");
 
-        const bool pendingTracked = syncIsoPendingDisplay(pendingIndices, hasPendingProcess, false);
+		const std::string_view warnColor = isOriginal ? UI::Palette::Yellow : theme->warning;
+		const std::string_view reset = UI::Palette::BoldReset;
 
-        if (!pendingTracked && dirsChanged) {
-            pendingIndices.clear();
-            hasPendingProcess = false;
-        }
-    }
+		auto render = [&] {
+
+			SyncOutput sync;
+			clearScrollBuffer();
+			std::cerr << "\n" << warnColor
+			          << "No paths matching the '/mnt/ISOs/{isoDirName}' pattern found."
+			          << reset << "\n";
+
+		};
+
+		pressEnterToReturnWithRepaint(render);
+
+		std::vector<std::string>().swap(lastSortedDirs);
+		lastIsoCount = 0;
+		GlobalCaches::cachedParsesForUmount.clear();
+
+	}
+
+	/**
+	 * @brief Updates filter state and synchronizes pending selection indices after a refresh.
+	 *
+	 * Resets the filter stack and view (clearing @p filteredFiles and setting
+	 * @p isFiltered to @c false) when the filtered list has caught up with the
+	 * full list (equal sizes) or when @p umountMvRmBreak forces it. On that
+	 * reset @p originalPage receives the current page so the full list can be
+	 * restored at the same position.
+	 *
+	 * @note @p currentPage is taken by value and only forwarded into
+	 *       @p originalPage; it is not modified here.
+	 *
+	 * @param[in]     isoDirs           Current list of mounted ISO directories.
+	 * @param[in,out] filteredFiles     Filtered entries; cleared when filter state resets.
+	 * @param[in,out] isFiltered        Active filter flag; reset to @c false on reset.
+	 * @param[in]     umountMvRmBreak   Forces a filter reset when @c true.
+	 * @param[in,out] pendingIndices    Staged selection indices updated via @c syncIsoPendingDisplay.
+	 * @param[in,out] hasPendingProcess Staged-process state flag updated alongside @p pendingIndices.
+	 * @param[in]     currentPage       Active page index saved on filter reset.
+	 * @param[out]    originalPage      Receives @p currentPage when filter state is reset.
+	 * @param[in]     dirsChanged       Whether the mounted directory list changed this pass.
+	 */
+	void syncFilterAndPendingSelection(const std::vector<std::string>& isoDirs,
+	                                   std::vector<std::string>& filteredFiles,
+	                                   bool& isFiltered,
+	                                   bool umountMvRmBreak,
+	                                   std::vector<std::string>& pendingIndices,
+	                                   bool& hasPendingProcess,
+	                                   size_t currentPage,
+	                                   size_t& originalPage,
+	                                   bool dirsChanged) {
+
+		if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {
+			originalPage = currentPage;
+			filteringStack.clear();
+			isFiltered = false;
+			filteredFiles.clear();
+		}
+
+		const bool pendingTracked = syncIsoPendingDisplay(pendingIndices, hasPendingProcess, false);
+
+		if (!pendingTracked && dirsChanged) {
+			pendingIndices.clear();
+			hasPendingProcess = false;
+		}
+
+	}
 
 } // namespace
 
@@ -456,36 +476,38 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
                                bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices,
                                bool& hasPendingProcess, size_t& currentPage,
                                size_t& originalPage, std::shared_ptr<RefreshState> state) {
-    signal(SIGINT, SIG_IGN);
-    disable_ctrl_d();
 
-    static struct stat lastDirStat{};
-    static std::vector<std::string> lastSortedDirs;
-    static size_t lastIsoCount = 0;
+	signal(SIGINT, SIG_IGN);
+	disable_ctrl_d();
 
-    const bool dirsChanged = refreshMountedIsoCache(lastDirStat, lastSortedDirs, lastIsoCount);
-    isoDirs = lastSortedDirs;
+	static struct stat lastDirStat{};
+	static std::vector<std::string> lastSortedDirs;
+	static size_t lastIsoCount = 0;
 
-    if (isoDirs.empty()) {
-        handleEmptyMountedIsos(lastSortedDirs, lastIsoCount);
-        return false;
-    }
+	const bool dirsChanged = refreshMountedIsoCache(lastDirStat, lastSortedDirs, lastIsoCount);
+	isoDirs = lastSortedDirs;
 
-    syncFilterAndPendingSelection(isoDirs, filteredFiles, isFiltered, umountMvRmBreak,
-                                  pendingIndices, hasPendingProcess, currentPage,
-                                  originalPage, dirsChanged);
+	if (isoDirs.empty()) {
+		handleEmptyMountedIsos(lastSortedDirs, lastIsoCount);
+		return false;
+	}
 
-    printList(
-        isFiltered ? filteredFiles : isoDirs,
-        "MOUNTED_ISOS",
-        "",
-        PrintListContext{
-            .pendingIndices = pendingIndices,
-            .hasPendingProcess = hasPendingProcess,
-            .currentPage = currentPage,
-            .state = state
-        });
-    return true;
+	syncFilterAndPendingSelection(isoDirs, filteredFiles, isFiltered, umountMvRmBreak,
+	                              pendingIndices, hasPendingProcess, currentPage,
+	                              originalPage, dirsChanged);
+
+	printList(
+	    isFiltered ? filteredFiles : isoDirs,
+	    "MOUNTED_ISOS",
+	    "",
+	    PrintListContext{
+			.pendingIndices = pendingIndices,
+			.hasPendingProcess = hasPendingProcess,
+			.currentPage = currentPage,
+			.state = state
+		});
+	return true;
+
 }
 
 // =============================================================================
@@ -494,13 +516,13 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 
 namespace {
 
-    /**
-     * @brief Binds a format-specific file cache to its synchronization mutex.
-     */
-    struct CacheTarget {
-        std::vector<std::string>* cache;
-        std::mutex* mutex;
-    };
+	/**
+	 * @brief Binds a format-specific file cache to its synchronization mutex.
+	 */
+	struct CacheTarget {
+		std::vector<std::string>* cache;
+		std::mutex* mutex;
+	};
 
 } // namespace
 
@@ -516,22 +538,24 @@ namespace {
  *         null for an unmapped type; they are non-null as a pair otherwise.
  */
 CacheTarget resolveCacheTarget(const std::string& fileType) {
-    if (fileType == "bin") {
-        return {&GlobalState::binImgFilesCache, &GlobalMutexes::binImgCacheMutex};
-    }
-    if (fileType == "mdf") {
-        return {&GlobalState::mdfMdsFilesCache, &GlobalMutexes::mdfMdsCacheMutex};
-    }
-    if (fileType == "nrg") {
-        return {&GlobalState::nrgFilesCache, &GlobalMutexes::nrgCacheMutex};
-    }
-    if (fileType == "chd") {
-        return {&GlobalState::chdFilesCache, &GlobalMutexes::chdCacheMutex};
-    }
-    if (fileType == "daa") {
-        return {&GlobalState::daaGbiFilesCache, &GlobalMutexes::daaGbiCacheMutex};
-    }
-    return {nullptr, nullptr};
+
+	if (fileType == "bin") {
+		return {&GlobalState::binImgFilesCache, &GlobalMutexes::binImgCacheMutex};
+	}
+	if (fileType == "mdf") {
+		return {&GlobalState::mdfMdsFilesCache, &GlobalMutexes::mdfMdsCacheMutex};
+	}
+	if (fileType == "nrg") {
+		return {&GlobalState::nrgFilesCache, &GlobalMutexes::nrgCacheMutex};
+	}
+	if (fileType == "chd") {
+		return {&GlobalState::chdFilesCache, &GlobalMutexes::chdCacheMutex};
+	}
+	if (fileType == "daa") {
+		return {&GlobalState::daaGbiFilesCache, &GlobalMutexes::daaGbiCacheMutex};
+	}
+	return {nullptr, nullptr};
+
 }
 
 /**
@@ -552,19 +576,21 @@ CacheTarget resolveCacheTarget(const std::string& fileType) {
  */
 void restoreFromCacheIfNeeded(std::vector<std::string>& files, const CacheTarget& target,
                                         bool isFiltered, bool& need2Sort) {
-    if (isFiltered || !target.cache || target.cache->empty()) {
-        return;
-    }
 
-    const bool contentMismatch = (target.cache->size() != files.size()) ||
-        !std::equal(target.cache->begin(), target.cache->end(), files.begin());
+	if (isFiltered || !target.cache || target.cache->empty()) {
+		return;
+	}
 
-    if (!contentMismatch) {
-        return;
-    }
+	const bool contentMismatch = (target.cache->size() != files.size()) ||
+	    !std::equal(target.cache->begin(), target.cache->end(), files.begin());
 
-    need2Sort = true;
-    files = *target.cache;
+	if (!contentMismatch) {
+		return;
+	}
+
+	need2Sort = true;
+	files = *target.cache;
+
 }
 
 /**
@@ -583,17 +609,19 @@ void restoreFromCacheIfNeeded(std::vector<std::string>& files, const CacheTarget
  * @param[in,out] need2Sort  Cleared after sort handling completes.
  */
 void applyPendingSort(std::vector<std::string>& files, const CacheTarget& target, bool& need2Sort) {
-    if (need2Sort) {
-        sortFilesCaseInsensitive(files);
 
-        if (target.cache && target.mutex) {
-            std::lock_guard<std::mutex> lock(*target.mutex);
-            sortFilesCaseInsensitive(*target.cache);
-        }
-    }
+	if (need2Sort) {
+		sortFilesCaseInsensitive(files);
 
-    GlobalState::needSortingAfterflno = false;
-    need2Sort = false;
+		if (target.cache && target.mutex) {
+			std::lock_guard<std::mutex> lock(*target.mutex);
+			sortFilesCaseInsensitive(*target.cache);
+		}
+	}
+
+	GlobalState::needSortingAfterflno = false;
+	need2Sort = false;
+
 }
 
 /**
@@ -629,22 +657,24 @@ void applyPendingSort(std::vector<std::string>& files, const CacheTarget& target
  */
 void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,
                                 std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::shared_ptr<RefreshState> state) {
-    const CacheTarget target = resolveCacheTarget(fileType);
 
-    restoreFromCacheIfNeeded(files, target, isFiltered, need2Sort);
+	const CacheTarget target = resolveCacheTarget(fileType);
 
-    if (!list || GlobalState::needSortingAfterflno) {
-        applyPendingSort(files, target, need2Sort);
-    }
+	restoreFromCacheIfNeeded(files, target, isFiltered, need2Sort);
 
-    printList(
-        files,
-        "IMAGE_FILES",
-        "convert2iso",
-        PrintListContext{
-            .pendingIndices = pendingIndices,
-            .hasPendingProcess = hasPendingProcess,
-            .currentPage = currentPage,
-            .state = state
-        });
+	if (!list || GlobalState::needSortingAfterflno) {
+		applyPendingSort(files, target, need2Sort);
+	}
+
+	printList(
+	    files,
+	    "IMAGE_FILES",
+	    "convert2iso",
+	    PrintListContext{
+			.pendingIndices = pendingIndices,
+			.hasPendingProcess = hasPendingProcess,
+			.currentPage = currentPage,
+			.state = state
+		});
+
 }

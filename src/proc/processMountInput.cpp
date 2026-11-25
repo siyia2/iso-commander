@@ -34,25 +34,27 @@ namespace fs = std::filesystem;
  */
 static std::vector<int> resolveSelectedIndices(const std::string& input,
                                              const std::vector<std::string>& files) {
-    std::unordered_set<int> indicesToProcess;
 
-    if (input == "00") {
-        for (int i = 1; i <= static_cast<int>(files.size()); ++i) {
-            indicesToProcess.insert(i);
-        }
-    } else {
-        tokenizeInput(input, files, indicesToProcess);
-        if (indicesToProcess.empty()) {
-            return {};
-        }
-    }
+	std::unordered_set<int> indicesToProcess;
 
-    std::vector<int> selectedIndices;
-    selectedIndices.reserve(indicesToProcess.size());
-    for (int index : indicesToProcess) {
-        selectedIndices.push_back(index);
-    }
-    return selectedIndices;
+	if (input == "00") {
+		for (int i = 1; i <= static_cast<int>(files.size()); ++i) {
+			indicesToProcess.insert(i);
+		}
+	} else {
+		tokenizeInput(input, files, indicesToProcess);
+		if (indicesToProcess.empty()) {
+			return {};
+		}
+	}
+
+	std::vector<int> selectedIndices;
+	selectedIndices.reserve(indicesToProcess.size());
+	for (int index : indicesToProcess) {
+		selectedIndices.push_back(index);
+	}
+	return selectedIndices;
+
 }
 
 /**
@@ -73,17 +75,19 @@ static std::vector<std::vector<int>> partitionIndexChunks(size_t selectionCount,
                                                           size_t poolSize,
                                                           size_t perOperationCap,
                                                           const std::vector<int>& selectedIndices) {
-    size_t numThreads = std::max(size_t(2), std::min({selectionCount, perOperationCap, poolSize}));
 
-    if ((selectionCount + numThreads - 1) / numThreads > 100) {
-        numThreads = (selectionCount + 99) / 100;
-    }
+	size_t numThreads = std::max(size_t(2), std::min({selectionCount, perOperationCap, poolSize}));
 
-    std::vector<std::vector<int>> indexChunks(numThreads);
-    for (size_t i = 0; i < selectionCount; ++i) {
-        indexChunks[i % numThreads].push_back(selectedIndices[i]);
-    }
-    return indexChunks;
+	if ((selectionCount + numThreads - 1) / numThreads > 100) {
+		numThreads = (selectionCount + 99) / 100;
+	}
+
+	std::vector<std::vector<int>> indexChunks(numThreads);
+	for (size_t i = 0; i < selectionCount; ++i) {
+		indexChunks[i % numThreads].push_back(selectedIndices[i]);
+	}
+	return indexChunks;
+
 }
 
 /**
@@ -97,16 +101,18 @@ static std::vector<std::vector<int>> partitionIndexChunks(size_t selectionCount,
 static std::string printOperationHeader(size_t taskCount,
                                         const std::string& operationColor,
                                         const std::string& operationName) {
-    std::ostringstream hdr;
-    hdr << color << "\n Processing"
-        << (taskCount > 1 ? " tasks" : " task")
-        << " for " << operationColor << operationName
-        << color << "... ("
-        << UI::Palette::Red << "Ctrl+c"
-        << color << ":cancel)\n";
-    const std::string header = hdr.str();
-    std::cout << header;
-    return header;
+
+	std::ostringstream hdr;
+	hdr << color << "\n Processing"
+	    << (taskCount > 1 ? " tasks" : " task")
+	    << " for " << operationColor << operationName
+	    << color << "... ("
+	    << UI::Palette::Red << "Ctrl+c"
+	    << color << ":cancel)\n";
+	const std::string header = hdr.str();
+	std::cout << header;
+	return header;
+
 }
 
 /**
@@ -129,27 +135,31 @@ static void runWorkerChunks(ThreadPool& pool,
                             std::atomic<size_t>& completedTasks,
                             std::atomic<size_t>& failedTasks,
                             bool isUnmount) {
-    std::vector<std::future<void>> futures;
-    futures.reserve(indexChunks.size());
 
-    for (const auto& idxChunk : indexChunks) {
-        futures.emplace_back(pool.enqueue([idxChunk, &files, &completedTasks, &failedTasks, isUnmount]() {
-            std::vector<std::string> chunkStr;
-            chunkStr.reserve(idxChunk.size());
-            for (int idx : idxChunk) {
-                chunkStr.push_back(files[idx - 1]);
-            }
-            if (isUnmount) {
-                unmountISO(chunkStr, &completedTasks, &failedTasks, false);
-            } else {
-                mountIsoFiles(chunkStr, &completedTasks, &failedTasks, false);
-            }
-        }));
-    }
+	std::vector<std::future<void>> futures;
+	futures.reserve(indexChunks.size());
 
-    for (auto& future : futures) {
-        future.wait();
-    }
+	for (const auto& idxChunk : indexChunks) {
+		futures.emplace_back(pool.enqueue([idxChunk, &files, &completedTasks, &failedTasks, isUnmount]() {
+
+			std::vector<std::string> chunkStr;
+			chunkStr.reserve(idxChunk.size());
+			for (int idx : idxChunk) {
+				chunkStr.push_back(files[idx - 1]);
+			}
+			if (isUnmount) {
+				unmountISO(chunkStr, &completedTasks, &failedTasks, false);
+			} else {
+				mountIsoFiles(chunkStr, &completedTasks, &failedTasks, false);
+			}
+
+		}));
+	}
+
+	for (auto& future : futures) {
+		future.wait();
+	}
+
 }
 
 /**
@@ -181,47 +191,49 @@ void processInputForMountOrUmount(const std::string& input,
                                   bool& umountMvRmBreak,
                                   bool& verbose,
                                   bool isUnmount) {
-    setupSignalHandlerCancellations();
-    GlobalState::g_operationCancelled.store(false);
 
-    const std::vector<int> selectedIndices = resolveSelectedIndices(input, files);
-    if (selectedIndices.empty()) {
-        if (isUnmount) {
-            umountMvRmBreak = false;
-        }
-        return;
-    }
+	setupSignalHandlerCancellations();
+	GlobalState::g_operationCancelled.store(false);
 
-    const std::string operationColor = std::string(isUnmount ? UI::Palette::Yellow : UI::Palette::Green);
-    const std::string operationName = isUnmount ? "umount" : "mount";
-    const std::string header = printOperationHeader(selectedIndices.size(), operationColor, operationName);
-    const std::string coloredProcess = operationColor + operationName + std::string(UI::Palette::BoldReset);
+	const std::vector<int> selectedIndices = resolveSelectedIndices(input, files);
+	if (selectedIndices.empty()) {
+		if (isUnmount) {
+			umountMvRmBreak = false;
+		}
+		return;
+	}
 
-    ThreadPool& pool = getStaticThreadPool();
-    const size_t cap = isUnmount ? GlobalThreadCaps::UMOUNT_THREAD_CAP : GlobalThreadCaps::MOUNT_THREAD_CAP;
-    const std::vector<std::vector<int>> indexChunks =
-        partitionIndexChunks(selectedIndices.size(), pool.threadCount(), cap, selectedIndices);
+	const std::string operationColor = std::string(isUnmount ? UI::Palette::Yellow : UI::Palette::Green);
+	const std::string operationName = isUnmount ? "umount" : "mount";
+	const std::string header = printOperationHeader(selectedIndices.size(), operationColor, operationName);
+	const std::string coloredProcess = operationColor + operationName + std::string(UI::Palette::BoldReset);
 
-    std::atomic<size_t> completedTasks(0);
-    std::atomic<size_t> failedTasks(0);
-    std::atomic<bool> isProcessingComplete(false);
+	ThreadPool& pool = getStaticThreadPool();
+	const size_t cap = isUnmount ? GlobalThreadCaps::UMOUNT_THREAD_CAP : GlobalThreadCaps::MOUNT_THREAD_CAP;
+	const std::vector<std::vector<int>> indexChunks =
+	    partitionIndexChunks(selectedIndices.size(), pool.threadCount(), cap, selectedIndices);
 
-    std::thread progressThread = launchProgressBar(
-        nullptr, static_cast<size_t>(0),
-        &completedTasks, &failedTasks, selectedIndices.size(),
-        &isProcessingComplete, &verbose,
-        coloredProcess, header);
+	std::atomic<size_t> completedTasks(0);
+	std::atomic<size_t> failedTasks(0);
+	std::atomic<bool> isProcessingComplete(false);
 
-    runWorkerChunks(pool, indexChunks, files, completedTasks, failedTasks, isUnmount);
+	std::thread progressThread = launchProgressBar(
+	    nullptr, static_cast<size_t>(0),
+	    &completedTasks, &failedTasks, selectedIndices.size(),
+	    &isProcessingComplete, &verbose,
+	    coloredProcess, header);
 
-    if (completedTasks == 0 && isUnmount) {
-        umountMvRmBreak = false;
-    }
+	runWorkerChunks(pool, indexChunks, files, completedTasks, failedTasks, isUnmount);
 
-    isProcessingComplete.store(true);
-    signal(SIGINT, SIG_IGN);
-    progressThread.join();
+	if (completedTasks == 0 && isUnmount) {
+		umountMvRmBreak = false;
+	}
 
-    std::error_code ec;
-    fs::remove("/mnt/ISOs", ec);
+	isProcessingComplete.store(true);
+	signal(SIGINT, SIG_IGN);
+	progressThread.join();
+
+	std::error_code ec;
+	fs::remove("/mnt/ISOs", ec);
+
 }

@@ -21,11 +21,11 @@ export extern "C++" {
  * @brief Information about an ISO image file.
  */
 struct IsoInfo {
-    std::string path;          /** Full filesystem path to the ISO file. */
-    std::string filename;      /** Name of the file without path. */
-    uint64_t size;             /** Size of the ISO in bytes. */
-    std::string sizeStr;       /** Human-readable size string (e.g., "4.2 GB"). */
-    size_t originalIndex;      /** Original sort index for maintaining list order. */
+	std::string path;          /** Full filesystem path to the ISO file. */
+	std::string filename;      /** Name of the file without path. */
+	uint64_t size;             /** Size of the ISO in bytes. */
+	std::string sizeStr;       /** Human-readable size string (e.g., "4.2 GB"). */
+	size_t originalIndex;      /** Original sort index for maintaining list order. */
 };
 
 /**
@@ -34,35 +34,35 @@ struct IsoInfo {
  * prevent accidental copying of atomic states.
  */
 struct ProgressInfo {
-    std::string filename;
-    std::string device;
-    std::string totalSize;
-    std::string sourcePath;
+	std::string filename;
+	std::string device;
+	std::string totalSize;
+	std::string sourcePath;
 
-    bool verifyRequested = false; // Set before dispatch; immutable while running.
-    std::atomic<bool> verifying{false};
-    std::atomic<uint64_t> bytesVerified{0};
+	bool verifyRequested = false; // Set before dispatch; immutable while running.
+	std::atomic<bool> verifying{false};
+	std::atomic<uint64_t> bytesVerified{0};
 
-    std::atomic<bool> writeCompleted{false}; // All writes and final flush succeeded.
-    std::atomic<bool> completed{false};      // Write and any requested verification succeeded.
-    std::atomic<bool> failed{false};
-    std::atomic<uint64_t> bytesWritten{0};
-    std::atomic<int> progress{0};
-    std::atomic<double> speed{0.0};
+	std::atomic<bool> writeCompleted{false}; // All writes and final flush succeeded.
+	std::atomic<bool> completed{false};      // Write and any requested verification succeeded.
+	std::atomic<bool> failed{false};
+	std::atomic<uint64_t> bytesWritten{0};
+	std::atomic<int> progress{0};
+	std::atomic<double> speed{0.0};
 
-    // Constructor
-    ProgressInfo(std::string filename, std::string device, std::string totalSize,
-                 std::string sourcePath);
+	// Constructor
+	ProgressInfo(std::string filename, std::string device, std::string totalSize,
+	             std::string sourcePath);
 
-    // Move Constructor
-    ProgressInfo(ProgressInfo&& other) noexcept;
+	// Move Constructor
+	ProgressInfo(ProgressInfo&& other) noexcept;
 
-    // Move Assignment
-    ProgressInfo& operator=(ProgressInfo&& other) noexcept;
+	// Move Assignment
+	ProgressInfo& operator=(ProgressInfo&& other) noexcept;
 
-    // Disable Copying (Atomics cannot be copied)
-    ProgressInfo(const ProgressInfo&) = delete;
-    ProgressInfo& operator=(const ProgressInfo&) = delete;
+	// Disable Copying (Atomics cannot be copied)
+	ProgressInfo(const ProgressInfo&) = delete;
+	ProgressInfo& operator=(const ProgressInfo&) = delete;
 };
 
 /**
@@ -78,10 +78,10 @@ struct ProgressInfo {
  * condition variable.
  */
 struct WriteSync {
-    std::atomic<size_t>     completedTasks{0};
-    std::atomic<size_t>     finishedTasks{0};   // success OR failure
-    std::mutex              mutex;
-    std::condition_variable cv;
+	std::atomic<size_t>     completedTasks{0};
+	std::atomic<size_t>     finishedTasks{0};   // success OR failure
+	std::mutex              mutex;
+	std::condition_variable cv;
 };
 
 } // extern "C++"

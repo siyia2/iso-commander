@@ -32,46 +32,46 @@ struct RefreshState;
  * smart-case applies to negated terms the same way.
  */
 struct QueryToken {
-    std::string original;            ///< Term text as typed (escapes resolved, '!' prefix removed).
-    std::string lower;               ///< Lowercased @c original; set only when !isCaseSensitive.
-    bool isCaseSensitive = false;    ///< True if @c original contains an uppercase letter.
-    bool negated = false;            ///< True if the term must NOT occur in the entry.
+	std::string original;            ///< Term text as typed (escapes resolved, '!' prefix removed).
+	std::string lower;               ///< Lowercased @c original; set only when !isCaseSensitive.
+	bool isCaseSensitive = false;    ///< True if @c original contains an uppercase letter.
+	bool negated = false;            ///< True if the term must NOT occur in the entry.
 };
 
 /**
  * @brief A single level of filter state, enabling nested (stacked) filtering.
  */
 struct FilteringState {
-    std::vector<std::size_t> originalIndices;
-    std::string query;
-    bool isFiltered = false;
-    bool namesOnly = false;
+	std::vector<std::size_t> originalIndices;
+	std::string query;
+	bool isFiltered = false;
+	bool namesOnly = false;
 };
 
 /**
  * @brief All mutable state needed to perform a single filter operation.
  */
 struct FilterContext {
-    std::vector<std::string>& files;
-    bool& isFiltered;
-    bool& needsClrScrn;
-    bool& filterHistory;
-    std::size_t& currentPage;
-    const std::vector<std::string>* sourceOverride = nullptr;
-    bool isUnmount = false;
-    bool toggleFullListUmount = false;
-    std::function<void()> repaintList = nullptr;
+	std::vector<std::string>& files;
+	bool& isFiltered;
+	bool& needsClrScrn;
+	bool& filterHistory;
+	std::size_t& currentPage;
+	const std::vector<std::string>* sourceOverride = nullptr;
+	bool isUnmount = false;
+	bool toggleFullListUmount = false;
+	std::function<void()> repaintList = nullptr;
 
-    // Live main-list rendering: when listType is non-empty and pendingIndices,
-    // hasPendingProcess, and state are all set, the filter prompt repaints the
-    // real printList output on every keystroke, narrowing/widening it as the
-    // query changes. Leaving listType empty disables this and keeps the
-    // Enter-only prompt.
-    std::string listType{};       // e.g. "ISO_FILES", "IMAGE_FILES", "MOUNTED_ISOS"
-    std::string listSubType{};
-    std::vector<std::string>* pendingIndices = nullptr;
-    bool* hasPendingProcess = nullptr;
-    std::shared_ptr<RefreshState> state = nullptr;
+	// Live main-list rendering: when listType is non-empty and pendingIndices,
+	// hasPendingProcess, and state are all set, the filter prompt repaints the
+	// real printList output on every keystroke, narrowing/widening it as the
+	// query changes. Leaving listType empty disables this and keeps the
+	// Enter-only prompt.
+	std::string listType{};       // e.g. "ISO_FILES", "IMAGE_FILES", "MOUNTED_ISOS"
+	std::string listSubType{};
+	std::vector<std::string>* pendingIndices = nullptr;
+	bool* hasPendingProcess = nullptr;
+	std::shared_ptr<RefreshState> state = nullptr;
 };
 
 /**
@@ -93,26 +93,26 @@ bool applyFilterCore(const std::string& searchString, FilterContext& ctx);
  * @brief Configuration for runSharedFilterFlow, describing one filter operation.
  */
 struct FilterCallConfig {
-    std::vector<std::string>* files = nullptr;
-    const std::vector<std::string>* sourceOverride = nullptr;
-    std::string operation;
-    std::string_view operationColor;
-    bool* isFiltered = nullptr;
-    bool* needsClrScrn = nullptr;
-    bool* filterHistory = nullptr;
-    bool* need2Sort = nullptr;
-    std::size_t* currentPage = nullptr;
-    bool isUnmount = false;
-    bool toggleFullList = false;
-    std::function<void()> repaintList = nullptr;
+	std::vector<std::string>* files = nullptr;
+	const std::vector<std::string>* sourceOverride = nullptr;
+	std::string operation;
+	std::string_view operationColor;
+	bool* isFiltered = nullptr;
+	bool* needsClrScrn = nullptr;
+	bool* filterHistory = nullptr;
+	bool* need2Sort = nullptr;
+	std::size_t* currentPage = nullptr;
+	bool isUnmount = false;
+	bool toggleFullList = false;
+	std::function<void()> repaintList = nullptr;
 
-    // Optional live rendering: populate all four to repaint the real list
-    // while the user types (see FilterContext above).
-    std::string listType{};
-    std::string listSubType{};
-    std::vector<std::string>* pendingIndices = nullptr;
-    bool* hasPendingProcess = nullptr;
-    std::shared_ptr<RefreshState> state = nullptr;
+	// Optional live rendering: populate all four to repaint the real list
+	// while the user types (see FilterContext above).
+	std::string listType{};
+	std::string listSubType{};
+	std::vector<std::string>* pendingIndices = nullptr;
+	bool* hasPendingProcess = nullptr;
+	std::shared_ptr<RefreshState> state = nullptr;
 };
 
 /**
@@ -123,15 +123,15 @@ struct FilterCallConfig {
  *          do not repeat long argument lists.
  */
 struct FilterEntryContext {
-    bool* isFiltered = nullptr;                        /**< Points to caller's flag indicating whether the list is filtered. */
-    bool* needsClrScrn = nullptr;                      /**< Points to caller's flag requesting a full screen redraw. */
-    bool* filterHistory = nullptr;                     /**< Points to caller's flag indicating filter history should be saved. */
-    std::size_t* currentPage = nullptr;                     /**< Points to caller's page index; may be reset after filtering. */
-    bool* need2Sort = nullptr;                         /**< Optional pointer to flag requesting resort after filtering. */
-    std::vector<std::string>* pendingIndices = nullptr;/**< Optional pointer to caller's pending-selection indices. */
-    bool* hasPendingProcess = nullptr;                 /**< Optional pointer to flag indicating a staged process action. */
-    std::shared_ptr<RefreshState> state = nullptr;     /**< Optional shared refresh state enabling live main-list preview. */
-    std::function<void()> repaintList = nullptr;       /**< Optional callback to repaint normal list on resize when not previewing. */
+	bool* isFiltered = nullptr;                        /**< Points to caller's flag indicating whether the list is filtered. */
+	bool* needsClrScrn = nullptr;                      /**< Points to caller's flag requesting a full screen redraw. */
+	bool* filterHistory = nullptr;                     /**< Points to caller's flag indicating filter history should be saved. */
+	std::size_t* currentPage = nullptr;                     /**< Points to caller's page index; may be reset after filtering. */
+	bool* need2Sort = nullptr;                         /**< Optional pointer to flag requesting resort after filtering. */
+	std::vector<std::string>* pendingIndices = nullptr;/**< Optional pointer to caller's pending-selection indices. */
+	bool* hasPendingProcess = nullptr;                 /**< Optional pointer to flag indicating a staged process action. */
+	std::shared_ptr<RefreshState> state = nullptr;     /**< Optional shared refresh state enabling live main-list preview. */
+	std::function<void()> repaintList = nullptr;       /**< Optional callback to repaint normal list on resize when not previewing. */
 };
 
 /**
@@ -257,11 +257,11 @@ bool livePreviewWasRepainted();
  */
 class LivePreviewReadlineGuard {
 public:
-    LivePreviewReadlineGuard();
-    ~LivePreviewReadlineGuard();
+	LivePreviewReadlineGuard();
+	~LivePreviewReadlineGuard();
 
-    LivePreviewReadlineGuard(const LivePreviewReadlineGuard&) = delete;
-    LivePreviewReadlineGuard& operator=(const LivePreviewReadlineGuard&) = delete;
+	LivePreviewReadlineGuard(const LivePreviewReadlineGuard&) = delete;
+	LivePreviewReadlineGuard& operator=(const LivePreviewReadlineGuard&) = delete;
 };
 
 } // extern "C++"

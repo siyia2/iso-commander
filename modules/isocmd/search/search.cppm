@@ -29,17 +29,17 @@ export extern "C++" {
  */
 class SearchReadlineGuard {
 public:
-    SearchReadlineGuard();
-    ~SearchReadlineGuard();
+	SearchReadlineGuard();
+	~SearchReadlineGuard();
 
-    // Non-copyable, non-movable
-    SearchReadlineGuard(const SearchReadlineGuard&) = delete;
-    SearchReadlineGuard& operator=(const SearchReadlineGuard&) = delete;
+	// Non-copyable, non-movable
+	SearchReadlineGuard(const SearchReadlineGuard&) = delete;
+	SearchReadlineGuard& operator=(const SearchReadlineGuard&) = delete;
 
 private:
-    // Same type as readline's rl_completion_func_t, spelled out so this
-    // header does not need <readline/readline.h>.
-    char** (*oldCompletion_)(const char*, int, int);
+	// Same type as readline's rl_completion_func_t, spelled out so this
+	// header does not need <readline/readline.h>.
+	char** (*oldCompletion_)(const char*, int, int);
 };
 
 /**
@@ -66,11 +66,11 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy = true);
  * vectors must remain valid for the entire lifetime of this struct.
  */
 struct RamCacheStore {
-    const std::vector<std::string>& binImg; ///< Cached BIN/IMG file paths (default fallback).
-    const std::vector<std::string>& mdfMds; ///< Cached MDF/MDS file paths.
-    const std::vector<std::string>& nrg;    ///< Cached NRG file paths.
-    const std::vector<std::string>& chd;    ///< Cached CHD file paths.
-    const std::vector<std::string>& daaGbi; ///< Cached DAA/GBI file paths.
+	const std::vector<std::string>& binImg; ///< Cached BIN/IMG file paths (default fallback).
+	const std::vector<std::string>& mdfMds; ///< Cached MDF/MDS file paths.
+	const std::vector<std::string>& nrg;    ///< Cached NRG file paths.
+	const std::vector<std::string>& chd;    ///< Cached CHD file paths.
+	const std::vector<std::string>& daaGbi; ///< Cached DAA/GBI file paths.
 };
 
 /**
@@ -79,10 +79,10 @@ struct RamCacheStore {
  * When all flags are `false`, BIN/IMG mode is treated as the default.
  */
 struct CacheMode {
-    bool mdf = false; ///< Select MDF/MDS cache when `true`.
-    bool nrg = false; ///< Select NRG cache when `true`.
-    bool chd = false; ///< Select CHD cache when `true`.
-    bool daa = false; ///< Select DAA/GBI cache when `true`.
+	bool mdf = false; ///< Select MDF/MDS cache when `true`.
+	bool nrg = false; ///< Select NRG cache when `true`.
+	bool chd = false; ///< Select CHD cache when `true`.
+	bool daa = false; ///< Select DAA/GBI cache when `true`.
 };
 
 /**

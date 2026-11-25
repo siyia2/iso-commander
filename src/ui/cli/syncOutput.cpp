@@ -4,5 +4,14 @@ import std;
 
 import isocmd.ui.cli.syncOutput;
 
-SyncOutput::SyncOutput()  { std::cout << kSyncBegin; }
-SyncOutput::~SyncOutput() { std::cout << kSyncEnd << std::flush; }
+SyncOutput::SyncOutput() {
+
+	std::cout << kSyncBegin;
+
+}
+
+SyncOutput::~SyncOutput() {
+
+	std::cout << kSyncEnd << std::flush;
+
+}

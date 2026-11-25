@@ -19,11 +19,13 @@ import isocmd.input.inputHandling;
  * terminates a shell or input loop.
  */
 void disable_ctrl_d() {
-    struct termios term;
-    if (tcgetattr(STDIN_FILENO, &term) == 0) {
-        term.c_cc[VEOF] = _POSIX_VDISABLE;
-        tcsetattr(STDIN_FILENO, TCSANOW, &term);
-    }
+
+	struct termios term;
+	if (tcgetattr(STDIN_FILENO, &term) == 0) {
+		term.c_cc[VEOF] = _POSIX_VDISABLE;
+		tcsetattr(STDIN_FILENO, TCSANOW, &term);
+	}
+
 }
 
 /**
@@ -31,18 +33,22 @@ void disable_ctrl_d() {
  * @details Restores VEOF to the standard ASCII 4 (End of Transmission).
  */
 void enable_ctrl_d() {
-    struct termios term;
-    if (tcgetattr(STDIN_FILENO, &term) == 0) {
-        term.c_cc[VEOF] = 4; // Standard default for most Unix systems
-        tcsetattr(STDIN_FILENO, TCSANOW, &term);
-    }
+
+	struct termios term;
+	if (tcgetattr(STDIN_FILENO, &term) == 0) {
+		term.c_cc[VEOF] = 4; // Standard default for most Unix systems
+		tcsetattr(STDIN_FILENO, TCSANOW, &term);
+	}
+
 }
 
 /**
  * @brief Discards any unread data in the terminal input buffer.
  */
 void flushStdin() {
-    tcflush(STDIN_FILENO, TCIFLUSH);
+
+	tcflush(STDIN_FILENO, TCIFLUSH);
+
 }
 
 /**
@@ -51,22 +57,26 @@ void flushStdin() {
  * user keystrokes from appearing on the screen or being buffered as line input.
  */
 void disableInput() {
-    struct termios term;
-    if (tcgetattr(STDIN_FILENO, &term) == 0) {
-        term.c_lflag &= ~(ICANON | ECHO);
-        tcsetattr(STDIN_FILENO, TCSANOW, &term);
-    }
+
+	struct termios term;
+	if (tcgetattr(STDIN_FILENO, &term) == 0) {
+		term.c_lflag &= ~(ICANON | ECHO);
+		tcsetattr(STDIN_FILENO, TCSANOW, &term);
+	}
+
 }
 
 /**
  * @brief Restores standard canonical input and echoing.
  */
 void restoreInput() {
-    struct termios term;
-    if (tcgetattr(STDIN_FILENO, &term) == 0) {
-        term.c_lflag |= ICANON | ECHO;
-        tcsetattr(STDIN_FILENO, TCSANOW, &term);
-    }
+
+	struct termios term;
+	if (tcgetattr(STDIN_FILENO, &term) == 0) {
+		term.c_lflag |= ICANON | ECHO;
+		tcsetattr(STDIN_FILENO, TCSANOW, &term);
+	}
+
 }
 
 /**
@@ -75,14 +85,16 @@ void restoreInput() {
  * and sets the system-wide SIGINT handler to SIG_IGN.
  */
 void setupReadlineToIgnoreCtrlC() {
-    // Prevent readline from overriding our signal logic
-    rl_catch_signals = 0;
 
-    struct sigaction sa_ignore;
-    sa_ignore.sa_handler = SIG_IGN;
-    sigemptyset(&sa_ignore.sa_mask);
-    sa_ignore.sa_flags = 0;
-    sigaction(SIGINT, &sa_ignore, nullptr);
+	// Prevent readline from overriding our signal logic
+	rl_catch_signals = 0;
+
+	struct sigaction sa_ignore;
+	sa_ignore.sa_handler = SIG_IGN;
+	sigemptyset(&sa_ignore.sa_mask);
+	sa_ignore.sa_flags = 0;
+	sigaction(SIGINT, &sa_ignore, nullptr);
+
 }
 
 /**
@@ -90,10 +102,12 @@ void setupReadlineToIgnoreCtrlC() {
  * @param signal The signal number caught (expected SIGINT).
  */
 void signalHandlerCancellations(int signal) {
-    if (signal == SIGINT) {
-        // Atomic flag used by worker threads to stop processing
-        GlobalState::g_operationCancelled = true;
-    }
+
+	if (signal == SIGINT) {
+		// Atomic flag used by worker threads to stop processing
+		GlobalState::g_operationCancelled = true;
+	}
+
 }
 
 /**
@@ -102,11 +116,13 @@ void signalHandlerCancellations(int signal) {
  * allowing current tasks to finish or clean up before returning.
  */
 void setupSignalHandlerCancellations() {
-    struct sigaction sa;
-    sa.sa_handler = signalHandlerCancellations;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIGINT, &sa, nullptr);
+
+	struct sigaction sa;
+	sa.sa_handler = signalHandlerCancellations;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sigaction(SIGINT, &sa, nullptr);
+
 }
 
 /**
@@ -116,13 +132,15 @@ void setupSignalHandlerCancellations() {
  * @param signum The signal number triggering the exit.
  */
 void signalHandler(int signum) {
-    // Ensure the terminal isn't left in a messy state
-    clearScrollBuffer();
 
-    // Release global lock if held
-    if (GlobalState::lockFileDescriptor != -1) {
-        close(GlobalState::lockFileDescriptor);
-    }
+	// Ensure the terminal isn't left in a messy state
+	clearScrollBuffer();
 
-    exit(signum);
+	// Release global lock if held
+	if (GlobalState::lockFileDescriptor != -1) {
+		close(GlobalState::lockFileDescriptor);
+	}
+
+	exit(signum);
+
 }

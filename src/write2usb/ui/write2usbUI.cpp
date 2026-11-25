@@ -40,422 +40,452 @@ void displayErrors();
 
 namespace MappingPrompt {
 
-    /**
-     * @brief Represents summary information for a physical removable storage device.
-     */
-    struct DeviceInfo {
-        std::string path;     ///< Device node path (e.g., /dev/sdb).
-        uint64_t size;        ///< Total storage capacity in bytes.
-        std::string driveName;///< Vendor or model drive name.
-        std::string sizeStr;  ///< Human-readable formatted file size string.
-        bool mounted;         ///< True if the device currently has active mounts.
-        bool error;           ///< True if an error occurred while probing the device.
-    };
+	/**
+	 * @brief Represents summary information for a physical removable storage device.
+	 */
+	struct DeviceInfo {
+		std::string path;     ///< Device node path (e.g., /dev/sdb).
+		uint64_t size;        ///< Total storage capacity in bytes.
+		std::string driveName;///< Vendor or model drive name.
+		std::string sizeStr;  ///< Human-readable formatted file size string.
+		bool mounted;         ///< True if the device currently has active mounts.
+		bool error;           ///< True if an error occurred while probing the device.
+	};
 
-    /**
-     * @brief Represents a single row in the pre-burn warning confirmation table.
-     */
-    struct WarnRow {
-        std::string device;       ///< Target device path.
-        std::string driveName;    ///< Drive model/name description.
-        std::string deviceSizeStr;///< Formatted storage device size.
-        std::string filename;     ///< Source ISO filename.
-        std::string isoSizeStr;   ///< Formatted ISO image size.
-    };
+	/**
+	 * @brief Represents a single row in the pre-burn warning confirmation table.
+	 */
+	struct WarnRow {
+		std::string device;       ///< Target device path.
+		std::string driveName;    ///< Drive model/name description.
+		std::string deviceSizeStr;///< Formatted storage device size.
+		std::string filename;     ///< Source ISO filename.
+		std::string isoSizeStr;   ///< Formatted ISO image size.
+	};
 
-    /**
-     * @brief Constructs the interactive index prompt string for device mapping input.
-     *
-     * @param wt The active write theme configuration.
-     * @return std::string Formatted ANSI-colored prompt string.
-     */
-    std::string buildIdxPrompt(const WriteTheme& wt) {
-        std::string prompt("\n");
-        prompt
-            .append(UI::Palette::RL_idxGreen)
-            .append("IDX>DEVICE")
-            .append(wt.rl_primaryCol)
-            .append(" ↵ for ")
-            .append(UI::Palette::RL_Yellow)
-            .append("write2usb")
-            .append(wt.rl_primaryCol)
-            .append(", ? for help: ")
-            .append(wt.rl_resetCol);
-        return prompt;
-    }
+	/**
+	 * @brief Constructs the interactive index prompt string for device mapping input.
+	 *
+	 * @param wt The active write theme configuration.
+	 * @return std::string Formatted ANSI-colored prompt string.
+	 */
+	std::string buildIdxPrompt(const WriteTheme& wt) {
 
-    /**
-     * @brief Validates whether the number of selected ISOs exceeds the thread pool capacity.
-     *
-     * @param pool Reference to the application thread pool.
-     * @param selectedIsos Vector of ISO files chosen by the user.
-     * @param wt The active write theme configuration.
-     * @return true If the selection limit has been exceeded.
-     * @return false If within safe execution limits.
-     */
-    bool checkThreadPoolLimit(ThreadPool& pool, const std::vector<IsoInfo>& selectedIsos, const WriteTheme& wt) {
-        if (selectedIsos.size() <= pool.threadCount()) return false;
-        auto render = [&] {
-            SyncOutput sync;
-            clearScrollBuffer();
-            std::cout << "\n"
-                      << wt.colorFailure << "Error: "
-                      << UI::Palette::Yellow << "write2usb"
-                      << wt.colorFailure << " selection limit" << wt.colorFailure << " is "
-                      << wt.colorWarning << pool.threadCount()
-                      << wt.colorFailure << " (thread pool size)."
-                      << wt.speedCol << "\n";
-        };
-        pressEnterToTryWithRepaint(render);
-        return true;
-    }
+		std::string prompt("\n");
+		prompt
+		    .append(UI::Palette::RL_idxGreen)
+		    .append("IDX>DEVICE")
+		    .append(wt.rl_primaryCol)
+		    .append(" ↵ for ")
+		    .append(UI::Palette::RL_Yellow)
+		    .append("write2usb")
+		    .append(wt.rl_primaryCol)
+		    .append(", ? for help: ")
+		    .append(wt.rl_resetCol);
+		return prompt;
 
-    /**
-     * @brief Collects probe information and sizes for a list of USB device paths.
-     *
-     * @param usbDevices Vector of detected USB device node paths.
-     * @return std::vector<DeviceInfo> Sorted and populated device details.
-     */
-    std::vector<DeviceInfo> collectAndSortDeviceInfos(const std::vector<std::string>& usbDevices) {
-        std::vector<DeviceInfo> deviceInfos;
-        deviceInfos.reserve(usbDevices.size());
-        for (const auto& device : usbDevices) {
-            try {
-                std::string driveName = getDriveName(device);
-                uint64_t deviceSize = getBlockDeviceSize(device);
-                std::string sizeStr = formatFileSize(deviceSize);
-                bool mounted = isDeviceMounted(device);
-                deviceInfos.push_back({device, deviceSize, driveName, sizeStr, mounted, false});
-            } catch (...) {
-                deviceInfos.push_back({device, 0, "", "", false, true});
-            }
-        }
+	}
 
-        std::sort(deviceInfos.begin(), deviceInfos.end(), [](const DeviceInfo& a, const DeviceInfo& b) {
-            if (a.error != b.error) return !a.error;
-            return a.size > b.size;
-        });
-        return deviceInfos;
-    }
+	/**
+	 * @brief Validates whether the number of selected ISOs exceeds the thread pool capacity.
+	 *
+	 * @param pool Reference to the application thread pool.
+	 * @param selectedIsos Vector of ISO files chosen by the user.
+	 * @param wt The active write theme configuration.
+	 * @return true If the selection limit has been exceeded.
+	 * @return false If within safe execution limits.
+	 */
+	bool checkThreadPoolLimit(ThreadPool& pool, const std::vector<IsoInfo>& selectedIsos, const WriteTheme& wt) {
 
-    /**
-     * @brief Builds the comprehensive device selection prompt string listing ISOs and targets.
-     *
-     * @param selectedIsos Original collection of selected ISO inputs.
-     * @param[out] sortedIsos Output parameter containing size-sorted ISO metadata.
-     * @param[out] usbDevices Output parameter containing detected removable block devices.
-     * @param wt The active write theme configuration.
-     * @return std::string The fully formatted multi-line console prompt.
-     */
-    std::string buildDevicePromptString(
-        const std::vector<IsoInfo>& selectedIsos,
-        std::vector<IsoInfo>& sortedIsos,
-        std::vector<std::string>& usbDevices,
-        const WriteTheme& wt, WriteMapping::Discover discover
-    ) {
-        sortedIsos = selectedIsos;
-        std::sort(sortedIsos.begin(), sortedIsos.end(), [](const IsoInfo& a, const IsoInfo& b) {
-            return a.size > b.size;
-        });
+		if (selectedIsos.size() <= pool.threadCount()) return false;
+		auto render = [&] {
 
-        std::ostringstream stream;
-        stream << "\n" << color << "Selected " << wt.fileCol << "ISO" << color << ":\n\n";
+			SyncOutput sync;
+			clearScrollBuffer();
+			std::cout << "\n"
+			          << wt.colorFailure << "Error: "
+			          << UI::Palette::Yellow << "write2usb"
+			          << wt.colorFailure << " selection limit" << wt.colorFailure << " is "
+			          << wt.colorWarning << pool.threadCount()
+			          << wt.colorFailure << " (thread pool size)."
+			          << wt.speedCol << "\n";
 
-        for (size_t i = 0; i < sortedIsos.size(); ++i) {
-            auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write2usb");
-            stream << wt.indexCol << " " << (i + 1) << ">" << " ";
-            if (!displayConfig::toggleNamesOnly) {
-                stream << wt.pathCol << isoDir << "/";
-            }
-            stream << wt.fileCol << filename;
-            stream << " " << UI::Palette::DimGray << "(" << wt.sizeCol << sortedIsos[i].sizeStr
-                   << UI::Palette::DimGray << ")\n";
-        }
+		};
+		pressEnterToTryWithRepaint(render);
+		return true;
 
-        stream << "\n" << color << "Removable USB Flash Devices:" << wt.rl_resetCol << "\n\n";
-        usbDevices = discover();
-        auto deviceInfos = collectAndSortDeviceInfos(usbDevices);
+	}
 
-        if (deviceInfos.empty()) {
-            stream << " " << wt.colorFailure << "No USB flash drives detected!" << wt.rl_resetCol << "\n";
-        } else {
-            for (const auto& dev : deviceInfos) {
-                if (dev.error) {
-                    stream << " " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
-                } else {
-                    stream << wt.deviceCol << " " << dev.path
-                           << wt.infoLabel << " <" << dev.driveName
-                           << "> " << UI::Palette::DimGray << "(" << wt.sizeCol << dev.sizeStr
-                           << UI::Palette::DimGray << ")"
-                           << ([&]() -> std::string {
-                               if (dev.mounted) return wt.colorFailure + " [MOUNTED]" + wt.rl_resetCol;
-                               return "";
-                           }())
-                           << "\n";
-                }
-            }
-        }
+	/**
+	 * @brief Collects probe information and sizes for a list of USB device paths.
+	 *
+	 * @param usbDevices Vector of detected USB device node paths.
+	 * @return std::vector<DeviceInfo> Sorted and populated device details.
+	 */
+	std::vector<DeviceInfo> collectAndSortDeviceInfos(const std::vector<std::string>& usbDevices) {
 
-        g_completerData.sortedIsos = &sortedIsos;
-        g_completerData.usbDevices = &usbDevices;
-        reset_custom_keybindingsForCpMvWrite2Usb();
+		std::vector<DeviceInfo> deviceInfos;
+		deviceInfos.reserve(usbDevices.size());
+		for (const auto& device : usbDevices) {
+			try {
+				std::string driveName = getDriveName(device);
+				uint64_t deviceSize = getBlockDeviceSize(device);
+				std::string sizeStr = formatFileSize(deviceSize);
+				bool mounted = isDeviceMounted(device);
+				deviceInfos.push_back({device, deviceSize, driveName, sizeStr, mounted, false});
+			} catch (...) {
+				deviceInfos.push_back({device, 0, "", "", false, true});
+			}
+		}
 
-        stream << buildIdxPrompt(wt);
-        return stream.str();
-    }
+		std::sort(deviceInfos.begin(), deviceInfos.end(), [](const DeviceInfo& a, const DeviceInfo& b) {
 
-    /**
-     * @brief Generates warning row dataset structures from validated ISO-to-device mapping pairs.
-     *
-     * @param validPairs Vector of validated ISO and target device mappings.
-     * @return std::vector<WarnRow> Compact structural rows ready for confirmation formatting.
-     */
-    std::vector<WarnRow> buildWarnRows(const std::vector<std::pair<IsoInfo, std::string>>& validPairs) {
-        std::vector<WarnRow> warnRows;
-        warnRows.reserve(validPairs.size());
-        for (const auto& [iso, device] : validPairs) {
-            warnRows.push_back({ device,
-                                 getDriveName(device),
-                                 formatFileSize(getBlockDeviceSize(device)),
-                                 iso.filename,
-                                 iso.sizeStr });
-        }
-        return warnRows;
-    }
+			if (a.error != b.error) return !a.error;
+			return a.size > b.size;
 
-    /**
-     * @brief Renders the destructive action confirmation table layout for terminal UI.
-     *
-     * @param cols Current terminal column width constraint.
-     * @param clearFirst If true, issues screen reset sequence codes before painting.
-     * @param devicePrompt Original prompt content block string.
-     * @param mainInputString User-supplied input string to echo back.
-     * @param warnRows Structural warning metadata row items.
-     * @param wt The active write theme configuration.
-     * @return std::vector<size_t> Calculated character widths per rendered line for window resizing hooks.
-     */
-    std::vector<size_t> renderConfirmRows(
-        size_t cols,
-        bool clearFirst,
-        const std::string& devicePrompt,
-        const std::string& mainInputString,
-        const std::vector<WarnRow>& warnRows,
-        const WriteTheme& wt
-    ) {
-        const size_t usableCols = cols > 1 ? cols - 1 : 1;
-        std::vector<size_t> widths;
+		});
+		return deviceInfos;
 
-        if (clearFirst) {
-            std::cout << "\033[H\033[2J\033[3J";
-            std::cout << promptHeaderForRepaint(devicePrompt);
-            std::cout << buildIdxPrompt(wt) << mainInputString << "\n";
-            std::cout << "\n";
-        } else {
-            std::cout << "\n";
-            widths.push_back(0);
-        }
+	}
 
-        std::cout << wt.colorWarning << "WARNING: This will "
-                  << UI::Palette::Red << "*ERASE ALL DATA*"
-                  << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
-        widths.push_back(0);
-        widths.push_back(utf8Width("WARNING: This will *ERASE ALL DATA* on:"));
-        widths.push_back(0);
-        rl_bind_keyseq("?", rl_insert);
-        for (const auto& r : warnRows) {
-            const size_t fixedWidth = 17 + r.device.size() + utf8Width(r.driveName)
-                                    + utf8Width(r.deviceSizeStr) + utf8Width(r.isoSizeStr);
-            const size_t availForName = usableCols > fixedWidth ? usableCols - fixedWidth : 0;
-            const std::string shownName = truncateIsoName(r.filename, availForName);
+	/**
+	 * @brief Builds the comprehensive device selection prompt string listing ISOs and targets.
+	 *
+	 * @param selectedIsos Original collection of selected ISO inputs.
+	 * @param[out] sortedIsos Output parameter containing size-sorted ISO metadata.
+	 * @param[out] usbDevices Output parameter containing detected removable block devices.
+	 * @param wt The active write theme configuration.
+	 * @return std::string The fully formatted multi-line console prompt.
+	 */
+	std::string buildDevicePromptString(
+	    const std::vector<IsoInfo>& selectedIsos,
+	    std::vector<IsoInfo>& sortedIsos,
+	    std::vector<std::string>& usbDevices,
+	    const WriteTheme& wt, WriteMapping::Discover discover
+	) {
 
-            std::ostringstream row;
-            row << UI::Palette::DimGray << " {" << wt.deviceCol << r.device
-                << " " << wt.infoLabel << "<" << r.driveName << ">" << UI::Palette::DimGray << " ("
-                << wt.sizeCol << r.deviceSizeStr
-                << UI::Palette::DimGray << ")} " << color << "←" << UI::Palette::DimGray << " {" << wt.fileCol
-                << shownName << UI::Palette::DimGray << " (" << wt.sizeCol
-                << r.isoSizeStr << UI::Palette::DimGray << ")}";
+		sortedIsos = selectedIsos;
+		std::sort(sortedIsos.begin(), sortedIsos.end(), [](const IsoInfo& a, const IsoInfo& b) {
 
-            const std::string clipped = clipToWidth(row.str(), usableCols);
-            std::cout << clipped << "\n";
-            widths.push_back(std::min(visibleWidth(clipped), usableCols));
-        }
+			return a.size > b.size;
 
-        std::cout << "\n";
-        widths.push_back(0);
-        return widths;
-    }
+		});
 
-    /**
-     * @brief Renders error messages with the specified prompt, main input string, and theme styling.
-     *
-     * @param devicePrompt The current device input prompt string.
-     * @param mainInputString The raw input string entered by the user.
-     * @param errors Vector of error messages to display.
-     * @param wt The current write theme configuration.
-     * @param color Color formatting string for error bullets.
-     */
-    void renderErrorMessage(const std::string& devicePrompt,
-                                   const std::string& mainInputString,
-                                   const std::vector<std::string>& errors,
-                                   const WriteTheme& wt,
-                                   std::string_view color)
-    {
-        SyncOutput sync;
-        clearScrollBuffer();
-        std::cout << promptHeaderForRepaint(devicePrompt);
-        std::cout << buildIdxPrompt(wt) << mainInputString << "\n";
-        std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
-        for (const auto& e : errors) {
-            std::cerr << color << " • " << e << "\n";
-        }
-    }
+		std::ostringstream stream;
+		stream << "\n" << color << "Selected " << wt.fileCol << "ISO" << color << ":\n\n";
 
-    /**
-     * @brief Prompts the user to enable optional checksum verification.
-     *
-     * Preserves the confirmation view across terminal resizes and repeats
-     * the prompt until a valid answer is entered or input is aborted.
-     *
-     * @param repaint Callback that redraws the accepted confirmation view.
-     * @param wt      The current write theme configuration.
-     * @param color   Color formatting string for the verification prompt.
-     * @return true to verify, false to skip, or nullopt on abort.
-     */
-    std::optional<bool> promptChecksumVerification(
-        const ConfirmResizeWatcher::Painter& repaint,
-        const WriteTheme& wt,
-        std::string_view color)
-    {
-        const std::string verifyText = "Verify write integrity? (y/n): ";
+		for (size_t i = 0; i < sortedIsos.size(); ++i) {
+			auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write2usb");
+			stream << wt.indexCol << " " << (i + 1) << ">" << " ";
+			if (!displayConfig::toggleNamesOnly) {
+				stream << wt.pathCol << isoDir << "/";
+			}
+			stream << wt.fileCol << filename;
+			stream << " " << UI::Palette::DimGray << "(" << wt.sizeCol << sortedIsos[i].sizeStr
+			       << UI::Palette::DimGray << ")\n";
+		}
 
-        std::string verifyPrompt("\001");
-        verifyPrompt.append(color)
-                    .append("\002")
-                    .append(verifyText)
-                    .append(wt.rl_resetCol);
+		stream << "\n" << color << "Removable USB Flash Devices:" << wt.rl_resetCol << "\n\n";
+		usbDevices = discover();
+		auto deviceInfos = collectAndSortDeviceInfos(usbDevices);
 
-        for (;;) {
-            const size_t cols = terminalSize().cols;
-            std::vector<size_t> widths;
+		if (deviceInfos.empty()) {
+			stream << " " << wt.colorFailure << "No USB flash drives detected!" << wt.rl_resetCol << "\n";
+		} else {
+			for (const auto& dev : deviceInfos) {
+				if (dev.error) {
+					stream << " " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
+				} else {
+					stream << wt.deviceCol << " " << dev.path
+					       << wt.infoLabel << " <" << dev.driveName
+					       << "> " << UI::Palette::DimGray << "(" << wt.sizeCol << dev.sizeStr
+					       << UI::Palette::DimGray << ")"
+					       << ([&]() -> std::string {
 
-            {
-                SyncOutput sync;
-                widths = repaint(cols);
-            }
+							   if (dev.mounted) return wt.colorFailure + " [MOUNTED]" + wt.rl_resetCol;
+							   return "";
 
-            std::unique_ptr<char, decltype(&std::free)> answer(
-                nullptr, &std::free);
+						   }())
+					       << "\n";
+				}
+			}
+		}
 
-            {
-                ConfirmationModeGuard confirmGuard;
-                ConfirmResizeWatcher watcher(
-                    repaint, cols, std::move(widths), verifyText);
+		g_completerData.sortedIsos = &sortedIsos;
+		g_completerData.usbDevices = &usbDevices;
+		reset_custom_keybindingsForCpMvWrite2Usb();
 
-                answer.reset(readline(verifyPrompt.c_str()));
-                watcher.stop();
-            }
+		stream << buildIdxPrompt(wt);
+		return stream.str();
 
-            if (!answer || std::string_view(answer.get()) == "\x1b")
-                return std::nullopt;
+	}
 
-            std::string choice(answer.get());
+	/**
+	 * @brief Generates warning row dataset structures from validated ISO-to-device mapping pairs.
+	 *
+	 * @param validPairs Vector of validated ISO and target device mappings.
+	 * @return std::vector<WarnRow> Compact structural rows ready for confirmation formatting.
+	 */
+	std::vector<WarnRow> buildWarnRows(const std::vector<std::pair<IsoInfo, std::string>>& validPairs) {
 
-            while (!choice.empty() &&
-                   std::isspace(static_cast<unsigned char>(choice.back())))
-                choice.pop_back();
+		std::vector<WarnRow> warnRows;
+		warnRows.reserve(validPairs.size());
+		for (const auto& [iso, device] : validPairs) {
+			warnRows.push_back({ device,
+				                 getDriveName(device),
+				                 formatFileSize(getBlockDeviceSize(device)),
+				                 iso.filename,
+				                 iso.sizeStr });
+		}
+		return warnRows;
 
-            if (choice == "y" || choice == "Y")
-                return true;
+	}
 
-            if (choice.empty() || choice == "n" || choice == "N")
-                return false;
-        }
-    }
+	/**
+	 * @brief Renders the destructive action confirmation table layout for terminal UI.
+	 *
+	 * @param cols Current terminal column width constraint.
+	 * @param clearFirst If true, issues screen reset sequence codes before painting.
+	 * @param devicePrompt Original prompt content block string.
+	 * @param mainInputString User-supplied input string to echo back.
+	 * @param warnRows Structural warning metadata row items.
+	 * @param wt The active write theme configuration.
+	 * @return std::vector<size_t> Calculated character widths per rendered line for window resizing hooks.
+	 */
+	std::vector<size_t> renderConfirmRows(
+	    size_t cols,
+	    bool clearFirst,
+	    const std::string& devicePrompt,
+	    const std::string& mainInputString,
+	    const std::vector<WarnRow>& warnRows,
+	    const WriteTheme& wt
+	) {
 
-    /**
-     * @brief Confirms valid ISO-to-device mappings and prompts for optional
-     *        checksum verification.
-     *
-     * @param devicePrompt    The current device input prompt string.
-     * @param mainInputString The raw input string entered by the user.
-     * @param warnRows        Warning rows generated for the valid pairs.
-     * @param wt              The current write theme configuration.
-     * @param color           Color formatting string for the prompts.
-     * @return Verification choice on confirmation; nullopt when declined
-     *         or aborted.
-     */
-    std::optional<bool> confirmDeviceMappings(
-        const std::string& devicePrompt,
-        const std::string& mainInputString,
-        const std::vector<WarnRow>& warnRows,
-        const WriteTheme& wt,
-        std::string_view color)
-    {
-        const size_t drawnCols = terminalSize().cols;
-        std::vector<size_t> drawnWidths;
+		const size_t usableCols = cols > 1 ? cols - 1 : 1;
+		std::vector<size_t> widths;
 
-        {
-            SyncOutput sync;
-            drawnWidths = renderConfirmRows(
-                drawnCols, false,
-                devicePrompt, mainInputString, warnRows, wt);
-        }
+		if (clearFirst) {
+			std::cout << "\033[H\033[2J\033[3J";
+			std::cout << promptHeaderForRepaint(devicePrompt);
+			std::cout << buildIdxPrompt(wt) << mainInputString << "\n";
+			std::cout << "\n";
+		} else {
+			std::cout << "\n";
+			widths.push_back(0);
+		}
 
-        const std::string promptText = "Proceed? (y/n): ";
+		std::cout << wt.colorWarning << "WARNING: This will "
+		          << UI::Palette::Red << "*ERASE ALL DATA*"
+		          << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
+		widths.push_back(0);
+		widths.push_back(utf8Width("WARNING: This will *ERASE ALL DATA* on:"));
+		widths.push_back(0);
+		rl_bind_keyseq("?", rl_insert);
+		for (const auto& r : warnRows) {
+			const size_t fixedWidth = 17 + r.device.size() + utf8Width(r.driveName)
+			                        + utf8Width(r.deviceSizeStr) + utf8Width(r.isoSizeStr);
+			const size_t availForName = usableCols > fixedWidth ? usableCols - fixedWidth : 0;
+			const std::string shownName = truncateIsoName(r.filename, availForName);
 
-        std::string confirmPrompt("\001");
-        confirmPrompt.append(color)
-                     .append("\002")
-                     .append(promptText)
-                     .append(wt.rl_resetCol);
+			std::ostringstream row;
+			row << UI::Palette::DimGray << " {" << wt.deviceCol << r.device
+			    << " " << wt.infoLabel << "<" << r.driveName << ">" << UI::Palette::DimGray << " ("
+			    << wt.sizeCol << r.deviceSizeStr
+			    << UI::Palette::DimGray << ")} " << color << "←" << UI::Palette::DimGray << " {" << wt.fileCol
+			    << shownName << UI::Palette::DimGray << " (" << wt.sizeCol
+			    << r.isoSizeStr << UI::Palette::DimGray << ")}";
 
-        std::unique_ptr<char, decltype(&std::free)> confirmation(
-            nullptr, &std::free);
+			const std::string clipped = clipToWidth(row.str(), usableCols);
+			std::cout << clipped << "\n";
+			widths.push_back(std::min(visibleWidth(clipped), usableCols));
+		}
 
-        {
-            ConfirmationModeGuard confirmGuard;
-            ConfirmResizeWatcher watcher(
-                [&](size_t cols) {
-                    return renderConfirmRows(
-                        cols, true,
-                        devicePrompt, mainInputString, warnRows, wt);
-                },
-                drawnCols, drawnWidths, promptText);
+		std::cout << "\n";
+		widths.push_back(0);
+		return widths;
 
-            confirmation.reset(readline(confirmPrompt.c_str()));
-            watcher.stop();
-        }
+	}
 
-        std::string ans;
+	/**
+	 * @brief Renders error messages with the specified prompt, main input string, and theme styling.
+	 *
+	 * @param devicePrompt The current device input prompt string.
+	 * @param mainInputString The raw input string entered by the user.
+	 * @param errors Vector of error messages to display.
+	 * @param wt The current write theme configuration.
+	 * @param color Color formatting string for error bullets.
+	 */
+	void renderErrorMessage(const std::string& devicePrompt,
+	                               const std::string& mainInputString,
+	                               const std::vector<std::string>& errors,
+	                               const WriteTheme& wt,
+	                               std::string_view color)
+	{
 
-        if (confirmation) {
-            ans = confirmation.get();
+		SyncOutput sync;
+		clearScrollBuffer();
+		std::cout << promptHeaderForRepaint(devicePrompt);
+		std::cout << buildIdxPrompt(wt) << mainInputString << "\n";
+		std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
+		for (const auto& e : errors) {
+			std::cerr << color << " • " << e << "\n";
+		}
 
-            while (!ans.empty() &&
-                   std::isspace(static_cast<unsigned char>(ans.back())))
-                ans.pop_back();
-        }
+	}
 
-        if (ans != "y" && ans != "Y")
-            return std::nullopt;
+	/**
+	 * @brief Prompts the user to enable optional checksum verification.
+	 *
+	 * Preserves the confirmation view across terminal resizes and repeats
+	 * the prompt until a valid answer is entered or input is aborted.
+	 *
+	 * @param repaint Callback that redraws the accepted confirmation view.
+	 * @param wt      The current write theme configuration.
+	 * @param color   Color formatting string for the verification prompt.
+	 * @return true to verify, false to skip, or nullopt on abort.
+	 */
+	std::optional<bool> promptChecksumVerification(
+	    const ConfirmResizeWatcher::Painter& repaint,
+	    const WriteTheme& wt,
+	    std::string_view color)
+	{
 
-        // Preserve the accepted confirmation when repainting
-        // the checksum verification prompt.
-        const auto repaint = [&](size_t cols) {
-            auto widths = renderConfirmRows(
-                cols, true,
-                devicePrompt, mainInputString, warnRows, wt);
+		const std::string verifyText = "Verify write integrity? (y/n): ";
 
-            std::cout << color << promptText << ans
-                      << UI::Palette::BoldReset << "\n";
+		std::string verifyPrompt("\001");
+		verifyPrompt.append(color)
+		            .append("\002")
+		            .append(verifyText)
+		            .append(wt.rl_resetCol);
 
-            widths.push_back(utf8Width(promptText + ans));
-            return widths;
-        };
+		for (;;) {
+			const size_t cols = terminalSize().cols;
+			std::vector<size_t> widths;
 
-        return promptChecksumVerification(repaint, wt, color);
-    }
+			{
+				SyncOutput sync;
+				widths = repaint(cols);
+			}
+
+			std::unique_ptr<char, decltype(&std::free)> answer(
+			    nullptr, &std::free);
+
+			{
+				ConfirmationModeGuard confirmGuard;
+				ConfirmResizeWatcher watcher(
+				    repaint, cols, std::move(widths), verifyText);
+
+				answer.reset(readline(verifyPrompt.c_str()));
+				watcher.stop();
+			}
+
+			if (!answer || std::string_view(answer.get()) == "\x1b")
+			    return std::nullopt;
+
+			std::string choice(answer.get());
+
+			while (!choice.empty() &&
+			       std::isspace(static_cast<unsigned char>(choice.back())))
+			    choice.pop_back();
+
+			if (choice == "y" || choice == "Y")
+			    return true;
+
+			if (choice.empty() || choice == "n" || choice == "N")
+			    return false;
+		}
+
+	}
+
+	/**
+	 * @brief Confirms valid ISO-to-device mappings and prompts for optional
+	 *        checksum verification.
+	 *
+	 * @param devicePrompt    The current device input prompt string.
+	 * @param mainInputString The raw input string entered by the user.
+	 * @param warnRows        Warning rows generated for the valid pairs.
+	 * @param wt              The current write theme configuration.
+	 * @param color           Color formatting string for the prompts.
+	 * @return Verification choice on confirmation; nullopt when declined
+	 *         or aborted.
+	 */
+	std::optional<bool> confirmDeviceMappings(
+	    const std::string& devicePrompt,
+	    const std::string& mainInputString,
+	    const std::vector<WarnRow>& warnRows,
+	    const WriteTheme& wt,
+	    std::string_view color)
+	{
+
+		const size_t drawnCols = terminalSize().cols;
+		std::vector<size_t> drawnWidths;
+
+		{
+			SyncOutput sync;
+			drawnWidths = renderConfirmRows(
+			    drawnCols, false,
+			    devicePrompt, mainInputString, warnRows, wt);
+		}
+
+		const std::string promptText = "Proceed? (y/n): ";
+
+		std::string confirmPrompt("\001");
+		confirmPrompt.append(color)
+		             .append("\002")
+		             .append(promptText)
+		             .append(wt.rl_resetCol);
+
+		std::unique_ptr<char, decltype(&std::free)> confirmation(
+		    nullptr, &std::free);
+
+		{
+			ConfirmationModeGuard confirmGuard;
+			ConfirmResizeWatcher watcher(
+			    [&](size_t cols) {
+
+					return renderConfirmRows(
+					    cols, true,
+					    devicePrompt, mainInputString, warnRows, wt);
+
+				},
+			    drawnCols, drawnWidths, promptText);
+
+			confirmation.reset(readline(confirmPrompt.c_str()));
+			watcher.stop();
+		}
+
+		std::string ans;
+
+		if (confirmation) {
+			ans = confirmation.get();
+
+			while (!ans.empty() &&
+			       std::isspace(static_cast<unsigned char>(ans.back())))
+			    ans.pop_back();
+		}
+
+		if (ans != "y" && ans != "Y")
+		    return std::nullopt;
+
+		// Preserve the accepted confirmation when repainting
+		// the checksum verification prompt.
+		const auto repaint = [&](size_t cols) {
+
+			auto widths = renderConfirmRows(
+			    cols, true,
+			    devicePrompt, mainInputString, warnRows, wt);
+
+			std::cout << color << promptText << ans
+			          << UI::Palette::BoldReset << "\n";
+
+			widths.push_back(utf8Width(promptText + ans));
+			return widths;
+
+		};
+
+		return promptChecksumVerification(repaint, wt, color);
+
+	}
 
 } // namespace MappingPrompt
 
@@ -465,108 +495,120 @@ namespace MappingPrompt {
 
 namespace {
 
-    /**
-     * @brief Installs a temporary GNU Readline startup hook to prefill the next input line.
-     *
-     * Restores any previously registered `rl_startup_hook` before inserting the prefilled text.
-     * If `prefill` is empty, no hook is installed.
-     *
-     * @param prefill Text to insert into the Readline buffer when Readline starts.
-     */
-    void installPrefillStartupHook(const std::string& prefill)
-    {
-        static std::string activePrefillText;
-        static rl_hook_func_t* previousStartupHook = nullptr;
+	/**
+	 * @brief Installs a temporary GNU Readline startup hook to prefill the next input line.
+	 *
+	 * Restores any previously registered `rl_startup_hook` before inserting the prefilled text.
+	 * If `prefill` is empty, no hook is installed.
+	 *
+	 * @param prefill Text to insert into the Readline buffer when Readline starts.
+	 */
+	void installPrefillStartupHook(const std::string& prefill)
+	{
 
-        rl_startup_hook = nullptr;
-        previousStartupHook = nullptr;
-        activePrefillText.clear();
+		static std::string activePrefillText;
+		static rl_hook_func_t* previousStartupHook = nullptr;
 
-        if (prefill.empty()) {
-            return;
-        }
+		rl_startup_hook = nullptr;
+		previousStartupHook = nullptr;
+		activePrefillText.clear();
 
-        activePrefillText = prefill;
-        previousStartupHook = rl_startup_hook;
-        rl_startup_hook = +[]() -> int {
-            if (previousStartupHook) {
-                previousStartupHook();
-            }
-            if (!activePrefillText.empty()) {
-                rl_insert_text(activePrefillText.c_str());
-            }
-            return 0;
-        };
-    }
+		if (prefill.empty()) {
+			return;
+		}
 
-    /**
-     * @brief Clears any temporary Readline startup hook installed for input prefilling.
-     */
-    void clearPrefillStartupHook()
-    {
-        rl_startup_hook = nullptr;
-    }
+		activePrefillText = prefill;
+		previousStartupHook = rl_startup_hook;
+		rl_startup_hook = +[]() -> int {
+			if (previousStartupHook) {
+				previousStartupHook();
+			}
+			if (!activePrefillText.empty()) {
+				rl_insert_text(activePrefillText.c_str());
+			}
+			return 0;
+		};
 
-    /**
-     * @brief Extracts file paths from sorted ISO descriptors for mapping parsing.
-     *
-     * @param sortedIsos Ordered list of available ISO descriptors.
-     * @return std::vector<std::string> Vector of ISO file paths in matching order.
-     */
-    std::vector<std::string> extractIsoFilenames(const std::vector<IsoInfo>& sortedIsos)
-    {
-        std::vector<std::string> isoFilenames;
-        isoFilenames.reserve(sortedIsos.size());
-        for (const auto& iso : sortedIsos) {
-            isoFilenames.push_back(iso.path);
-        }
-        return isoFilenames;
-    }
+	}
 
-    /**
-     * @brief Prompts the user to acknowledge parse or validation errors with window-resize repaint support.
-     *
-     * Disables `SIGINT` and `Ctrl+D` before waiting for acknowledgement when validation fails.
-     *
-     * @param devicePrompt Rendered Readline prompt string.
-     * @param rawInput Raw user input string to re-display alongside the error message.
-     * @param messages List of parse or validation error messages to render.
-     * @param wt Active write theme configuration.
-     * @param pauseForContinue True to wait to continue (e.g., missing root permissions); false to retry.
-     * @param ignoreSignals True to ignore `SIGINT` and disable `Ctrl+D` prior to prompting.
-     */
-    void handlePromptErrors(
-        const std::string& devicePrompt,
-        const std::string& rawInput,
-        const std::vector<std::string>& messages,
-        const WriteTheme& wt,
-        bool pauseForContinue,
-        bool ignoreSignals)
-    {
-        if (ignoreSignals) {
-            signal(SIGINT, SIG_IGN);
-            disable_ctrl_d();
-        }
+	/**
+	 * @brief Clears any temporary Readline startup hook installed for input prefilling.
+	 */
+	void clearPrefillStartupHook()
+	{
 
-        const auto renderError = [&] {
-            MappingPrompt::renderErrorMessage(devicePrompt, rawInput, messages, wt, color);
-        };
+		rl_startup_hook = nullptr;
 
-        if (pauseForContinue) {
-            pressEnterToContinueWithRepaint(renderError);
-        } else {
-            pressEnterToTryWithRepaint(renderError);
-        }
-    }
+	}
 
-    /**
-     * @brief Finalizes confirmed ISO-to-device mappings and prepares signal state for writing.
-     */
-    void finalizeConfirmedMappings()
-    {
-        setupSignalHandlerCancellations();
-        GlobalState::g_operationCancelled.store(false);
-    }
+	/**
+	 * @brief Extracts file paths from sorted ISO descriptors for mapping parsing.
+	 *
+	 * @param sortedIsos Ordered list of available ISO descriptors.
+	 * @return std::vector<std::string> Vector of ISO file paths in matching order.
+	 */
+	std::vector<std::string> extractIsoFilenames(const std::vector<IsoInfo>& sortedIsos)
+	{
+
+		std::vector<std::string> isoFilenames;
+		isoFilenames.reserve(sortedIsos.size());
+		for (const auto& iso : sortedIsos) {
+			isoFilenames.push_back(iso.path);
+		}
+		return isoFilenames;
+
+	}
+
+	/**
+	 * @brief Prompts the user to acknowledge parse or validation errors with window-resize repaint support.
+	 *
+	 * Disables `SIGINT` and `Ctrl+D` before waiting for acknowledgement when validation fails.
+	 *
+	 * @param devicePrompt Rendered Readline prompt string.
+	 * @param rawInput Raw user input string to re-display alongside the error message.
+	 * @param messages List of parse or validation error messages to render.
+	 * @param wt Active write theme configuration.
+	 * @param pauseForContinue True to wait to continue (e.g., missing root permissions); false to retry.
+	 * @param ignoreSignals True to ignore `SIGINT` and disable `Ctrl+D` prior to prompting.
+	 */
+	void handlePromptErrors(
+	    const std::string& devicePrompt,
+	    const std::string& rawInput,
+	    const std::vector<std::string>& messages,
+	    const WriteTheme& wt,
+	    bool pauseForContinue,
+	    bool ignoreSignals)
+	{
+
+		if (ignoreSignals) {
+			signal(SIGINT, SIG_IGN);
+			disable_ctrl_d();
+		}
+
+		const auto renderError = [&] {
+
+			MappingPrompt::renderErrorMessage(devicePrompt, rawInput, messages, wt, color);
+
+		};
+
+		if (pauseForContinue) {
+			pressEnterToContinueWithRepaint(renderError);
+		} else {
+			pressEnterToTryWithRepaint(renderError);
+		}
+
+	}
+
+	/**
+	 * @brief Finalizes confirmed ISO-to-device mappings and prepares signal state for writing.
+	 */
+	void finalizeConfirmedMappings()
+	{
+
+		setupSignalHandlerCancellations();
+		GlobalState::g_operationCancelled.store(false);
+
+	}
 
 } // namespace
 
@@ -585,88 +627,94 @@ namespace {
 std::vector<std::pair<IsoInfo, std::string>> WriteMapping::collectWithDevices(
     const std::vector<IsoInfo>& selectedIsos, Discover discover, Validate validate, bool noPermissions, bool* verify)
 {
-    if (verify) *verify = false;
-    PendingReadlineTextClearGuard pendingTextGuard;
-    const WriteTheme wt = getWriteTheme();
-    std::string pendingInput;
 
-    while (true) {
-        TerminalStateGuard termGuard;
-        ThreadPool& pool = getStaticThreadPool();
-        if (MappingPrompt::checkThreadPoolLimit(pool, selectedIsos, wt)) {
-            return {};
-        }
+	if (verify) *verify = false;
+	PendingReadlineTextClearGuard pendingTextGuard;
+	const WriteTheme wt = getWriteTheme();
+	std::string pendingInput;
 
-        displayErrors();
+	while (true) {
+		TerminalStateGuard termGuard;
+		ThreadPool& pool = getStaticThreadPool();
+		if (MappingPrompt::checkThreadPoolLimit(pool, selectedIsos, wt)) {
+			return {};
+		}
 
-        std::vector<IsoInfo> sortedIsos;
-        std::vector<std::string> usbDevices;
-        const std::string devicePrompt =
-            MappingPrompt::buildDevicePromptString(selectedIsos, sortedIsos, usbDevices, wt, discover);
+		displayErrors();
 
-        const auto repaintDevices = [&] {
-            SyncOutput sync;
-            clearScrollBuffer();
-            std::cout << promptHeaderForRepaint(devicePrompt);
-        };
+		std::vector<IsoInfo> sortedIsos;
+		std::vector<std::string> usbDevices;
+		const std::string devicePrompt =
+		    MappingPrompt::buildDevicePromptString(selectedIsos, sortedIsos, usbDevices, wt, discover);
 
-        armPendingInputRestore();
-        installPrefillStartupHook(pendingInput);
-        pendingInput.clear();
+		const auto repaintDevices = [&] {
 
-        RlLine deviceInput = readlineWithResize(devicePrompt, repaintDevices);
-        clearPrefillStartupHook();
+			SyncOutput sync;
+			clearScrollBuffer();
+			std::cout << promptHeaderForRepaint(devicePrompt);
 
-        if (!deviceInput) {
-            return {};
-        }
+		};
 
-        std::string mainInputString(deviceInput.get());
-        if (mainInputString.empty()) {
-            continue;
-        }
-        if (mainInputString == "\x1b") {
-            return {};
-        }
-        if (mainInputString == "?") {
-            helpMappings();
-            continue;
-        }
+		armPendingInputRestore();
+		installPrefillStartupHook(pendingInput);
+		pendingInput.clear();
 
-        add_history(deviceInput.get());
+		RlLine deviceInput = readlineWithResize(devicePrompt, repaintDevices);
+		clearPrefillStartupHook();
 
-        std::vector<std::string> parseErrors;
-        auto deviceMap = parseDeviceMappings(deviceInput.get(), extractIsoFilenames(sortedIsos), parseErrors);
-        if (!parseErrors.empty()) {
-            handlePromptErrors(devicePrompt, mainInputString, parseErrors, wt, false, false);
-            continue;
-        }
+		if (!deviceInput) {
+			return {};
+		}
 
-        std::vector<std::string> validationErrors;
-        auto validPairs = validate(deviceMap, sortedIsos, noPermissions, validationErrors);
-        if (!validationErrors.empty()) {
-            handlePromptErrors(devicePrompt, mainInputString, validationErrors, wt, noPermissions, true);
-            continue;
-        }
+		std::string mainInputString(deviceInput.get());
+		if (mainInputString.empty()) {
+			continue;
+		}
+		if (mainInputString == "\x1b") {
+			return {};
+		}
+		if (mainInputString == "?") {
+			helpMappings();
+			continue;
+		}
 
-        if (validPairs.empty()) {
-            pendingInput = mainInputString;
-            continue;
-        }
+		add_history(deviceInput.get());
 
-        auto warnRows = MappingPrompt::buildWarnRows(validPairs);
-        if (auto choice = MappingPrompt::confirmDeviceMappings(devicePrompt, mainInputString, warnRows, wt, color); choice.has_value()) {
-            if (verify) *verify = *choice;
-            finalizeConfirmedMappings();
-            return validPairs;
-        }
+		std::vector<std::string> parseErrors;
+		auto deviceMap = parseDeviceMappings(deviceInput.get(), extractIsoFilenames(sortedIsos), parseErrors);
+		if (!parseErrors.empty()) {
+			handlePromptErrors(devicePrompt, mainInputString, parseErrors, wt, false, false);
+			continue;
+		}
 
-        rl_bind_keyseq("?", help_handler);
-        pendingInput = mainInputString;
-    }
+		std::vector<std::string> validationErrors;
+		auto validPairs = validate(deviceMap, sortedIsos, noPermissions, validationErrors);
+		if (!validationErrors.empty()) {
+			handlePromptErrors(devicePrompt, mainInputString, validationErrors, wt, noPermissions, true);
+			continue;
+		}
+
+		if (validPairs.empty()) {
+			pendingInput = mainInputString;
+			continue;
+		}
+
+		auto warnRows = MappingPrompt::buildWarnRows(validPairs);
+		if (auto choice = MappingPrompt::confirmDeviceMappings(devicePrompt, mainInputString, warnRows, wt, color); choice.has_value()) {
+			if (verify) *verify = *choice;
+			finalizeConfirmedMappings();
+			return validPairs;
+		}
+
+		rl_bind_keyseq("?", help_handler);
+		pendingInput = mainInputString;
+	}
+
 }
 
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
     const std::vector<IsoInfo>& selectedIsos, bool* verify) {
-    return WriteMapping::collectWithDevices(selectedIsos, getRemovableDevices, validateDevices, geteuid() != 0, verify);
+
+	return WriteMapping::collectWithDevices(selectedIsos, getRemovableDevices, validateDevices, geteuid() != 0, verify);
+
 }

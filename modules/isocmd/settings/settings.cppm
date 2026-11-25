@@ -25,16 +25,16 @@ export extern "C++" {
  * @c numericEntry so the validator and the editor metadata come from one place.
  */
 struct ConfigEntry {
-    std::string key;
-    std::string defaultValue;
-    std::string comment;
-    std::string section;
-    std::function<bool(const std::string&)> validate;
+	std::string key;
+	std::string defaultValue;
+	std::string comment;
+	std::string section;
+	std::function<bool(const std::string&)> validate;
 
-    const std::vector<std::string>* values = nullptr;  // enumerated settings (static storage)
-    bool numeric = false;                              // free-form number
-    int  minValue = 0;                                 // numeric range, inclusive
-    int  maxValue = 0;
+	const std::vector<std::string>* values = nullptr;  // enumerated settings (static storage)
+	bool numeric = false;                              // free-form number
+	int  minValue = 0;                                 // numeric range, inclusive
+	int  maxValue = 0;
 };
 
 /**
@@ -47,8 +47,8 @@ enum class EditNav { Advance, Updated, Next, Prev, GoTo, Abort, Handled };
  * @brief Global storage for configuration state and file system paths.
  */
 namespace ConfigCaches {
-    inline std::map<std::string, std::string> g_configCache;
-    inline std::string g_cachedPath;
+	inline std::map<std::string, std::string> g_configCache;
+	inline std::string g_cachedPath;
 }
 
 /**
@@ -59,11 +59,11 @@ namespace ConfigCaches {
  * completes them in this order.
  */
 namespace ConfigValues {
-    extern const std::vector<std::string> base;
-    extern const std::vector<std::string> skin;
-    extern const std::vector<std::string> theme;
-    extern const std::vector<std::string> onOff;
-    extern const std::vector<std::string> display;
+	extern const std::vector<std::string> base;
+	extern const std::vector<std::string> skin;
+	extern const std::vector<std::string> theme;
+	extern const std::vector<std::string> onOff;
+	extern const std::vector<std::string> display;
 }
 
 /**
@@ -114,7 +114,6 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache,
 void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap);
 const ConfigEntry* findConfigEntry(const std::string& key);
 
-
 /**
  * INTERACTIVE EDITOR DECLARATIONS (settingsEditor.cpp & related UI/input helpers)
  */
@@ -122,7 +121,6 @@ void helpSettingsEditor();
 void syncCache(const std::string& filePath);
 int pgup_handler(int, int);
 int pgdn_handler(int, int);
-
 
 void interactiveConfigEditor(const std::string& configPath);
 

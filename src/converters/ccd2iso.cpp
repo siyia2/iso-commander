@@ -65,84 +65,85 @@ bool convertCcdToIso(
     const std::string& isoPath,
     std::atomic<std::size_t>* completedBytes) {
 
-    if (GlobalState::g_operationCancelled.load()) {
-        GlobalState::g_operationCancelled.store(true);
-        return false;
-    }
+	if (GlobalState::g_operationCancelled.load()) {
+		GlobalState::g_operationCancelled.store(true);
+		return false;
+	}
 
-    std::ifstream ccdFile(ccdPath, std::ios::binary);
-    if (!ccdFile) {
-        return false;
-    }
+	std::ifstream ccdFile(ccdPath, std::ios::binary);
+	if (!ccdFile) {
+		return false;
+	}
 
-    std::ofstream isoFile(isoPath, std::ios::binary);
-    if (!isoFile) {
-        return false;
-    }
+	std::ofstream isoFile(isoPath, std::ios::binary);
+	if (!isoFile) {
+		return false;
+	}
 
-    CcdSector sector;
+	CcdSector sector;
 
-    while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
-        if (GlobalState::g_operationCancelled.load()) {
-            isoFile.close();
-            fs::remove(isoPath);
-            GlobalState::g_operationCancelled.store(true);
-            return false;
-        }
+	while (ccdFile.read(reinterpret_cast<char*>(&sector), sizeof(CcdSector))) {
+		if (GlobalState::g_operationCancelled.load()) {
+			isoFile.close();
+			fs::remove(isoPath);
+			GlobalState::g_operationCancelled.store(true);
+			return false;
+		}
 
-        std::size_t bytesWritten = 0;
+		std::size_t bytesWritten = 0;
 
-        switch (sector.sectheader.header.mode) {
-            case 1: {
-                isoFile.write(
-                    reinterpret_cast<char*>(sector.content.mode1.data),
-                    DATA_SIZE
-                );
-                bytesWritten = DATA_SIZE;
-                break;
-            }
+		switch (sector.sectheader.header.mode) {
+			case 1: {
+				isoFile.write(
+				    reinterpret_cast<char*>(sector.content.mode1.data),
+				    DATA_SIZE
+				);
+				bytesWritten = DATA_SIZE;
+				break;
+			}
 
-            case 2: {
-                isoFile.write(
-                    reinterpret_cast<char*>(sector.content.mode2.data),
-                    DATA_SIZE
-                );
-                bytesWritten = DATA_SIZE;
-                break;
-            }
+			case 2: {
+				isoFile.write(
+				    reinterpret_cast<char*>(sector.content.mode2.data),
+				    DATA_SIZE
+				);
+				bytesWritten = DATA_SIZE;
+				break;
+			}
 
-            case 0xe2:
-                return true;
+			case 0xe2:
+			    return true;
 
-            default:
-                return false;
-        }
+			default:
+			    return false;
+		}
 
-        if (GlobalState::g_operationCancelled.load()) {
-            isoFile.close();
-            fs::remove(isoPath);
-            GlobalState::g_operationCancelled.store(true);
-            return false;
-        }
+		if (GlobalState::g_operationCancelled.load()) {
+			isoFile.close();
+			fs::remove(isoPath);
+			GlobalState::g_operationCancelled.store(true);
+			return false;
+		}
 
-        if (!isoFile || bytesWritten != DATA_SIZE) {
-            return false;
-        }
+		if (!isoFile || bytesWritten != DATA_SIZE) {
+			return false;
+		}
 
-        if (completedBytes) {
-            completedBytes->fetch_add(
-                bytesWritten,
-                std::memory_order_relaxed
-            );
-        }
+		if (completedBytes) {
+			completedBytes->fetch_add(
+			    bytesWritten,
+			    std::memory_order_relaxed
+			);
+		}
 
-        if (GlobalState::g_operationCancelled.load()) {
-            isoFile.close();
-            fs::remove(isoPath);
-            GlobalState::g_operationCancelled.store(true);
-            return false;
-        }
-    }
+		if (GlobalState::g_operationCancelled.load()) {
+			isoFile.close();
+			fs::remove(isoPath);
+			GlobalState::g_operationCancelled.store(true);
+			return false;
+		}
+	}
 
-    return true;
+	return true;
+
 }

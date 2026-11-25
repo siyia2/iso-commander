@@ -33,33 +33,33 @@ export extern "C++" {
  */
 class ListResizeWatcher {
 public:
-    /// Redraws the screen (see the callback contract above).
-    using Repaint = std::function<void()>;
+	/// Redraws the screen (see the callback contract above).
+	using Repaint = std::function<void()>;
 
-    /// Implementation detail; public only so the event-hook trampoline can name it.
-    struct Impl;
+	/// Implementation detail; public only so the event-hook trampoline can name it.
+	struct Impl;
 
-    /**
-     * @brief Installs the @c SIGWINCH handler and the chained event hook.
-     * @param repaint Repaint callback.
-     */
-    explicit ListResizeWatcher(Repaint repaint);
+	/**
+	 * @brief Installs the @c SIGWINCH handler and the chained event hook.
+	 * @param repaint Repaint callback.
+	 */
+	explicit ListResizeWatcher(Repaint repaint);
 
-    /// Calls @ref stop.
-    ~ListResizeWatcher();
+	/// Calls @ref stop.
+	~ListResizeWatcher();
 
-    ListResizeWatcher(const ListResizeWatcher&) = delete;
-    ListResizeWatcher& operator=(const ListResizeWatcher&) = delete;
+	ListResizeWatcher(const ListResizeWatcher&) = delete;
+	ListResizeWatcher& operator=(const ListResizeWatcher&) = delete;
 
-    /**
-     * @brief Restores the previous SIGWINCH handler and event hook.
-     *
-     * Safe to call more than once.
-     */
-    void stop();
+	/**
+	 * @brief Restores the previous SIGWINCH handler and event hook.
+	 *
+	 * Safe to call more than once.
+	 */
+	void stop();
 
 private:
-    std::unique_ptr<Impl> impl_;
+	std::unique_ptr<Impl> impl_;
 };
 
 /// Owning pointer for a line returned by @c readline() (freed with @c std::free).

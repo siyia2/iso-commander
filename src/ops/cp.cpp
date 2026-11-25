@@ -12,7 +12,9 @@ import isocmd.ops.cpMvRm;
  */
 static bool isCopyCancelled()
 {
-    return GlobalState::g_operationCancelled.load(std::memory_order_acquire);
+
+	return GlobalState::g_operationCancelled.load(std::memory_order_acquire);
+
 }
 
 /**
@@ -23,10 +25,12 @@ static bool isCopyCancelled()
  */
 static void discardTemporaryFile(std::ofstream& output, const fs::path& tmp)
 {
-    output.close();
 
-    std::error_code rmEc;
-    fs::remove(tmp, rmEc);
+	output.close();
+
+	std::error_code rmEc;
+	fs::remove(tmp, rmEc);
+
 }
 
 /**
@@ -45,15 +49,17 @@ static bool openBufferedBinaryStream(
     std::vector<char>& buffer
 )
 {
-    if (auto* sb = stream.rdbuf()) {
-        sb->pubsetbuf(
-            buffer.data(),
-            static_cast<std::streamsize>(buffer.size())
-        );
-    }
 
-    stream.open(path, std::ios::binary);
-    return static_cast<bool>(stream);
+	if (auto* sb = stream.rdbuf()) {
+		sb->pubsetbuf(
+		    buffer.data(),
+		    static_cast<std::streamsize>(buffer.size())
+		);
+	}
+
+	stream.open(path, std::ios::binary);
+	return static_cast<bool>(stream);
+
 }
 
 /**
@@ -76,45 +82,47 @@ static bool copyStreamChunks(
     std::error_code& ec
 )
 {
-    totalCopied = 0;
 
-    while (!isCopyCancelled()) {
-        input.read(
-            inBuf.data(),
-            static_cast<std::streamsize>(inBuf.size())
-        );
+	totalCopied = 0;
 
-        const std::streamsize bytesRead = input.gcount();
+	while (!isCopyCancelled()) {
+		input.read(
+		    inBuf.data(),
+		    static_cast<std::streamsize>(inBuf.size())
+		);
 
-        // badbit means a real read error, not a normal end of file. Any bytes
-        // already read are not trusted: the copy must fail.
-        if (input.bad()) {
-            ec = std::make_error_code(std::errc::io_error);
-            return false;
-        }
+		const std::streamsize bytesRead = input.gcount();
 
-        if (bytesRead == 0) {
-            break;
-        }
+		// badbit means a real read error, not a normal end of file. Any bytes
+		// already read are not trusted: the copy must fail.
+		if (input.bad()) {
+			ec = std::make_error_code(std::errc::io_error);
+			return false;
+		}
 
-        output.write(inBuf.data(), bytesRead);
+		if (bytesRead == 0) {
+			break;
+		}
 
-        if (!output) {
-            ec = std::make_error_code(std::errc::io_error);
-            return false;
-        }
+		output.write(inBuf.data(), bytesRead);
 
-        totalCopied += static_cast<std::uintmax_t>(bytesRead);
+		if (!output) {
+			ec = std::make_error_code(std::errc::io_error);
+			return false;
+		}
 
-        if (completedBytes) {
-            completedBytes->fetch_add(
-                static_cast<std::size_t>(bytesRead),
-                std::memory_order_relaxed
-            );
-        }
-    }
+		totalCopied += static_cast<std::uintmax_t>(bytesRead);
 
-    return true;
+		if (completedBytes) {
+			completedBytes->fetch_add(
+			    static_cast<std::size_t>(bytesRead),
+			    std::memory_order_relaxed
+			);
+		}
+	}
+
+	return true;
+
 }
 
 /**
@@ -139,29 +147,31 @@ static bool finalizeTemporaryFile(
     std::error_code& ec
 )
 {
-    output.close();
 
-    if (!output) {
-        ec = std::make_error_code(std::errc::io_error);
-        return false;
-    }
+	output.close();
 
-    // Never publish a short copy: a cross-device move deletes the source
-    // after this function reports success.
-    if (hasKnownSize && totalCopied != expectedSize) {
-        ec = std::make_error_code(std::errc::io_error);
-        return false;
-    }
+	if (!output) {
+		ec = std::make_error_code(std::errc::io_error);
+		return false;
+	}
 
-    std::error_code renameEc;
-    fs::rename(tmp, dst, renameEc);
+	// Never publish a short copy: a cross-device move deletes the source
+	// after this function reports success.
+	if (hasKnownSize && totalCopied != expectedSize) {
+		ec = std::make_error_code(std::errc::io_error);
+		return false;
+	}
 
-    if (renameEc) {
-        ec = renameEc;
-        return false;
-    }
+	std::error_code renameEc;
+	fs::rename(tmp, dst, renameEc);
 
-    return true;
+	if (renameEc) {
+		ec = renameEc;
+		return false;
+	}
+
+	return true;
+
 }
 
 /**
@@ -184,61 +194,63 @@ bool bufferedCopyWithProgress(
     std::error_code& ec
 )
 {
-    constexpr std::size_t kBufferSize = 4 * 1024 * 1024;
 
-    std::vector<char> inBuf(kBufferSize);
-    std::vector<char> outBuf(kBufferSize);
+	constexpr std::size_t kBufferSize = 4 * 1024 * 1024;
 
-    if (isCopyCancelled()) {
-        ec = std::make_error_code(std::errc::operation_canceled);
-        return false;
-    }
+	std::vector<char> inBuf(kBufferSize);
+	std::vector<char> outBuf(kBufferSize);
 
-    std::ifstream input;
-    if (!openBufferedBinaryStream(input, src, inBuf)) {
-        ec = std::make_error_code(std::errc::no_such_file_or_directory);
-        return false;
-    }
+	if (isCopyCancelled()) {
+		ec = std::make_error_code(std::errc::operation_canceled);
+		return false;
+	}
 
-    fs::path tmp = dst;
-    tmp += ".part";
+	std::ifstream input;
+	if (!openBufferedBinaryStream(input, src, inBuf)) {
+		ec = std::make_error_code(std::errc::no_such_file_or_directory);
+		return false;
+	}
 
-    std::ofstream output;
-    if (!openBufferedBinaryStream(output, tmp, outBuf)) {
-        ec = std::make_error_code(std::errc::permission_denied);
-        return false;
-    }
+	fs::path tmp = dst;
+	tmp += ".part";
 
-    // Expected size, used to detect a source that ended early without the
-    // stream reporting an error. If it cannot be determined, skip that check.
-    std::error_code sizeEc;
-    const std::uintmax_t expectedSize = fs::file_size(src, sizeEc);
+	std::ofstream output;
+	if (!openBufferedBinaryStream(output, tmp, outBuf)) {
+		ec = std::make_error_code(std::errc::permission_denied);
+		return false;
+	}
 
-    std::uintmax_t totalCopied = 0;
-    if (!copyStreamChunks(input, output, inBuf, completedBytes, totalCopied, ec)) {
-        discardTemporaryFile(output, tmp);
-        return false;
-    }
+	// Expected size, used to detect a source that ended early without the
+	// stream reporting an error. If it cannot be determined, skip that check.
+	std::error_code sizeEc;
+	const std::uintmax_t expectedSize = fs::file_size(src, sizeEc);
 
-    if (isCopyCancelled()) {
-        ec = std::make_error_code(std::errc::operation_canceled);
-        discardTemporaryFile(output, tmp);
-        return false;
-    }
+	std::uintmax_t totalCopied = 0;
+	if (!copyStreamChunks(input, output, inBuf, completedBytes, totalCopied, ec)) {
+		discardTemporaryFile(output, tmp);
+		return false;
+	}
 
-    if (!finalizeTemporaryFile(
-            output,
-            tmp,
-            dst,
-            totalCopied,
-            expectedSize,
-            !sizeEc,
-            ec)) {
-        discardTemporaryFile(output, tmp);
-        return false;
-    }
+	if (isCopyCancelled()) {
+		ec = std::make_error_code(std::errc::operation_canceled);
+		discardTemporaryFile(output, tmp);
+		return false;
+	}
 
-    return true;
+	if (!finalizeTemporaryFile(
+	        output,
+	        tmp,
+	        dst,
+	        totalCopied,
+	        expectedSize,
+	        !sizeEc,
+	        ec)) {
+		discardTemporaryFile(output, tmp);
+		return false;
+	}
+
+	return true;
+
 }
 
 /**
@@ -263,30 +275,32 @@ bool performBufferedCopyOperation(
     std::string_view verb
 )
 {
-    std::error_code ec;
 
-    const bool success = bufferedCopyWithProgress(
-        paths.srcPath,
-        paths.destPath,
-        ctx.completedBytes,
-        ec
-    );
+	std::error_code ec;
 
-    if (success && ctx.changeOwnership) {
-        ctx.changeOwnership(paths.destPath);
-    }
+	const bool success = bufferedCopyWithProgress(
+	    paths.srcPath,
+	    paths.destPath,
+	    ctx.completedBytes,
+	    ec
+	);
 
-    logOperationResult(
-        ctx,
-        success,
-        GlobalState::g_operationCancelled.load(),
-        ec,
-        verb,
-        paths.srcDir,
-        paths.srcFile,
-        paths.destDirProcessed,
-        paths.destFile
-    );
+	if (success && ctx.changeOwnership) {
+		ctx.changeOwnership(paths.destPath);
+	}
 
-    return success;
+	logOperationResult(
+	    ctx,
+	    success,
+	    GlobalState::g_operationCancelled.load(),
+	    ec,
+	    verb,
+	    paths.srcDir,
+	    paths.srcFile,
+	    paths.destDirProcessed,
+	    paths.destFile
+	);
+
+	return success;
+
 }

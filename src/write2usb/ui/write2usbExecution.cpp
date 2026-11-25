@@ -41,22 +41,24 @@ ProgressInfo::ProgressInfo(ProgressInfo&& other) noexcept
 
 // Move Assignment
 ProgressInfo& ProgressInfo::operator=(ProgressInfo&& other) noexcept {
-    if (this != &other) {
-        filename = std::move(other.filename);
-        device = std::move(other.device);
-        totalSize = std::move(other.totalSize);
-        sourcePath = std::move(other.sourcePath);
-        verifyRequested = other.verifyRequested;
-        verifying.store(other.verifying.load());
-        bytesVerified.store(other.bytesVerified.load());
-        writeCompleted.store(other.writeCompleted.load());
-        completed.store(other.completed.load());
-        failed.store(other.failed.load());
-        bytesWritten.store(other.bytesWritten.load());
-        progress.store(other.progress.load());
-        speed.store(other.speed.load());
-    }
-    return *this;
+
+	if (this != &other) {
+		filename = std::move(other.filename);
+		device = std::move(other.device);
+		totalSize = std::move(other.totalSize);
+		sourcePath = std::move(other.sourcePath);
+		verifyRequested = other.verifyRequested;
+		verifying.store(other.verifying.load());
+		bytesVerified.store(other.bytesVerified.load());
+		writeCompleted.store(other.writeCompleted.load());
+		completed.store(other.completed.load());
+		failed.store(other.failed.load());
+		bytesWritten.store(other.bytesWritten.load());
+		progress.store(other.progress.load());
+		speed.store(other.speed.load());
+	}
+	return *this;
+
 }
 
 namespace fs = std::filesystem;
@@ -67,60 +69,64 @@ namespace fs = std::filesystem;
 
 namespace WriteExecution {
 
-    /**
-     * @brief Builds the per-task ProgressInfo vector from (IsoInfo, device)
-     * pairs, in the order they would appear after a stable, case-insensitive
-     * natural sort by ISO filename (device path as tie-break).
-     *
-     * The caller's vector is not modified or copied. A vector of indices into
-     * @p validPairsIn is stable-sorted instead, and the pairs are visited in
-     * that order; only the four fields ProgressInfo carries (filename, device,
-     * sizeStr, sourcePath) are copied, directly into the progress vector.
-     *
-     * The progress vector is reserved to exactly @p validPairsIn.size() before
-     * filling, so its backing storage never reallocates after construction
-     * (ProgressInfo holds atomics and is therefore non-movable — the reserve is
-     * load-bearing, not just an optimisation).
-     *
-     * The returned shared_ptr is captured by every pooled write task and by the
-     * cancellation drain, so the entries outlive this function whenever a task
-     * or drain thread still needs them.
-     *
-     * @par Ordering
-     * Primary key: IsoInfo::filename via naturalCompare (case-insensitive,
-     * numeric-aware: "archlinux-9.iso" before "archlinux-10.iso"). Secondary
-     * key: the device path under ordinary std::string ordering. Equal
-     * (filename, device) keys keep their input order.
-     *
-     * @param validPairsIn Validated (IsoInfo, device) pairs targeted for writing.
-     *                     Not modified.
-     * @return A shared pointer to a new vector of ProgressInfo entries, one per
-     *         input pair, in stable sorted order.
-     *
-     * @see ::performWriteOperation
-     */
-    std::shared_ptr<std::vector<ProgressInfo>>
-    prepareWriteData(const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
-        std::vector<size_t> order(validPairsIn.size());
-        std::iota(order.begin(), order.end(), size_t{0});
+	/**
+	 * @brief Builds the per-task ProgressInfo vector from (IsoInfo, device)
+	 * pairs, in the order they would appear after a stable, case-insensitive
+	 * natural sort by ISO filename (device path as tie-break).
+	 *
+	 * The caller's vector is not modified or copied. A vector of indices into
+	 * @p validPairsIn is stable-sorted instead, and the pairs are visited in
+	 * that order; only the four fields ProgressInfo carries (filename, device,
+	 * sizeStr, sourcePath) are copied, directly into the progress vector.
+	 *
+	 * The progress vector is reserved to exactly @p validPairsIn.size() before
+	 * filling, so its backing storage never reallocates after construction
+	 * (ProgressInfo holds atomics and is therefore non-movable — the reserve is
+	 * load-bearing, not just an optimisation).
+	 *
+	 * The returned shared_ptr is captured by every pooled write task and by the
+	 * cancellation drain, so the entries outlive this function whenever a task
+	 * or drain thread still needs them.
+	 *
+	 * @par Ordering
+	 * Primary key: IsoInfo::filename via naturalCompare (case-insensitive,
+	 * numeric-aware: "archlinux-9.iso" before "archlinux-10.iso"). Secondary
+	 * key: the device path under ordinary std::string ordering. Equal
+	 * (filename, device) keys keep their input order.
+	 *
+	 * @param validPairsIn Validated (IsoInfo, device) pairs targeted for writing.
+	 *                     Not modified.
+	 * @return A shared pointer to a new vector of ProgressInfo entries, one per
+	 *         input pair, in stable sorted order.
+	 *
+	 * @see ::performWriteOperation
+	 */
+	std::shared_ptr<std::vector<ProgressInfo>>
+	prepareWriteData(const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
 
-        std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
-            const int c = naturalCompare(validPairsIn[a].first.filename,
-                                         validPairsIn[b].first.filename);
-            if (c != 0) return c < 0;
-            return validPairsIn[a].second < validPairsIn[b].second;
-        });
+		std::vector<size_t> order(validPairsIn.size());
+		std::iota(order.begin(), order.end(), size_t{0});
 
-        auto progressPtr = std::make_shared<std::vector<ProgressInfo>>();
-        auto& progress   = *progressPtr;
-        progress.reserve(validPairsIn.size());
+		std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
 
-        for (size_t idx : order) {
-            const auto& [iso, device] = validPairsIn[idx];
-            progress.push_back(ProgressInfo{iso.filename, device, iso.sizeStr, iso.path});
-        }
-        return progressPtr;
-    }
+			const int c = naturalCompare(validPairsIn[a].first.filename,
+			                             validPairsIn[b].first.filename);
+			if (c != 0) return c < 0;
+			return validPairsIn[a].second < validPairsIn[b].second;
+
+		});
+
+		auto progressPtr = std::make_shared<std::vector<ProgressInfo>>();
+		auto& progress   = *progressPtr;
+		progress.reserve(validPairsIn.size());
+
+		for (size_t idx : order) {
+			const auto& [iso, device] = validPairsIn[idx];
+			progress.push_back(ProgressInfo{iso.filename, device, iso.sizeStr, iso.path});
+		}
+		return progressPtr;
+
+	}
 
 } // namespace WriteExecution
 
@@ -179,45 +185,49 @@ void drainManagerForWrite2UsbUI(
     const std::vector<ProgressInfo>& progressData,
     std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr)
 {
-    static std::atomic<size_t> activeDrains{0};
 
-    std::vector<bool> needsDrain;
-    needsDrain.reserve(progressData.size());
+	static std::atomic<size_t> activeDrains{0};
 
-    size_t newlyDraining = 0;
-    for (size_t i = 0; i < progressData.size(); ++i) {
-        const bool pending =
-            !progressData[i].completed.load() && !progressData[i].failed.load();
-        needsDrain.push_back(pending);
-        if (pending) {
-            ++newlyDraining;
-        }
-    }
+	std::vector<bool> needsDrain;
+	needsDrain.reserve(progressData.size());
 
-    if (newlyDraining > 0) {
-        activeDrains.fetch_add(newlyDraining, std::memory_order_relaxed);
-        g_drainingCancelled.store(true, std::memory_order_release);
-    }
+	size_t newlyDraining = 0;
+	for (size_t i = 0; i < progressData.size(); ++i) {
+		const bool pending =
+		    !progressData[i].completed.load() && !progressData[i].failed.load();
+		needsDrain.push_back(pending);
+		if (pending) {
+			++newlyDraining;
+		}
+	}
 
-    for (size_t i = 0; i < futures.size(); ++i) {
-        g_drainingManager.add(std::thread([
-            f = std::move(futures[i]),
-            tracked = needsDrain[i],
-            progressDataPtr
-        ]() mutable {
-            (void)progressDataPtr;
+	if (newlyDraining > 0) {
+		activeDrains.fetch_add(newlyDraining, std::memory_order_relaxed);
+		g_drainingCancelled.store(true, std::memory_order_release);
+	}
 
-            if (f.valid()) {
-                f.wait();
-            }
+	for (size_t i = 0; i < futures.size(); ++i) {
+		g_drainingManager.add(std::thread([
+		    f = std::move(futures[i]),
+		    tracked = needsDrain[i],
+		    progressDataPtr
+		]() mutable {
 
-            if (tracked) {
-                if (activeDrains.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-                    g_drainingCancelled.store(false, std::memory_order_release);
-                }
-            }
-        }));
-    }
+			(void)progressDataPtr;
+
+			if (f.valid()) {
+				f.wait();
+			}
+
+			if (tracked) {
+				if (activeDrains.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+					g_drainingCancelled.store(false, std::memory_order_release);
+				}
+			}
+
+		}));
+	}
+
 }
 
 /**
@@ -283,119 +293,127 @@ void drainManagerForWrite2UsbUI(
 std::shared_ptr<WriteScreen> WriteExecution::performWithWriter(
         const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn, Writer writer,
         bool* allSucceeded, bool verify) {
-    // One call builds the sorted per-task progress vector and establishes the
-    // ordering invariant (task i ↔ progress row i). No sorted-pair vector is
-    // materialised, so only one shared pointer travels through the tasks and drain.
-    auto progressDataPtr = WriteExecution::prepareWriteData(validPairsIn);
-    auto& progressData   = *progressDataPtr;
-    for (auto& row : progressData) row.verifyRequested = verify;
 
-    const size_t totalTasks = progressData.size();
+	// One call builds the sorted per-task progress vector and establishes the
+	// ordering invariant (task i ↔ progress row i). No sorted-pair vector is
+	// materialised, so only one shared pointer travels through the tasks and drain.
+	auto progressDataPtr = WriteExecution::prepareWriteData(validPairsIn);
+	auto& progressData   = *progressDataPtr;
+	for (auto& row : progressData) row.verifyRequested = verify;
 
-    auto syncPtr = std::make_shared<WriteSync>();
-    auto& finishedTasks   = syncPtr->finishedTasks;
-    auto& progressCvMutex = syncPtr->mutex;
-    auto& progressCv      = syncPtr->cv;
+	const size_t totalTasks = progressData.size();
 
-    ThreadPool& pool = getStaticThreadPool();
+	auto syncPtr = std::make_shared<WriteSync>();
+	auto& finishedTasks   = syncPtr->finishedTasks;
+	auto& progressCvMutex = syncPtr->mutex;
+	auto& progressCv      = syncPtr->cv;
 
-    disableInput();
-    clearScrollBuffer();
+	ThreadPool& pool = getStaticThreadPool();
 
-    auto screen = createWriteScreen(progressDataPtr, syncPtr, getWriteTheme());
-    startWriteScreen(*screen);
+	disableInput();
+	clearScrollBuffer();
 
-    std::vector<std::future<void>> futures;
-    futures.reserve(totalTasks);
-    const auto batchStart = std::chrono::steady_clock::now();
-    for (size_t i = 0; i < totalTasks; ++i) {
-        futures.push_back(pool.enqueue([progressDataPtr, syncPtr, i, writer]() {
-            auto& progress = (*progressDataPtr)[i];
-            bool success = false;
-            try {
-                success = writer(progress.sourcePath, progress.device, i, *progressDataPtr);
-            } catch (...) {
-                // A throwing writer must still publish task completion and wake waiters.
-            }
+	auto screen = createWriteScreen(progressDataPtr, syncPtr, getWriteTheme());
+	startWriteScreen(*screen);
 
-            if (success) {
-                progress.writeCompleted.store(true);
-                progress.completed.store(true);
-                syncPtr->completedTasks.fetch_add(1);
-            } else if (!GlobalState::g_operationCancelled.load()) {
-                progress.failed.store(true);
-            }
+	std::vector<std::future<void>> futures;
+	futures.reserve(totalTasks);
+	const auto batchStart = std::chrono::steady_clock::now();
+	for (size_t i = 0; i < totalTasks; ++i) {
+		futures.push_back(pool.enqueue([progressDataPtr, syncPtr, i, writer]() {
 
-            syncPtr->finishedTasks.fetch_add(1);
+			auto& progress = (*progressDataPtr)[i];
+			bool success = false;
+			try {
+				success = writer(progress.sourcePath, progress.device, i, *progressDataPtr);
+			} catch (...) {
+				// A throwing writer must still publish task completion and wake waiters.
+			}
 
-            {
-                std::lock_guard<std::mutex> lock(syncPtr->mutex);
-            }
-            // notify_all: the screen's keeper thread and the main thread wait
-            // on this same condition variable, and notify_one could wake the
-            // wrong one.
-            syncPtr->cv.notify_all();
-        }));
-    }
+			if (success) {
+				progress.writeCompleted.store(true);
+				progress.completed.store(true);
+				syncPtr->completedTasks.fetch_add(1);
+			} else if (!GlobalState::g_operationCancelled.load()) {
+				progress.failed.store(true);
+			}
 
-    // Wait for all tasks to finish. Each task's notify_all() wakes this
-    // thread on completion. Ctrl+C is also a wakeup: a SIGINT handler cannot
-    // notify a condition variable itself, but WriteScreen chains into it and
-    // relays the signal through its self-pipe, so its relay thread notifies
-    // this same condition variable after g_operationCancelled is set. The
-    // wait is therefore unbounded, with no periodic recheck.
-    //
-    // Only if that relay could not be set up (pipe/handler failure) do we
-    // fall back to a 500 ms recheck so cancellation still works.
-    {
-        std::unique_lock<std::mutex> lock(progressCvMutex);
-        const auto done = [&] {
-            return finishedTasks.load() == totalTasks ||
-                   GlobalState::g_operationCancelled.load();
-        };
+			syncPtr->finishedTasks.fetch_add(1);
 
-        if (writeScreenCancelWakeable(*screen)) {
-            progressCv.wait(lock, done);
-        } else {
-            while (!done())
-                progressCv.wait_for(lock, std::chrono::milliseconds(500), done);
-        }
-    }
+			{
+				std::lock_guard<std::mutex> lock(syncPtr->mutex);
+			}
+			// notify_all: the screen's keeper thread and the main thread wait
+			// on this same condition variable, and notify_one could wake the
+			// wrong one.
+			syncPtr->cv.notify_all();
 
-    // Each writer returns only after its write and optional verification.
-    // Freeze the batch wall-clock time before rendering or cancellation draining.
-    const auto batchElapsed = std::chrono::steady_clock::now() - batchStart;
-    signal(SIGINT, SIG_IGN);
+		}));
+	}
 
-    finishWriteScreen(*screen, batchElapsed);
+	// Wait for all tasks to finish. Each task's notify_all() wakes this
+	// thread on completion. Ctrl+C is also a wakeup: a SIGINT handler cannot
+	// notify a condition variable itself, but WriteScreen chains into it and
+	// relays the signal through its self-pipe, so its relay thread notifies
+	// this same condition variable after g_operationCancelled is set. The
+	// wait is therefore unbounded, with no periodic recheck.
+	//
+	// Only if that relay could not be set up (pipe/handler failure) do we
+	// fall back to a 500 ms recheck so cancellation still works.
+	{
+		std::unique_lock<std::mutex> lock(progressCvMutex);
+		const auto done = [&] {
 
-    flushStdin();
-    restoreInput();
+			return finishedTasks.load() == totalTasks ||
+			       GlobalState::g_operationCancelled.load();
 
-    if (GlobalState::g_operationCancelled.load()) {
-        drainManagerForWrite2UsbUI(
-            std::move(futures),
-            progressData,
-            progressDataPtr);
-    } else {
-        for (auto& future : futures) {
-            if (future.valid()) {
-                future.wait();
-            }
-        }
-    }
+		};
 
-    if (allSucceeded) {
-        *allSucceeded = !GlobalState::g_operationCancelled.load() &&
-                        syncPtr->completedTasks.load() == totalTasks;
-    }
+		if (writeScreenCancelWakeable(*screen)) {
+			progressCv.wait(lock, done);
+		} else {
+			while (!done())
+			    progressCv.wait_for(lock, std::chrono::milliseconds(500), done);
+		}
+	}
 
-    return screen;
+	// Each writer returns only after its write and optional verification.
+	// Freeze the batch wall-clock time before rendering or cancellation draining.
+	const auto batchElapsed = std::chrono::steady_clock::now() - batchStart;
+	signal(SIGINT, SIG_IGN);
+
+	finishWriteScreen(*screen, batchElapsed);
+
+	flushStdin();
+	restoreInput();
+
+	if (GlobalState::g_operationCancelled.load()) {
+		drainManagerForWrite2UsbUI(
+		    std::move(futures),
+		    progressData,
+		    progressDataPtr);
+	} else {
+		for (auto& future : futures) {
+			if (future.valid()) {
+				future.wait();
+			}
+		}
+	}
+
+	if (allSucceeded) {
+		*allSucceeded = !GlobalState::g_operationCancelled.load() &&
+		                syncPtr->completedTasks.load() == totalTasks;
+	}
+
+	return screen;
+
 }
 
 std::shared_ptr<WriteScreen> performWriteOperation(
         const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn, bool* allSucceeded, bool verify) {
-    return WriteExecution::performWithWriter(validPairsIn, writeIsoToDevice, allSucceeded, verify);
+
+	return WriteExecution::performWithWriter(validPairsIn, writeIsoToDevice, allSucceeded, verify);
+
 }
 
 /**
@@ -417,51 +435,53 @@ std::shared_ptr<WriteScreen> performWriteOperation(
  * @param isoFiles       Full ordered list of available ISO paths.
  */
 void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles) {
-    clearScrollBuffer();
-    std::unordered_set<int> indicesToProcess;
 
-    setupSignalHandlerCancellations();
-    GlobalState::g_operationCancelled.store(false);
+	clearScrollBuffer();
+	std::unordered_set<int> indicesToProcess;
 
-    tokenizeInput(input, isoFiles, indicesToProcess);
-    if (indicesToProcess.empty()) {
-        return;
-    }
+	setupSignalHandlerCancellations();
+	GlobalState::g_operationCancelled.store(false);
 
-    std::vector<IsoInfo> selectedIsos;
-    for (int idx : indicesToProcess) {
-        const std::string& path = isoFiles[idx - 1];
-        std::filesystem::path fsPath(path);
-        std::error_code ec;
-        auto size = std::filesystem::file_size(fsPath, ec);
-        if (ec) continue;
-        selectedIsos.emplace_back(IsoInfo{
-            path,
-            fsPath.filename().string(),
-            size,
-            formatFileSize(size),
-            static_cast<size_t>(idx)
-        });
-    }
+	tokenizeInput(input, isoFiles, indicesToProcess);
+	if (indicesToProcess.empty()) {
+		return;
+	}
 
-    if (selectedIsos.empty()) {
-        return;
-    }
+	std::vector<IsoInfo> selectedIsos;
+	for (int idx : indicesToProcess) {
+		const std::string& path = isoFiles[idx - 1];
+		std::filesystem::path fsPath(path);
+		std::error_code ec;
+		auto size = std::filesystem::file_size(fsPath, ec);
+		if (ec) continue;
+		selectedIsos.emplace_back(IsoInfo{
+			path,
+			fsPath.filename().string(),
+			size,
+			formatFileSize(size),
+			static_cast<size_t>(idx)
+		});
+	}
 
-    bool verify = false;
-    auto validPairs = collectDeviceMappings(selectedIsos, &verify);
-    if (validPairs.empty()) {
-        return;
-    }
+	if (selectedIsos.empty()) {
+		return;
+	}
 
-    auto screen = performWriteOperation(validPairs, nullptr, verify);
+	bool verify = false;
+	auto validPairs = collectDeviceMappings(selectedIsos, &verify);
+	if (validPairs.empty()) {
+		return;
+	}
 
-    signal(SIGINT, SIG_IGN);
-    disable_ctrl_d();
+	auto screen = performWriteOperation(validPairs, nullptr, verify);
 
-    setWriteScreenPrompt(*screen, std::string(color) + "\n↵ to continue...");
+	signal(SIGINT, SIG_IGN);
+	disable_ctrl_d();
 
-    pressEnterToContinueWithRepaint([&] { repaintWriteScreen(*screen); });
+	setWriteScreenPrompt(*screen, std::string(color) + "\n↵ to continue...");
 
-    stopWriteScreen(*screen);
+	pressEnterToContinueWithRepaint([&] { repaintWriteScreen(*screen); });
+
+	stopWriteScreen(*screen);
+
 }

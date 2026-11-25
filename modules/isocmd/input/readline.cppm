@@ -54,11 +54,11 @@ struct IsoInfo; // Forward declaration
  * @brief Encapsulates datasets required for tab-completion.
  */
 struct CompleterData {
-    /** @brief Pointer to the processed list of ISO images. */
-    const std::vector<IsoInfo>* sortedIsos;
+	/** @brief Pointer to the processed list of ISO images. */
+	const std::vector<IsoInfo>* sortedIsos;
 
-    /** @brief Pointer to the list of available USB device paths. */
-    const std::vector<std::string>* usbDevices;
+	/** @brief Pointer to the list of available USB device paths. */
+	const std::vector<std::string>* usbDevices;
 };
 
 /** @brief Global access point for the completion data used by the Readline callback. */
@@ -69,17 +69,17 @@ extern CompleterData g_completerData;
  * @brief Global state management for Readline buffer persistence during completion cycles.
  */
 namespace RetainAndRestoreReadlineBuffer {
-    /// @brief Mode flag to determine if completion text should be persisted across Readline calls.
-    inline int g_rl_complete_mode = 0;
-    /// @brief Storage for the completed line text to be restored after a reset.
-    extern std::string g_rl_pending_text;
+	/// @brief Mode flag to determine if completion text should be persisted across Readline calls.
+	inline int g_rl_complete_mode = 0;
+	/// @brief Storage for the completed line text to be restored after a reset.
+	extern std::string g_rl_pending_text;
 }
 
 /**
  * @brief Clears pending Readline text when the guard goes out of scope.
  */
 struct PendingReadlineTextClearGuard {
-    ~PendingReadlineTextClearGuard();
+	~PendingReadlineTextClearGuard();
 };
 
 /**
@@ -140,14 +140,14 @@ char** setting_value_completion_entry(const char* text, int start, int end);
  * snapshot first (@c clear_list_and_screen).
  */
 namespace SettingsEditorRepaint {
-    /// @brief Active body-repaint callback; empty when no editor prompt is live.
-    extern std::function<void()> g_fn;
+	/// @brief Active body-repaint callback; empty when no editor prompt is live.
+	extern std::function<void()> g_fn;
 
-    /// @brief Installs (or, with an empty function, clears) the hook.
-    void set(std::function<void()> fn);
+	/// @brief Installs (or, with an empty function, clears) the hook.
+	void set(std::function<void()> fn);
 
-    /// @brief Returns the active hook; empty when none is installed.
-    const std::function<void()>& get();
+	/// @brief Returns the active hook; empty when none is installed.
+	const std::function<void()>& get();
 }
 
 /** Hook for reloading readline async style. */

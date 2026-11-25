@@ -18,15 +18,15 @@ export extern "C++" {
 
 namespace iso_detect {
 
-    /**
-     * @brief Checks that a file descriptor refers to an ISO 9660 or UDF disc image.
-     */
-    bool isValidIso9660(int fd);
+	/**
+	 * @brief Checks that a file descriptor refers to an ISO 9660 or UDF disc image.
+	 */
+	bool isValidIso9660(int fd);
 
-    /**
-     * @brief Probes an ISO image to detect Windows 10/11 installation media.
-     */
-    bool isWindowsIsoInitialCheck(int fd, off_t fileSize);
+	/**
+	 * @brief Probes an ISO image to detect Windows 10/11 installation media.
+	 */
+	bool isWindowsIsoInitialCheck(int fd, off_t fileSize);
 
 } // namespace iso_detect
 

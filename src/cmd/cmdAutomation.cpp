@@ -21,9 +21,11 @@ using namespace IsoCli;
  *         otherwise false.
  */
 static bool isActionKeyword(const std::string& action) {
-    return action == "mount" || action == "umount" ||
-           action == "unmount" || action == "c2iso" ||
-           action == "w2usb";
+
+	return action == "mount" || action == "umount" ||
+	       action == "unmount" || action == "c2iso" ||
+	       action == "w2usb";
+
 }
 
 /**
@@ -37,7 +39,9 @@ static bool isActionKeyword(const std::string& action) {
  *         otherwise false.
  */
 static bool isFlag(const std::string& arg) {
-    return arg == "--silent" || arg == "--verify" || arg.rfind("-d", 0) == 0;
+
+	return arg == "--silent" || arg == "--verify" || arg.rfind("-d", 0) == 0;
+
 }
 
 /**
@@ -47,7 +51,9 @@ static bool isFlag(const std::string& arg) {
  * @return true if the path begins with "/dev/"; otherwise false.
  */
 static bool isDevPath(std::string_view path) {
-    return path.rfind("/dev/", 0) == 0;
+
+	return path.rfind("/dev/", 0) == 0;
+
 }
 
 /**
@@ -60,11 +66,13 @@ static bool isDevPath(std::string_view path) {
  *                    needs to be flushed.
  */
 static void flushDeferredWarn(bool& captureWarn) {
-    if (!captureWarn)
-        return;
 
-    std::cout << UI::Palette::Reset << "\n";
-    captureWarn = false;
+	if (!captureWarn)
+	    return;
+
+	std::cout << UI::Palette::Reset << "\n";
+	captureWarn = false;
+
 }
 
 /**
@@ -78,17 +86,19 @@ static void flushDeferredWarn(bool& captureWarn) {
  * @param out Parsed argument structure to update.
  */
 static void applyAction(const std::string& action, ParsedArgs& out) {
-    if (action == "c2iso") {
-        out.convert = true;
-        out.action  = "convert";
-    } else if (action == "w2usb") {
-        out.writeUsb = true;
-        out.action   = "w2usb";
-    } else if (action == "mount") {
-        out.action = "mount";
-    } else {
-        out.action = "umount";
-    }
+
+	if (action == "c2iso") {
+		out.convert = true;
+		out.action  = "convert";
+	} else if (action == "w2usb") {
+		out.writeUsb = true;
+		out.action   = "w2usb";
+	} else if (action == "mount") {
+		out.action = "mount";
+	} else {
+		out.action = "umount";
+	}
+
 }
 
 /**
@@ -112,33 +122,35 @@ static bool parseDepthOption(
     ParsedArgs& out,
     bool& captureWarn
 ) {
-    if (out.writeUsb || out.action == "umount")
-        return true;
 
-    const std::string depthStr = arg.substr(2);
+	if (out.writeUsb || out.action == "umount")
+	    return true;
 
-    try {
-        size_t parsed = 0;
-        const int depth = std::stoi(depthStr, &parsed);
+	const std::string depthStr = arg.substr(2);
 
-        if (parsed != depthStr.size())
-            throw std::invalid_argument("invalid depth");
+	try {
+		size_t parsed = 0;
+		const int depth = std::stoi(depthStr, &parsed);
 
-        if (depth < 0) {
-            flushDeferredWarn(captureWarn);
-            warnMsg(out.silentMode,
-                    "Negative depth; using unlimited depth.", "");
-            out.maxDepth = -1;
-        } else {
-            out.maxDepth = depth;
-        }
-    } catch (const std::exception&) {
-        flushDeferredWarn(captureWarn);
-        errMsg("Invalid depth option: '" + arg + "'.");
-        return false;
-    }
+		if (parsed != depthStr.size())
+		    throw std::invalid_argument("invalid depth");
 
-    return true;
+		if (depth < 0) {
+			flushDeferredWarn(captureWarn);
+			warnMsg(out.silentMode,
+			        "Negative depth; using unlimited depth.", "");
+			out.maxDepth = -1;
+		} else {
+			out.maxDepth = depth;
+		}
+	} catch (const std::exception&) {
+		flushDeferredWarn(captureWarn);
+		errMsg("Invalid depth option: '" + arg + "'.");
+		return false;
+	}
+
+	return true;
+
 }
 
 /**
@@ -158,22 +170,24 @@ static bool handleFlag(
     ParsedArgs& out,
     bool& captureWarn
 ) {
-    if (arg == "--silent") {
-        out.silentMode = true;
-        return true;
-    }
 
-    if (arg == "--verify") {
-        if (!out.writeUsb) {
-            flushDeferredWarn(captureWarn);
-            errMsg("Option '--verify' is only supported by w2usb.");
-            return false;
-        }
-        out.verifyUsb = true;
-        return true;
-    }
+	if (arg == "--silent") {
+		out.silentMode = true;
+		return true;
+	}
 
-    return parseDepthOption(arg, out, captureWarn);
+	if (arg == "--verify") {
+		if (!out.writeUsb) {
+			flushDeferredWarn(captureWarn);
+			errMsg("Option '--verify' is only supported by w2usb.");
+			return false;
+		}
+		out.verifyUsb = true;
+		return true;
+	}
+
+	return parseDepthOption(arg, out, captureWarn);
+
 }
 
 /**
@@ -197,17 +211,19 @@ static bool appendPath(
     bool& pathsStarted,
     bool& captureWarn
 ) {
-    if (out.writeUsb && !out.paths.empty() &&
-        !isDevPath(arg) && isDevPath(out.paths.back())) {
-        flushDeferredWarn(captureWarn);
-        errMsg("w2usb: ISO paths must precede device paths.");
-        return false;
-    }
 
-    out.paths.push_back(arg);
-    pathsStarted = true;
+	if (out.writeUsb && !out.paths.empty() &&
+	    !isDevPath(arg) && isDevPath(out.paths.back())) {
+		flushDeferredWarn(captureWarn);
+		errMsg("w2usb: ISO paths must precede device paths.");
+		return false;
+	}
 
-    return true;
+	out.paths.push_back(arg);
+	pathsStarted = true;
+
+	return true;
+
 }
 
 /**
@@ -229,23 +245,25 @@ static bool parseInitialAction(
     bool& actionSeen,
     bool& captureWarn
 ) {
-    if (isFlag(arg)) {
-        flushDeferredWarn(captureWarn);
-        errMsg("Option '" + arg +
-               "' must follow the action keyword.");
-        return false;
-    }
 
-    if (!isActionKeyword(arg)) {
-        flushDeferredWarn(captureWarn);
-        errMsg("Unknown action: '" + arg + "'.");
-        return false;
-    }
+	if (isFlag(arg)) {
+		flushDeferredWarn(captureWarn);
+		errMsg("Option '" + arg +
+		       "' must follow the action keyword.");
+		return false;
+	}
 
-    actionSeen = true;
-    applyAction(arg, out);
+	if (!isActionKeyword(arg)) {
+		flushDeferredWarn(captureWarn);
+		errMsg("Unknown action: '" + arg + "'.");
+		return false;
+	}
 
-    return true;
+	actionSeen = true;
+	applyAction(arg, out);
+
+	return true;
+
 }
 
 /**
@@ -287,50 +305,52 @@ static bool parseInitialAction(
  *         or w2usb path ordering is violated.
  */
 static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
-    bool captureWarn  = false;
-    bool actionSeen   = false;
-    bool pathsStarted = false;
 
-    for (int i = 1; i < argc; ++i) {
-        const std::string arg = argv[i];
+	bool captureWarn  = false;
+	bool actionSeen   = false;
+	bool pathsStarted = false;
 
-        // 1. The action keyword must come first.
-        if (!actionSeen) {
-            if (!parseInitialAction(
-                    arg, out, actionSeen, captureWarn))
-                return false;
+	for (int i = 1; i < argc; ++i) {
+		const std::string arg = argv[i];
 
-            continue;
-        }
+		// 1. The action keyword must come first.
+		if (!actionSeen) {
+			if (!parseInitialAction(
+			        arg, out, actionSeen, captureWarn))
+			    return false;
 
-        // 2. Flags must appear before the first path.
-        if (isFlag(arg)) {
-            if (pathsStarted) {
-                flushDeferredWarn(captureWarn);
-                errMsg("Option '" + arg +
-                       "' must precede all paths.");
-                return false;
-            }
+			continue;
+		}
 
-            if (!handleFlag(arg, out, captureWarn))
-                return false;
+		// 2. Flags must appear before the first path.
+		if (isFlag(arg)) {
+			if (pathsStarted) {
+				flushDeferredWarn(captureWarn);
+				errMsg("Option '" + arg +
+				       "' must precede all paths.");
+				return false;
+			}
 
-            continue;
-        }
+			if (!handleFlag(arg, out, captureWarn))
+			    return false;
 
-        // 3. Everything else is a path.
-        if (!appendPath(arg, out, pathsStarted, captureWarn))
-            return false;
-    }
+			continue;
+		}
 
-    flushDeferredWarn(captureWarn);
+		// 3. Everything else is a path.
+		if (!appendPath(arg, out, pathsStarted, captureWarn))
+		    return false;
+	}
 
-    if (!actionSeen) {
-        errMsg("No action provided.");
-        return false;
-    }
+	flushDeferredWarn(captureWarn);
 
-    return true;
+	if (!actionSeen) {
+		errMsg("No action provided.");
+		return false;
+	}
+
+	return true;
+
 }
 
 // Implemented in cmdAutomationConvert.cpp and cmdAutomationWrite.cpp
@@ -350,32 +370,34 @@ int handleWriteUsb(const ParsedArgs& args);
  * @return int 0 on success, 1 on error.
  */
 int handleMountUmountConvertWriteCommands(int argc, char* argv[]) {
-    setupSignalHandlerCancellations();
-    GlobalState::g_operationCancelled.store(false);
-    GlobalState::isNonInteractive.store(true);
 
-    if (argc < 2) {
-        errMsg("No arguments provided.");
-        return 1;
-    }
+	setupSignalHandlerCancellations();
+	GlobalState::g_operationCancelled.store(false);
+	GlobalState::isNonInteractive.store(true);
 
-    ParsedArgs args;
-    if (!parseArgs(argc, argv, args) || args.action.empty()) {
-        return 1;
-    }
+	if (argc < 2) {
+		errMsg("No arguments provided.");
+		return 1;
+	}
 
-    if (args.convert)
-        return handleConvert(args);
+	ParsedArgs args;
+	if (!parseArgs(argc, argv, args) || args.action.empty()) {
+		return 1;
+	}
 
-    if (args.writeUsb)
-        return handleWriteUsb(args);
+	if (args.convert)
+	    return handleConvert(args);
 
-    if (args.action == "mount")
-        return handleMount(args);
+	if (args.writeUsb)
+	    return handleWriteUsb(args);
 
-    if (args.action == "umount" || args.action == "unmount")
-        return handleUmount(args);
+	if (args.action == "mount")
+	    return handleMount(args);
 
-    errMsg(std::string("Unknown action '") + args.action + "'");
-    return 1;
+	if (args.action == "umount" || args.action == "unmount")
+	    return handleUmount(args);
+
+	errMsg(std::string("Unknown action '") + args.action + "'");
+	return 1;
+
 }

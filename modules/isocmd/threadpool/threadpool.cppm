@@ -59,16 +59,18 @@ export extern "C++" {
 
 // Common future-state operations for void tasks, implemented once in taskPromise.cpp.
 namespace threadpool_detail {
-    std::shared_ptr<std::promise<void>> preparePromise(std::future<void>& result);
-    void completePromise(std::promise<void>& promise);
-    void failPromise(std::promise<void>& promise);
+	std::shared_ptr<std::promise<void>> preparePromise(std::future<void>& result);
+	void completePromise(std::promise<void>& promise);
+	void failPromise(std::promise<void>& promise);
 
-    template <typename R>
-    std::shared_ptr<std::promise<R>> preparePromise(std::future<R>& result) {
-        auto promise = std::make_shared<std::promise<R>>();
-        result = promise->get_future();
-        return promise;
-    }
+	template <typename R>
+	std::shared_ptr<std::promise<R>> preparePromise(std::future<R>& result) {
+
+		auto promise = std::make_shared<std::promise<R>>();
+		result = promise->get_future();
+		return promise;
+
+	}
 }
 
 /**
@@ -123,134 +125,170 @@ namespace threadpool_detail {
  */
 class ThreadPool {
 private:
-    const std::size_t num_threads;
+	const std::size_t num_threads;
 
-    alignas(64) std::atomic<uint64_t> task_state{0};
+	alignas(64) std::atomic<uint64_t> task_state{0};
 
-    static constexpr uint64_t PENDING_ONE = uint64_t(1) << 32;
-    static constexpr uint64_t ACTIVE_ONE  = uint64_t(1);
-    static constexpr uint64_t STOP_BIT    = uint64_t(1) << 31;
-    static constexpr uint64_t ACTIVE_MASK = STOP_BIT - 1;
+	static constexpr uint64_t PENDING_ONE = uint64_t(1) << 32;
+	static constexpr uint64_t ACTIVE_ONE  = uint64_t(1);
+	static constexpr uint64_t STOP_BIT    = uint64_t(1) << 31;
+	static constexpr uint64_t ACTIVE_MASK = STOP_BIT - 1;
 
-    std::vector<std::thread> workers;
-    /**
-     * @brief Embedded Michael–Scott FIFO for MoveOnlyTask, reclaimed via hazard pointers.
-     *
-     * Only the layout and declarations are needed by pool importers. Node
-     * construction, CAS loops and reclamation live in threadpool.cpp.
-     */
-    class TaskQueue {
-        struct Node;
-        alignas(64) std::atomic<Node*> head;
-        alignas(64) std::atomic<Node*> tail;
-        static void pause_processor() noexcept;
-    public:
-        TaskQueue();
-        ~TaskQueue();
-        TaskQueue(const TaskQueue&) = delete;
-        TaskQueue& operator=(const TaskQueue&) = delete;
-        void enqueuePrepared(MoveOnlyTask&& value);
-        bool dequeue(MoveOnlyTask& result);
-    };
+	std::vector<std::thread> workers;
+	/**
+	 * @brief Embedded Michael–Scott FIFO for MoveOnlyTask, reclaimed via hazard pointers.
+	 *
+	 * Only the layout and declarations are needed by pool importers. Node
+	 * construction, CAS loops and reclamation live in threadpool.cpp.
+	 */
+	class TaskQueue {
+		struct Node;
+		alignas(64) std::atomic<Node*> head;
+		alignas(64) std::atomic<Node*> tail;
+		static void pause_processor() noexcept;
+	public:
+		TaskQueue();
+		~TaskQueue();
+		TaskQueue(const TaskQueue&) = delete;
+		TaskQueue& operator=(const TaskQueue&) = delete;
+		void enqueuePrepared(MoveOnlyTask&& value);
+		bool dequeue(MoveOnlyTask& result);
+	};
 
-    TaskQueue task_queue;
-    alignas(64) std::atomic<uint64_t> global_waiters{0};
+	TaskQueue task_queue;
+	alignas(64) std::atomic<uint64_t> global_waiters{0};
 
-    static uint32_t pendingFromState(uint64_t s) noexcept { return static_cast<uint32_t>(s >> 32); }
-    static uint32_t activeFromState(uint64_t s) noexcept  { return static_cast<uint32_t>(s & ACTIVE_MASK); }
-    static bool stopFromState(uint64_t s) noexcept { return (s & STOP_BIT) != 0; }
+	static uint32_t pendingFromState(uint64_t s) noexcept {
 
-    void submitTask(MoveOnlyTask task);
+		return static_cast<uint32_t>(s >> 32);
 
-    void runTask(MoveOnlyTask& task);
+	}
 
-    void workerThread();
+	static uint32_t activeFromState(uint64_t s) noexcept {
+
+		return static_cast<uint32_t>(s & ACTIVE_MASK);
+
+	}
+
+	static bool stopFromState(uint64_t s) noexcept {
+
+		return (s & STOP_BIT) != 0;
+
+	}
+
+	void submitTask(MoveOnlyTask task);
+
+	void runTask(MoveOnlyTask& task);
+
+	void workerThread();
 
 public:
-    explicit ThreadPool(std::size_t n);
+	explicit ThreadPool(std::size_t n);
 
-    ~ThreadPool();
+	~ThreadPool();
 
-    // All in-tree submissions are already bound, zero-argument callables.
-    // Avoid instantiating an empty tuple and std::apply for each lambda.
-    template <class F>
-    auto enqueue(F&& f) -> std::future<std::invoke_result_t<F>> {
-        using return_type = std::invoke_result_t<F>;
+	// All in-tree submissions are already bound, zero-argument callables.
+	// Avoid instantiating an empty tuple and std::apply for each lambda.
+	template <class F>
+	auto enqueue(F&& f) -> std::future<std::invoke_result_t<F>> {
 
-        std::future<return_type> result;
-        auto promise = threadpool_detail::preparePromise(result);
+		using return_type = std::invoke_result_t<F>;
 
-        submitTask(MoveOnlyTask([
-            func = std::forward<F>(f),
-            p    = std::move(promise)]() mutable
-        {
-            try {
-                if constexpr (std::is_void_v<return_type>) {
-                    std::move(func)();
-                    threadpool_detail::completePromise(*p);
-                } else {
-                    p->set_value(std::move(func)());
-                }
-            } catch (...) {
-                if constexpr (std::is_void_v<return_type>) {
-                    threadpool_detail::failPromise(*p);
-                } else {
-                    p->set_exception(std::current_exception());
-                }
-            }
-        }));
+		std::future<return_type> result;
+		auto promise = threadpool_detail::preparePromise(result);
 
-        return result;
-    }
+		submitTask(MoveOnlyTask([
+		    func = std::forward<F>(f),
+		    p    = std::move(promise)]() mutable
+		{
 
-    // Retain the existing argument-binding path for unbound callables.
-    template <class F, class... Args>
-        requires (sizeof...(Args) > 0)
-    auto enqueue(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>> {
-        using return_type = std::invoke_result_t<F, Args...>;
+			try {
+				if constexpr (std::is_void_v<return_type>) {
+					std::move(func)();
+					threadpool_detail::completePromise(*p);
+				} else {
+					p->set_value(std::move(func)());
+				}
+			} catch (...) {
+				if constexpr (std::is_void_v<return_type>) {
+					threadpool_detail::failPromise(*p);
+				} else {
+					p->set_exception(std::current_exception());
+				}
+			}
 
-        std::future<return_type> result;
-        auto promise = threadpool_detail::preparePromise(result);
+		}));
 
-        submitTask(MoveOnlyTask([
-            func = std::forward<F>(f),
-            tup  = std::make_tuple(std::forward<Args>(args)...),
-            p    = std::move(promise)]() mutable
-        {
-            try {
-                if constexpr (std::is_void_v<return_type>) {
-                    std::apply(std::move(func), std::move(tup));
-                    threadpool_detail::completePromise(*p);
-                } else {
-                    p->set_value(std::apply(std::move(func), std::move(tup)));
-                }
-            } catch (...) {
-                if constexpr (std::is_void_v<return_type>) {
-                    threadpool_detail::failPromise(*p);
-                } else {
-                    p->set_exception(std::current_exception());
-                }
-            }
-        }));
+		return result;
 
+	}
 
-        return result;
-    }
+	// Retain the existing argument-binding path for unbound callables.
+	template <class F, class... Args>
+	    requires (sizeof...(Args) > 0)
+	auto enqueue(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>> {
 
-    void waitAllTasksCompleted();
+		using return_type = std::invoke_result_t<F, Args...>;
 
-    void shutdown();
+		std::future<return_type> result;
+		auto promise = threadpool_detail::preparePromise(result);
 
-    bool isIdle() const {
-        uint64_t s = task_state.load(std::memory_order_acquire);
-        return pendingFromState(s) == 0 && activeFromState(s) == 0;
-    }
+		submitTask(MoveOnlyTask([
+		    func = std::forward<F>(f),
+		    tup  = std::make_tuple(std::forward<Args>(args)...),
+		    p    = std::move(promise)]() mutable
+		{
 
-    std::size_t threadCount() const { return num_threads; }
-    uint64_t pendingCount() const { return pendingFromState(task_state.load(std::memory_order_acquire)); }
-    uint64_t activeCount() const { return activeFromState(task_state.load(std::memory_order_acquire)); }
+			try {
+				if constexpr (std::is_void_v<return_type>) {
+					std::apply(std::move(func), std::move(tup));
+					threadpool_detail::completePromise(*p);
+				} else {
+					p->set_value(std::apply(std::move(func), std::move(tup)));
+				}
+			} catch (...) {
+				if constexpr (std::is_void_v<return_type>) {
+					threadpool_detail::failPromise(*p);
+				} else {
+					p->set_exception(std::current_exception());
+				}
+			}
+
+		}));
+
+		return result;
+
+	}
+
+	void waitAllTasksCompleted();
+
+	void shutdown();
+
+	bool isIdle() const {
+
+		uint64_t s = task_state.load(std::memory_order_acquire);
+		return pendingFromState(s) == 0 && activeFromState(s) == 0;
+
+	}
+
+	std::size_t threadCount() const {
+
+		return num_threads;
+
+	}
+
+	uint64_t pendingCount() const {
+
+		return pendingFromState(task_state.load(std::memory_order_acquire));
+
+	}
+
+	uint64_t activeCount() const {
+
+		return activeFromState(task_state.load(std::memory_order_acquire));
+
+	}
 };
-
 
 /**
  * @brief Thread-safe retrieval of the process-wide ThreadPool singleton.

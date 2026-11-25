@@ -41,39 +41,46 @@ export extern "C++" {
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
-
 inline constexpr size_t DATA_SIZE = 2048;
 
 struct __attribute__((packed)) CcdSectheaderSyn {
-    uint8_t data[12];
+
+	uint8_t data[12];
+
 };
 
 struct __attribute__((packed)) CcdSectheaderHeader {
-    uint8_t sectaddr_min, sectaddr_sec, sectaddr_frac;
-    uint8_t mode;
+
+	uint8_t sectaddr_min, sectaddr_sec, sectaddr_frac;
+	uint8_t mode;
+
 };
 
 struct __attribute__((packed)) CcdSectheader {
-    CcdSectheaderSyn syn;
-    CcdSectheaderHeader header;
+
+	CcdSectheaderSyn syn;
+	CcdSectheaderHeader header;
+
 };
 
 struct __attribute__((packed)) CcdSector {
-    CcdSectheader sectheader;
-    union {
-        struct {
-            uint8_t data[DATA_SIZE];
-            uint8_t edc[4];
-            uint8_t unused[8];
-            uint8_t ecc[276];
-        } mode1;
-        struct {
-            uint8_t sectsubheader[8];
-            uint8_t data[DATA_SIZE];
-            uint8_t edc[4];
-            uint8_t ecc[276];
-        } mode2;
-    } content;
+
+	CcdSectheader sectheader;
+	union {
+		struct {
+			uint8_t data[DATA_SIZE];
+			uint8_t edc[4];
+			uint8_t unused[8];
+			uint8_t ecc[276];
+		} mode1;
+		struct {
+			uint8_t sectsubheader[8];
+			uint8_t data[DATA_SIZE];
+			uint8_t edc[4];
+			uint8_t ecc[276];
+		} mode2;
+	} content;
+
 };
 
 } // extern "C++"
