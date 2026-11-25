@@ -22,7 +22,7 @@
 #  Native std is cached outside the ordinary build tree.
 #    make clean                   discard build output, preserve standard-library cache
 #    make clean cache             discard only the persistent standard-library cache
-#    make clean all               discard build output, then rebuild using the existing cache
+#    make clean all               discard build output and the persistent standard-library cache
 #    make nocache                 build without the persistent std cache; rebuild std each time
 #    make V=1                     show full compiler command lines
 #    make install [BINDIR=/some/dir]
@@ -44,40 +44,36 @@ BINDIR   ?= bin
 
 STD_CACHE_ROOT := .std-cache
 
-# Cleanup must finish before a rebuild starts, even with parallel make.
-# Do not load or regenerate dependency files in this outer invocation:
-# the recursive build reads a fresh graph after cleanup.
+# Cleanup-only invocations never load or regenerate dependency files.
+# With clean, cache and all are cleanup selectors, not build goals.
 ifneq ($(filter cache,$(MAKECMDGOALS)),)
 ifeq ($(filter clean,$(MAKECMDGOALS)),)
     $(error Use make clean cache to remove only the persistent standard-library cache)
 endif
-ifneq ($(filter-out clean cache,$(MAKECMDGOALS)),)
-    $(error Combine clean cache with no other targets)
-endif
 endif
 
 ifneq ($(filter clean,$(MAKECMDGOALS)),)
-ifneq ($(filter-out clean cache all nocache,$(MAKECMDGOALS)),)
-    $(error Combine clean only with cache, all or nocache)
+ifneq ($(filter-out clean cache all,$(MAKECMDGOALS)),)
+    $(error Combine clean only with cache or all)
+endif
+ifneq ($(filter cache,$(MAKECMDGOALS)),)
+ifneq ($(filter all,$(MAKECMDGOALS)),)
+    $(error Use either make clean cache or make clean all)
+endif
 endif
 .DEFAULT_GOAL := clean
-.PHONY: clean cache all nocache
+.PHONY: clean cache all
 
-ifneq ($(filter cache,$(MAKECMDGOALS)),)
-# In this invocation, clean removes only the persistent std cache.
 clean:
+ifneq ($(filter all,$(MAKECMDGOALS)),)
+	rm -rf $(BUILD_DIR) $(TARGET_DYN) $(TARGET_STAT) $(STD_CACHE_ROOT)
+else ifneq ($(filter cache,$(MAKECMDGOALS)),)
 	rm -rf $(STD_CACHE_ROOT)
-
-cache: clean
 else
-clean:
 	rm -rf $(BUILD_DIR) $(TARGET_DYN) $(TARGET_STAT)
-
-all: clean
-	+$(MAKE) $(if $(filter nocache,$(MAKECMDGOALS)),nocache,all)
-
-nocache: all
 endif
+
+cache all: clean
 
 else
 
@@ -415,7 +411,7 @@ help:
 	@echo "Targets:  all (default)  nocache  clean  install  uninstall  help"
 	@echo "Cleanup:  make clean            remove build artifacts, preserve std cache"
 	@echo "          make clean cache      remove only the persistent std cache"
-	@echo "          make clean all        clean and rebuild using the existing cache"
+	@echo "          make clean all        remove build artifacts and persistent std cache"
 	@echo "Options:  STATIC=1  SANITIZE=1|2  FAST=1  V=1  BINDIR=<dir>  BUILD_DIR=<dir>"
 	@echo "nocache:  rebuild std in the build tree without using .std-cache/"
 	@echo "Output:   isocmd (default), isocmd_static (STATIC=1)"
