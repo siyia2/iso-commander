@@ -36,6 +36,8 @@ namespace {
 
         /// Number of circulating buffers (double buffering).
         constexpr int    kNumBuffers     = 2;
+        /// Maximum aligned restarts after anomalous short direct writes, per write chunk.
+        constexpr unsigned kMaxDirectWriteRestarts = 8;
         static_assert(kMaxWriteChunk <= kDesiredBuffer,
                       "write chunk larger than the buffer is pointless");
 
@@ -180,16 +182,17 @@ namespace {
              * @param paddedSize    @p fileSize rounded up to a sector multiple.
              * @param bufferSize    Size of each buffer (multiple of the sector size).
              * @param writeChunk    Maximum bytes per write() (multiple of the sector size).
+             * @param sectorSize    Effective direct-I/O alignment in bytes.
              * @param buffers       Pre-allocated aligned buffers; they must outlive the streamer.
              * @param progressData  Progress array shared with the UI.
              * @param progressIndex Slot of this operation in @p progressData.
              */
             IsoStreamer(int isoFd, int devFd, uint64_t fileSize, uint64_t paddedSize,
-                        size_t bufferSize, size_t writeChunk,
+                        size_t bufferSize, size_t writeChunk, size_t sectorSize,
                         IsoBufferPool& buffers,
                         std::vector<ProgressInfo>& progressData, size_t progressIndex)
                 : isoFd_(isoFd), devFd_(devFd), fileSize_(fileSize), paddedSize_(paddedSize),
-                  bufferSize_(bufferSize), writeChunk_(writeChunk),
+                  bufferSize_(bufferSize), writeChunk_(writeChunk), sectorSize_(sectorSize),
                   progressData_(progressData), progressIndex_(progressIndex) {
                 for (auto& b : buffers)
                     emptyQ_.push_back({b->data, 0});
@@ -227,8 +230,10 @@ namespace {
 
                 posix_fadvise(isoFd_, 0, 0, POSIX_FADV_DONTNEED);
 
-                if (!aborted() && fsync(devFd_) != 0) {
-                    markFailed();
+                while (!aborted()) {
+                    if (fsync(devFd_) == 0) break;
+                    if (errno == EINTR) continue;
+                    if (!aborted()) markFailed();
                     return false;
                 }
 
@@ -329,6 +334,7 @@ namespace {
 
                 auto& info = progressData_[progressIndex_];
                 info.speed.store(avgSpeed);
+                info.bytesWritten.store(directBytesWritten_.load());
                 info.progress.store(100);
                 info.completed.store(true);
                 return true;
@@ -563,7 +569,7 @@ namespace {
             }
 
             /**
-             * @brief Accounts for bytes just written to the device.
+             * @brief Accounts for newly covered bytes, excluding replayed data.
              *
              * Updates the internal total (including padding) and the reported total,
              * which is capped at the true file size so padding stays hidden.
@@ -573,7 +579,7 @@ namespace {
              * out of the reported figure, so progress never goes beyond the real file size,
              * but it is still counted internally to know when everything is done.
              *
-             * @param written Bytes written by the last write() call.
+             * @param written Newly covered bytes beyond the previous high-water mark.
              */
             void recordWritten(size_t written) {
                 // Cap reported progress at the true file size to hide padding.
@@ -588,10 +594,11 @@ namespace {
             /**
              * @brief Writes one buffer to the device.
              *
-             * Handles partial writes and EINTR. Each write() is capped at
-             * writeChunk_ (a multiple of the sector size), so buffer address, length
-             * and device offset all stay sector-aligned for O_DIRECT, while progress
-             * is reported and cancellation checked after every write of <= 4 MiB.
+             * Handles aligned partial writes and EINTR. If a short write reports an
+             * unaligned byte count, rewinds to the start of the current write chunk
+             * and replays it, with at most kMaxDirectWriteRestarts restarts per chunk.
+             * The high-water mark prevents replayed bytes from inflating progress.
+             * All requests remain sector-aligned; cancellation is checked on retries.
              *
              * @par Utility
              * Sending data to a drive may take several tries, because it can be partial or
@@ -603,30 +610,63 @@ namespace {
              *         say which).
              */
             bool writeBuffer(const Chunk& c) {
-                size_t remaining = c.len;
-                char*  ptr       = c.buf;
+                size_t offset = 0;
+                while (offset < c.len) {
+                    const size_t len = std::min(c.len - offset, writeChunk_);
+                    const uint64_t chunkStart = localBytesWritten_;
+                    size_t done = 0;
+                    size_t highWater = 0;
+                    unsigned restarts = 0;
 
-                while (remaining > 0) {
-                    const size_t thisWrite = std::min(remaining, writeChunk_);
-                    ssize_t written = write(devFd_, ptr, thisWrite);
+                    while (done < len) {
+                        if (isCancelled()) {
+                            cancelled_ = true;
+                            return false;
+                        }
 
-                    if (written < 0) {
-                        if (errno == EINTR) continue;
-                        ioFailed_ = true;
-                        return false;
-                    }
-                    if (written == 0) {   // no progress; avoid infinite spin
-                        ioFailed_ = true;
-                        return false;
-                    }
-                    if (isCancelled()) {
-                        cancelled_ = true;
-                        return false;
-                    }
+                        const ssize_t written = write(devFd_, c.buf + offset + done, len - done);
+                        if (written < 0 && errno == EINTR) continue;
+                        if (written <= 0 || static_cast<size_t>(written) > len - done) {
+                            ioFailed_ = true;
+                            return false;
+                        }
 
-                    remaining -= static_cast<size_t>(written);
-                    ptr       += written;
-                    recordWritten(static_cast<size_t>(written));
+                        done += static_cast<size_t>(written);
+                        if (done > highWater) {
+                            recordWritten(done - highWater);
+                            highWater = done;
+                        }
+
+                        if (isCancelled()) {
+                            cancelled_ = true;
+                            return false;
+                        }
+
+                        if (done % sectorSize_ != 0) {
+                            if (restarts == io::kMaxDirectWriteRestarts) {
+                                ioFailed_ = true;
+                                return false;
+                            }
+                            ++restarts;
+                            // Restart from an absolute aligned offset: the kernel's
+                            // current offset may no longer satisfy O_DIRECT alignment.
+                            const auto start = static_cast<off_t>(chunkStart);
+                            off_t position;
+                            do {
+                                if (isCancelled()) {
+                                    cancelled_ = true;
+                                    return false;
+                                }
+                                position = lseek(devFd_, start, SEEK_SET);
+                            } while (position == -1 && errno == EINTR);
+                            if (position != start) {
+                                ioFailed_ = true;
+                                return false;
+                            }
+                            done = 0;
+                        }
+                    }
+                    offset += len;
                 }
                 return true;
             }
@@ -658,6 +698,7 @@ namespace {
             const uint64_t paddedSize_;
             const size_t   bufferSize_;
             const size_t   writeChunk_;
+            const size_t   sectorSize_;
 
             std::vector<ProgressInfo>& progressData_;
             const size_t               progressIndex_;
@@ -778,6 +819,6 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
         return fail();
 
     stream::IsoStreamer streamer(iso.fd, dev.fd, fileSize, paddedSize, bufferSize, writeChunk,
-                                 buffers, progressData, progressIndex);
+                                 static_cast<size_t>(sectorSize), buffers, progressData, progressIndex);
     return streamer.run();
 }

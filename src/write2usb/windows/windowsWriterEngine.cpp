@@ -415,7 +415,12 @@ namespace windowsWriter_engine::copy {
 
            if (!success) {
                // Drops dirty pages without writing them and frees any preallocation.
-               [[maybe_unused]] const int r = ftruncate(fd_out, 0);
+               // Retry an interruption, but stop on a permanent cleanup error.
+               // The copy is already failed; never report completion in either case.
+               int r;
+               do {
+                   r = ftruncate(fd_out, 0);
+               } while (r == -1 && errno == EINTR);
            }
 
            posix_fadvise(

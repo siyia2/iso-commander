@@ -149,26 +149,19 @@ static void validateDevices(const std::vector<std::string>& devArgs,
 }
 
 /**
- * @brief Executes write operations in either interactive mode or silent asynchronous threads.
+ * @brief Executes silent write operations in asynchronous worker threads.
  *
- * If silent mode is disabled, delegates execution to the interactive UI writer.
- * If silent mode is enabled, disables standard input and dispatches parallel tasks
- * to the static thread pool, managing futures and tracking completion/failure statuses.
+ * Disables standard input and dispatches parallel tasks to the static thread pool,
+ * managing futures and tracking completion/failure statuses.
  *
- * @param silentMode Flag indicating whether to skip the live progress UI.
  * @param pairsPtr Shared pointer containing paired ISO metadata and target device paths.
  * @param progressDataPtr Shared pointer to the progress state tracking vector.
  * @param pool Reference to the static thread pool used for concurrent writes.
  */
-static void executeWriteOperations(bool silentMode,
-                                    std::shared_ptr<std::vector<std::pair<IsoInfo, std::string>>> pairsPtr,
-                                    std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr,
-                                    ThreadPool& pool) {
-    if (!silentMode) {
-        performWriteOperation(*pairsPtr);
-        return;
-    }
-
+static void executeSilentWriteOperations(
+    std::shared_ptr<std::vector<std::pair<IsoInfo, std::string>>> pairsPtr,
+    std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr,
+    ThreadPool& pool) {
     disableInput();
 
     std::vector<std::future<void>> futures;
@@ -353,17 +346,16 @@ int handleWriteUsb(const ParsedArgs& args) {
         return 1;
     }
 
-    auto progressDataPtr = buildProgressData(*pairsPtr);
-
-    executeWriteOperations(args.silentMode, pairsPtr, progressDataPtr, pool);
-
-    g_drainingManager.joinAll();
-
-    const int exitCode = evaluateWriteResult(*progressDataPtr);
-
     if (!args.silentMode) {
+        bool allSucceeded = false;
+        performWriteOperation(*pairsPtr, &allSucceeded);
+        g_drainingManager.joinAll();
         std::cout << "\n";
+        return (allSucceeded && !GlobalState::g_operationCancelled.load()) ? 0 : 1;
     }
 
-    return exitCode;
+    auto progressDataPtr = buildProgressData(*pairsPtr);
+    executeSilentWriteOperations(pairsPtr, progressDataPtr, pool);
+    g_drainingManager.joinAll();
+    return evaluateWriteResult(*progressDataPtr);
 }

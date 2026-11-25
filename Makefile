@@ -27,7 +27,7 @@
 #    make nocache                 build without the persistent std cache; rebuild std each time
 #    make test-unit                   safe unit and CLI regression tests
 #    make test-integration       unprivileged filesystem, cancellation, USB, import and PTY tests
-#    make test-privileged        build as user, run loop-device and mount tests via sudo
+#    make test-privileged        build as user, run loop-device, mount and CLI tests via sudo
 #    make test-privileged-build  compile privileged tests without running them
 #    make test-unit SANITIZE=1         run unit/CLI tests with AddressSanitizer
 #    make test-unit SANITIZE=2         run unit/CLI tests with ThreadSanitizer
@@ -426,7 +426,9 @@ TEST_PRIVILEGED_SRCS := $(sort $(wildcard tests/privileged/*.cpp))
 TEST_UNIT_OBJS := $(TEST_UNIT_SRCS:%.cpp=$(OBJ_DIR)/%.o)
 TEST_INTEGRATION_OBJS := $(TEST_INTEGRATION_SRCS:%.cpp=$(OBJ_DIR)/%.o)
 TEST_PRIVILEGED_OBJS := $(TEST_PRIVILEGED_SRCS:%.cpp=$(OBJ_DIR)/%.o)
-TEST_OBJS := $(TEST_UNIT_OBJS) $(TEST_INTEGRATION_OBJS) $(TEST_PRIVILEGED_OBJS)
+TEST_FAULT_OBJ := $(OBJ_DIR)/tests/common/ioFaults.o
+TEST_FAULT_WRAP := -Wl,--wrap=read,--wrap=write,--wrap=pwrite,--wrap=fsync,--wrap=sync_file_range,--wrap=posix_fallocate,--wrap=ftruncate,--wrap=close
+TEST_OBJS := $(TEST_UNIT_OBJS) $(TEST_INTEGRATION_OBJS) $(TEST_PRIVILEGED_OBJS) $(TEST_FAULT_OBJ)
 TEST_BIN := $(OBJ_DIR)/tests/isocmd-tests
 TEST_INTEGRATION_BIN := $(OBJ_DIR)/tests/isocmd-integration-tests
 TEST_MENU_OBJ := $(OBJ_DIR)/tests/menuApp.o
@@ -442,13 +444,13 @@ $(OBJ_DIR)/tests/%.o: tests/%.cpp tests/common/testHarness.h Makefile $(CONFIG_S
 	$(publish_depfile)
 
 $(TEST_BIN): $(TEST_UNIT_OBJS) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ)
-$(TEST_INTEGRATION_BIN): $(TEST_INTEGRATION_OBJS) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ)
-$(TEST_PRIVILEGED_BIN): $(TEST_PRIVILEGED_OBJS) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ)
+$(TEST_INTEGRATION_BIN): $(TEST_INTEGRATION_OBJS) $(TEST_FAULT_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ)
+$(TEST_PRIVILEGED_BIN): $(TEST_PRIVILEGED_OBJS) $(TEST_FAULT_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ)
 # forkpty is in libc on modern glibc; -lutil also supports older glibc.
 # Only the integration executable needs it.
 $(TEST_BIN) $(TEST_INTEGRATION_BIN) $(TEST_PRIVILEGED_BIN):
 	@echo "  TEST LD  $@"
-	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(TEST_LIB_OBJS) $(filter $(TEST_OBJS),$^) -o $@ $(LIBS) $(if $(filter $(TEST_INTEGRATION_BIN),$@),-lutil)
+	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(TEST_LIB_OBJS) $(filter $(TEST_OBJS),$^) -o $@ $(LIBS) $(if $(filter $(TEST_INTEGRATION_BIN),$@),-lutil) $(if $(filter $(TEST_INTEGRATION_BIN) $(TEST_PRIVILEGED_BIN),$@),$(TEST_FAULT_WRAP))
 
 test-unit: $(TARGET) $(TEST_BIN)
 	$(Q)sh tests/run.sh "$(TEST_BIN)" "$(TARGET)"
@@ -466,11 +468,11 @@ $(TEST_MENU_BIN): $(TEST_MENU_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ)
 test-integration: $(TEST_INTEGRATION_BIN) $(TEST_MENU_BIN)
 	$(Q)sh tests/integration/run.sh "$(TEST_INTEGRATION_BIN)" "$(TEST_MENU_BIN)"
 
-test-privileged-build: $(TEST_PRIVILEGED_BIN)
+test-privileged-build: $(TEST_PRIVILEGED_BIN) $(TARGET)
 
 # Elevate only after all compilation and dependency generation have finished.
 test-privileged: test-privileged-build
-	$(Q)sudo sh tests/privileged/run.sh "$(TEST_PRIVILEGED_BIN)"
+	$(Q)sudo sh tests/privileged/run.sh "$(TEST_PRIVILEGED_BIN)" "$(TARGET)"
 
 -include $(wildcard $(TEST_OBJS:.o=.d) $(TEST_MENU_OBJ:.o=.d))
 
@@ -492,7 +494,7 @@ help:
 	@echo "Testing:"
 	@echo "  make test-unit             Unit and CLI regression tests"
 	@echo "  make test-integration      Filesystem, cancellation, USB, import and PTY tests"
-	@echo "  make test-privileged       Build as user, run loop-device and mount tests via sudo"
+	@echo "  make test-privileged       Build as user, run loop-device, mount and CLI tests via sudo"
 	@echo "  make test-privileged-build Build privileged tests without running them"
 	@echo ""
 	@echo "  Run all test targets without sudo."

@@ -93,7 +93,9 @@ int writeUiChild() {
         for (int result=0;result<3;++result) {
             mode=result; calls.clear();
             setupSignalHandlerCancellations(); GlobalState::g_operationCancelled=false;
-            auto screen=WriteExecution::performWithWriter(mappings,fakeWriter);
+            bool allSucceeded = result != 0; // Start with the opposite expected result.
+            auto screen=WriteExecution::performWithWriter(mappings,fakeWriter,&allSucceeded);
+            CHECK(allSucceeded == (result == 0));
             std::sort(calls.begin(),calls.end()); CHECK(calls==expected);
             stopWriteScreen(*screen);
             std::cout<<"TEST-WRITE-RESULT-"<<result<<'\n'<<std::flush;

@@ -135,9 +135,10 @@ private:
 /**
  * Writes the given (ISO, device) pairs concurrently on the thread pool,
  * with a live progress display and a final status summary.
+ * If allSucceeded is provided, stores whether every writer succeeded without cancellation.
  */
 std::shared_ptr<WriteScreen> performWriteOperation(
-    const std::vector<std::pair<IsoInfo, std::string>>&);
+    const std::vector<std::pair<IsoInfo, std::string>>&, bool* allSucceeded = nullptr);
 
 
 // --- Device discovery and mapping APIs (defined in write2usbUI.cpp) ---
@@ -174,7 +175,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
 namespace WriteExecution {
 using Writer = bool (*)(const std::string&, const std::string&, size_t, std::vector<ProgressInfo>&);
 std::shared_ptr<WriteScreen> performWithWriter(
-    const std::vector<std::pair<IsoInfo, std::string>>&, Writer);
+    const std::vector<std::pair<IsoInfo, std::string>>&, Writer, bool* allSucceeded = nullptr);
 }
 namespace WriteMapping {
 using Discover = std::vector<std::string> (*)();
