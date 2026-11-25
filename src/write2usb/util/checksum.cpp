@@ -48,8 +48,10 @@ namespace usb_verify {
 	bool readChecksum(int fd, uint64_t size, char* buffer, size_t bufferSize,
 	                  size_t alignment, ReadbackProgress& progress, uint64_t& result) {
 
-		if (!buffer || !bufferSize || !alignment || bufferSize % alignment || size % alignment)
-		    return false;
+    	if (!buffer || !bufferSize || !alignment ||
+        bufferSize % alignment || size % alignment ||
+        reinterpret_cast<std::uintptr_t>(buffer) % alignment)
+            return false;
 		Checksum64 checksum;
 		uint64_t done = 0;
 		while (done < size) {
