@@ -98,6 +98,7 @@ else
 endif
 
 cache all: clean
+	@:
 
 else
 
