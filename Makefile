@@ -25,6 +25,8 @@
 #    make clean cache             discard only the persistent standard-library cache
 #    make clean all               discard build output and the persistent standard-library cache
 #    make nocache                 build without the persistent std cache; rebuild std each time
+#  std cache entries survive unrelated Makefile edits; the key tracks the
+#  actual std compilation configuration and installed header dependencies.
 #    make test-unit                   safe unit and CLI regression tests
 #    make test-integration       unprivileged filesystem, cancellation, USB, import and PTY tests
 #    make test-privileged        build as user, run loop-device, mount and CLI tests via sudo
@@ -201,6 +203,7 @@ MOD_DIR  := modules
 MODSRCS  := $(sort $(shell find $(MOD_DIR) -name '*.cppm'))
 OBJS     := $(SRCS:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o) $(MODSRCS:$(MOD_DIR)/%.cppm=$(OBJ_DIR)/mod/%.o)
 DEPFILES := $(OBJS:.o=.d)
+TEST_SCAN_SRCS := $(sort $(shell find tests -name '*.cpp'))
 
 # ---------- C++23 modules ----------
 # modules/isocmd/a/b.cppm  ->  module isocmd.a.b  ->  $(GCM_DIR)/isocmd.a.b.gcm
@@ -214,8 +217,12 @@ MOD_NAMES := $(foreach m,$(MODSRCS),$(subst /,.,$(patsubst $(MOD_DIR)/%.cppm,%,$
 # Keep the compiler-owned module outside BUILD_DIR so ordinary clean builds
 # can reuse it. Key by compiler identity, compile flags and include environment;
 # -MD below additionally tracks the actual installed headers and std.cc.
+# Bump the recipe revision if the std build procedure changes incompatibly.
+# Unlike a Makefile timestamp, this does not invalidate std for unrelated edits.
+STD_RECIPE_REV := 1
+STD_COMPILE_FLAGS := $(filter-out -MMD -MP,$(CPPFLAGS)) $(CXXFLAGS)
 STD_CACHE_KEY := $(shell { \
-    printf '%s\n' '$(CXX)' '$(GCC_VERSION)' '$(CPPFLAGS)' '$(CXXFLAGS)' \
+    printf '%s\n' '$(STD_RECIPE_REV)' '$(CXX)' '$(GCC_VERSION)' '$(STD_COMPILE_FLAGS)' \
         '$(CPATH)' '$(CPLUS_INCLUDE_PATH)' '$(C_INCLUDE_PATH)' '$(GCC_EXEC_PREFIX)' '$(COMPILER_PATH)' '$(PATH)'; \
     $(CXX) -dumpmachine; \
     stat -Lc '%n %d %i %s %y %z' "$$(command -v $(firstword $(CXX)))" "$$($(CXX) -print-prog-name=cc1plus)"; \
@@ -267,7 +274,7 @@ endef
 # fan-out. Source line counts approximate cost; the graph and link order are
 # unchanged. Large independent implementation files retain high priority.
 MODDEPS_MK := $(OBJ_DIR)/moddeps.mk
-$(MODDEPS_MK): $(MODSRCS) $(SRCS) Makefile $(CONFIG_STAMP)
+$(MODDEPS_MK): $(MODSRCS) $(SRCS) $(TEST_SCAN_SRCS) Makefile $(CONFIG_STAMP)
 	@mkdir -p $(@D)
 	@set -e; tmp="$$(mktemp)"; trap 'rm -f "$$tmp"' EXIT; \
 	LC_ALL=C awk -v obj="$(OBJ_DIR)" -v gcm="$(GCM_DIR)" \
@@ -279,9 +286,14 @@ $(MODDEPS_MK): $(MODSRCS) $(SRCS) Makefile $(CONFIG_STAMP)
 	      o = obj "/mod/" n ".o"; gsub(/\//, ".", n); g = gcm "/" n ".gcm"; \
 	      printf "%s: %s\n\t@:\n", g, o; \
 	      printf "ifeq ($$(wildcard %s),)\n%s: FORCE\nendif\n", g, o; \
+	    } else if (index(file, "tests/") == 1) { \
+	      n = file; sub(/\.cpp$$/, "", n); \
+	      printf "%s/%s.o: %s\n", obj, n, deps; \
+	      return; \
 	    } else { \
 	      n = substr(file, length(src) + 1); sub(/\.cpp$$/, "", n); \
 	      o = obj "/" n ".o"; \
+	      if (n == "app/main") printf "%s/tests/menuApp.o: %s\n", obj, deps; \
 	    } \
 	    printf "%s: %s\n", o, deps; \
 	    objects[++count] = o; cost[o] = 1 + lines / 200; \
@@ -340,7 +352,7 @@ $(MODDEPS_MK): $(MODSRCS) $(SRCS) Makefile $(CONFIG_STAMP)
 	    printf "\nROOT_MODULE_OBJS :="; \
 	    for (i = 1; i <= count; ++i) if (root_modules[objects[i]]) printf " %s", objects[i]; \
 	    printf "\n"; \
-	  }' $(MODSRCS) $(SRCS) > "$$tmp"; \
+	  }' $(MODSRCS) $(SRCS) $(TEST_SCAN_SRCS) > "$$tmp"; \
 	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then \
 	  rm -f "$$tmp" && touch "$@"; \
 	else \
@@ -362,17 +374,17 @@ $(MAPPER): Makefile $(CONFIG_STAMP) $(STD_MODULE_MAPPER)
 # Build libstdc++ once per cached configuration, or on every nocache build.
 # Its object is linked exactly once.
 # -MD tracks installed standard-library sources and headers as well.
-$(STD_MODULE_MAPPER): Makefile
+$(STD_MODULE_MAPPER):
 	@mkdir -p $(@D)
 	@{ printf '%s %s\n' std "$(STD_MODULE_GCM)"; } > $@.tmp
 	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
 
-$(STD_MODULE_OBJ) $(STD_MODULE_GCM) &: Makefile $(STD_MODULE_MAPPER)
+$(STD_MODULE_OBJ) $(STD_MODULE_GCM) &: $(STD_MODULE_MAPPER)
 	@echo "  MOD     std (libstdc++)"
 	@mkdir -p $(STD_CACHE_DIR)
 	$(Q)rm -f $(STD_MODULE_GCM) $(STD_MODULE_OBJ)
 	$(Q)set -e; trap 'rm -f $(STD_MODULE_GCM) $(STD_MODULE_OBJ) $(STD_MODULE_DEP).tmp' EXIT; \
-	$(CXX) $(filter-out -MMD -MP,$(CPPFLAGS)) -MD -MP -MF $(STD_MODULE_DEP).tmp -MT $(STD_MODULE_OBJ) -MT $(STD_MODULE_GCM) -fmodule-mapper=$(STD_MODULE_MAPPER) $(CXXFLAGS) -fsearch-include-path -x c++ -c bits/std.cc -o $(STD_MODULE_OBJ); \
+	$(CXX) $(STD_COMPILE_FLAGS) -MD -MP -MF $(STD_MODULE_DEP).tmp -MT $(STD_MODULE_OBJ) -MT $(STD_MODULE_GCM) -fmodule-mapper=$(STD_MODULE_MAPPER) -fsearch-include-path -x c++ -c bits/std.cc -o $(STD_MODULE_OBJ); \
 	mv -f $(STD_MODULE_DEP).tmp $(STD_MODULE_DEP); trap - EXIT
 ifneq ($(filter nocache,$(MAKECMDGOALS)),)
 $(STD_MODULE_OBJ) $(STD_MODULE_GCM): FORCE
@@ -435,9 +447,10 @@ TEST_MENU_OBJ := $(OBJ_DIR)/tests/menuApp.o
 TEST_MENU_BIN := $(OBJ_DIR)/tests/isocmd-menu-test
 TEST_PRIVILEGED_BIN := $(OBJ_DIR)/tests/isocmd-privileged-tests
 TEST_LIB_OBJS := $(filter-out $(OBJ_DIR)/app/main.o,$(OBJS))
-TEST_MODULES := $(foreach n,$(MOD_NAMES),$(GCM_DIR)/$(n).gcm)
+# All test sources import std through testHarness.h (directly or via ioFaults.h).
+# Project module prerequisites are generated per source in moddeps.mk.
 
-$(OBJ_DIR)/tests/%.o: tests/%.cpp tests/common/testHarness.h Makefile $(CONFIG_STAMP) $(STD_MODULE_GCM) $(TEST_MODULES) | $(MAPPER)
+$(OBJ_DIR)/tests/%.o: tests/%.cpp tests/common/testHarness.h Makefile $(CONFIG_STAMP) $(STD_MODULE_GCM) | $(MAPPER)
 	@echo "  TEST CXX $<"
 	@mkdir -p $(@D)
 	$(Q)$(CXX) $(CPPFLAGS) $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -c $< -o $@
@@ -455,7 +468,7 @@ $(TEST_BIN) $(TEST_INTEGRATION_BIN) $(TEST_PRIVILEGED_BIN):
 test-unit: $(TARGET) $(TEST_BIN)
 	$(Q)sh tests/run.sh "$(TEST_BIN)" "$(TARGET)"
 
-$(TEST_MENU_OBJ): src/app/main.cpp Makefile $(CONFIG_STAMP) $(STD_MODULE_GCM) $(TEST_MODULES) | $(MAPPER)
+$(TEST_MENU_OBJ): src/app/main.cpp Makefile $(CONFIG_STAMP) | $(MAPPER)
 	@echo "  TEST CXX $< (private menu lock)"
 	@mkdir -p $(@D)
 	$(Q)$(CXX) $(CPPFLAGS) $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -DISOCMD_TEST_PRIVATE_LOCK -c $< -o $@
