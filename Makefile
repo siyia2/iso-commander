@@ -7,11 +7,12 @@
 #    src/<module>/*.cpp            implementation, `import`s the modules above
 #    deps/                         vendored third-party code (libchdr)
 #    build/<variant>/              object + dependency files (generated)
-#    isocmd                        final binary (generated, kept at the root)
+#    isocmd                        dynamic executable (generated at the root)
+#    isocmd_static                 static executable (generated at the root)
 #
 #  Usage:
-#    make                  optimized dynamic build
-#    make STATIC=1         fully static build
+#    make                  optimized dynamic build (isocmd)
+#    make STATIC=1         fully static build (isocmd_static)
 #    make SANITIZE=1       AddressSanitizer build
 #    make SANITIZE=2       ThreadSanitizer build
 #    make FAST=1           quick development build: -O0, no LTO (separate build/fast tree).
@@ -21,6 +22,7 @@
 #  Native std is cached outside the ordinary build tree.
 #    make clean cache             discard build output and standard-library cache
 #    make cache                   discard cached standard-library artifacts only
+#    make nocache                 build without the persistent std cache; rebuild std each time
 #    make V=1                     show full compiler command lines
 #    make install [BINDIR=/some/dir]
 # ============================================================================
@@ -32,7 +34,8 @@ ifeq ($(filter -j%, $(MAKEFLAGS)),)
 endif
 
 # ---------- Project ----------
-TARGET   := isocmd
+TARGET_DYN  := isocmd
+TARGET_STAT := isocmd_static
 SRC_DIR  := src
 DEPS_DIR := deps
 BUILD_DIR ?= build
@@ -113,12 +116,19 @@ LIBS_STAT = $(CHD_STATIC) \
 
 # ---------- Select build type ----------
 ifeq ($(STATIC),1)
+    TARGET       := $(TARGET_STAT)
     LIBS         = $(LIBS_STAT)
     LDFLAGS_LINK = -static
     VARIANT     := $(VARIANT)-static
 else
+    TARGET       := $(TARGET_DYN)
     LIBS         = $(LIBS_DYN)
     LDFLAGS_LINK =
+endif
+
+# Keep uncached objects and CMIs separate from the normal build variants.
+ifneq ($(filter nocache,$(MAKECMDGOALS)),)
+    VARIANT := $(VARIANT)-nocache
 endif
 
 # Assigned (not appended) so environment CXXFLAGS/LDFLAGS (e.g. from makepkg)
@@ -158,7 +168,11 @@ STD_CACHE_KEY := $(shell { \
     $(CXX) -dumpmachine; \
     stat -Lc '%n %d %i %s %y %z' "$$(command -v $(firstword $(CXX)))" "$$($(CXX) -print-prog-name=cc1plus)"; \
     } | sha256sum | cut -d' ' -f1)
-STD_CACHE_DIR := $(STD_CACHE_ROOT)/$(VARIANT)/$(STD_CACHE_KEY)
+ifneq ($(filter nocache,$(MAKECMDGOALS)),)
+    STD_CACHE_DIR := $(OBJ_DIR)/std/$(STD_CACHE_KEY)
+else
+    STD_CACHE_DIR := $(STD_CACHE_ROOT)/$(VARIANT)/$(STD_CACHE_KEY)
+endif
 STD_MODULE_OBJ := $(STD_CACHE_DIR)/std.o
 STD_MODULE_GCM := $(STD_CACHE_DIR)/std.gcm
 STD_MODULE_DEP := $(STD_CACHE_DIR)/std.d
@@ -174,9 +188,9 @@ $(CONFIG_STAMP): FORCE Makefile
 	@{ printf '%s\n' '$(CXX)' '$(shell $(CXX) --version 2>/dev/null | head -n 1)' '$(CPPFLAGS)' '$(CXXFLAGS)' '$(LDFLAGS)' '$(LIBS)' '$(STD_CACHE_KEY)' '$(MOD_NAMES)'; } > $@.tmp
 	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
 
-# The executable is shared by the release/static/sanitizer build trees. Relink
-# when switching variants even if the newly selected objects are older.
-LINK_STAMP := $(BUILD_DIR)/link.config
+# Each linkage type has its own executable and link stamp. Relink only
+# when switching variants that share that executable (e.g. release and fast).
+LINK_STAMP := $(BUILD_DIR)/link-$(TARGET).config
 $(LINK_STAMP): FORCE
 	@mkdir -p $(@D)
 	@printf '%s\n' '$(OBJ_DIR)' > $@.tmp
@@ -293,7 +307,8 @@ $(MAPPER): Makefile $(CONFIG_STAMP) $(STD_MODULE_MAPPER)
 	  mv -f "$$tmp" "$@"; \
 	fi
 
-# Build the actual libstdc++ module once; its object is linked exactly once.
+# Build libstdc++ once per cached configuration, or on every nocache build.
+# Its object is linked exactly once.
 # -MD tracks installed standard-library sources and headers as well.
 $(STD_MODULE_MAPPER): Makefile
 	@mkdir -p $(@D)
@@ -307,7 +322,9 @@ $(STD_MODULE_OBJ) $(STD_MODULE_GCM) &: Makefile $(STD_MODULE_MAPPER)
 	$(Q)set -e; trap 'rm -f $(STD_MODULE_GCM) $(STD_MODULE_OBJ) $(STD_MODULE_DEP).tmp' EXIT; \
 	$(CXX) $(filter-out -MMD -MP,$(CPPFLAGS)) -MD -MP -MF $(STD_MODULE_DEP).tmp -MT $(STD_MODULE_OBJ) -MT $(STD_MODULE_GCM) -fmodule-mapper=$(STD_MODULE_MAPPER) $(CXXFLAGS) -fsearch-include-path -x c++ -c bits/std.cc -o $(STD_MODULE_OBJ); \
 	mv -f $(STD_MODULE_DEP).tmp $(STD_MODULE_DEP); trap - EXIT
-ifeq ($(wildcard $(STD_MODULE_DEP)),)
+ifneq ($(filter nocache,$(MAKECMDGOALS)),)
+$(STD_MODULE_OBJ) $(STD_MODULE_GCM): FORCE
+else ifeq ($(wildcard $(STD_MODULE_DEP)),)
 $(STD_MODULE_OBJ) $(STD_MODULE_GCM): FORCE
 endif
 -include $(STD_MODULE_DEP)
@@ -315,7 +332,7 @@ endif
 # ---------- Targets ----------
 .DEFAULT_GOAL := all
 .DELETE_ON_ERROR:
-.PHONY: all clean cache install uninstall help
+.PHONY: all clean cache nocache install uninstall help
 # Read the generated priority order before expanding the link prerequisites.
 # Do not regenerate the project dependency graph just to delete it.
 ifeq ($(strip $(MAKECMDGOALS)),)
@@ -329,6 +346,7 @@ BUILD_OBJS = $(filter $(OBJS),$(SCHEDULED_OBJS)) $(filter-out $(SCHEDULED_OBJS),
 # ranked importer graph.
 EARLY_OBJS := $(filter $(ROOT_MODULE_OBJS),$(BUILD_OBJS))
 all: $(TARGET)
+nocache: all
 
 $(TARGET): $(STD_MODULE_OBJ) $(STD_MODULE_GCM) $(EARLY_OBJS) $(filter-out $(EARLY_OBJS),$(BUILD_OBJS)) $(LINK_STAMP)
 	@echo "  LD      $@"
@@ -348,7 +366,7 @@ $(OBJ_DIR)/mod/%.o: $(MOD_DIR)/%.cppm Makefile $(CONFIG_STAMP) | $(MAPPER)
 	$(publish_depfile)
 
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET_DYN) $(TARGET_STAT)
 
 cache:
 	rm -rf $(STD_CACHE_ROOT)
@@ -361,8 +379,10 @@ uninstall:
 	rm -f $(BINDIR)/$(TARGET)
 
 help:
-	@echo "Targets:  all (default)  clean  cache   install  uninstall  help"
+	@echo "Targets:  all (default)  clean  cache  nocache  install  uninstall  help"
 	@echo "Options:  STATIC=1  SANITIZE=1|2  FAST=1  V=1  BINDIR=<dir>  BUILD_DIR=<dir>"
+	@echo "nocache:  rebuild std in the build tree without using .std-cache/"
+	@echo "Output:   isocmd (default), isocmd_static (STATIC=1)"
 	@echo "Compiler: $(CXX)"
 
 # Recover dependency files left by older Makefiles after failed GCC builds.
