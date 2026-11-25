@@ -1,24 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cerrno>
-#include <condition_variable>
-#include <cstdint>
-#include <cstddef>
-#include <cstring>
-#include <deque>
-#include <memory>
-#include <mutex>
-#include <optional>
-#include <string>
-#include <thread>
-#include <utility>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <sys/ioctl.h>
@@ -26,12 +11,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-// Project Headers
-#include "isocmd/core/cancellation.h"
-#include "isocmd/write2usb/write2usbUI.h"
-#include "isocmd/write2usb/alignedBuffer.h"
-#include "isocmd/write2usb/isoDetect.h"
-#include "isocmd/write2usb/windowsWriter.h"
+import std;
+import isocmd.core.cancellation;
+import isocmd.write2usb.util.alignedBuffer;
+import isocmd.write2usb.util.isoDetect;
+import isocmd.write2usb.windows.windowsWriter;
+import isocmd.write2usb.ui.write2usbUI;
 
 namespace {
 

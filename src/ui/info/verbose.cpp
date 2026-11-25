@@ -1,37 +1,32 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <cctype>
-#include <chrono>
-#include <cstddef>
-#include <functional>
-#include <iomanip>
-#include <iostream>
-#include <iterator>
-#include <sstream>
-#include <string>
-#include <string_view>
-#include <unordered_set>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
+#include <stdio.h>
 #include <signal.h>
 
-// Third-Party Library Headers
 #include <readline/history.h>
 
-// Project Headers
-#include "isocmd/database/databaseOps.h"
-#include "isocmd/ui/display.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/ui/pausePrompts.h"
-#include "isocmd/input/readline.h"
-#include "isocmd/core/cancellation.h"
-#include "isocmd/core/lists.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/ui/verbose.h"
+import std;
+import isocmd.core.cancellation;
+import isocmd.core.lists;
+import isocmd.database.databaseOps;
+import isocmd.input.inputHandling;
+import isocmd.select.select;
+import isocmd.ui.interface.pausePrompts;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.display.themes;
+import isocmd.ui.info.verbose;
+
+VerboseSets verboseSets;
+
+void clearGlobalVerboseSets() {
+    verboseSets.operationCompleted.clear();
+    verboseSets.operationFailed.clear();
+    verboseSets.operationSkipped.clear();
+    verboseSets.uniqueErrorTokenMessages.clear();
+    std::vector<MountRecord>().swap(verboseSets.mountRecords); // also release capacity
+    std::vector<UmountRecord>().swap(verboseSets.umountRecords);
+}
 
 std::int64_t monotonicNowNs() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(

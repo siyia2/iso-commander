@@ -1,27 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <cctype>
-#include <cstddef>
-#include <cstring>
-#include <exception>
-#include <future>
-#include <iterator>
-#include <numeric>
-#include <string>
-#include <string_view>
-#include <utility>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
 #include <emmintrin.h>
 
-// Project Headers
-#include "isocmd/core/threadCaps.h"
-#include "isocmd/threadpool/threadpool.h"
-#include "isocmd/filter/filter.h"
-#include "isocmd/util/stringManipulation.h"
+import std;
+import isocmd.core.threadCaps;
+import isocmd.filter.filter;
+import isocmd.threadpool.threadpool;
+import isocmd.util.stringManipulation;
 
 // ─── SIMD Search Implementation (SSE2) ───────────────────────────────────────
 
@@ -43,8 +29,8 @@
  * bytes with the pattern.
  *
  * Platform: requires x86/x86-64 (SSE2 is part of the x86-64 baseline) and a
- * compiler providing @c __builtin_ctz (GCC/Clang). Not buildable on other
- * architectures or MSVC as written.
+ * GCC, providing @c __builtin_ctz. Not buildable on other architectures
+ * as written.
  *
  * Safety: the vector loop runs only while @c i + m + 15 <= n, so both
  * unaligned 16-byte loads stay inside @p text. Bounds are written as

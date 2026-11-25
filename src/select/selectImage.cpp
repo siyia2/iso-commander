@@ -1,34 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <atomic>
-#include <cstddef>
-#include <format>
-#include <iostream>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
-
-// Third-Party Library Headers
+#include <stdio.h>
 #include <readline/history.h>
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/database/databaseOps.h"
-#include "isocmd/filter/filter.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/core/globalMutexes.h"
-#include "isocmd/ui/readlineResize.h"
-#include "isocmd/input/readline.h"
-#include "isocmd/select/select.h"
-#include "isocmd/select/selectShared.h"
-#include "isocmd/core/sharedRefreshState.h"
-#include "isocmd/core/cancellation.h"
-#include "isocmd/core/lists.h"
-#include "isocmd/core/uiState.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/ui/verbose.h"
+import std;
+import isocmd.core.cancellation;
+import isocmd.core.lists;
+import isocmd.core.uiState;
+import isocmd.filter.filter;
+import isocmd.input.inputHandling;
+import isocmd.input.readline;
+import isocmd.select.select;
+import isocmd.select.selectShared;
+import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.themes;
+import isocmd.ui.info.verbose;
 
 using namespace select_shared;
 
@@ -318,13 +305,17 @@ namespace {
              * @return Formatted prompt string for @c readlineWithResize().
              */
             std::string buildPrompt(const ReadlineAndPromptTheme& pt) const {
-                return std::format("{0}IDX{1} ↵ for {2}{3}{1}, ? for help: {4}",
-                    UI::Palette::RL_idxGreen,
-                    pt.primary,
-                    pt.highlight,
-                    operation,
-                    pt.reset
-                );
+                std::string prompt(UI::Palette::RL_idxGreen);
+                prompt
+                    .append("IDX")
+                    .append(pt.primary)
+                    .append(" ↵ for ")
+                    .append(pt.highlight)
+                    .append(operation)
+                    .append(pt.primary)
+                    .append(", ? for help: ")
+                    .append(pt.reset);
+                return prompt;
             }
 
             /**

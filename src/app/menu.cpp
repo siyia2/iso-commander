@@ -1,30 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <atomic>
-#include <chrono>
-#include <condition_variable>
-#include <iostream>
-#include <memory>
-#include <mutex>
-#include <string>
-#include <thread>
-#include <vector>
-
-// Third-Party Library Headers
+#include <stdio.h>
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/core/globalMutexes.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/ui/readlineResize.h"
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/input/readline.h"
-#include "isocmd/select/select.h"
-#include "isocmd/core/uiState.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/ui/display.h"
-#include "isocmd/core/sharedRefreshState.h"
+import std;
+import isocmd.app.main;
+import isocmd.core.globalMutexes;
+import isocmd.core.sharedRefreshState;
+import isocmd.core.uiState;
+import isocmd.input.inputHandling;
+import isocmd.input.readline;
+import isocmd.select.select;
+import isocmd.ui.display.readlineResize;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.display.themes;
 
 /**
  * @brief Renders the multi-colored ASCII art banner to the terminal.

@@ -1,32 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <cstddef>
-#include <format>
-#include <iostream>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
-
+#include <stddef.h>
+#include <stdio.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-// Third-Party Library Headers
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/core/sharedRefreshState.h"
-#include "isocmd/core/lists.h"
-#include "isocmd/core/uiState.h"
-#include "isocmd/filter/filter.h"
-#include "isocmd/ui/display.h"
-#include "isocmd/ui/printList.h"
-#include "isocmd/ui/readlineResize.h"
-#include "isocmd/ui/stringListView.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/util/stringManipulation.h"
+import std;
+import isocmd.core.sharedRefreshState;
+import isocmd.core.uiState;
+import isocmd.filter.filter;
+import isocmd.ui.display.display;
+import isocmd.ui.display.printList;
+import isocmd.ui.display.stringListView;
+import isocmd.ui.display.themes;
+import isocmd.util.stringManipulation;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -600,19 +589,13 @@ namespace {
 
         const size_t sampleShown = std::min(totalMatches, initialRows);
 
-        const std::string statusSample = (totalMatches > sampleShown)
-            ? std::format(
-                  "[preview {}-{}/{} · shown {} · PgUp/PgDn to scroll]",
-                  1,
-                  sampleEnd,
-                  totalMatches,
-                  sampleShown)
-            : std::format(
-                  "[preview {}-{}/{} · shown {}]",
-                  1,
-                  sampleEnd,
-                  totalMatches,
-                  sampleShown);
+        std::string statusSample("[preview 1-");
+        statusSample.append(std::to_string(sampleEnd)).append("/")
+                    .append(std::to_string(totalMatches)).append(" · shown ")
+                    .append(std::to_string(sampleShown));
+        if (totalMatches > sampleShown)
+            statusSample.append(" · PgUp/PgDn to scroll");
+        statusSample.append("]");
 
         const size_t wrappedRows =
             wrappedLineRows(statusSample.size(), termCols);

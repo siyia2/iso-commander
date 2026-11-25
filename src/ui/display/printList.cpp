@@ -1,33 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <array>
-#include <atomic>
-#include <charconv>
-#include <cstddef>
-#include <filesystem>
-#include <iostream>
-#include <memory>
-#include <mutex>
-#include <string>
-#include <string_view>
-#include <vector>
+#include <stddef.h>
 
-// Project Headers
-#include "isocmd/ui/display.h"
-#include "isocmd/filter/filter.h"
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/ui/termSize.h"
-#include "isocmd/ui/printList.h"
-#include "isocmd/app/main.h"
-#include "isocmd/core/sharedRefreshState.h"
-#include "isocmd/core/lists.h"
-#include "isocmd/core/paths.h"
-#include "isocmd/core/uiState.h"
-#include "isocmd/ui/stringListView.h"
-#include "isocmd/util/stringManipulation.h"
-#include "isocmd/ui/themes.h"
+import std;
+import isocmd.app.main;
+import isocmd.core.lists;
+import isocmd.core.paths;
+import isocmd.core.sharedRefreshState;
+import isocmd.core.uiState;
+import isocmd.filter.filter;
+import isocmd.ui.display.display;
+import isocmd.ui.display.printList;
+import isocmd.ui.display.stringListView;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.cli.termSize;
+import isocmd.ui.display.themes;
+import isocmd.util.stringManipulation;
 
 namespace fs = std::filesystem;
 

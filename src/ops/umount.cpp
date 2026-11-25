@@ -1,35 +1,62 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <cctype>
-#include <cstddef>
-#include <filesystem>
-#include <functional>
-#include <iterator>
-#include <mutex>
-#include <string>
-#include <string_view>
-#include <tuple>
-#include <unordered_set>
-#include <utility>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
 #include <unistd.h>
 
-// Third-Party Library Headers
 #include <libmount/libmount.h>
 
-// Project Headers
-#include "isocmd/ui/display.h"
-#include "isocmd/core/globalMutexes.h"
-#include "isocmd/core/cancellation.h"
-#include "isocmd/util/stringManipulation.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/ops/umount.h"
-#include "isocmd/ui/verbose.h"
+import std;
+import isocmd.core.cancellation;
+import isocmd.core.globalMutexes;
+import isocmd.ops.umount;
+import isocmd.ui.display.display;
+import isocmd.ui.display.themes;
+import isocmd.ui.info.verbose;
+import isocmd.util.stringManipulation;
+
+namespace {
+
+/**
+ * @brief Formatter for unmount-specific verbose terminal messages.
+ * @details Generates ANSI color-coded strings for unmounting operations,
+ * utilizing std::string_view and buffer reservation to ensure high performance
+ * and minimal heap allocations during batch processing.
+ */
+struct VerboseMessageFormatter {
+    const SemanticUIColors tc;
+
+    VerboseMessageFormatter() : tc(resolveVerboseTheme()) {}
+
+    // Change parameters to std::string_view to avoid caller-side allocations
+    std::string format(std::string_view messageType, std::string_view path) const {
+        std::string buf;
+        // Pre-calculating a safe minimum size prevents multiple reallocations during append
+        buf.reserve(128 + path.size());
+
+        auto appendError = [&](std::string_view tag) {
+            buf.append(tc.error).append("Failed to unmount: ")
+               .append(tc.warning).append("'").append(path).append(tc.warning).append("'")
+               .append(tc.error).append(". ")
+               .append(tc.label).append("{").append(tag).append("}")
+               .append(tc.reset);
+        };
+
+        // Comparison of string_view with "literals" is highly optimized in C++20
+        if (messageType == "success") {
+            buf.append(tc.label).append("Unmounted: ")
+               .append(tc.path).append("'").append(path).append(tc.path).append("'")
+               .append(tc.label).append(".")
+               .append(tc.reset);
+        }
+        else if (messageType == "root_error") appendError("needsRoot");
+        else if (messageType == "error")      appendError("notAnISO");
+        else if (messageType == "cancel")     appendError("cxl");
+
+        return buf;
+    }
+};
+
+} // namespace
 
 namespace fs = std::filesystem;
 

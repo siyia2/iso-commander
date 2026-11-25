@@ -1,50 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <csignal>
-#include <cstddef>
-#include <cstdint>
-#include <exception>
-#include <filesystem>
-#include <format>
-#include <functional>
-#include <future>
-#include <iostream>
-#include <memory>
-#include <mutex>
-#include <sstream>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <utility>
-#include <vector>
-
-// Third-Party Library Headers
+#include <stdio.h>
+#include <signal.h>
 #include <readline/history.h>
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/database/databaseOps.h"
-#include "isocmd/ui/display.h"
-#include "isocmd/core/globalMutexes.h"
-#include "isocmd/input/history.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/ui/readlineResize.h"
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/ui/termSize.h"
-#include "isocmd/ui/pausePrompts.h"
-#include "isocmd/input/readline.h"
-#include "isocmd/search/search.h"
-#include "isocmd/core/cancellation.h"
-#include "isocmd/core/lists.h"
-#include "isocmd/core/paths.h"
-#include "isocmd/util/stringManipulation.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/threadpool/threadpool.h"
-#include "isocmd/ui/verbose.h"
+import std;
+import isocmd.core.cancellation;
+import isocmd.core.globalMutexes;
+import isocmd.core.lists;
+import isocmd.core.paths;
+import isocmd.database.databaseOps;
+import isocmd.input.history;
+import isocmd.input.inputHandling;
+import isocmd.input.readline;
+import isocmd.search.search;
+import isocmd.threadpool.threadpool;
+import isocmd.ui.interface.pausePrompts;
+import isocmd.ui.display.readlineResize;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.cli.termSize;
+import isocmd.ui.display.themes;
+import isocmd.ui.info.verbose;
+import isocmd.util.stringManipulation;
 
 namespace fs = std::filesystem;
 
@@ -715,17 +693,25 @@ static const std::unordered_map<std::string, FileTypeConfig>& getFileTypeMap() {
  * @return std::string  The formatted and ANSI-coded readline prompt string.
  */
 static std::string buildSearchPrompt(const VerboseAndDatabaseTheme& dt, const std::string& fileExtension) {
-    return std::format(
-        "\001{0}\002FolderPaths\001{1}\002 ↵ to search for \001{2}\002{3}"
-        "\001{1}\002 entries and cache in \001{4}\002RAM\001{1}"
-        "\002, ? for help:\n\001{5}\002",
-        dt.green,      // {0}
-        dt.blue,       // {1}
-        dt.orange,     // {2}
-        fileExtension, // {3}
-        dt.yellow,     // {4}
-        dt.reset       // {5}
-    );
+    std::string prompt("\001");
+    prompt
+        .append(dt.green)
+        .append("\002FolderPaths\001")
+        .append(dt.blue)
+        .append("\002 ↵ to search for \001")
+        .append(dt.orange)
+        .append("\002")
+        .append(fileExtension)
+        .append("\001")
+        .append(dt.blue)
+        .append("\002 entries and cache in \001")
+        .append(dt.yellow)
+        .append("\002RAM\001")
+        .append(dt.blue)
+        .append("\002, ? for help:\n\001")
+        .append(dt.reset)
+        .append("\002");
+    return prompt;
 }
 
 /**

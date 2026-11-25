@@ -1,20 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <atomic>
-#include <cerrno>
-#include <cstdint>
-#include <mutex>
-#include <thread>
-
-// C / System Headers
+#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-// Project Headers
-#include "isocmd/ui/progressBarSizeWatcher.h"
+import std;
+import isocmd.ui.bar.progressBarSizeWatcher;
+import isocmd.ui.cli.termSize;
 
 namespace rendering_detail {
 namespace {

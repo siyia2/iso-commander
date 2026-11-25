@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <utility>
+import std;
 
-// Project Headers
-#include "isocmd/write2usb/drainingState.h"
+import isocmd.write2usb.util.drainingState;
 
 void DrainingThreadManager::add(std::thread&& t) {
     std::lock_guard<std::mutex> lock(mtx);

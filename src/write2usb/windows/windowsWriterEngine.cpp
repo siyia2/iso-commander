@@ -1,22 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <cerrno>
-#include <cstddef>
-#include <cstdint>
-#include <filesystem>
-#include <string>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
+#include <stdint.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 
-// Project Headers
-#include "isocmd/core/cancellation.h"
-#include "isocmd/write2usb/windowsWriterEngine.h"
+import std;
+import isocmd.core.cancellation;
+import isocmd.write2usb.windows.windowsWriterEngine;
 
 namespace fs = std::filesystem;
 

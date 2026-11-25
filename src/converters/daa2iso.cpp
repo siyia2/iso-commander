@@ -43,22 +43,16 @@
 
 // ___________________________________________________________________________
 
-// C++ Standard Library Headers
-#include <atomic>
-#include <cstddef>
-#include <filesystem>
-#include <string>
-
-// C / System Headers
+#include <stddef.h>
 #include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-// Project Headers
-#include "isocmd/converters/daa2iso.h"
-#include "isocmd/core/cancellation.h"
+import std;
+import isocmd.converters.daa2iso;
+import isocmd.core.cancellation;
 
 namespace fs = std::filesystem;
 

@@ -1,41 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <csignal>
-#include <cstddef>
-#include <cstdlib>
-#include <format>
-#include <functional>
-#include <iomanip>
-#include <iostream>
-#include <memory>
-#include <sstream>
-#include <string>
-#include <string_view>
-#include <thread>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <termios.h>
 #include <unistd.h>
 
-// Third-Party Library Headers
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/input/readline.h"
-#include "isocmd/ui/progressBarSizeWatcher.h"
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/ui/termSize.h"
-#include "isocmd/core/cancellation.h"
-#include "isocmd/core/uiState.h"
-#include "isocmd/ui/themes.h"
+import std;
+import isocmd.core.cancellation;
+import isocmd.core.uiState;
+import isocmd.input.inputHandling;
+import isocmd.input.readline;
+import isocmd.proc.process;
+import isocmd.ui.bar.progressBarSizeWatcher;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.cli.termSize;
+import isocmd.ui.display.themes;
 
 namespace {
 
@@ -785,7 +770,15 @@ namespace {
         }
 
         std::string makePrompt(std::string_view text) const {
-            return std::format("\001{}\002{}\001{}\002", color, text, pc_.reset);
+            std::string prompt("\001");
+            prompt
+                .append(color)
+                .append("\002")
+                .append(text)
+                .append("\001")
+                .append(pc_.reset)
+                .append("\002");
+            return prompt;
         }
 
         std::string promptFor(int cols) const {
@@ -1060,4 +1053,21 @@ void displayProgressBarWithSize(
         header);
 
     session.run();
+}
+
+// Keep the std::thread constructor instantiation in a single translation unit.
+std::thread launchProgressBar(
+    std::atomic<size_t>* completedBytes,
+    size_t totalBytes,
+    std::atomic<size_t>* completedTasks,
+    std::atomic<size_t>* failedTasks,
+    size_t totalTasks,
+    std::atomic<bool>* isComplete,
+    bool* verbose,
+    const std::string& operation,
+    const std::string& header) {
+    return std::thread(displayProgressBarWithSize,
+                       completedBytes, totalBytes,
+                       completedTasks, failedTasks, totalTasks,
+                       isComplete, verbose, operation, header);
 }

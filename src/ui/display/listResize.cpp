@@ -1,23 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <atomic>
-#include <cassert>
-#include <cstdlib>
-#include <iostream>
-#include <memory>
-#include <string>
-#include <utility>
-
-// C / System Headers
+#include <stdio.h>
+#include <assert.h>
 #include <signal.h>
 
-// Third-Party Library Headers
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/ui/readlineResize.h"
-#include "isocmd/ui/termSize.h"
+import std;
+import isocmd.ui.display.readlineResize;
+import isocmd.ui.cli.termSize;
 
 /**
  * @brief Wraps @c readline() with an optional @ref ListResizeWatcher and

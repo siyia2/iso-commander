@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <cstddef>
-#include <string>
-#include <utility>
-#include <vector>
+import std;
 
-// Project Headers
-#include "isocmd/filter/filter.h"
-#include "isocmd/ui/display.h"
+import isocmd.filter.filter;
+import isocmd.ui.display.display;
+
+std::vector<FilteringState> filteringStack;
 
 /**
  * @brief Translates a filter match's local index (relative to the current

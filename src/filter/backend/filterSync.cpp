@@ -1,17 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <cstddef>
-#include <string>
-#include <string_view>
-#include <unordered_map>
-#include <unordered_set>
-#include <utility>
-#include <vector>
+import std;
 
-// Project Headers
-#include "isocmd/filter/filter.h"
+import isocmd.core.lists;
+import isocmd.filter.filter;
 
 // ─── Filter stack sync ───────────────────────────────────────────────────
 

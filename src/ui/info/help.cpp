@@ -1,17 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <csignal>
-#include <cstdint>
-#include <iostream>
-#include <string>
-#include <string_view>
+import std;
 
-// Project Headers
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/ui/pausePrompts.h"
-#include "isocmd/ui/themes.h"
+import isocmd.input.inputHandling;
+import isocmd.ui.interface.pausePrompts;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.display.themes;
 
 namespace {
 

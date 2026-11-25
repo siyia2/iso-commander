@@ -1,43 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <cassert>
-#include <cerrno>
-#include <chrono>
-#include <cstddef>
-#include <cstdio>
-#include <filesystem>
-#include <functional>
-#include <iomanip>
-#include <iostream>
-#include <memory>
-#include <mutex>
-#include <sstream>
-#include <string>
-#include <thread>
-#include <unordered_map>
-#include <utility>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
+#include <stdio.h>
+#include <errno.h>
+#include <assert.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
 #include <unistd.h>
 
-// Third-Party Library Headers
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/ui/display.h"
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/ui/termSize.h"
-#include "isocmd/core/cancellation.h"
-#include "isocmd/util/stringManipulation.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/write2usb/write2usbUI.h"
+import std;
+import isocmd.core.cancellation;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.cli.termSize;
+import isocmd.ui.display.themes;
+import isocmd.write2usb.ui.textWidth;
+import isocmd.write2usb.ui.write2usbUI;
+import isocmd.write2usb.util.writeTypes;
 
 namespace fs = std::filesystem;
 

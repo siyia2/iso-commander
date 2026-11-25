@@ -1,39 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <csignal>
-#include <cstddef>
-#include <filesystem>
-#include <iostream>
-#include <memory>
-#include <mutex>
-#include <string>
-#include <string_view>
-#include <system_error>
-#include <unordered_set>
-#include <utility>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
+#include <signal.h>
 #include <sys/stat.h>
 
-// Project Headers
-#include "isocmd/core/caches.h"
-#include "isocmd/database/databaseOps.h"
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/filter/filter.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/core/globalMutexes.h"
-#include "isocmd/ui/stringListView.h"
-#include "isocmd/ui/pausePrompts.h"
-#include "isocmd/ui/printList.h"
-#include "isocmd/core/sharedRefreshState.h"
-#include "isocmd/util/sort.h"
-#include "isocmd/core/lists.h"
-#include "isocmd/core/uiState.h"
-#include "isocmd/ui/themes.h"
+import std;
+import isocmd.core.caches;
+import isocmd.core.globalMutexes;
+import isocmd.core.lists;
+import isocmd.core.sharedRefreshState;
+import isocmd.core.uiState;
+import isocmd.database.databaseOps;
+import isocmd.filter.filter;
+import isocmd.input.inputHandling;
+import isocmd.select.select;
+import isocmd.ui.interface.pausePrompts;
+import isocmd.ui.display.printList;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.display.themes;
+import isocmd.util.sort;
 
 // =============================================================================
 // External declarations

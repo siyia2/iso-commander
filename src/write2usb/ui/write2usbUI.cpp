@@ -1,46 +1,29 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <cctype>
-#include <csignal>
-#include <cstddef>
-#include <cstdint>
-#include <cstdlib>
-#include <filesystem>
-#include <format>
-#include <fstream>
-#include <iostream>
-#include <memory>
-#include <mutex>
-#include <sstream>
-#include <string>
-#include <system_error>
-#include <unordered_set>
-#include <utility>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <signal.h>
 #include <unistd.h>
 
-// Third-Party Library Headers
 #include <readline/history.h>
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/input/readline.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/ui/display.h"
-#include "isocmd/ui/readlineResize.h"
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/ui/termSize.h"
-#include "isocmd/ui/pausePrompts.h"
-#include "isocmd/util/sort.h"
-#include "isocmd/core/cancellation.h"
-#include "isocmd/util/stringManipulation.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/threadpool/threadpool.h"
-#include "isocmd/write2usb/write2usbUI.h"
+import std;
+import isocmd.core.cancellation;
+import isocmd.input.inputHandling;
+import isocmd.input.readline;
+import isocmd.threadpool.threadpool;
+import isocmd.ui.display.display;
+import isocmd.ui.interface.pausePrompts;
+import isocmd.ui.display.readlineResize;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.cli.termSize;
+import isocmd.ui.display.themes;
+import isocmd.util.stringManipulation;
+import isocmd.write2usb.util.terminalGuards;
+import isocmd.write2usb.ui.textWidth;
+import isocmd.write2usb.ui.write2usbUI;
 
 namespace fs = std::filesystem;
 
@@ -87,14 +70,18 @@ namespace MappingPrompt {
      * @return std::string Formatted ANSI-colored prompt string.
      */
     std::string buildIdxPrompt(const WriteTheme& wt) {
-        return std::format(
-            "\n{}IDX>DEVICE{} ↵ for {}write2usb{}, ? for help: {}",
-            UI::Palette::RL_idxGreen,
-            wt.rl_primaryCol,
-            UI::Palette::RL_Yellow,
-            wt.rl_primaryCol,
-            wt.rl_resetCol
-        );
+        std::string prompt("\n");
+        prompt
+            .append(UI::Palette::RL_idxGreen)
+            .append("IDX>DEVICE")
+            .append(wt.rl_primaryCol)
+            .append(" ↵ for ")
+            .append(UI::Palette::RL_Yellow)
+            .append("write2usb")
+            .append(wt.rl_primaryCol)
+            .append(", ? for help: ")
+            .append(wt.rl_resetCol);
+        return prompt;
     }
 
     /**
@@ -348,8 +335,8 @@ namespace MappingPrompt {
         }
 
         const std::string promptText = "Proceed? (y/n): ";
-        const std::string confirmPrompt =
-            std::format("\001{}\002{}{}", color, promptText, wt.rl_resetCol);
+        std::string confirmPrompt("\001");
+        confirmPrompt.append(color).append("\002").append(promptText).append(wt.rl_resetCol);
 
         std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
         {

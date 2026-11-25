@@ -1,21 +1,32 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <cctype>
-#include <charconv>
-#include <iostream>
-#include <sstream>
-#include <string>
-#include <string_view>
-#include <system_error>
-#include <unordered_map>
-#include <unordered_set>
-#include <utility>
-#include <vector>
+#include <stddef.h>
 
-// Project Headers
-#include "isocmd/select/selectShared.h"
+import std;
+import isocmd.core.uiState;
+import isocmd.input.readline;
+import isocmd.select.selectShared;
+
+ReadlineKeybindingGuard::ReadlineKeybindingGuard() {
+    setup_custom_keybindingsForSelect();
+}
+
+ReadlineKeybindingGuard::~ReadlineKeybindingGuard() {
+    reset_custom_keybindingsForSelect();
+    RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
+}
+
+void ReadlineKeybindingGuard::restore() {
+    setup_custom_keybindingsForSelect();
+}
+
+IsoListStateGuard::~IsoListStateGuard() {
+    if (!isUnmountCheck_()) {
+        isAtISOList_.store(wasAtList_, std::memory_order_release);
+    }
+
+    GlobalState::g_filteringIndicator.store(false, std::memory_order_release);
+}
 
 namespace select_shared {
 

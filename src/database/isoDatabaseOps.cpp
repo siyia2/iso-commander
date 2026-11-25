@@ -1,28 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <csignal>
-#include <cstddef>
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <filesystem>
-#include <fstream>
-#include <functional>
-#include <future>
-#include <iomanip>
-#include <iostream>
-#include <mutex>
-#include <sstream>
-#include <string>
-#include <string_view>
-#include <unordered_set>
-#include <utility>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
+#include <errno.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,20 +11,23 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-// Project Headers
-#include "isocmd/core/caches.h"
-#include "isocmd/core/threadCaps.h"
-#include "isocmd/core/globalMutexes.h"
-#include "isocmd/core/lists.h"
-#include "isocmd/core/paths.h"
-#include "isocmd/core/uiState.h"
-#include "isocmd/database/databaseOps.h"
-#include "isocmd/input/history.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/threadpool/threadpool.h"
-#include "isocmd/ui/pausePrompts.h"
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/ui/themes.h"
+import std;
+import isocmd.core.caches;
+import isocmd.core.globalMutexes;
+import isocmd.core.lists;
+import isocmd.core.paths;
+import isocmd.core.threadCaps;
+import isocmd.core.uiState;
+import isocmd.input.history;
+import isocmd.input.inputHandling;
+import isocmd.threadpool.threadpool;
+import isocmd.ui.interface.pausePrompts;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.display.themes;
+
+bool isValidDirectory(const std::string& path) {
+    return std::filesystem::is_directory(path);
+}
 
 // Local ISO Database mutex
 namespace {

@@ -1,26 +1,18 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <cerrno>
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <string>
-#include <thread>
-#include <vector>
+#include <stddef.h>
+#include <stdint.h>
+#include <errno.h>
+#include <stdio.h>
+#include <chd.h>
 
-// C / System Headers
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
-// Project Headers
-#include "isocmd/converters/chd2iso.h"
-#include "isocmd/core/cancellation.h"
+import std;
+import isocmd.converters.chd2iso;
+import isocmd.core.cancellation;
 
 namespace fs = std::filesystem;
 

@@ -1,29 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <array>
-#include <cstdint>
-#include <cstddef>
-#include <cstring>
-#include <cstdio>
-#include <fstream>
-#include <iomanip>
-#include <sstream>
-#include <string>
-#include <string_view>
-#include <vector>
-
-// C / System Headers
 #include <fcntl.h>
 #include <sys/stat.h>
 
-// Third-Party Library Headers
+#include <stdio.h>
 #include <chd.h>
 
-// Project Headers
-#include "isocmd/converters/ccd2iso.h"
-#include "isocmd/converters/daa2iso.h"
-#include "isocmd/converters/mdf2iso.h"
+import std;
+import isocmd.converters.ccd2iso;
+import isocmd.converters.daa2iso;
+import isocmd.converters.mdf2iso;
+
+// Declarations used only by this file (moved out of the module interface).
+std::size_t getTotalFileSize(const std::vector<std::string>& files);
 
 //=============================================================================
 // Write2Usb Section

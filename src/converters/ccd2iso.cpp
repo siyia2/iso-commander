@@ -1,15 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <atomic>
-#include <cstddef>
-#include <filesystem>
-#include <fstream>
-#include <string>
+import std;
 
-// Project Headers
-#include "isocmd/converters/ccd2iso.h"
-#include "isocmd/core/cancellation.h"
+import isocmd.converters.ccd2iso;
+import isocmd.core.cancellation;
 
 namespace fs = std::filesystem;
 

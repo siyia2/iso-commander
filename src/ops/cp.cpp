@@ -1,19 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <atomic>
-#include <cstddef>
-#include <cstdint>
-#include <filesystem>
-#include <fstream>
-#include <string>
-#include <string_view>
-#include <system_error>
-#include <vector>
+import std;
 
-// Project Headers
-#include "isocmd/core/cancellation.h"
-#include "isocmd/ops/cpMvRm.h"
+import isocmd.core.cancellation;
+import isocmd.ops.cpMvRm;
 
 /**
  * @brief Checks whether the global operation cancellation flag is set.

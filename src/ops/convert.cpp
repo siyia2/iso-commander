@@ -1,32 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <cctype>
-#include <cstddef>
-#include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <mutex>
-#include <string>
-#include <string_view>
-#include <utility>
-#include <vector>
-
 // C / POSIX Headers
+#include <stddef.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-// Project Headers
-#include "isocmd/core/globalMutexes.h"
-#include "isocmd/core/cancellation.h"
-#include "isocmd/core/lists.h"
-#include "isocmd/ops/convert.h"
-#include "isocmd/ui/display.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/ui/verbose.h"
-#include "isocmd/util/stringManipulation.h"
+import std;
+import isocmd.core.cancellation;
+import isocmd.core.globalMutexes;
+import isocmd.core.lists;
+import isocmd.ops.convert;
+import isocmd.ui.display.display;
+import isocmd.ui.display.themes;
+import isocmd.ui.info.verbose;
+import isocmd.util.stringManipulation;
 
 /**
  * @brief Checks whether a filesystem entry exists at the given path.

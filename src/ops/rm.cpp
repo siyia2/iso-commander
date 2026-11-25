@@ -1,30 +1,17 @@
 
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <atomic>
-#include <cstddef>
-#include <format>
-#include <filesystem>
-#include <functional>
-#include <string>
-#include <string_view>
-#include <system_error>
-#include <utility>
-#include <vector>
-
-// Third-Party Library Headers
-#include <readline/history.h>
+#include <stdio.h>
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/ops/cpMvRm.h"
-#include "isocmd/input/history.h"
-#include "isocmd/input/readline.h"
-#include "isocmd/core/cancellation.h"
-#include "isocmd/util/sort.h"
-#include "isocmd/util/stringManipulation.h"
-#include "isocmd/ui/themes.h"
+import std;
+import isocmd.ui.interface.pagination;
+import isocmd.core.cancellation;
+import isocmd.input.readline;
+import isocmd.ops.cpMvRm;
+import isocmd.ui.display.themes;
+import isocmd.util.sort;
+import isocmd.util.stringManipulation;
 
 namespace fs = std::filesystem;
 
@@ -68,13 +55,10 @@ bool handleDeleteOperation(
 
     const std::string promptPrefix = "\n";
 
-    const std::string promptSuffix = std::format(
-        "{0}The selected {1}ISO{0} will be {2}*PERMANENTLY DELETED*{0}. Proceed? (y/n): {3}",
-        blue,
-        green,
-        red,
-        reset
-    );
+    std::string promptSuffix(blue);
+    promptSuffix.append("The selected ").append(green).append("ISO").append(blue)
+                .append(" will be ").append(red).append("*PERMANENTLY DELETED*")
+                .append(blue).append(". Proceed? (y/n): ").append(reset);
 
     bool isPageTurn = false;
 

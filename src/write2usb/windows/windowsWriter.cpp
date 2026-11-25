@@ -1,23 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cctype>
-#include <cerrno>
-#include <cstddef>
-#include <cstdint>
-#include <cstdlib>
-#include <filesystem>
-#include <random>
-#include <string>
-#include <thread>
-#include <unordered_set>
-#include <utility>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <spawn.h>
 #include <signal.h>
@@ -26,17 +12,19 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-// Third-Party Library Headers
 #include <libmount/libmount.h>
 #include <blkid/blkid.h>
 
-// Project Headers
-#include "isocmd/core/cancellation.h"
-#include "isocmd/write2usb/write2usbUI.h"
-#include "isocmd/write2usb/alignedBuffer.h"
-#include "isocmd/write2usb/threadGuard.h"
-#include "isocmd/write2usb/windowsWriter.h"
-#include "isocmd/write2usb/windowsWriterEngine.h"
+import std;
+import isocmd.core.cancellation;
+import isocmd.write2usb.util.alignedBuffer;
+import isocmd.write2usb.util.threadGuard;
+import isocmd.write2usb.windows.windowsWriter;
+import isocmd.write2usb.windows.windowsWriterEngine;
+import isocmd.write2usb.util.writeTypes;
+
+// Declarations used only by this file (moved out of the module interface).
+bool isWindowsIso(const std::string& isoPath);
 
 namespace fs = std::filesystem;
 

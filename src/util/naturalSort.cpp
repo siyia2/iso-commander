@@ -1,24 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <cctype>
-#include <cstddef>
-#include <functional>
-#include <future>
-#include <mutex>
-#include <string>
-#include <string_view>
-#include <thread>
-#include <utility>
-#include <vector>
+#include <stddef.h>
 
-// Project Headers
-#include "isocmd/core/threadCaps.h"
-#include "isocmd/ui/display.h"
-#include "isocmd/core/globalMutexes.h"
-#include "isocmd/core/lists.h"
-#include "isocmd/threadpool/threadpool.h"
+import std;
+import isocmd.core.globalMutexes;
+import isocmd.core.lists;
+import isocmd.core.threadCaps;
+import isocmd.threadpool.threadpool;
+import isocmd.ui.display.display;
+
 namespace {
 
     /**

@@ -1,7 +1,82 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Project Headers
-#include "isocmd/ui/themes.h"
+import std;
+
+import isocmd.ui.display.themes;
+
+void UI::Palette::updateDefaultColors() {
+    using namespace UI::Palette;
+
+    static constexpr std::pair<std::string_view, std::string_view> colorMap[] = {
+        {"ash",      "\033[1;38;2;172;192;174m"},
+        {"black",    "\033[1;38;2;62;62;68m"},
+        {"charcoal", "\033[1;38;2;80;94;108m"},
+        {"gray",     "\033[1;38;2;146;146;152m"},
+        {"silver",   "\033[1;38;2;192;192;192m"},
+        {"steel",    "\033[1;38;2;106;128;154m"},
+        {"white",    "\033[1;38;2;222;222;222m"}
+    };
+
+    auto it = std::lower_bound(
+        std::begin(colorMap),
+        std::end(colorMap),
+        defaultColor,
+        [](const auto& entry, std::string_view val) {
+            return entry.first < val;
+        }
+    );
+
+    std::string_view code =
+        (it != std::end(colorMap) && it->first == defaultColor)
+            ? it->second
+            : "\033[1;38;2;222;222;222m";
+
+    BoldReset = std::string(code);
+
+    RL_BoldAlt =
+        "\001" + std::string(code.substr(0, code.size() - 1)) + "m\002";
+}
+
+std::string_view getskin() {
+    using namespace UI::Palette;
+    static constexpr std::pair<std::string_view, std::string_view> skinMap[] = {
+        {"amber",    Amber},
+        {"black",    Black},
+        {"cyan",     Cyan},
+        {"gray",     Gray},
+        {"green",    Green},
+        {"purple",   Purple},
+        {"rose",     Rose},
+        {"white",    White},
+    };
+    auto it = std::lower_bound(std::begin(skinMap), std::end(skinMap), skin,
+        [](const auto& entry, std::string_view val) { return entry.first < val; });
+    color = (it != std::end(skinMap) && it->first == skin) ? it->second : Reset;
+    return color;
+}
+
+const UI::MainTheme* getActiveTheme() {
+    static constexpr std::pair<std::string_view, const UI::MainTheme*> themeTable[] = {
+        {"classic",       &ClassicTheme},
+        {"crimson",       &CrimsonTheme},
+        {"dracula",       &DraculaTheme},
+        {"forest",        &ForestTheme},
+        {"high_contrast", &HighContrast},
+        {"midnight",      &MidnightTheme},
+        {"mono",          &MonoTheme},
+        {"neon",          &NeonTheme},
+        {"ocean",         &OceanTheme},
+        {"original",      &OriginalTheme},
+        {"paper",         &PaperTheme},
+        {"retro",         &RetroTheme},
+        {"sakura",        &SakuraTheme},
+        {"sunset",        &SunsetTheme},
+        {"tokyo",         &TokyoNightTheme},
+    };
+    auto it = std::lower_bound(std::begin(themeTable), std::end(themeTable), globalTheme,
+        [](const auto& entry, const std::string& val) { return entry.first < val; });
+    return (it != std::end(themeTable) && it->first == globalTheme) ? it->second : &OriginalTheme;
+}
 
 // ============================================================
 //  Interactive Prompts & Input

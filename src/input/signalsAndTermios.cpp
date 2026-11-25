@@ -1,22 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <atomic>
-#include <csignal>
-#include <cstdio>
-#include <cstdlib>
-
-// C / System Headers
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
 #include <termios.h>
 #include <unistd.h>
 
-// Third-Party Library Headers
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/core/cancellation.h"
-#include "isocmd/core/uiState.h"
+import isocmd.core.cancellation;
+import isocmd.core.uiState;
+import isocmd.input.inputHandling;
 
 /**
  * @brief Disables EOF (Ctrl+D) processing in the terminal.

@@ -1,47 +1,27 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <cctype>
-#include <chrono>
-#include <cstddef>
-#include <cstdint>
-#include <exception>
-#include <filesystem>
-#include <format>
-#include <functional>
-#include <future>
-#include <iostream>
-#include <mutex>
-#include <sstream>
-#include <string>
-#include <string_view>
-#include <unordered_set>
-#include <utility>
-#include <vector>
-
-// Third-Party Library Headers
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <readline/history.h>
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/database/databaseOps.h"
-#include "isocmd/ui/display.h"
-#include "isocmd/core/globalMutexes.h"
-#include "isocmd/input/history.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/ui/readlineResize.h"
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/ui/termSize.h"
-#include "isocmd/ui/pausePrompts.h"
-#include "isocmd/input/readline.h"
-#include "isocmd/search/search.h"
-#include "isocmd/core/cancellation.h"
-#include "isocmd/util/stringManipulation.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/threadpool/threadpool.h"
-#include "isocmd/ui/verbose.h"
+import std;
+import isocmd.core.cancellation;
+import isocmd.core.globalMutexes;
+import isocmd.database.databaseOps;
+import isocmd.input.history;
+import isocmd.input.inputHandling;
+import isocmd.input.readline;
+import isocmd.search.search;
+import isocmd.threadpool.threadpool;
+import isocmd.ui.interface.pausePrompts;
+import isocmd.ui.display.readlineResize;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.cli.termSize;
+import isocmd.ui.display.themes;
+import isocmd.ui.info.verbose;
+import isocmd.util.stringManipulation;
 
 namespace fs = std::filesystem;
 
@@ -203,14 +183,23 @@ static void executeParallelTraversal(
  * @return Formatted prompt string with ANSI color codes.
  */
 static std::string constructDatabasePrompt(const VerboseAndDatabaseTheme& dt) {
-    return std::format(
-        "\001{0}\002FolderPaths\001{1}\002 ↵ to search for {0}\002.iso"
-        "\001{1}\002 entries and import into \001{0}\002local"
-        "\001{1}\002 DB, ? for help:\n\001{2}\002",
-        dt.green, // {0}
-        dt.blue,  // {1}
-        dt.reset  // {2}
-    );
+    std::string prompt("\001");
+    prompt
+        .append(dt.green)
+        .append("\002FolderPaths\001")
+        .append(dt.blue)
+        .append("\002 ↵ to search for ")
+        .append(dt.green)
+        .append("\002.iso\001")
+        .append(dt.blue)
+        .append("\002 entries and import into \001")
+        .append(dt.green)
+        .append("\002local\001")
+        .append(dt.blue)
+        .append("\002 DB, ? for help:\n\001")
+        .append(dt.reset)
+        .append("\002");
+    return prompt;
 }
 
 /**

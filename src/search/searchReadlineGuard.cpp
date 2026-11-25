@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <cstdio>
-
-// Third-Party Library Headers
+#include <stdio.h>
 #include <readline/history.h>
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/search/search.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/input/readline.h"
+import isocmd.input.inputHandling;
+import isocmd.input.readline;
+import isocmd.search.search;
 
 SearchReadlineGuard::SearchReadlineGuard()
     : oldCompletion_(rl_attempted_completion_function) {}

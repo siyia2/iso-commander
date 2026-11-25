@@ -1,21 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <array>
-#include <cstddef>
-#include <cstdint>
-#include <queue>
-#include <string_view>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
+#include <stdint.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-// Project Headers
-#include "isocmd/write2usb/isoDetect.h"
+import std;
 
 namespace {
 

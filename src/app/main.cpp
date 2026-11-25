@@ -1,45 +1,29 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <atomic>
-#include <csignal>
-#include <cstdlib>
-#include <filesystem>
-#include <functional>
-#include <iostream>
-#include <map>
-#include <memory>
-#include <mutex>
-#include <optional>
-#include <string>
-#include <thread>
-#include <vector>
-
-// C / System Headers
+#include <stdio.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <unistd.h>
 
-// Third-Party Library Headers
 #include <readline/history.h>
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/core/sharedRefreshState.h"
-#include "isocmd/threadpool/threadpool.h"
-#include "isocmd/database/databaseOps.h"
-#include "isocmd/ui/display.h"
-#include "isocmd/ui/readlineResize.h"
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/app/main.h"
-#include "isocmd/input/readline.h"
-#include "isocmd/core/cancellation.h"
-#include "isocmd/core/lists.h"
-#include "isocmd/core/paths.h"
-#include "isocmd/core/uiState.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/config/settings.h"
-#include "isocmd/write2usb/write2usbUI.h"
+import std;
+import isocmd.app.main;
+import isocmd.settings.settings;
+import isocmd.core.cancellation;
+import isocmd.core.lists;
+import isocmd.core.paths;
+import isocmd.core.sharedRefreshState;
+import isocmd.core.uiState;
+import isocmd.database.databaseOps;
+import isocmd.input.inputHandling;
+import isocmd.input.readline;
+import isocmd.threadpool.threadpool;
+import isocmd.ui.display.readlineResize;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.display.themes;
+import isocmd.write2usb.util.drainingState;
 
 namespace fs = std::filesystem;
 

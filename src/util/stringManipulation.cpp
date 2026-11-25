@@ -1,18 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <cctype>
-#include <cstddef>
-#include <string>
-#include <string_view>
-#include <tuple>
-#include <unordered_map>
-#include <utility>
+#include <stddef.h>
 
-// Project Headers
-#include "isocmd/core/caches.h"
-#include "isocmd/ui/display.h"
+import std;
+import isocmd.core.caches;
+import isocmd.ui.display.display;
 
 /**
  * @brief Converts a string to lowercase in-place.

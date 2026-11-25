@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <cstdio>
-
-// Third-Party Library Headers
+#include <stdio.h>
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/input/readline.h"
+import isocmd.input.inputHandling;
+import isocmd.input.readline;
 
 //=============================================================================
 // Event Driven Keys

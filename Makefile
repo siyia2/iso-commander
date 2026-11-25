@@ -2,8 +2,9 @@
 #  iso-commander Makefile
 #
 #  Layout:
-#    include/isocmd/<module>/*.h   public/internal headers  (-Iinclude)
-#    src/<module>/*.cpp            implementation, mirrors include/
+#    modules/isocmd/<dir>/*.cppm   C++23 module interfaces (module isocmd.<dir>.<name>)
+#    libstdc++ bits/std.cc        compiler-provided standard library module (import std;)
+#    src/<module>/*.cpp            implementation, `import`s the modules above
 #    deps/                         vendored third-party code (libchdr)
 #    build/<variant>/              object + dependency files (generated)
 #    isocmd                        final binary (generated, kept at the root)
@@ -13,8 +14,16 @@
 #    make STATIC=1         fully static build
 #    make SANITIZE=1       AddressSanitizer build
 #    make SANITIZE=2       ThreadSanitizer build
-#    make PCH=0            disable the precompiled std header (GCC only; on by default)
-#    make V=1              show full compiler command lines
+#    make FAST=1           quick development build: -O0, no LTO (separate build/fast tree).
+#                          Much quicker edit-compile-link cycles; not for release use.
+#
+#  Requires GCC 15+ with libstdc++'s C++23 standard library module.
+#  Native std is cached outside the ordinary build tree; no header unit by default.
+#    make STD_HEADER_UNIT=1       opt in to the full header unit (GCC 16+)
+#    make clean cache             discard build output and standard-library cache
+#    make cache                   discard cached standard-library artifacts only
+#    make clean-std-cache         alias for cache
+#    make V=1                     show full compiler command lines
 #    make install [BINDIR=/some/dir]
 # ============================================================================
 
@@ -27,13 +36,29 @@ endif
 # ---------- Project ----------
 TARGET   := isocmd
 SRC_DIR  := src
-INC_DIR  := include
 DEPS_DIR := deps
 BUILD_DIR ?= build
 BINDIR   ?= bin
 
 # ---------- Toolchain ----------
 CXX ?= g++
+GCC_VERSION := $(shell $(CXX) -dumpfullversion 2>/dev/null)
+GCC_MAJOR := $(firstword $(subst ., ,$(GCC_VERSION)))
+ifeq ($(shell [ "$(GCC_MAJOR)" -ge 15 ] 2>/dev/null && echo 1),)
+    $(error GCC 15 or newer with libstdc++ standard library modules is required)
+endif
+GCC_NATIVE_STD := $(shell [ "$(GCC_MAJOR)" -ge 16 ] && echo 1 || echo 0)
+# GCC 16+ can reuse the native header unit when compiling libstdc++ std.cc.
+STD_HEADER_UNIT ?= 0
+STD_HEADER_UNIT := $(STD_HEADER_UNIT)
+ifeq ($(filter 0 1,$(STD_HEADER_UNIT)),)
+    $(error STD_HEADER_UNIT must be 0 or 1)
+endif
+ifeq ($(STD_HEADER_UNIT),1)
+    ifneq ($(GCC_NATIVE_STD),1)
+        $(error STD_HEADER_UNIT=1 requires GCC 16 or newer)
+    endif
+endif
 
 # ---------- Verbosity ----------
 ifeq ($(V),1)
@@ -43,7 +68,7 @@ else
 endif
 
 # ---------- Compiler and common flags ----------
-CXXFLAGS_BASE = -std=c++20 -Wall -Wextra
+CXXFLAGS_BASE = -std=c++23 -Wall -Wextra $(if $(filter 1,$(GCC_NATIVE_STD)),-fmodules,-fmodules-ts)
 LDFLAGS_BASE  = -Wl,--as-needed -Wl,-z,relro -Wl,-z,now
 
 # ---- Normal build ----
@@ -69,6 +94,13 @@ else ifeq ($(SANITIZE),2)
     LDFLAGS_NORMAL  =
     LDFLAGS_STRIP   =
     VARIANT         = tsan
+else ifeq ($(FAST),1)
+    # Development build: skip -O3 and whole-program LTO, which dominate the
+    # link step and are re-run in full after every edit. Output is a normal,
+    # working (but larger and slower) binary kept in its own object tree.
+    CXXFLAGS_NORMAL = -O0 -fno-plt -fno-rtti
+    LDFLAGS_NORMAL  =
+    VARIANT         = fast
 endif
 
 # ---------- Third-party / system libraries ----------
@@ -105,57 +137,308 @@ endif
 
 # Assigned (not appended) so environment CXXFLAGS/LDFLAGS (e.g. from makepkg)
 # do not alter the tuned flags above, matching the previous Makefile.
-CPPFLAGS = -I$(INC_DIR) -I$(CHD_INC) -MMD -MP
+CPPFLAGS = -I$(CHD_INC) -MMD -MP
+# The generated moddeps.mk owns the named-module dependency graph.
+# GCC's synthetic *.c++-module / *.c++m targets have no Make rules here.
+CPPFLAGS += -Mno-modules
+
 CXXFLAGS = $(CXXFLAGS_BASE) $(CXXFLAGS_NORMAL) $(CXXFLAGS_EXTRA)
 LDFLAGS  = $(LDFLAGS_LINK) $(LDFLAGS_BASE) $(LDFLAGS_NORMAL) $(LDFLAGS_EXTRA) $(LDFLAGS_STRIP)
 
 # ---------- Sources (auto-discovered, one object tree per build variant) ----------
 OBJ_DIR  := $(BUILD_DIR)/$(VARIANT)
 SRCS     := $(sort $(shell find $(SRC_DIR) -name '*.cpp'))
-OBJS     := $(SRCS:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
+MOD_DIR  := modules
+MODSRCS  := $(sort $(shell find $(MOD_DIR) -name '*.cppm'))
+OBJS     := $(SRCS:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o) $(MODSRCS:$(MOD_DIR)/%.cppm=$(OBJ_DIR)/mod/%.o)
 DEPFILES := $(OBJS:.o=.d)
 
-# ---------- Precompiled header (GCC only) ----------
-# The std headers in include/isocmd/pch.h are parsed once per build variant and
-# force-included into every translation unit. Flags are identical to normal
-# compiles, as GCC requires. Disable with `make PCH=0` (or when using clang).
-PCH ?= 1
-PCH_SRC := $(INC_DIR)/isocmd/pch.h
-PCH_DIR := $(OBJ_DIR)/pch
-PCH_GCH := $(PCH_DIR)/pch.h.gch
-ifneq ($(findstring clang,$(shell $(CXX) --version 2>/dev/null)),)
-    PCH := 0
+# ---------- C++23 modules ----------
+# modules/isocmd/a/b.cppm  ->  module isocmd.a.b  ->  $(GCM_DIR)/isocmd.a.b.gcm
+# GCC finds each compiled module interface through a generated module mapper.
+GCM_DIR := $(OBJ_DIR)/gcm
+MAPPER  := $(OBJ_DIR)/modules.map
+MOD_NAMES := $(foreach m,$(MODSRCS),$(subst /,.,$(patsubst $(MOD_DIR)/%.cppm,%,$(m))))
+
+# Native standard library named module. Its installed source is found by GCC
+# using the active compiler's own include path (no hard-coded GCC version).
+# Keep the compiler-owned module outside BUILD_DIR so ordinary clean builds
+# can reuse it. Key by compiler identity, compile flags and include environment;
+# -MD below additionally tracks the actual installed headers and std.cc.
+STD_CACHE_ROOT := .std-cache
+STD_CACHE_KEY := $(shell { \
+    printf '%s\n' '$(CXX)' '$(GCC_VERSION)' '$(CPPFLAGS)' '$(CXXFLAGS)' 'STD_HEADER_UNIT=$(STD_HEADER_UNIT)' \
+        '$(CPATH)' '$(CPLUS_INCLUDE_PATH)' '$(C_INCLUDE_PATH)' '$(GCC_EXEC_PREFIX)' '$(COMPILER_PATH)' '$(PATH)'; \
+    $(CXX) -dumpmachine; \
+    stat -Lc '%n %d %i %s %y %z' "$$(command -v $(firstword $(CXX)))" "$$($(CXX) -print-prog-name=cc1plus)"; \
+    } | sha256sum | cut -d' ' -f1)
+STD_CACHE_DIR := $(STD_CACHE_ROOT)/$(VARIANT)/$(STD_CACHE_KEY)
+STD_MODULE_OBJ := $(STD_CACHE_DIR)/std.o
+STD_MODULE_GCM := $(STD_CACHE_DIR)/std.gcm
+STD_MODULE_DEP := $(STD_CACHE_DIR)/std.d
+STD_MODULE_MAPPER := $(STD_CACHE_DIR)/std-module.map
+
+# GCC 16+ can translate standard includes to the full native header unit.
+# Do not generate a reduced umbrella: libstdc++ std.cc exports the whole library.
+ifeq ($(STD_HEADER_UNIT),1)
+    STD_GCM := $(STD_CACHE_DIR)/libstdcxx-header.gcm
+    STD_DEP := $(STD_CACHE_DIR)/libstdcxx-header.d
+    STD_MAPPER := $(STD_CACHE_DIR)/header.map
+    EARLY_MAPPER := $(OBJ_DIR)/early-modules.map
 endif
-ifeq ($(PCH),1)
-    PCH_FLAGS := -I$(PCH_DIR) -include pch.h
-    PCH_DEP   := $(PCH_GCH)
-else
-    PCH_FLAGS :=
-    PCH_DEP   :=
+
+# A changed compiler, build mode or flag set invalidates old objects and CMIs.
+# The stamp is rewritten only when the configuration actually changes.
+CONFIG_STAMP := $(OBJ_DIR)/compile.config
+.PHONY: FORCE
+FORCE:
+$(CONFIG_STAMP): FORCE Makefile
+	@mkdir -p $(@D)
+	@{ printf '%s\n' '$(CXX)' '$(shell $(CXX) --version 2>/dev/null | head -n 1)' '$(CPPFLAGS)' '$(CXXFLAGS)' '$(LDFLAGS)' '$(LIBS)' 'STD_HEADER_UNIT=$(STD_HEADER_UNIT)' '$(STD_CACHE_KEY)' '$(MOD_NAMES)'; } > $@.tmp
+	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
+
+# The executable is shared by the release/static/sanitizer build trees. Relink
+# when switching variants even if the newly selected objects are older.
+LINK_STAMP := $(BUILD_DIR)/link.config
+$(LINK_STAMP): FORCE
+	@mkdir -p $(@D)
+	@printf '%s\n' '$(OBJ_DIR)' > $@.tmp
+	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
+MODFLAGS := -fmodule-mapper=$(MAPPER)
+
+# Publish dependency files only after a successful compile. A failed compiler
+# invocation may still emit a dependency file; never include that partial output.
+DEPFLAGS = -MF $(@:.o=.d).tmp -MT $@
+
+define publish_depfile
+	$(Q)mv -f $(@:.o=.d).tmp $(@:.o=.d)
+endef
+
+# Import dependencies, scanned from the sources: every file waits for the .gcm
+# of each module it imports, and every .gcm is a by-product of its .cppm object.
+# Both implementation and interface edits can change the import graph.
+# Refresh its timestamp even if the graph is unchanged, avoiding repeated scans.
+# One awk process reads every source, avoiding per-file shell pipelines.
+# Also identify independent interfaces with no imports and only a small
+# allowlist of non-importable C/C++ compatibility headers. They can compile
+# while GCC 16 builds the umbrella header unit. Unknown includes or imports
+# conservatively retain the header-unit dependency.
+# Prioritize independent interfaces during std compilation, then rank the
+# remaining work by estimated downstream critical path plus unique transitive
+# fan-out. Source line counts approximate cost; the graph and link order are
+# unchanged. Large independent implementation files retain high priority.
+MODDEPS_MK := $(OBJ_DIR)/moddeps.mk
+$(MODDEPS_MK): $(MODSRCS) $(SRCS) Makefile $(CONFIG_STAMP)
+	@mkdir -p $(@D)
+	@set -e; tmp="$$(mktemp)"; trap 'rm -f "$$tmp"' EXIT; \
+	LC_ALL=C awk -v obj="$(OBJ_DIR)" -v gcm="$(GCM_DIR)" \
+	    -v stdgcm="$(STD_MODULE_GCM)" -v src="$(SRC_DIR)/" -v mod="$(MOD_DIR)/" '\
+	  function emit(    n,o,g,i,k,dep) { \
+	    if (file == "") return; \
+	    if (index(file, mod) == 1) { \
+	      n = substr(file, length(mod) + 1); sub(/\.cppm$$/, "", n); \
+	      o = obj "/mod/" n ".o"; gsub(/\//, ".", n); g = gcm "/" n ".gcm"; \
+	      printf "%s: %s\n\t@:\n", g, o; \
+	      printf "ifeq ($$(wildcard %s),)\n%s: FORCE\nendif\n", g, o; \
+	    } else { \
+	      n = substr(file, length(src) + 1); sub(/\.cpp$$/, "", n); \
+	      o = obj "/" n ".o"; \
+	    } \
+	    printf "%s: %s\n", o, deps; \
+	    objects[++count] = o; cost[o] = 1 + lines / 200; \
+	    if (g != "") { module_gcm[o] = g; if (early) early_objects[o] = 1; if (deps == "") root_modules[o] = 1; } \
+	    n = split(deps, imports, /[[:space:]]+/); \
+	    for (i = 1; i <= n; ++i) { \
+	      dep = imports[i]; if (dep == "") continue; \
+	      k = dep SUBSEP o; if (!edge[k]++) consumers[dep, ++degree[dep]] = o; \
+	    } \
+	  } \
+	  function rank(o,    g,i,child,best,r) { \
+	    if (o in ranks) return ranks[o]; \
+	    if (visiting[o]) { print "Cyclic module imports: " o > "/dev/stderr"; exit 1; } \
+	    visiting[o] = 1; best = 0; g = module_gcm[o]; \
+	    if (g != "") for (i = 1; i <= degree[g]; ++i) { \
+	      child = consumers[g,i]; r = rank(child); if (r > best) best = r; \
+	    } \
+	    delete visiting[o]; return ranks[o] = cost[o] + best; \
+	  } \
+	  function downstream(root,o,    g,i,child,total,k) { \
+	    k = root SUBSEP o; if (seen[k]++) return 0; \
+	    g = module_gcm[o]; total = 1; \
+	    if (g != "") for (i = 1; i <= degree[g]; ++i) { \
+	      child = consumers[g,i]; total += downstream(root,child); \
+	    } \
+	    return total; \
+	  } \
+	  BEGIN { \
+	    for (i = 1; i < ARGC; ++i) { \
+	      file = ARGV[i]; deps = ""; lines = 0; early = 1; \
+	      while ((status = (getline line < file)) > 0) { \
+	        ++lines; \
+	        if (line ~ /^[[:space:]]*#[[:space:]]*(include|include_next|import)([[:space:]<"]|$$)/ && \
+	            line !~ /^[[:space:]]*#[[:space:]]*include[[:space:]]*<(stddef\.h|stdint\.h|sys\/types\.h)>[[:space:]]*$$/) early = 0; \
+	        if (line ~ /^[[:space:]]*(export[[:space:]]+)?import([[:space:]<":]|$$)/) early = 0; \
+	        if (line !~ /^[[:space:]]*(export[[:space:]]+)?import[[:space:]]+(std|isocmd[A-Za-z0-9_.]*);/) continue; \
+	        name = line; sub(/^[[:space:]]*(export[[:space:]]+)?import[[:space:]]+/, "", name); \
+	        sub(/;.*/, "", name); \
+	        deps = deps (name == "std" ? stdgcm : gcm "/" name ".gcm") " "; \
+	      } \
+	      if (status < 0) exit 1; \
+	      close(file); emit(); \
+	    } \
+	    for (i = 1; i <= count; ++i) { \
+	      o = objects[i]; rank(o); \
+	      reach[o] = downstream(o,o) - 1; \
+	      priority[o] = ranks[o] + 0.15 * reach[o]; \
+	    } \
+	    printf "SCHEDULED_OBJS :="; \
+	    for (i = 1; i <= count; ++i) { \
+	      best = ""; \
+	      for (j = 1; j <= count; ++j) { \
+	        o = objects[j]; if (used[o]) continue; \
+	        if (best == "" || priority[o] > priority[best] || \
+	            (priority[o] == priority[best] && reach[o] > reach[best])) best = o; \
+	      } \
+	      used[best] = 1; printf " %s", best; \
+	    } \
+	    printf "\nROOT_MODULE_OBJS :="; \
+	    for (i = 1; i <= count; ++i) if (root_modules[objects[i]]) printf " %s", objects[i]; \
+	    printf "\nEARLY_MODULE_OBJS :="; \
+	    for (i = 1; i <= count; ++i) if (early_objects[objects[i]]) printf " %s", objects[i]; \
+	    printf "\n"; \
+	  }' $(MODSRCS) $(SRCS) > "$$tmp"; \
+	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then \
+	  rm -f "$$tmp" && touch "$@"; \
+	else \
+	  mv -f "$$tmp" "$@"; \
+	fi
+
+# Keep the header-unit mapper independent from the named-module mapper.
+# GCC records the mapper file itself in -MD dependencies, so merely making
+# the full mapper order-only would still rebuild the umbrella unnecessarily.
+ifeq ($(STD_HEADER_UNIT),1)
+$(STD_MAPPER): Makefile
+	@mkdir -p $(@D)
+	@set -e; tmp="$@.tmp"; \
+	header=$$(printf '#include <bits/stdc++.h>\n' | $(CXX) $(filter-out -MMD -MP,$(CPPFLAGS)) $(filter-out -fmodules -fmodules-ts,$(CXXFLAGS)) -E -x c++ - | \
+	    awk '/^# 1 ".*\/bits\/stdc\+\+\.h"/ && !found { sub(/^# 1 "/, ""); sub(/".*/, ""); print; found=1 }'); \
+	test -n "$$header" || { echo "Cannot locate libstdc++ bits/stdc++.h" >&2; exit 1; }; \
+	printf '%s %s\n' "$$header" "$(STD_GCM)" > "$$tmp"; \
+	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp" && touch "$@"; else mv -f "$$tmp" "$@"; fi
 endif
+
+$(MAPPER): Makefile $(CONFIG_STAMP) $(STD_MODULE_MAPPER)
+	@mkdir -p $(@D) $(GCM_DIR)
+	@set -e; tmp="$$(mktemp)"; trap 'rm -f "$$tmp"' EXIT; \
+	{ $(foreach n,$(MOD_NAMES),echo "$(n) $(GCM_DIR)/$(n).gcm";) \
+	  cat "$(STD_MODULE_MAPPER)"; \
+	} > "$$tmp"; \
+	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then \
+	  rm -f "$$tmp" && touch "$@"; \
+	else \
+	  mv -f "$$tmp" "$@"; \
+	fi
+
+# Build the native header unit before any importer starts. -MD also tracks
+# libstdc++/libc headers, unlike the ordinary project-only -MMD dependency files.
+ifeq ($(STD_HEADER_UNIT),1)
+# The cache key covers the compiler and compile flags, not project module
+# names or linker options. Installed-header dependencies are tracked below.
+$(STD_GCM): Makefile $(STD_MAPPER)
+	@echo "  HDR     bits/stdc++.h"
+	@mkdir -p $(@D)
+	$(Q)rm -f $@
+	$(Q)set -e; trap 'rm -f $@ $(STD_DEP).tmp' EXIT; \
+	$(CXX) $(filter-out -MMD -MP,$(CPPFLAGS)) -MD -MP -MF $(STD_DEP).tmp -MT $@ -fmodule-mapper=$(STD_MAPPER) $(CXXFLAGS) -x c++-system-header -c bits/stdc++.h; \
+	mv -f $(STD_DEP).tmp $(STD_DEP); trap - EXIT
+# A missing dependency manifest cannot validate an existing cached unit.
+ifeq ($(wildcard $(STD_DEP)),)
+$(STD_GCM): FORCE
+endif
+-include $(STD_DEP)
+endif
+
+# Build the actual libstdc++ module once; its object is linked exactly once.
+# -MD tracks installed standard-library sources and headers as well.
+$(STD_MODULE_MAPPER): Makefile $(STD_MAPPER)
+	@mkdir -p $(@D)
+	@{ printf '%s %s\n' std "$(STD_MODULE_GCM)"; $(if $(STD_MAPPER),cat "$(STD_MAPPER)",:); } > $@.tmp
+	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
+
+$(STD_MODULE_OBJ) $(STD_MODULE_GCM) &: Makefile $(STD_GCM) $(STD_MODULE_MAPPER)
+	@echo "  MOD     std (libstdc++)"
+	@mkdir -p $(STD_CACHE_DIR)
+	$(Q)rm -f $(STD_MODULE_GCM) $(STD_MODULE_OBJ)
+	$(Q)set -e; trap 'rm -f $(STD_MODULE_GCM) $(STD_MODULE_OBJ) $(STD_MODULE_DEP).tmp' EXIT; \
+	$(CXX) $(filter-out -MMD -MP,$(CPPFLAGS)) -MD -MP -MF $(STD_MODULE_DEP).tmp -MT $(STD_MODULE_OBJ) -MT $(STD_MODULE_GCM) -fmodule-mapper=$(STD_MODULE_MAPPER) $(CXXFLAGS) -fsearch-include-path -x c++ -c bits/std.cc -o $(STD_MODULE_OBJ); \
+	mv -f $(STD_MODULE_DEP).tmp $(STD_MODULE_DEP); trap - EXIT
+ifeq ($(wildcard $(STD_MODULE_DEP)),)
+$(STD_MODULE_OBJ) $(STD_MODULE_GCM): FORCE
+endif
+-include $(STD_MODULE_DEP)
 
 # ---------- Targets ----------
-.PHONY: all clean install uninstall help
+.DEFAULT_GOAL := all
+.DELETE_ON_ERROR:
+.PHONY: all clean cache clean-std-cache install uninstall help
+# Read the generated priority order before expanding the link prerequisites.
+# Do not regenerate the project dependency graph just to delete it.
+ifeq ($(strip $(MAKECMDGOALS)),)
+-include $(MODDEPS_MK)
+else ifneq ($(strip $(filter-out clean cache clean-std-cache help uninstall,$(MAKECMDGOALS))),)
+-include $(MODDEPS_MK)
+endif
+# Preserve all current objects even on the initial parse with no graph yet.
+BUILD_OBJS = $(filter $(OBJS),$(SCHEDULED_OBJS)) $(filter-out $(SCHEDULED_OBJS),$(OBJS))
+# Launch the native std build first, then independent interfaces, then the
+# ranked importer graph. With the optional header unit, only the conservative
+# early subset may bypass the header-unit dependency.
+ifeq ($(STD_HEADER_UNIT),1)
+EARLY_OBJS := $(filter $(EARLY_MODULE_OBJS),$(BUILD_OBJS))
+STD_IMPORTER_OBJS := $(filter-out $(EARLY_OBJS),$(OBJS))
+$(STD_IMPORTER_OBJS): $(STD_GCM)
+# Use a named-module-only mapper for independent interfaces. With no header
+# mapping they cannot accidentally import the umbrella while it is being built.
+# The allowed compatibility headers are not GCC 16 auto-translation candidates.
+# Keep the normal mapper for all other objects; no unsupported compiler flags.
+ifneq ($(strip $(EARLY_OBJS)),)
+$(EARLY_MAPPER): Makefile $(CONFIG_STAMP)
+	@mkdir -p $(@D) $(GCM_DIR)
+	@set -e; tmp="$@.tmp"; \
+	{ $(foreach n,$(MOD_NAMES),echo "$(n) $(GCM_DIR)/$(n).gcm";) } > "$$tmp"; \
+	if [ -f "$@" ] && cmp -s "$$tmp" "$@"; then rm -f "$$tmp" && touch "$@"; else mv -f "$$tmp" "$@"; fi
+$(EARLY_OBJS): private MODFLAGS := -fmodule-mapper=$(EARLY_MAPPER)
+$(EARLY_OBJS): | $(EARLY_MAPPER)
+endif
+else
+EARLY_OBJS := $(filter $(ROOT_MODULE_OBJS),$(BUILD_OBJS))
+endif
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
+$(TARGET): $(STD_MODULE_OBJ) $(STD_MODULE_GCM) $(STD_GCM) $(EARLY_OBJS) $(filter-out $(EARLY_OBJS),$(BUILD_OBJS)) $(LINK_STAMP)
 	@echo "  LD      $@"
-	$(Q)$(CXX) $(LDFLAGS) $^ -o $@ $(LIBS)
+	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(OBJS) -o $@ $(LIBS)
 
-# The header is copied next to its .gch so GCC finds it via -I$(PCH_DIR).
-$(PCH_GCH): $(PCH_SRC)
-	@echo "  PCH     $<"
-	@mkdir -p $(PCH_DIR)
-	@cp $< $(PCH_DIR)/pch.h
-	$(Q)$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++-header $(PCH_DIR)/pch.h -o $@
-
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(PCH_DEP)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp Makefile $(CONFIG_STAMP) | $(MAPPER)
 	@echo "  CXX     $<"
 	@mkdir -p $(@D)
-	$(Q)$(CXX) $(CPPFLAGS) $(PCH_FLAGS) $(CXXFLAGS) -c $< -o $@
+	$(Q)$(CXX) $(CPPFLAGS) $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -c $< -o $@
+	$(publish_depfile)
+
+# Module interface units: GCC emits the .o and .gcm in one step.
+$(OBJ_DIR)/mod/%.o: $(MOD_DIR)/%.cppm Makefile $(CONFIG_STAMP) | $(MAPPER)
+	@echo "  MOD     $<"
+	@mkdir -p $(@D)
+	$(Q)$(CXX) $(CPPFLAGS) $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -x c++ -c $< -o $@
+	$(publish_depfile)
 
 clean:
 	rm -rf $(BUILD_DIR) $(TARGET)
+
+cache:
+	rm -rf $(STD_CACHE_ROOT)
+
+clean-std-cache: cache
 
 install: $(TARGET)
 	mkdir -p $(BINDIR)
@@ -165,8 +448,20 @@ uninstall:
 	rm -f $(BINDIR)/$(TARGET)
 
 help:
-	@echo "Targets:  all (default)  clean  install  uninstall  help"
-	@echo "Options:  STATIC=1  SANITIZE=1|2  PCH=0  V=1  BINDIR=<dir>  BUILD_DIR=<dir>"
+	@echo "Targets:  all (default)  clean  cache  clean-std-cache  install  uninstall  help"
+	@echo "Options:  STATIC=1  SANITIZE=1|2  FAST=1  V=1  BINDIR=<dir>  BUILD_DIR=<dir>"
+	@echo "          STD_HEADER_UNIT=0|1"
+	@echo "Defaults: STD_HEADER_UNIT=$(STD_HEADER_UNIT) (selected compiler: $(CXX))"
+
+# Recover dependency files left by older Makefiles after failed GCC builds.
+# Ignore only files with synthetic module targets, and rebuild their objects
+# once so normal header tracking is restored without a clean rebuild.
+EXISTING_DEPFILES := $(wildcard $(DEPFILES))
+BAD_DEPFILES := $(if $(EXISTING_DEPFILES),$(shell grep -lE '\.c\+\+(-module|m)([[:space:]:]|$$)' $(EXISTING_DEPFILES) || :))
+ifneq ($(strip $(BAD_DEPFILES)),)
+.PHONY: repair-depfile
+$(BAD_DEPFILES:.d=.o): repair-depfile
+endif
 
 # Header dependency tracking (generated by -MMD)
--include $(DEPFILES)
+-include $(filter-out $(BAD_DEPFILES),$(DEPFILES))

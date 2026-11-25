@@ -1,18 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <cstddef>
-#include <iostream>
-#include <stdexcept>
-#include <string>
-#include <string_view>
+#include <stddef.h>
 
-// Project Headers
-#include "isocmd/cmd/cmdAutomation.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/core/cancellation.h"
-#include "isocmd/core/uiState.h"
-#include "isocmd/ui/themes.h"
+import std;
+import isocmd.cmd.cmdAutomation;
+import isocmd.core.cancellation;
+import isocmd.core.uiState;
+import isocmd.input.inputHandling;
+import isocmd.ui.display.themes;
 
 // ─── Argument parsing ────────────────────────────────────────────────────────
 
@@ -327,7 +322,7 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
     return true;
 }
 
-// Implemented in cmdAutomationConvertWrite.cpp
+// Implemented in cmdAutomationConvert.cpp and cmdAutomationWrite.cpp
 int handleConvert(const ParsedArgs& args);
 int handleWriteUsb(const ParsedArgs& args);
 

@@ -1,20 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <cctype>
-#include <charconv>
-#include <cstddef>
-#include <sstream>
-#include <string>
-#include <string_view>
-#include <system_error>
-#include <unordered_set>
-#include <vector>
+import std;
 
-// Project Headers
-#include "isocmd/ui/themes.h"
-#include "isocmd/ui/verbose.h"
+import isocmd.input.tokenize;
+import isocmd.ui.display.themes;
+import isocmd.ui.info.verbose;
 
 namespace {
 

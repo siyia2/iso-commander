@@ -1,16 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <chrono>
-#include <cstddef>
-#include <cstdio>
-#include <cstdlib>
-#include <iostream>
-#include <string>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <string.h>
@@ -19,15 +11,13 @@
 #include <termios.h>
 #include <unistd.h>
 
-// Third-Party Library Headers
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/core/uiState.h"
-#include "isocmd/input/readline.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/write2usb/write2usbUI.h"
+import std;
+import isocmd.core.uiState;
+import isocmd.input.inputHandling;
+import isocmd.input.readline;
+import isocmd.ui.display.themes;
 
 /**
  * @file readline_completion.cpp

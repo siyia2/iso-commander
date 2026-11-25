@@ -1,18 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <cctype>
-#include <csignal>
-#include <cstddef>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <unordered_set>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <sys/file.h>
 #include <sys/stat.h>
@@ -20,16 +9,16 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-// Third-Party Library Headers
 #include <readline/history.h>
 
-// Project Headers
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/input/history.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/ui/pausePrompts.h"
-#include "isocmd/core/paths.h"
-#include "isocmd/ui/themes.h"
+import std;
+import isocmd.app.main;
+import isocmd.core.paths;
+import isocmd.input.history;
+import isocmd.input.inputHandling;
+import isocmd.ui.interface.pausePrompts;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.display.themes;
 
 /**
  * @brief Validates whether a folder-path history file is effectively empty.

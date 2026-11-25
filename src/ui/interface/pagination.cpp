@@ -1,32 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <cctype>
-#include <cstddef>
-#include <functional>
-#include <iostream>
-#include <string>
-#include <vector>
+#include <stddef.h>
+
+import std;
 
 // Third-Party Library Headers
-#include <readline/readline.h>
-
-// Project Headers
-#include "isocmd/ui/display.h"
-#include "isocmd/filter/filter.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/input/readline.h"
-#include "isocmd/ui/readlineResize.h"
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/ui/termSize.h"
-#include "isocmd/util/sort.h"
-#include "isocmd/core/lists.h"
-#include "isocmd/core/uiState.h"
-#include "isocmd/util/stringManipulation.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/ui/verbose.h"
+import isocmd.core.lists;
+import isocmd.core.uiState;
+import isocmd.filter.filter;
+import isocmd.input.inputHandling;
+import isocmd.input.readline;
+import isocmd.ui.interface.pagination;
+import isocmd.select.select;
+import isocmd.ui.display.display;
+import isocmd.ui.display.readlineResize;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.cli.termSize;
+import isocmd.ui.display.themes;
+import isocmd.ui.info.verbose;
+import isocmd.util.sort;
+import isocmd.util.stringManipulation;
 
 /**
  * @file pagination.cpp
@@ -354,7 +347,7 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                                    const std::function<void()>& setupEnvironmentFn,
                                    bool& isPageTurn,
                                    size_t& currentPage,
-                                   bool disableTabCompletion = false) {
+                                   bool disableTabCompletion) {
 
     const PrintListTheme c = getListColors();
 

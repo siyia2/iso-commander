@@ -1,31 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <format>
-#include <functional>
-#include <iostream>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
-
-// Third-Party Library Headers
+#include <stddef.h>
+#include <stdio.h>
 #include <readline/history.h>
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/core/sharedRefreshState.h"
-#include "isocmd/core/lists.h"
-#include "isocmd/core/uiState.h"
-#include "isocmd/filter/filter.h"
-#include "isocmd/input/history.h"
-#include "isocmd/input/readline.h"
-#include "isocmd/ui/display.h"
-#include "isocmd/ui/printList.h"
-#include "isocmd/ui/readlineResize.h"
-#include "isocmd/ui/stringListView.h"
-#include "isocmd/ui/themes.h"
+import std;
+import isocmd.core.lists;
+import isocmd.core.sharedRefreshState;
+import isocmd.core.uiState;
+import isocmd.filter.filter;
+import isocmd.input.history;
+import isocmd.input.readline;
+import isocmd.select.select;
+import isocmd.ui.display.display;
+import isocmd.ui.display.printList;
+import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.stringListView;
+import isocmd.ui.display.themes;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -305,8 +297,8 @@ static bool runSharedFilterFlow(
 
     const ReadlineAndPromptTheme ft = getFilterTheme("", false);
 
-    const std::string prompt =
-        std::format("{}Filter: {}", ft.filter, ft.reset);
+    std::string prompt(ft.filter);
+    prompt.append("Filter: ").append(ft.reset);
 
     FilterContext ctx{
         *cfg.files,

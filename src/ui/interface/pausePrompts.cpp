@@ -1,27 +1,26 @@
 
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <csignal>
-#include <cerrno>
-#include <functional>
-#include <string>
-#include <iostream>
-
-// C / System Headers
+#include <stdio.h>
+#include <errno.h>
 #include <poll.h>
 #include <signal.h>
 #include <termios.h>
 #include <unistd.h>
 
-// Third-Party Library Headers
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/ui/syncOutput.h"
-#include "isocmd/ui/termSize.h"
-#include "isocmd/ui/themes.h"
+import std;
+import isocmd.input.inputHandling;
+import isocmd.ui.interface.pausePrompts;
+import isocmd.ui.cli.syncOutput;
+import isocmd.ui.cli.termSize;
+import isocmd.ui.display.themes;
+
+// Declarations used only by this file (moved out of the module interface).
+void pressEnterTo(const std::string& prompt);
+void pressEnterToWithRepaint(const std::string& prompt,
+                             const std::function<void()>& repaint);
 
 namespace {
 

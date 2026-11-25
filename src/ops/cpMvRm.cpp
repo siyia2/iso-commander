@@ -1,40 +1,41 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <atomic>
-#include <cctype>
-#include <cerrno>
-#include <cstddef>
-#include <filesystem>
-#include <format>
-#include <mutex>
-#include <sstream>
-#include <string>
-#include <string_view>
-#include <system_error>
-#include <utility>
-#include <vector>
-
-// C / System Headers
+#include <stddef.h>
+#include <stdio.h>
+#include <ctype.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-// Third-Party Library Headers
 #include <readline/history.h>
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/ops/cpMvRm.h"
-#include "isocmd/core/globalMutexes.h"
-#include "isocmd/input/history.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/input/readline.h"
-#include "isocmd/proc/process.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/ui/verbose.h"
-#include "isocmd/util/sort.h"
-#include "isocmd/util/stringManipulation.h"
+import std;
+import isocmd.core.globalMutexes;
+import isocmd.input.history;
+import isocmd.input.inputHandling;
+import isocmd.input.readline;
+import isocmd.ops.cpMvRm;
+import isocmd.proc.process;
+import isocmd.search.search;
+import isocmd.ui.display.display;
+import isocmd.ui.interface.pagination;
+import isocmd.ui.display.themes;
+import isocmd.ui.info.verbose;
+import isocmd.util.sort;
+import isocmd.util.stringManipulation;
+
+// Declarations used only by this file (moved out of the module interface).
+void reportErrorCpMvRm(
+    OperationContext& ctx,
+    std::string_view errorType,
+    std::string_view srcDir,
+    std::string_view srcFile,
+    std::string_view destDir,
+    std::string_view errorDetail,
+    std::string_view operation
+);
 
 namespace fs = std::filesystem;
 
@@ -230,14 +231,21 @@ static std::string buildCpMvPromptSuffix(const CpMvPromptContext& ctx)
     const std::string reset =
         "\001" + std::string(UI::Palette::BoldReset) + "\002";
 
-    return std::format(
-        "{0}FolderPaths{1} ↵ for selected {0}ISO{1} to be {2}{3}{1} into, ? for help:\n{4}",
-        green,
-        blue,
-        ctx.operationColor,
-        ctx.operationDescription,
-        reset
-    );
+    std::string prompt(green);
+    prompt
+        .append("FolderPaths")
+        .append(blue)
+        .append(" ↵ for selected ")
+        .append(green)
+        .append("ISO")
+        .append(blue)
+        .append(" to be ")
+        .append(ctx.operationColor)
+        .append(ctx.operationDescription)
+        .append(blue)
+        .append(" into, ? for help:\n")
+        .append(reset);
+    return prompt;
 }
 
 /**
@@ -1001,4 +1009,61 @@ void handleIsoFileOperation(
 
     // Flush any remaining batched messages.
     reporter.flush();
+}
+
+std::string buildDisplaySrc(std::string_view srcDir, std::string_view srcFile) {
+    if (!displayConfig::toggleNamesOnly) {
+        std::string s;
+        s.reserve(srcDir.size() + srcFile.size() + 1);
+        s.append(srcDir).append("/").append(srcFile);
+        return s;
+    }
+    return std::string(srcFile);
+}
+
+RlFormFeedGuard::~RlFormFeedGuard() { rl_bind_key('\f', prevent_readline_keybindings); }
+
+RlKeyBindGuard::~RlKeyBindGuard() {
+    rl_bind_key('\f', prevent_readline_keybindings);
+    rl_bind_key('\t', prevent_readline_keybindings);
+    rl_bind_keyseq("\\e", exit_handler);
+}
+
+RlCompleteModeGuard::RlCompleteModeGuard() : saved(RetainAndRestoreReadlineBuffer::g_rl_complete_mode) {}
+
+RlCompleteModeGuard::~RlCompleteModeGuard() { RetainAndRestoreReadlineBuffer::g_rl_complete_mode = saved; }
+
+RlStartupHookGuard::~RlStartupHookGuard() { rl_startup_hook = nullptr; }
+
+BatchReporter::BatchReporter(std::unordered_set<std::string>& globalIsos,
+              std::unordered_set<std::string>& globalErrors,
+              std::mutex& mutex,
+              size_t batchSize) : globalIsos_(globalIsos), globalErrors_(globalErrors),
+      mutex_(mutex), batchSize_(batchSize) {}
+
+void BatchReporter::addSuccess(std::string msg) {
+    localIsos_.push_back(std::move(msg));
+    tryFlush();
+}
+
+void BatchReporter::addError(std::string msg) {
+    localErrors_.push_back(std::move(msg));
+    tryFlush();
+}
+
+void BatchReporter::flush() {
+    if (!localIsos_.empty() || !localErrors_.empty()) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        globalIsos_.insert(std::make_move_iterator(localIsos_.begin()),
+                          std::make_move_iterator(localIsos_.end()));
+        globalErrors_.insert(std::make_move_iterator(localErrors_.begin()),
+                             std::make_move_iterator(localErrors_.end()));
+        localIsos_.clear();
+        localErrors_.clear();
+    }
+}
+
+void BatchReporter::tryFlush() {
+    if (localIsos_.size() >= batchSize_ || localErrors_.size() >= batchSize_)
+        flush();
 }

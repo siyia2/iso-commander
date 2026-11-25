@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <csignal>
-#include <cstdio>
-
-// Third-Party Library Headers
+#include <stdio.h>
+#include <signal.h>
 #include <readline/readline.h>
 
-// Project Headers
-#include "isocmd/write2usb/terminalGuards.h"
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/input/readline.h"
+import isocmd.input.inputHandling;
+import isocmd.input.readline;
+import isocmd.write2usb.util.terminalGuards;
 
 namespace {
 

@@ -1,26 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cstddef>
-#include <fstream>
-#include <map>
-#include <memory>
-#include <mutex>
-#include <sstream>
-#include <string>
-#include <thread>
-#include <unordered_set>
-#include <utility>
-#include <vector>
+import std;
 
-// Project Headers
-#include "isocmd/core/sharedRefreshState.h"
-#include "isocmd/core/paths.h"
-#include "isocmd/threadpool/threadpool.h"
-#include "isocmd/database/databaseOps.h"
+import isocmd.core.paths;
+import isocmd.core.sharedRefreshState;
+import isocmd.database.databaseOps;
+import isocmd.threadpool.threadpool;
 
 namespace {
 

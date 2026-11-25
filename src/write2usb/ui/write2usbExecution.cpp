@@ -1,35 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// C++ Standard Library Headers
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <condition_variable>
-#include <csignal>
-#include <cstddef>
-#include <filesystem>
-#include <format>
-#include <future>
-#include <iostream>
-#include <memory>
-#include <mutex>
-#include <numeric>
-#include <sstream>
-#include <string>
-#include <thread>
-#include <unordered_set>
-#include <utility>
-#include <vector>
+#include <stddef.h>
+#include <signal.h>
 
-// Project Headers
-#include "isocmd/input/inputHandling.h"
-#include "isocmd/ui/pausePrompts.h"
-#include "isocmd/util/sort.h"
-#include "isocmd/core/cancellation.h"
-#include "isocmd/ui/themes.h"
-#include "isocmd/threadpool/threadpool.h"
-#include "isocmd/input/tokenize.h"
-#include "isocmd/write2usb/write2usbUI.h"
+import std;
+import isocmd.core.cancellation;
+import isocmd.input.inputHandling;
+import isocmd.input.tokenize;
+import isocmd.threadpool.threadpool;
+import isocmd.ui.interface.pausePrompts;
+import isocmd.ui.display.themes;
+import isocmd.util.sort;
+import isocmd.write2usb.util.drainingState;
+import isocmd.write2usb.ui.write2usbUI;
+import isocmd.write2usb.util.writeTypes;
 
 namespace fs = std::filesystem;
 
