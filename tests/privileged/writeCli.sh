@@ -78,6 +78,15 @@ if [ "$1" = setup ]; then
         cp "$name.iso" "$name.expected"
         truncate -s 16M "$name.expected"
     done
+    # Exercise a verified write across the 4 MiB buffer boundary and a
+    # partial final sector, with nonzero data at both boundaries.
+    truncate -s 5242917 padded.iso
+    printf '\001CD001' | dd of=padded.iso bs=1 seek=32768 conv=notrunc status=none
+    printf 'cross-chunk' | dd of=padded.iso bs=1 seek=4194300 conv=notrunc status=none
+    printf 'last-byte' | dd of=padded.iso bs=1 seek=5242908 conv=notrunc status=none
+    cp padded.iso padded.expected
+    truncate -s 16M padded.expected
+    printf 'tail-marker' | dd of=padded.expected bs=1 seek=8388608 conv=notrunc status=none
     mkdir "$sandbox/write-mounted"
     # util-linux script preserves the child's exit status. Redirect application
     # stderr inside the PTY child, so only stdout is terminal-rendered.
@@ -98,18 +107,24 @@ cat "$sandbox/pty-app.stderr" >&2
 exit "$result"
 PTY
     chmod 700 "$sandbox/pty-cli"
-    failed=0
+    failed=0 total=0
     for scenario in capacity duplicate mounted busy invalid-image-silent invalid-image-verbose \
         single-silent broadcast-silent paired-silent partial-silent partial-verbose \
-        single-verbose broadcast-verbose paired-verbose; do
+        single-verbose broadcast-verbose paired-verbose \
+        verify-invalid-image-silent verify-invalid-image-verbose \
+        verify-single-silent verify-broadcast-silent verify-paired-silent \
+        verify-partial-silent verify-partial-verbose \
+        verify-single-verbose verify-broadcast-verbose verify-paired-verbose \
+        verify-padded-silent verify-padded-verbose; do
+        total=$((total + 1))
         # Separate shells preserve errexit while allowing other cases to run
-        # after a failed assertion (including the known verbose exit-code bug).
+        # after a failed assertion.
         if sh "$self" case "$scenario"; then :; else
             failed=$((failed + 1))
             printf 'FAIL: w2usb scenario %s\n' "$scenario" >&2
         fi
     done
-    printf 'w2usb CLI: %s/14 scenarios passed\n' "$((14 - failed))"
+    printf 'w2usb CLI: %s/%s scenarios passed\n' "$((total - failed))" "$total"
     [ "$failed" -eq 0 ]
     exit
 fi
@@ -123,6 +138,12 @@ dd if=zero.expected of="$b" bs=1M conv=fsync status=none
 check_bytes() {
     cmp -s -- "$1.expected" "$a" || cli_fail "unexpected bytes on $a (expected $1)"
     cmp -s -- "$2.expected" "$b" || cli_fail "unexpected bytes on $b (expected $2)"
+}
+seed_padded_target() {
+    # The first byte beyond the unpadded ISO must be overwritten by zero
+    # padding; a marker well beyond the aligned image must be left intact.
+    printf 'tail-marker' | dd of="$a" bs=1 seek=8388608 conv=notrunc,fsync status=none
+    printf '\245' | dd of="$a" bs=1 seek=5242917 conv=notrunc,fsync status=none
 }
 capture_verbose() {
     app="$sandbox/pty-cli"
@@ -139,7 +160,20 @@ validation_result() {
     cli_empty stdout
     check_bytes zero zero
 }
-case "$2" in
+# Reuse the same CLI assertions for ordinary and verified writes. Pass the
+# flag as a real argument, never through shell word splitting or eval.
+scenario=$2
+success_status=DONE
+suffix=''
+case "$scenario" in
+    verify-*)
+        scenario=${scenario#verify-}
+        success_status=PASS
+        suffix=' (--verify)'
+        set -- --verify ;;
+    *) set -- ;;
+esac
+case "$scenario" in
     capacity)
         cli_capture 'w2usb: oversized image' w2usb "$PWD/oversized.iso" "$a"
         validation_result; cli_has stderr 'ISO exceeds target drive capacity:'
@@ -161,40 +195,59 @@ case "$2" in
         cli_capture 'w2usb: busy target rejection' w2usb --silent "$PWD/a.iso" "$a"
         validation_result; cli_has stderr "'$a' has pending kernel-level tasks"; cli_expect_rc 1 ;;
     invalid-image-silent)
-        cli_capture 'w2usb: invalid optical image, silent' w2usb --silent "$PWD/bad-write.iso" "$a"
+        cli_capture "w2usb: invalid optical image, silent$suffix" w2usb "$@" --silent "$PWD/bad-write.iso" "$a"
         cli_quiet; check_bytes zero zero; cli_expect_rc 1 ;;
     invalid-image-verbose)
-        capture_verbose 'w2usb: invalid optical image, verbose' w2usb "$PWD/bad-write.iso" "$a"
+        capture_verbose "w2usb: invalid optical image, verbose$suffix" w2usb "$@" "$PWD/bad-write.iso" "$a"
         verbose_result FAILED 0/1; cli_record stdout 'bad-write.iso' "$a" FAIL
         check_bytes zero zero; cli_expect_rc 1 ;;
     single-silent)
-        cli_capture 'w2usb: single silent success' w2usb --silent "$PWD/a.iso" "$a"
+        cli_capture "w2usb: single silent success$suffix" w2usb "$@" --silent "$PWD/a.iso" "$a"
         cli_quiet; check_bytes a zero; cli_expect_rc 0 ;;
     broadcast-silent)
-        cli_capture 'w2usb: broadcast silent success' w2usb --silent "$PWD/a.iso" "$a" "$b"
+        cli_capture "w2usb: broadcast silent success$suffix" w2usb "$@" --silent "$PWD/a.iso" "$a" "$b"
         cli_quiet; check_bytes a a; cli_expect_rc 0 ;;
     paired-silent)
-        cli_capture 'w2usb: paired silent success' w2usb --silent "$PWD/b.iso" "$PWD/a.iso" "$a" "$b"
+        cli_capture "w2usb: paired silent success$suffix" w2usb "$@" --silent "$PWD/b.iso" "$PWD/a.iso" "$a" "$b"
         cli_quiet; check_bytes b a; cli_expect_rc 0 ;;
     partial-silent)
-        cli_capture 'w2usb: partial silent batch' w2usb --silent "$PWD/a.iso" "$PWD/bad-write.iso" "$a" "$b"
+        cli_capture "w2usb: partial silent batch$suffix" w2usb "$@" --silent "$PWD/a.iso" "$PWD/bad-write.iso" "$a" "$b"
         cli_quiet; check_bytes a zero; cli_expect_rc 1 ;;
     partial-verbose)
-        capture_verbose 'w2usb: partial verbose batch' w2usb "$PWD/a.iso" "$PWD/bad-write.iso" "$a" "$b"
-        verbose_result PARTIAL 1/2; cli_record stdout 'a.iso' "$a" DONE; cli_record stdout 'bad-write.iso' "$b" FAIL
+        capture_verbose "w2usb: partial verbose batch$suffix" w2usb "$@" "$PWD/a.iso" "$PWD/bad-write.iso" "$a" "$b"
+        verbose_result PARTIAL 1/2; cli_record stdout 'a.iso' "$a" "$success_status"; cli_record stdout 'bad-write.iso' "$b" FAIL
         check_bytes a zero; cli_expect_rc 1 ;;
     single-verbose)
-        capture_verbose 'w2usb: single verbose success' w2usb "$PWD/a.iso" "$a"
-        verbose_result COMPLETED 1/1; cli_record stdout 'a.iso' "$a" DONE
+        capture_verbose "w2usb: single verbose success$suffix" w2usb "$@" "$PWD/a.iso" "$a"
+        verbose_result COMPLETED 1/1; cli_record stdout 'a.iso' "$a" "$success_status"
         check_bytes a zero; cli_expect_rc 0 ;;
     broadcast-verbose)
-        capture_verbose 'w2usb: broadcast verbose success' w2usb "$PWD/a.iso" "$a" "$b"
-        verbose_result COMPLETED 2/2; cli_record stdout 'a.iso' "$a" DONE; cli_record stdout 'a.iso' "$b" DONE
+        capture_verbose "w2usb: broadcast verbose success$suffix" w2usb "$@" "$PWD/a.iso" "$a" "$b"
+        verbose_result COMPLETED 2/2; cli_record stdout 'a.iso' "$a" "$success_status"; cli_record stdout 'a.iso' "$b" "$success_status"
         check_bytes a a; cli_expect_rc 0 ;;
     paired-verbose)
-        capture_verbose 'w2usb: paired verbose success' w2usb "$PWD/b.iso" "$PWD/a.iso" "$a" "$b"
-        verbose_result COMPLETED 2/2; cli_record stdout 'b.iso' "$a" DONE; cli_record stdout 'a.iso' "$b" DONE
+        capture_verbose "w2usb: paired verbose success$suffix" w2usb "$@" "$PWD/b.iso" "$PWD/a.iso" "$a" "$b"
+        verbose_result COMPLETED 2/2; cli_record stdout 'b.iso' "$a" "$success_status"; cli_record stdout 'a.iso' "$b" "$success_status"
         check_bytes b a; cli_expect_rc 0 ;;
+    padded-silent)
+        seed_padded_target
+        cli_capture "w2usb: padded multi-chunk silent success$suffix" w2usb "$@" --silent "$PWD/padded.iso" "$a"
+        cli_quiet; check_bytes padded zero; cli_expect_rc 0 ;;
+    padded-verbose)
+        seed_padded_target
+        capture_verbose "w2usb: padded multi-chunk verbose success$suffix" w2usb "$@" "$PWD/padded.iso" "$a"
+        verbose_result COMPLETED 1/1; cli_record stdout 'padded.iso' "$a" "$success_status"
+        check_bytes padded zero; cli_expect_rc 0 ;;
     *) exit 2 ;;
+esac
+# The verbose renderer must never report an unverified DONE when --verify
+# was requested; ordinary writes must never report PASS. Match the status
+# after the progress bar rather than a substring in a path or banner.
+case "$scenario" in
+    *-verbose)
+        if [ "$success_status" = PASS ]; then unexpected=DONE; else unexpected=PASS; fi
+        if grep -Eq "\] $unexpected( |$)" cli.stdout; then
+            cli_fail "unexpected write status: $unexpected"
+        fi ;;
 esac
 cli_pass

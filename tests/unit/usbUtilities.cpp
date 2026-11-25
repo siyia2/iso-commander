@@ -5,6 +5,8 @@
 import isocmd.write2usb.util.isoDetect;
 import isocmd.write2usb.util.alignedBuffer;
 import isocmd.write2usb.util.writeTypes;
+import isocmd.write2usb.util.checksum;
+import isocmd.core.cancellation;
 
 namespace isocmd_tests {
 
@@ -48,23 +50,67 @@ void isoDetection() {
     }
 }
 
+void checksumVerification() {
+    using namespace usb_verify;
+    Checksum64 crc;
+    crc.update("123456789", 9);
+    CHECK(crc.value == 0x6C40DF5F0B497347ULL);
+    Checksum64 split;
+    split.update("1234", 4); split.update("56789", 5);
+    CHECK(split.value == crc.value);
+    CHECK(Checksum64{}.value == 0);
+
+    TempDir tmp;
+    const auto path = tmp.path / "payload";
+    writeFile(path, "123456789");
+    ProgressInfo row("test", "fixture", "9 B", "source");
+    row.bytesWritten = 9;
+    char buffer[4];
+    ReadbackProgress readback(row, 9);
+    CHECK(row.verifying && row.progress == 0 && !row.completed);
+    CHECK(verifyFile(path, 9, crc.value, buffer, sizeof buffer, readback));
+    CHECK(row.bytesVerified == 9 && row.bytesWritten == 9 && row.progress == 99 && !row.completed);
+    CHECK(readback.finish());
+    CHECK(row.completed && row.progress == 100);
+
+    ProgressInfo bad("test", "fixture", "9 B", "source");
+    ReadbackProgress badProgress(bad, 9);
+    writeFile(path, "123456788");
+    CHECK(!verifyFile(path, 9, crc.value, buffer, sizeof buffer, badProgress));
+    CHECK(!bad.completed && bad.progress < 100);
+    writeFile(path, "12345678");
+    CHECK(!verifyFile(path, 9, crc.value, buffer, sizeof buffer, badProgress));
+    writeFile(path, "");
+    CHECK(verifyFile(path, 0, 0, buffer, sizeof buffer, badProgress));
+    CHECK(!verifyFile(path, 0, 1, buffer, sizeof buffer, badProgress));
+    const auto link = tmp.path / "symlink";
+    fs::create_symlink(path, link);
+    CHECK(!verifyFile(link, 0, 0, buffer, sizeof buffer, badProgress));
+    struct Reset { ~Reset() { GlobalState::g_operationCancelled = false; } } reset;
+    GlobalState::g_operationCancelled = true;
+    CHECK(!verifyFile(path, 0, 0, buffer, sizeof buffer, badProgress));
+}
+
 void progressAndBuffer() {
     std::vector<ProgressInfo> progress;
     for (int i = 0; i < 4096; ++i) {
         progress.emplace_back(std::to_string(i), "fake-device", "4 MB", "source.iso");
         auto& p = progress.back();
         p.completed = i % 2 == 0; p.failed = i % 3 == 0;
+        p.verifyRequested = i % 2 == 0; p.verifying = i % 3 == 0; p.bytesVerified = i * 128u;
         p.bytesWritten = i * 4096u; p.progress = i % 101; p.speed = i * 0.5;
     }
     for (int i = 0; i < 4096; ++i) {
         const auto& p = progress[i];
         CHECK(p.filename == std::to_string(i) && p.device == "fake-device" && p.sourcePath == "source.iso" && p.totalSize == "4 MB");
         CHECK(p.completed.load() == (i % 2 == 0) && p.failed.load() == (i % 3 == 0));
+        CHECK(p.verifyRequested == (i % 2 == 0) && p.verifying.load() == (i % 3 == 0) && p.bytesVerified.load() == i * 128u);
         CHECK(p.bytesWritten.load() == i * 4096u && p.progress.load() == i % 101 && p.speed.load() == i * 0.5);
     }
     ProgressInfo target("", "", "", "");
     target = std::move(progress.back());
     CHECK(target.filename == "4095" && target.bytesWritten.load() == 4095u * 4096u);
+    CHECK(!target.verifyRequested && target.verifying && target.bytesVerified == 4095u * 128u);
     auto& alias = target; target = std::move(alias);
     CHECK(target.filename == "4095" && target.progress.load() == 4095 % 101);
     for (std::size_t alignment : {512, 4096}) {

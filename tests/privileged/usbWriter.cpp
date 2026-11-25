@@ -12,7 +12,10 @@ import isocmd.write2usb.util.writeTypes;
 import isocmd.core.cancellation;
 
 using namespace isocmd_tests;
-namespace isocmd_tests { int mountTest(); }
+namespace isocmd_tests {
+int mountTest();
+int windowsWriterTest(const std::string& loop, const std::string& layout);
+}
 
 namespace {
 using namespace io_faults;
@@ -58,7 +61,7 @@ void rawIoFaults(const fs::path& src, const std::string& device, int pinned,
     int failures = 0;
     auto run = [&](const char* name, Plan& plan, bool success, bool cancelled, std::size_t written,
                    std::optional<std::size_t> syncCalls = {}, std::size_t unalignedEffects = 0,
-                   std::size_t closeEffects = 0) {
+                   std::size_t closeEffects = 0, bool verify = false) {
         try {
             struct Reset { ~Reset() { GlobalState::g_operationCancelled = false; } } reset;
             GlobalState::g_operationCancelled = false;
@@ -67,6 +70,7 @@ void rawIoFaults(const fs::path& src, const std::string& device, int pinned,
             if (!plan[Call::Fsync].target) plan[Call::Fsync].set(output, {});
             std::vector<ProgressInfo> progress;
             progress.emplace_back("source.iso", device, "test", src.string());
+            progress[0].verifyRequested = verify;
             bool result;
             {
                 Scope scope(plan);
@@ -79,6 +83,10 @@ void rawIoFaults(const fs::path& src, const std::string& device, int pinned,
             CHECK(progress[0].completed.load() == success);
             CHECK(progress[0].failed.load() == (!success && !cancelled));
             CHECK(GlobalState::g_operationCancelled.load() == cancelled);
+            if (verify && written == paddedImage.size()) {
+                CHECK(progress[0].verifying);
+                if (success) CHECK(progress[0].bytesVerified == paddedImage.size());
+            }
             CHECK(plan[Call::Fsync].calls.load() == syncCalls.value_or(
                 written == paddedImage.size() && !cancelled ? 1u : 0u));
             CHECK(progress[0].bytesWritten.load() <= std::min(written, actualSize));
@@ -173,6 +181,26 @@ void rawIoFaults(const fs::path& src, const std::string& device, int pinned,
         Plan clean;
         run("clean write after injected failures", clean, true, false, paddedImage.size());
     }
+    {
+        Plan p;
+        p[Call::Read].set(output, {error(EINTR), shortTransfer(sector)});
+        run("verified direct readback with EINTR and short read", p, true, false, paddedImage.size(), 1, 0, 0, true);
+    }
+    {
+        Plan p;
+        p[Call::Read].set(output, {corruptRead()});
+        run("verification detects corrupted readback", p, false, false, paddedImage.size(), 1, 0, 0, true);
+    }
+    {
+        Plan p;
+        p[Call::Read].set(output, {error(EIO)});
+        run("verification readback EIO", p, false, false, paddedImage.size(), 1, 0, 0, true);
+    }
+    {
+        Plan p;
+        p[Call::Read].set(output, {cancelAfterShort(sector, cancelRawWrite)});
+        run("cancellation during verification", p, false, true, paddedImage.size(), 1, 0, 0, true);
+    }
     CHECK(failures == 0);
 }
 } // namespace
@@ -181,6 +209,7 @@ int main(int argc,char** argv) {
     // The namespace runner can verify aliases without performing any writes.
     if (geteuid()!=0) return 2;
     if (argc==2 && std::string_view(argv[1])=="--mount-test") return mountTest();
+    if (argc==4 && std::string_view(argv[1])=="--windows-test") return windowsWriterTest(argv[2], argv[3]);
     const bool verifyOnly=argc==4 && std::string_view(argv[1])=="--verify-loop";
     if (argc!=2 && !verifyOnly) return 2;
     try {

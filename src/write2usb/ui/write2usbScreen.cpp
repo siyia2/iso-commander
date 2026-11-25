@@ -315,7 +315,8 @@ void ConfirmResizeWatcher::stop() {
  * rows so the bars line up. Drive names are always shown in full. The bar
  * has 5 cells and 10 steps of 10% (empty ░, half ▄, full ▇), floored from
  * the percentage, so it is full only at 100%. The status column shows the
- * live percentage, or DONE (speed shown as " (avg)"), FAIL or CXL
+ * live percentage (writing or verification), DONE or PASS (speed shown
+ * as " (avg)"), FAIL or CXL
  * (cancelled).
  *
  * @par Filename truncation
@@ -360,8 +361,7 @@ public:
         : progressDataPtr_(std::move(progressDataPtr)),
           progressData_(*progressDataPtr_),
           syncPtr_(std::move(syncPtr)),
-          wt_(std::move(theme)),
-          startTime_(std::chrono::steady_clock::now()) {}
+          wt_(std::move(theme)) {}
 
     ~WriteScreen() { stop(); }
 
@@ -382,7 +382,7 @@ public:
 
     /// Switches to the result screen and paints it. Call once, after the wait
     /// for completion / cancellation. The keeper keeps running afterwards.
-    void finish() {
+    void finish(std::chrono::steady_clock::duration elapsed) {
         std::lock_guard<std::mutex> rl(renderMutex_);
 
         size_t failed = 0;
@@ -408,8 +408,7 @@ public:
         st << color << "Status: " << operation << color << " → " << word << wt_.rl_resetCol;
         statusLine_ = st.str();
 
-        const double secs = std::chrono::duration<double>(
-            std::chrono::steady_clock::now() - startTime_).count();
+        const double secs = std::chrono::duration<double>(elapsed).count();
 
         std::ostringstream sm;
         sm << std::fixed << std::setprecision(1);
@@ -768,7 +767,7 @@ private:
 
         bool isCompleted = prog.completed.load();
 
-        if (isCompleted)                                    row << wt_.colorSuccess << "DONE ";
+        if (isCompleted)                                    row << wt_.colorSuccess << (prog.verifying.load() ? "PASS " : "DONE ");
         else if (prog.failed.load())                        row << wt_.colorFailure << "FAIL ";
         else if (GlobalState::g_operationCancelled.load())  row << wt_.colorWarning << "CXL  ";
         else {
@@ -852,7 +851,6 @@ private:
     std::vector<ProgressInfo>&                 progressData_;
     std::shared_ptr<WriteSync>                 syncPtr_;
     const WriteTheme                           wt_;
-    const std::chrono::steady_clock::time_point startTime_;
 
     // Written once in computeConstants() before the keeper thread starts.
     // rowShortNames_ holds the full, never-truncated drive names.
@@ -895,7 +893,9 @@ std::shared_ptr<WriteScreen> createWriteScreen(
     return std::make_shared<WriteScreen>(std::move(progressData), std::move(sync), std::move(theme));
 }
 void startWriteScreen(WriteScreen& screen) { screen.start(); }
-void finishWriteScreen(WriteScreen& screen) { screen.finish(); }
+void finishWriteScreen(WriteScreen& screen, std::chrono::steady_clock::duration elapsed) {
+    screen.finish(elapsed);
+}
 bool writeScreenCancelWakeable(const WriteScreen& screen) { return screen.cancelWakeable(); }
 void setWriteScreenPrompt(WriteScreen& screen, std::string prompt) { screen.setPrompt(std::move(prompt)); }
 void repaintWriteScreen(WriteScreen& screen) { screen.repaint(); }

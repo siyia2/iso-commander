@@ -15,6 +15,8 @@ import std;
 import isocmd.core.cancellation;
 import isocmd.write2usb.util.alignedBuffer;
 import isocmd.write2usb.util.telemetry;
+import isocmd.write2usb.util.checksum;
+import isocmd.write2usb.util.writeTypes;
 import isocmd.write2usb.util.isoDetect;
 import isocmd.write2usb.windows.windowsWriter;
 import isocmd.write2usb.ui.write2usbUI;
@@ -193,7 +195,9 @@ namespace {
                         std::vector<ProgressInfo>& progressData, size_t progressIndex)
                 : isoFd_(isoFd), devFd_(devFd), fileSize_(fileSize), paddedSize_(paddedSize),
                   bufferSize_(bufferSize), writeChunk_(writeChunk), sectorSize_(sectorSize),
-                  progressData_(progressData), progressIndex_(progressIndex) {
+                  progressData_(progressData), progressIndex_(progressIndex),
+                  verify_(progressData[progressIndex].verifyRequested),
+                  verifyBuffer_(buffers.front()->data) {
                 for (auto& b : buffers)
                     emptyQ_.push_back({b->data, 0});
             }
@@ -335,8 +339,23 @@ namespace {
                 auto& info = progressData_[progressIndex_];
                 info.speed.store(avgSpeed);
                 info.bytesWritten.store(directBytesWritten_.load());
-                info.progress.store(100);
-                info.completed.store(true);
+                if (verify_) {
+                    usb_verify::ReadbackProgress readback(info, paddedSize_);
+                    uint64_t actual = 0;
+                    if (lseek(devFd_, 0, SEEK_SET) != 0 ||
+                        !usb_verify::readChecksum(devFd_, paddedSize_, verifyBuffer_, bufferSize_,
+                                                  sectorSize_, readback, actual) || actual != checksum_.value) {
+                        if (!aborted()) markFailed();
+                        return false;
+                    }
+                    if (!readback.finish()) {
+                        if (!aborted()) markFailed();
+                        return false;
+                    }
+                } else {
+                    info.progress.store(100);
+                    info.completed.store(true);
+                }
                 return true;
             }
 
@@ -686,6 +705,7 @@ namespace {
                         break;
                     }
                     if (!writeBuffer(c)) break;
+                    if (verify_) checksum_.update(c.buf, c.len);
                     recycle(c.buf);
                 }
             }
@@ -702,6 +722,9 @@ namespace {
 
             std::vector<ProgressInfo>& progressData_;
             const size_t               progressIndex_;
+            const bool verify_;
+            char* const verifyBuffer_;
+            usb_verify::Checksum64 checksum_;
 
             std::mutex              qMutex_;
             std::condition_variable qCv_;
@@ -766,8 +789,8 @@ namespace {
  * @param progressIndex Slot in the progress array for this operation.
  * @param progressData  Operation-local progress, speed and completion data.
  * @return true if the image was fully written and fsynced; false on I/O
- *         error, validation failure or cancellation. The result is not read
- *         back or verified against the ISO.
+ *         error, validation failure, cancellation or requested checksum failure.
+ *         Optional direct readback includes the final sector padding.
  *
  * @see iso_detect::isValidIso9660
  * @see iso_detect::isWindowsIsoInitialCheck
@@ -789,7 +812,8 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
     if (lseek(iso.fd, 0, SEEK_SET) == -1) return fail();
     posix_fadvise(iso.fd, 0, 0, POSIX_FADV_SEQUENTIAL);
 
-    io::FdGuard dev(open(device.c_str(), O_WRONLY | O_DIRECT));
+    io::FdGuard dev(open(device.c_str(),
+        (progressData[progressIndex].verifyRequested ? O_RDWR : O_WRONLY) | O_DIRECT));
     if (dev.fd == -1) return fail();
 
     int sectorSize = 0;

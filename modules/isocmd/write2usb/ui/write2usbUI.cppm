@@ -78,8 +78,8 @@ std::shared_ptr<WriteScreen> createWriteScreen(
 /** @brief Prints the header and starts the keeper / relay threads. */
 void startWriteScreen(WriteScreen& screen);
 
-/** @brief Switches to the result screen and paints it. Call once. */
-void finishWriteScreen(WriteScreen& screen);
+/** @brief Paints the result screen using the frozen batch elapsed time. Call once. */
+void finishWriteScreen(WriteScreen& screen, std::chrono::steady_clock::duration elapsed);
 
 /**
  * @brief True if Ctrl+C is relayed into the shared condition variable, so a
@@ -136,9 +136,10 @@ private:
  * Writes the given (ISO, device) pairs concurrently on the thread pool,
  * with a live progress display and a final status summary.
  * If allSucceeded is provided, stores whether every writer succeeded without cancellation.
+ * verify enables readback before completion for every device in this batch.
  */
 std::shared_ptr<WriteScreen> performWriteOperation(
-    const std::vector<std::pair<IsoInfo, std::string>>&, bool* allSucceeded = nullptr);
+    const std::vector<std::pair<IsoInfo, std::string>>&, bool* allSucceeded = nullptr, bool verify = false);
 
 
 // --- Device discovery and mapping APIs (defined in write2usbUI.cpp) ---
@@ -163,9 +164,10 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(
     const std::vector<std::string>& selectedIsos,
     std::vector<std::string>& errors);
 
-/** @brief Runs the interactive ISO-to-device mapping and confirmation flow. */
+/** @brief Runs the interactive ISO-to-device mapping and confirmation flow.
+ *  If verify is provided, stores the optional checksum choice on confirmation. */
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
-    const std::vector<IsoInfo>& selectedIsos);
+    const std::vector<IsoInfo>& selectedIsos, bool* verify = nullptr);
 
 /** @brief Entry point for the write-to-USB workflow. */
 void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles);
@@ -175,7 +177,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
 namespace WriteExecution {
 using Writer = bool (*)(const std::string&, const std::string&, size_t, std::vector<ProgressInfo>&);
 std::shared_ptr<WriteScreen> performWithWriter(
-    const std::vector<std::pair<IsoInfo, std::string>>&, Writer, bool* allSucceeded = nullptr);
+    const std::vector<std::pair<IsoInfo, std::string>>&, Writer, bool* allSucceeded = nullptr, bool verify = false);
 }
 namespace WriteMapping {
 using Discover = std::vector<std::string> (*)();
@@ -183,7 +185,7 @@ using Validate = std::vector<std::pair<IsoInfo, std::string>> (*)(
     const std::vector<std::pair<size_t, std::string>>&, const std::vector<IsoInfo>&,
     bool, std::vector<std::string>&);
 std::vector<std::pair<IsoInfo, std::string>> collectWithDevices(
-    const std::vector<IsoInfo>&, Discover, Validate, bool noPermissions);
+    const std::vector<IsoInfo>&, Discover, Validate, bool noPermissions, bool* verify = nullptr);
 }
 
 // --- Filesystem & Formatting Utilities ---

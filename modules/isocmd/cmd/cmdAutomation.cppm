@@ -19,6 +19,7 @@ struct ParsedArgs {
     bool                     silentMode = false; ///< Suppresses informational output and progress messages
     bool                     convert    = false; ///< c2iso: non-interactive conversion
     bool                     writeUsb   = false; ///< w2usb: non-interactive ISO -> USB write
+    bool                     verifyUsb  = false; ///< w2usb: verify data after writing
     int                      maxDepth   = -1;    ///< Maximum directory scan depth; -1 means unlimited
 };
 

@@ -13,7 +13,7 @@
 namespace isocmd_tests::io_faults {
 
 enum class Call { Read, Write, Pwrite, Fsync, SyncRange, Fallocate, Truncate, Close, Count };
-enum class Kind { Pass, Error, Zero, Short, CancelAfterShort, UnalignedShort };
+enum class Kind { Pass, Error, Zero, Short, CancelAfterShort, UnalignedShort, CorruptRead };
 struct Step {
     Kind kind = Kind::Pass;
     int error = 0;
@@ -22,6 +22,7 @@ struct Step {
 };
 inline Step error(int code) { return {Kind::Error, code}; }
 inline Step zero() { return {Kind::Zero}; }
+inline Step corruptRead() { return {Kind::CorruptRead}; }
 inline Step shortTransfer(std::size_t n) { return {Kind::Short, 0, n}; }
 // Emulate a kernel reporting an unaligned count from an aligned O_DIRECT
 // request. Commit one complete sector, then rewind its final byte so the

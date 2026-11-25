@@ -13,6 +13,7 @@ void paginationCommands();
 void isoDetection();
 void conversion();
 void progressAndBuffer();
+void checksumVerification();
 void threadPool();
 void taskLifetime();
 void database();
@@ -30,6 +31,7 @@ int main() {
         {"configuration and self-repair", configuration}, {"themes and text width", themeAndWidth},
         {"ISO signature detection", isoDetection}, {"CCD and NRG conversion", conversion},
         {"progress state and aligned buffers", progressAndBuffer},
+        {"CRC-64 and readback verification", checksumVerification},
         {"thread pool stress and shutdown", threadPool},
         {"move-only task ownership and lifetime", taskLifetime},
         {"database persistence and concurrent updates", database},

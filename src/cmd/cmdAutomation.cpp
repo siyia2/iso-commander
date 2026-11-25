@@ -29,7 +29,7 @@ static bool isActionKeyword(const std::string& action) {
 /**
  * @brief Determines whether an argument represents a supported option.
  *
- * Recognizes the "--silent" option and arguments beginning with "-d".
+ * Recognizes "--silent", "--verify" and arguments beginning with "-d".
  * Depth-option validation is performed separately.
  *
  * @param arg Argument to inspect.
@@ -37,7 +37,7 @@ static bool isActionKeyword(const std::string& action) {
  *         otherwise false.
  */
 static bool isFlag(const std::string& arg) {
-    return arg == "--silent" || arg.rfind("-d", 0) == 0;
+    return arg == "--silent" || arg == "--verify" || arg.rfind("-d", 0) == 0;
 }
 
 /**
@@ -163,6 +163,16 @@ static bool handleFlag(
         return true;
     }
 
+    if (arg == "--verify") {
+        if (!out.writeUsb) {
+            flushDeferredWarn(captureWarn);
+            errMsg("Option '--verify' is only supported by w2usb.");
+            return false;
+        }
+        out.verifyUsb = true;
+        return true;
+    }
+
     return parseDepthOption(arg, out, captureWarn);
 }
 
@@ -257,6 +267,7 @@ static bool parseInitialAction(
  *
  * Supported options:
  * - @c --silent enables silent mode.
+ * - @c --verify enables USB checksum readback for w2usb only.
  * - @c -dN sets the maximum directory traversal depth for mount
  *   and c2iso operations.
  *

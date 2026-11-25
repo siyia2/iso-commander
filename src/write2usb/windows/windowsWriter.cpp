@@ -8,6 +8,8 @@
 #include <spawn.h>
 #include <signal.h>
 #include <sys/mount.h>
+#include <sys/ioctl.h>
+#include <linux/fs.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -19,6 +21,7 @@ import std;
 import isocmd.core.cancellation;
 import isocmd.write2usb.util.alignedBuffer;
 import isocmd.write2usb.util.telemetry;
+import isocmd.write2usb.util.checksum;
 import isocmd.write2usb.util.threadGuard;
 import isocmd.write2usb.windows.windowsWriter;
 import isocmd.write2usb.windows.windowsWriterEngine;
@@ -590,7 +593,8 @@ namespace {
                                     const std::string& fatMnt,
                                     const std::string& ntfsMnt,
                                     mnt::ScopedMount& fatScope,
-                                    mnt::ScopedMount& ntfsScope) {
+                                    mnt::ScopedMount& ntfsScope,
+                                    std::string& ntfsDriver) {
             if (mnt::libMountRetry(
                     fatPart.c_str(), fatMnt.c_str(), "noatime") != 0)
                 return false;
@@ -598,7 +602,7 @@ namespace {
             fatScope.setMounted();
 
             if (isoType == IsoType::WindowsInstall) {
-                const std::string ntfsDriver = getBestNtfsDriver();
+                ntfsDriver = getBestNtfsDriver();
                 if (ntfsDriver.empty()) return false;
 
                 if (mnt::libMountNtfsRetry(
@@ -733,10 +737,11 @@ namespace {
                           const std::string& fatMnt,
                           const std::string& ntfsMnt,
                           mnt::ScopedMount& fatScope,
-                          mnt::ScopedMount& ntfsScope) {
+                          mnt::ScopedMount& ntfsScope,
+                          std::string& ntfsDriver) {
             if (!disk::mountTargetFilesystems(
                     isoType, fatPart, ntfsPart,
-                    fatMnt, ntfsMnt, fatScope, ntfsScope))
+                    fatMnt, ntfsMnt, fatScope, ntfsScope, ntfsDriver))
                 return false;
 
             return !isCancelled();
@@ -789,6 +794,48 @@ namespace {
             if (isCancelled()) return false;
 
             return finalFlush(isoType, ntfsMnt, fatMnt);
+        }
+
+        // Verification must not read dirty or still-cached file data from the
+        // preceding mount. No lazy unmount is accepted on this path.
+        bool reopenReadOnly(const std::string& partition, mnt::ScopedMount& scope, const char* filesystemType) {
+            if (isCancelled()) return false;
+            int rc;
+            do { rc = umount2(scope.path.c_str(), UMOUNT_NOFOLLOW); }
+            while (rc != 0 && errno == EINTR && !isCancelled());
+            if (rc != 0) return false;
+            scope.active = false;
+            if (isCancelled()) return false;
+            const int fd = open(partition.c_str(), O_RDONLY | O_CLOEXEC);
+            if (fd < 0) return false;
+            do { rc = ioctl(fd, BLKFLSBUF, 0); }
+            while (rc != 0 && errno == EINTR && !isCancelled());
+            const bool closed = close(fd) == 0;
+            if (rc != 0 || !closed || isCancelled()) return false;
+            // The writer already selected and loaded the kernel filesystem
+            // drivers. Readback needs no mount helper or external command.
+            if (retry::withBackoff([&] {
+                    return mount(partition.c_str(), scope.path.c_str(), filesystemType,
+                                 MS_RDONLY | MS_NOATIME, nullptr);
+                }) != 0) return false;
+            scope.setMounted();
+            return !isCancelled();
+        }
+
+        bool verifyEntries(const EntryVec& entries, const std::vector<uint64_t>& checksums,
+                           char* buffer, size_t bufferSize, usb_verify::ReadbackProgress& progress) {
+            size_t index = 0;
+            for (const auto& entry : entries) {
+                if (isCancelled()) return false;
+                if (entry.isDir) {
+                    std::error_code ec;
+                    if (!fs::is_directory(fs::symlink_status(entry.dst, ec)) || ec) return false;
+                } else {
+                    if (index >= checksums.size() || !usb_verify::verifyFile(entry.dst, entry.size,
+                          checksums[index++], buffer, bufferSize, progress)) return false;
+                }
+            }
+            return index == checksums.size();
         }
 
         double averageSpeedMBps(uint64_t totalBytes, double seconds) {
@@ -894,9 +941,10 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     const std::string ntfsMnt =
         (isoType == IsoType::WindowsInstall) ? ntfsMntBuf : std::string{};
 
+    std::string ntfsDriver;
     if (!steps::mountTargets(
             isoType, fatPart, ntfsPart,
-            fatMnt, ntfsMnt, fatScope, ntfsScope))
+            fatMnt, ntfsMnt, fatScope, ntfsScope, ntfsDriver))
         return report.failUnlessCancelled();
 
     std::vector<iso::IsoCopyEntry> ntfsEntries, espEntries;
@@ -927,11 +975,13 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (!ioBuf)
         return report.failUnlessCancelled();
 
+    std::vector<uint64_t> ntfsChecksums, espChecksums;
     auto runPass = [&](std::vector<iso::IsoCopyEntry>& entries) {
+        auto* checksums = slot.verifyRequested ? (&entries == &ntfsEntries ? &ntfsChecksums : &espChecksums) : nullptr;
         return copy::processEntries(
             entries, isoType, ntfsMnt,
             bufferSize, ioBuf.data,
-            totalBytesWrittenAccumulator);
+            totalBytesWrittenAccumulator, checksums);
     };
 
     if (!steps::runCopyPasses(
@@ -940,6 +990,19 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
         return report.failUnlessCancelled();
 
     threadGuard.stop();
+    slot.bytesWritten.store(totalBytesWrittenAccumulator.load());
+    if (steps::isCancelled()) return false;
+
+    if (slot.verifyRequested) {
+        usb_verify::ReadbackProgress readback(slot, totalBytes);
+        if ((isoType == IsoType::WindowsInstall && !steps::reopenReadOnly(ntfsPart, ntfsScope, ntfsDriver.c_str())) ||
+            !steps::reopenReadOnly(fatPart, fatScope, "vfat") ||
+            !steps::verifyEntries(ntfsEntries, ntfsChecksums, ioBuf.data, bufferSize, readback) ||
+            !steps::verifyEntries(espEntries, espChecksums, ioBuf.data, bufferSize, readback))
+            return report.failUnlessCancelled();
+        if (!readback.finish()) return report.failUnlessCancelled();
+        return true;
+    }
 
     // ScopedMount destructors for ntfsScope, fatScope and isoScope fire here
     // in reverse declaration order: ntfs -> fat -> iso.

@@ -31,6 +31,9 @@ All arguments are validated before any device is touched. Only raw devices are a
 .B \-\-silent
 Suppress informational messages, warnings and progress output. Critical errors will still be displayed.
 .TP 16
+.B \-\-verify
+Verify USB writes by reading back CRC-64 checksums after writing (\fBw2usb\fR only). Failure or cancellation returns a nonzero exit status.
+.TP 16
 .B \-d\fIN\fR
 Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 scans only the specified directories.
 .br
@@ -61,12 +64,13 @@ isocmd w2usb file.iso /dev/sdc@Write one ISO to one USB device
 isocmd w2usb file.iso /dev/sdc /dev/sdd@Write one ISO to multiple USB devices
 isocmd w2usb file1.iso file2.iso /dev/sdc /dev/sdd@Write file1.iso to sdc and file2.iso to sdd
 isocmd w2usb \-\-silent file.iso /dev/sdc@Write an ISO with minimal output
+isocmd w2usb \-\-verify file.iso /dev/sdc@Write an ISO and verify the result
 .TE
 
 .SH UI INTERACTIVE OPTIONS AND FEATURES
 .TP
 .B ManageISO
-Mount, unmount, delete, move, copy, and write ISO files to USB (bootable preserved). Requires root for mount/umount/write2usb.
+Mount, unmount, delete, move, copy, and write ISO files to USB (bootable preserved). Requires root for mount/umount/write2usb. USB writes offer optional checksum readback after confirmation.
 
 .TP
 .B Convert2ISO

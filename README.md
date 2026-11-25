@@ -55,8 +55,19 @@ Mount ISOs, convert images, write bootable USB drives — done right
 
 🖊️ **Best-in-Class USB Write Engine**
 - Automatic ISO detection — custom write method for Windows vs. others
+- Optional CRC-64 readback verification (raw image or copied Windows files), with no added dependencies
 - No wimlib, no file splitting — `install.wim` routed to NTFS natively
 - Dynamic NTFS driver selection — `NTFSPLUS` is preferred for best performance
+
+### USB write verification
+
+After confirming the destructive write, choose `y` at `Verify checksum? (y/n):` to verify the whole batch. Press Enter or `n` to skip verification. The existing per-device progress bar restarts for the readback (using the same percentage display as writing), and reports `PASS`, `FAIL` or `CXL`. Unverified writes retain the usual `DONE` / `FAIL` / `CXL` statuses.
+
+`Time Elapsed` measures the whole batch from dispatch until the last device finishes writing and, when enabled, verification. Concurrent device durations are not added together. Cancellation freezes the elapsed time when the batch is interrupted.
+
+For automation, use `sudo isocmd w2usb --verify file.iso /dev/sdX` (also works with `--silent`). A write or verification failure, or cancellation, returns a nonzero exit status.
+
+Raw writes verify the exact written range, including zero padding, with direct I/O. Windows writes verify the size and CRC of each copied file and the presence of directories after flushing, unmounting, invalidating partition caches and mounting read-only. Verification does not check ISO authenticity, bootability, unwritten space, or every filesystem metadata byte.
 
 ## USB Boot Mode Support
 

@@ -348,13 +348,14 @@ int handleWriteUsb(const ParsedArgs& args) {
 
     if (!args.silentMode) {
         bool allSucceeded = false;
-        performWriteOperation(*pairsPtr, &allSucceeded);
+        performWriteOperation(*pairsPtr, &allSucceeded, args.verifyUsb);
         g_drainingManager.joinAll();
         std::cout << "\n";
         return (allSucceeded && !GlobalState::g_operationCancelled.load()) ? 0 : 1;
     }
 
     auto progressDataPtr = buildProgressData(*pairsPtr);
+    for (auto& row : *progressDataPtr) row.verifyRequested = args.verifyUsb;
     executeSilentWriteOperations(pairsPtr, progressDataPtr, pool);
     g_drainingManager.joinAll();
     return evaluateWriteResult(*progressDataPtr);

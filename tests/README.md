@@ -67,7 +67,7 @@ that fresh file before calling the real Linux ISO writer. It checks the written
 bytes, alignment padding, completion flag and untouched trailing byte.
 
 The end-to-end `w2usb` CLI suite creates a second 16 MiB backing file and
-runs 14 independent scenarios against the two disposable loops. A private
+runs 26 independent scenarios against the two disposable loops. A private
 mount namespace replaces `/dev` with a fresh tmpfs (only two verified block
 nodes, `/dev/testa` and `/dev/testb`, plus minimal character devices and a
 private devpts instance). A synthetic `/sys/block` supplies removable USB
@@ -79,6 +79,13 @@ case the two verified loops are reset; full-device byte comparisons verify
 successful writes, positional mapping, zeroed tails and no changes on
 validation failure. Verbose cases use a 120x24 PTY with separate application
 stderr; silent cases require empty raw stdout and stderr on dispatched jobs.
+The 12 verified scenarios cover single, broadcast and paired writes, invalid
+images and mixed success/failure batches in both modes, plus a multi-chunk
+image with a partial final sector (nonzero padding sentinel and untouched
+tail marker). Successful verified verbose rows must
+report PASS rather than DONE, and all cases check exact exit status and both
+full devices. Checksum mismatch and readback cancellation are injected in the
+separate privileged writer executable, not the production CLI.
 Mounted rejection uses a private tmpfs mount with the test device name as
 its source, rather than mounting or formatting the loop. Busy rejection
 uses a synthetic in-flight counter. Each case runs in its own shell so
@@ -86,6 +93,35 @@ regressions do not prevent later cases from executing. All-success verbose
 cases require exit 0, even if the current implementation returns 1 due to
 its separate UI and CLI progress vectors. This is an intentional regression
 assertion, not an expected-failure exemption.
+
+### Windows end-to-end verification
+
+With `xorriso` or `genisoimage`, `parted`, and `mkfs.fat` (dosfstools),
+the privileged runner generates a synthetic Windows PE-style ISO and tests the
+real FAT-only writer. With `mkfs.ntfs` (ntfs-3g) it also tests the FAT32 + NTFS
+installation layout. The kernel must support ISO9660, VFAT, loop partition
+scanning and (for the full layout) the production writer's writable NTFS driver
+(e.g. ntfs3). Missing ISO/format tools produce explicit SKIP messages;
+a write, mount or verification failure with the tools present fails the suite.
+Allow two additional available loop devices (one writable target and one
+read-only source ISO loop) and sufficient free disk space for the filesystems.
+Each Windows case uses a fresh sparse 1280 MiB backing file, needed for the
+1 GiB ESP plus NTFS data partition. Fixtures are not bootable Windows images.
+
+The actual `writeIsoToDevice` dispatcher runs with `verifyRequested=true` in a
+private mount namespace. A root-owned alias directory links only to the pinned,
+independently checked disposable target and its kernel-created partition names;
+normal host `/dev` remains visible for libmount's read-only ISO loop allocation.
+No external target path is accepted by the runner. The test checks GPT, exact
+partition count, filesystem types and labels, per-partition file routing,
+empty files/directories, distinct multi-chunk payloads, exact written/verified
+byte counts, completion state, and absence of leaked mounts. It independently
+remounts the resulting filesystems read-only and compares fixture file bytes,
+without using the production checksum algorithm. Both cases run separately;
+a failed case propagates a nonzero exit status. These are production-writer
+integration tests, not Windows CLI/bootability tests.
+
+### ISO mounting
 
 If `xorriso` or `genisoimage` is installed, the runner also generates an ISO and
 calls the production mount/unmount functions in a separate private mount
@@ -135,6 +171,7 @@ tests/
 ├── privileged/
 │   ├── mount.cpp
 │   ├── usbWriter.cpp
+│   ├── windowsWriter.cpp   # real FAT-only and FAT32 + NTFS verification
 │   ├── cli.sh              # root validation and isolated mount/unmount CLI
 │   ├── writeCli.sh         # isolated real w2usb CLI, PTY and data checks
 │   └── run.sh
@@ -172,7 +209,7 @@ tests/
 | Integration: interactive workflows | Real PageUp/PageDown and page jumps, live filter scroll, query replacement, resize, no-match retry, cancellation, staged copy, rejected/confirmed delete and move with filesystem checks |
 | Integration: USB UI | Injected discovery/validation using harmless device names; invalid mapping retry, confirmation resize, decline and prefill, multi-device task ordering, completed/partial/failed summaries |
 | Integration: progress | Real WriteScreen rendering at 10/50/99/100%, speed and bar glyphs, filename clipping, active/result resize, DONE/FAIL/CXL and interrupted summary; copy result resize at verbose prompt |
-| Privileged | Linux writer on verified disposable loop device; 16 raw I/O scenarios (EINTR, short reads, aligned and unaligned short writes with bounded restart, premature EOF, EIO, ENOSPC, zero writes, final fsync EINTR retries and hard failure, close EIO during failure cleanup, active cancellation and clean retry), exact device prefix/padding and untouched tail; CLI USB argument and device validation (including multiple errors and duplicate targets); 14 real raw-writer CLI cases: single/broadcast/paired success, invalid image, mixed batch, capacity/duplicate/mounted/busy rejection, verbose per-job status and summary, silent output, exit codes and full-device data checks; optional private-namespace ISO mount/read/unmount and CLI success, skip, failure, mixed results, status/summary and silent mode |
+| Privileged | Linux writer on verified disposable loop device; 16 raw I/O scenarios (EINTR, short reads, aligned and unaligned short writes with bounded restart, premature EOF, EIO, ENOSPC, zero writes, final fsync EINTR retries and hard failure, close EIO during failure cleanup, active cancellation and clean retry), exact device prefix/padding and untouched tail; CLI USB argument and device validation (including multiple errors and duplicate targets); 26 real raw-writer CLI cases (14 ordinary and 12 with `--verify`): single/broadcast/paired success, invalid image, mixed batch, capacity/duplicate/mounted/busy rejection, verbose per-job status and summary, silent output, exit codes and full-device data checks; optional full Windows FAT-only and FAT32 + NTFS verified writes on disposable partitioned loops, independent read-only remount and byte comparisons; optional private-namespace ISO mount/read/unmount and CLI success, skip, failure, mixed results, status/summary and silent mode |
 
 ## Safety and limitations
 
@@ -221,10 +258,8 @@ counts replayed bytes only once. Tests also verify restart exhaustion, final
 fsync EINTR retries, and Windows cleanup ftruncate EINTR retries. Windows asynchronous range
 writeback is best-effort, not equivalent to a durable final syncfs.
 The suite does not yet simulate all cleanup syscalls (e.g. unmount/rmdir),
-full Windows filesystem syncfs faults, the full Windows partition/format workflow, actual
-FAT32/NTFS writes, all converters, successful physical-device flashing through either CLI or UI, every interactive operation or all possible thread
-interleavings. The Windows copy-engine tests use regular filesystem paths, not
-actual FAT32/NTFS volumes. The privileged Linux writer fixture has a synthetic
+full Windows filesystem syncfs/remount fault injection, Windows end-to-end CLI or corruption/cancellation cases on real FAT32/NTFS volumes, all converters, successful physical-device flashing through either CLI or UI, every interactive operation or all possible thread
+interleavings. The unprivileged Windows copy-engine tests use regular filesystem paths; the optional privileged Windows tests exercise actual FAT32/NTFS volumes. The privileged Linux writer fixture has a synthetic
 ISO signature, not a bootable image. Passing sanitizers do not prove the absence
 of all races or undefined behavior.
 
@@ -237,3 +272,7 @@ Use `TempDir` and ordinary files for fixtures. Unit and integration `.cpp`
 files are automatically discovered by the Makefile. Keep tests outside `src/`
 and keep physical devices, real user data and system mount targets out of
 all suites. Only the explicitly invoked privileged runner may create loop devices.
+
+### USB checksum verification
+
+The unit suite checks the CRC-64/ECMA-182 reference vector, chunked updates, file sizes, corruption, cancellation and progress-state moves. Integration tests exercise checksum capture in the Windows copy engine and the second confirmation prompt (including resize and default skip). The privileged suite tests verified raw writes on its disposable loop fixture, including readback EINTR, short reads, corruption, EIO and cancellation. The real CLI suite also exercises `--verify` in verbose and silent modes (including multiple devices, partial batches, invalid images and sector padding). The optional privileged Windows tests now exercise the complete FAT-only and FAT32 + NTFS partition/format/copy/flush/unmount/read-only-remount/checksum workflow and independently compare the resulting file contents. Windows checksum mismatch and cancellation remain covered at the file/copy-engine level, not by the full partitioned workflow.

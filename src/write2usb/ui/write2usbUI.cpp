@@ -319,9 +319,9 @@ namespace MappingPrompt {
      * @param warnRows Warning rows generated for the valid pairs.
      * @param wt The current write theme configuration.
      * @param color Color formatting string for confirmation prompt.
-     * @return true if the user confirmed with 'y' or 'Y', false otherwise.
+     * @return Verification choice on confirmation; nullopt when declined or aborted.
      */
-    bool confirmDeviceMappings(const std::string& devicePrompt,
+    std::optional<bool> confirmDeviceMappings(const std::string& devicePrompt,
                                       const std::string& mainInputString,
                                       const std::vector<WarnRow>& warnRows,
                                       const WriteTheme& wt,
@@ -357,7 +357,42 @@ namespace MappingPrompt {
             }
         }
 
-        return (ans == "y" || ans == "Y");
+        if (ans != "y" && ans != "Y") return std::nullopt;
+
+        // Keep the second question in the same confirmation view. On resize,
+        // replay the accepted first question before Readline redraws the input.
+        const std::string verifyText = "Verify checksum? (y/n): ";
+        std::string verifyPrompt("\001");
+        verifyPrompt.append(color).append("\002").append(verifyText).append(wt.rl_resetCol);
+        const auto repaint = [&](size_t cols) {
+            auto widths = renderConfirmRows(cols, true, devicePrompt, mainInputString, warnRows, wt);
+            std::cout << color << promptText << ans << UI::Palette::BoldReset << "\n";
+            widths.push_back(utf8Width(promptText + ans));
+            return widths;
+        };
+        // A resize may have occurred during the first question: repaint using
+        // the current dimensions before arming the second watcher.
+        for (;;) {
+            const size_t cols = terminalSize().cols;
+            std::vector<size_t> widths;
+            {
+                SyncOutput sync;
+                widths = repaint(cols);
+            }
+            std::unique_ptr<char, decltype(&std::free)> answer(nullptr, &std::free);
+            {
+                ConfirmationModeGuard confirmGuard;
+                ConfirmResizeWatcher watcher(repaint, cols, std::move(widths), verifyText);
+                answer.reset(readline(verifyPrompt.c_str()));
+                watcher.stop();
+            }
+            if (!answer || std::string_view(answer.get()) == "\x1b") return std::nullopt;
+            std::string choice(answer.get());
+            while (!choice.empty() && std::isspace(static_cast<unsigned char>(choice.back())))
+                choice.pop_back();
+            if (choice == "y" || choice == "Y") return true;
+            if (choice.empty() || choice == "n" || choice == "N") return false;
+        }
     }
 
 } // namespace MappingPrompt
@@ -481,12 +516,14 @@ namespace {
  * for final user confirmation before returning confirmed association pairs.
  *
  * @param selectedIsos Vector of selected ISO files designated for writing.
+ * @param[out] verify Optional output for the confirmed batch verification choice.
  * @return std::vector<std::pair<IsoInfo, std::string>> Vector of confirmed (ISO, Target Device) association pairs,
  *         or an empty vector if cancelled or stopped by thread pool limits.
  */
 std::vector<std::pair<IsoInfo, std::string>> WriteMapping::collectWithDevices(
-    const std::vector<IsoInfo>& selectedIsos, Discover discover, Validate validate, bool noPermissions)
+    const std::vector<IsoInfo>& selectedIsos, Discover discover, Validate validate, bool noPermissions, bool* verify)
 {
+    if (verify) *verify = false;
     PendingReadlineTextClearGuard pendingTextGuard;
     const WriteTheme wt = getWriteTheme();
     std::string pendingInput;
@@ -556,7 +593,8 @@ std::vector<std::pair<IsoInfo, std::string>> WriteMapping::collectWithDevices(
         }
 
         auto warnRows = MappingPrompt::buildWarnRows(validPairs);
-        if (MappingPrompt::confirmDeviceMappings(devicePrompt, mainInputString, warnRows, wt, color)) {
+        if (auto choice = MappingPrompt::confirmDeviceMappings(devicePrompt, mainInputString, warnRows, wt, color); choice.has_value()) {
+            if (verify) *verify = *choice;
             finalizeConfirmedMappings();
             return validPairs;
         }
@@ -567,6 +605,6 @@ std::vector<std::pair<IsoInfo, std::string>> WriteMapping::collectWithDevices(
 }
 
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
-    const std::vector<IsoInfo>& selectedIsos) {
-    return WriteMapping::collectWithDevices(selectedIsos, getRemovableDevices, validateDevices, geteuid() != 0);
+    const std::vector<IsoInfo>& selectedIsos, bool* verify) {
+    return WriteMapping::collectWithDevices(selectedIsos, getRemovableDevices, validateDevices, geteuid() != 0, verify);
 }

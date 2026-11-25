@@ -33,6 +33,7 @@ Pairs fakeValidate(const std::vector<std::pair<std::size_t,std::string>>& map,
 std::mutex recordMutex;
 std::vector<std::tuple<std::size_t,std::string,std::string>> calls;
 std::atomic<int> mode{0};
+std::atomic<bool> expectVerification{false};
 bool fakeWriter(const std::string& source,const std::string& device,std::size_t index,std::vector<ProgressInfo>& progress) {
     // Never open a device. A wrong row association is recorded as a failed call.
     {
@@ -40,11 +41,18 @@ bool fakeWriter(const std::string& source,const std::string& device,std::size_t 
         calls.emplace_back(index,source,device);
     }
     auto& row=progress.at(index);
-    if (row.sourcePath!=source || row.device!=device) return false;
+    if (row.sourcePath!=source || row.device!=device || row.verifyRequested != expectVerification.load()) return false;
     row.progress=50; row.speed=12.3; row.bytesWritten=100;
-    std::this_thread::sleep_for(10ms);
-    if (mode==2 || (mode==1 && device=="/dev/zero")) return false;
+    // The slowest device has distinct write and verification phases.
+    std::this_thread::sleep_for(device=="/dev/zero" ? 200ms : 10ms);
+    if (mode==2) return false;
     row.progress=100; row.speed=20.0; row.bytesWritten=200;
+    if (row.verifyRequested) {
+        row.verifying = true; row.progress=0;
+        std::this_thread::sleep_for(device=="/dev/zero" ? 400ms : 10ms);
+        row.progress=100; row.bytesVerified=200;
+    }
+    if (mode==1 && device=="/dev/zero") return false;
     return true;
 }
 void waitInput() { CHECK(std::cin.get()=='\n'); }
@@ -83,24 +91,35 @@ int writeUiChild() {
         auto cancelled=WriteMapping::collectWithDevices(isos,fakeDevices,fakeValidate,false);
         CHECK(cancelled.empty());
         std::cout<<"TEST-MAPPING-CANCELLED\n"<<std::flush;
-        auto mappings=WriteMapping::collectWithDevices(isos,fakeDevices,fakeValidate,false);
+        bool verify=false;
+        auto mappings=WriteMapping::collectWithDevices(isos,fakeDevices,fakeValidate,false,&verify);
+        CHECK(verify);
         CHECK(mappings.size()==3);
         CHECK(mappings[0].first.filename=="iso2.iso" && mappings[0].second=="/dev/zero");
         CHECK(mappings[1].first.filename=="iso10.iso" && mappings[1].second=="/dev/null");
         CHECK(mappings[2].first.filename=="iso2.iso" && mappings[2].second=="/dev/full");
         const std::vector<std::tuple<std::size_t,std::string,std::string>> expected{
             {0,"/fixture/iso2.iso","/dev/full"},{1,"/fixture/iso2.iso","/dev/zero"},{2,"/fixture/iso10.iso","/dev/null"}};
-        for (int result=0;result<3;++result) {
-            mode=result; calls.clear();
+        for (int result=0;result<4;++result) {
+            mode=result==3?0:result; calls.clear();
             setupSignalHandlerCancellations(); GlobalState::g_operationCancelled=false;
-            bool allSucceeded = result != 0; // Start with the opposite expected result.
-            auto screen=WriteExecution::performWithWriter(mappings,fakeWriter,&allSucceeded);
-            CHECK(allSucceeded == (result == 0));
+            const bool expectedSuccess = result==0 || result==3;
+            bool allSucceeded = !expectedSuccess; // Start with the opposite expected result.
+            const bool verifyBatch = result!=3 && verify;
+            expectVerification = verifyBatch;
+            auto screen=WriteExecution::performWithWriter(mappings,fakeWriter,&allSucceeded,verifyBatch);
+            CHECK(allSucceeded == expectedSuccess);
             std::sort(calls.begin(),calls.end()); CHECK(calls==expected);
             stopWriteScreen(*screen);
             std::cout<<"TEST-WRITE-RESULT-"<<result<<'\n'<<std::flush;
             waitInput();
         }
+        std::cout<<"TEST-VERIFY-DEFAULT\n"<<std::flush;
+        verify=true;
+        auto skipped=WriteMapping::collectWithDevices(isos,fakeDevices,fakeValidate,false,&verify);
+        CHECK(skipped.size()==2 && !verify);
+        CHECK(skipped[0].first.filename=="iso2.iso" && skipped[0].second=="/dev/zero");
+        CHECK(skipped[1].first.filename=="iso10.iso" && skipped[1].second=="/dev/null");
         std::cout<<"TEST-WRITE-UI-PASS\n"<<std::flush;
         return 0;
     } catch(const std::exception& e) { std::cerr<<e.what()<<'\n'; return 1; }
@@ -115,17 +134,23 @@ int progressScreenChild() {
         rows->emplace_back("third-fixture.iso","/dev/full","1 MB","fixture3");
         (*rows)[0].progress=10; (*rows)[0].speed=0.05;
         (*rows)[1].progress=50; (*rows)[1].speed=12.3;
+        (*rows)[1].verifyRequested=true; (*rows)[1].verifying=true;
         (*rows)[2].progress=99; (*rows)[2].speed=40;
         auto sync=std::make_shared<WriteSync>();
         setupSignalHandlerCancellations(); GlobalState::g_operationCancelled=false;
         auto screen=createWriteScreen(rows,sync,getWriteTheme());
         startWriteScreen(*screen);
+        const auto batchStart=std::chrono::steady_clock::now();
+        waitProgressInput();
+        // Exercise single-digit and 100% progress before the final result.
+        (*rows)[0].progress=5;
+        (*rows)[1].speed=179.8; (*rows)[1].progress=100;
         waitProgressInput();
         (*rows)[0].progress=100; (*rows)[0].completed=true;
         (*rows)[1].failed=true;
         sync->completedTasks=1; sync->finishedTasks=2;
         GlobalState::g_operationCancelled=true;
-        finishWriteScreen(*screen);
+        finishWriteScreen(*screen,std::chrono::steady_clock::now()-batchStart);
         waitProgressInput();
         stopWriteScreen(*screen); stopWriteScreen(*screen);
         GlobalState::g_operationCancelled=false;

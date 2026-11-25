@@ -9,6 +9,7 @@
 import std;
 import isocmd.core.cancellation;
 import isocmd.write2usb.windows.windowsWriterEngine;
+import isocmd.write2usb.util.checksum;
 
 namespace fs = std::filesystem;
 
@@ -304,7 +305,8 @@ namespace windowsWriter_engine::copy {
                            char* buf,
                            std::atomic<uint64_t>& totalAccumulator,
                            uint64_t& bytesCopiedTotal,
-                           FilesystemWritebackState& filesystemWriteback) {
+                           FilesystemWritebackState& filesystemWriteback,
+                           usb_verify::Checksum64* checksum) {
            uint64_t fileOffset = 0;
            FileWritebackState fileWriteback;
 
@@ -342,6 +344,8 @@ namespace windowsWriter_engine::copy {
                    break;
                }
 
+               if (checksum) checksum->update(buf, chunkSize);
+
                if (!writeOneChunk(
                        fd_out, buf, chunkSize,
                        fileOffset, bytesCopiedTotal,
@@ -377,7 +381,8 @@ namespace windowsWriter_engine::copy {
                                  uint64_t fileSize, bool preallocate,
                                  size_t bufferSize, char* buf,
                                  std::atomic<uint64_t>& totalAccumulator,
-                                 FilesystemWritebackState& filesystemWriteback) {
+                                 FilesystemWritebackState& filesystemWriteback,
+                                 uint64_t* expectedChecksum) {
            const int fd_in = open(
                src.c_str(), O_RDONLY | O_CLOEXEC
            );
@@ -407,10 +412,11 @@ namespace windowsWriter_engine::copy {
 
            uint64_t bytesCopiedTotal = 0;
 
+           usb_verify::Checksum64 checksum;
            const bool success = copyFileChunks(
                fd_in, fd_out, fileSize, bufferSize, buf,
                totalAccumulator, bytesCopiedTotal,
-               filesystemWriteback
+               filesystemWriteback, expectedChecksum ? &checksum : nullptr
            );
 
            if (!success) {
@@ -430,6 +436,7 @@ namespace windowsWriter_engine::copy {
            close(fd_in);
            close(fd_out);
 
+           if (success && expectedChecksum) *expectedChecksum = checksum.value;
            return success &&
                   !GlobalState::g_operationCancelled.load();
        }
@@ -450,8 +457,13 @@ namespace windowsWriter_engine::copy {
                        const std::string& ntfsMnt,
                        size_t bufferSize,
                        char* buf,
-                       std::atomic<uint64_t>& totalAccumulator) {
+                       std::atomic<uint64_t>& totalAccumulator,
+                       std::vector<uint64_t>* checksums) {
 
+       if (checksums) {
+           checksums->clear();
+           checksums->reserve(entries.size());
+       }
        // Collect every directory that needs to exist.
        std::vector<fs::path> directories;
        directories.reserve(entries.size());
@@ -495,12 +507,14 @@ namespace windowsWriter_engine::copy {
                (isoType == IsoType::WindowsInstall) &&
                e.dst.native().compare(0, ntfsMnt.size(), ntfsMnt) == 0;
 
+           uint64_t checksum = 0;
            if (!copyFileWithProgress(
                    e.src, e.dst, e.size, toNtfs,
                    bufferSize, buf, totalAccumulator,
-                   filesystemWriteback)) {
+                   filesystemWriteback, checksums ? &checksum : nullptr)) {
                return false;
            }
+           if (checksums) checksums->push_back(checksum);
        }
 
        return true;

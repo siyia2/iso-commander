@@ -38,6 +38,8 @@ expect_error "Option '--silent' must precede all paths." mount dummy --silent
 expect_error "Option '-d0' must precede all paths." c2iso dummy -d0
 expect_error 'ISO paths must precede device paths' w2usb /dev/isocmd-test-does-not-exist dummy.iso
 expect_error "Option '--silent' must precede all paths." w2usb dummy.iso --silent
+expect_error "Option '--verify' must precede all paths." w2usb dummy.iso --verify
+expect_error "Option '--verify' is only supported by w2usb." c2iso --verify dummy
 
 # Real CLI dispatch with deterministic raw sectors, no device writes.
 mkdir -p images/nested empty

@@ -29,6 +29,9 @@ ProgressInfo::ProgressInfo(ProgressInfo&& other) noexcept
       device(std::move(other.device)),
       totalSize(std::move(other.totalSize)),
       sourcePath(std::move(other.sourcePath)),
+      verifyRequested(other.verifyRequested),
+      verifying(other.verifying.load()),
+      bytesVerified(other.bytesVerified.load()),
       completed(other.completed.load()),
       failed(other.failed.load()),
       bytesWritten(other.bytesWritten.load()),
@@ -42,6 +45,9 @@ ProgressInfo& ProgressInfo::operator=(ProgressInfo&& other) noexcept {
         device = std::move(other.device);
         totalSize = std::move(other.totalSize);
         sourcePath = std::move(other.sourcePath);
+        verifyRequested = other.verifyRequested;
+        verifying.store(other.verifying.load());
+        bytesVerified.store(other.bytesVerified.load());
         completed.store(other.completed.load());
         failed.store(other.failed.load());
         bytesWritten.store(other.bytesWritten.load());
@@ -226,7 +232,9 @@ void drainManagerForWrite2UsbUI(
  *
  * @par Normal completion
  * Waits until all tasks finish, disables further SIGINT handling, and paints
- * the result screen. The returned screen stays alive so the caller can
+ * the result screen. Batch elapsed time spans task dispatch through the last
+ * writer returning, including optional verification on every device. Parallel
+ * durations overlap; they are not summed. The returned screen stays alive so the caller can
  * display a prompt and keep resize-triggered repainting. All valid futures
  * are waited on before returning.
  *
@@ -263,6 +271,7 @@ void drainManagerForWrite2UsbUI(
  * @param validPairsIn Validated (IsoInfo, device) pairs to write. Not
  *                     modified.
  * @param writer Function used to execute each write task.
+ * @param verify        Enable readback verification for all writers in the batch.
  * @param[out] allSucceeded Optional synchronous result; false on failure or cancellation.
  *                         Never retained by the worker or drain threads.
  *
@@ -271,12 +280,13 @@ void drainManagerForWrite2UsbUI(
  */
 std::shared_ptr<WriteScreen> WriteExecution::performWithWriter(
         const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn, Writer writer,
-        bool* allSucceeded) {
+        bool* allSucceeded, bool verify) {
     // One call builds the sorted per-task progress vector and establishes the
     // ordering invariant (task i ↔ progress row i). No sorted-pair vector is
     // materialised, so only one shared pointer travels through the tasks and drain.
     auto progressDataPtr = WriteExecution::prepareWriteData(validPairsIn);
     auto& progressData   = *progressDataPtr;
+    for (auto& row : progressData) row.verifyRequested = verify;
 
     const size_t totalTasks = progressData.size();
 
@@ -294,11 +304,17 @@ std::shared_ptr<WriteScreen> WriteExecution::performWithWriter(
     startWriteScreen(*screen);
 
     std::vector<std::future<void>> futures;
+    futures.reserve(totalTasks);
+    const auto batchStart = std::chrono::steady_clock::now();
     for (size_t i = 0; i < totalTasks; ++i) {
         futures.push_back(pool.enqueue([progressDataPtr, syncPtr, i, writer]() {
             auto& progress = (*progressDataPtr)[i];
-            const bool success = writer(
-                progress.sourcePath, progress.device, i, *progressDataPtr);
+            bool success = false;
+            try {
+                success = writer(progress.sourcePath, progress.device, i, *progressDataPtr);
+            } catch (...) {
+                // A throwing writer must still publish task completion and wake waiters.
+            }
 
             if (success) {
                 progress.completed.store(true);
@@ -343,9 +359,12 @@ std::shared_ptr<WriteScreen> WriteExecution::performWithWriter(
         }
     }
 
+    // Each writer returns only after its write and optional verification.
+    // Freeze the batch wall-clock time before rendering or cancellation draining.
+    const auto batchElapsed = std::chrono::steady_clock::now() - batchStart;
     signal(SIGINT, SIG_IGN);
 
-    finishWriteScreen(*screen);
+    finishWriteScreen(*screen, batchElapsed);
 
     flushStdin();
     restoreInput();
@@ -372,8 +391,8 @@ std::shared_ptr<WriteScreen> WriteExecution::performWithWriter(
 }
 
 std::shared_ptr<WriteScreen> performWriteOperation(
-        const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn, bool* allSucceeded) {
-    return WriteExecution::performWithWriter(validPairsIn, writeIsoToDevice, allSucceeded);
+        const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn, bool* allSucceeded, bool verify) {
+    return WriteExecution::performWithWriter(validPairsIn, writeIsoToDevice, allSucceeded, verify);
 }
 
 /**
@@ -426,12 +445,13 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
         return;
     }
 
-    auto validPairs = collectDeviceMappings(selectedIsos);
+    bool verify = false;
+    auto validPairs = collectDeviceMappings(selectedIsos, &verify);
     if (validPairs.empty()) {
         return;
     }
 
-    auto screen = performWriteOperation(validPairs);
+    auto screen = performWriteOperation(validPairs, nullptr, verify);
 
     signal(SIGINT, SIG_IGN);
     disable_ctrl_d();

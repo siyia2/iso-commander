@@ -413,17 +413,37 @@ int writeUiTest(const char* binary) {
             term.send("n\n"); end=term.waitFor("? for help: ",end);
             // Declining retains the input for editing; resubmit it unchanged.
             end=term.waitFor(mapping,end); term.send("\n"); end=term.waitFor("Proceed? (y/n): ",end);
+            term.send("y\n");
+            end=term.waitFor("Verify checksum? (y/n): ",end);
+            const auto verifyResize=term.output.size(); term.resize(24,110);
+            end=term.waitFor("Verify checksum? (y/n): ",verifyResize);
             const auto afterConfirm=term.output.size(); term.send("y\n");
-            for (int i=0;i<3;++i) {
+            for (int i=0;i<4;++i) {
                 const auto startResult=i==0?afterConfirm:end;
                 end=term.waitFor("TEST-WRITE-RESULT-"+std::to_string(i),startResult);
                 const auto frame=plain(std::string_view(term.output).substr(startResult,end-startResult));
-                CHECK(has(frame,i==0?"COMPLETED":i==1?"PARTIAL":"FAILED"));
-                CHECK(has(frame,i==0?"Successful: 3/3":i==1?"Successful: 2/3":"Successful: 0/3"));
+                const bool successful=i==0 || i==3;
+                CHECK(has(frame,successful?"COMPLETED":i==1?"PARTIAL":"FAILED"));
+                CHECK(has(frame,successful?"Successful: 3/3":i==1?"Successful: 2/3":"Successful: 0/3"));
+                // The slowest device takes 200 ms to write and another 400 ms
+                // to verify, even when verification fails. The summary must
+                // not stop at write completion or another device finishing.
+                const std::string elapsedLabel="Time Elapsed: ";
+                const auto elapsedPos=frame.find(elapsedLabel);
+                CHECK(elapsedPos!=std::string::npos);
+                const double elapsed=std::stod(frame.substr(elapsedPos+elapsedLabel.size()));
+                CHECK(elapsed >= (i<2 ? 0.6 : 0.2));
                 CHECK(has(frame,"iso2.iso") && has(frame,"iso10.iso"));
+                if (i==0) CHECK(has(frame,"PASS"));
+                if (i==3) CHECK(has(frame,"DONE") && !has(frame,"PASS"));
                 CHECK(has(frame,"/dev/full") && has(frame,"/dev/zero") && has(frame,"/dev/null"));
                 term.send("\n");
             }
+            end=term.waitFor("TEST-VERIFY-DEFAULT",end);
+            end=term.waitFor("? for help: ",end);
+            term.send("1>/dev/zero;2>/dev/null\n"); end=term.waitFor("Proceed? (y/n): ",end);
+            term.send("y\n"); end=term.waitFor("Verify checksum? (y/n): ",end);
+            term.send("\n");
             term.waitFor("TEST-WRITE-UI-PASS",end); term.waitForExit();
         } catch (...) { printOutput(term.output); throw; }
         std::cout<<"PASS: device mapping retry, resize, confirmation, multi-device task association and results\n";
@@ -438,8 +458,37 @@ int progressScreenTest(const char* binary) {
             std::size_t start=0;
             auto frame=screenFrame(term,start,"51.2 KB/s");
             CHECK(has(frame,"▄░░░░") && has(frame,"▇▇▄░░") && has(frame,"▇▇▇▇▄"));
-            CHECK(has(frame,"10%") && has(frame,"50%") && has(frame,"99%") && has(frame,"12.3 MB/s"));
+            CHECK(has(frame,"10%") && has(frame,"] 50%") && !has(frame,"CHK") && has(frame,"99%") && has(frame,"12.3 MB/s"));
             CHECK(has(frame,"very-long-fixture-image-for-resize-testing.iso"));
+            // Original layout: one space after the bar, a left-aligned
+            // five-character status field, then right-aligned speed values.
+            const auto checkSpeedSpacing = [](const std::string& text) {
+                std::istringstream rows(text); std::string row;
+                std::size_t count = 0;
+                std::size_t speedEndColumn = 0;
+                while (std::getline(rows, row)) {
+                    if (!has(row,"/dev/")) continue;
+                    auto unit = row.find(" MB/s");
+                    if (unit == std::string::npos) unit = row.find(" KB/s");
+                    CHECK(unit != std::string::npos);
+                    const auto barEnd = row.rfind(']', unit);
+                    CHECK(barEnd != std::string::npos);
+                    const auto statusStart = row.find_first_not_of(' ', barEnd + 1);
+                    CHECK(statusStart == barEnd + 2);
+                    const auto statusEnd = row.find(' ', statusStart);
+                    CHECK(statusEnd != std::string::npos && statusEnd <= statusStart + 4);
+                    const auto speedStart = row.find_first_not_of(' ', statusEnd);
+                    CHECK(speedStart != std::string::npos && speedStart >= statusStart + 5);
+                    CHECK(speedStart < unit);
+                    CHECK(row[speedStart] >= '0' && row[speedStart] <= '9');
+                    const auto column = visibleWidth(row.substr(0, unit + 5));
+                    if (count == 0) speedEndColumn = column;
+                    else CHECK(column == speedEndColumn);
+                    ++count;
+                }
+                CHECK(count == 3);
+            };
+            checkSpeedSpacing(frame);
             start=term.output.size(); term.resize(20,55);
             frame=screenFrame(term,start,"Processing");
             CHECK(!has(frame,"very-long-fixture-image-for-resize-testing.iso") && has(frame,"…"));
@@ -448,8 +497,14 @@ int progressScreenTest(const char* binary) {
             start=term.output.size(); term.resize(24,120);
             frame=screenFrame(term,start,"very-long-fixture-image-for-resize-testing.iso");
             CHECK(has(frame,"99%"));
+            checkSpeedSpacing(frame);
+            term.send("\n"); frame=screenFrame(term,start,"100% 179.8 MB/s");
+            // The longest speed follows a full-width percentage by one space.
+            CHECK(has(frame,"100% 179.8 MB/s") && has(frame,"] 5%"));
+            checkSpeedSpacing(frame);
             term.send("\n"); frame=screenFrame(term,start,"INTERRUPTED");
-            CHECK(has(frame,"Successful: 1/3") && has(frame,"DONE") && has(frame,"FAIL") && has(frame,"CXL") && has(frame,"(avg)"));
+            checkSpeedSpacing(frame);
+            CHECK(has(frame,"Successful: 1/3") && has(frame,"DONE") && has(frame,"FAIL") && has(frame,"] CXL  ") && has(frame,"(avg)"));
             CHECK(has(frame,"▇▇▇▇▇"));
             start=term.output.size(); term.resize(20,100);
             frame=screenFrame(term,start,"INTERRUPTED"); CHECK(has(frame,"Successful: 1/3"));

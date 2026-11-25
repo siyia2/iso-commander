@@ -68,7 +68,12 @@ int __real_ftruncate(int, off_t);
 int __real_close(int);
 
 ssize_t __wrap_read(int fd, void* buf, size_t n) {
-    return transfer(Call::Read, fd, n, [&](size_t count) { return __real_read(fd, buf, count); });
+    const auto step = next(Call::Read, fd);
+    const auto result = transferStep(step, n, [&](size_t count) { return __real_read(fd, buf, count); });
+    if (step.kind == Kind::CorruptRead && result > 0) {
+        static_cast<unsigned char*>(buf)[0] ^= 1;
+    }
+    return result;
 }
 ssize_t __wrap_write(int fd, const void* buf, size_t n) {
     const auto step = next(Call::Write, fd);

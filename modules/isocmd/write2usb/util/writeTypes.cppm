@@ -39,6 +39,10 @@ struct ProgressInfo {
     std::string totalSize;
     std::string sourcePath;
 
+    bool verifyRequested = false; // Set before dispatch; immutable while running.
+    std::atomic<bool> verifying{false};
+    std::atomic<uint64_t> bytesVerified{0};
+
     std::atomic<bool> completed{false};
     std::atomic<bool> failed{false};
     std::atomic<uint64_t> bytesWritten{0};
