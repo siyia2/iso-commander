@@ -700,169 +700,169 @@ void logOperationResult(
 
 namespace {
 
-/**
- * @brief Parses a semicolon-separated list of destination directories.
- *
- * Empty entries produced by a trailing semicolon are preserved, matching
- * the original inline parsing behaviour.
- *
- * @param userDestDir Semicolon-separated destination directory string.
- * @return Normalized destination directory strings in input order.
- */
-std::vector<std::string> parseDestinationDirs(
-    const std::string& userDestDir
-)
-{
-    std::vector<std::string> destDirs;
+    /**
+     * @brief Parses a semicolon-separated list of destination directories.
+     *
+     * Empty entries produced by a trailing semicolon are preserved, matching
+     * the original inline parsing behaviour.
+     *
+     * @param userDestDir Semicolon-separated destination directory string.
+     * @return Normalized destination directory strings in input order.
+     */
+    std::vector<std::string> parseDestinationDirs(
+        const std::string& userDestDir
+    )
+    {
+        std::vector<std::string> destDirs;
 
-    std::istringstream iss(userDestDir);
-    std::string destDir;
+        std::istringstream iss(userDestDir);
+        std::string destDir;
 
-    while (std::getline(iss, destDir, ';')) {
-        destDirs.push_back(fs::path(destDir).string());
+        while (std::getline(iss, destDir, ';')) {
+            destDirs.push_back(fs::path(destDir).string());
+        }
+
+        return destDirs;
     }
 
-    return destDirs;
-}
+    /**
+     * @brief Checks whether a source/destination pair may proceed.
+     *
+     * Checks same-file, source-missing, and destination-exists conditions.
+     * Existing destinations are not removed here; overwrite is performed by
+     * the eventual copy/rename operation.
+     *
+     * @param ctx Operation context for error reporting.
+     * @param params Destination-check parameters.
+     * @return True if the operation may proceed.
+     */
+    bool isDestinationReadyForCopyMove(
+        OperationContext& ctx,
+        DestinationCheckParams& params
+    )
+    {
+        const TransferPaths& paths = params.paths;
 
-/**
- * @brief Checks whether a source/destination pair may proceed.
- *
- * Checks same-file, source-missing, and destination-exists conditions.
- * Existing destinations are not removed here; overwrite is performed by
- * the eventual copy/rename operation.
- *
- * @param ctx Operation context for error reporting.
- * @param params Destination-check parameters.
- * @return True if the operation may proceed.
- */
-bool isDestinationReadyForCopyMove(
-    OperationContext& ctx,
-    DestinationCheckParams& params
-)
-{
-    const TransferPaths& paths = params.paths;
+        if (fs::absolute(paths.srcPath) == fs::absolute(paths.destPath)) {
+            const std::string_view opName =
+                (params.op == TransferOp::Move) ? "move" : "copy";
 
-    if (fs::absolute(paths.srcPath) == fs::absolute(paths.destPath)) {
-        const std::string_view opName =
-            (params.op == TransferOp::Move) ? "move" : "copy";
+            reportErrorCpMvRm(
+                ctx, "same_file",
+                paths.srcDir, paths.srcFile,
+                "", "", opName
+            );
 
-        reportErrorCpMvRm(
-            ctx, "same_file",
-            paths.srcDir, paths.srcFile,
-            "", "", opName
-        );
+            return false;
+        }
 
-        return false;
-    }
+        ++params.state.validDestinations;
 
-    ++params.state.validDestinations;
+        if (!fs::exists(paths.srcPath)) {
+            reportErrorCpMvRm(
+                ctx, "source_missing",
+                paths.srcDir, paths.srcFile,
+                "", "", ""
+            );
 
-    if (!fs::exists(paths.srcPath)) {
-        reportErrorCpMvRm(
-            ctx, "source_missing",
-            paths.srcDir, paths.srcFile,
-            "", "", ""
-        );
+            return false;
+        }
 
-        return false;
-    }
+        if (!fs::exists(paths.destPath)) {
+            return true;
+        }
 
-    if (!fs::exists(paths.destPath)) {
+        if (!params.overwriteExisting) {
+            const std::string_view opName =
+                (params.op == TransferOp::Copy) ? "copying" : "moving";
+
+            reportErrorCpMvRm(
+                ctx, "file_exists",
+                paths.srcDir, paths.srcFile,
+                paths.destDirProcessed, "", opName
+            );
+
+            return false;
+        }
+
+        // The existing destination is replaced only after a successful copy.
         return true;
     }
 
-    if (!params.overwriteExisting) {
-        const std::string_view opName =
-            (params.op == TransferOp::Copy) ? "copying" : "moving";
-
-        reportErrorCpMvRm(
-            ctx, "file_exists",
-            paths.srcDir, paths.srcFile,
-            paths.destDirProcessed, "", opName
-        );
-
-        return false;
-    }
-
-    // The existing destination is replaced only after a successful copy.
-    return true;
-}
-
-/**
- * @brief Validates and dispatches one copy/move operation.
- *
- * Multi-destination moves use buffered copies; the caller removes the source
- * once at least one destination copy succeeds.
- */
-void processCopyMoveDestination(
-    OperationContext& ctx,
-    DestinationCheckParams& params
-)
-{
-    if (!isDestinationReadyForCopyMove(ctx, params)) {
-        return;
-    }
-
-    const TransferPaths& paths = params.paths;
-
-    bool success = false;
-
-    if (params.op == TransferOp::Move && params.destDirCount > 1) {
-        success = performBufferedCopyOperation(ctx, paths, "moving");
-
-        if (success) {
-            params.state.atLeastOneCopySucceeded = true;
+    /**
+     * @brief Validates and dispatches one copy/move operation.
+     *
+     * Multi-destination moves use buffered copies; the caller removes the source
+     * once at least one destination copy succeeds.
+     */
+    void processCopyMoveDestination(
+        OperationContext& ctx,
+        DestinationCheckParams& params
+    )
+    {
+        if (!isDestinationReadyForCopyMove(ctx, params)) {
+            return;
         }
-    } else if (params.op == TransferOp::Move) {
-        success = performMoveOperation(ctx, paths, params.fileSize);
-    } else {
-        success = performBufferedCopyOperation(ctx, paths, "copying");
+
+        const TransferPaths& paths = params.paths;
+
+        bool success = false;
+
+        if (params.op == TransferOp::Move && params.destDirCount > 1) {
+            success = performBufferedCopyOperation(ctx, paths, "moving");
+
+            if (success) {
+                params.state.atLeastOneCopySucceeded = true;
+            }
+        } else if (params.op == TransferOp::Move) {
+            success = performMoveOperation(ctx, paths, params.fileSize);
+        } else {
+            success = performBufferedCopyOperation(ctx, paths, "copying");
+        }
+
+        if (success && params.successfulDestPaths && params.destPathsMutex) {
+            std::lock_guard<std::mutex> lock(*params.destPathsMutex);
+            params.successfulDestPaths->push_back(paths.destPath.string());
+        }
     }
 
-    if (success && params.successfulDestPaths && params.destPathsMutex) {
-        std::lock_guard<std::mutex> lock(*params.destPathsMutex);
-        params.successfulDestPaths->push_back(paths.destPath.string());
-    }
-}
+    /**
+     * @brief Removes the source after a successful multi-destination move.
+     *
+     * The source is removed only when at least one destination was valid and at
+     * least one copy succeeded.
+     */
+    void removeSourceAfterMultiDestMove(
+        OperationContext& ctx,
+        const fs::path& srcPath,
+        std::string_view srcDir,
+        std::string_view srcFile,
+        TransferOp op,
+        std::size_t destDirCount,
+        const MultiDestState& state
+    )
+    {
+        if (!(op == TransferOp::Move &&
+              destDirCount > 1 &&
+              state.validDestinations > 0 &&
+              state.atLeastOneCopySucceeded)) {
+            return;
+        }
 
-/**
- * @brief Removes the source after a successful multi-destination move.
- *
- * The source is removed only when at least one destination was valid and at
- * least one copy succeeded.
- */
-void removeSourceAfterMultiDestMove(
-    OperationContext& ctx,
-    const fs::path& srcPath,
-    std::string_view srcDir,
-    std::string_view srcFile,
-    TransferOp op,
-    std::size_t destDirCount,
-    const MultiDestState& state
-)
-{
-    if (!(op == TransferOp::Move &&
-          destDirCount > 1 &&
-          state.validDestinations > 0 &&
-          state.atLeastOneCopySucceeded)) {
-        return;
-    }
+        std::error_code deleteEc;
 
-    std::error_code deleteEc;
-
-    if (!fs::remove(srcPath, deleteEc)) {
-        reportErrorCpMvRm(
-            ctx,
-            "remove_after_move",
-            srcDir,
-            srcFile,
-            "",
-            deleteEc.message(),
-            ""
-        );
+        if (!fs::remove(srcPath, deleteEc)) {
+            reportErrorCpMvRm(
+                ctx,
+                "remove_after_move",
+                srcDir,
+                srcFile,
+                "",
+                deleteEc.message(),
+                ""
+            );
+        }
     }
-}
 
 } // namespace
 

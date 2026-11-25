@@ -11,67 +11,67 @@ import isocmd.ui.bar.progressBarSizeWatcher;
 import isocmd.ui.cli.termSize;
 
 namespace rendering_detail {
-namespace {
+    namespace {
 
-/// Write end of the self-pipe the SIGWINCH handler pokes. -1 = no watcher.
-inline std::atomic<int> progressWinchFd{-1};
+        /// Write end of the self-pipe the SIGWINCH handler pokes. -1 = no watcher.
+        inline std::atomic<int> progressWinchFd{-1};
 
-/// Set by the SIGWINCH handler, cleared when the size is re-read.
-inline std::atomic<bool> progressWinchDirty{false};
+        /// Set by the SIGWINCH handler, cleared when the size is re-read.
+        inline std::atomic<bool> progressWinchDirty{false};
 
-/// Set around the handler's write() so closeWake() can wait for it.
-inline std::atomic<bool> progressWinchInHandler{false};
+        /// Set around the handler's write() so closeWake() can wait for it.
+        inline std::atomic<bool> progressWinchInHandler{false};
 
-/// Handler installed before ours; forwarded to preserve existing handling.
-inline struct sigaction previousProgressWinch {};
+        /// Handler installed before ours; forwarded to preserve existing handling.
+        inline struct sigaction previousProgressWinch {};
 
-/// Serializes closeWake() against an in-flight handler write.
-inline std::mutex progressWinchCloseMutex;
+        /// Serializes closeWake() against an in-flight handler write.
+        inline std::mutex progressWinchCloseMutex;
 
-static_assert(
-    std::atomic<int>::is_always_lock_free &&
-    std::atomic<bool>::is_always_lock_free,
-    "handler state must be lock-free to be used from a signal handler");
+        static_assert(
+            std::atomic<int>::is_always_lock_free &&
+            std::atomic<bool>::is_always_lock_free,
+            "handler state must be lock-free to be used from a signal handler");
 
-/**
- * @brief SIGWINCH handler.
- *
- * Marks the terminal size dirty and writes to the non-blocking self-pipe.
- * The previous handler is forwarded to after our work is complete.
- */
-inline void onProgressWinch(int sig, siginfo_t* info, void* ctx) {
-    const int savedErrno = errno;
+        /**
+         * @brief SIGWINCH handler.
+         *
+         * Marks the terminal size dirty and writes to the non-blocking self-pipe.
+         * The previous handler is forwarded to after our work is complete.
+         */
+        inline void onProgressWinch(int sig, siginfo_t* info, void* ctx) {
+            const int savedErrno = errno;
 
-    progressWinchDirty.store(true, std::memory_order_release);
+            progressWinchDirty.store(true, std::memory_order_release);
 
-    progressWinchInHandler.store(true, std::memory_order_seq_cst);
+            progressWinchInHandler.store(true, std::memory_order_seq_cst);
 
-    const int fd = progressWinchFd.load(std::memory_order_acquire);
+            const int fd = progressWinchFd.load(std::memory_order_acquire);
 
-    if (fd >= 0) {
-        const char b = 1;
-        [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);
-    }
+            if (fd >= 0) {
+                const char b = 1;
+                [[maybe_unused]] const ssize_t r = ::write(fd, &b, 1);
+            }
 
-    progressWinchInHandler.store(false, std::memory_order_release);
+            progressWinchInHandler.store(false, std::memory_order_release);
 
-    errno = savedErrno;
+            errno = savedErrno;
 
-    if (previousProgressWinch.sa_handler == SIG_DFL ||
-        previousProgressWinch.sa_handler == SIG_IGN) {
-        return;
-    }
+            if (previousProgressWinch.sa_handler == SIG_DFL ||
+                previousProgressWinch.sa_handler == SIG_IGN) {
+                return;
+            }
 
-    if (previousProgressWinch.sa_flags & SA_SIGINFO) {
-        if (previousProgressWinch.sa_sigaction) {
-            previousProgressWinch.sa_sigaction(sig, info, ctx);
+            if (previousProgressWinch.sa_flags & SA_SIGINFO) {
+                if (previousProgressWinch.sa_sigaction) {
+                    previousProgressWinch.sa_sigaction(sig, info, ctx);
+                }
+            } else {
+                previousProgressWinch.sa_handler(sig);
+            }
         }
-    } else {
-        previousProgressWinch.sa_handler(sig);
-    }
-}
 
-} // namespace
+    } // namespace
 } // namespace rendering_detail
 
 ProgressBarSizeWatcher::ProgressBarSizeWatcher() {

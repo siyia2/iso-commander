@@ -2,25 +2,25 @@
 #include "common/testHarness.h"
 
 namespace isocmd_tests {
-void filterGrammar();
-void filterRandom();
-void selection();
-void sortingAndViews();
-void configuration();
-void themeAndWidth();
-void listRendering();
-void paginationCommands();
-void isoDetection();
-void conversion();
-void progressAndBuffer();
-void checksumVerification();
-void threadPool();
-void taskLifetime();
-void database();
-void deviceDiscovery();
-void historyPersistence();
-void writeTelemetry();
-void usbMappingValidation();
+    void filterGrammar();
+    void filterRandom();
+    void selection();
+    void sortingAndViews();
+    void configuration();
+    void themeAndWidth();
+    void listRendering();
+    void paginationCommands();
+    void isoDetection();
+    void conversion();
+    void progressAndBuffer();
+    void checksumVerification();
+    void threadPool();
+    void taskLifetime();
+    void database();
+    void deviceDiscovery();
+    void historyPersistence();
+    void writeTelemetry();
+    void usbMappingValidation();
 }
 
 int main() {

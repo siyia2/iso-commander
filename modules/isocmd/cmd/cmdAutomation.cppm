@@ -25,37 +25,37 @@ struct ParsedArgs {
 
 namespace IsoCli {
 
-/**
- * @brief Prints an informational message unless silent mode is enabled.
- *
- * @param silentMode Whether informational output should be suppressed.
- * @param msg        Message to print.
- */
-void verboseInfo(bool silentMode, const std::string& msg);
+    /**
+     * @brief Prints an informational message unless silent mode is enabled.
+     *
+     * @param silentMode Whether informational output should be suppressed.
+     * @param msg        Message to print.
+     */
+    void verboseInfo(bool silentMode, const std::string& msg);
 
-/**
- * @brief Prints a warning message unless silent mode is enabled.
- *
- * @param silentMode Whether warning output should be suppressed.
- * @param msg        Warning message to print.
- */
-void verboseWarn(bool silentMode, const std::string& msg);
+    /**
+     * @brief Prints a warning message unless silent mode is enabled.
+     *
+     * @param silentMode Whether warning output should be suppressed.
+     * @param msg        Warning message to print.
+     */
+    void verboseWarn(bool silentMode, const std::string& msg);
 
-/**
- * @brief Prints a warning message with an optional associated path.
- *
- * @param silentMode Whether warning output should be suppressed.
- * @param reason     Warning message or reason.
- * @param path       Optional path associated with the warning.
- */
-void warnMsg(bool silentMode, std::string_view reason, std::string_view path = "");
+    /**
+     * @brief Prints a warning message with an optional associated path.
+     *
+     * @param silentMode Whether warning output should be suppressed.
+     * @param reason     Warning message or reason.
+     * @param path       Optional path associated with the warning.
+     */
+    void warnMsg(bool silentMode, std::string_view reason, std::string_view path = "");
 
-/**
- * @brief Prints an error message.
- *
- * @param msg Error message to print.
- */
-void errMsg(std::string_view msg);
+    /**
+     * @brief Prints an error message.
+     *
+     * @param msg Error message to print.
+     */
+    void errMsg(std::string_view msg);
 
 } // namespace IsoCli
 

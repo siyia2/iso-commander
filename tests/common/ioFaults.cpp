@@ -3,55 +3,55 @@
 #include "ioFaults.h"
 
 namespace isocmd_tests::io_faults {
-namespace {
-std::atomic<Plan*> active{nullptr};
+    namespace {
+        std::atomic<Plan*> active{nullptr};
 
-Step next(Call op, int fd) noexcept {
-    auto* plan = active.load(std::memory_order_acquire);
-    if (!plan) return {};
-    auto& rule = (*plan)[op];
-    if (!rule.target || !rule.target->matches(fd)) return {};
-    const auto i = rule.calls.fetch_add(1, std::memory_order_relaxed);
-    return i < rule.steps.size() ? rule.steps[i] : Step{};
-}
+        Step next(Call op, int fd) noexcept {
+            auto* plan = active.load(std::memory_order_acquire);
+            if (!plan) return {};
+            auto& rule = (*plan)[op];
+            if (!rule.target || !rule.target->matches(fd)) return {};
+            const auto i = rule.calls.fetch_add(1, std::memory_order_relaxed);
+            return i < rule.steps.size() ? rule.steps[i] : Step{};
+        }
 
-void recordEffect(Call op) noexcept {
-    if (auto* plan = active.load(std::memory_order_acquire))
-        (*plan)[op].effects.fetch_add(1, std::memory_order_relaxed);
-}
+        void recordEffect(Call op) noexcept {
+            if (auto* plan = active.load(std::memory_order_acquire))
+                (*plan)[op].effects.fetch_add(1, std::memory_order_relaxed);
+        }
 
-template<class Invoke>
-ssize_t transferStep(const Step& step, size_t count, Invoke invoke) {
-    if (step.kind == Kind::Error) { errno = step.error; return -1; }
-    if (step.kind == Kind::Zero) return 0;
-    if (step.kind == Kind::Short || step.kind == Kind::CancelAfterShort)
-        count = std::min(count, step.bytes);
-    const ssize_t result = invoke(count);
-    if (step.kind == Kind::CancelAfterShort && result > 0 && step.cancel) step.cancel();
-    return result;
-}
-template<class Invoke>
-ssize_t transfer(Call op, int fd, size_t count, Invoke invoke) {
-    return transferStep(next(op, fd), count, invoke);
-}
-} // namespace
+        template<class Invoke>
+        ssize_t transferStep(const Step& step, size_t count, Invoke invoke) {
+            if (step.kind == Kind::Error) { errno = step.error; return -1; }
+            if (step.kind == Kind::Zero) return 0;
+            if (step.kind == Kind::Short || step.kind == Kind::CancelAfterShort)
+                count = std::min(count, step.bytes);
+            const ssize_t result = invoke(count);
+            if (step.kind == Kind::CancelAfterShort && result > 0 && step.cancel) step.cancel();
+            return result;
+        }
+        template<class Invoke>
+        ssize_t transfer(Call op, int fd, size_t count, Invoke invoke) {
+            return transferStep(next(op, fd), count, invoke);
+        }
+    } // namespace
 
-bool Identity::matches(int fd) const noexcept {
-    struct stat actual{};
-    const int saved = errno;
-    const bool match = fstat(fd, &actual) == 0 && actual.st_dev == value.st_dev &&
-        actual.st_ino == value.st_ino && (actual.st_mode & S_IFMT) == (value.st_mode & S_IFMT) &&
-        actual.st_rdev == value.st_rdev;
-    errno = saved;
-    return match;
-}
+    bool Identity::matches(int fd) const noexcept {
+        struct stat actual{};
+        const int saved = errno;
+        const bool match = fstat(fd, &actual) == 0 && actual.st_dev == value.st_dev &&
+            actual.st_ino == value.st_ino && (actual.st_mode & S_IFMT) == (value.st_mode & S_IFMT) &&
+            actual.st_rdev == value.st_rdev;
+        errno = saved;
+        return match;
+    }
 
-Scope::Scope(Plan& plan) {
-    Plan* expected = nullptr;
-    if (!active.compare_exchange_strong(expected, &plan))
-        throw std::logic_error("nested I/O fault injection");
-}
-Scope::~Scope() { active.store(nullptr, std::memory_order_release); }
+    Scope::Scope(Plan& plan) {
+        Plan* expected = nullptr;
+        if (!active.compare_exchange_strong(expected, &plan))
+            throw std::logic_error("nested I/O fault injection");
+    }
+    Scope::~Scope() { active.store(nullptr, std::memory_order_release); }
 } // namespace isocmd_tests::io_faults
 
 // Separate symbols referenced by --wrap only in integration/privileged test

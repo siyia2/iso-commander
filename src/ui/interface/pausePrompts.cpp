@@ -132,7 +132,7 @@ namespace {
     /**
      * @brief Synchronizes Readline's screen dimensions with the current terminal size.
      */
-     void syncReadlineScreenSize() {
+    void syncReadlineScreenSize() {
         const TermSize sz = terminalSize();
         if (sz.cols != 0 && sz.rows != 0) {
             rl_set_screen_size(
@@ -150,9 +150,9 @@ namespace {
      * @param clearScreen When true, emits ANSI cursor-home and scrollback/screen clear sequences
      *                    before redrawing.
      */
-     void renderPromptFrame(const std::string& prompt,
-                                  const std::function<void()>* repaint,
-                                  bool clearScreen) {
+    void renderPromptFrame(const std::string& prompt,
+                                 const std::function<void()>* repaint,
+                                 bool clearScreen) {
         syncReadlineScreenSize();
         {
             SyncOutput sync;
@@ -178,7 +178,7 @@ namespace {
      * @param ch Input byte read from standard input.
      * @return true if the byte terminates the prompt loop; otherwise false.
      */
-     bool isDismissKey(char ch) {
+    bool isDismissKey(char ch) {
         return ch == '\n' || ch == '\r' || ch == 4 || ch == 27;
     }
 
@@ -191,7 +191,7 @@ namespace {
      *          0 if input ended or encountered a non-recoverable poll/read error,
      *         -1 if interrupted by a signal or woken without POLLIN and ready to retry.
      */
-     int pollAndReadKey(const sigset_t& waitMask, char& outCh) {
+    int pollAndReadKey(const sigset_t& waitMask, char& outCh) {
         struct pollfd pfd{STDIN_FILENO, POLLIN, 0};
         const int r = ppoll(&pfd, 1, nullptr, &waitMask);
 

@@ -175,17 +175,17 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
 // Internal dependency-injected entry points. Production wrappers below/above
 // always supply the real writer and discovery/validation functions.
 namespace WriteExecution {
-using Writer = bool (*)(const std::string&, const std::string&, size_t, std::vector<ProgressInfo>&);
-std::shared_ptr<WriteScreen> performWithWriter(
-    const std::vector<std::pair<IsoInfo, std::string>>&, Writer, bool* allSucceeded = nullptr, bool verify = false);
+    using Writer = bool (*)(const std::string&, const std::string&, size_t, std::vector<ProgressInfo>&);
+    std::shared_ptr<WriteScreen> performWithWriter(
+        const std::vector<std::pair<IsoInfo, std::string>>&, Writer, bool* allSucceeded = nullptr, bool verify = false);
 }
 namespace WriteMapping {
-using Discover = std::vector<std::string> (*)();
-using Validate = std::vector<std::pair<IsoInfo, std::string>> (*)(
-    const std::vector<std::pair<size_t, std::string>>&, const std::vector<IsoInfo>&,
-    bool, std::vector<std::string>&);
-std::vector<std::pair<IsoInfo, std::string>> collectWithDevices(
-    const std::vector<IsoInfo>&, Discover, Validate, bool noPermissions, bool* verify = nullptr);
+    using Discover = std::vector<std::string> (*)();
+    using Validate = std::vector<std::pair<IsoInfo, std::string>> (*)(
+        const std::vector<std::pair<size_t, std::string>>&, const std::vector<IsoInfo>&,
+        bool, std::vector<std::string>&);
+    std::vector<std::pair<IsoInfo, std::string>> collectWithDevices(
+        const std::vector<IsoInfo>&, Discover, Validate, bool noPermissions, bool* verify = nullptr);
 }
 
 // --- Filesystem & Formatting Utilities ---
@@ -218,63 +218,63 @@ uint64_t getBlockDeviceSize(const std::string& device);
  */
 namespace WriteValidation {
 
-/**
- * @brief Builds a themed error message that has no associated path.
- *
- * @param wt  Active write theme supplying the label and reset colours.
- * @param msg Message text (e.g. "Root privileges are required").
- * @return The message prefixed with the error label colour and terminated
- *         with a colour reset.
- */
-std::string plainErr(const UI::WriteTheme& wt, const std::string& msg);
+    /**
+     * @brief Builds a themed error message that has no associated path.
+     *
+     * @param wt  Active write theme supplying the label and reset colours.
+     * @param msg Message text (e.g. "Root privileges are required").
+     * @return The message prefixed with the error label colour and terminated
+     *         with a colour reset.
+     */
+    std::string plainErr(const UI::WriteTheme& wt, const std::string& msg);
 
-/**
- * @brief Builds a themed error message of the form "'<path>' <message>".
- *
- * @param wt   Active write theme.
- * @param path Path to display, quoted, at the start of the message.
- * @param msg  Message text; include a leading space (e.g. " is not an ISO file").
- * @return The fully coloured message string.
- */
-std::string pathErr(const UI::WriteTheme& wt, const std::string& path, const std::string& msg);
+    /**
+     * @brief Builds a themed error message of the form "'<path>' <message>".
+     *
+     * @param wt   Active write theme.
+     * @param path Path to display, quoted, at the start of the message.
+     * @param msg  Message text; include a leading space (e.g. " is not an ISO file").
+     * @return The fully coloured message string.
+     */
+    std::string pathErr(const UI::WriteTheme& wt, const std::string& path, const std::string& msg);
 
-/**
- * @brief Prints a themed "Validation errors:" block to stderr.
- *
- * @param wt   Active write theme.
- * @param errs Pre-formatted error messages, printed as indented bullets.
- */
-void printValidationErrors(const UI::WriteTheme& wt, const std::vector<std::string>& errs);
+    /**
+     * @brief Prints a themed "Validation errors:" block to stderr.
+     *
+     * @param wt   Active write theme.
+     * @param errs Pre-formatted error messages, printed as indented bullets.
+     */
+    void printValidationErrors(const UI::WriteTheme& wt, const std::vector<std::string>& errs);
 
-/**
- * @brief Runs the device-level checks, independent of which ISO is paired with it.
- *
- * Verifies that the device is a removable USB flash drive, is not mounted,
- * is not in the draining set (pending kernel-level tasks), has no write I/O
- * still in flight (non-interactive mode only), and has a determinable size.
- *
- * @param wt     Active write theme.
- * @param device Path used for the checks (canonical /dev/sdX).
- * @param shown  Path displayed in error messages (what the user typed).
- * @param[out] size Device size in bytes; only valid when no error is returned.
- * @return An error message for the first failed check, or std::nullopt if
- *         the device is usable.
- */
-std::optional<std::string> checkDevice(const UI::WriteTheme& wt, const std::string& device,
-                                       const std::string& shown, uint64_t& size);
+    /**
+     * @brief Runs the device-level checks, independent of which ISO is paired with it.
+     *
+     * Verifies that the device is a removable USB flash drive, is not mounted,
+     * is not in the draining set (pending kernel-level tasks), has no write I/O
+     * still in flight (non-interactive mode only), and has a determinable size.
+     *
+     * @param wt     Active write theme.
+     * @param device Path used for the checks (canonical /dev/sdX).
+     * @param shown  Path displayed in error messages (what the user typed).
+     * @param[out] size Device size in bytes; only valid when no error is returned.
+     * @return An error message for the first failed check, or std::nullopt if
+     *         the device is usable.
+     */
+    std::optional<std::string> checkDevice(const UI::WriteTheme& wt, const std::string& device,
+                                           const std::string& shown, uint64_t& size);
 
-/**
- * @brief Checks that an ISO fits on a device.
- *
- * @param wt         Active write theme.
- * @param iso        ISO to be written.
- * @param device     Device path, used for the message and the drive-name lookup.
- * @param deviceSize Device capacity in bytes (as returned by checkDevice()).
- * @return A themed "is too large for" message including both sizes and the
- *         drive name, or std::nullopt if the ISO fits.
- */
-std::optional<std::string> checkCapacity(const UI::WriteTheme& wt, const IsoInfo& iso,
-                                         const std::string& device, uint64_t deviceSize);
+    /**
+     * @brief Checks that an ISO fits on a device.
+     *
+     * @param wt         Active write theme.
+     * @param iso        ISO to be written.
+     * @param device     Device path, used for the message and the drive-name lookup.
+     * @param deviceSize Device capacity in bytes (as returned by checkDevice()).
+     * @return A themed "is too large for" message including both sizes and the
+     *         drive name, or std::nullopt if the ISO fits.
+     */
+    std::optional<std::string> checkCapacity(const UI::WriteTheme& wt, const IsoInfo& iso,
+                                             const std::string& device, uint64_t deviceSize);
 
 } // namespace WriteValidation
 

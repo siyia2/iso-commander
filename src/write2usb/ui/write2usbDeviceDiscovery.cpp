@@ -36,82 +36,82 @@ std::string getDriveName(const std::string& device, const DeviceDiscoveryPaths& 
 
 namespace {
 
-/**
- * @brief Reads and right-trims the first line of a sysfs attribute file.
- *
- * @param attributePath Full path to the sysfs attribute file to read.
- * @return Trimmed string contents of the first line, or std::nullopt on read failure.
- */
-static std::optional<std::string> readTrimmedSysfsAttribute(const fs::path& attributePath) {
-    std::ifstream file(attributePath);
-    std::string value;
-    if (!file || !std::getline(file, value)) {
-        return std::nullopt;
-    }
-
-    while (!value.empty() &&
-           std::isspace(static_cast<unsigned char>(value.back()))) {
-        value.pop_back();
-    }
-
-    return value;
-}
-
-/**
- * @brief Resolves a device path under /dev/ to its /sys/block entry path.
- *
- * Validates the input prefix, resolves symlinks to a canonical device node,
- * and verifies that a corresponding /sys/block/<name> entry exists.
- *
- * @param devicePath Block-device path (must start with /dev/).
- * @param ec Output error code populated on filesystem errors.
- * @return Canonical path under /sys/block if valid and existing, otherwise std::nullopt.
- */
-static std::optional<fs::path> resolveSysBlockPath(const std::string& devicePath,
-                                                   std::error_code& ec, const DeviceDiscoveryPaths& paths) {
-    const auto prefix = paths.dev.string() + "/";
-    if (devicePath.size() <= prefix.size() || devicePath.rfind(prefix, 0) != 0) {
-        return std::nullopt;
-    }
-
-    const fs::path devNode = fs::canonical(devicePath, ec);
-    if (ec) {
-        return std::nullopt;
-    }
-
-    const std::string name = devNode.filename().string();
-    if (name.empty()) {
-        return std::nullopt;
-    }
-
-    const fs::path sysPath = paths.sysBlock / name;
-    if (!fs::exists(sysPath, ec) || ec) {
-        return std::nullopt;
-    }
-
-    return sysPath;
-}
-
-/**
- * @brief Walks up a canonical sysfs path looking for a USB device node.
- *
- * Identifies a USB device ancestor by checking for the presence of an
- * "idVendor" file at each directory level up to the root path.
- *
- * @param canonicalSysPath Canonical path within the sysfs hierarchy.
- * @param ec Working error code cleared across filesystem probes.
- * @return true if an ancestor directory contains "idVendor", false otherwise.
- */
-static bool hasUsbVendorAncestor(const fs::path& canonicalSysPath, std::error_code& ec) {
-    for (fs::path p = canonicalSysPath; p != p.root_path(); p = p.parent_path()) {
-        if (fs::exists(p / "idVendor", ec)) {
-            return true;
+    /**
+     * @brief Reads and right-trims the first line of a sysfs attribute file.
+     *
+     * @param attributePath Full path to the sysfs attribute file to read.
+     * @return Trimmed string contents of the first line, or std::nullopt on read failure.
+     */
+    static std::optional<std::string> readTrimmedSysfsAttribute(const fs::path& attributePath) {
+        std::ifstream file(attributePath);
+        std::string value;
+        if (!file || !std::getline(file, value)) {
+            return std::nullopt;
         }
-        ec.clear();
+
+        while (!value.empty() &&
+               std::isspace(static_cast<unsigned char>(value.back()))) {
+            value.pop_back();
+        }
+
+        return value;
     }
 
-    return false;
-}
+    /**
+     * @brief Resolves a device path under /dev/ to its /sys/block entry path.
+     *
+     * Validates the input prefix, resolves symlinks to a canonical device node,
+     * and verifies that a corresponding /sys/block/<name> entry exists.
+     *
+     * @param devicePath Block-device path (must start with /dev/).
+     * @param ec Output error code populated on filesystem errors.
+     * @return Canonical path under /sys/block if valid and existing, otherwise std::nullopt.
+     */
+    static std::optional<fs::path> resolveSysBlockPath(const std::string& devicePath,
+                                                       std::error_code& ec, const DeviceDiscoveryPaths& paths) {
+        const auto prefix = paths.dev.string() + "/";
+        if (devicePath.size() <= prefix.size() || devicePath.rfind(prefix, 0) != 0) {
+            return std::nullopt;
+        }
+
+        const fs::path devNode = fs::canonical(devicePath, ec);
+        if (ec) {
+            return std::nullopt;
+        }
+
+        const std::string name = devNode.filename().string();
+        if (name.empty()) {
+            return std::nullopt;
+        }
+
+        const fs::path sysPath = paths.sysBlock / name;
+        if (!fs::exists(sysPath, ec) || ec) {
+            return std::nullopt;
+        }
+
+        return sysPath;
+    }
+
+    /**
+     * @brief Walks up a canonical sysfs path looking for a USB device node.
+     *
+     * Identifies a USB device ancestor by checking for the presence of an
+     * "idVendor" file at each directory level up to the root path.
+     *
+     * @param canonicalSysPath Canonical path within the sysfs hierarchy.
+     * @param ec Working error code cleared across filesystem probes.
+     * @return true if an ancestor directory contains "idVendor", false otherwise.
+     */
+    static bool hasUsbVendorAncestor(const fs::path& canonicalSysPath, std::error_code& ec) {
+        for (fs::path p = canonicalSysPath; p != p.root_path(); p = p.parent_path()) {
+            if (fs::exists(p / "idVendor", ec)) {
+                return true;
+            }
+            ec.clear();
+        }
+
+        return false;
+    }
 
 } // namespace
 

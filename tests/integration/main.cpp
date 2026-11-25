@@ -3,7 +3,7 @@
 #include "../common/testHarness.h"
 
 namespace isocmd_tests {
-void backgroundImport(); void filesystemOperations(); void directoryTraversal(); void cancellation(); void activeCancellation(); void usbWriter(); void windowsIoRecovery(); void windowsIoFailures(); void windowsCleanupFailures(); void windowsFinalWriteback(); int terminalChild(); int terminalTest(const char* binary); int menuTest(const char* binary); int workflowTest(const char* binary); int writeUiChild(); int progressScreenChild(); int writeUiTest(const char* binary); int progressScreenTest(const char* binary);
+    void backgroundImport(); void filesystemOperations(); void directoryTraversal(); void cancellation(); void activeCancellation(); void usbWriter(); void windowsIoRecovery(); void windowsIoFailures(); void windowsCleanupFailures(); void windowsFinalWriteback(); int terminalChild(); int terminalTest(const char* binary); int menuTest(const char* binary); int workflowTest(const char* binary); int writeUiChild(); int progressScreenChild(); int writeUiTest(const char* binary); int progressScreenTest(const char* binary);
 }
 int main(int argc,char** argv) {
     using namespace isocmd_tests;

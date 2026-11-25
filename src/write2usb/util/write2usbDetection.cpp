@@ -351,177 +351,177 @@ namespace {
     } // namespace aho_corasick
 
     //---- Read-only file mapping ---------------------------------
+    /**
+     * @brief RAII wrapper around a private, read-only mmap of a file from offset 0.
+     *
+     * Unmaps on destruction. Not copyable. Check ok() before using the data.
+     *
+     * @par Utility
+     * "Mapping" lets the program look at a file as if it were already in memory,
+     * while the system loads only the parts that are actually used. This wrapper
+     * releases the mapping automatically, so it can never be left behind.
+     */
+    class ScopedMapping {
+    public:
         /**
-         * @brief RAII wrapper around a private, read-only mmap of a file from offset 0.
-         *
-         * Unmaps on destruction. Not copyable. Check ok() before using the data.
+         * @brief Maps the first @p length bytes of @p fd read-only.
          *
          * @par Utility
-         * "Mapping" lets the program look at a file as if it were already in memory,
-         * while the system loads only the parts that are actually used. This wrapper
-         * releases the mapping automatically, so it can never be left behind.
+         * Only the parts of the file that are looked at are really read from disk, so
+         * checking a multi-gigabyte image stays fast.
+         *
+         * @param fd     Open, readable file descriptor (not owned, not closed).
+         * @param length Number of bytes to map; must not exceed the file size.
          */
-        class ScopedMapping {
-        public:
-            /**
-             * @brief Maps the first @p length bytes of @p fd read-only.
-             *
-             * @par Utility
-             * Only the parts of the file that are looked at are really read from disk, so
-             * checking a multi-gigabyte image stays fast.
-             *
-             * @param fd     Open, readable file descriptor (not owned, not closed).
-             * @param length Number of bytes to map; must not exceed the file size.
-             */
-            ScopedMapping(int fd, size_t length)
-                : addr_(mmap(nullptr, length, PROT_READ, MAP_PRIVATE, fd, 0)),
-                  length_(length) {}
+        ScopedMapping(int fd, size_t length)
+            : addr_(mmap(nullptr, length, PROT_READ, MAP_PRIVATE, fd, 0)),
+              length_(length) {}
 
-            /**
-             * @brief Unmaps the window if the mapping succeeded.
-             *
-             * @par Utility
-             * Cleanup happens by itself, so nobody has to remember to do it.
-             *
-             */
-            ~ScopedMapping() {
-                if (ok()) munmap(addr_, length_);
-            }
+        /**
+         * @brief Unmaps the window if the mapping succeeded.
+         *
+         * @par Utility
+         * Cleanup happens by itself, so nobody has to remember to do it.
+         *
+         */
+        ~ScopedMapping() {
+            if (ok()) munmap(addr_, length_);
+        }
 
-            ScopedMapping(const ScopedMapping&)            = delete;
-            ScopedMapping& operator=(const ScopedMapping&) = delete;
+        ScopedMapping(const ScopedMapping&)            = delete;
+        ScopedMapping& operator=(const ScopedMapping&) = delete;
 
-            /**
-             * @brief Reports whether mmap succeeded.
-             *
-             * @par Utility
-             * The system reports a failed mapping with a special value that is easy to
-             * overlook. This turns it into a plain yes or no.
-             *
-             * @return true if mmap succeeded.
-             */
-            bool        ok()   const { return addr_ != MAP_FAILED; }
+        /**
+         * @brief Reports whether mmap succeeded.
+         *
+         * @par Utility
+         * The system reports a failed mapping with a special value that is easy to
+         * overlook. This turns it into a plain yes or no.
+         *
+         * @return true if mmap succeeded.
+         */
+        bool        ok()   const { return addr_ != MAP_FAILED; }
 
-            /**
-             * @brief Returns the start of the mapped window.
-             *
-             * @par Utility
-             * Tells the other functions where the image data begins.
-             *
-             * @return Pointer to the start of the mapped window (valid only if ok()).
-             */
-            const char* data() const { return static_cast<const char*>(addr_); }
+        /**
+         * @brief Returns the start of the mapped window.
+         *
+         * @par Utility
+         * Tells the other functions where the image data begins.
+         *
+         * @return Pointer to the start of the mapped window (valid only if ok()).
+         */
+        const char* data() const { return static_cast<const char*>(addr_); }
 
-            /**
-             * @brief Returns the length of the mapped window.
-             *
-             * @par Utility
-             * Tells the other functions how much data is available, so nothing reads past
-             * the end. This can be less than the whole file.
-             *
-             * @return Size of the mapped window in bytes.
-             */
-            size_t      size() const { return length_; }
+        /**
+         * @brief Returns the length of the mapped window.
+         *
+         * @par Utility
+         * Tells the other functions how much data is available, so nothing reads past
+         * the end. This can be less than the whole file.
+         *
+         * @return Size of the mapped window in bytes.
+         */
+        size_t      size() const { return length_; }
 
-            /**
-             * @brief Hints the kernel about the upcoming sequential scan.
-             *
-             * Applies MADV_WILLNEED to the first @p eagerBytes so page-faulting starts
-             * immediately, and MADV_SEQUENTIAL to the whole window so read-ahead stays
-             * primed if the full window is scanned. Hints are best-effort; failures
-             * are ignored.
-             *
-             * @par Utility
-             * It tells the operating system "I will read this from start to end, in order".
-             * The system can then load the next part of the file ahead of time, so the
-             * search does not have to wait for the disk.
-             *
-             * @param eagerBytes Prefix length to prefetch (clamped to the window size).
-             */
-            void adviseSequentialScan(size_t eagerBytes) const {
-                madvise(addr_, std::min(eagerBytes, length_), MADV_WILLNEED);
-                madvise(addr_, length_, MADV_SEQUENTIAL);
-            }
+        /**
+         * @brief Hints the kernel about the upcoming sequential scan.
+         *
+         * Applies MADV_WILLNEED to the first @p eagerBytes so page-faulting starts
+         * immediately, and MADV_SEQUENTIAL to the whole window so read-ahead stays
+         * primed if the full window is scanned. Hints are best-effort; failures
+         * are ignored.
+         *
+         * @par Utility
+         * It tells the operating system "I will read this from start to end, in order".
+         * The system can then load the next part of the file ahead of time, so the
+         * search does not have to wait for the disk.
+         *
+         * @param eagerBytes Prefix length to prefetch (clamped to the window size).
+         */
+        void adviseSequentialScan(size_t eagerBytes) const {
+            madvise(addr_, std::min(eagerBytes, length_), MADV_WILLNEED);
+            madvise(addr_, length_, MADV_SEQUENTIAL);
+        }
 
-        private:
-            void*  addr_;
-            size_t length_;
-        };
+    private:
+        void*  addr_;
+        size_t length_;
+    };
 
 } // namespace
 
 namespace iso_detect {
 
-        /**
-         * @brief Checks that a file descriptor refers to an ISO 9660 or UDF disc image.
-         *
-         * Walks the Volume Recognition Sequence (sectors 16-23, 2048-byte spacing)
-         * with pread, so the descriptor's offset is untouched. Accepts an ISO 9660
-         * PVD (type 0x01, "CD001"), which covers UDF-bridge images, or a UDF
-         * "NSR02"/"NSR03" descriptor, which covers pure-UDF images. "CD001" non-PVD
-         * entries, "BEA01" and "TEA01" are skipped; any other identifier rejects the
-         * image immediately.
-         *
-         * @param fd Open, readable descriptor for the image. Not closed by this
-         *           function.
-         * @return true if an accepted descriptor is found; false on a short read, an
-         *         unrecognized identifier, or no match within 8 sectors.
-         *
-         * @note Acceptance does not imply the image is bootable. The name is
-         *       historical; isValidOpticalImage would describe it more accurately.
-         */
-        bool isValidIso9660(int fd) {
-            using namespace iso_layout;
+    /**
+     * @brief Checks that a file descriptor refers to an ISO 9660 or UDF disc image.
+     *
+     * Walks the Volume Recognition Sequence (sectors 16-23, 2048-byte spacing)
+     * with pread, so the descriptor's offset is untouched. Accepts an ISO 9660
+     * PVD (type 0x01, "CD001"), which covers UDF-bridge images, or a UDF
+     * "NSR02"/"NSR03" descriptor, which covers pure-UDF images. "CD001" non-PVD
+     * entries, "BEA01" and "TEA01" are skipped; any other identifier rejects the
+     * image immediately.
+     *
+     * @param fd Open, readable descriptor for the image. Not closed by this
+     *           function.
+     * @return true if an accepted descriptor is found; false on a short read, an
+     *         unrecognized identifier, or no match within 8 sectors.
+     *
+     * @note Acceptance does not imply the image is bootable. The name is
+     *       historical; isValidOpticalImage would describe it more accurately.
+     */
+    bool isValidIso9660(int fd) {
+        using namespace iso_layout;
 
-            for (int i = 0; i < kVrsSectors; ++i) {
-                uint8_t d[kHeaderSize];
-                const off_t offset = static_cast<off_t>(kVrsStart + i * kSectorSize);
-                if (pread(fd, d, sizeof(d), offset) != static_cast<ssize_t>(sizeof(d)))
-                    return false;
+        for (int i = 0; i < kVrsSectors; ++i) {
+            uint8_t d[kHeaderSize];
+            const off_t offset = static_cast<off_t>(kVrsStart + i * kSectorSize);
+            if (pread(fd, d, sizeof(d), offset) != static_cast<ssize_t>(sizeof(d)))
+                return false;
 
-                const std::string_view id(reinterpret_cast<const char*>(d) + kIdOffset, kIdLength);
-                if (isAcceptedDescriptor(d[0], id)) return true;
-                if (!isRecognitionSequenceId(id))   return false;
-            }
-            return false;
+            const std::string_view id(reinterpret_cast<const char*>(d) + kIdOffset, kIdLength);
+            if (isAcceptedDescriptor(d[0], id)) return true;
+            if (!isRecognitionSequenceId(id))   return false;
         }
+        return false;
+    }
 
-        /**
-         * @brief Probes an ISO image to detect Windows 10/11 installation media.
-         *
-         * Maps up to the first 32 MiB of the file and checks, in order:
-         *  1. a valid volume header at sector 16 (PVD "CD001", or UDF "NSR02"/"NSR03");
-         *  2. a single-pass Aho-Corasick scan for "boot.wim" and "bootmgr[.efi]",
-         *     case-insensitive, in ASCII / UTF-16LE / UTF-16BE (the latter is the
-         *     native Joliet/UDF filename encoding).
-         *
-         * The 32 MiB window suffices because the directory entries for bootmgr and
-         * boot.wim always sit within the first few MiB. The scan exits as soon as
-         * both signature groups have matched, so on typical Windows ISOs most of the
-         * window is never touched.
-         *
-         * @param fd       Open, readable descriptor; mapped from offset 0, not closed here.
-         * @param fileSize Image size in bytes (from fstat); used for the minimum-size
-         *                 guard and to clamp the mapping window.
-         * @return true if the header is valid and both signature groups are present.
-         *
-         * @note Read-only; the file is not modified.
-         */
-        bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
-            constexpr off_t  kMinFileSize = 0x9000;
-            constexpr size_t kMaxWindow   = 32 * 1024 * 1024;
-            constexpr size_t kEagerBytes  = 4 * 1024 * 1024;
+    /**
+     * @brief Probes an ISO image to detect Windows 10/11 installation media.
+     *
+     * Maps up to the first 32 MiB of the file and checks, in order:
+     *  1. a valid volume header at sector 16 (PVD "CD001", or UDF "NSR02"/"NSR03");
+     *  2. a single-pass Aho-Corasick scan for "boot.wim" and "bootmgr[.efi]",
+     *     case-insensitive, in ASCII / UTF-16LE / UTF-16BE (the latter is the
+     *     native Joliet/UDF filename encoding).
+     *
+     * The 32 MiB window suffices because the directory entries for bootmgr and
+     * boot.wim always sit within the first few MiB. The scan exits as soon as
+     * both signature groups have matched, so on typical Windows ISOs most of the
+     * window is never touched.
+     *
+     * @param fd       Open, readable descriptor; mapped from offset 0, not closed here.
+     * @param fileSize Image size in bytes (from fstat); used for the minimum-size
+     *                 guard and to clamp the mapping window.
+     * @return true if the header is valid and both signature groups are present.
+     *
+     * @note Read-only; the file is not modified.
+     */
+    bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
+        constexpr off_t  kMinFileSize = 0x9000;
+        constexpr size_t kMaxWindow   = 32 * 1024 * 1024;
+        constexpr size_t kEagerBytes  = 4 * 1024 * 1024;
 
-            if (fileSize < kMinFileSize) return false;
+        if (fileSize < kMinFileSize) return false;
 
-            const ScopedMapping map(fd, std::min(static_cast<size_t>(fileSize), kMaxWindow));
-            if (!map.ok()) return false;
+        const ScopedMapping map(fd, std::min(static_cast<size_t>(fileSize), kMaxWindow));
+        if (!map.ok()) return false;
 
-            map.adviseSequentialScan(kEagerBytes);
+        map.adviseSequentialScan(kEagerBytes);
 
-            if (!iso_layout::hasValidVolumeHeader(map.data(), map.size())) return false;
+        if (!iso_layout::hasValidVolumeHeader(map.data(), map.size())) return false;
 
-            return win_signature::isComplete(aho_corasick::scan(map.data(), map.size()));
-        }
+        return win_signature::isComplete(aho_corasick::scan(map.data(), map.size()));
+    }
 
 } // namespace iso_detect

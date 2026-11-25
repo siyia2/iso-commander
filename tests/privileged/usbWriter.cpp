@@ -13,197 +13,197 @@ import isocmd.core.cancellation;
 
 using namespace isocmd_tests;
 namespace isocmd_tests {
-int mountTest();
-int windowsWriterTest(const std::string& loop, const std::string& layout);
+    int mountTest();
+    int windowsWriterTest(const std::string& loop, const std::string& layout);
 }
 
 namespace {
-using namespace io_faults;
-void cancelRawWrite() { GlobalState::g_operationCancelled = true; }
+    using namespace io_faults;
+    void cancelRawWrite() { GlobalState::g_operationCancelled = true; }
 
-// Called only after the existing privileged fixture has pinned the loop device
-// and verified its exact root-owned disposable backing inode and capacity.
-void rawIoFaults(const fs::path& src, const std::string& device, int pinned,
-                 std::size_t sector, const std::string& paddedImage) {
-    ReadFd inputFd(src);
-    const Identity input(inputFd.fd), output(pinned);
-    struct WritableFd {
-        int fd;
-        ~WritableFd() { if (fd >= 0) close(fd); }
-    } seedFd{open(device.c_str(), O_RDWR | O_CLOEXEC | O_NOFOLLOW)};
-    CHECK(seedFd.fd >= 0 && output.matches(seedFd.fd));
-    const std::size_t actualSize = fs::file_size(src);
-    const std::size_t chunk = (4 * 1024 * 1024 / sector) * sector;
-    CHECK(chunk > sector && paddedImage.size() > chunk);
-    const std::string sentinel(paddedImage.size() + sector, '\x5a');
-    auto resetDevice = [&] {
-        std::size_t done = 0;
-        while (done < sentinel.size()) {
-            const auto n = pwrite(seedFd.fd, sentinel.data() + done, sentinel.size() - done, done);
-            if (n < 0 && errno == EINTR) continue;
-            CHECK(n > 0); done += static_cast<std::size_t>(n);
-        }
-        CHECK(fsync(seedFd.fd) == 0);
-    };
-    auto checkDevice = [&](std::size_t written) {
-        CHECK(written <= paddedImage.size());
-        std::string actual(sentinel.size(), '\0');
-        std::size_t done = 0;
-        while (done < actual.size()) {
-            const auto n = pread(pinned, actual.data() + done, actual.size() - done, done);
-            if (n < 0 && errno == EINTR) continue;
-            CHECK(n > 0); done += static_cast<std::size_t>(n);
-        }
-        std::string expected = sentinel;
-        expected.replace(0, written, paddedImage, 0, written);
-        CHECK(actual == expected);
-    };
-    int failures = 0;
-    auto run = [&](const char* name, Plan& plan, bool success, bool cancelled, std::size_t written,
-                   std::optional<std::size_t> syncCalls = {}, std::size_t unalignedEffects = 0,
-                   std::size_t closeEffects = 0, bool verify = false) {
-        try {
-            struct Reset { ~Reset() { GlobalState::g_operationCancelled = false; } } reset;
-            GlobalState::g_operationCancelled = false;
-            resetDevice();
-            // Count real final flushes even in cases that do not inject a sync fault.
-            if (!plan[Call::Fsync].target) plan[Call::Fsync].set(output, {});
-            std::vector<ProgressInfo> progress;
-            progress.emplace_back("source.iso", device, "test", src.string());
-            progress[0].verifyRequested = verify;
-            bool result;
-            {
-                Scope scope(plan);
-                result = writeIsoToDevice(src.string(), device, 0, progress);
+    // Called only after the existing privileged fixture has pinned the loop device
+    // and verified its exact root-owned disposable backing inode and capacity.
+    void rawIoFaults(const fs::path& src, const std::string& device, int pinned,
+                     std::size_t sector, const std::string& paddedImage) {
+        ReadFd inputFd(src);
+        const Identity input(inputFd.fd), output(pinned);
+        struct WritableFd {
+            int fd;
+            ~WritableFd() { if (fd >= 0) close(fd); }
+        } seedFd{open(device.c_str(), O_RDWR | O_CLOEXEC | O_NOFOLLOW)};
+        CHECK(seedFd.fd >= 0 && output.matches(seedFd.fd));
+        const std::size_t actualSize = fs::file_size(src);
+        const std::size_t chunk = (4 * 1024 * 1024 / sector) * sector;
+        CHECK(chunk > sector && paddedImage.size() > chunk);
+        const std::string sentinel(paddedImage.size() + sector, '\x5a');
+        auto resetDevice = [&] {
+            std::size_t done = 0;
+            while (done < sentinel.size()) {
+                const auto n = pwrite(seedFd.fd, sentinel.data() + done, sentinel.size() - done, done);
+                if (n < 0 && errno == EINTR) continue;
+                CHECK(n > 0); done += static_cast<std::size_t>(n);
             }
-            CHECK(plan[Call::Write].effects.load() == unalignedEffects);
-            CHECK(plan[Call::Close].effects.load() == closeEffects);
-            CHECK(result == success);
-            for (const auto& rule : plan.rules) CHECK(rule.consumed());
-            CHECK(progress[0].completed.load() == success);
-            CHECK(progress[0].writeCompleted.load() == (success || (verify && written == paddedImage.size())));
-            CHECK(progress[0].failed.load() == (!success && !cancelled));
-            CHECK(GlobalState::g_operationCancelled.load() == cancelled);
-            if (verify && written == paddedImage.size()) {
-                CHECK(progress[0].verifying);
-                if (success) CHECK(progress[0].bytesVerified == paddedImage.size());
+            CHECK(fsync(seedFd.fd) == 0);
+        };
+        auto checkDevice = [&](std::size_t written) {
+            CHECK(written <= paddedImage.size());
+            std::string actual(sentinel.size(), '\0');
+            std::size_t done = 0;
+            while (done < actual.size()) {
+                const auto n = pread(pinned, actual.data() + done, actual.size() - done, done);
+                if (n < 0 && errno == EINTR) continue;
+                CHECK(n > 0); done += static_cast<std::size_t>(n);
             }
-            CHECK(plan[Call::Fsync].calls.load() == syncCalls.value_or(
-                written == paddedImage.size() && !cancelled ? 1u : 0u));
-            CHECK(progress[0].bytesWritten.load() <= std::min(written, actualSize));
-            if (success) {
-                CHECK(progress[0].progress.load() == 100);
-                CHECK(progress[0].bytesWritten.load() == actualSize);
+            std::string expected = sentinel;
+            expected.replace(0, written, paddedImage, 0, written);
+            CHECK(actual == expected);
+        };
+        int failures = 0;
+        auto run = [&](const char* name, Plan& plan, bool success, bool cancelled, std::size_t written,
+                       std::optional<std::size_t> syncCalls = {}, std::size_t unalignedEffects = 0,
+                       std::size_t closeEffects = 0, bool verify = false) {
+            try {
+                struct Reset { ~Reset() { GlobalState::g_operationCancelled = false; } } reset;
+                GlobalState::g_operationCancelled = false;
+                resetDevice();
+                // Count real final flushes even in cases that do not inject a sync fault.
+                if (!plan[Call::Fsync].target) plan[Call::Fsync].set(output, {});
+                std::vector<ProgressInfo> progress;
+                progress.emplace_back("source.iso", device, "test", src.string());
+                progress[0].verifyRequested = verify;
+                bool result;
+                {
+                    Scope scope(plan);
+                    result = writeIsoToDevice(src.string(), device, 0, progress);
+                }
+                CHECK(plan[Call::Write].effects.load() == unalignedEffects);
+                CHECK(plan[Call::Close].effects.load() == closeEffects);
+                CHECK(result == success);
+                for (const auto& rule : plan.rules) CHECK(rule.consumed());
+                CHECK(progress[0].completed.load() == success);
+                CHECK(progress[0].writeCompleted.load() == (success || (verify && written == paddedImage.size())));
+                CHECK(progress[0].failed.load() == (!success && !cancelled));
+                CHECK(GlobalState::g_operationCancelled.load() == cancelled);
+                if (verify && written == paddedImage.size()) {
+                    CHECK(progress[0].verifying);
+                    if (success) CHECK(progress[0].bytesVerified == paddedImage.size());
+                }
+                CHECK(plan[Call::Fsync].calls.load() == syncCalls.value_or(
+                    written == paddedImage.size() && !cancelled ? 1u : 0u));
+                CHECK(progress[0].bytesWritten.load() <= std::min(written, actualSize));
+                if (success) {
+                    CHECK(progress[0].progress.load() == 100);
+                    CHECK(progress[0].bytesWritten.load() == actualSize);
+                }
+                else CHECK(progress[0].progress.load() < 100);
+                checkDevice(written);
+                std::cout << "PASS: raw I/O: " << name << '\n';
+            } catch (const std::exception& e) {
+                ++failures;
+                std::cerr << "FAIL: raw I/O: " << name << ": " << e.what() << '\n';
             }
-            else CHECK(progress[0].progress.load() < 100);
-            checkDevice(written);
-            std::cout << "PASS: raw I/O: " << name << '\n';
-        } catch (const std::exception& e) {
-            ++failures;
-            std::cerr << "FAIL: raw I/O: " << name << ": " << e.what() << '\n';
+        };
+        {
+            Plan p;
+            p[Call::Read].set(input, {error(EINTR), shortTransfer(137), shortTransfer(901)});
+            run("EINTR and short reads", p, true, false, paddedImage.size());
         }
-    };
-    {
-        Plan p;
-        p[Call::Read].set(input, {error(EINTR), shortTransfer(137), shortTransfer(901)});
-        run("EINTR and short reads", p, true, false, paddedImage.size());
+        {
+            Plan p;
+            p[Call::Write].set(output, {error(EINTR), shortTransfer(sector), shortTransfer(sector)});
+            run("EINTR and aligned short writes", p, true, false, paddedImage.size());
+        }
+        {
+            Plan p;
+            p[Call::Read].set(input, {{}, shortTransfer(137), error(EIO)});
+            run("read EIO after a full chunk", p, false, false, chunk);
+        }
+        {
+            Plan p;
+            p[Call::Read].set(input, {{}, shortTransfer(137), zero()});
+            run("premature EOF after a full chunk", p, false, false, chunk);
+        }
+        for (const auto& [name, fault] : std::initializer_list<std::pair<const char*, Step>>{
+                 {"write EIO after partial write", error(EIO)},
+                 {"write ENOSPC after partial write", error(ENOSPC)},
+                 {"zero-byte write after partial write", zero()}}) {
+            Plan p;
+            p[Call::Write].set(output, {shortTransfer(sector), fault});
+            run(name, p, false, false, sector);
+        }
+        {
+            Plan p;
+            p[Call::Fsync].set(output, {error(EIO)});
+            run("final fsync EIO", p, false, false, paddedImage.size());
+        }
+        {
+            Plan p;
+            p[Call::Write].set(output, {cancelAfterShort(sector, cancelRawWrite)});
+            run("cancellation during an active write", p, false, true, sector);
+        }
+        {
+            Plan p;
+            p[Call::Write].set(output, {unalignedDirectShort(sector)});
+            run("recover unaligned O_DIRECT short write", p, true, false, paddedImage.size(), 1, 1);
+        }
+        {
+            Plan p;
+            // First complete chunk and then a sector of the next chunk land normally.
+            // An unaligned return must not corrupt an earlier chunk or double-count it.
+            p[Call::Write].set(output, {{}, shortTransfer(sector), unalignedDirectShort(sector)});
+            run("recover unaligned O_DIRECT short write after progress", p, true, false, paddedImage.size(), 1, 1);
+        }
+        {
+            Plan p;
+            // The ninth unaligned result exhausts the eight allowed restarts.
+            p[Call::Write].set(output, {
+                unalignedDirectShort(sector), unalignedDirectShort(sector), unalignedDirectShort(sector),
+                unalignedDirectShort(sector), unalignedDirectShort(sector), unalignedDirectShort(sector),
+                unalignedDirectShort(sector), unalignedDirectShort(sector), unalignedDirectShort(sector)});
+            run("unaligned O_DIRECT restart limit", p, false, false, sector, 0, 9);
+        }
+        {
+            Plan p;
+            p[Call::Fsync].set(output, {error(EINTR), error(EINTR), {}});
+            run("final fsync retries EINTR", p, true, false, paddedImage.size(), 3);
+        }
+        {
+            Plan p;
+            p[Call::Fsync].set(output, {error(EINTR), error(EIO)});
+            run("final fsync EINTR followed by hard error", p, false, false, paddedImage.size(), 2);
+        }
+        {
+            Plan p;
+            p[Call::Write].set(output, {shortTransfer(sector), error(EIO)});
+            p[Call::Close].set(output, {error(EIO)});
+            run("close EIO after failed write", p, false, false, sector, 0, 0, 1);
+        }
+        {
+            Plan clean;
+            run("clean write after injected failures", clean, true, false, paddedImage.size());
+        }
+        {
+            Plan p;
+            p[Call::Read].set(output, {error(EINTR), shortTransfer(sector)});
+            run("verified direct readback with EINTR and short read", p, true, false, paddedImage.size(), 1, 0, 0, true);
+        }
+        {
+            Plan p;
+            p[Call::Read].set(output, {corruptRead()});
+            run("verification detects corrupted readback", p, false, false, paddedImage.size(), 1, 0, 0, true);
+        }
+        {
+            Plan p;
+            p[Call::Read].set(output, {error(EIO)});
+            run("verification readback EIO", p, false, false, paddedImage.size(), 1, 0, 0, true);
+        }
+        {
+            Plan p;
+            p[Call::Read].set(output, {cancelAfterShort(sector, cancelRawWrite)});
+            run("cancellation during verification", p, false, true, paddedImage.size(), 1, 0, 0, true);
+        }
+        CHECK(failures == 0);
     }
-    {
-        Plan p;
-        p[Call::Write].set(output, {error(EINTR), shortTransfer(sector), shortTransfer(sector)});
-        run("EINTR and aligned short writes", p, true, false, paddedImage.size());
-    }
-    {
-        Plan p;
-        p[Call::Read].set(input, {{}, shortTransfer(137), error(EIO)});
-        run("read EIO after a full chunk", p, false, false, chunk);
-    }
-    {
-        Plan p;
-        p[Call::Read].set(input, {{}, shortTransfer(137), zero()});
-        run("premature EOF after a full chunk", p, false, false, chunk);
-    }
-    for (const auto& [name, fault] : std::initializer_list<std::pair<const char*, Step>>{
-             {"write EIO after partial write", error(EIO)},
-             {"write ENOSPC after partial write", error(ENOSPC)},
-             {"zero-byte write after partial write", zero()}}) {
-        Plan p;
-        p[Call::Write].set(output, {shortTransfer(sector), fault});
-        run(name, p, false, false, sector);
-    }
-    {
-        Plan p;
-        p[Call::Fsync].set(output, {error(EIO)});
-        run("final fsync EIO", p, false, false, paddedImage.size());
-    }
-    {
-        Plan p;
-        p[Call::Write].set(output, {cancelAfterShort(sector, cancelRawWrite)});
-        run("cancellation during an active write", p, false, true, sector);
-    }
-    {
-        Plan p;
-        p[Call::Write].set(output, {unalignedDirectShort(sector)});
-        run("recover unaligned O_DIRECT short write", p, true, false, paddedImage.size(), 1, 1);
-    }
-    {
-        Plan p;
-        // First complete chunk and then a sector of the next chunk land normally.
-        // An unaligned return must not corrupt an earlier chunk or double-count it.
-        p[Call::Write].set(output, {{}, shortTransfer(sector), unalignedDirectShort(sector)});
-        run("recover unaligned O_DIRECT short write after progress", p, true, false, paddedImage.size(), 1, 1);
-    }
-    {
-        Plan p;
-        // The ninth unaligned result exhausts the eight allowed restarts.
-        p[Call::Write].set(output, {
-            unalignedDirectShort(sector), unalignedDirectShort(sector), unalignedDirectShort(sector),
-            unalignedDirectShort(sector), unalignedDirectShort(sector), unalignedDirectShort(sector),
-            unalignedDirectShort(sector), unalignedDirectShort(sector), unalignedDirectShort(sector)});
-        run("unaligned O_DIRECT restart limit", p, false, false, sector, 0, 9);
-    }
-    {
-        Plan p;
-        p[Call::Fsync].set(output, {error(EINTR), error(EINTR), {}});
-        run("final fsync retries EINTR", p, true, false, paddedImage.size(), 3);
-    }
-    {
-        Plan p;
-        p[Call::Fsync].set(output, {error(EINTR), error(EIO)});
-        run("final fsync EINTR followed by hard error", p, false, false, paddedImage.size(), 2);
-    }
-    {
-        Plan p;
-        p[Call::Write].set(output, {shortTransfer(sector), error(EIO)});
-        p[Call::Close].set(output, {error(EIO)});
-        run("close EIO after failed write", p, false, false, sector, 0, 0, 1);
-    }
-    {
-        Plan clean;
-        run("clean write after injected failures", clean, true, false, paddedImage.size());
-    }
-    {
-        Plan p;
-        p[Call::Read].set(output, {error(EINTR), shortTransfer(sector)});
-        run("verified direct readback with EINTR and short read", p, true, false, paddedImage.size(), 1, 0, 0, true);
-    }
-    {
-        Plan p;
-        p[Call::Read].set(output, {corruptRead()});
-        run("verification detects corrupted readback", p, false, false, paddedImage.size(), 1, 0, 0, true);
-    }
-    {
-        Plan p;
-        p[Call::Read].set(output, {error(EIO)});
-        run("verification readback EIO", p, false, false, paddedImage.size(), 1, 0, 0, true);
-    }
-    {
-        Plan p;
-        p[Call::Read].set(output, {cancelAfterShort(sector, cancelRawWrite)});
-        run("cancellation during verification", p, false, true, paddedImage.size(), 1, 0, 0, true);
-    }
-    CHECK(failures == 0);
-}
 } // namespace
 
 int main(int argc,char** argv) {

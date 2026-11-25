@@ -16,45 +16,45 @@ import isocmd.util.stringManipulation;
 
 namespace {
 
-/**
- * @brief Formatter for unmount-specific verbose terminal messages.
- * @details Generates ANSI color-coded strings for unmounting operations,
- * utilizing std::string_view and buffer reservation to ensure high performance
- * and minimal heap allocations during batch processing.
- */
-struct VerboseMessageFormatter {
-    const SemanticUIColors tc;
+    /**
+     * @brief Formatter for unmount-specific verbose terminal messages.
+     * @details Generates ANSI color-coded strings for unmounting operations,
+     * utilizing std::string_view and buffer reservation to ensure high performance
+     * and minimal heap allocations during batch processing.
+     */
+    struct VerboseMessageFormatter {
+        const SemanticUIColors tc;
 
-    VerboseMessageFormatter() : tc(resolveVerboseTheme()) {}
+        VerboseMessageFormatter() : tc(resolveVerboseTheme()) {}
 
-    // Change parameters to std::string_view to avoid caller-side allocations
-    std::string format(std::string_view messageType, std::string_view path) const {
-        std::string buf;
-        // Pre-calculating a safe minimum size prevents multiple reallocations during append
-        buf.reserve(128 + path.size());
+        // Change parameters to std::string_view to avoid caller-side allocations
+        std::string format(std::string_view messageType, std::string_view path) const {
+            std::string buf;
+            // Pre-calculating a safe minimum size prevents multiple reallocations during append
+            buf.reserve(128 + path.size());
 
-        auto appendError = [&](std::string_view tag) {
-            buf.append(tc.error).append("Failed to unmount: ")
-               .append(tc.warning).append("'").append(path).append(tc.warning).append("'")
-               .append(tc.error).append(". ")
-               .append(tc.label).append("{").append(tag).append("}")
-               .append(tc.reset);
-        };
+            auto appendError = [&](std::string_view tag) {
+                buf.append(tc.error).append("Failed to unmount: ")
+                   .append(tc.warning).append("'").append(path).append(tc.warning).append("'")
+                   .append(tc.error).append(". ")
+                   .append(tc.label).append("{").append(tag).append("}")
+                   .append(tc.reset);
+            };
 
-        // Comparison of string_view with "literals" is highly optimized in C++20
-        if (messageType == "success") {
-            buf.append(tc.label).append("Unmounted: ")
-               .append(tc.path).append("'").append(path).append(tc.path).append("'")
-               .append(tc.label).append(".")
-               .append(tc.reset);
+            // Comparison of string_view with "literals" is highly optimized in C++20
+            if (messageType == "success") {
+                buf.append(tc.label).append("Unmounted: ")
+                   .append(tc.path).append("'").append(path).append(tc.path).append("'")
+                   .append(tc.label).append(".")
+                   .append(tc.reset);
+            }
+            else if (messageType == "root_error") appendError("needsRoot");
+            else if (messageType == "error")      appendError("notAnISO");
+            else if (messageType == "cancel")     appendError("cxl");
+
+            return buf;
         }
-        else if (messageType == "root_error") appendError("needsRoot");
-        else if (messageType == "error")      appendError("notAnISO");
-        else if (messageType == "cancel")     appendError("cxl");
-
-        return buf;
-    }
-};
+    };
 
 } // namespace
 
@@ -214,22 +214,22 @@ void unmountISO(
 // ---------------------------------------------------------------------------
 namespace {
 
-/// Case-insensitive three-way compare, the same ordering verbosePrint() uses.
-int compareIgnoreCase(std::string_view a, std::string_view b) {
-    const size_t n = std::min(a.size(), b.size());
-    for (size_t i = 0; i < n; ++i) {
-        const int x = std::tolower(static_cast<unsigned char>(a[i]));
-        const int y = std::tolower(static_cast<unsigned char>(b[i]));
-        if (x != y) return x < y ? -1 : 1;
+    /// Case-insensitive three-way compare, the same ordering verbosePrint() uses.
+    int compareIgnoreCase(std::string_view a, std::string_view b) {
+        const size_t n = std::min(a.size(), b.size());
+        for (size_t i = 0; i < n; ++i) {
+            const int x = std::tolower(static_cast<unsigned char>(a[i]));
+            const int y = std::tolower(static_cast<unsigned char>(b[i]));
+            if (x != y) return x < y ? -1 : 1;
+        }
+        if (a.size() == b.size()) return 0;
+        return a.size() < b.size() ? -1 : 1;
     }
-    if (a.size() == b.size()) return 0;
-    return a.size() < b.size() ? -1 : 1;
-}
 
-struct UmountLineRef {
-    std::string key;   // displayed directory text + the bytes that follow it in the line
-    size_t      index; // position in verboseSets.umountRecords
-};
+    struct UmountLineRef {
+        std::string key;   // displayed directory text + the bytes that follow it in the line
+        size_t      index; // position in verboseSets.umountRecords
+    };
 
 } // namespace
 

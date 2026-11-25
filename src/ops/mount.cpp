@@ -24,104 +24,104 @@ import isocmd.util.stringManipulation;
 
 namespace {
 
-/**
- * @brief High-performance formatter for mount-related terminal output.
- * @details Utilizes a persistent internal buffer to minimize heap allocations
- * and leverages std::string_view for zero-copy parameter passing. This ensures
- * that verbose logging remains fast even during high-volume batch operations.
- */
-struct VerbosityFormatter {
-    const SemanticUIColors tc;
-    std::string outputBuffer;
+    /**
+     * @brief High-performance formatter for mount-related terminal output.
+     * @details Utilizes a persistent internal buffer to minimize heap allocations
+     * and leverages std::string_view for zero-copy parameter passing. This ensures
+     * that verbose logging remains fast even during high-volume batch operations.
+     */
+    struct VerbosityFormatter {
+        const SemanticUIColors tc;
+        std::string outputBuffer;
 
-    VerbosityFormatter() : tc(resolveVerboseTheme()) {
-        outputBuffer.reserve(512); // Reused for every call
-    }
-
-    // Use std::string_view for all parameters to avoid caller-side allocations
-    std::string formatMountSuccess(std::string_view isoDir, std::string_view isoFile,
-                                   std::string_view mntDir, std::string_view mntFile,
-                                   std::string_view fsType = "") {
-        outputBuffer.clear();
-        outputBuffer.append(tc.label).append("ISO: ")
-                    .append(tc.path).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(tc.label).append(" mnt@: ")
-                    .append(tc.highlight).append("'").append(mntDir).append("/").append(mntFile).append("'")
-                    .append(tc.label).append(".");
-
-        if (!fsType.empty()) {
-            outputBuffer.append(" ").append(tc.label).append("{").append(fsType).append("}");
+        VerbosityFormatter() : tc(resolveVerboseTheme()) {
+            outputBuffer.reserve(512); // Reused for every call
         }
-        return outputBuffer.append(tc.reset);
-    }
 
-    std::string formatError(std::string_view isoDir, std::string_view isoFile,
-                            std::string_view errorCode) {
-        outputBuffer.clear();
-        return outputBuffer.append(tc.error).append("Failed to mnt: ")
-                    .append(tc.warning).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(tc.error).append(". ")
-                    .append(tc.label).append("{").append(errorCode).append("}")
-                    .append(tc.reset);
-    }
+        // Use std::string_view for all parameters to avoid caller-side allocations
+        std::string formatMountSuccess(std::string_view isoDir, std::string_view isoFile,
+                                       std::string_view mntDir, std::string_view mntFile,
+                                       std::string_view fsType = "") {
+            outputBuffer.clear();
+            outputBuffer.append(tc.label).append("ISO: ")
+                        .append(tc.path).append("'").append(getPath(isoDir, isoFile)).append("'")
+                        .append(tc.label).append(" mnt@: ")
+                        .append(tc.highlight).append("'").append(mntDir).append("/").append(mntFile).append("'")
+                        .append(tc.label).append(".");
 
-    std::string formatDetailedError(std::string_view isoDir, std::string_view isoFile,
-                                    std::string_view errorDetail) {
-        outputBuffer.clear();
-        return outputBuffer.append(tc.error).append("Failed to mnt: ")
-                    .append(tc.warning).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(tc.error).append(". ")
-                    .append(tc.label).append(errorDetail)
-                    .append(tc.reset);
-    }
-
-    std::string formatSkipped(std::string_view isoDir, std::string_view isoFile,
-                              std::string_view mntDir, std::string_view mntFile) {
-        outputBuffer.clear();
-        return outputBuffer.append(tc.warning).append("ISO: ")
-                    .append(tc.path).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(tc.warning).append(" alr mnt@: ")
-                    .append(tc.highlight).append("'").append(mntDir).append("/").append(mntFile).append("'")
-                    .append(tc.warning).append(".")
-                    .append(tc.reset);
-    }
-
-    std::string formatMountFailure(std::string_view isoDir, std::string_view isoFile,
-                                   std::string_view errorType, std::string_view mountTarget = "") {
-        outputBuffer.clear();
-        outputBuffer.append(tc.error).append("Failed to mnt: ")
-                    .append(tc.warning).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(tc.error).append(". ").append(tc.label);
-
-        if (errorType == "clx")             outputBuffer.append("Operation was cancelled");
-        else if (errorType == "needsRoot")  outputBuffer.append("Root privileges required");
-        else if (errorType == "missingISO") outputBuffer.append("ISO file not found");
-        else if (!mountTarget.empty())      outputBuffer.append("Already mounted at ").append(mountTarget);
-        else                                outputBuffer.append(errorType);
-
-        return outputBuffer.append(tc.reset);
-    }
-
-    std::string formatMountSkipped(std::string_view isoDir, std::string_view isoFile) {
-        outputBuffer.clear();
-        return outputBuffer.append(tc.warning).append("ISO: ")
-                    .append(tc.path).append("'").append(getPath(isoDir, isoFile)).append("'")
-                    .append(tc.warning).append(" skipped.")
-                    .append(tc.reset);
-    }
-
-private:
-    // Helper now returns std::string because it might perform concatenation
-    std::string getPath(std::string_view dir, std::string_view file) const {
-        if (displayConfig::toggleNamesOnly) {
-            return std::string(file);
+            if (!fsType.empty()) {
+                outputBuffer.append(" ").append(tc.label).append("{").append(fsType).append("}");
+            }
+            return outputBuffer.append(tc.reset);
         }
-        std::string fullPath;
-        fullPath.reserve(dir.size() + file.size() + 1);
-        fullPath.append(dir).append("/").append(file);
-        return fullPath;
-    }
-};
+
+        std::string formatError(std::string_view isoDir, std::string_view isoFile,
+                                std::string_view errorCode) {
+            outputBuffer.clear();
+            return outputBuffer.append(tc.error).append("Failed to mnt: ")
+                        .append(tc.warning).append("'").append(getPath(isoDir, isoFile)).append("'")
+                        .append(tc.error).append(". ")
+                        .append(tc.label).append("{").append(errorCode).append("}")
+                        .append(tc.reset);
+        }
+
+        std::string formatDetailedError(std::string_view isoDir, std::string_view isoFile,
+                                        std::string_view errorDetail) {
+            outputBuffer.clear();
+            return outputBuffer.append(tc.error).append("Failed to mnt: ")
+                        .append(tc.warning).append("'").append(getPath(isoDir, isoFile)).append("'")
+                        .append(tc.error).append(". ")
+                        .append(tc.label).append(errorDetail)
+                        .append(tc.reset);
+        }
+
+        std::string formatSkipped(std::string_view isoDir, std::string_view isoFile,
+                                  std::string_view mntDir, std::string_view mntFile) {
+            outputBuffer.clear();
+            return outputBuffer.append(tc.warning).append("ISO: ")
+                        .append(tc.path).append("'").append(getPath(isoDir, isoFile)).append("'")
+                        .append(tc.warning).append(" alr mnt@: ")
+                        .append(tc.highlight).append("'").append(mntDir).append("/").append(mntFile).append("'")
+                        .append(tc.warning).append(".")
+                        .append(tc.reset);
+        }
+
+        std::string formatMountFailure(std::string_view isoDir, std::string_view isoFile,
+                                       std::string_view errorType, std::string_view mountTarget = "") {
+            outputBuffer.clear();
+            outputBuffer.append(tc.error).append("Failed to mnt: ")
+                        .append(tc.warning).append("'").append(getPath(isoDir, isoFile)).append("'")
+                        .append(tc.error).append(". ").append(tc.label);
+
+            if (errorType == "clx")             outputBuffer.append("Operation was cancelled");
+            else if (errorType == "needsRoot")  outputBuffer.append("Root privileges required");
+            else if (errorType == "missingISO") outputBuffer.append("ISO file not found");
+            else if (!mountTarget.empty())      outputBuffer.append("Already mounted at ").append(mountTarget);
+            else                                outputBuffer.append(errorType);
+
+            return outputBuffer.append(tc.reset);
+        }
+
+        std::string formatMountSkipped(std::string_view isoDir, std::string_view isoFile) {
+            outputBuffer.clear();
+            return outputBuffer.append(tc.warning).append("ISO: ")
+                        .append(tc.path).append("'").append(getPath(isoDir, isoFile)).append("'")
+                        .append(tc.warning).append(" skipped.")
+                        .append(tc.reset);
+        }
+
+    private:
+        // Helper now returns std::string because it might perform concatenation
+        std::string getPath(std::string_view dir, std::string_view file) const {
+            if (displayConfig::toggleNamesOnly) {
+                return std::string(file);
+            }
+            std::string fullPath;
+            fullPath.reserve(dir.size() + file.size() + 1);
+            fullPath.append(dir).append("/").append(file);
+            return fullPath;
+        }
+    };
 
 } // namespace
 
@@ -1095,51 +1095,51 @@ void mountIsoFiles(
 // ---------------------------------------------------------------------------
 namespace {
 
-/// Case-insensitive three-way compare, the same ordering verbosePrint() uses.
-int compareIgnoreCase(std::string_view a, std::string_view b) {
-    const size_t n = std::min(a.size(), b.size());
-    for (size_t i = 0; i < n; ++i) {
-        const int x = std::tolower(static_cast<unsigned char>(a[i]));
-        const int y = std::tolower(static_cast<unsigned char>(b[i]));
-        if (x != y) return x < y ? -1 : 1;
+    /// Case-insensitive three-way compare, the same ordering verbosePrint() uses.
+    int compareIgnoreCase(std::string_view a, std::string_view b) {
+        const size_t n = std::min(a.size(), b.size());
+        for (size_t i = 0; i < n; ++i) {
+            const int x = std::tolower(static_cast<unsigned char>(a[i]));
+            const int y = std::tolower(static_cast<unsigned char>(b[i]));
+            if (x != y) return x < y ? -1 : 1;
+        }
+        if (a.size() == b.size()) return 0;
+        return a.size() < b.size() ? -1 : 1;
     }
-    if (a.size() == b.size()) return 0;
-    return a.size() < b.size() ? -1 : 1;
-}
 
-/// Displayed image path followed by the closing quote. A printed line is
-/// "<colour>ISO: <colour>'<path>'<rest>", so for lines of one kind comparing this
-/// text orders them exactly as comparing the whole formatted lines would.
-std::string displayedPathKey(const std::string& isoPath) {
-    auto [dir, file] = extractDirectoryAndFilename(isoPath, "mount");
-    std::string key;
-    if (displayConfig::toggleNamesOnly) {
-        key.assign(file);
-    } else {
-        key.reserve(dir.size() + file.size() + 2);
-        key.append(dir).append("/").append(file);
+    /// Displayed image path followed by the closing quote. A printed line is
+    /// "<colour>ISO: <colour>'<path>'<rest>", so for lines of one kind comparing this
+    /// text orders them exactly as comparing the whole formatted lines would.
+    std::string displayedPathKey(const std::string& isoPath) {
+        auto [dir, file] = extractDirectoryAndFilename(isoPath, "mount");
+        std::string key;
+        if (displayConfig::toggleNamesOnly) {
+            key.assign(file);
+        } else {
+            key.reserve(dir.size() + file.size() + 2);
+            key.append(dir).append("/").append(file);
+        }
+        key.push_back('\'');
+        return key;
     }
-    key.push_back('\'');
-    return key;
-}
 
-struct MountLineRef {
-    std::string key;   // displayedPathKey()
-    size_t      index; // position in verboseSets.mountRecords
-};
+    struct MountLineRef {
+        std::string key;   // displayedPathKey()
+        size_t      index; // position in verboseSets.mountRecords
+    };
 
-/// Builds the printed line for one record (the same text the old code stored).
-std::string formatMountLine(VerbosityFormatter& formatter, const MountRecord& r) {
-    auto [isoDir, isoName] = extractDirectoryAndFilename(r.isoPath, "mount");
-    if (r.kind == MountRecKind::Failed)
-        return formatter.formatError(isoDir, isoName, r.code ? r.code : "");
+    /// Builds the printed line for one record (the same text the old code stored).
+    std::string formatMountLine(VerbosityFormatter& formatter, const MountRecord& r) {
+        auto [isoDir, isoName] = extractDirectoryAndFilename(r.isoPath, "mount");
+        if (r.kind == MountRecKind::Failed)
+            return formatter.formatError(isoDir, isoName, r.code ? r.code : "");
 
-    const std::string mountPoint = buildMountPoint(r.isoPath);
-    auto [mntDir, mntName] = extractDirectoryAndFilename(mountPoint, "mount");
-    return r.kind == MountRecKind::Completed
-               ? formatter.formatMountSuccess(isoDir, isoName, mntDir, mntName, r.code ? r.code : "")
-               : formatter.formatSkipped(isoDir, isoName, mntDir, mntName);
-}
+        const std::string mountPoint = buildMountPoint(r.isoPath);
+        auto [mntDir, mntName] = extractDirectoryAndFilename(mountPoint, "mount");
+        return r.kind == MountRecKind::Completed
+                   ? formatter.formatMountSuccess(isoDir, isoName, mntDir, mntName, r.code ? r.code : "")
+                   : formatter.formatSkipped(isoDir, isoName, mntDir, mntName);
+    }
 
 } // namespace
 
