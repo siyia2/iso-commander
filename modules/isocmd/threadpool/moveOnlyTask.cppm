@@ -20,7 +20,8 @@ export extern "C++" {
  *
  * Stores any callable (function pointer, lambda, `std::bind` expression, …) that
  * accepts zero arguments and returns `void`.  The callable is held inside an
- * inline storage buffer of @ref StorageSize bytes whenever possible; otherwise it
+ * inline storage buffer of @ref StorageSize bytes when size, alignment and
+ * non-throwing move construction permit; otherwise it
  * is heap-allocated via `std::unique_ptr` and the pointer itself lives in the
  * buffer.  Either way the external interface – move, call, destroy – is uniform
  * through a compile-time-generated VTable.
@@ -59,7 +60,7 @@ private:
     };
 
     /// @brief Aligned raw storage for the callable (or a `unique_ptr` to it).
-    alignas(std::max_align_t) char storage[StorageSize];
+    alignas(std::max_align_t) std::byte storage[StorageSize];
 
     /// @brief Active dispatch table, or `nullptr` when the task is empty.
     const VTable* vtable{nullptr};
@@ -116,7 +117,9 @@ public:
     template <typename F, typename = std::enable_if_t<!std::is_same_v<std::decay_t<F>, MoveOnlyTask>>>
     MoveOnlyTask(F&& f) {
         using DecayedF = std::decay_t<F>;
-        if constexpr (sizeof(DecayedF) <= StorageSize && alignof(DecayedF) <= alignof(std::max_align_t)) {
+        if constexpr (sizeof(DecayedF) <= StorageSize &&
+                      alignof(DecayedF) <= alignof(std::max_align_t) &&
+                      std::is_nothrow_move_constructible_v<DecayedF>) {
             ::new (static_cast<void*>(storage)) DecayedF(std::forward<F>(f));
             vtable = &vtable_for<DecayedF>;
         } else {
@@ -163,7 +166,9 @@ private:
         vtable = other.vtable;
         if (vtable) {
             vtable->move(storage, other.storage);
-            other.vtable = nullptr;
+            // Moving constructs a new callable but does not end the source
+            // callable's lifetime. Destroy it before clearing its VTable.
+            other.reset();
         }
     }
 };

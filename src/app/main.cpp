@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -350,7 +351,15 @@ int main(int argc, char *argv[]) {
      * prints a hint about the stale lock file and exits.
      */
     const PrintListTheme c = getListColors();
+#ifdef ISOCMD_TEST_PRIVATE_LOCK
+    const char* sandbox = std::getenv("ISOCMD_TEST_SANDBOX");
+    const char* home = std::getenv("HOME");
+    if (!sandbox || !home || fs::path(home) != fs::path(sandbox) / "home") return 1;
+    const std::string privateLock = (fs::path(sandbox) / "isocmd.lock").string();
+    const char* lockFile = privateLock.c_str();
+#else
     const char* lockFile = "/tmp/isocmd.lock";
+#endif
     if (!acquireSingleInstanceLock(GlobalState::lockFileDescriptor, c, lockFile)) {
         return 1;
     }

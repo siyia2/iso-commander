@@ -146,7 +146,7 @@ static void executeFileOperations(ThreadPool& pool,
     futures.reserve(indexChunks.size());
 
     for (const auto& chunk : indexChunks) {
-        futures.emplace_back(pool.enqueue([chunk, &options, &progress]() {
+        futures.emplace_back(pool.enqueue([chunk = chunk, &options, &progress]() {
             handleIsoFileOperation(options, chunk, progress);
         }));
     }

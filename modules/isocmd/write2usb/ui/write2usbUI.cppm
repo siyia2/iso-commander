@@ -32,6 +32,17 @@ bool isDeviceMounted(const std::string&);
  */
 std::string getDriveName(const std::string&);
 
+// Explicit filesystem roots allow read-only discovery against synthetic fixtures.
+struct DeviceDiscoveryPaths {
+    std::filesystem::path sysBlock = "/sys/block";
+    std::filesystem::path dev = "/dev";
+    std::filesystem::path mounts = "/proc/mounts";
+};
+std::string getDriveName(const std::string&, const DeviceDiscoveryPaths&);
+bool isFlashDrive(const std::string&, const DeviceDiscoveryPaths&);
+std::vector<std::string> getRemovableDevices(const DeviceDiscoveryPaths&);
+bool isDeviceMounted(const std::string&, const DeviceDiscoveryPaths&);
+
 // --- Write theme forward declaration (used by WriteScreen + WriteValidation) ---
 
 namespace UI { struct WriteTheme; }
@@ -157,6 +168,22 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
 
 /** @brief Entry point for the write-to-USB workflow. */
 void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles);
+
+// Internal dependency-injected entry points. Production wrappers below/above
+// always supply the real writer and discovery/validation functions.
+namespace WriteExecution {
+using Writer = bool (*)(const std::string&, const std::string&, size_t, std::vector<ProgressInfo>&);
+std::shared_ptr<WriteScreen> performWithWriter(
+    const std::vector<std::pair<IsoInfo, std::string>>&, Writer);
+}
+namespace WriteMapping {
+using Discover = std::vector<std::string> (*)();
+using Validate = std::vector<std::pair<IsoInfo, std::string>> (*)(
+    const std::vector<std::pair<size_t, std::string>>&, const std::vector<IsoInfo>&,
+    bool, std::vector<std::string>&);
+std::vector<std::pair<IsoInfo, std::string>> collectWithDevices(
+    const std::vector<IsoInfo>&, Discover, Validate, bool noPermissions);
+}
 
 // --- Filesystem & Formatting Utilities ---
 

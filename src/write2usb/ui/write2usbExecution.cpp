@@ -266,8 +266,8 @@ void drainManagerForWrite2UsbUI(
  * @return A shared pointer to the live WriteScreen, allowing the caller to
  *         retain the result screen while waiting for user input.
  */
-std::shared_ptr<WriteScreen> performWriteOperation(
-        const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
+std::shared_ptr<WriteScreen> WriteExecution::performWithWriter(
+        const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn, Writer writer) {
     // One call builds the sorted per-task progress vector and establishes the
     // ordering invariant (task i ↔ progress row i). No sorted-pair vector is
     // materialised, so only one shared pointer travels through the tasks and drain.
@@ -291,9 +291,9 @@ std::shared_ptr<WriteScreen> performWriteOperation(
 
     std::vector<std::future<void>> futures;
     for (size_t i = 0; i < totalTasks; ++i) {
-        futures.push_back(pool.enqueue([progressDataPtr, syncPtr, i]() {
+        futures.push_back(pool.enqueue([progressDataPtr, syncPtr, i, writer]() {
             auto& progress = (*progressDataPtr)[i];
-            const bool success = writeIsoToDevice(
+            const bool success = writer(
                 progress.sourcePath, progress.device, i, *progressDataPtr);
 
             if (success) {
@@ -360,6 +360,11 @@ std::shared_ptr<WriteScreen> performWriteOperation(
     }
 
     return screen;
+}
+
+std::shared_ptr<WriteScreen> performWriteOperation(
+        const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
+    return WriteExecution::performWithWriter(validPairsIn, writeIsoToDevice);
 }
 
 /**

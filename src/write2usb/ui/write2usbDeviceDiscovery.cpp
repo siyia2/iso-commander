@@ -18,9 +18,9 @@ namespace fs = std::filesystem;
  * @param device Absolute block-device path (e.g. /dev/sdc).
  * @return Model name, or "Unknown Drive" if the file is absent or empty.
  */
-std::string getDriveName(const std::string& device) {
+std::string getDriveName(const std::string& device, const DeviceDiscoveryPaths& paths) {
     std::string deviceName = device.substr(device.find_last_of('/') + 1);
-    std::string sysfsPath = "/sys/block/" + deviceName + "/device/model";
+    const auto sysfsPath = paths.sysBlock / deviceName / "device/model";
 
     std::ifstream modelFile(sysfsPath);
     std::string driveName;
@@ -68,8 +68,9 @@ static std::optional<std::string> readTrimmedSysfsAttribute(const fs::path& attr
  * @return Canonical path under /sys/block if valid and existing, otherwise std::nullopt.
  */
 static std::optional<fs::path> resolveSysBlockPath(const std::string& devicePath,
-                                                   std::error_code& ec) {
-    if (devicePath.size() <= 5 || devicePath.rfind("/dev/", 0) != 0) {
+                                                   std::error_code& ec, const DeviceDiscoveryPaths& paths) {
+    const auto prefix = paths.dev.string() + "/";
+    if (devicePath.size() <= prefix.size() || devicePath.rfind(prefix, 0) != 0) {
         return std::nullopt;
     }
 
@@ -83,7 +84,7 @@ static std::optional<fs::path> resolveSysBlockPath(const std::string& devicePath
         return std::nullopt;
     }
 
-    const fs::path sysPath = fs::path("/sys/block") / name;
+    const fs::path sysPath = paths.sysBlock / name;
     if (!fs::exists(sysPath, ec) || ec) {
         return std::nullopt;
     }
@@ -125,11 +126,11 @@ static bool hasUsbVendorAncestor(const fs::path& canonicalSysPath, std::error_co
  * @param devicePath Block-device path (must start with /dev/).
  * @return true if the device is a removable USB block device.
  */
-bool isFlashDrive(const std::string& devicePath) {
+bool isFlashDrive(const std::string& devicePath, const DeviceDiscoveryPaths& paths) {
     try {
         std::error_code ec;
 
-        const auto sysPath = resolveSysBlockPath(devicePath, ec);
+        const auto sysPath = resolveSysBlockPath(devicePath, ec, paths);
         if (!sysPath) {
             return false;
         }
@@ -159,11 +160,11 @@ bool isFlashDrive(const std::string& devicePath) {
  *
  * @return Absolute device paths such as /dev/sdb.
  */
-std::vector<std::string> getRemovableDevices() {
+std::vector<std::string> getRemovableDevices(const DeviceDiscoveryPaths& paths) {
     std::vector<std::string> devices;
 
     try {
-        for (const auto& entry : fs::directory_iterator("/sys/block")) {
+        for (const auto& entry : fs::directory_iterator(paths.sysBlock)) {
             const std::string deviceName = entry.path().filename().string();
 
             if (deviceName.rfind("loop", 0) == 0 ||
@@ -182,9 +183,9 @@ std::vector<std::string> getRemovableDevices() {
                 continue;
             }
 
-            const std::string devPath = "/dev/" + deviceName;
+            const std::string devPath = (paths.dev / deviceName).string();
 
-            if (isFlashDrive(devPath)) {
+            if (isFlashDrive(devPath, paths)) {
                 devices.push_back(devPath);
             }
         }
@@ -205,8 +206,8 @@ std::vector<std::string> getRemovableDevices() {
  * @param device Absolute block-device path (e.g. /dev/sdb).
  * @return true if the device or a partition of it is mounted.
  */
-bool isDeviceMounted(const std::string& device) {
-    std::ifstream mountsFile("/proc/mounts");
+bool isDeviceMounted(const std::string& device, const DeviceDiscoveryPaths& paths) {
+    std::ifstream mountsFile(paths.mounts);
     if (!mountsFile.is_open()) {
         return false;
     }
@@ -214,8 +215,9 @@ bool isDeviceMounted(const std::string& device) {
     std::string line;
     std::string deviceName = device;
 
-    if (deviceName.substr(0, 5) == "/dev/") {
-        deviceName = deviceName.substr(5);
+    const auto prefix = paths.dev.string() + "/";
+    if (deviceName.rfind(prefix, 0) == 0) {
+        deviceName = deviceName.substr(prefix.size());
     }
 
     while (std::getline(mountsFile, line)) {
@@ -223,13 +225,13 @@ bool isDeviceMounted(const std::string& device) {
         std::string mountDevice;
         iss >> mountDevice;
 
-        if (mountDevice.substr(0, 5) == "/dev/") {
-            mountDevice = mountDevice.substr(5);
+        if (mountDevice.rfind(prefix, 0) == 0) {
+            mountDevice = mountDevice.substr(prefix.size());
         }
 
         if (mountDevice == deviceName ||
             (mountDevice.find(deviceName) == 0 &&
-             std::isdigit(mountDevice[deviceName.length()]))) {
+             std::isdigit(static_cast<unsigned char>(mountDevice[deviceName.length()])))) {
             mountsFile.close();
             return true;
         }
@@ -238,3 +240,9 @@ bool isDeviceMounted(const std::string& device) {
     mountsFile.close();
     return false;
 }
+
+// Production entry points retain their original system paths.
+std::string getDriveName(const std::string& device) { return getDriveName(device, {}); }
+bool isFlashDrive(const std::string& device) { return isFlashDrive(device, {}); }
+std::vector<std::string> getRemovableDevices() { return getRemovableDevices({}); }
+bool isDeviceMounted(const std::string& device) { return isDeviceMounted(device, {}); }

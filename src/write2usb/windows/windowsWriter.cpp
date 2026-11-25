@@ -18,6 +18,7 @@
 import std;
 import isocmd.core.cancellation;
 import isocmd.write2usb.util.alignedBuffer;
+import isocmd.write2usb.util.telemetry;
 import isocmd.write2usb.util.threadGuard;
 import isocmd.write2usb.windows.windowsWriter;
 import isocmd.write2usb.windows.windowsWriterEngine;
@@ -643,77 +644,16 @@ namespace {
                                 std::atomic<bool>& active,
                                 uint64_t totalBytes,
                                 ProgressInfo& info) {
-            auto lastUpdate = std::chrono::high_resolution_clock::now();
-            uint64_t lastWritten = 0;
-            double smoothedSpeed = 0.0;
-            bool haveEstimate = false;
-
-            auto stallStart = std::chrono::high_resolution_clock::now();
-            bool stalled = false;
-
-            constexpr double alpha = 0.3;
-            constexpr int MIN_UPDATE_INTERVAL_MS = 1000;
-            constexpr int STALL_TIMEOUT_SECONDS = 300;
-
+            write_telemetry::SpeedEstimator estimator(write_telemetry::Clock::now(),
+                write_telemetry::windowsStallTimeoutSeconds);
             while (active.load()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-                const auto now = std::chrono::high_resolution_clock::now();
-                const auto ms =
-                    std::chrono::duration_cast<std::chrono::milliseconds>(
-                        now - lastUpdate).count();
-
+                const auto now = write_telemetry::Clock::now();
                 const uint64_t currentWritten = accumulator.load();
                 info.bytesWritten.store(currentWritten);
-
-                info.progress.store(static_cast<int>(
-                    std::min(99.0,
-                        (static_cast<double>(currentWritten) / totalBytes) *
-                        100.0)));
-
-                const uint64_t deltaBytes =
-                    (currentWritten >= lastWritten)
-                        ? (currentWritten - lastWritten)
-                        : 0;
-
-                if (deltaBytes > 0 && ms >= MIN_UPDATE_INTERVAL_MS) {
-                    stalled = false;
-
-                    const double instantSpeed =
-                        (static_cast<double>(deltaBytes) /
-                         (1024.0 * 1024.0)) /
-                        (ms / 1000.0);
-
-                    const double smoothingFactor =
-                        (instantSpeed < 10.0) ? 0.2 : alpha;
-
-                    smoothedSpeed = haveEstimate
-                        ? (smoothingFactor * instantSpeed +
-                           (1.0 - smoothingFactor) * smoothedSpeed)
-                        : instantSpeed;
-
-                    haveEstimate = true;
-                    info.speed.store(smoothedSpeed);
-
-                    lastWritten = currentWritten;
-                    lastUpdate = now;
-                } else if (deltaBytes == 0 &&
-                           ms >= MIN_UPDATE_INTERVAL_MS) {
-                    // Do not reset lastUpdate/lastWritten here. A long in-flight
-                    // write can span many ticks with deltaBytes == 0. Leaving
-                    // them untouched makes the eventual delta reflect true time.
-                    if (!stalled) {
-                        stalled = true;
-                        stallStart = now;
-                    }
-
-                    const auto stallDuration =
-                        std::chrono::duration_cast<std::chrono::seconds>(
-                            now - stallStart).count();
-
-                    if (stallDuration >= STALL_TIMEOUT_SECONDS)
-                        info.speed.store(0.0);
-                }
+                info.progress.store(write_telemetry::transferPercent(currentWritten, totalBytes));
+                if (auto speed = estimator.sample(currentWritten, now))
+                    info.speed.store(*speed);
             }
         }
 

@@ -6,6 +6,7 @@
 #    libstdc++ bits/std.cc        compiler-provided standard library module (import std;)
 #    src/<module>/*.cpp            implementation, `import`s the modules above
 #    deps/                         vendored third-party code (libchdr)
+#    tests/                        native C++ regression tests and shell runners
 #    build/<variant>/              object + dependency files (generated)
 #    isocmd                        dynamic executable (generated at the root)
 #    isocmd_static                 static executable (generated at the root)
@@ -24,9 +25,25 @@
 #    make clean cache             discard only the persistent standard-library cache
 #    make clean all               discard build output and the persistent standard-library cache
 #    make nocache                 build without the persistent std cache; rebuild std each time
+#    make test-unit                   safe unit and CLI regression tests
+#    make test-integration       unprivileged filesystem, cancellation, USB, import and PTY tests
+#    make test-privileged        build as user, run loop-device and mount tests via sudo
+#    make test-privileged-build  compile privileged tests without running them
+#    make test-unit SANITIZE=1         run unit/CLI tests with AddressSanitizer
+#    make test-unit SANITIZE=2         run unit/CLI tests with ThreadSanitizer
 #    make V=1                     show full compiler command lines
 #    make install [BINDIR=/some/dir]
+#
+#  Tests require no Python or external C++ framework; see tests/README.md.
 # ============================================================================
+
+# Reject sudo test builds before included dependency makefiles can be rebuilt.
+# Only the privileged runner, never the compiler or cache recipes, needs root.
+ifneq ($(filter test-unit test-integration test-privileged test-privileged-build,$(MAKECMDGOALS)),)
+ifeq ($(shell id -u),0)
+    $(error Run test targets as a regular user; make test-privileged invokes sudo only for the runner)
+endif
+endif
 
 # ---------- Parallelism ----------
 NUM_PROCESSORS := $(shell nproc)
@@ -367,7 +384,7 @@ endif
 # ---------- Targets ----------
 .DEFAULT_GOAL := all
 .DELETE_ON_ERROR:
-.PHONY: all nocache install uninstall help
+.PHONY: all nocache install uninstall help test-unit test-integration test-privileged test-privileged-build
 # Read the generated priority order before expanding the link prerequisites.
 # Do not regenerate the project dependency graph just to delete it.
 ifeq ($(strip $(MAKECMDGOALS)),)
@@ -400,6 +417,63 @@ $(OBJ_DIR)/mod/%.o: $(MOD_DIR)/%.cppm Makefile $(CONFIG_STAMP) | $(MAPPER)
 	$(Q)$(CXX) $(CPPFLAGS) $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -x c++ -c $< -o $@
 	$(publish_depfile)
 
+# ---------- Regression tests ----------
+# Reuse production objects and the same module mapper/flags; never link the
+# application entry point into the unit-test executable. Tests stay outside src/.
+TEST_UNIT_SRCS := tests/main.cpp $(sort $(wildcard tests/unit/*.cpp))
+TEST_INTEGRATION_SRCS := $(sort $(wildcard tests/integration/*.cpp))
+TEST_PRIVILEGED_SRCS := $(sort $(wildcard tests/privileged/*.cpp))
+TEST_UNIT_OBJS := $(TEST_UNIT_SRCS:%.cpp=$(OBJ_DIR)/%.o)
+TEST_INTEGRATION_OBJS := $(TEST_INTEGRATION_SRCS:%.cpp=$(OBJ_DIR)/%.o)
+TEST_PRIVILEGED_OBJS := $(TEST_PRIVILEGED_SRCS:%.cpp=$(OBJ_DIR)/%.o)
+TEST_OBJS := $(TEST_UNIT_OBJS) $(TEST_INTEGRATION_OBJS) $(TEST_PRIVILEGED_OBJS)
+TEST_BIN := $(OBJ_DIR)/tests/isocmd-tests
+TEST_INTEGRATION_BIN := $(OBJ_DIR)/tests/isocmd-integration-tests
+TEST_MENU_OBJ := $(OBJ_DIR)/tests/menuApp.o
+TEST_MENU_BIN := $(OBJ_DIR)/tests/isocmd-menu-test
+TEST_PRIVILEGED_BIN := $(OBJ_DIR)/tests/isocmd-privileged-tests
+TEST_LIB_OBJS := $(filter-out $(OBJ_DIR)/app/main.o,$(OBJS))
+TEST_MODULES := $(foreach n,$(MOD_NAMES),$(GCM_DIR)/$(n).gcm)
+
+$(OBJ_DIR)/tests/%.o: tests/%.cpp tests/common/testHarness.h Makefile $(CONFIG_STAMP) $(STD_MODULE_GCM) $(TEST_MODULES) | $(MAPPER)
+	@echo "  TEST CXX $<"
+	@mkdir -p $(@D)
+	$(Q)$(CXX) $(CPPFLAGS) $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -c $< -o $@
+	$(publish_depfile)
+
+$(TEST_BIN): $(TEST_UNIT_OBJS) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ)
+$(TEST_INTEGRATION_BIN): $(TEST_INTEGRATION_OBJS) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ)
+$(TEST_PRIVILEGED_BIN): $(TEST_PRIVILEGED_OBJS) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ)
+# forkpty is in libc on modern glibc; -lutil also supports older glibc.
+# Only the integration executable needs it.
+$(TEST_BIN) $(TEST_INTEGRATION_BIN) $(TEST_PRIVILEGED_BIN):
+	@echo "  TEST LD  $@"
+	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(TEST_LIB_OBJS) $(filter $(TEST_OBJS),$^) -o $@ $(LIBS) $(if $(filter $(TEST_INTEGRATION_BIN),$@),-lutil)
+
+test-unit: $(TARGET) $(TEST_BIN)
+	$(Q)sh tests/run.sh "$(TEST_BIN)" "$(TARGET)"
+
+$(TEST_MENU_OBJ): src/app/main.cpp Makefile $(CONFIG_STAMP) $(STD_MODULE_GCM) $(TEST_MODULES) | $(MAPPER)
+	@echo "  TEST CXX $< (private menu lock)"
+	@mkdir -p $(@D)
+	$(Q)$(CXX) $(CPPFLAGS) $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -DISOCMD_TEST_PRIVATE_LOCK -c $< -o $@
+	$(publish_depfile)
+
+$(TEST_MENU_BIN): $(TEST_MENU_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ)
+	@echo "  TEST LD  $@"
+	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(TEST_LIB_OBJS) $(TEST_MENU_OBJ) -o $@ $(LIBS)
+
+test-integration: $(TEST_INTEGRATION_BIN) $(TEST_MENU_BIN)
+	$(Q)sh tests/integration/run.sh "$(TEST_INTEGRATION_BIN)" "$(TEST_MENU_BIN)"
+
+test-privileged-build: $(TEST_PRIVILEGED_BIN)
+
+# Elevate only after all compilation and dependency generation have finished.
+test-privileged: test-privileged-build
+	$(Q)sudo sh tests/privileged/run.sh "$(TEST_PRIVILEGED_BIN)"
+
+-include $(wildcard $(TEST_OBJS:.o=.d) $(TEST_MENU_OBJ:.o=.d))
+
 install: $(TARGET)
 	mkdir -p $(BINDIR)
 	install -m 755 $(TARGET) $(BINDIR)
@@ -408,13 +482,48 @@ uninstall:
 	rm -f $(BINDIR)/$(TARGET)
 
 help:
-	@echo "Targets:  all (default)  nocache  clean  install  uninstall  help"
-	@echo "Cleanup:  make clean            remove build artifacts, preserve std cache"
-	@echo "          make clean cache      remove only the persistent std cache"
-	@echo "          make clean all        remove build artifacts and persistent std cache"
-	@echo "Options:  STATIC=1  SANITIZE=1|2  FAST=1  V=1  BINDIR=<dir>  BUILD_DIR=<dir>"
-	@echo "nocache:  rebuild std in the build tree without using .std-cache/"
-	@echo "Output:   isocmd (default), isocmd_static (STATIC=1)"
+	@echo "Usage: make [target] [options]"
+	@echo ""
+	@echo "Build:"
+	@echo "  make                       Build isocmd (default)"
+	@echo "  make all                   Same as make"
+	@echo "  make nocache               Rebuild std without the persistent cache"
+	@echo ""
+	@echo "Testing:"
+	@echo "  make test-unit             Unit and CLI regression tests"
+	@echo "  make test-integration      Filesystem, cancellation, USB, import and PTY tests"
+	@echo "  make test-privileged       Build as user, run loop-device and mount tests via sudo"
+	@echo "  make test-privileged-build Build privileged tests without running them"
+	@echo ""
+	@echo "  Run all test targets without sudo."
+	@echo "  Use SANITIZE=1 (ASan) or SANITIZE=2 (TSan) with any test suite."
+	@echo "  See tests/README.md for requirements and safety."
+	@echo ""
+	@echo "Cleanup:"
+	@echo "  make clean                 Remove build artifacts, preserve std cache"
+	@echo "  make clean cache           Remove only the persistent std cache"
+	@echo "  make clean all             Remove build artifacts and std cache"
+	@echo ""
+	@echo "Installation:"
+	@echo "  make install               Install the application"
+	@echo "  make uninstall             Uninstall the application"
+	@echo ""
+	@echo "Options:"
+	@echo "  STATIC=1                   Build a static executable"
+	@echo "  SANITIZE=1                 Enable AddressSanitizer (ASan)"
+	@echo "  SANITIZE=2                 Enable ThreadSanitizer (TSan)"
+	@echo "  FAST=1                     Enable fast development build (-O0, no LTO)"
+	@echo "  V=1                        Enable verbose build output"
+	@echo "  BINDIR=<dir>               Set installation directory"
+	@echo "  BUILD_DIR=<dir>            Set build directory"
+	@echo ""
+	@echo "Output:"
+	@echo "  isocmd                     Default executable"
+	@echo "  isocmd_static              Static executable (STATIC=1)"
+	@echo ""
+	@echo "Help:"
+	@echo "  make help                  Show this help"
+	@echo ""
 	@echo "Compiler: $(CXX)"
 
 # Recover dependency files left by older Makefiles after failed GCC builds.

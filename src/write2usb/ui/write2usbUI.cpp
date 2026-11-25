@@ -151,7 +151,7 @@ namespace MappingPrompt {
         const std::vector<IsoInfo>& selectedIsos,
         std::vector<IsoInfo>& sortedIsos,
         std::vector<std::string>& usbDevices,
-        const WriteTheme& wt
+        const WriteTheme& wt, WriteMapping::Discover discover
     ) {
         sortedIsos = selectedIsos;
         std::sort(sortedIsos.begin(), sortedIsos.end(), [](const IsoInfo& a, const IsoInfo& b) {
@@ -173,7 +173,7 @@ namespace MappingPrompt {
         }
 
         stream << "\n" << color << "Removable USB Flash Devices:" << wt.rl_resetCol << "\n\n";
-        usbDevices = getRemovableDevices();
+        usbDevices = discover();
         auto deviceInfos = collectAndSortDeviceInfos(usbDevices);
 
         if (deviceInfos.empty()) {
@@ -484,12 +484,11 @@ namespace {
  * @return std::vector<std::pair<IsoInfo, std::string>> Vector of confirmed (ISO, Target Device) association pairs,
  *         or an empty vector if cancelled or stopped by thread pool limits.
  */
-std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
-    const std::vector<IsoInfo>& selectedIsos)
+std::vector<std::pair<IsoInfo, std::string>> WriteMapping::collectWithDevices(
+    const std::vector<IsoInfo>& selectedIsos, Discover discover, Validate validate, bool noPermissions)
 {
     PendingReadlineTextClearGuard pendingTextGuard;
     const WriteTheme wt = getWriteTheme();
-    const bool noPermissions = (geteuid() != 0);
     std::string pendingInput;
 
     while (true) {
@@ -504,7 +503,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
         std::vector<IsoInfo> sortedIsos;
         std::vector<std::string> usbDevices;
         const std::string devicePrompt =
-            MappingPrompt::buildDevicePromptString(selectedIsos, sortedIsos, usbDevices, wt);
+            MappingPrompt::buildDevicePromptString(selectedIsos, sortedIsos, usbDevices, wt, discover);
 
         const auto repaintDevices = [&] {
             SyncOutput sync;
@@ -545,7 +544,7 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
         }
 
         std::vector<std::string> validationErrors;
-        auto validPairs = validateDevices(deviceMap, sortedIsos, noPermissions, validationErrors);
+        auto validPairs = validate(deviceMap, sortedIsos, noPermissions, validationErrors);
         if (!validationErrors.empty()) {
             handlePromptErrors(devicePrompt, mainInputString, validationErrors, wt, noPermissions, true);
             continue;
@@ -565,4 +564,9 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
         rl_bind_keyseq("?", help_handler);
         pendingInput = mainInputString;
     }
+}
+
+std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
+    const std::vector<IsoInfo>& selectedIsos) {
+    return WriteMapping::collectWithDevices(selectedIsos, getRemovableDevices, validateDevices, geteuid() != 0);
 }
