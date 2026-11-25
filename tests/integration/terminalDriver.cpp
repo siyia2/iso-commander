@@ -553,6 +553,14 @@ namespace isocmd_tests {
 				step(term, "r", "Reset all settings to default? (y/n): ");
 				step(term, "n\n", selectionPrompt);
 				CHECK(has(readFile(config), "pagination = 3\n"));
+				CHECK(has(readFile(config), "write2usb_checksum = off\n"));
+				expectStep(term, "7\n", valuePrompt, "Setting: write2usb_checksum");
+				expectStep(term, "yes\n", "to try again...", "Invalid value:");
+				CHECK(has(readFile(config), "write2usb_checksum = off\n"));
+				step(term, "\n", valuePrompt);
+				expectStep(term, "on\n", continuePrompt, "Updated and saved to:");
+				CHECK(has(readFile(config), "write2usb_checksum = on\n"));
+				step(term, "\n", selectionPrompt);
 				step(term, "\x1b", mainPrompt);
 
 			});
@@ -562,9 +570,12 @@ namespace isocmd_tests {
 				step(term, "4\n", selectionPrompt);
 				expectStep(term, "6\n", valuePrompt, "Current: 3");
 				step(term, "\x1b", selectionPrompt);
+				expectStep(term, "7\n", valuePrompt, "Current: on");
+				step(term, "\x1b", selectionPrompt);
 				step(term, "r", "Reset all settings to default? (y/n): ");
 				expectStep(term, "y\n", continuePrompt, "Defaults applied");
 				CHECK(has(readFile(config), "pagination = 25\n"));
+				CHECK(has(readFile(config), "write2usb_checksum = off\n"));
 				step(term, "\n", selectionPrompt);
 				expectStep(term, "6\n", valuePrompt, "Current: 25");
 				step(term, "\x1b", selectionPrompt);
@@ -775,10 +786,6 @@ namespace isocmd_tests {
 				term.send("n\n"); end=term.waitFor("? for help: ",end);
 				// Declining retains the input for editing; resubmit it unchanged.
 				end=term.waitFor(mapping,end); term.send("\n"); end=term.waitFor("Proceed? (y/n): ",end);
-				term.send("y\n");
-				end=term.waitFor("Verify write integrity? (y/n): ",end);
-				const auto verifyResize=term.output.size(); term.resize(24,110);
-				end=term.waitFor("Verify write integrity? (y/n): ",verifyResize);
 				const auto afterConfirm=term.output.size(); term.send("y\n");
 				for (int i=0;i<4;++i) {
 					const auto startResult=i==0?afterConfirm:end;
@@ -787,12 +794,12 @@ namespace isocmd_tests {
 					checkWriteResult(frame, i);
 					term.send("\n");
 				}
-				end=term.waitFor("TEST-VERIFY-DEFAULT",end);
+				end=term.waitFor("TEST-VERIFY-OFF",end);
 				end=term.waitFor("? for help: ",end);
 				term.send("1>/dev/zero;2>/dev/null\n"); end=term.waitFor("Proceed? (y/n): ",end);
-				term.send("y\n"); end=term.waitFor("Verify write integrity? (y/n): ",end);
-				term.send("\n");
+				term.send("y\n");
 				term.waitFor("TEST-WRITE-UI-PASS",end); term.waitForExit();
+				CHECK(!has(plain(term.output), "Verify write integrity? (y/n):"));
 			} catch (...) { printOutput(term.output); throw; }
 			std::cout<<"PASS: device mapping retry, resize, confirmation, multi-device task association and results\n";
 			return 0;

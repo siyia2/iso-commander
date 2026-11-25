@@ -124,6 +124,10 @@ extern const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
 	numericEntry("pagination", "25",
 	             "Items per page in list view (0 to disable)",
 	             "", 0, 1000),
+	enumEntry("write2usb_checksum", "off",
+	          "Verify data after writing to USB",
+	          "",
+	          ConfigValues::onOff),
 
 	// --- History Settings ---
 	numericEntry("folder_path_history_lines", "30",
@@ -336,6 +340,16 @@ bool readUserConfigUpdates(const std::string& filePath) {
 	syncCache(filePath);
 	auto it = ConfigCaches::g_configCache.find("auto_update");
 	return (it != ConfigCaches::g_configCache.end() && it->second == "on");
+
+}
+
+/**
+ * @brief Returns the current interactive USB checksum verification setting.
+ */
+bool write2usbChecksumEnabled() {
+
+	const auto it = ConfigCaches::g_configCache.find("write2usb_checksum");
+	return it != ConfigCaches::g_configCache.end() && it->second == "on";
 
 }
 

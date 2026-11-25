@@ -334,82 +334,16 @@ namespace MappingPrompt {
 	}
 
 	/**
-	 * @brief Prompts the user to enable optional checksum verification.
-	 *
-	 * Preserves the confirmation view across terminal resizes and repeats
-	 * the prompt until a valid answer is entered or input is aborted.
-	 *
-	 * @param repaint Callback that redraws the accepted confirmation view.
-	 * @param wt      The current write theme configuration.
-	 * @param color   Color formatting string for the verification prompt.
-	 * @return true to verify, false to skip, or nullopt on abort.
-	 */
-	std::optional<bool> promptChecksumVerification(
-	    const ConfirmResizeWatcher::Painter& repaint,
-	    const WriteTheme& wt,
-	    std::string_view color)
-	{
-
-		const std::string verifyText = "Verify write integrity? (y/n): ";
-
-		std::string verifyPrompt("\001");
-		verifyPrompt.append(color)
-		            .append("\002")
-		            .append(verifyText)
-		            .append(wt.rl_resetCol);
-
-		for (;;) {
-			const size_t cols = terminalSize().cols;
-			std::vector<size_t> widths;
-
-			{
-				SyncOutput sync;
-				widths = repaint(cols);
-			}
-
-			std::unique_ptr<char, decltype(&std::free)> answer(
-			    nullptr, &std::free);
-
-			{
-				ConfirmationModeGuard confirmGuard;
-				ConfirmResizeWatcher watcher(
-				    repaint, cols, std::move(widths), verifyText);
-
-				answer.reset(readline(verifyPrompt.c_str()));
-				watcher.stop();
-			}
-
-			if (!answer || std::string_view(answer.get()) == "\x1b")
-			    return std::nullopt;
-
-			std::string choice(answer.get());
-
-			while (!choice.empty() &&
-			       std::isspace(static_cast<unsigned char>(choice.back())))
-			    choice.pop_back();
-
-			if (choice == "y" || choice == "Y")
-			    return true;
-
-			if (choice.empty() || choice == "n" || choice == "N")
-			    return false;
-		}
-
-	}
-
-	/**
-	 * @brief Confirms valid ISO-to-device mappings and prompts for optional
-	 *        checksum verification.
+	 * @brief Confirms valid ISO-to-device mappings.
 	 *
 	 * @param devicePrompt    The current device input prompt string.
 	 * @param mainInputString The raw input string entered by the user.
 	 * @param warnRows        Warning rows generated for the valid pairs.
 	 * @param wt              The current write theme configuration.
 	 * @param color           Color formatting string for the prompts.
-	 * @return Verification choice on confirmation; nullopt when declined
-	 *         or aborted.
+	 * @return true when confirmed; false when declined or aborted.
 	 */
-	std::optional<bool> confirmDeviceMappings(
+	bool confirmDeviceMappings(
 	    const std::string& devicePrompt,
 	    const std::string& mainInputString,
 	    const std::vector<WarnRow>& warnRows,
@@ -464,26 +398,7 @@ namespace MappingPrompt {
 			    ans.pop_back();
 		}
 
-		if (ans != "y" && ans != "Y")
-		    return std::nullopt;
-
-		// Preserve the accepted confirmation when repainting
-		// the checksum verification prompt.
-		const auto repaint = [&](size_t cols) {
-
-			auto widths = renderConfirmRows(
-			    cols, true,
-			    devicePrompt, mainInputString, warnRows, wt);
-
-			std::cout << color << promptText << ans
-			          << UI::Palette::BoldReset << "\n";
-
-			widths.push_back(utf8Width(promptText + ans));
-			return widths;
-
-		};
-
-		return promptChecksumVerification(repaint, wt, color);
+		return ans == "y" || ans == "Y";
 
 	}
 
@@ -620,15 +535,13 @@ namespace {
  * for final user confirmation before returning confirmed association pairs.
  *
  * @param selectedIsos Vector of selected ISO files designated for writing.
- * @param[out] verify Optional output for the confirmed batch verification choice.
  * @return std::vector<std::pair<IsoInfo, std::string>> Vector of confirmed (ISO, Target Device) association pairs,
  *         or an empty vector if cancelled or stopped by thread pool limits.
  */
 std::vector<std::pair<IsoInfo, std::string>> WriteMapping::collectWithDevices(
-    const std::vector<IsoInfo>& selectedIsos, Discover discover, Validate validate, bool noPermissions, bool* verify)
+    const std::vector<IsoInfo>& selectedIsos, Discover discover, Validate validate, bool noPermissions)
 {
 
-	if (verify) *verify = false;
 	PendingReadlineTextClearGuard pendingTextGuard;
 	const WriteTheme wt = getWriteTheme();
 	std::string pendingInput;
@@ -700,8 +613,7 @@ std::vector<std::pair<IsoInfo, std::string>> WriteMapping::collectWithDevices(
 		}
 
 		auto warnRows = MappingPrompt::buildWarnRows(validPairs);
-		if (auto choice = MappingPrompt::confirmDeviceMappings(devicePrompt, mainInputString, warnRows, wt, color); choice.has_value()) {
-			if (verify) *verify = *choice;
+		if (MappingPrompt::confirmDeviceMappings(devicePrompt, mainInputString, warnRows, wt, color)) {
 			finalizeConfirmedMappings();
 			return validPairs;
 		}
@@ -713,8 +625,8 @@ std::vector<std::pair<IsoInfo, std::string>> WriteMapping::collectWithDevices(
 }
 
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
-    const std::vector<IsoInfo>& selectedIsos, bool* verify) {
+    const std::vector<IsoInfo>& selectedIsos) {
 
-	return WriteMapping::collectWithDevices(selectedIsos, getRemovableDevices, validateDevices, geteuid() != 0, verify);
+	return WriteMapping::collectWithDevices(selectedIsos, getRemovableDevices, validateDevices, geteuid() != 0);
 
 }

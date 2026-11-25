@@ -114,6 +114,9 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache,
 void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap);
 const ConfigEntry* findConfigEntry(const std::string& key);
 
+// Reads the live settings cache; defaults to disabled when absent.
+bool write2usbChecksumEnabled();
+
 /**
  * INTERACTIVE EDITOR DECLARATIONS (settingsEditor.cpp & related UI/input helpers)
  */

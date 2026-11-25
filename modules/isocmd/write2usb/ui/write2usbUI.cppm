@@ -164,10 +164,9 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(
     const std::vector<std::string>& selectedIsos,
     std::vector<std::string>& errors);
 
-/** @brief Runs the interactive ISO-to-device mapping and confirmation flow.
- *  If verify is provided, stores the optional checksum choice on confirmation. */
+/** @brief Runs the interactive ISO-to-device mapping and confirmation flow. */
 std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
-    const std::vector<IsoInfo>& selectedIsos, bool* verify = nullptr);
+    const std::vector<IsoInfo>& selectedIsos);
 
 /** @brief Entry point for the write-to-USB workflow. */
 void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles);
@@ -185,7 +184,7 @@ namespace WriteMapping {
 	    const std::vector<std::pair<size_t, std::string>>&, const std::vector<IsoInfo>&,
 	    bool, std::vector<std::string>&);
 	std::vector<std::pair<IsoInfo, std::string>> collectWithDevices(
-	    const std::vector<IsoInfo>&, Discover, Validate, bool noPermissions, bool* verify = nullptr);
+	    const std::vector<IsoInfo>&, Discover, Validate, bool noPermissions);
 }
 
 // --- Filesystem & Formatting Utilities ---

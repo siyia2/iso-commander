@@ -7,6 +7,7 @@ import std;
 import isocmd.core.cancellation;
 import isocmd.input.inputHandling;
 import isocmd.input.tokenize;
+import isocmd.settings.settings;
 import isocmd.threadpool.threadpool;
 import isocmd.ui.interface.pausePrompts;
 import isocmd.ui.display.themes;
@@ -467,13 +468,12 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
 		return;
 	}
 
-	bool verify = false;
-	auto validPairs = collectDeviceMappings(selectedIsos, &verify);
+	auto validPairs = collectDeviceMappings(selectedIsos);
 	if (validPairs.empty()) {
 		return;
 	}
 
-	auto screen = performWriteOperation(validPairs, nullptr, verify);
+	auto screen = performWriteOperation(validPairs, nullptr, write2usbChecksumEnabled());
 
 	signal(SIGINT, SIG_IGN);
 	disable_ctrl_d();

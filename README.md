@@ -55,7 +55,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 
 🖊️ **Best-in-Class USB Write Engine**
 - Automatic ISO detection — custom write method for Windows vs. others
-- Optional CRC-64 readback verification (raw image or copied Windows files), with no added dependencies
+- Optional CRC-64 readback verification (raw image or copied Windows files), with no added dependencies — enable via `write2usb_checksum = on` in Settings or `w2usb --verify` in CLI mode
 - No wimlib, no file splitting — `install.wim` routed to NTFS natively
 - Dynamic NTFS driver selection — `NTFSPLUS` is preferred for best performance
 

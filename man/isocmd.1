@@ -70,7 +70,7 @@ isocmd w2usb \-\-verify file.iso /dev/sdc@Write an ISO and verify the result
 .SH UI INTERACTIVE OPTIONS AND FEATURES
 .TP
 .B ManageISO
-Mount, unmount, delete, move, copy, and write ISO files to USB (bootable preserved). Requires root for mount/umount/write2usb. USB writes offer optional checksum readback after confirmation.
+Mount, unmount, delete, move, copy, and write ISO files to USB (bootable preserved). Requires root for mount/umount/write2usb. Enable checksum readback for interactive USB writes with \fBwrite2usb_checksum\fR in Settings.
 
 .TP
 .B Convert2ISO
@@ -154,6 +154,7 @@ auto_update@Enable background metadata updates on startup@on|off (Default: off)
 filenames_only@Show filenames instead of full paths; global override except unmount list@on|off (Default: off)
 live_filter_limit@Max list items for live filtering to remain active (0 to disable)@integer >= 0 (Default: 10000)
 pagination@Items per page (0 to disable)@integer >= 0 (Default: 25)
+write2usb_checksum@Verify interactive USB writes using CRC-64 readback@on|off (Default: off)
 .TE
 .SS HISTORY
 .TS

@@ -9,6 +9,7 @@
 import isocmd.core.cancellation;
 import isocmd.input.inputHandling;
 import isocmd.input.readline;
+import isocmd.settings.settings;
 import isocmd.ui.display.themes;
 import isocmd.write2usb.ui.write2usbUI;
 import isocmd.write2usb.util.writeTypes;
@@ -113,9 +114,9 @@ namespace isocmd_tests {
 			auto cancelled=WriteMapping::collectWithDevices(isos,fakeDevices,fakeValidate,false);
 			CHECK(cancelled.empty());
 			std::cout<<"TEST-MAPPING-CANCELLED\n"<<std::flush;
-			bool verify=false;
-			auto mappings=WriteMapping::collectWithDevices(isos,fakeDevices,fakeValidate,false,&verify);
-			CHECK(verify);
+			ConfigCaches::g_configCache["write2usb_checksum"] = "on";
+			auto mappings=WriteMapping::collectWithDevices(isos,fakeDevices,fakeValidate,false);
+			CHECK(write2usbChecksumEnabled());
 			CHECK(mappings.size()==3);
 			CHECK(mappings[0].first.filename=="iso2.iso" && mappings[0].second=="/dev/zero");
 			CHECK(mappings[1].first.filename=="iso10.iso" && mappings[1].second=="/dev/null");
@@ -127,19 +128,18 @@ namespace isocmd_tests {
 				setupSignalHandlerCancellations(); GlobalState::g_operationCancelled=false;
 				const bool expectedSuccess = result==0 || result==3;
 				bool allSucceeded = !expectedSuccess; // Start with the opposite expected result.
-				const bool verifyBatch = result!=3 && verify;
-				expectVerification = verifyBatch;
-				auto screen=WriteExecution::performWithWriter(mappings,fakeWriter,&allSucceeded,verifyBatch);
+				if (result==3) ConfigCaches::g_configCache["write2usb_checksum"] = "off";
+				expectVerification = result!=3;
+				auto screen=WriteExecution::performWithWriter(mappings,fakeWriter,&allSucceeded,write2usbChecksumEnabled());
 				CHECK(allSucceeded == expectedSuccess);
 				std::sort(calls.begin(),calls.end()); CHECK(calls==expected);
 				stopWriteScreen(*screen);
 				std::cout<<"TEST-WRITE-RESULT-"<<result<<'\n'<<std::flush;
 				waitInput();
 			}
-			std::cout<<"TEST-VERIFY-DEFAULT\n"<<std::flush;
-			verify=true;
-			auto skipped=WriteMapping::collectWithDevices(isos,fakeDevices,fakeValidate,false,&verify);
-			CHECK(skipped.size()==2 && !verify);
+			std::cout<<"TEST-VERIFY-OFF\n"<<std::flush;
+			auto skipped=WriteMapping::collectWithDevices(isos,fakeDevices,fakeValidate,false);
+			CHECK(skipped.size()==2 && !write2usbChecksumEnabled());
 			CHECK(skipped[0].first.filename=="iso2.iso" && skipped[0].second=="/dev/zero");
 			CHECK(skipped[1].first.filename=="iso10.iso" && skipped[1].second=="/dev/null");
 			std::cout<<"TEST-WRITE-UI-PASS\n"<<std::flush;
