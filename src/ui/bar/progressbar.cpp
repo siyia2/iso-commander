@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <signal.h>
@@ -90,7 +89,7 @@ namespace {
 	// Progress-bar formatting and rendering helpers
 	// ============================================================================
 
-	constexpr size_t kMinBarWidth = 10;
+	constexpr std::size_t kMinBarWidth = 10;
 	constexpr int kMinSafeCols = 8;
 
 	bool sameSize(const TermSize& a, const TermSize& b) {
@@ -99,9 +98,9 @@ namespace {
 
 	}
 
-	size_t numDigits(size_t n) {
+	std::size_t numDigits(std::size_t n) {
 
-		size_t d = 1;
+		std::size_t d = 1;
 
 		while (n >= 10) {
 			n /= 10;
@@ -144,14 +143,14 @@ namespace {
 	 * If s[i] starts a CSI escape sequence, returns the index just past it;
 	 * otherwise returns i.
 	 */
-	size_t escapeSequenceEnd(const std::string& s, size_t i) {
+	std::size_t escapeSequenceEnd(const std::string& s, std::size_t i) {
 
 		if (static_cast<unsigned char>(s[i]) != 0x1B ||
 		    i + 1 >= s.size() || s[i + 1] != '[') {
 			return i;
 		}
 
-		size_t j = i + 2;
+		std::size_t j = i + 2;
 
 		while (j < s.size() && !(s[j] >= 0x40 && s[j] <= 0x7E)) {
 			++j;
@@ -168,9 +167,9 @@ namespace {
 	/**
 	 * @brief Returns the byte length of the UTF-8 character starting at s[i].
 	 */
-	size_t utf8CharLength(const std::string& s, size_t i) {
+	std::size_t utf8CharLength(const std::string& s, std::size_t i) {
 
-		size_t len = 1;
+		std::size_t len = 1;
 
 		while (i + len < s.size() &&
 		       (static_cast<unsigned char>(s[i + len]) & 0xC0) == 0x80) {
@@ -184,15 +183,15 @@ namespace {
 	/**
 	 * @brief Clips one line to maxCols visible columns, keeping ANSI escapes intact.
 	 */
-	std::string clipToWidth(const std::string& s, size_t maxCols) {
+	std::string clipToWidth(const std::string& s, std::size_t maxCols) {
 
 		std::string out;
 		out.reserve(s.size());
 
-		size_t w = 0;
+		std::size_t w = 0;
 
-		for (size_t i = 0; i < s.size();) {
-			const size_t escEnd = escapeSequenceEnd(s, i);
+		for (std::size_t i = 0; i < s.size();) {
+			const std::size_t escEnd = escapeSequenceEnd(s, i);
 
 			if (escEnd != i) {
 				out.append(s, i, escEnd - i);
@@ -200,7 +199,7 @@ namespace {
 				continue;
 			}
 
-			const size_t len = utf8CharLength(s, i);
+			const std::size_t len = utf8CharLength(s, i);
 
 			if (w >= maxCols) {
 				break;
@@ -218,13 +217,13 @@ namespace {
 	/**
 	 * @brief Clips every line of a multi-line text.
 	 */
-	std::string clipText(const std::string& text, size_t maxCols) {
+	std::string clipText(const std::string& text, std::size_t maxCols) {
 
 		std::string out;
-		size_t start = 0;
+		std::size_t start = 0;
 
 		while (true) {
-			const size_t nl = text.find('\n', start);
+			const std::size_t nl = text.find('\n', start);
 
 			if (nl == std::string::npos) {
 				out += clipToWidth(text.substr(start), maxCols);
@@ -272,11 +271,11 @@ namespace {
 	class ProgressBarSession {
 	public:
 		ProgressBarSession(
-		    std::atomic<size_t>* completedBytes,
-		    size_t totalBytes,
-		    std::atomic<size_t>* completedTasks,
-		    std::atomic<size_t>* failedTasks,
-		    size_t totalTasks,
+		    std::atomic<std::size_t>* completedBytes,
+		    std::size_t totalBytes,
+		    std::atomic<std::size_t>* completedTasks,
+		    std::atomic<std::size_t>* failedTasks,
+		    std::size_t totalTasks,
 		    std::atomic<bool>* isComplete,
 		    bool* verbose,
 		    const std::string& operation,
@@ -334,16 +333,16 @@ namespace {
 		};
 
 		struct Counters {
-			size_t completed;
-			size_t failed;
-			size_t bytes;
+			std::size_t completed;
+			std::size_t failed;
+			std::size_t bytes;
 		};
 
 		struct LineContext {
-			size_t completedTasks = 0;
+			std::size_t completedTasks = 0;
 			std::string timeStr;
 			std::string pctStr;
-			size_t usableCols = 1;
+			std::size_t usableCols = 1;
 			int barWidth = 0;
 			int progressPos = 0;
 			bool useFinalLayout = false;
@@ -421,7 +420,7 @@ namespace {
 
 		}
 
-		size_t usableCols() const {
+		std::size_t usableCols() const {
 
 			return curSize_.cols > 1 ? curSize_.cols - 1 : 1;
 
@@ -496,7 +495,7 @@ namespace {
 
 		}
 
-		void updateSpeedCache(size_t completedBytesValue, double elapsed) {
+		void updateSpeedCache(std::size_t completedBytesValue, double elapsed) {
 
 			if (!bytesTrackingEnabled_ ||
 			    completedBytesValue == lastCompletedBytes_) {
@@ -518,31 +517,31 @@ namespace {
 		/**
 		 * @brief Returns the widest bar the bytes/speed lines allow.
 		 */
-		size_t bytesLinesMaxBar(size_t usable) const {
+		std::size_t bytesLinesMaxBar(std::size_t usable) const {
 
-			const size_t sizeWidth =
-			    std::max<size_t>(totalBytesFormatted_.size(), 10);
+			const std::size_t sizeWidth =
+			    std::max<std::size_t>(totalBytesFormatted_.size(), 10);
 
-			const size_t line2Text = 11 + sizeWidth + 1 + sizeWidth;
-			const size_t line3Text = 7 + 10 + 2 + 6;
-			const size_t textW = std::max(line2Text, line3Text);
+			const std::size_t line2Text = 11 + sizeWidth + 1 + sizeWidth;
+			const std::size_t line3Text = 7 + 10 + 2 + 6;
+			const std::size_t textW = std::max(line2Text, line3Text);
 
 			return usable > 3 + textW ? usable - 3 - textW : 0;
 
 		}
 
 		int barWidthFor(
-		    size_t timeLen,
-		    size_t usable,
+		    std::size_t timeLen,
+		    std::size_t usable,
 		    bool useFinalLayout) const {
 
-			const size_t taskDigits = numDigits(totalTasks_);
-			const size_t timeWidth = std::max<size_t>(timeLen, 5);
+			const std::size_t taskDigits = numDigits(totalTasks_);
+			const std::size_t timeWidth = std::max<std::size_t>(timeLen, 5);
 
-			const size_t line1Fixed =
+			const std::size_t line1Fixed =
 			    1 + 2 + 3 + 3 + taskDigits + 1 + taskDigits + 8 + timeWidth + 1;
 
-			size_t maxBar = usable > line1Fixed
+			std::size_t maxBar = usable > line1Fixed
 			    ? usable - line1Fixed
 			    : 0;
 
@@ -550,7 +549,7 @@ namespace {
 				maxBar = std::min(maxBar, bytesLinesMaxBar(usable));
 			}
 
-			const size_t configuredBar = static_cast<size_t>(
+			const std::size_t configuredBar = static_cast<std::size_t>(
 			    useFinalLayout ? finalBarWidth_ : processingBarWidth_);
 
 			return static_cast<int>(
@@ -588,7 +587,7 @@ namespace {
 		    const std::string& text,
 		    const LineContext& ctx) {
 
-			size_t pad = static_cast<size_t>(ctx.barWidth) + 3;
+			std::size_t pad = static_cast<std::size_t>(ctx.barWidth) + 3;
 
 			if (pad + text.size() > ctx.usableCols) {
 				pad = ctx.usableCols > text.size()
@@ -669,7 +668,7 @@ namespace {
 
 			std::string out;
 
-			for (size_t i = 0; i < lines.size(); ++i) {
+			for (std::size_t i = 0; i < lines.size(); ++i) {
 				if (i > 0) {
 					out += '\n';
 				}
@@ -998,12 +997,12 @@ namespace {
 		ProgressBarColors pc_;
 		InputBlocker inputBlocker_;
 
-		std::atomic<size_t>* completedBytes_;
-		size_t totalBytes_;
+		std::atomic<std::size_t>* completedBytes_;
+		std::size_t totalBytes_;
 
-		std::atomic<size_t>* completedTasks_;
-		std::atomic<size_t>* failedTasks_;
-		size_t totalTasks_;
+		std::atomic<std::size_t>* completedTasks_;
+		std::atomic<std::size_t>* failedTasks_;
+		std::size_t totalTasks_;
 
 		std::atomic<bool>* isComplete_;
 		bool* verbose_;
@@ -1021,7 +1020,7 @@ namespace {
 
 		std::string totalBytesFormatted_;
 
-		size_t lastCompletedBytes_ = SIZE_MAX;
+		std::size_t lastCompletedBytes_ = SIZE_MAX;
 
 		std::string cachedCompletedBytesFormatted_ = "0.00 B";
 		std::string cachedSpeedFormatted_ = "0.00 B/s";
@@ -1039,9 +1038,9 @@ namespace {
 
 		bool countersFrozen_ = false;
 
-		size_t frozenCompletedTasks_ = 0;
-		size_t frozenFailedTasks_ = 0;
-		size_t frozenCompletedBytes_ = 0;
+		std::size_t frozenCompletedTasks_ = 0;
+		std::size_t frozenFailedTasks_ = 0;
+		std::size_t frozenCompletedBytes_ = 0;
 
 		bool finalCancelled_ = false;
 		bool finalSnapTo100_ = false;
@@ -1115,11 +1114,11 @@ namespace {
  *                       wipe. If empty, a single blank line is used instead.
  */
 void displayProgressBarWithSize(
-    std::atomic<size_t>* completedBytes,
-    size_t totalBytes,
-    std::atomic<size_t>* completedTasks,
-    std::atomic<size_t>* failedTasks,
-    size_t totalTasks,
+    std::atomic<std::size_t>* completedBytes,
+    std::size_t totalBytes,
+    std::atomic<std::size_t>* completedTasks,
+    std::atomic<std::size_t>* failedTasks,
+    std::size_t totalTasks,
     std::atomic<bool>* isComplete,
     bool* verbose,
     const std::string& operation,
@@ -1142,11 +1141,11 @@ void displayProgressBarWithSize(
 
 // Keep the std::thread constructor instantiation in a single translation unit.
 std::thread launchProgressBar(
-    std::atomic<size_t>* completedBytes,
-    size_t totalBytes,
-    std::atomic<size_t>* completedTasks,
-    std::atomic<size_t>* failedTasks,
-    size_t totalTasks,
+    std::atomic<std::size_t>* completedBytes,
+    std::size_t totalBytes,
+    std::atomic<std::size_t>* completedTasks,
+    std::atomic<std::size_t>* failedTasks,
+    std::size_t totalTasks,
     std::atomic<bool>* isComplete,
     bool* verbose,
     const std::string& operation,

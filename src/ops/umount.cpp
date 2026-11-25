@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <unistd.h>
 
 #include <libmount/libmount.h>
@@ -146,8 +145,8 @@ static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessage
  */
 void unmountISO(
     const std::vector<std::string>& isoDirs,
-    std::atomic<size_t>* completedTasks,
-    std::atomic<size_t>* failedTasks,
+    std::atomic<std::size_t>* completedTasks,
+    std::atomic<std::size_t>* failedTasks,
     bool silentMode)
 {
 
@@ -155,7 +154,7 @@ void unmountISO(
 	// Results are kept as compact records (directory + message key) and turned into
 	// lines only when they are printed; see forEachUmountLine().
 	std::vector<UmountRecord> tempRecords;
-	constexpr size_t kBatchSize = 50;
+	constexpr std::size_t kBatchSize = 50;
 	if (!silentMode) tempRecords.reserve(kBatchSize);
 	auto flushTemporaryBuffers = [&]() {
 
@@ -235,8 +234,8 @@ namespace {
 	/// Case-insensitive three-way compare, the same ordering verbosePrint() uses.
 	int compareMountPointIgnoreCase(std::string_view a, std::string_view b) {
 
-		const size_t n = std::min(a.size(), b.size());
-		for (size_t i = 0; i < n; ++i) {
+		const std::size_t n = std::min(a.size(), b.size());
+		for (std::size_t i = 0; i < n; ++i) {
 			const int x = std::tolower(static_cast<unsigned char>(a[i]));
 			const int y = std::tolower(static_cast<unsigned char>(b[i]));
 			if (x != y) return x < y ? -1 : 1;
@@ -248,14 +247,14 @@ namespace {
 
 	struct UmountLineRef {
 		std::string key;   // displayed directory text + the bytes that follow it in the line
-		size_t      index; // position in verboseSets.umountRecords
+		std::size_t      index; // position in verboseSets.umountRecords
 	};
 
 } // namespace
 
-size_t countUmountRecords(bool completed) {
+std::size_t countUmountRecords(bool completed) {
 
-	return static_cast<size_t>(std::count_if(
+	return static_cast<std::size_t>(std::count_if(
 	    verboseSets.umountRecords.begin(), verboseSets.umountRecords.end(),
 	    [completed](const UmountRecord& r) { return r.completed == completed; }));
 
@@ -274,12 +273,12 @@ void forEachUmountLine(bool completed, const std::function<void(std::string_view
 	suffix.push_back('\'');
 
 	std::vector<UmountLineRef> refs;
-	for (size_t i = 0; i < records.size(); ++i)
+	for (std::size_t i = 0; i < records.size(); ++i)
 	    if (records[i].completed == completed)
 	        refs.push_back({formatDirText(records[i].mountPoint) + suffix, i});
 	if (refs.empty()) return;
 
-	auto line = [&](size_t i) {
+	auto line = [&](std::size_t i) {
 
 		return formatDirForDisplay(records[i].mountPoint, formatter, records[i].messageKey);
 

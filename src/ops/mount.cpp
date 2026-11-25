@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -218,23 +216,23 @@ namespace {
 		off_t size_;
 	};
 
-	uint32_t be32(const unsigned char* p) {
+	std::uint32_t be32(const unsigned char* p) {
 
-		return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) |
-		       (uint32_t(p[2]) << 8)  |  uint32_t(p[3]);
-
-	}
-
-	uint32_t le32(const unsigned char* p) {
-
-		return (uint32_t(p[3]) << 24) | (uint32_t(p[2]) << 16) |
-		       (uint32_t(p[1]) << 8)  |  uint32_t(p[0]);
+		return (std::uint32_t(p[0]) << 24) | (std::uint32_t(p[1]) << 16) |
+		       (std::uint32_t(p[2]) << 8)  |  std::uint32_t(p[3]);
 
 	}
 
-	uint64_t le64(const unsigned char* p) {
+	std::uint32_t le32(const unsigned char* p) {
 
-		return (uint64_t(le32(p + 4)) << 32) | le32(p);
+		return (std::uint32_t(p[3]) << 24) | (std::uint32_t(p[2]) << 16) |
+		       (std::uint32_t(p[1]) << 8)  |  std::uint32_t(p[0]);
+
+	}
+
+	std::uint64_t le64(const unsigned char* p) {
+
+		return (std::uint64_t(le32(p + 4)) << 32) | le32(p);
 
 	}
 
@@ -272,9 +270,9 @@ namespace {
 	}
 
 	/// Clamps a partition size so a truncated image never yields a sizelimit past EOF.
-	off_t clampedSize(const ImageReader& rd, off_t base, uint64_t bytes) {
+	off_t clampedSize(const ImageReader& rd, off_t base, std::uint64_t bytes) {
 
-		const uint64_t maxBytes = static_cast<uint64_t>(rd.fileSize() - base);
+		const std::uint64_t maxBytes = static_cast<std::uint64_t>(rd.fileSize() - base);
 		return (bytes == 0 || bytes > maxBytes) ? 0 : static_cast<off_t>(bytes);
 
 	}
@@ -286,19 +284,19 @@ namespace {
 	 * by "PM" partition entries starting at block 1. Every partition is probed by content,
 	 * not by its type string, so mislabelled partitions still work.
 	 */
-	bool scanApm(const ImageReader& rd, uint32_t bs, ImageInfo& out) {
+	bool scanApm(const ImageReader& rd, std::uint32_t bs, ImageInfo& out) {
 
-		uint32_t mapEntries = 1;
-		for (uint32_t i = 1; i <= mapEntries && i <= 128; ++i) {
+		std::uint32_t mapEntries = 1;
+		for (std::uint32_t i = 1; i <= mapEntries && i <= 128; ++i) {
 			unsigned char e[80];
 			if (!rd.read(off_t(i) * bs, e, sizeof(e)) || e[0] != 'P' || e[1] != 'M') break;
 
 			if (i == 1) mapEntries = be32(e + 4);
 
-			const uint64_t start = be32(e + 8);
-			const uint64_t count = be32(e + 12);
-			const uint64_t base  = start * bs;
-			if (base >= static_cast<uint64_t>(rd.fileSize())) continue;
+			const std::uint64_t start = be32(e + 8);
+			const std::uint64_t count = be32(e + 12);
+			const std::uint64_t base  = start * bs;
+			if (base >= static_cast<std::uint64_t>(rd.fileSize())) continue;
 
 			const ImageKind kind = probeVolumeAt(rd, static_cast<off_t>(base));
 			if (kind != ImageKind::None) {
@@ -324,8 +322,8 @@ namespace {
 		unsigned char ddr[4];
 		if (!rd.read(0, ddr, 4) || ddr[0] != 'E' || ddr[1] != 'R') return false;
 
-		const uint32_t declared = (uint32_t(ddr[2]) << 8) | ddr[3];
-		for (const uint32_t bs : {declared, 512u, 2048u}) {
+		const std::uint32_t declared = (std::uint32_t(ddr[2]) << 8) | ddr[3];
+		for (const std::uint32_t bs : {declared, 512u, 2048u}) {
 			if (bs != 512 && bs != 1024 && bs != 2048 && bs != 4096) continue;
 			if (scanApm(rd, bs, out)) return true;
 		}
@@ -362,17 +360,17 @@ namespace {
 	 * @return true if a valid partition volume is found, false otherwise.
 	 */
 	bool scanGptEntries(const ImageReader& rd,
-	                           uint32_t ss,
-	                           uint64_t entriesLba,
-	                           uint32_t numEntries,
-	                           uint32_t entrySize,
+	                           std::uint32_t ss,
+	                           std::uint64_t entriesLba,
+	                           std::uint32_t numEntries,
+	                           std::uint32_t entrySize,
 	                           ImageInfo& out) {
 
-		const uint64_t fileSize = static_cast<uint64_t>(rd.fileSize());
-		const uint32_t limit = numEntries < 256 ? numEntries : 256;
+		const std::uint64_t fileSize = static_cast<std::uint64_t>(rd.fileSize());
+		const std::uint32_t limit = numEntries < 256 ? numEntries : 256;
 
-		for (uint32_t i = 0; i < limit; ++i) {
-			const uint64_t entryOff = entriesLba * ss + uint64_t(i) * entrySize;
+		for (std::uint32_t i = 0; i < limit; ++i) {
+			const std::uint64_t entryOff = entriesLba * ss + std::uint64_t(i) * entrySize;
 			if (entryOff > fileSize) {
 				break;
 			}
@@ -387,13 +385,13 @@ namespace {
 				continue;
 			}
 
-			const uint64_t first = le64(e + 32);
-			const uint64_t last = le64(e + 40);
+			const std::uint64_t first = le64(e + 32);
+			const std::uint64_t last = le64(e + 40);
 			if (last < first) {
 				continue;
 			}
 
-			const uint64_t base = first * ss;
+			const std::uint64_t base = first * ss;
 			if (base >= fileSize) {
 				continue;
 			}
@@ -419,16 +417,16 @@ namespace {
 	 * @param out Populated with volume metadata when a matching partition is found.
 	 * @return true if a valid GPT header at @p ss yields a supported volume, false otherwise.
 	 */
-	bool findInGptForSectorSize(const ImageReader& rd, uint32_t ss, ImageInfo& out) {
+	bool findInGptForSectorSize(const ImageReader& rd, std::uint32_t ss, ImageInfo& out) {
 
 		unsigned char hdr[92];
 		if (!rd.read(ss, hdr, sizeof(hdr)) || std::memcmp(hdr, "EFI PART", 8) != 0) {
 			return false;
 		}
 
-		const uint64_t entriesLba = le64(hdr + 72);
-		const uint32_t numEntries = le32(hdr + 80);
-		const uint32_t entrySize = le32(hdr + 84);
+		const std::uint64_t entriesLba = le64(hdr + 72);
+		const std::uint32_t numEntries = le32(hdr + 80);
+		const std::uint32_t entrySize = le32(hdr + 84);
 		if (entrySize < 48 || entrySize > 4096 || numEntries == 0) {
 			return false;
 		}
@@ -450,7 +448,7 @@ namespace {
 	 */
 	bool findInGpt(const ImageReader& rd, ImageInfo& out) {
 
-		for (const uint32_t ss : {512u, 4096u}) {
+		for (const std::uint32_t ss : {512u, 4096u}) {
 			if (findInGptForSectorSize(rd, ss, out)) {
 				return true;
 			}
@@ -667,7 +665,7 @@ namespace {
 	 */
 	std::string mountPointSuffix(const std::string& isoPath) {
 
-		uint64_t h = 14695981039346656037ULL;
+		std::uint64_t h = 14695981039346656037ULL;
 		for (unsigned char c : isoPath) {
 			h ^= c;
 			h *= 1099511628211ULL;
@@ -753,9 +751,9 @@ namespace {
 
 	/// Packs (st_dev, st_ino) into a single uint64_t key so the cache is correct
 	/// across multiple filesystems (inodes are only unique per device).
-	uint64_t makeInodeKey(const struct stat& st) {
+	std::uint64_t makeInodeKey(const struct stat& st) {
 
-		return (static_cast<uint64_t>(st.st_dev) << 32) | st.st_ino;
+		return (static_cast<std::uint64_t>(st.st_dev) << 32) | st.st_ino;
 
 	}
 
@@ -767,7 +765,7 @@ namespace {
 	 * happened since the mount. Returns false if @p src is not a loop device or the
 	 * backing file cannot be resolved.
 	 */
-	bool loopBackingInodeKey(const char* src, uint64_t& key) {
+	bool loopBackingInodeKey(const char* src, std::uint64_t& key) {
 
 		unsigned int loopNum = 0;
 		if (std::sscanf(src, "/dev/loop%u", &loopNum) != 1) return false;
@@ -775,7 +773,7 @@ namespace {
 		char backingPath[256];
 		const int written = snprintf(backingPath, sizeof(backingPath),
 		                             "/sys/block/loop%u/loop/backing_file", loopNum);
-		if (written <= 0 || static_cast<size_t>(written) >= sizeof(backingPath))
+		if (written <= 0 || static_cast<std::size_t>(written) >= sizeof(backingPath))
 		    return false; // Path too long, skip this entry
 
 		std::ifstream f(backingPath);
@@ -801,7 +799,7 @@ namespace {
 	 * Block devices are resolved through sysfs when they are loop devices; any other
 	 * source is a direct file mount and is stat()ed normally.
 	 */
-	bool mountSourceInodeKey(const char* src, uint64_t& key) {
+	bool mountSourceInodeKey(const char* src, std::uint64_t& key) {
 
 		struct stat st{};
 		if (::stat(src, &st) != 0) return false;
@@ -821,9 +819,9 @@ namespace {
 	 * mnt_fs_get_source() returns the loop device (e.g. /dev/loop0) for ISO mounts,
 	 * not the backing file path, so it is resolved through sysfs.
 	 */
-	std::unordered_set<uint64_t> buildMountedInodeCache() {
+	std::unordered_set<std::uint64_t> buildMountedInodeCache() {
 
-		std::unordered_set<uint64_t> inodes;
+		std::unordered_set<std::uint64_t> inodes;
 		libmnt_table* tbl = mnt_new_table_from_file("/proc/self/mountinfo");
 		if (!tbl) return inodes;
 		TableGuard tableGuard{tbl};
@@ -837,7 +835,7 @@ namespace {
 			const char* src = mnt_fs_get_source(fs);
 			if (!src) continue;
 
-			uint64_t key = 0;
+			std::uint64_t key = 0;
 			if (mountSourceInodeKey(src, key))
 			    inodes.insert(key);
 		}
@@ -866,7 +864,7 @@ namespace {
 
 	/// Records "needsRoot" for every file and counts them all as failed.
 	void failAllNeedsRoot(const std::vector<std::string>& isoFiles,
-	                      std::atomic<size_t>* failedTasks,
+	                      std::atomic<std::size_t>* failedTasks,
 	                      bool silentMode) {
 
 		if (!silentMode) {
@@ -962,8 +960,8 @@ namespace {
 	class MountBatch {
 	public:
 		MountBatch(libmnt_context* context,
-		           std::atomic<size_t>* completed,
-		           std::atomic<size_t>* failed,
+		           std::atomic<std::size_t>* completed,
+		           std::atomic<std::size_t>* failed,
 		           bool silent)
 		    : ctx_(context),
 		      completedTasks_(completed),
@@ -1025,7 +1023,7 @@ namespace {
 		}
 
 	private:
-		static constexpr size_t kBatchSize = 50;
+		static constexpr std::size_t kBatchSize = 50;
 
 		// Cancellation, existence (single stat() also feeds the inode cache),
 		// regular-file check and image detection. Returns an error code, or nullptr.
@@ -1123,11 +1121,11 @@ namespace {
 		}
 
 		libmnt_context*                ctx_;
-		std::atomic<size_t>*           completedTasks_;
-		std::atomic<size_t>*           failedTasks_;
+		std::atomic<std::size_t>*           completedTasks_;
+		std::atomic<std::size_t>*           failedTasks_;
 		const bool                     silentMode_;
 		std::unordered_set<std::string> mountPointCache_;
-		std::unordered_set<uint64_t>   mountedInodes_;
+		std::unordered_set<std::uint64_t>   mountedInodes_;
 		std::vector<MountRecord>       tempRecords_;
 	};
 
@@ -1179,8 +1177,8 @@ namespace {
  */
 void mountIsoFiles(
     const std::vector<std::string>& isoFiles,
-    std::atomic<size_t>* completedTasks,
-    std::atomic<size_t>* failedTasks,
+    std::atomic<std::size_t>* completedTasks,
+    std::atomic<std::size_t>* failedTasks,
     bool silentMode)
 {
 
@@ -1221,8 +1219,8 @@ namespace {
 	/// Case-insensitive three-way compare, the same ordering verbosePrint() uses.
 	int compareIgnoreCase(std::string_view a, std::string_view b) {
 
-		const size_t n = std::min(a.size(), b.size());
-		for (size_t i = 0; i < n; ++i) {
+		const std::size_t n = std::min(a.size(), b.size());
+		for (std::size_t i = 0; i < n; ++i) {
 			const int x = std::tolower(static_cast<unsigned char>(a[i]));
 			const int y = std::tolower(static_cast<unsigned char>(b[i]));
 			if (x != y) return x < y ? -1 : 1;
@@ -1252,7 +1250,7 @@ namespace {
 
 	struct MountLineRef {
 		std::string key;   // displayedPathKey()
-		size_t      index; // position in verboseSets.mountRecords
+		std::size_t      index; // position in verboseSets.mountRecords
 	};
 
 	/// Builds the printed line for one record (the same text the old code stored).
@@ -1272,9 +1270,9 @@ namespace {
 
 } // namespace
 
-size_t countMountRecords(MountRecKind kind) {
+std::size_t countMountRecords(MountRecKind kind) {
 
-	return static_cast<size_t>(std::count_if(
+	return static_cast<std::size_t>(std::count_if(
 	    verboseSets.mountRecords.begin(), verboseSets.mountRecords.end(),
 	    [kind](const MountRecord& r) { return r.kind == kind; }));
 
@@ -1285,7 +1283,7 @@ void forEachMountLine(MountRecKind kind, const std::function<void(std::string_vi
 	const std::vector<MountRecord>& records = verboseSets.mountRecords;
 
 	std::vector<MountLineRef> refs;
-	for (size_t i = 0; i < records.size(); ++i)
+	for (std::size_t i = 0; i < records.size(); ++i)
 	    if (records[i].kind == kind) refs.push_back({displayedPathKey(records[i].isoPath), i});
 	if (refs.empty()) return;
 

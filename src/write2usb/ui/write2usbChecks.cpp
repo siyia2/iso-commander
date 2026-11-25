@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-#include <stdint.h>
-
 import std;
 import isocmd.core.uiState;
 import isocmd.ui.display.themes;
@@ -115,7 +112,7 @@ namespace WriteValidation {
 	 *         device is ready for writing.
 	 */
 	std::optional<std::string> checkDevice(const WriteTheme& wt, const std::string& device,
-	                                       const std::string& shown, uint64_t& size) {
+	                                       const std::string& shown, std::uint64_t& size) {
 
 		if (!isFlashDrive(device))
 		    return pathErr(wt, shown, " is not a removable USB flash device");
@@ -150,7 +147,7 @@ namespace WriteValidation {
 	 *         device path, drive name), or std::nullopt if the ISO fits.
 	 */
 	std::optional<std::string> checkCapacity(const WriteTheme& wt, const IsoInfo& iso,
-	                                         const std::string& device, uint64_t deviceSize) {
+	                                         const std::string& device, std::uint64_t deviceSize) {
 
 		if (iso.size <= deviceSize)
 		    return std::nullopt;
@@ -207,7 +204,7 @@ namespace WriteValidation {
  *         validation failed.
  */
 std::vector<std::pair<IsoInfo, std::string>> validateDevices(
-        const std::vector<std::pair<size_t, std::string>>& deviceMap,
+        const std::vector<std::pair<std::size_t, std::string>>& deviceMap,
         const std::vector<IsoInfo>& selectedIsos,
         bool noPermissions,
         std::vector<std::string>& validationErrors) {
@@ -225,7 +222,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(
 	for (const auto& [index, device] : deviceMap) {
 		const auto& iso = selectedIsos[index - 1];
 
-		uint64_t deviceSize = 0;
+		std::uint64_t deviceSize = 0;
 		if (auto err = checkDevice(wt, device, device, deviceSize)) {
 			validationErrors.push_back(std::move(*err));
 			continue;
@@ -277,11 +274,11 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(
  *                     messages.
  * @return Vector of valid (1-based index, canonical device path) pairs.
  */
-std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::string& pairString,
+std::vector<std::pair<std::size_t, std::string>> parseDeviceMappings(const std::string& pairString,
                                                                 const std::vector<std::string>& selectedIsos,
                                                                 std::vector<std::string>& errors) {
 
-	std::vector<std::pair<size_t, std::string>> deviceMap;
+	std::vector<std::pair<std::size_t, std::string>> deviceMap;
 	std::unordered_set<std::string> usedDevices;
 	std::istringstream pairStream(pairString);
 	std::string pair;
@@ -301,7 +298,7 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 		trim(pair);
 		if (pair.empty()) continue;
 
-		size_t sepPos = pair.find('>');
+		std::size_t sepPos = pair.find('>');
 		if (sepPos == std::string::npos) {
 			errors.push_back(wt.warnLabel + "Invalid pair format: '" + wt.errLabel + pair + wt.warnLabel + "'");
 			continue;
@@ -313,7 +310,7 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 		trim(device);
 
 		try {
-			size_t index = std::stoul(indexStr);
+			std::size_t index = std::stoul(indexStr);
 
 			if (index < 1 || index > selectedIsos.size()) {
 				errors.push_back(wt.warnLabel + "Invalid index '" + wt.errLabel + indexStr + wt.warnLabel + "'");
@@ -346,12 +343,12 @@ std::vector<std::pair<size_t, std::string>> parseDeviceMappings(const std::strin
 		}
 	}
 
-	std::unordered_set<size_t> mappedIndices;
+	std::unordered_set<std::size_t> mappedIndices;
 	for (const auto& [index, device] : deviceMap) {
 		mappedIndices.insert(index);
 	}
 
-	for (size_t i = 1; i <= selectedIsos.size(); ++i) {
+	for (std::size_t i = 1; i <= selectedIsos.size(); ++i) {
 		if (mappedIndices.find(i) == mappedIndices.end()) {
 			errors.push_back(wt.warnLabel + "Missing mapping for ISO '" + wt.errLabel + std::to_string(i) + wt.warnLabel + "'");
 		}

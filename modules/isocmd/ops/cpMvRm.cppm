@@ -2,7 +2,6 @@
 
 module;
 
-#include <stddef.h>
 #include <sys/types.h>
 
 export module isocmd.ops.cpMvRm;
@@ -92,8 +91,8 @@ struct DestinationCheckParams {
 	TransferPaths paths;                              ///< Source/destination paths and display strings
 	TransferOp op = TransferOp::Copy;                 ///< Copy or move
 	bool overwriteExisting = false;                   ///< True if existing destinations may be overwritten
-	size_t fileSize = 0;                              ///< Source file size in bytes
-	size_t destDirCount = 0;                          ///< Number of destination directories targeted
+	std::size_t fileSize = 0;                              ///< Source file size in bytes
+	std::size_t destDirCount = 0;                          ///< Number of destination directories targeted
 	MultiDestState& state;                            ///< Mutable tracking state shared across a file's destinations
 	std::vector<std::string>* successfulDestPaths = nullptr; ///< Optional: collects destination paths of successful operations
 	std::mutex* destPathsMutex = nullptr;             ///< Optional: protects @c successfulDestPaths
@@ -167,7 +166,7 @@ public:
 	BatchReporter(std::unordered_set<std::string>& globalIsos,
 	              std::unordered_set<std::string>& globalErrors,
 	              std::mutex& mutex,
-	              size_t batchSize = 50);
+	              std::size_t batchSize = 50);
 
 	/**
 	 * @brief Buffers a success message and flushes if the batch size is reached.
@@ -200,7 +199,7 @@ private:
 	std::unordered_set<std::string>& globalIsos_;   ///< Global completed set
 	std::unordered_set<std::string>& globalErrors_; ///< Global failed set
 	std::mutex& mutex_;                             ///< Protects global sets
-	const size_t batchSize_;                        ///< Flush threshold
+	const std::size_t batchSize_;                        ///< Flush threshold
 };
 
 /**
@@ -214,13 +213,13 @@ private:
  */
 struct OperationContext {
 	BatchReporter& reporter;                               ///< Batched message output
-	std::atomic<size_t>* completedTasks = nullptr;         ///< Successful operation counter
-	std::atomic<size_t>* failedTasks    = nullptr;         ///< Failed operation counter
+	std::atomic<std::size_t>* completedTasks = nullptr;         ///< Successful operation counter
+	std::atomic<std::size_t>* failedTasks    = nullptr;         ///< Failed operation counter
 	std::atomic<bool>&   operationSuccessful;              ///< Set to false on any failure
 	/// Optional callback to chown newly created files to the real user.
 	std::function<void(const std::filesystem::path&)> changeOwnership;
 	/// Bytes processed counter (copy/move/delete progress). Optional.
-	std::atomic<size_t>* completedBytes = nullptr;
+	std::atomic<std::size_t>* completedBytes = nullptr;
 };
 
 /**
@@ -262,7 +261,7 @@ void getRealUserId(
 bool bufferedCopyWithProgress(
     const fs::path& src,
     const fs::path& dst,
-    std::atomic<size_t>* completedBytes,
+    std::atomic<std::size_t>* completedBytes,
     std::error_code& ec
 );
 
@@ -296,7 +295,7 @@ bool performBufferedCopyOperation(
 bool performMoveOperation(
     OperationContext& ctx,
     const TransferPaths& paths,
-    size_t fileSize
+    std::size_t fileSize
 );
 
 /**
@@ -317,7 +316,7 @@ void performDeleteOperation(
     const fs::path& srcPath,
     std::string_view srcDir,
     std::string_view srcFile,
-    size_t fileSize
+    std::size_t fileSize
 );
 
 } // extern "C++"

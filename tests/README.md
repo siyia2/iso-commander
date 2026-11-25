@@ -36,10 +36,9 @@ privileged runner. Test targets reject root invocations before generating any
 build or cache files. The application and helper scripts are staged in a root-owned temporary directory. The runner's temporary root-owned files are cleaned up
 on exit; it does not write to the project's build tree or standard-library cache.
 
-To build without executing, or to run the compiled release test manually:
+To rerun the already-built release test manually:
 
 ```sh
-make test-privileged-build
 sudo sh tests/privileged/run.sh build/release/tests/isocmd-privileged-tests ./isocmd
 ```
 

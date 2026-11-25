@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <stdio.h>
 #include <signal.h>
 #include <readline/readline.h>
@@ -110,7 +109,7 @@ namespace {
 	namespace nav {
 
 		/// 1-based target index parsed from a `g<number>` jump command.
-		size_t gotoPos = 0;
+		std::size_t gotoPos = 0;
 
 		/**
 		 * @brief Translates special navigation keys or jump commands into an `EditNav` action.
@@ -120,7 +119,7 @@ namespace {
 		 * @param newVal Trimmed input text used to detect `g<number>` jump syntax.
 		 * @return Navigation action if matched; `std::nullopt` for standard value/command input.
 		 */
-		std::optional<EditNav> handleInput(const std::string_view& s, size_t pos, size_t total,
+		std::optional<EditNav> handleInput(const std::string_view& s, std::size_t pos, std::size_t total,
 		                                   const std::string& newVal) {
 
 			if (s == "PgUp" || s == "PgDn") {
@@ -136,7 +135,7 @@ namespace {
 			    std::isdigit(static_cast<unsigned char>(newVal[1]))) {
 				RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
 				try {
-					const size_t target = std::stoul(newVal.substr(1));
+					const std::size_t target = std::stoul(newVal.substr(1));
 					if (target >= 1 && target <= total && target != pos) {
 						gotoPos = target;
 						return EditNav::GoTo;
@@ -156,7 +155,7 @@ namespace {
 		 * @param i In/out index into @p ordered.
 		 * @return `true` if no items remain in @p ordered; `false` otherwise.
 		 */
-		bool removeHandled(std::vector<int>& ordered, size_t& i) {
+		bool removeHandled(std::vector<int>& ordered, std::size_t& i) {
 
 			ordered.erase(ordered.begin() + static_cast<std::ptrdiff_t>(i));
 			if (ordered.empty()) {
@@ -176,9 +175,9 @@ namespace {
 		 * @param i In/out current index within @p ordered.
 		 * @return `true` when the batch edit loop should exit; `false` to continue.
 		 */
-		bool advance(EditNav r, std::vector<int>& ordered, size_t& i) {
+		bool advance(EditNav r, std::vector<int>& ordered, std::size_t& i) {
 
-			const size_t n = ordered.size();
+			const std::size_t n = ordered.size();
 			switch (r) {
 				case EditNav::Advance:
 				case EditNav::Updated:
@@ -246,7 +245,7 @@ namespace {
 		 * @param isNumeric `true` if the setting expects a numeric value rather than enumerated choices.
 		 * @param validValues Allowed discrete values for completion when non-empty.
 		 */
-		void setupSettingReadline(size_t total, bool isNumeric,
+		void setupSettingReadline(std::size_t total, bool isNumeric,
 		                          std::vector<std::string>& validValues) {
 
 			reset_custom_keybindingsForSettingsEditor();
@@ -513,7 +512,7 @@ namespace {
 		std::string formatDescriptionComment(const std::string& comment) {
 
 			std::string displayComment = comment;
-			const size_t cpos = displayComment.find("\n# ");
+			const std::size_t cpos = displayComment.find("\n# ");
 			if (cpos != std::string::npos) {
 				displayComment.replace(cpos, 3, "\n             ");
 			}
@@ -538,8 +537,8 @@ namespace {
 
 			std::cout << tc.str << "Valid values: " << tc.reset;
 			if (!validValues.empty()) {
-				const size_t wrapAfter = (key == "theme") ? 7 : validValues.size();
-				for (size_t k = 0; k < validValues.size(); ++k) {
+				const std::size_t wrapAfter = (key == "theme") ? 7 : validValues.size();
+				for (std::size_t k = 0; k < validValues.size(); ++k) {
 					if (k == wrapAfter) {
 						std::cout << "\n               ";
 					} else if (k > 0) {
@@ -572,7 +571,7 @@ namespace {
 		 * @param total Total items in the batch.
 		 */
 		template <typename ThemeT>
-		void drawBatchNavigationFooter(const ThemeT& tc, size_t pos, size_t total) {
+		void drawBatchNavigationFooter(const ThemeT& tc, std::size_t pos, std::size_t total) {
 
 			if (total <= 1) {
 				return;
@@ -606,7 +605,7 @@ namespace {
 		void drawEditScreen(const std::string& key, const std::string& current,
 		                    const ThemeT& tc, const ConfigEntry* entry,
 		                    const std::vector<std::string>& validValues,
-		                    bool isNumeric, size_t pos, size_t total,
+		                    bool isNumeric, std::size_t pos, std::size_t total,
 		                    std::vector<std::string>& pendingErrors) {
 
 			clearScrollBuffer();
@@ -713,12 +712,12 @@ namespace {
 		                  const std::vector<std::string>& inputErrors) {
 
 			const std::vector<std::string> noErrors;
-			size_t i = 0;
+			std::size_t i = 0;
 			bool showErrors = true;
 			bool done = false;
 
 			while (!done) {
-				const size_t n = ordered.size();
+				const std::size_t n = ordered.size();
 				const EditNav r = editSetting(configPath,
 				                              CONFIG_ORDERED_DEFAULTS[ordered[i] - 1].key,
 				                              showErrors ? inputErrors : noErrors,
@@ -796,7 +795,7 @@ namespace {
  */
 EditNav editSetting(const std::string& configPath, const std::string& key,
                     const std::vector<std::string>& inputErrors,
-                    size_t pos, size_t total) {
+                    std::size_t pos, std::size_t total) {
 
 	auto tc = resolveOptionsTheme();
 	const ConfigEntry* entry = findConfigEntry(key);

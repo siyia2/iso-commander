@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <stdio.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -21,13 +20,13 @@ import isocmd.util.stringManipulation;
 
 namespace {
 
-	constexpr size_t PREVIEW_MIN_ROWS = 1;
+	constexpr std::size_t PREVIEW_MIN_ROWS = 1;
 
 	// Accounts for: leading newline before status, preview status line,
 	// blank separator line in redisplay hook, prompt row, and header/safety margin.
 	// The status-line row is recovered for the preview when the status line is
 	// suppressed (see computeDynamicPreviewWindowRows()).
-	constexpr size_t PREVIEW_BASE_RESERVED_ROWS = 6;
+	constexpr std::size_t PREVIEW_BASE_RESERVED_ROWS = 6;
 
 	// ─── Data Structures ─────────────────────────────────────────────────────────
 
@@ -43,8 +42,8 @@ namespace {
 	 *               must treat the whole source as the match set).
 	 */
 	struct LivePreviewResult {
-		std::vector<size_t> local;
-		std::vector<size_t> global;
+		std::vector<std::size_t> local;
+		std::vector<std::size_t> global;
 		bool identity = false;
 	};
 
@@ -52,9 +51,9 @@ namespace {
 	 * @brief Bounded [start, end) window slice over a list of size @c total.
 	 */
 	struct WindowSlice {
-		size_t start = 0;
-		size_t end = 0;
-		size_t total = 0;
+		std::size_t start = 0;
+		std::size_t end = 0;
+		std::size_t total = 0;
 	};
 
 	/**
@@ -90,12 +89,12 @@ namespace {
 
 		// Incremental-narrowing state, reset at the start of every readline().
 		std::string lastQuery;
-		std::vector<size_t> lastMatches;
+		std::vector<std::size_t> lastMatches;
 
 		// Effective preview page size: configured ITEMS_PER_PAGE or dynamic terminal height.
-		size_t previewWindowRows = 12;
-		size_t previewCursor = 0;
-		size_t previewScrollOffset = 0;
+		std::size_t previewWindowRows = 12;
+		std::size_t previewCursor = 0;
+		std::size_t previewScrollOffset = 0;
 		bool forceRepaint = false;
 
 		bool primed = false;
@@ -112,13 +111,13 @@ namespace {
 	 *
 	 * @return Terminal row count, or a sensible default (24) if unavailable.
 	 */
-	size_t queryTerminalRows()
+	std::size_t queryTerminalRows()
 	{
 
 		struct winsize ws{};
 
 		if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 0)
-		    return static_cast<size_t>(ws.ws_row);
+		    return static_cast<std::size_t>(ws.ws_row);
 
 		return 24;
 
@@ -129,13 +128,13 @@ namespace {
 	 *
 	 * @return Terminal column count, or a sensible default (80) if unavailable.
 	 */
-	size_t queryTerminalCols()
+	std::size_t queryTerminalCols()
 	{
 
 		struct winsize ws{};
 
 		if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0)
-		    return static_cast<size_t>(ws.ws_col);
+		    return static_cast<std::size_t>(ws.ws_col);
 
 		return 80;
 
@@ -150,7 +149,7 @@ namespace {
 	 * @return Estimated number of occupied rows (always >= 1; 1 when either input
 	 *         is 0).
 	 */
-	size_t wrappedLineRows(size_t visibleChars, size_t termCols)
+	std::size_t wrappedLineRows(std::size_t visibleChars, std::size_t termCols)
 	{
 
 		if (termCols == 0 || visibleChars == 0)
@@ -177,13 +176,13 @@ namespace {
 	 *
 	 * @return Available number of preview rows (>= PREVIEW_MIN_ROWS).
 	 */
-	size_t computeDynamicPreviewWindowRows(
-	    size_t extraReservedRows = 0,
+	std::size_t computeDynamicPreviewWindowRows(
+	    std::size_t extraReservedRows = 0,
 	    bool showStatus = true)
 	{
 
-		const size_t termRows = queryTerminalRows();
-		const size_t reserved =
+		const std::size_t termRows = queryTerminalRows();
+		const std::size_t reserved =
 		    PREVIEW_BASE_RESERVED_ROWS - (showStatus ? 0 : 1)
 		    + extraReservedRows;
 
@@ -208,7 +207,7 @@ namespace {
 	 *        when ITEMS_PER_PAGE sizing is in effect.
 	 */
 	void refreshPreviewWindowHeight(
-	    size_t extraReservedRows = 0,
+	    std::size_t extraReservedRows = 0,
 	    bool showStatus = true)
 	{
 
@@ -273,7 +272,7 @@ namespace {
 		    return extractUnmountKey(path);
 
 		if (g_livePreview.useNameOnly) {
-			const size_t lastSlash = path.find_last_of('/');
+			const std::size_t lastSlash = path.find_last_of('/');
 
 			return (lastSlash != std::string::npos)
 			    ? path.substr(lastSlash + 1)
@@ -346,10 +345,10 @@ namespace {
 	 * @return The visible [start, end) window.
 	 */
 	WindowSlice computePreviewWindow(
-	    size_t total,
-	    size_t maxRows,
-	    size_t cursor,
-	    size_t& scrollOffset)
+	    std::size_t total,
+	    std::size_t maxRows,
+	    std::size_t cursor,
+	    std::size_t& scrollOffset)
 	{
 
 		if (total == 0) {
@@ -362,7 +361,7 @@ namespace {
 			return {0, 0, total};
 		}
 
-		const size_t visibleCount = std::min(total, maxRows);
+		const std::size_t visibleCount = std::min(total, maxRows);
 		cursor = std::min(cursor, total - 1);
 
 		if (cursor < scrollOffset) {
@@ -371,7 +370,7 @@ namespace {
 			scrollOffset = cursor - visibleCount + 1;
 		}
 
-		const size_t maxStart = total - visibleCount;
+		const std::size_t maxStart = total - visibleCount;
 		scrollOffset = std::min(scrollOffset, maxStart);
 
 		return {scrollOffset, scrollOffset + visibleCount, total};
@@ -448,7 +447,7 @@ namespace {
 
 		result.global.reserve(result.local.size());
 
-		for (size_t idx : result.local)
+		for (std::size_t idx : result.local)
 		    result.global.push_back(resolveGlobalIndex(idx));
 
 		return result;
@@ -463,7 +462,7 @@ namespace {
 	 * Restores ITEMS_PER_PAGE even when rendering exits through an exception.
 	 */
 	struct UnpaginatedScope {
-		const size_t saved = GlobalState::ITEMS_PER_PAGE;
+		const std::size_t saved = GlobalState::ITEMS_PER_PAGE;
 
 		UnpaginatedScope()
 		{
@@ -494,7 +493,7 @@ namespace {
 	struct PreviewStackGuard {
 		bool pushed;
 
-		PreviewStackGuard(std::vector<size_t>&& globals, bool push)
+		PreviewStackGuard(std::vector<std::size_t>&& globals, bool push)
 		    : pushed(push)
 		{
 
@@ -540,12 +539,12 @@ namespace {
 	 */
 	WindowSlice calculateWrappedPreviewWindow(
 	    const LivePreviewResult& preview,
-	    size_t totalMatches,
-	    size_t termCols,
+	    std::size_t totalMatches,
+	    std::size_t termCols,
 	    const std::vector<std::string>& displayLabels)
 	{
 
-		size_t effectiveMaxRows = g_livePreview.previewWindowRows;
+		std::size_t effectiveMaxRows = g_livePreview.previewWindowRows;
 
 		WindowSlice win = computePreviewWindow(
 		    totalMatches,
@@ -554,13 +553,13 @@ namespace {
 		    g_livePreview.previewScrollOffset);
 
 		if (totalMatches > 0 && win.end > win.start) {
-			size_t physicalItemRows = 0;
+			std::size_t physicalItemRows = 0;
 
-			for (size_t i = win.start; i < win.end; ++i) {
-				const size_t itemIdx =
+			for (std::size_t i = win.start; i < win.end; ++i) {
+				const std::size_t itemIdx =
 				    preview.identity ? i : preview.local[i];
 
-				const size_t approxCols =
+				const std::size_t approxCols =
 				    (itemIdx < displayLabels.size()
 				        ? displayLabels[itemIdx].size()
 				        : 0) + 10;
@@ -570,12 +569,12 @@ namespace {
 
 			if (GlobalState::ITEMS_PER_PAGE == 0 &&
 			    physicalItemRows > effectiveMaxRows) {
-				const size_t avgRowsPerItem =
-				    std::max<size_t>(
+				const std::size_t avgRowsPerItem =
+				    std::max<std::size_t>(
 				        1,
 				        physicalItemRows / (win.end - win.start));
 
-				effectiveMaxRows = std::max<size_t>(
+				effectiveMaxRows = std::max<std::size_t>(
 				    PREVIEW_MIN_ROWS,
 				    effectiveMaxRows / avgRowsPerItem);
 
@@ -596,7 +595,7 @@ namespace {
 	/**
 	 * @brief Determines whether the preview status line should be displayed.
 	 */
-	bool shouldShowPreviewStatus(size_t totalMatches, size_t sourceSize)
+	bool shouldShowPreviewStatus(std::size_t totalMatches, std::size_t sourceSize)
 	{
 
 		return totalMatches > 0 && totalMatches != sourceSize;
@@ -606,23 +605,23 @@ namespace {
 	/**
 	 * @brief Calculates additional rows consumed by the preview status line.
 	 */
-	size_t calculateStatusWrapExtra(
-	    size_t totalMatches,
-	    size_t termCols,
+	std::size_t calculateStatusWrapExtra(
+	    std::size_t totalMatches,
+	    std::size_t termCols,
 	    bool showStatus)
 	{
 
 		if (!showStatus)
 		    return 0;
 
-		const size_t sampleEnd =
-		    std::min(totalMatches, static_cast<size_t>(9999));
+		const std::size_t sampleEnd =
+		    std::min(totalMatches, static_cast<std::size_t>(9999));
 
-		const size_t initialRows = GlobalState::ITEMS_PER_PAGE > 0
+		const std::size_t initialRows = GlobalState::ITEMS_PER_PAGE > 0
 		    ? GlobalState::ITEMS_PER_PAGE
 		    : computeDynamicPreviewWindowRows(0, showStatus);
 
-		const size_t sampleShown = std::min(totalMatches, initialRows);
+		const std::size_t sampleShown = std::min(totalMatches, initialRows);
 
 		std::string statusSample("[preview 1-");
 		statusSample.append(std::to_string(sampleEnd)).append("/")
@@ -632,7 +631,7 @@ namespace {
 		    statusSample.append(" · PgUp/PgDn to scroll");
 		statusSample.append("]");
 
-		const size_t wrappedRows =
+		const std::size_t wrappedRows =
 		    wrappedLineRows(statusSample.size(), termCols);
 
 		return wrappedRows > 1 ? wrappedRows - 1 : 0;
@@ -642,22 +641,22 @@ namespace {
 	/**
 	 * @brief Estimates additional rows required by wrapped preview item labels.
 	 */
-	size_t calculateItemWrapAdjustment(
+	std::size_t calculateItemWrapAdjustment(
 	    const std::vector<std::string>& displayLabels,
 	    const LivePreviewResult& preview,
-	    size_t totalMatches,
-	    size_t termCols)
+	    std::size_t totalMatches,
+	    std::size_t termCols)
 	{
 
-		size_t maxWrappedPerItem = 1;
+		std::size_t maxWrappedPerItem = 1;
 
-		for (size_t i = 0; i < totalMatches && i < 64; ++i) {
-			const size_t itemIdx =
+		for (std::size_t i = 0; i < totalMatches && i < 64; ++i) {
+			const std::size_t itemIdx =
 			    preview.identity ? i : preview.local[i];
 
 			if (itemIdx < displayLabels.size()) {
 				// Prefix "[idx]^ " (~10 characters) plus label length.
-				const size_t approxCols =
+				const std::size_t approxCols =
 				    displayLabels[itemIdx].size() + 10;
 
 				maxWrappedPerItem = std::max(
@@ -693,8 +692,8 @@ namespace {
 	 */
 	WindowSlice calculatePreviewWindow(
 	    const LivePreviewResult& preview,
-	    size_t totalMatches,
-	    size_t termCols)
+	    std::size_t totalMatches,
+	    std::size_t termCols)
 	{
 
 		if (totalMatches == 0) {
@@ -715,10 +714,10 @@ namespace {
 		        ? g_livePreview.derivedCache
 		        : source;
 
-		const size_t statusWrapExtra =
+		const std::size_t statusWrapExtra =
 		    calculateStatusWrapExtra(totalMatches, termCols, showStatus);
 
-		const size_t wrapAdjustment =
+		const std::size_t wrapAdjustment =
 		    calculateItemWrapAdjustment(
 		        displayLabels,
 		        preview,
@@ -743,8 +742,8 @@ namespace {
 	 * @brief Holds the data required for a windowed preview view.
 	 */
 	struct PreviewWindowData {
-		std::vector<size_t> local;
-		std::vector<size_t> global;
+		std::vector<std::size_t> local;
+		std::vector<std::size_t> global;
 		bool useWindowedView = false;
 	};
 
@@ -763,7 +762,7 @@ namespace {
 			data.local.reserve(win.end - win.start);
 			data.global.reserve(win.end - win.start);
 
-			for (size_t i = win.start; i < win.end; ++i) {
+			for (std::size_t i = win.start; i < win.end; ++i) {
 				data.local.push_back(preview.local[i]);
 
 				if (i < preview.global.size())
@@ -778,7 +777,7 @@ namespace {
 			data.local.reserve(win.end - win.start);
 			data.global.reserve(win.end - win.start);
 
-			for (size_t i = win.start; i < win.end; ++i) {
+			for (std::size_t i = win.start; i < win.end; ++i) {
 				data.local.push_back(i);
 				data.global.push_back(resolveGlobalIndex(i));
 			}
@@ -795,8 +794,8 @@ namespace {
 	 */
 	void renderPreviewNavigationHints(
 	    const WindowSlice& win,
-	    size_t totalMatches,
-	    size_t sourceSize)
+	    std::size_t totalMatches,
+	    std::size_t sourceSize)
 	{
 
 		// Keep the status predicate synchronized with calculatePreviewWindow().
@@ -861,7 +860,7 @@ namespace {
 	void renderPreviewWindow(
 	    const LivePreviewResult& preview,
 	    const WindowSlice& win,
-	    size_t totalMatches)
+	    std::size_t totalMatches)
 	{
 
 		const std::vector<std::string>& source = *g_livePreview.sourceList;
@@ -870,7 +869,7 @@ namespace {
 		    buildPreviewWindowData(preview, win, source);
 
 		{
-			size_t previewPage = 0;
+			std::size_t previewPage = 0;
 
 			const StringListView view = windowData.useWindowedView
 			    ? StringListView(source, windowData.local)
@@ -919,7 +918,7 @@ namespace {
 	void paintLivePreviewFrame(const std::string& query)
 	{
 
-		const size_t termCols = queryTerminalCols();
+		const std::size_t termCols = queryTerminalCols();
 
 		const bool queryChanged = query != g_livePreview.lastQuery;
 
@@ -933,7 +932,7 @@ namespace {
 
 		const std::vector<std::string>& source = *g_livePreview.sourceList;
 
-		const size_t totalMatches =
+		const std::size_t totalMatches =
 		    preview.identity ? source.size() : preview.local.size();
 
 		const WindowSlice win = calculatePreviewWindow(
@@ -1025,13 +1024,13 @@ namespace {
 	 *
 	 * @param direction Negative for PageUp, positive for PageDown.
 	 */
-	void movePreviewWindowCursor(ptrdiff_t direction)
+	void movePreviewWindowCursor(std::ptrdiff_t direction)
 	{
 
 		if (!liveMainListEnabled() || direction == 0)
 		    return;
 
-		const size_t count = g_livePreview.hasLastMatches
+		const std::size_t count = g_livePreview.hasLastMatches
 		    ? g_livePreview.lastMatches.size()
 		    : (g_livePreview.sourceList
 		        ? g_livePreview.sourceList->size()
@@ -1043,18 +1042,18 @@ namespace {
 			return;
 		}
 
-		const size_t pageSize = std::min(
+		const std::size_t pageSize = std::min(
 		    count,
-		    std::max<size_t>(1, g_livePreview.previewWindowRows));
+		    std::max<std::size_t>(1, g_livePreview.previewWindowRows));
 
 		// There is no next or previous page when every match is already visible.
 		if (count <= pageSize)
 		    return;
 
-		const size_t maxScrollOffset = count - pageSize;
-		const size_t currentCursor =
+		const std::size_t maxScrollOffset = count - pageSize;
+		const std::size_t currentCursor =
 		    std::min(g_livePreview.previewCursor, count - 1);
-		const size_t currentOffset =
+		const std::size_t currentOffset =
 		    std::min(g_livePreview.previewScrollOffset, maxScrollOffset);
 
 		if (direction > 0) {

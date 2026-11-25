@@ -2,7 +2,6 @@
 
 #include <stddef.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <string.h>
@@ -1249,7 +1248,7 @@ int clear_screen_and_buffer(int, int) {
 		RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 0;
 	}
 
-	free(new_text);
+	std::free(new_text);
 	return 0;
 
 }
@@ -1368,8 +1367,8 @@ int my_rl_complete(int ignore, int invoking_key)
 
 	list_shown_during_completion = false;
 
-	free(old_text);
-	free(new_text);
+	std::free(old_text);
+	std::free(new_text);
 	return ret;
 
 }

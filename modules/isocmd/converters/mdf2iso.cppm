@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-module;
-
-#include <stddef.h>
-
 export module isocmd.converters.mdf2iso;
 
 import std;
@@ -47,10 +43,10 @@ export extern "C++" {
  * raw MDF sectors, including sector headers and trailing ECC/subchannel data.
  */
 struct MdfTypeInfo {
-	size_t seek_ecc;    ///< Number of bytes to skip after the sector payload.
-	size_t sector_size; ///< Total size of each raw sector in bytes.
-	size_t sector_data; ///< Number of user-data bytes extracted per sector.
-	size_t seek_head;   ///< Number of header bytes to skip before the payload.
+	std::size_t seek_ecc;    ///< Number of bytes to skip after the sector payload.
+	std::size_t sector_size; ///< Total size of each raw sector in bytes.
+	std::size_t sector_data; ///< Number of user-data bytes extracted per sector.
+	std::size_t seek_head;   ///< Number of header bytes to skip before the payload.
 
 	/**
 	 * @brief Initializes all sector layout parameters to zero.

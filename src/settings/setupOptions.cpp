@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-
 import std;
 import isocmd.settings.settings;
 import isocmd.core.paths;
@@ -223,7 +221,7 @@ std::map<std::string, std::string> readConfig(const std::string& configPath) {
 		while (std::getline(inFile, line)) {
 			line = trim(line);
 			if (line.empty() || line[0] == '#') continue;
-			size_t equalPos = line.find('=');
+			std::size_t equalPos = line.find('=');
 			if (equalPos != std::string::npos) {
 				config[trim(line.substr(0, equalPos))] = trim(line.substr(equalPos + 1));
 			}
@@ -259,7 +257,7 @@ static bool ensureDefaults(std::map<std::string, std::string>& configMap, const 
 			while (std::getline(inFile, line)) {
 				line = trim(line);
 				if (line.empty() || line[0] == '#') continue;
-				size_t equalPos = line.find('=');
+				std::size_t equalPos = line.find('=');
 				if (equalPos != std::string::npos)
 				    diskKeys.push_back(trim(line.substr(0, equalPos)));
 			}
@@ -299,7 +297,7 @@ void syncCache(const std::string& filePath) {
  */
 void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap) {
 
-	auto getVal = [&](const std::string& key, size_t defaultVal) -> size_t {
+	auto getVal = [&](const std::string& key, std::size_t defaultVal) -> std::size_t {
 
 		auto it = configMap.find(key);
 		if (it == configMap.end()) return defaultVal;
@@ -308,7 +306,7 @@ void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& c
 		return defaultVal;
 		if (s.size() > 1 && s[0] == '0') return defaultVal;
 		try {
-			return static_cast<size_t>(std::stoull(s));
+			return static_cast<std::size_t>(std::stoull(s));
 		} catch (...) { return defaultVal; }
 
 	};

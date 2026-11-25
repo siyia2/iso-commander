@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // C / POSIX Headers
-#include <stddef.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -81,9 +80,9 @@ namespace {
 		gid_t real_gid = 0; ///< Real GID applied to produced ISO files via `chown`.
 
 		// Atomic counters
-		std::atomic<size_t>* completedBytes = nullptr; ///< Incremented by bytes processed (may be null).
-		std::atomic<size_t>* completedTasks = nullptr; ///< Incremented per success or skip (must be non-null).
-		std::atomic<size_t>* failedTasks    = nullptr; ///< Incremented per failure (must be non-null).
+		std::atomic<std::size_t>* completedBytes = nullptr; ///< Incremented by bytes processed (may be null).
+		std::atomic<std::size_t>* completedTasks = nullptr; ///< Incremented per success or skip (must be non-null).
+		std::atomic<std::size_t>* failedTasks    = nullptr; ///< Incremented per failure (must be non-null).
 
 		// Optional output collection
 		std::vector<std::string>* successfulOutputPaths = nullptr; ///< Optional sink for produced ISO paths.
@@ -93,7 +92,7 @@ namespace {
 		std::vector<std::string> localSuccessMsgs; ///< Buffered success lines awaiting flush.
 		std::vector<std::string> localFailedMsgs;  ///< Buffered failure lines awaiting flush.
 		std::vector<std::string> localSkippedMsgs; ///< Buffered skip lines awaiting flush.
-		size_t batchSize = 50;                     ///< Flush threshold per message class.
+		std::size_t batchSize = 50;                     ///< Flush threshold per message class.
 
 		/**
 		 * @brief Flushes all buffered messages into the shared verbose sets.
@@ -229,14 +228,14 @@ namespace {
 	 */
 	std::string_view getFileType(std::string_view fileNameOnly) {
 
-		const size_t dotPos = fileNameOnly.find_last_of('.');
+		const std::size_t dotPos = fileNameOnly.find_last_of('.');
 		if (dotPos == std::string_view::npos) return "Image";
 
 		std::string_view ext = fileNameOnly.substr(dotPos + 1);
 		auto iequal = [](std::string_view a, const char* b) {
 
 			if (a.size() != std::strlen(b)) return false;
-			for (size_t i = 0; i < a.size(); ++i)
+			for (std::size_t i = 0; i < a.size(); ++i)
 			    if (std::tolower(static_cast<unsigned char>(a[i])) != b[i]) return false;
 			return true;
 
@@ -297,8 +296,8 @@ namespace {
 	 */
 	std::string deriveOutputPath(const std::string& inputPath) {
 
-		const size_t dotPos = inputPath.find_last_of('.');
-		const size_t baseLen = (dotPos != std::string::npos) ? dotPos : inputPath.size();
+		const std::size_t dotPos = inputPath.find_last_of('.');
+		const std::size_t baseLen = (dotPos != std::string::npos) ? dotPos : inputPath.size();
 		std::string outputPath;
 		outputPath.reserve(baseLen + 4);
 		outputPath.assign(inputPath, 0, baseLen);

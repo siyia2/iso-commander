@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <signal.h>
 #include <unistd.h>
@@ -45,7 +43,7 @@ namespace MappingPrompt {
 	 */
 	struct DeviceInfo {
 		std::string path;     ///< Device node path (e.g., /dev/sdb).
-		uint64_t size;        ///< Total storage capacity in bytes.
+		std::uint64_t size;        ///< Total storage capacity in bytes.
 		std::string driveName;///< Vendor or model drive name.
 		std::string sizeStr;  ///< Human-readable formatted file size string.
 		bool mounted;         ///< True if the device currently has active mounts.
@@ -129,7 +127,7 @@ namespace MappingPrompt {
 		for (const auto& device : usbDevices) {
 			try {
 				std::string driveName = getDriveName(device);
-				uint64_t deviceSize = getBlockDeviceSize(device);
+				std::uint64_t deviceSize = getBlockDeviceSize(device);
 				std::string sizeStr = formatFileSize(deviceSize);
 				bool mounted = isDeviceMounted(device);
 				deviceInfos.push_back({device, deviceSize, driveName, sizeStr, mounted, false});
@@ -174,7 +172,7 @@ namespace MappingPrompt {
 		std::ostringstream stream;
 		stream << "\n" << color << "Selected " << wt.fileCol << "ISO" << color << ":\n\n";
 
-		for (size_t i = 0; i < sortedIsos.size(); ++i) {
+		for (std::size_t i = 0; i < sortedIsos.size(); ++i) {
 			auto [isoDir, filename] = extractDirectoryAndFilename(sortedIsos[i].path, "write2usb");
 			stream << wt.indexCol << " " << (i + 1) << ">" << " ";
 			if (!displayConfig::toggleNamesOnly) {
@@ -252,8 +250,8 @@ namespace MappingPrompt {
 	 * @param wt The active write theme configuration.
 	 * @return std::vector<size_t> Calculated character widths per rendered line for window resizing hooks.
 	 */
-	std::vector<size_t> renderConfirmRows(
-	    size_t cols,
+	std::vector<std::size_t> renderConfirmRows(
+	    std::size_t cols,
 	    bool clearFirst,
 	    const std::string& devicePrompt,
 	    const std::string& mainInputString,
@@ -261,8 +259,8 @@ namespace MappingPrompt {
 	    const WriteTheme& wt
 	) {
 
-		const size_t usableCols = cols > 1 ? cols - 1 : 1;
-		std::vector<size_t> widths;
+		const std::size_t usableCols = cols > 1 ? cols - 1 : 1;
+		std::vector<std::size_t> widths;
 
 		if (clearFirst) {
 			std::cout << "\033[H\033[2J\033[3J";
@@ -282,9 +280,9 @@ namespace MappingPrompt {
 		widths.push_back(0);
 		rl_bind_keyseq("?", rl_insert);
 		for (const auto& r : warnRows) {
-			const size_t fixedWidth = 17 + r.device.size() + utf8Width(r.driveName)
+			const std::size_t fixedWidth = 17 + r.device.size() + utf8Width(r.driveName)
 			                        + utf8Width(r.deviceSizeStr) + utf8Width(r.isoSizeStr);
-			const size_t availForName = usableCols > fixedWidth ? usableCols - fixedWidth : 0;
+			const std::size_t availForName = usableCols > fixedWidth ? usableCols - fixedWidth : 0;
 			const std::string shownName = truncateIsoName(r.filename, availForName);
 
 			std::ostringstream row;
@@ -351,8 +349,8 @@ namespace MappingPrompt {
 	    std::string_view color)
 	{
 
-		const size_t drawnCols = terminalSize().cols;
-		std::vector<size_t> drawnWidths;
+		const std::size_t drawnCols = terminalSize().cols;
+		std::vector<std::size_t> drawnWidths;
 
 		{
 			SyncOutput sync;
@@ -375,7 +373,7 @@ namespace MappingPrompt {
 		{
 			ConfirmationModeGuard confirmGuard;
 			ConfirmResizeWatcher watcher(
-			    [&](size_t cols) {
+			    [&](std::size_t cols) {
 
 					return renderConfirmRows(
 					    cols, true,

@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-module;
-
-#include <stdint.h>
-
 export module isocmd.threadpool.threadpool;
 
 import std;
@@ -127,12 +123,12 @@ class ThreadPool {
 private:
 	const std::size_t num_threads;
 
-	alignas(64) std::atomic<uint64_t> task_state{0};
+	alignas(64) std::atomic<std::uint64_t> task_state{0};
 
-	static constexpr uint64_t PENDING_ONE = uint64_t(1) << 32;
-	static constexpr uint64_t ACTIVE_ONE  = uint64_t(1);
-	static constexpr uint64_t STOP_BIT    = uint64_t(1) << 31;
-	static constexpr uint64_t ACTIVE_MASK = STOP_BIT - 1;
+	static constexpr std::uint64_t PENDING_ONE = std::uint64_t(1) << 32;
+	static constexpr std::uint64_t ACTIVE_ONE  = std::uint64_t(1);
+	static constexpr std::uint64_t STOP_BIT    = std::uint64_t(1) << 31;
+	static constexpr std::uint64_t ACTIVE_MASK = STOP_BIT - 1;
 
 	std::vector<std::thread> workers;
 	/**
@@ -156,21 +152,21 @@ private:
 	};
 
 	TaskQueue task_queue;
-	alignas(64) std::atomic<uint64_t> global_waiters{0};
+	alignas(64) std::atomic<std::uint64_t> global_waiters{0};
 
-	static uint32_t pendingFromState(uint64_t s) noexcept {
+	static std::uint32_t pendingFromState(std::uint64_t s) noexcept {
 
-		return static_cast<uint32_t>(s >> 32);
-
-	}
-
-	static uint32_t activeFromState(uint64_t s) noexcept {
-
-		return static_cast<uint32_t>(s & ACTIVE_MASK);
+		return static_cast<std::uint32_t>(s >> 32);
 
 	}
 
-	static bool stopFromState(uint64_t s) noexcept {
+	static std::uint32_t activeFromState(std::uint64_t s) noexcept {
+
+		return static_cast<std::uint32_t>(s & ACTIVE_MASK);
+
+	}
+
+	static bool stopFromState(std::uint64_t s) noexcept {
 
 		return (s & STOP_BIT) != 0;
 
@@ -266,7 +262,7 @@ public:
 
 	bool isIdle() const {
 
-		uint64_t s = task_state.load(std::memory_order_acquire);
+		std::uint64_t s = task_state.load(std::memory_order_acquire);
 		return pendingFromState(s) == 0 && activeFromState(s) == 0;
 
 	}
@@ -277,13 +273,13 @@ public:
 
 	}
 
-	uint64_t pendingCount() const {
+	std::uint64_t pendingCount() const {
 
 		return pendingFromState(task_state.load(std::memory_order_acquire));
 
 	}
 
-	uint64_t activeCount() const {
+	std::uint64_t activeCount() const {
 
 		return activeFromState(task_state.load(std::memory_order_acquire));
 

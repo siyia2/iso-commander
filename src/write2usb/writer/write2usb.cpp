@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -31,10 +29,10 @@ namespace {
 	namespace io {
 
 		/// Target size of each I/O buffer (rounded down to a sector multiple at use).
-		constexpr size_t kDesiredBuffer  = 4 * 1024 * 1024;
+		constexpr std::size_t kDesiredBuffer  = 4 * 1024 * 1024;
 
 		/// Upper bound for a single device write(); keeps progress/cancel granularity fine.
-		constexpr size_t kMaxWriteChunk  = 4 * 1024 * 1024;
+		constexpr std::size_t kMaxWriteChunk  = 4 * 1024 * 1024;
 
 		/// Number of circulating buffers (double buffering).
 		constexpr int    kNumBuffers     = 2;
@@ -113,10 +111,10 @@ namespace {
 		 * @param bufferSize Size of every buffer, in bytes (multiple of sectorSize).
 		 * @return true if all buffers were allocated; false on the first failure.
 		 */
-		bool allocateAlignedBuffers(IsoBufferPool& out, int sectorSize, size_t bufferSize) {
+		bool allocateAlignedBuffers(IsoBufferPool& out, int sectorSize, std::size_t bufferSize) {
 
 			for (int i = 0; i < kNumBuffers; ++i) {
-				auto buf = std::make_unique<AlignedBuffer>(bufferSize, static_cast<size_t>(sectorSize));
+				auto buf = std::make_unique<AlignedBuffer>(bufferSize, static_cast<std::size_t>(sectorSize));
 				if (!buf->ok())
 				    return false;
 				out.push_back(std::move(buf));
@@ -166,7 +164,7 @@ namespace {
 		 * @param index        Slot belonging to this operation.
 		 * @return Always false, so callers can write `return markFailed(...)`.
 		 */
-		bool markFailed(std::vector<ProgressInfo>& progressData, size_t index) {
+		bool markFailed(std::vector<ProgressInfo>& progressData, std::size_t index) {
 
 			progressData[index].failed.store(true);
 			return false;
@@ -203,10 +201,10 @@ namespace {
 			 * @param progressData  Progress array shared with the UI.
 			 * @param progressIndex Slot of this operation in @p progressData.
 			 */
-			IsoStreamer(int isoFd, int devFd, uint64_t fileSize, uint64_t paddedSize,
-			            size_t bufferSize, size_t writeChunk, size_t sectorSize,
+			IsoStreamer(int isoFd, int devFd, std::uint64_t fileSize, std::uint64_t paddedSize,
+			            std::size_t bufferSize, std::size_t writeChunk, std::size_t sectorSize,
 			            IsoBufferPool& buffers,
-			            std::vector<ProgressInfo>& progressData, size_t progressIndex)
+			            std::vector<ProgressInfo>& progressData, std::size_t progressIndex)
 			    : isoFd_(isoFd), devFd_(devFd), fileSize_(fileSize), paddedSize_(paddedSize),
 			      bufferSize_(bufferSize), writeChunk_(writeChunk), sectorSize_(sectorSize),
 			      progressData_(progressData), progressIndex_(progressIndex),
@@ -266,7 +264,7 @@ namespace {
 			/// A buffer handed between the reader and the writer.
 			struct Chunk {
 				char*  buf;   ///< Aligned buffer start.
-				size_t len;   ///< Valid bytes; 0 == end-of-stream sentinel.
+				std::size_t len;   ///< Valid bytes; 0 == end-of-stream sentinel.
 			};
 
 			/**
@@ -376,7 +374,7 @@ namespace {
 				info.bytesWritten.store(directBytesWritten_.load());
 				if (verify_) {
 					usb_verify::ReadbackProgress readback(info, paddedSize_);
-					uint64_t actual = 0;
+					std::uint64_t actual = 0;
 					if (lseek(devFd_, 0, SEEK_SET) != 0 ||
 					    !usb_verify::readChecksum(devFd_, paddedSize_, verifyBuffer_, bufferSize_,
 					                              sectorSize_, readback, actual) || actual != checksum_.value) {
@@ -427,7 +425,7 @@ namespace {
 			 *
 			 * @param currentWritten Cumulative bytes written, excluding tail padding.
 			 */
-			void publishProgress(uint64_t currentWritten) {
+			void publishProgress(std::uint64_t currentWritten) {
 
 				auto& info = progressData_[progressIndex_];
 				info.bytesWritten.store(currentWritten);
@@ -450,7 +448,7 @@ namespace {
 					if (!waitForTick()) break;
 
 					const auto now = Clock::now();
-					const uint64_t currentWritten = directBytesWritten_.load();
+					const std::uint64_t currentWritten = directBytesWritten_.load();
 
 					publishProgress(currentWritten);
 
@@ -539,7 +537,7 @@ namespace {
 			 * @param[out] reachedEof Set when read() returned 0.
 			 * @return false on a read error; true otherwise.
 			 */
-			bool readFully(char* buf, size_t toRead, size_t& got, bool& reachedEof) {
+			bool readFully(char* buf, std::size_t toRead, std::size_t& got, bool& reachedEof) {
 
 				got = 0;
 				reachedEof = false;
@@ -553,7 +551,7 @@ namespace {
 						reachedEof = true;
 						break;
 					}
-					got += static_cast<size_t>(r);
+					got += static_cast<std::size_t>(r);
 				}
 				return true;
 
@@ -573,16 +571,16 @@ namespace {
 			 */
 			void readerLoop() {
 
-				uint64_t readTotal = 0;
+				std::uint64_t readTotal = 0;
 
 				while (readTotal < paddedSize_ && !isCancelled()) {
 					Chunk c;
 					if (!acquireEmptyBuffer(c)) return;
 
-					const size_t toRead = static_cast<size_t>(
-					    std::min<uint64_t>(bufferSize_, paddedSize_ - readTotal));
+					const std::size_t toRead = static_cast<std::size_t>(
+					    std::min<std::uint64_t>(bufferSize_, paddedSize_ - readTotal));
 
-					size_t got = 0;
+					std::size_t got = 0;
 					bool reachedEof = false;
 
 					if (!readFully(c.buf, toRead, got, reachedEof)) {
@@ -656,14 +654,14 @@ namespace {
 			 *
 			 * @param written Newly covered bytes beyond the previous high-water mark.
 			 */
-			void recordWritten(size_t written) {
+			void recordWritten(std::size_t written) {
 
 				// Cap reported progress at the true file size to hide padding.
-				const uint64_t reportable = std::min<uint64_t>(
-				    static_cast<uint64_t>(written),
+				const std::uint64_t reportable = std::min<std::uint64_t>(
+				    static_cast<std::uint64_t>(written),
 				    fileSize_ - std::min(localBytesWritten_, fileSize_));
 
-				localBytesWritten_ += static_cast<uint64_t>(written);
+				localBytesWritten_ += static_cast<std::uint64_t>(written);
 				directBytesWritten_.fetch_add(reportable);
 
 			}
@@ -680,8 +678,8 @@ namespace {
 			 * @param restarts   Number of restarts for the current chunk.
 			 * @return false on I/O failure or cancellation.
 			 */
-			bool recoverWriteAlignment(uint64_t chunkStart,
-			                           size_t& done,
+			bool recoverWriteAlignment(std::uint64_t chunkStart,
+			                           std::size_t& done,
 			                           unsigned& restarts) {
 
 				if (isCancelled()) {
@@ -735,14 +733,14 @@ namespace {
 			 */
 			bool writeBuffer(const Chunk& c) {
 
-				size_t offset = 0;
+				std::size_t offset = 0;
 
 				while (offset < c.len) {
-					const size_t len = std::min(c.len - offset, writeChunk_);
-					const uint64_t chunkStart = localBytesWritten_;
+					const std::size_t len = std::min(c.len - offset, writeChunk_);
+					const std::uint64_t chunkStart = localBytesWritten_;
 
-					size_t done = 0;
-					size_t highWater = 0;
+					std::size_t done = 0;
+					std::size_t highWater = 0;
 					unsigned restarts = 0;
 
 					while (done < len) {
@@ -757,12 +755,12 @@ namespace {
 						if (written < 0 && errno == EINTR)
 						    continue;
 
-						if (written <= 0 || static_cast<size_t>(written) > len - done) {
+						if (written <= 0 || static_cast<std::size_t>(written) > len - done) {
 							ioFailed_ = true;
 							return false;
 						}
 
-						done += static_cast<size_t>(written);
+						done += static_cast<std::size_t>(written);
 
 						if (done > highWater) {
 							recordWritten(done - highWater);
@@ -806,14 +804,14 @@ namespace {
 
 			const int      isoFd_;
 			const int      devFd_;
-			const uint64_t fileSize_;
-			const uint64_t paddedSize_;
-			const size_t   bufferSize_;
-			const size_t   writeChunk_;
-			const size_t   sectorSize_;
+			const std::uint64_t fileSize_;
+			const std::uint64_t paddedSize_;
+			const std::size_t   bufferSize_;
+			const std::size_t   writeChunk_;
+			const std::size_t   sectorSize_;
 
 			std::vector<ProgressInfo>& progressData_;
-			const size_t               progressIndex_;
+			const std::size_t               progressIndex_;
 			const bool verify_;
 			char* const verifyBuffer_;
 			usb_verify::Checksum64 checksum_;
@@ -825,7 +823,7 @@ namespace {
 			bool                    stopReader_ = false;
 			bool                    readFailed_ = false;
 
-			std::atomic<uint64_t>   directBytesWritten_{0};
+			std::atomic<std::uint64_t>   directBytesWritten_{0};
 			std::atomic<bool>       monitoringActive_{true};
 			std::mutex              monMutex_;
 			std::condition_variable monCv_;
@@ -834,7 +832,7 @@ namespace {
 			std::thread       monitorThread_;
 			Clock::time_point startTime_;
 
-			uint64_t localBytesWritten_ = 0;
+			std::uint64_t localBytesWritten_ = 0;
 			bool     cancelled_         = false;
 			bool     ioFailed_          = false;
 		};
@@ -888,7 +886,7 @@ namespace {
  * @see iso_detect::isWindowsIsoInitialCheck
  * @see writeWindowsIsoToDevice
  */
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex, std::vector<ProgressInfo>& progressData) {
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, std::size_t progressIndex, std::vector<ProgressInfo>& progressData) {
 
 	const auto fail = [&] { return progress::markFailed(progressData, progressIndex); };
 
@@ -912,12 +910,12 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 	if (!io::queryEffectiveSectorSize(dev.fd, sectorSize))
 	    return fail();
 
-	const uint64_t fileSize = static_cast<uint64_t>(sb.st_size);
+	const std::uint64_t fileSize = static_cast<std::uint64_t>(sb.st_size);
 	if (fileSize == 0) return fail();
 
-	const uint64_t paddedSize = ((fileSize + sectorSize - 1) / sectorSize) * sectorSize;
+	const std::uint64_t paddedSize = ((fileSize + sectorSize - 1) / sectorSize) * sectorSize;
 
-	size_t bufferSize = (io::kDesiredBuffer / sectorSize) * sectorSize;
+	std::size_t bufferSize = (io::kDesiredBuffer / sectorSize) * sectorSize;
 	if (bufferSize == 0) bufferSize = sectorSize;
 
 	// Device writes are capped at 4 MiB and kept sector-aligned so the
@@ -927,15 +925,15 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, siz
 	// slow USB drive (< 10 MB/s) blocks for many seconds and makes the
 	// monitor's speed samples noisy. Must stay a multiple of sectorSize for
 	// O_DIRECT.
-	const size_t writeChunk = std::max<size_t>((io::kMaxWriteChunk / sectorSize) * sectorSize,
-	                                           static_cast<size_t>(sectorSize));
+	const std::size_t writeChunk = std::max<std::size_t>((io::kMaxWriteChunk / sectorSize) * sectorSize,
+	                                           static_cast<std::size_t>(sectorSize));
 
 	io::IsoBufferPool buffers;
 	if (!io::allocateAlignedBuffers(buffers, sectorSize, bufferSize))
 	    return fail();
 
 	stream::IsoStreamer streamer(iso.fd, dev.fd, fileSize, paddedSize, bufferSize, writeChunk,
-	                             static_cast<size_t>(sectorSize), buffers, progressData, progressIndex);
+	                             static_cast<std::size_t>(sectorSize), buffers, progressData, progressIndex);
 	return streamer.run();
 
 }

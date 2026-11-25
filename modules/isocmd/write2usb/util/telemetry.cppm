@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-module;
-#include <stdint.h>
-
 export module isocmd.write2usb.util.telemetry;
 import std;
 
@@ -49,14 +46,14 @@ export namespace write_telemetry {
 		 * @param now            Time of the observation.
 		 * @return Speed in MB/s to publish, or std::nullopt if nothing should change.
 		 */
-		std::optional<double> sample(uint64_t currentWritten, Clock::time_point now) {
+		std::optional<double> sample(std::uint64_t currentWritten, Clock::time_point now) {
 
 			const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
 			                           now - lastUpdate_).count();
 			if (elapsedMs < kMinUpdateIntervalMs)
 			    return std::nullopt;
 
-			const uint64_t delta = (currentWritten >= lastWritten_) ? (currentWritten - lastWritten_) : 0;
+			const std::uint64_t delta = (currentWritten >= lastWritten_) ? (currentWritten - lastWritten_) : 0;
 			return delta > 0 ? onProgress(currentWritten, delta, elapsedMs, now)
 			                 : onNoProgress(now);
 
@@ -86,7 +83,7 @@ export namespace write_telemetry {
 		 * @param now            Time of the observation.
 		 * @return The new smoothed speed in MB/s.
 		 */
-		double onProgress(uint64_t currentWritten, uint64_t delta, long long elapsedMs,
+		double onProgress(std::uint64_t currentWritten, std::uint64_t delta, long long elapsedMs,
 		                  Clock::time_point now) {
 
 			stalled_ = false;
@@ -144,14 +141,14 @@ export namespace write_telemetry {
 
 		Clock::time_point lastUpdate_;
 		Clock::time_point stallStart_;
-		uint64_t lastWritten_  = 0;
+		std::uint64_t lastWritten_  = 0;
 		double   smoothed_     = 0.0;
 		bool     haveEstimate_ = false;
 		bool     stalled_      = false;
 	};
 
 	// The writers reserve 100% for successful completion after flushing.
-	inline int transferPercent(uint64_t written, uint64_t total) {
+	inline int transferPercent(std::uint64_t written, std::uint64_t total) {
 
 		return static_cast<int>(std::min(99.0, (static_cast<double>(written) / total) * 100.0));
 

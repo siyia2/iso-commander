@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-module;
-
-#include <stddef.h>
-
 export module isocmd.core.caches;
 
 import std;
@@ -18,13 +14,13 @@ export extern "C++" {
 struct StringViewHash {
 	using is_transparent = void;
 
-	size_t operator()(std::string_view sv) const {
+	std::size_t operator()(std::string_view sv) const {
 
 		return std::hash<std::string_view>{}(sv);
 
 	}
 
-	size_t operator()(const std::string& s) const {
+	std::size_t operator()(const std::string& s) const {
 
 		return std::hash<std::string>{}(s);
 

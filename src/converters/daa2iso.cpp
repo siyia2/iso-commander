@@ -43,12 +43,7 @@
 
 // ___________________________________________________________________________
 
-#include <stddef.h>
-#include <ctype.h>
-#include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 import std;
 import isocmd.converters.daa2iso;
@@ -64,22 +59,22 @@ namespace fs = std::filesystem;
 #define SZ_OK           0
 #define SZ_ERROR_DATA   1
 
-typedef size_t SizeT;
+typedef std::size_t SizeT;
 typedef int    SRes;
 
-typedef void *(*ISzAlloc_Alloc)(void *, size_t);
+typedef void *(*ISzAlloc_Alloc)(void *, std::size_t);
 typedef void  (*ISzAlloc_Free) (void *, void *);
 struct ISzAlloc { ISzAlloc_Alloc Alloc; ISzAlloc_Free Free; };
 
-static void *SzAlloc(void *, size_t sz) {
+static void *SzAlloc(void *, std::size_t sz) {
 
-	return malloc(sz);
+	return std::malloc(sz);
 
 }
 
 static void  SzFree (void *, void *p) {
 
-	free(p);
+	std::free(p);
 
 }
 
@@ -89,7 +84,7 @@ static ISzAlloc g_Alloc = { SzAlloc, SzFree };
 #define kBitModelTotal        (1 << kNumBitModelTotalBits)
 #define kNumMoveBits          5
 
-typedef uint16_t CLzmaProb;
+typedef std::uint16_t CLzmaProb;
 
 struct CLzmaDec {
 	CLzmaProb  *probs;
@@ -276,7 +271,7 @@ static u32 lzma_decode_len(CLzmaDec *p, CLzmaProb *prob, u32 posState) {
 
 }
 
-static size_t lzma_decode_distance(CLzmaDec *p, CLzmaProb *probs, int len) {
+static std::size_t lzma_decode_distance(CLzmaDec *p, CLzmaProb *probs, int len) {
 
 	u32 posSlot;
 	int numDirectBits;
@@ -338,7 +333,7 @@ static size_t lzma_decode_distance(CLzmaDec *p, CLzmaProb *probs, int len) {
 			distance |= sym2 & 0xF;
 		}
 	}
-	return (size_t)distance + 1;
+	return (std::size_t)distance + 1;
 
 }
 
@@ -350,9 +345,9 @@ typedef enum {
 
 typedef struct {
 	unsigned state;
-	size_t   rep0, rep1, rep2, rep3;
+	std::size_t   rep0, rep1, rep2, rep3;
 	int      len;
-	size_t   result;
+	std::size_t   result;
 } LzmaVars;
 
 /* Decode one adaptive bit (the update / normalize pattern repeated everywhere). */
@@ -376,14 +371,14 @@ static unsigned lzma_decode_bit(CLzmaDec *p, CLzmaProb *prob) {
 }
 
 /* Position in the dictionary that is `rep0` bytes behind the write position. */
-static size_t lzma_dic_src(const CLzmaDec *p, size_t rep0) {
+static std::size_t lzma_dic_src(const CLzmaDec *p, std::size_t rep0) {
 
 	return (p->dicPos >= rep0) ? (p->dicPos - rep0)
 	                           : (p->dicPos + p->dicBufSize - rep0);
 
 }
 
-static void lzma_init(CLzmaDec *p, const u8 *in, u8 *out, size_t outsz) {
+static void lzma_init(CLzmaDec *p, const u8 *in, u8 *out, std::size_t outsz) {
 
 	// Basic Initialization
 	p->dic         = out;
@@ -472,7 +467,7 @@ static LzmaStep lzma_step_short_rep(CLzmaDec *p, LzmaVars *v) {
 		v->result = 0;
 		return LZMA_STEP_DONE;
 	}
-	size_t srcPos = lzma_dic_src(p, v->rep0);
+	std::size_t srcPos = lzma_dic_src(p, v->rep0);
 	if (p->dicPos >= p->dicBufSize) {
 		v->result = p->dicPos;
 		return LZMA_STEP_DONE;
@@ -487,7 +482,7 @@ static LzmaStep lzma_step_short_rep(CLzmaDec *p, LzmaVars *v) {
 /* IsRepG0 == 1: choose rep1 / rep2 / rep3 and rotate the rep history. */
 static void lzma_select_rep_distance(CLzmaDec *p, CLzmaProb *probs, LzmaVars *v) {
 
-	size_t distance;
+	std::size_t distance;
 
 	if (lzma_decode_bit(p, probs + IsRepG1 + v->state) == 0) {
 		distance = v->rep1;
@@ -523,13 +518,13 @@ static LzmaStep lzma_step_rep_match(CLzmaDec *p, CLzmaProb *probs, LzmaVars *v, 
 }
 
 /* Copies the match; returns 0 if the distance is invalid. */
-static int lzma_copy_match(CLzmaDec *p, size_t rep0, int len) {
+static int lzma_copy_match(CLzmaDec *p, std::size_t rep0, int len) {
 
 	// FINAL MATCH COPY
 	if (rep0 > p->dicPos + p->checkDicSize) return 0;
 	while (len--) {
 		if (p->dicPos >= p->dicBufSize) break;
-		size_t srcPos = lzma_dic_src(p, rep0);
+		std::size_t srcPos = lzma_dic_src(p, rep0);
 		p->dic[p->dicPos++] = p->dic[srcPos];
 		p->processedPos++;
 	}
@@ -537,7 +532,7 @@ static int lzma_copy_match(CLzmaDec *p, size_t rep0, int len) {
 
 }
 
-static size_t lzma_decode_full(CLzmaDec *p, const u8 *in, size_t insz, u8 *out, size_t outsz) {
+static std::size_t lzma_decode_full(CLzmaDec *p, const u8 *in, std::size_t insz, u8 *out, std::size_t outsz) {
 
 	lzma_init(p, in, out, outsz);
 	(void)insz;
@@ -548,7 +543,7 @@ static size_t lzma_decode_full(CLzmaDec *p, const u8 *in, size_t insz, u8 *out, 
 	for (;;) {
 		if (p->dicPos >= p->dicBufSize) return p->dicPos;
 
-		u32 posState = (u32)((size_t)p->dicPos & ((1 << p->pb) - 1));
+		u32 posState = (u32)((std::size_t)p->dicPos & ((1 << p->pb) - 1));
 		CLzmaProb *prob = probs + IsMatch + (v.state << kNumPosBitsMax) + posState;
 
 		LzmaStep step;
@@ -589,10 +584,10 @@ struct TINF_DATA {
 	unsigned int   tag;
 	unsigned int   bitcount;
 	u8            *dest;
-	size_t        *destLen;     // Changed to size_t
-	size_t         sourceLen;   // Changed to size_t
-	size_t         sourceSize;  // Changed to size_t
-	size_t         destSize;    // Changed to size_t
+	std::size_t        *destLen;     // Changed to size_t
+	std::size_t         sourceLen;   // Changed to size_t
+	std::size_t         sourceSize;  // Changed to size_t
+	std::size_t         destSize;    // Changed to size_t
 	TINF_TREE      ltree;
 	TINF_TREE      dtree;
 };
@@ -767,8 +762,8 @@ static int tinf_inflate_uncompressed_block(TINF_DATA *d) {
 }
 
 static int tinf_uncompress(TinfTables &tt,
-                            void *dest, size_t *destLen, // Changed to size_t
-                            const void *source, size_t sourceLen, // Changed to size_t
+                            void *dest, std::size_t *destLen, // Changed to size_t
+                            const void *source, std::size_t sourceLen, // Changed to size_t
                             const unsigned swapped_btype[3]) {
 
 	TINF_DATA d;
@@ -891,12 +886,12 @@ static unsigned daa2iso_read_bits(unsigned bits, const u8 *in, unsigned in_bits,
 
 static u8 *find_ext(u8 *fname, const char *ext) {
 
-	int len    = strlen((char*)fname);
-	int extlen = strlen(ext);
+	int len    = std::strlen((char*)fname);
+	int extlen = std::strlen(ext);
 	u8 *ret    = fname + len - extlen;
 	if (len >= extlen) {
 		for (int i = 0; i < extlen; i++)
-		    if (tolower(ret[i]) != tolower((unsigned char)ext[i])) return nullptr;
+		    if (std::tolower(ret[i]) != std::tolower((unsigned char)ext[i])) return nullptr;
 		return ret;
 	}
 	return nullptr;
@@ -934,15 +929,15 @@ struct DaaContext {
 	// Per-instance bit-reader counter (was static global — race condition fix)
 	int         powerisuxn     = 0;
 
-	std::atomic<size_t> *completedBytes = nullptr;
+	std::atomic<std::size_t> *completedBytes = nullptr;
 
 	~DaaContext() {
 
 		if (fdi) { fclose(fdi); fdi = nullptr; }
 		if (fdo) { fclose(fdo); fdo = nullptr; }
-		if (in) { free(in); in = nullptr; }
-		if (out_buf) { free(out_buf); out_buf = nullptr; }
-		if (multi_filename) { free(multi_filename); multi_filename = nullptr; }
+		if (in) { std::free(in); in = nullptr; }
+		if (out_buf) { std::free(out_buf); out_buf = nullptr; }
+		if (multi_filename) { std::free(multi_filename); multi_filename = nullptr; }
 
 		// Safety check for parallel threads
 		if (lzma.probs != nullptr) {
@@ -965,7 +960,7 @@ static FILE *ctx_next_volume(DaaContext &ctx) {
 	if (!ctx.multi_filename)
 	    throw DaaError("multi_filename not initialised");
 
-	char *toadd = ctx.multi_filename + strlen(ctx.multi_filename);
+	char *toadd = ctx.multi_filename + std::strlen(ctx.multi_filename);
 	int written = snprintf(toadd, 32, fmts[ctx.multi - 1], ctx.multinum);
 	if (written < 0 || written >= 32)
 	    throw DaaError("volume filename overflow");
@@ -978,7 +973,7 @@ static FILE *ctx_next_volume(DaaContext &ctx) {
 		fclose(fd); throw DaaError("volume header read error");
 	}
 	swap_daa_if_be(&daa, ctx.endian);
-	if (strncmp((char*)daa.sign,"DAA VOL",16) && strncmp((char*)daa.sign,"GBI VOL",16)) {
+	if (std::strncmp((char*)daa.sign,"DAA VOL",16) && std::strncmp((char*)daa.sign,"GBI VOL",16)) {
 		fclose(fd); throw DaaError("wrong DAA VOL signature");
 	}
 	if (fseek(fd, daa.size_offset, SEEK_SET)) {
@@ -1008,10 +1003,10 @@ static void ctx_alloc(u8 **data, unsigned wantsize, unsigned *currsize) {
 	unsigned actual_wantsize = wantsize + 16;
 	if (actual_wantsize <= *currsize && *data) return;
 
-	u8 *tmp = (u8*)realloc(*data, actual_wantsize);
+	u8 *tmp = (u8*)std::realloc(*data, actual_wantsize);
 	if (!tmp) throw DaaError("out of memory");
 
-	memset(tmp + wantsize, 0, 16);
+	std::memset(tmp + wantsize, 0, 16);
 	*data = tmp;
 	*currsize = actual_wantsize;
 
@@ -1038,12 +1033,12 @@ static bool daa_fail(DaaContext &ctx) {
  */
 static void validateDaaHeader(const daa_t &daa, DaaContext &ctx) {
 
-	if (!strncmp((char*)daa.sign, "DAA", 16) || !strncmp((char*)daa.sign, "\xb8\xbd\xb6", 3))
+	if (!std::strncmp((char*)daa.sign, "DAA", 16) || !std::strncmp((char*)daa.sign, "\xb8\xbd\xb6", 3))
 	    ctx.daagbi = TYPE_DAA;
-	else if (!strncmp((char*)daa.sign, "GBI", 16))
+	else if (!std::strncmp((char*)daa.sign, "GBI", 16))
 	    ctx.daagbi = TYPE_GBI;
 	else {
-		if (!strncmp((char*)daa.sign, "DAA VOL", 16) || !strncmp((char*)daa.sign, "GBI VOL", 16))
+		if (!std::strncmp((char*)daa.sign, "DAA VOL", 16) || !std::strncmp((char*)daa.sign, "GBI VOL", 16))
 		    throw DaaError("must choose the first DAA file, not a volume");
 		throw DaaError("unknown DAA signature");
 	}
@@ -1097,7 +1092,7 @@ static void* setupVersionData(DaaContext &ctx, daa_t &daa, VersionLayout &out) {
 
 	if (daa.version == 0x100) {
 		out.daas_mem = daa.data_offset - daa.size_offset;
-		daa_data_t *daa_data = (daa_data_t*)malloc(out.daas_mem + 16);
+		daa_data_t *daa_data = (daa_data_t*)std::malloc(out.daas_mem + 16);
 		if (!daa_data) throw DaaError("out of memory (daa_data)");
 		out.daas = out.daas_mem / 3;
 		setupBtype(ctx, ver110_btype);
@@ -1126,9 +1121,9 @@ static void* setupVersionData(DaaContext &ctx, daa_t &daa, VersionLayout &out) {
 			swap32_if_be(&out.daa_dataz, ctx.endian);
 		}
 
-		daa_data_t *daa_data = (daa_data_t*)malloc(out.daas_mem + 16);
+		daa_data_t *daa_data = (daa_data_t*)std::malloc(out.daas_mem + 16);
 		if (!daa_data) throw DaaError("out of memory (daa_data v110)");
-		memset(daa_data, 0, out.daas_mem + 16);
+		std::memset(daa_data, 0, out.daas_mem + 16);
 
 		out.dolamebits = (ver110_y & 0x20000) ? 1 : 0;
 		out.dolame     = (ver110_y & 0x8000000) ? 1 : 0;
@@ -1183,16 +1178,16 @@ static void setupMultiPartFiles(DaaContext &ctx, const std::string &inputFile, c
 	if (ctx.multi || (tot != daa.daasize)) {
 		u8 *p;
 		const char *fi = inputFile.c_str();
-		if      (find_ext((u8*)fi,"001.daa")) { ctx.multi=1; ctx.multinum=2; p=(u8*)fi+strlen(fi)-7; }
-		else if (find_ext((u8*)fi,"01.daa"))  { ctx.multi=2; ctx.multinum=2; p=(u8*)fi+strlen(fi)-6; }
+		if      (find_ext((u8*)fi,"001.daa")) { ctx.multi=1; ctx.multinum=2; p=(u8*)fi+std::strlen(fi)-7; }
+		else if (find_ext((u8*)fi,"01.daa"))  { ctx.multi=2; ctx.multinum=2; p=(u8*)fi+std::strlen(fi)-6; }
 		else {
 			ctx.multi=3; ctx.multinum=0;
-			p=(u8*)strrchr(fi,'.');
-			if (!p) p=(u8*)fi+strlen(fi);
+			p=(u8*)std::strrchr(fi,'.');
+			if (!p) p=(u8*)fi+std::strlen(fi);
 		}
-		size_t plen = (u8*)p - (u8*)fi;
-		ctx.multi_filename = (char*)malloc(plen + 32);
-		memcpy(ctx.multi_filename, fi, plen);
+		std::size_t plen = (u8*)p - (u8*)fi;
+		ctx.multi_filename = (char*)std::malloc(plen + 32);
+		std::memcpy(ctx.multi_filename, fi, plen);
 		ctx.multi_filename[plen] = '\0';
 	}
 
@@ -1215,7 +1210,7 @@ static void readAndDecompressIndexTable(DaaContext &ctx, void *daa_data, u32 daa
 	if (daa_dataz) {
 		ctx_alloc(&ctx.in, daa_dataz, &ctx.insz);
 		ctx_read(ctx, ctx.in, daa_dataz);
-		size_t destLen = daas_mem;
+		std::size_t destLen = daas_mem;
 		if (tinf_uncompress(ctx.tinf, (u8*)daa_data, &destLen, ctx.in, daa_dataz, ctx.swapped_btype) != TINF_OK)
 		    throw DaaError("failed to decompress index table");
 		u32 bits_per_entry = (u32)(bittype + bitsize);
@@ -1320,7 +1315,7 @@ static u32 decompressChunk(DaaContext &ctx, u32 chunksize, u32 in_len,
 
 	if (ztype == -1) {
 		const u32 outlen = (in_len < chunksize) ? in_len : chunksize;
-		memcpy(ctx.out_buf, ctx.in, outlen);
+		std::memcpy(ctx.out_buf, ctx.in, outlen);
 		return outlen;
 	}
 
@@ -1338,7 +1333,7 @@ static u32 decompressChunk(DaaContext &ctx, u32 chunksize, u32 in_len,
 	}
 
 	if (ztype == 1) {
-		size_t destLen = ctx.outsz;
+		std::size_t destLen = ctx.outsz;
 		if (tinf_uncompress(ctx.tinf, ctx.out_buf, &destLen, ctx.in, in_len,
 		                    ctx.swapped_btype) != TINF_OK) {
 			throw DaaError("INFLATE decompression failed");
@@ -1452,7 +1447,7 @@ static bool processAllChunks(DaaContext &ctx, const daa_t &daa, void *daa_data,
 
 	for (u32 i = 0; i < daas; i++) {
 		if (GlobalState::g_operationCancelled.load()) {
-			free(daa_data);
+			std::free(daa_data);
 			return false;  // silent cancel, no exception
 		}
 
@@ -1513,7 +1508,7 @@ static bool processAllChunks(DaaContext &ctx, const daa_t &daa, void *daa_data,
  */
 bool convertDaaToIso(const std::string &inputFile,
                      const std::string &outputFile,
-                     std::atomic<size_t> *completedBytes)
+                     std::atomic<std::size_t> *completedBytes)
 {
 
 	if (GlobalState::g_operationCancelled.load()) return false;
@@ -1564,7 +1559,7 @@ bool convertDaaToIso(const std::string &inputFile,
 			return daa_fail(ctx);
 		}
 
-		free(daa_data);
+		std::free(daa_data);
 		fclose(ctx.fdo); ctx.fdo = nullptr;
 		fclose(ctx.fdi); ctx.fdi = nullptr;
 		return true;

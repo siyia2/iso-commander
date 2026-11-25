@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-
 import std;
 
 // Third-Party Library Headers
@@ -39,7 +37,7 @@ namespace {
 	 * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
 	 * @return true if the command was a pagination command and successfully handled; false otherwise.
 	 */
-	bool handlePaginationCommand(const std::string& command, size_t totalPages, size_t& currentPage, bool& needsClrScrn) {
+	bool handlePaginationCommand(const std::string& command, std::size_t totalPages, std::size_t& currentPage, bool& needsClrScrn) {
 
 		if (command == "PgDn") {
 			if (totalPages > 0 && currentPage < totalPages - 1)
@@ -66,7 +64,7 @@ namespace {
 	 * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
 	 * @return true if the command matched the go-to pattern and was handled; false otherwise.
 	 */
-	bool handleGoToCommand(const std::string& command, size_t totalPages, size_t& currentPage, bool& needsClrScrn) {
+	bool handleGoToCommand(const std::string& command, std::size_t totalPages, std::size_t& currentPage, bool& needsClrScrn) {
 
 		if (command.size() >= 2 && command[0] == 'g' && std::isdigit(command[1])) {
 			try {
@@ -173,7 +171,7 @@ namespace {
  * @return true if the command was handled (caller should usually continue the loop);
  *         false if it was not recognized.
  */
-bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPages, size_t& currentPage,
+bool processPaginationHelpAndDisplay(const std::string& command, std::size_t& totalPages, std::size_t& currentPage,
                                      bool& isFiltered, bool& needsClrScrn, const std::string& operation,
                                      bool& need2Sort, std::atomic<bool>* isAtISOList,
                                      std::vector<std::string>& filteredFiles) {
@@ -230,15 +228,15 @@ bool processPaginationHelpAndDisplay(const std::string& command, size_t& totalPa
  * @param withErrors          True to display error messages before the list, false otherwise.
  */
 static void drawPaginatedPage(const std::vector<std::string>& entries,
-                       size_t currentPage,
+                       std::size_t currentPage,
                        bool disablePagination,
-                       size_t totalPages,
+                       std::size_t totalPages,
                        const PrintListTheme& c,
                        bool withErrors) {
 
-	const size_t totalEntries = entries.size();
-	const size_t start = disablePagination ? 0 : (currentPage * GlobalState::ITEMS_PER_PAGE);
-	const size_t end = disablePagination ? totalEntries : std::min(start + GlobalState::ITEMS_PER_PAGE, totalEntries);
+	const std::size_t totalEntries = entries.size();
+	const std::size_t start = disablePagination ? 0 : (currentPage * GlobalState::ITEMS_PER_PAGE);
+	const std::size_t end = disablePagination ? totalEntries : std::min(start + GlobalState::ITEMS_PER_PAGE, totalEntries);
 
 	SyncOutput sync;
 
@@ -261,7 +259,7 @@ static void drawPaginatedPage(const std::vector<std::string>& entries,
 	}
 
 	// 3. Entries, directly to stdout
-	for (size_t i = start; i < end; ++i) {
+	for (std::size_t i = start; i < end; ++i) {
 		std::cout << entries[i];
 	}
 
@@ -291,8 +289,8 @@ static void drawPaginatedPage(const std::vector<std::string>& entries,
  * @return false       If the input is not a recognized navigation command.
  */
 static bool handleNavigation(const std::string& userInput,
-                             size_t totalPages,
-                             size_t& currentPage,
+                             std::size_t totalPages,
+                             std::size_t& currentPage,
                              bool& isPageTurn) {
 
 	if (userInput.empty()) return false;
@@ -301,7 +299,7 @@ static bool handleNavigation(const std::string& userInput,
 	    userInput[0] == 'g' &&
 	    std::isdigit(static_cast<unsigned char>(userInput[1]))) {
 		try {
-			const size_t requestedPage = std::stoul(userInput.substr(1));
+			const std::size_t requestedPage = std::stoul(userInput.substr(1));
 
 			if (requestedPage >= 1 && requestedPage <= totalPages) {
 				currentPage = requestedPage - 1;
@@ -361,14 +359,14 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
                                    const std::string& promptSuffix,
                                    const std::function<void()>& setupEnvironmentFn,
                                    bool& isPageTurn,
-                                   size_t& currentPage,
+                                   std::size_t& currentPage,
                                    bool disableTabCompletion) {
 
 	const PrintListTheme c = getListColors();
 
 	bool disablePagination = (GlobalState::ITEMS_PER_PAGE <= 0 || entries.size() <= GlobalState::ITEMS_PER_PAGE);
-	size_t totalEntries = entries.size();
-	size_t totalPages = disablePagination ? 1 : ((totalEntries + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE);
+	std::size_t totalEntries = entries.size();
+	std::size_t totalPages = disablePagination ? 1 : ((totalEntries + GlobalState::ITEMS_PER_PAGE - 1) / GlobalState::ITEMS_PER_PAGE);
 
 	auto drawPage = [&](bool withErrors) {
 

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <stdio.h>
-#include <ctype.h>
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -122,7 +120,7 @@ static std::string validateLinuxPath(const std::string& path)
 	}
 
 	for (char c : path) {
-		if (iscntrl(static_cast<unsigned char>(c))) {
+		if (std::iscntrl(static_cast<unsigned char>(c))) {
 			return makeError(
 			    std::string(colors.error_label) +
 			    "Error: Control characters in path " +
@@ -1092,7 +1090,7 @@ RlStartupHookGuard::~RlStartupHookGuard() {
 BatchReporter::BatchReporter(std::unordered_set<std::string>& globalIsos,
               std::unordered_set<std::string>& globalErrors,
               std::mutex& mutex,
-              size_t batchSize) : globalIsos_(globalIsos), globalErrors_(globalErrors),
+              std::size_t batchSize) : globalIsos_(globalIsos), globalErrors_(globalErrors),
       mutex_(mutex), batchSize_(batchSize) {}
 
 void BatchReporter::addSuccess(std::string msg) {

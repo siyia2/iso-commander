@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-
 import std;
 import isocmd.app.main;
 import isocmd.core.lists;
@@ -172,7 +170,7 @@ namespace {
 	 *         immediately after the leading content (non-paginated); the
 	 *         caller must pass it to flushOutput().
 	 */
-	size_t appendHeader(std::string& output, bool disablePagination, std::size_t effectivePage, std::size_t totalPages,
+	std::size_t appendHeader(std::string& output, bool disablePagination, std::size_t effectivePage, std::size_t totalPages,
 	                    std::size_t startIndex, std::size_t endIndex, std::size_t totalItems, const PrintListTheme& c)
 	{
 

@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-module;
-
-#include <stddef.h>
-
 export module isocmd.write2usb.windows.windowsWriter;
 
 import std;
@@ -35,7 +31,7 @@ struct ProgressInfo;
  */
 bool writeWindowsIsoToDevice(const std::string& isoPath,
                              const std::string& device,
-                             size_t             progressIndex,
+                             std::size_t             progressIndex,
                              std::vector<ProgressInfo>& progressData);
 
 } // extern "C++"

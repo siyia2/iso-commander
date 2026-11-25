@@ -1,10 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-module;
-
-#include <stddef.h>
-#include <stdint.h>
-
 export module isocmd.write2usb.util.writeTypes;
 
 import std;
@@ -23,9 +18,9 @@ export extern "C++" {
 struct IsoInfo {
 	std::string path;          /** Full filesystem path to the ISO file. */
 	std::string filename;      /** Name of the file without path. */
-	uint64_t size;             /** Size of the ISO in bytes. */
+	std::uint64_t size;             /** Size of the ISO in bytes. */
 	std::string sizeStr;       /** Human-readable size string (e.g., "4.2 GB"). */
-	size_t originalIndex;      /** Original sort index for maintaining list order. */
+	std::size_t originalIndex;      /** Original sort index for maintaining list order. */
 };
 
 /**
@@ -41,12 +36,12 @@ struct ProgressInfo {
 
 	bool verifyRequested = false; // Set before dispatch; immutable while running.
 	std::atomic<bool> verifying{false};
-	std::atomic<uint64_t> bytesVerified{0};
+	std::atomic<std::uint64_t> bytesVerified{0};
 
 	std::atomic<bool> writeCompleted{false}; // All writes and final flush succeeded.
 	std::atomic<bool> completed{false};      // Write and any requested verification succeeded.
 	std::atomic<bool> failed{false};
-	std::atomic<uint64_t> bytesWritten{0};
+	std::atomic<std::uint64_t> bytesWritten{0};
 	std::atomic<int> progress{0};
 	std::atomic<double> speed{0.0};
 
@@ -78,8 +73,8 @@ struct ProgressInfo {
  * condition variable.
  */
 struct WriteSync {
-	std::atomic<size_t>     completedTasks{0};
-	std::atomic<size_t>     finishedTasks{0};   // success OR failure
+	std::atomic<std::size_t>     completedTasks{0};
+	std::atomic<std::size_t>     finishedTasks{0};   // success OR failure
 	std::mutex              mutex;
 	std::condition_variable cv;
 };

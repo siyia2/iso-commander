@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 
 #include <readline/history.h>
@@ -94,7 +92,7 @@ void loadHistory(bool& filterHistory) {
 
 	clear_history();
 	std::string targetFilePath = !filterHistory ? GlobalState::historyFilePath : GlobalState::filterHistoryFilePath;
-	size_t maxLines = !filterHistory ? GlobalState::MAX_HISTORY_LINES : GlobalState::MAX_HISTORY_PATTERN_LINES;
+	std::size_t maxLines = !filterHistory ? GlobalState::MAX_HISTORY_LINES : GlobalState::MAX_HISTORY_PATTERN_LINES;
 	if (maxLines == 0) return;
 
 	if (!std::filesystem::exists(targetFilePath)) {
@@ -189,7 +187,7 @@ static int openAndLockTruncatedFile(const std::string& filePath) {
  * @param maxLines Maximum number of unique history entries to retain.
  * @return Vector of history lines ordered from oldest to newest.
  */
-static std::vector<std::string> collectUniqueHistoryLines(size_t maxLines) {
+static std::vector<std::string> collectUniqueHistoryLines(std::size_t maxLines) {
 
 	std::vector<std::string> finalLines;
 	HIST_ENTRY** histList = history_list();
@@ -281,7 +279,7 @@ void saveHistory(bool& filterHistory) {
 
 	const std::string& targetFilePath =
 	    !filterHistory ? GlobalState::historyFilePath : GlobalState::filterHistoryFilePath;
-	const size_t maxLines =
+	const std::size_t maxLines =
 	    !filterHistory ? GlobalState::MAX_HISTORY_LINES : GlobalState::MAX_HISTORY_PATTERN_LINES;
 
 	if (maxLines == 0) {
@@ -338,7 +336,7 @@ void clearHistory(const std::string& inputSearch,
 
 	auto hc = resolveDatabaseTheme();
 
-	const std::string basePath = std::string(getenv("HOME")) + "/.local/share/isocmd/database/";
+	const std::string basePath = std::string(std::getenv("HOME")) + "/.local/share/isocmd/database/";
 	std::string filePath;
 	std::string historyType;
 

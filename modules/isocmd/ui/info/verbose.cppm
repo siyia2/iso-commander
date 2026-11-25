@@ -1,10 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-module;
-
-#include <stddef.h>
-#include <stdint.h>
-
 export module isocmd.ui.info.verbose;
 
 import std;
@@ -20,7 +15,7 @@ export extern "C++" {
 std::int64_t monotonicNowNs();
 
 /// Outcome category of one mount result.
-enum class MountRecKind : uint8_t { Completed, Skipped, Failed };
+enum class MountRecKind : std::uint8_t { Completed, Skipped, Failed };
 
 /**
  * @brief Compact result of one mount attempt.
@@ -54,13 +49,13 @@ struct UmountRecord {
 };
 
 /// Number of stored unmount records (completed or failed).
-size_t countUmountRecords(bool completed);
+std::size_t countUmountRecords(bool completed);
 
 /// Like forEachMountLine(), for unmount results. Defined in umount.cpp.
 void forEachUmountLine(bool completed, const std::function<void(std::string_view)>& fn);
 
 /// Number of stored mount records of the given kind.
-size_t countMountRecords(MountRecKind kind);
+std::size_t countMountRecords(MountRecKind kind);
 
 /**
  * @brief Calls @p fn once per distinct mount result of @p kind, as a formatted line.
@@ -142,12 +137,12 @@ struct ImageSearchRequest {
 	bool newFilesFound;                                           ///< Whether the scan produced new files.
 	bool list;                                                    ///< Suppresses the "no new files" / "cache empty" branches.
 	int currentCacheOld;                                          ///< Cache count before this search.
-	const std::atomic<size_t>& totalFiles;                        ///< Aggregate regular-file count from findFiles().
+	const std::atomic<std::size_t>& totalFiles;                        ///< Aggregate regular-file count from findFiles().
 	std::int64_t start_time_ns;                                   ///< Search start (see monotonicNowNs()); used for elapsed time.
 };
 
 struct DatabaseRefreshReport {
-	size_t totalProcessed = 0;
+	std::size_t totalProcessed = 0;
 	int deltaCount = 0;
 	double totalElapsed = 0.0;
 
@@ -210,7 +205,7 @@ struct DatabaseRefreshResult {
 	std::vector<std::string>& validPaths;                      ///< Base directories successfully traversed.
 	std::unordered_set<std::string>& invalidPaths;             ///< Directories skipped due to permissions or existence errors.
 	std::unordered_set<std::string>& uniqueErrorMessages;      ///< Deduplicated system-level I/O errors.
-	std::atomic<size_t>& totalFiles;                           ///< Atomic count of files scanned.
+	std::atomic<std::size_t>& totalFiles;                           ///< Atomic count of files scanned.
 	bool& newISOFound;                                         ///< On entry, whether the scan produced delta changes; may be mutated by the save step.
 	std::int64_t start_time_ns;                                ///< Refresh origin (see monotonicNowNs()); used for elapsed time.
 };

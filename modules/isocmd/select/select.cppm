@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-module;
-
-#include <stddef.h>
-
 export module isocmd.select.select;
 
 import std;
@@ -37,8 +33,8 @@ bool loadAndDisplayIso(
     bool &umountMvRmBreak,
     std::vector<std::string> &pendingIndices,
     bool &hasPendingProcess,
-    size_t &currentPage,
-    size_t &originalPage,
+    std::size_t &currentPage,
+    std::size_t &originalPage,
     std::shared_ptr<RefreshState> state
 );
 
@@ -50,8 +46,8 @@ bool loadAndDisplayMountedISOs(
     bool &umountMvRmBreak,
     std::vector<std::string> &pendingIndices,
     bool &hasPendingProcess,
-    size_t &currentPage,
-    size_t &originalPage,
+    std::size_t &currentPage,
+    std::size_t &originalPage,
     std::shared_ptr<RefreshState> state
 );
 
@@ -65,7 +61,7 @@ void loadAndDisplayImageFiles(
     bool &list,
     std::vector<std::string> &pendingIndices,
     bool &hasPendingProcess,
-    size_t &currentPage,
+    std::size_t &currentPage,
     std::shared_ptr<RefreshState> state
 );
 
@@ -112,8 +108,8 @@ void writeToUsb(
 /// Handles pagination keys, help ('?'), and display toggles ('*', '~').
 bool processPaginationHelpAndDisplay(
     const std::string& inputString,
-    size_t& totalPages,
-    size_t& currentPage,
+    std::size_t& totalPages,
+    std::size_t& currentPage,
     bool& isFiltered,
     bool& needsClrScrn,
     const std::string& operation,

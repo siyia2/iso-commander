@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-#include <stdint.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -25,16 +23,16 @@ namespace windowsWriter_engine::copy {
 		 *        filesystem writeback pacer.
 		 */
 		struct FileWritebackState {
-			uint64_t pendOff    = 0;   ///< Start of the not-yet-submitted range.
-			uint64_t pendLen    = 0;   ///< Length of the not-yet-submitted range.
+			std::uint64_t pendOff    = 0;   ///< Start of the not-yet-submitted range.
+			std::uint64_t pendLen    = 0;   ///< Length of the not-yet-submitted range.
 			int      pendChunks = 0;   ///< Chunks accumulated in that range.
 		};
 
 		/** A submitted file range retained for a later writeback wait. */
 		struct WritebackRange {
 			int      fd = -1;
-			uint64_t off = 0;
-			uint64_t len = 0;
+			std::uint64_t off = 0;
+			std::uint64_t len = 0;
 		};
 
 		/**
@@ -58,7 +56,7 @@ namespace windowsWriter_engine::copy {
 		 * @param flags SYNC_FILE_RANGE_* flags passed through to the kernel.
 		 * @return Zero on success, or -1 on failure or cancellation.
 		 */
-		int syncFileRange(int fd, uint64_t off, uint64_t len, unsigned int flags) {
+		int syncFileRange(int fd, std::uint64_t off, std::uint64_t len, unsigned int flags) {
 
 			if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
 				errno = ECANCELED;
@@ -113,7 +111,7 @@ namespace windowsWriter_engine::copy {
 
 			}
 
-			void submitRange(int fd, uint64_t off, uint64_t len, int chunks) {
+			void submitRange(int fd, std::uint64_t off, std::uint64_t len, int chunks) {
 
 				if (len == 0 || chunks <= 0)
 				    return;
@@ -158,7 +156,7 @@ namespace windowsWriter_engine::copy {
 		 * @brief Accumulates contiguous chunks for the current file, then hands
 		 *        a completed pacing range to the shared filesystem state.
 		 */
-		void paceWriteback(int fd_out, uint64_t off, uint64_t len,
+		void paceWriteback(int fd_out, std::uint64_t off, std::uint64_t len,
 		                   FileWritebackState& fileState,
 		                   FilesystemWritebackState& filesystemState) {
 
@@ -211,9 +209,9 @@ namespace windowsWriter_engine::copy {
 		 *
 		 * @return Bytes filled (0 = EOF), or -1 on error / cancellation.
 		 */
-		ssize_t fillChunk(int fd_in, char* buf, size_t bufferSize) {
+		ssize_t fillChunk(int fd_in, char* buf, std::size_t bufferSize) {
 
-			size_t total = 0;
+			std::size_t total = 0;
 
 			while (total < bufferSize) {
 				if (GlobalState::g_operationCancelled.load())
@@ -233,7 +231,7 @@ namespace windowsWriter_engine::copy {
 				if (n == 0)
 				    break;
 
-				total += static_cast<size_t>(n);
+				total += static_cast<std::size_t>(n);
 			}
 
 			return static_cast<ssize_t>(total);
@@ -251,15 +249,15 @@ namespace windowsWriter_engine::copy {
 		 * @param filesystemWriteback Shared filesystem pacing state.
 		 * @return true if the entire chunk was written successfully.
 		 */
-		bool writeOneChunk(int fd_out, const char* buf, size_t len,
-		                   uint64_t& fileOffset,
-		                   uint64_t& bytesCopiedTotal,
-		                   std::atomic<uint64_t>& totalAccumulator,
+		bool writeOneChunk(int fd_out, const char* buf, std::size_t len,
+		                   std::uint64_t& fileOffset,
+		                   std::uint64_t& bytesCopiedTotal,
+		                   std::atomic<std::uint64_t>& totalAccumulator,
 		                   FileWritebackState& fileWriteback,
 		                   FilesystemWritebackState& filesystemWriteback) {
 
-			const uint64_t chunkOff = fileOffset;
-			size_t done = 0;
+			const std::uint64_t chunkOff = fileOffset;
+			std::size_t done = 0;
 
 			while (done < len) {
 				if (GlobalState::g_operationCancelled.load())
@@ -284,10 +282,10 @@ namespace windowsWriter_engine::copy {
 					return false;
 				}
 
-				const uint64_t writtenBytes =
-				    static_cast<uint64_t>(written);
+				const std::uint64_t writtenBytes =
+				    static_cast<std::uint64_t>(written);
 
-				done += static_cast<size_t>(written);
+				done += static_cast<std::size_t>(written);
 				fileOffset += writtenBytes;
 
 				totalAccumulator.fetch_add(writtenBytes);
@@ -316,15 +314,15 @@ namespace windowsWriter_engine::copy {
 		 *         without failure or cancellation.
 		 */
 		bool copyFileChunks(int fd_in, int fd_out,
-		                    uint64_t fileSize,
-		                    size_t bufferSize,
+		                    std::uint64_t fileSize,
+		                    std::size_t bufferSize,
 		                    char* buf,
-		                    std::atomic<uint64_t>& totalAccumulator,
-		                    uint64_t& bytesCopiedTotal,
+		                    std::atomic<std::uint64_t>& totalAccumulator,
+		                    std::uint64_t& bytesCopiedTotal,
 		                    FilesystemWritebackState& filesystemWriteback,
 		                    usb_verify::Checksum64* checksum) {
 
-			uint64_t fileOffset = 0;
+			std::uint64_t fileOffset = 0;
 			FileWritebackState fileWriteback;
 
 			if (bufferSize == 0) {
@@ -338,10 +336,10 @@ namespace windowsWriter_engine::copy {
 			       !GlobalState::g_operationCancelled.load()) {
 
 				// Never read beyond the expected ISO file size.
-				const size_t chunkSize = static_cast<size_t>(
-				    std::min<uint64_t>(
+				const std::size_t chunkSize = static_cast<std::size_t>(
+				    std::min<std::uint64_t>(
 				        fileSize - fileOffset,
-				        static_cast<uint64_t>(bufferSize)
+				        static_cast<std::uint64_t>(bufferSize)
 				    )
 				);
 
@@ -355,7 +353,7 @@ namespace windowsWriter_engine::copy {
 				}
 
 				// fillChunk() only returns early when EOF is reached.
-				if (static_cast<size_t>(n) != chunkSize) {
+				if (static_cast<std::size_t>(n) != chunkSize) {
 					errno = EIO;
 					success = false;
 					break;
@@ -396,11 +394,11 @@ namespace windowsWriter_engine::copy {
 		 * partially written FAT32 files are truncated to zero bytes.
 		 */
 		bool copyFileWithProgress(const fs::path& src, const fs::path& dst,
-		                          uint64_t fileSize, bool preallocate,
-		                          size_t bufferSize, char* buf,
-		                          std::atomic<uint64_t>& totalAccumulator,
+		                          std::uint64_t fileSize, bool preallocate,
+		                          std::size_t bufferSize, char* buf,
+		                          std::atomic<std::uint64_t>& totalAccumulator,
 		                          FilesystemWritebackState& filesystemWriteback,
-		                          uint64_t* expectedChecksum) {
+		                          std::uint64_t* expectedChecksum) {
 
 			const int fd_in = open(
 			    src.c_str(), O_RDONLY | O_CLOEXEC
@@ -429,7 +427,7 @@ namespace windowsWriter_engine::copy {
 			        fd_out, 0, static_cast<off_t>(fileSize)
 			    );
 
-			uint64_t bytesCopiedTotal = 0;
+			std::uint64_t bytesCopiedTotal = 0;
 
 			usb_verify::Checksum64 checksum;
 			const bool success = copyFileChunks(
@@ -475,10 +473,10 @@ namespace windowsWriter_engine::copy {
 	bool processEntries(const std::vector<IsoCopyEntry>& entries,
 	                    IsoType isoType,
 	                    const std::string& ntfsMnt,
-	                    size_t bufferSize,
+	                    std::size_t bufferSize,
 	                    char* buf,
-	                    std::atomic<uint64_t>& totalAccumulator,
-	                    std::vector<uint64_t>* checksums) {
+	                    std::atomic<std::uint64_t>& totalAccumulator,
+	                    std::vector<std::uint64_t>* checksums) {
 
 		if (checksums) {
 			checksums->clear();
@@ -527,7 +525,7 @@ namespace windowsWriter_engine::copy {
 			    (isoType == IsoType::WindowsInstall) &&
 			    e.dst.native().compare(0, ntfsMnt.size(), ntfsMnt) == 0;
 
-			uint64_t checksum = 0;
+			std::uint64_t checksum = 0;
 			if (!copyFileWithProgress(
 			        e.src, e.dst, e.size, toNtfs,
 			        bufferSize, buf, totalAccumulator,

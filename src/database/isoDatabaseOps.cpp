@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <errno.h>
 #include <signal.h>
 #include <fcntl.h>
@@ -63,36 +62,36 @@ namespace {
  * @param[out] pathExists  Reference to a vector of integers set to 1 if a path exists, or 0 if missing.
  * @return size_t          The total count of surviving (existing) paths found.
  */
-static size_t checkPathsParallel(
+static std::size_t checkPathsParallel(
     const std::vector<std::string>& cache,
     std::vector<int>& pathExists
 ) {
 
 	ThreadPool& pool = getStaticThreadPool();
-	std::atomic<size_t> existingCount{0};
+	std::atomic<std::size_t> existingCount{0};
 
-	const size_t numThread = std::min({
+	const std::size_t numThread = std::min({
 		pool.threadCount(),
-		static_cast<size_t>(GlobalThreadCaps::CLEAN_THREAD_CAP),
+		static_cast<std::size_t>(GlobalThreadCaps::CLEAN_THREAD_CAP),
 		cache.size()
 	});
 
 	if (numThread == 0) return 0;
 
-	const size_t chunkSize = (cache.size() + numThread - 1) / numThread;
+	const std::size_t chunkSize = (cache.size() + numThread - 1) / numThread;
 	std::vector<std::future<void>> futures;
 	futures.reserve(numThread);
 
-	for (size_t i = 0; i < numThread; ++i) {
-		const size_t start = i * chunkSize;
-		const size_t end   = std::min(cache.size(), start + chunkSize);
+	for (std::size_t i = 0; i < numThread; ++i) {
+		const std::size_t start = i * chunkSize;
+		const std::size_t end   = std::min(cache.size(), start + chunkSize);
 
 		if (start >= end) break;
 
 		futures.emplace_back(
 		    pool.enqueue([&cache, &pathExists, &existingCount, start, end] {
 
-				for (size_t j = start; j < end; ++j) {
+				for (std::size_t j = start; j < end; ++j) {
 					if (access(cache[j].c_str(), F_OK) == 0) {
 						pathExists[j] = 1;
 						existingCount.fetch_add(1, std::memory_order_relaxed);
@@ -132,16 +131,16 @@ static bool writeAndRenameDatabase(
     const std::string& dbPath,
     std::vector<std::string>& cache,
     const std::vector<int>& pathExists,
-    size_t survivingCount,
+    std::size_t survivingCount,
     std::vector<std::string>& retained
 ) {
 
 	retained.clear();
 	retained.reserve(survivingCount);
 
-	size_t totalBufferSize = 0;
+	std::size_t totalBufferSize = 0;
 
-	for (size_t i = 0; i < cache.size(); ++i) {
+	for (std::size_t i = 0; i < cache.size(); ++i) {
 		if (pathExists[i]) {
 			totalBufferSize += cache[i].size() + 1;
 			retained.push_back(std::move(cache[i]));
@@ -266,7 +265,7 @@ void removeNonExistentPathsFromDatabase(
 
 		std::vector<std::string> cache;
 		char* linePtr = nullptr;
-		size_t len = 0;
+		std::size_t len = 0;
 
 		while (getline(&linePtr, &len, file) != -1) {
 			std::string line(linePtr);
@@ -290,7 +289,7 @@ void removeNonExistentPathsFromDatabase(
 		if (cache.empty()) return;
 
 		std::vector<int> pathExists(cache.size(), 0);
-		size_t existingCount = checkPathsParallel(cache, pathExists);
+		std::size_t existingCount = checkPathsParallel(cache, pathExists);
 
 		if (existingCount == cache.size()) return;
 
@@ -501,7 +500,7 @@ namespace {
 			return false;
 		}
 
-		size_t written = 0;
+		std::size_t written = 0;
 
 		while (written < output.size()) {
 			ssize_t n = write(
@@ -519,7 +518,7 @@ namespace {
 				return false;
 			}
 
-			written += static_cast<size_t>(n);
+			written += static_cast<std::size_t>(n);
 		}
 
 		if (fsync(tmpFd) == -1) {
@@ -585,7 +584,7 @@ bool saveToDatabase(
 	std::lock_guard<std::mutex> fileLock(dbFileMutex);
 
 	std::vector<std::string> combinedCache = readExistingCache(cachePath);
-	const size_t oldSize = combinedCache.size();
+	const std::size_t oldSize = combinedCache.size();
 
 	// Reserve up front: no reallocation, so the string_views below stay valid.
 	combinedCache.reserve(oldSize + discoveredISO.size());

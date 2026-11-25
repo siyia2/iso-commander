@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-#include <stdint.h>
-#include <ctype.h>
 #include <unistd.h>
 
 import std;
@@ -94,7 +91,7 @@ static std::vector<IsoInfo> validateIsos(const std::vector<std::string>& isoArgs
 			continue;
 		}
 		std::string ext = p.extension().string();
-		std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+		std::transform(ext.begin(), ext.end(), ext.begin(), static_cast<int (*)(int)>(std::tolower));
 		if (ext != ".iso") {
 			errors.push_back(pathErr(wt, raw, " is not an ISO file"));
 			continue;
@@ -130,7 +127,7 @@ static void validateDevices(const std::vector<std::string>& devArgs,
                             const WriteTheme& wt,
                             std::vector<std::string>& errors,
                             std::vector<std::string>& devices,
-                            std::vector<uint64_t>& deviceSizes) {
+                            std::vector<std::uint64_t>& deviceSizes) {
 
 	using namespace WriteValidation;
 	std::unordered_set<std::string> seen;
@@ -143,7 +140,7 @@ static void validateDevices(const std::vector<std::string>& devArgs,
 			errors.push_back(pathErr(wt, raw, " is listed more than once"));
 			continue;
 		}
-		uint64_t size = 0;
+		std::uint64_t size = 0;
 		if (auto err = checkDevice(wt, dev, raw, size)) {
 			errors.push_back(std::move(*err));
 			continue;
@@ -174,7 +171,7 @@ static void executeSilentWriteOperations(
 	std::vector<std::future<void>> futures;
 	futures.reserve(pairsPtr->size());
 
-	for (size_t i = 0; i < pairsPtr->size(); ++i) {
+	for (std::size_t i = 0; i < pairsPtr->size(); ++i) {
 		futures.emplace_back(pool.enqueue(
 		    [pairsPtr, progressDataPtr, i]() {
 
@@ -216,10 +213,10 @@ static void executeSilentWriteOperations(
 static void collectCapacityErrors(const WriteTheme& wt,
                                   const std::vector<IsoInfo>& isos,
                                   const std::vector<std::string>& devices,
-                                  const std::vector<uint64_t>& deviceSizes,
+                                  const std::vector<std::uint64_t>& deviceSizes,
                                   std::vector<std::string>& errors) {
 
-	for (size_t d = 0; d < devices.size(); ++d) {
+	for (std::size_t d = 0; d < devices.size(); ++d) {
 		const IsoInfo& iso = (isos.size() == 1) ? isos[0] : isos[d];
 		if (auto err = WriteValidation::checkCapacity(wt, iso, devices[d], deviceSizes[d])) {
 			errors.push_back(std::move(*err));
@@ -244,7 +241,7 @@ static std::vector<std::pair<IsoInfo, std::string>> buildWritePairs(
 
 	std::vector<std::pair<IsoInfo, std::string>> pairs;
 	pairs.reserve(devices.size());
-	for (size_t d = 0; d < devices.size(); ++d) {
+	for (std::size_t d = 0; d < devices.size(); ++d) {
 		pairs.emplace_back(isos.size() == 1 ? isos[0] : isos[d], devices[d]);
 	}
 	return pairs;
@@ -281,7 +278,7 @@ static std::shared_ptr<std::vector<ProgressInfo>> buildProgressData(
  * @return bool `true` if `jobCount` is within `pool.threadCount()`; `false` otherwise.
  */
 static bool checkThreadPoolLimit(const WriteTheme& wt,
-                                 size_t jobCount,
+                                 std::size_t jobCount,
                                  const ThreadPool& pool) {
 
 	if (jobCount <= pool.threadCount()) {
@@ -306,7 +303,7 @@ static bool checkThreadPoolLimit(const WriteTheme& wt,
  */
 static int evaluateWriteResult(const std::vector<ProgressInfo>& progressData) {
 
-	size_t ok = 0;
+	std::size_t ok = 0;
 	for (const auto& progress : progressData) {
 		if (progress.completed.load()) {
 			++ok;
@@ -347,7 +344,7 @@ int handleWriteUsb(const ParsedArgs& args) {
 	std::vector<IsoInfo> isos = validateIsos(isoArgs, wt, errors);
 
 	std::vector<std::string> devices;
-	std::vector<uint64_t> deviceSizes;
+	std::vector<std::uint64_t> deviceSizes;
 	validateDevices(devArgs, wt, errors, devices, deviceSizes);
 
 	if (errors.empty()) {

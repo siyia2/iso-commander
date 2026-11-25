@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <signal.h>
 
 import std;
@@ -71,19 +70,19 @@ static std::vector<int> resolveSelectedIndices(const std::string& input,
  * @param selectedIndices Selected 1-based file indices to partition.
  * @return Vector of index chunks, one per worker task.
  */
-static std::vector<std::vector<int>> partitionIndexChunks(size_t selectionCount,
-                                                          size_t poolSize,
-                                                          size_t perOperationCap,
+static std::vector<std::vector<int>> partitionIndexChunks(std::size_t selectionCount,
+                                                          std::size_t poolSize,
+                                                          std::size_t perOperationCap,
                                                           const std::vector<int>& selectedIndices) {
 
-	size_t numThreads = std::max(size_t(2), std::min({selectionCount, perOperationCap, poolSize}));
+	std::size_t numThreads = std::max(std::size_t(2), std::min({selectionCount, perOperationCap, poolSize}));
 
 	if ((selectionCount + numThreads - 1) / numThreads > 100) {
 		numThreads = (selectionCount + 99) / 100;
 	}
 
 	std::vector<std::vector<int>> indexChunks(numThreads);
-	for (size_t i = 0; i < selectionCount; ++i) {
+	for (std::size_t i = 0; i < selectionCount; ++i) {
 		indexChunks[i % numThreads].push_back(selectedIndices[i]);
 	}
 	return indexChunks;
@@ -98,7 +97,7 @@ static std::vector<std::vector<int>> partitionIndexChunks(size_t selectionCount,
  * @param operationName  Operation label (`"umount"` or `"mount"`).
  * @return Formatted header string that was written to `std::cout`.
  */
-static std::string printOperationHeader(size_t taskCount,
+static std::string printOperationHeader(std::size_t taskCount,
                                         const std::string& operationColor,
                                         const std::string& operationName) {
 
@@ -132,8 +131,8 @@ static std::string printOperationHeader(size_t taskCount,
 static void runWorkerChunks(ThreadPool& pool,
                             const std::vector<std::vector<int>>& indexChunks,
                             const std::vector<std::string>& files,
-                            std::atomic<size_t>& completedTasks,
-                            std::atomic<size_t>& failedTasks,
+                            std::atomic<std::size_t>& completedTasks,
+                            std::atomic<std::size_t>& failedTasks,
                             bool isUnmount) {
 
 	std::vector<std::future<void>> futures;
@@ -209,16 +208,16 @@ void processInputForMountOrUmount(const std::string& input,
 	const std::string coloredProcess = operationColor + operationName + std::string(UI::Palette::BoldReset);
 
 	ThreadPool& pool = getStaticThreadPool();
-	const size_t cap = isUnmount ? GlobalThreadCaps::UMOUNT_THREAD_CAP : GlobalThreadCaps::MOUNT_THREAD_CAP;
+	const std::size_t cap = isUnmount ? GlobalThreadCaps::UMOUNT_THREAD_CAP : GlobalThreadCaps::MOUNT_THREAD_CAP;
 	const std::vector<std::vector<int>> indexChunks =
 	    partitionIndexChunks(selectedIndices.size(), pool.threadCount(), cap, selectedIndices);
 
-	std::atomic<size_t> completedTasks(0);
-	std::atomic<size_t> failedTasks(0);
+	std::atomic<std::size_t> completedTasks(0);
+	std::atomic<std::size_t> failedTasks(0);
 	std::atomic<bool> isProcessingComplete(false);
 
 	std::thread progressThread = launchProgressBar(
-	    nullptr, static_cast<size_t>(0),
+	    nullptr, static_cast<std::size_t>(0),
 	    &completedTasks, &failedTasks, selectedIndices.size(),
 	    &isProcessingComplete, &verbose,
 	    coloredProcess, header);

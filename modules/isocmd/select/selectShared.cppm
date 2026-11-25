@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-module;
-
-#include <stddef.h>
-
 export module isocmd.select.selectShared;
 
 import std;
@@ -192,8 +188,8 @@ namespace select_shared {
 
 		/// One parsed pending token: "N" or "A-B", with an optional trailing '^'.
 		struct IndexToken {
-			size_t lo     = 0;
-			size_t hi     = 0;
+			std::size_t lo     = 0;
+			std::size_t hi     = 0;
 			bool   source = false;   // '^' suffix: indices refer to the source list
 		};
 
@@ -231,12 +227,12 @@ namespace select_shared {
 		 *              @p paths; otherwise @p paths is left untouched (display use,
 		 *              where @p source may be momentarily stale).
 		 */
-		std::vector<size_t> resolveIndices(std::vector<std::string>& paths,
+		std::vector<std::size_t> resolveIndices(std::vector<std::string>& paths,
 		                                   const std::vector<std::string>& source,
 		                                   bool prune);
 
 		/// {1,2,3,7,9,10} -> {"1-3","7","9-10"}
-		std::vector<std::string> compressRuns(const std::vector<size_t>& idx);
+		std::vector<std::string> compressRuns(const std::vector<std::size_t>& idx);
 
 		std::string joinTokens(const std::vector<std::string>& tokens);
 

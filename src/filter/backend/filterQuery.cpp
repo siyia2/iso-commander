@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <emmintrin.h>
 
 import std;
@@ -48,8 +47,8 @@ import isocmd.util.stringManipulation;
 static bool simdSearchExists(std::string_view text, std::string_view pattern)
 {
 
-	const size_t n = text.size();
-	const size_t m = pattern.size();
+	const std::size_t n = text.size();
+	const std::size_t m = pattern.size();
 	if (m == 0 || m > n) return false;
 
 	if (m == 1) {
@@ -60,7 +59,7 @@ static bool simdSearchExists(std::string_view text, std::string_view pattern)
 	const char* const p = pattern.data();
 	const __m128i first = _mm_set1_epi8(p[0]);
 	const __m128i last = _mm_set1_epi8(p[m - 1]);
-	size_t i = 0;
+	std::size_t i = 0;
 
 	for (; i + m + 15 <= n; i += 16) {
 		const __m128i a = _mm_loadu_si128(reinterpret_cast<const __m128i*>(t + i));
@@ -95,8 +94,8 @@ static bool simdSearchExists(std::string_view text, std::string_view pattern)
  */
 bool hasDanglingBackslash(const std::string& query) {
 
-	size_t run = 0;
-	for (size_t i = query.size(); i > 0 && query[i - 1] == '\\'; --i)
+	std::size_t run = 0;
+	for (std::size_t i = query.size(); i > 0 && query[i - 1] == '\\'; --i)
 	    ++run;
 	return (run % 2) == 1;
 
@@ -171,7 +170,7 @@ static void finishGroup(std::string& term, bool& negate, QueryGroup& group, std:
  * @param group Reference to the active QueryGroup.
  * @param groups Reference to the collection of QueryGroups.
  */
-static void processQueryChar(const std::string& query, size_t& i,
+static void processQueryChar(const std::string& query, std::size_t& i,
                              std::string& term, bool& negate, bool& sawOr,
                              QueryGroup& group, std::vector<QueryGroup>& groups) {
 
@@ -255,7 +254,7 @@ std::vector<QueryGroup> buildQueryGroups(const std::string& query,
 	bool sawOr  = false;   // at least one unescaped ';' has been seen
 	term.reserve(query.size());
 
-	for (size_t i = 0; i < query.size(); ++i) {
+	for (std::size_t i = 0; i < query.size(); ++i) {
 		processQueryChar(query, i, term, negate, sawOr, group, groups);
 	}
 
@@ -371,10 +370,10 @@ static bool matchesAnyGroup(const std::vector<QueryGroup>& groups,
  * @param count Number of indices to generate.
  * @return Vector containing values `0` through `count - 1`, or empty if @p count is `0`.
  */
-static std::vector<size_t> makeAscendingIndices(size_t count)
+static std::vector<std::size_t> makeAscendingIndices(std::size_t count)
 {
 
-	std::vector<size_t> indices(count);
+	std::vector<std::size_t> indices(count);
 	std::iota(indices.begin(), indices.end(), 0);
 	return indices;
 
@@ -392,23 +391,23 @@ static std::vector<size_t> makeAscendingIndices(size_t count)
  * @param useCachedLower True when @p precomputedLower is non-null and matches `files.size()`.
  * @return Ascending indices within `[start, end)` of entries matching any query group.
  */
-static std::vector<size_t> filterChunkIndices(const std::vector<std::string>& files,
-                                              size_t start,
-                                              size_t end,
+static std::vector<std::size_t> filterChunkIndices(const std::vector<std::string>& files,
+                                              std::size_t start,
+                                              std::size_t end,
                                               bool needLower,
                                               const std::vector<QueryGroup>& queryGroups,
                                               const std::vector<std::string>* precomputedLower,
                                               bool useCachedLower)
 {
 
-	std::vector<size_t> localMatches;
+	std::vector<std::size_t> localMatches;
 	localMatches.reserve((end - start) / 4);
 
 	std::string fileLowerScratch;
 	if (needLower && !useCachedLower)
 	    fileLowerScratch.reserve(256);
 
-	for (size_t j = start; j < end; ++j) {
+	for (std::size_t j = start; j < end; ++j) {
 		const std::string& file = files[j];
 
 		const std::string* fileLower = nullptr;
@@ -440,11 +439,11 @@ static std::vector<size_t> filterChunkIndices(const std::vector<std::string>& fi
  * @param totalFiles Total number of input entries for output capacity reservation.
  * @return Concatenated ascending matching indices across all completed chunks.
  */
-static std::vector<size_t> collectChunkResults(std::vector<std::future<std::vector<size_t>>>& futures,
-                                               size_t totalFiles)
+static std::vector<std::size_t> collectChunkResults(std::vector<std::future<std::vector<std::size_t>>>& futures,
+                                               std::size_t totalFiles)
 {
 
-	std::vector<size_t> filteredIndices;
+	std::vector<std::size_t> filteredIndices;
 	filteredIndices.reserve(totalFiles);
 
 	std::exception_ptr firstException;
@@ -496,7 +495,7 @@ static std::vector<size_t> collectChunkResults(std::vector<std::future<std::vect
  *         @p files or @p query is empty. If the query has no non-empty term
  *         (e.g. ";", "&" or "!"), every index is returned.
  */
-std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query,
+std::vector<std::size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query,
                                        const std::vector<std::string>* precomputedLower)
 {
 
@@ -514,20 +513,20 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
 	const bool useCachedLower = precomputedLower && precomputedLower->size() == files.size();
 
 	ThreadPool&  pool       = getStaticThreadPool();
-	const size_t numThreads = std::min({
+	const std::size_t numThreads = std::min({
 		pool.threadCount(),
 		files.size(),
-		static_cast<size_t>(GlobalThreadCaps::FILTER_THREAD_CAP)
+		static_cast<std::size_t>(GlobalThreadCaps::FILTER_THREAD_CAP)
 	});
 
-	const size_t chunkSize = (files.size() + numThreads - 1) / numThreads;
+	const std::size_t chunkSize = (files.size() + numThreads - 1) / numThreads;
 
-	std::vector<std::future<std::vector<size_t>>> futures;
+	std::vector<std::future<std::vector<std::size_t>>> futures;
 	futures.reserve(numThreads);
 
-	for (size_t i = 0; i < numThreads; ++i) {
-		const size_t start = i * chunkSize;
-		const size_t end   = std::min(files.size(), start + chunkSize);
+	for (std::size_t i = 0; i < numThreads; ++i) {
+		const std::size_t start = i * chunkSize;
+		const std::size_t end   = std::min(files.size(), start + chunkSize);
 		if (start >= end) break;
 
 		futures.emplace_back(pool.enqueue(
@@ -559,26 +558,26 @@ std::vector<size_t> filterFilesIndices(const std::vector<std::string>& files, co
  * @return Matching indices into @p files from the `[start, end)` slice in
  *         candidate order.
  */
-static std::vector<size_t> filterSubsetChunk(
+static std::vector<std::size_t> filterSubsetChunk(
     const std::vector<std::string>& files,
-    const std::vector<size_t>& candidateIndices,
-    const size_t start,
-    const size_t end,
+    const std::vector<std::size_t>& candidateIndices,
+    const std::size_t start,
+    const std::size_t end,
     const std::vector<QueryGroup>& queryGroups,
     const bool needLower,
     const std::vector<std::string>* precomputedLower,
     const bool useCachedLower)
 {
 
-	std::vector<size_t> localMatches;
+	std::vector<std::size_t> localMatches;
 	localMatches.reserve((end - start) / 4);
 
 	std::string fileLowerScratch;
 	if (needLower && !useCachedLower)
 	    fileLowerScratch.reserve(256);
 
-	for (size_t candidatePos = start; candidatePos < end; ++candidatePos) {
-		const size_t fileIndex = candidateIndices[candidatePos];
+	for (std::size_t candidatePos = start; candidatePos < end; ++candidatePos) {
+		const std::size_t fileIndex = candidateIndices[candidatePos];
 		const std::string& file = files[fileIndex];
 
 		const std::string* fileLower = nullptr;
@@ -610,12 +609,12 @@ static std::vector<size_t> filterSubsetChunk(
  * @param maxMatches Upper bound used to reserve output capacity.
  * @return Combined matching indices in future submission order.
  */
-static std::vector<size_t> collectSubsetResults(
-    std::vector<std::future<std::vector<size_t>>>& futures,
-    const size_t maxMatches)
+static std::vector<std::size_t> collectSubsetResults(
+    std::vector<std::future<std::vector<std::size_t>>>& futures,
+    const std::size_t maxMatches)
 {
 
-	std::vector<size_t> filteredIndices;
+	std::vector<std::size_t> filteredIndices;
 	filteredIndices.reserve(maxMatches);
 
 	std::exception_ptr firstException;
@@ -674,9 +673,9 @@ static std::vector<size_t> collectSubsetResults(
  *         Empty if @p files, @p candidateIndices or @p query is empty; the
  *         candidates unchanged if the query has no non-empty term.
  */
-std::vector<size_t> filterFilesIndicesSubset(
+std::vector<std::size_t> filterFilesIndicesSubset(
     const std::vector<std::string>& files,
-    const std::vector<size_t>& candidateIndices,
+    const std::vector<std::size_t>& candidateIndices,
     const std::string& query,
     const std::vector<std::string>* precomputedLower)
 {
@@ -694,21 +693,21 @@ std::vector<size_t> filterFilesIndicesSubset(
 
 	ThreadPool& pool = getStaticThreadPool();
 
-	const size_t numThreads = std::min({
+	const std::size_t numThreads = std::min({
 		pool.threadCount(),
 		candidateIndices.size(),
-		static_cast<size_t>(GlobalThreadCaps::FILTER_THREAD_CAP)
+		static_cast<std::size_t>(GlobalThreadCaps::FILTER_THREAD_CAP)
 	});
 
-	const size_t chunkSize =
+	const std::size_t chunkSize =
 	    (candidateIndices.size() + numThreads - 1) / numThreads;
 
-	std::vector<std::future<std::vector<size_t>>> futures;
+	std::vector<std::future<std::vector<std::size_t>>> futures;
 	futures.reserve(numThreads);
 
-	for (size_t i = 0; i < numThreads; ++i) {
-		const size_t start = i * chunkSize;
-		const size_t end   = std::min(candidateIndices.size(),
+	for (std::size_t i = 0; i < numThreads; ++i) {
+		const std::size_t start = i * chunkSize;
+		const std::size_t end   = std::min(candidateIndices.size(),
 		                              start + chunkSize);
 
 		if (start >= end)
@@ -717,7 +716,7 @@ std::vector<size_t> filterFilesIndicesSubset(
 		futures.emplace_back(pool.enqueue(
 		    [&files, &candidateIndices, start, end,
 		     &queryGroups, needLower, precomputedLower,
-		     useCachedLower]() -> std::vector<size_t> {
+		     useCachedLower]() -> std::vector<std::size_t> {
 
 				return filterSubsetChunk(
 				    files, candidateIndices, start, end,

@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-
 import std;
 import isocmd.cmd.cmdAutomation;
 import isocmd.core.cancellation;
@@ -129,7 +127,7 @@ static bool parseDepthOption(
 	const std::string depthStr = arg.substr(2);
 
 	try {
-		size_t parsed = 0;
+		std::size_t parsed = 0;
 		const int depth = std::stoi(depthStr, &parsed);
 
 		if (parsed != depthStr.size())

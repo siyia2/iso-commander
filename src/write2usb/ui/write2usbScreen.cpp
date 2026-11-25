@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <stdio.h>
 #include <errno.h>
 #include <assert.h>
@@ -90,10 +89,10 @@ namespace write_screen_detail {
 namespace confirm_resize_detail {
 
 	struct ResizeRepaintState {
-		size_t lastCols = 0;
-		std::function<std::vector<size_t>(size_t)> paint;
-		std::vector<size_t> lineWidths;
-		size_t promptWidth = 0;
+		std::size_t lastCols = 0;
+		std::function<std::vector<std::size_t>(std::size_t)> paint;
+		std::vector<std::size_t> lineWidths;
+		std::size_t promptWidth = 0;
 		int wakeRd = -1;
 	};
 
@@ -131,21 +130,21 @@ namespace confirm_resize_detail {
 	static void confirmResizeRepaint(ResizeRepaintState& s) {
 
 		const TermSize sz = terminalSize();
-		const size_t cols = sz.cols;
-		const size_t rows = sz.rows;
+		const std::size_t cols = sz.cols;
+		const std::size_t rows = sz.rows;
 
 		if (cols == 0 || rows == 0 || cols == s.lastCols) return;
 		s.lastCols = cols;
 
 		rl_set_screen_size(static_cast<int>(rows), static_cast<int>(cols));
 
-		size_t warningRows = 0;
-		for (size_t w : s.lineWidths)
-		    warningRows += std::max<size_t>(1, (w + cols - 1) / cols);
+		std::size_t warningRows = 0;
+		for (std::size_t w : s.lineWidths)
+		    warningRows += std::max<std::size_t>(1, (w + cols - 1) / cols);
 
-		const size_t cursorCols = s.promptWidth + rl_point;
-		const size_t cursorLine = cursorCols / cols;
-		const size_t up = warningRows + cursorLine;
+		const std::size_t cursorCols = s.promptWidth + rl_point;
+		const std::size_t cursorLine = cursorCols / cols;
+		const std::size_t up = warningRows + cursorLine;
 
 		if (up >= rows) return;
 
@@ -190,7 +189,7 @@ namespace confirm_resize_detail {
 } // namespace confirm_resize_detail
 
 struct ConfirmResizeWatcher::Impl {
-	Impl(Painter paint, size_t drawnCols, std::vector<size_t> drawnWidths,
+	Impl(Painter paint, std::size_t drawnCols, std::vector<std::size_t> drawnWidths,
 	     const std::string& promptText)
 	    : state_(confirm_resize_detail::g_confirmResize) {
 
@@ -269,7 +268,7 @@ struct ConfirmResizeWatcher::Impl {
 };
 
 ConfirmResizeWatcher::ConfirmResizeWatcher(
-        Painter paint, size_t drawnCols, std::vector<size_t> drawnWidths,
+        Painter paint, std::size_t drawnCols, std::vector<std::size_t> drawnWidths,
         const std::string& promptText)
     : impl_(std::make_unique<Impl>(std::move(paint), drawnCols,
                                    std::move(drawnWidths), promptText)) {}
@@ -413,7 +412,7 @@ public:
 
 		std::lock_guard<std::mutex> rl(renderMutex_);
 
-		size_t failed = 0, written = 0, verified = 0;
+		std::size_t failed = 0, written = 0, verified = 0;
 		bool verificationRequested = false;
 		for (const auto& prog : progressData_) {
 			if (prog.failed.load()) ++failed;
@@ -425,7 +424,7 @@ public:
 			}
 		}
 
-		const size_t completed = syncPtr_->completedTasks.load();
+		const std::size_t completed = syncPtr_->completedTasks.load();
 		const bool   cancelled = GlobalState::g_operationCancelled.load();
 
 		const std::string operation =
@@ -529,7 +528,7 @@ private:
 
 	// Right-pads an ASCII string to the given byte width. Used for device
 	// paths and other ASCII-only columns.
-	static std::string padRight(std::string s, size_t target) {
+	static std::string padRight(std::string s, std::size_t target) {
 
 		if (s.size() < target) s.append(target - s.size(), ' ');
 		return s;
@@ -725,7 +724,7 @@ private:
 
 		using clock = std::chrono::steady_clock;
 		clock::time_point lastDraw{};
-		size_t seenFinished = static_cast<size_t>(-1);
+		std::size_t seenFinished = static_cast<std::size_t>(-1);
 
 		while (!stop_.load(std::memory_order_acquire)) {
 			bool finishedPhase = false;
@@ -734,7 +733,7 @@ private:
 				std::lock_guard<std::mutex> rl(renderMutex_);
 
 				const bool   resizeEvt   = resizeSignalled_.exchange(false, std::memory_order_acquire);
-				const size_t finishedNow = syncPtr_->finishedTasks.load();
+				const std::size_t finishedNow = syncPtr_->finishedTasks.load();
 				const bool   completion  = (finishedNow != seenFinished);
 				seenFinished = finishedNow;
 				finishedPhase = (phase_ == Phase::Finished);
@@ -781,7 +780,7 @@ private:
 
 	}
 
-	std::string buildHeaderFrame(bool finished, bool resized, size_t cols, size_t rows) {
+	std::string buildHeaderFrame(bool finished, bool resized, std::size_t cols, std::size_t rows) {
 
 		std::string frame;
 		frame += "\033[?2026h";
@@ -797,9 +796,9 @@ private:
 			// for any wrapping) and clear to the end of the screen. Relative
 			// movement is used instead of \033[s / \033[u because a saved absolute
 			// cursor position goes stale when the terminal re-wraps.
-			size_t up = 0;
-			for (size_t w : lastRowWidths_)
-			    up += std::max<size_t>(1, (w + cols - 1) / cols);
+			std::size_t up = 0;
+			for (std::size_t w : lastRowWidths_)
+			    up += std::max<std::size_t>(1, (w + cols - 1) / cols);
 			if (up > 0) frame += "\033[" + std::to_string(up) + "A";
 			frame += "\r\033[J";
 		}
@@ -810,8 +809,8 @@ private:
 
 	}
 
-	std::string buildRowString(size_t i, const std::string& shortFile, const std::string& speedStr,
-	                           size_t maxFilenameWidth, size_t maxSpeedWidth, size_t usableCols) {
+	std::string buildRowString(std::size_t i, const std::string& shortFile, const std::string& speedStr,
+	                           std::size_t maxFilenameWidth, std::size_t maxSpeedWidth, std::size_t usableCols) {
 
 		const auto& prog = progressData_[i];
 
@@ -877,8 +876,8 @@ private:
 
 		const bool finished = (phase_ == Phase::Finished);
 
-		size_t maxFilenameWidth = 0;
-		size_t maxSpeedWidth    = 0;
+		std::size_t maxFilenameWidth = 0;
+		std::size_t maxSpeedWidth    = 0;
 
 		std::vector<std::string> speedStrs;
 		speedStrs.reserve(progressData_.size());
@@ -890,16 +889,16 @@ private:
 		bool anyCompleted = false;
 		for (const auto& prog : progressData_)
 		    if (prog.completed.load()) { anyCompleted = true; break; }
-		const size_t avgExtra = anyCompleted ? 6 : 0;
+		const std::size_t avgExtra = anyCompleted ? 6 : 0;
 
-		const size_t fixedWidth = 3 + maxDeviceLen_ + (maxNameWidth_ + 3) + 2 + BAR_WIDTH
+		const std::size_t fixedWidth = 3 + maxDeviceLen_ + (maxNameWidth_ + 3) + 2 + BAR_WIDTH
 		                        + 2 + 5 + maxSpeedWidth + avgExtra;
 
-		const size_t cols = termSize.cols;
-		const size_t rows = termSize.rows;
-		const size_t usableCols = cols > 1 ? cols - 1 : 1;
+		const std::size_t cols = termSize.cols;
+		const std::size_t rows = termSize.rows;
+		const std::size_t usableCols = cols > 1 ? cols - 1 : 1;
 
-		const size_t allowedFilenameWidth =
+		const std::size_t allowedFilenameWidth =
 		    usableCols > fixedWidth ? usableCols - fixedWidth : 0;
 
 		std::vector<std::string> shortFiles;
@@ -913,7 +912,7 @@ private:
 		lastRowWidths_.clear();
 		lastRowWidths_.reserve(progressData_.size());
 
-		for (size_t i = 0; i < progressData_.size(); ++i) {
+		for (std::size_t i = 0; i < progressData_.size(); ++i) {
 			const std::string line = buildRowString(i, shortFiles[i], speedStrs[i],
 			                                        maxFilenameWidth, maxSpeedWidth, usableCols);
 			lastRowWidths_.push_back(std::min(visibleWidth(line), usableCols));
@@ -938,8 +937,8 @@ private:
 	// Written once in computeConstants() before the keeper thread starts.
 	// rowShortNames_ holds the full, never-truncated drive names.
 	std::vector<std::string> rowShortNames_;
-	size_t maxDeviceLen_ = 0;
-	size_t maxNameWidth_ = 0;
+	std::size_t maxDeviceLen_ = 0;
+	std::size_t maxNameWidth_ = 0;
 
 	// Everything below is guarded by renderMutex_.
 	std::mutex          renderMutex_;
@@ -950,10 +949,10 @@ private:
 	// Visible width (in columns) of every row printed by the previous frame.
 	// Used to work out how far to move the cursor back up, even if the
 	// terminal was resized (and therefore re-wrapped the old rows) in between.
-	std::vector<size_t> lastRowWidths_;
+	std::vector<std::size_t> lastRowWidths_;
 	// Terminal size at the time of the previous frame. A change in either
 	// dimension triggers a full wipe + repaint instead of a cursor-up redraw.
-	size_t              lastCols_ = 0, lastRows_ = 0;
+	std::size_t              lastCols_ = 0, lastRows_ = 0;
 	bool                hasDrawn_ = false;
 
 	// Resize relay. wakeRd_/wakeWr_/pollFallback_ are set in start() before

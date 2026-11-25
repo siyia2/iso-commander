@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-#include <stdint.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -17,13 +15,13 @@ namespace {
 	//---- ISO 9660 / UDF volume recognition ----------------------
 	namespace iso_layout {
 
-		constexpr size_t  kSectorSize  = 2048;
-		constexpr size_t  kVrsStart    = 16 * kSectorSize;   // 0x8000: first volume descriptor
+		constexpr std::size_t  kSectorSize  = 2048;
+		constexpr std::size_t  kVrsStart    = 16 * kSectorSize;   // 0x8000: first volume descriptor
 		constexpr int     kVrsSectors  = 8;                  // sectors 16-23 are examined
-		constexpr size_t  kIdOffset    = 1;                  // identifier follows the type byte
-		constexpr size_t  kIdLength    = 5;
-		constexpr size_t  kHeaderSize  = kIdOffset + kIdLength;
-		constexpr uint8_t kTypePrimary = 0x01;               // Primary Volume Descriptor
+		constexpr std::size_t  kIdOffset    = 1;                  // identifier follows the type byte
+		constexpr std::size_t  kIdLength    = 5;
+		constexpr std::size_t  kHeaderSize  = kIdOffset + kIdLength;
+		constexpr std::uint8_t kTypePrimary = 0x01;               // Primary Volume Descriptor
 
 		/**
 		 * @brief Tells whether a volume descriptor identifies a usable disc image.
@@ -41,7 +39,7 @@ namespace {
 		 * @param id   Five-byte standard identifier (offset 1 of the descriptor).
 		 * @return true if the descriptor is accepted.
 		 */
-		constexpr bool isAcceptedDescriptor(uint8_t type, std::string_view id) {
+		constexpr bool isAcceptedDescriptor(std::uint8_t type, std::string_view id) {
 
 			return (type == kTypePrimary && id == "CD001") ||
 			       id == "NSR02" || id == "NSR03";
@@ -82,10 +80,10 @@ namespace {
 		 * @param mapSize Size of the mapped window in bytes.
 		 * @return true if the descriptor at sector 16 is accepted.
 		 */
-		bool hasValidVolumeHeader(const char* addr, size_t mapSize) {
+		bool hasValidVolumeHeader(const char* addr, std::size_t mapSize) {
 
 			if (mapSize < kVrsStart + kHeaderSize) return false;
-			const auto type = static_cast<uint8_t>(addr[kVrsStart]);
+			const auto type = static_cast<std::uint8_t>(addr[kVrsStart]);
 			const std::string_view id(addr + kVrsStart + kIdOffset, kIdLength);
 			return isAcceptedDescriptor(type, id);
 
@@ -107,13 +105,13 @@ namespace {
 		 * a fixed table instead of the computer's language settings, so the result is
 		 * the same on every machine, and converting a letter is a single quick lookup.
 		 */
-		const std::array<uint8_t, 256>& table() {
+		const std::array<std::uint8_t, 256>& table() {
 
 			static const auto t = [] {
 
-				std::array<uint8_t, 256> a{};
+				std::array<std::uint8_t, 256> a{};
 				for (int i = 0; i < 256; ++i)
-				    a[i] = static_cast<uint8_t>((i >= 'A' && i <= 'Z') ? i + ('a' - 'A') : i);
+				    a[i] = static_cast<std::uint8_t>((i >= 'A' && i <= 'Z') ? i + ('a' - 'A') : i);
 				return a;
 
 			}();
@@ -159,7 +157,7 @@ namespace {
 		 * @param encoding Encoding index.
 		 * @return A mask with exactly one bit set: 1 << (pattern * 3 + encoding).
 		 */
-		constexpr uint32_t bit(int pattern, int encoding) {
+		constexpr std::uint32_t bit(int pattern, int encoding) {
 
 			return 1u << (pattern * kEncodingCount + encoding);
 
@@ -176,17 +174,17 @@ namespace {
 		 * @param pattern Pattern index.
 		 * @return The three adjacent bits belonging to @p pattern.
 		 */
-		constexpr uint32_t group(int pattern) {
+		constexpr std::uint32_t group(int pattern) {
 
 			return bit(pattern, Ascii) | bit(pattern, Utf16Le) | bit(pattern, Utf16Be);
 
 		}
 
 		/// Any encoding of "boot.wim" (0b000000111).
-		constexpr uint32_t kMaskBootWim = group(BootWim);
+		constexpr std::uint32_t kMaskBootWim = group(BootWim);
 
 		/// Any encoding of "bootmgr.efi" or "bootmgr" (0b111111000).
-		constexpr uint32_t kMaskBootMgr = group(BootmgrEfi) | group(Bootmgr);
+		constexpr std::uint32_t kMaskBootMgr = group(BootmgrEfi) | group(Bootmgr);
 
 		/**
 		 * @brief Tells whether the matches found so far are enough to call it Windows media.
@@ -201,7 +199,7 @@ namespace {
 		 * @param found Bitmask accumulated by aho_corasick::scan().
 		 * @return true if both groups have at least one match.
 		 */
-		constexpr bool isComplete(uint32_t found) {
+		constexpr bool isComplete(std::uint32_t found) {
 
 			return (found & kMaskBootWim) != 0 && (found & kMaskBootMgr) != 0;
 
@@ -221,7 +219,7 @@ namespace {
 		struct Node {
 			std::array<int, 256> next{};   ///< Transition per input byte; -1 only while building.
 			int      fail{0};              ///< Failure link: longest proper suffix that is also a prefix.
-			uint32_t match{0};             ///< win_signature bits of every pattern ending here (incl. via fail links).
+			std::uint32_t match{0};             ///< win_signature bits of every pattern ending here (incl. via fail links).
 
 			Node() {
 
@@ -257,7 +255,7 @@ namespace {
 				const auto& fold = case_fold::table();
 
 				int cur = 0;
-				auto step = [&](uint8_t byte) {
+				auto step = [&](std::uint8_t byte) {
 
 					if (trie[cur].next[byte] == -1) {
 						trie[cur].next[byte] = static_cast<int>(trie.size());
@@ -268,7 +266,7 @@ namespace {
 				};
 
 				for (char raw : text) {
-					const uint8_t c = fold[static_cast<uint8_t>(raw)];
+					const std::uint8_t c = fold[static_cast<std::uint8_t>(raw)];
 					switch (encoding) {
 						case Ascii:   step(c);                 break;
 						case Utf16Le: step(c);    step(0x00);  break;
@@ -365,15 +363,15 @@ namespace {
 		 *
 		 * @return Bitmask of matched (pattern, encoding) bits.
 		 */
-		uint32_t scan(const char* addr, size_t size) {
+		std::uint32_t scan(const char* addr, std::size_t size) {
 
 			const auto& ac   = automaton();
 			const auto& fold = case_fold::table();
 
-			uint32_t found = 0;
+			std::uint32_t found = 0;
 			int cur = 0;
-			for (size_t i = 0; i < size; ++i) {
-				cur    = ac[cur].next[fold[static_cast<uint8_t>(addr[i])]];
+			for (std::size_t i = 0; i < size; ++i) {
+				cur    = ac[cur].next[fold[static_cast<std::uint8_t>(addr[i])]];
 				found |= ac[cur].match;
 				if (win_signature::isComplete(found)) break;
 			}
@@ -406,7 +404,7 @@ namespace {
 		 * @param fd     Open, readable file descriptor (not owned, not closed).
 		 * @param length Number of bytes to map; must not exceed the file size.
 		 */
-		ScopedMapping(int fd, size_t length)
+		ScopedMapping(int fd, std::size_t length)
 		    : addr_(mmap(nullptr, length, PROT_READ, MAP_PRIVATE, fd, 0)),
 		      length_(length) {}
 
@@ -464,7 +462,7 @@ namespace {
 		 *
 		 * @return Size of the mapped window in bytes.
 		 */
-		size_t      size() const {
+		std::size_t      size() const {
 
 			return length_;
 
@@ -485,7 +483,7 @@ namespace {
 		 *
 		 * @param eagerBytes Prefix length to prefetch (clamped to the window size).
 		 */
-		void adviseSequentialScan(size_t eagerBytes) const {
+		void adviseSequentialScan(std::size_t eagerBytes) const {
 
 			madvise(addr_, std::min(eagerBytes, length_), MADV_WILLNEED);
 			madvise(addr_, length_, MADV_SEQUENTIAL);
@@ -494,7 +492,7 @@ namespace {
 
 	private:
 		void*  addr_;
-		size_t length_;
+		std::size_t length_;
 	};
 
 } // namespace
@@ -524,7 +522,7 @@ namespace iso_detect {
 		using namespace iso_layout;
 
 		for (int i = 0; i < kVrsSectors; ++i) {
-			uint8_t d[kHeaderSize];
+			std::uint8_t d[kHeaderSize];
 			const off_t offset = static_cast<off_t>(kVrsStart + i * kSectorSize);
 			if (pread(fd, d, sizeof(d), offset) != static_cast<ssize_t>(sizeof(d)))
 			    return false;
@@ -561,12 +559,12 @@ namespace iso_detect {
 	bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
 
 		constexpr off_t  kMinFileSize = 0x9000;
-		constexpr size_t kMaxWindow   = 32 * 1024 * 1024;
-		constexpr size_t kEagerBytes  = 4 * 1024 * 1024;
+		constexpr std::size_t kMaxWindow   = 32 * 1024 * 1024;
+		constexpr std::size_t kEagerBytes  = 4 * 1024 * 1024;
 
 		if (fileSize < kMinFileSize) return false;
 
-		const ScopedMapping map(fd, std::min(static_cast<size_t>(fileSize), kMaxWindow));
+		const ScopedMapping map(fd, std::min(static_cast<std::size_t>(fileSize), kMaxWindow));
 		if (!map.ok()) return false;
 
 		map.adviseSequentialScan(kEagerBytes);

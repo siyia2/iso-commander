@@ -1,10 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-module;
-
-#include <stddef.h>
-#include <stdint.h>
-
 export module isocmd.write2usb.windows.windowsWriterEngine;
 
 import std;
@@ -33,7 +28,7 @@ namespace write2usb_detail {
 	struct IsoCopyEntry {
 		std::filesystem::path src;
 		std::filesystem::path dst;
-		uint64_t size;
+		std::uint64_t size;
 		bool isDir;
 	};
 
@@ -41,8 +36,8 @@ namespace write2usb_detail {
 
 namespace windowsWriter_engine::copy {
 
-	inline constexpr size_t kBufferSize      = 4 * 1024 * 1024;
-	inline constexpr size_t kBufferAlign     = 4096;
+	inline constexpr std::size_t kBufferSize      = 4 * 1024 * 1024;
+	inline constexpr std::size_t kBufferAlign     = 4096;
 	inline constexpr int    kPaceEveryChunks = 1;
 
 	/**
@@ -56,10 +51,10 @@ namespace windowsWriter_engine::copy {
 	bool processEntries(const std::vector<write2usb_detail::IsoCopyEntry>& entries,
 	                    write2usb_detail::IsoType isoType,
 	                    const std::string& ntfsMnt,
-	                    size_t bufferSize,
+	                    std::size_t bufferSize,
 	                    char* buf,
-	                    std::atomic<uint64_t>& totalAccumulator,
-	                    std::vector<uint64_t>* checksums = nullptr);
+	                    std::atomic<std::uint64_t>& totalAccumulator,
+	                    std::vector<std::uint64_t>* checksums = nullptr);
 
 } // namespace windowsWriter_engine::copy
 

@@ -35,7 +35,6 @@
 #    make test-unit                   safe unit and CLI regression tests
 #    make test-integration       unprivileged filesystem, cancellation, USB, import and PTY tests
 #    make test-privileged        build as user, run loop-device, mount and CLI tests via sudo
-#    make test-privileged-build  compile privileged tests without running them
 #    make test-unit SANITIZE=1         run unit/CLI tests with AddressSanitizer
 #    make test-unit SANITIZE=2         run unit/CLI tests with ThreadSanitizer
 #    make V=1                     show full compiler command lines
@@ -46,7 +45,7 @@
 
 # Reject sudo test builds before included dependency makefiles can be rebuilt.
 # Only the privileged runner, never the compiler or cache recipes, needs root.
-ifneq ($(filter test-unit test-integration test-privileged test-privileged-build,$(MAKECMDGOALS)),)
+ifneq ($(filter test-unit test-integration test-privileged,$(MAKECMDGOALS)),)
 ifeq ($(shell id -u),0)
     $(error Run test targets as a regular user; make test-privileged invokes sudo only for the runner)
 endif
@@ -482,7 +481,7 @@ endif
 # ---------- Targets ----------
 .DEFAULT_GOAL := all
 .DELETE_ON_ERROR:
-.PHONY: all nocache install uninstall help test-unit test-integration test-privileged test-privileged-build
+.PHONY: all nocache install uninstall help test-unit test-integration test-privileged
 # Read the generated priority order before expanding the link prerequisites.
 # Do not regenerate the project dependency graph just to delete it.
 ifeq ($(strip $(MAKECMDGOALS)),)
@@ -588,10 +587,8 @@ $(TEST_MENU_BIN): $(TEST_MENU_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_ST
 test-integration: $(TEST_INTEGRATION_BIN) $(TEST_MENU_BIN)
 	$(Q)sh tests/integration/run.sh "$(TEST_INTEGRATION_BIN)" "$(TEST_MENU_BIN)"
 
-test-privileged-build: $(TEST_PRIVILEGED_BIN) $(TARGET)
-
 # Elevate only after all compilation and dependency generation have finished.
-test-privileged: test-privileged-build
+test-privileged: $(TEST_PRIVILEGED_BIN) $(TARGET)
 	$(Q)sudo sh tests/privileged/run.sh "$(TEST_PRIVILEGED_BIN)" "$(TARGET)"
 
 -include $(wildcard $(TEST_OBJS:.o=.d) $(TEST_MENU_OBJ:.o=.d))
@@ -616,7 +613,6 @@ help:
 	@echo "  make test-unit             Unit and CLI regression tests"
 	@echo "  make test-integration      Filesystem, cancellation, USB, import and PTY tests"
 	@echo "  make test-privileged       Build as user, run loop-device, mount and CLI tests via sudo"
-	@echo "  make test-privileged-build Build privileged tests without running them"
 	@echo ""
 	@echo "  Run all test targets without sudo."
 	@echo "  Use SANITIZE=1 (ASan) or SANITIZE=2 (TSan) with any test suite."

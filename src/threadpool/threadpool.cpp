@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stdint.h>
-
 import std;
 import isocmd.core.threadCaps;
 import isocmd.threadpool.moveOnlyTask;
@@ -607,7 +605,7 @@ void ThreadPool::runTask(MoveOnlyTask &task) {
 		}
 	}
 
-	uint64_t prev = task_state.fetch_sub(ACTIVE_ONE, std::memory_order_acq_rel);
+	std::uint64_t prev = task_state.fetch_sub(ACTIVE_ONE, std::memory_order_acq_rel);
 
 	if (activeFromState(prev) == 1 && pendingFromState(prev) == 0) {
 		task_state.notify_all();
@@ -634,7 +632,7 @@ void ThreadPool::runTask(MoveOnlyTask &task) {
 void ThreadPool::workerThread() {
 
 	while (true) {
-		uint64_t current_state = task_state.load(std::memory_order_acquire);
+		std::uint64_t current_state = task_state.load(std::memory_order_acquire);
 
 		if (stopFromState(current_state)) {
 			return;
@@ -647,8 +645,8 @@ void ThreadPool::workerThread() {
 			    return;
 		}
 
-		uint64_t expected = current_state;
-		uint64_t desired = current_state - PENDING_ONE + ACTIVE_ONE;
+		std::uint64_t expected = current_state;
+		std::uint64_t desired = current_state - PENDING_ONE + ACTIVE_ONE;
 
 		if (!task_state.compare_exchange_weak(expected, desired, std::memory_order_acq_rel,
 		                                      std::memory_order_relaxed)) {
@@ -664,7 +662,7 @@ void ThreadPool::workerThread() {
 		if (task_queue.dequeue(task)) {
 			runTask(task);
 		} else {
-			uint64_t prev =
+			std::uint64_t prev =
 			    task_state.fetch_add(PENDING_ONE - ACTIVE_ONE, std::memory_order_acq_rel);
 			if (activeFromState(prev) == 1 && pendingFromState(prev) == 0) {
 				task_state.notify_all();
@@ -712,7 +710,7 @@ ThreadPool::~ThreadPool() {
  */
 void ThreadPool::waitAllTasksCompleted() {
 
-	uint64_t current_state = task_state.load(std::memory_order_acquire);
+	std::uint64_t current_state = task_state.load(std::memory_order_acquire);
 	while (pendingFromState(current_state) != 0 || activeFromState(current_state) != 0) {
 		task_state.wait(current_state, std::memory_order_relaxed);
 		current_state = task_state.load(std::memory_order_acquire);

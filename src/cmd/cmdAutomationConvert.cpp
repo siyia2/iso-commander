@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-
 import std;
 import isocmd.cmd.cmdAutomation;
 import isocmd.core.cancellation;
@@ -157,34 +155,34 @@ static bool collectAndValidateImages(const ParsedArgs& args,
  * @brief Executes concurrent conversion workers across prepared tasks.
  */
 static void runConvertWorkers(const std::vector<ConversionTask>& tasks,
-                              std::atomic<size_t>& completedBytes,
-                              std::atomic<size_t>& completedTasks,
-                              std::atomic<size_t>& failedTasks,
+                              std::atomic<std::size_t>& completedBytes,
+                              std::atomic<std::size_t>& completedTasks,
+                              std::atomic<std::size_t>& failedTasks,
                               std::vector<std::string>& successfulOutputs,
                               std::mutex& outMutex) {
 
 	ThreadPool& pool = getStaticThreadPool();
-	const size_t poolSize = pool.threadCount();
+	const std::size_t poolSize = pool.threadCount();
 
-	const size_t numThreads = std::min({
+	const std::size_t numThreads = std::min({
 		tasks.size(),
 		GlobalThreadCaps::CONV_THREAD_CAP,
 		poolSize
 	});
 
-	std::atomic<size_t> nextTask{0};
+	std::atomic<std::size_t> nextTask{0};
 
 	std::vector<std::future<void>> futures;
 	futures.reserve(numThreads);
 
-	for (size_t t = 0; t < numThreads; ++t) {
+	for (std::size_t t = 0; t < numThreads; ++t) {
 		futures.emplace_back(pool.enqueue(
 		    [&tasks, &nextTask,
 		     &completedBytes, &completedTasks, &failedTasks,
 		     &successfulOutputs, &outMutex]() {
 
 				while (!GlobalState::g_operationCancelled.load()) {
-					const size_t i = nextTask.fetch_add(1);
+					const std::size_t i = nextTask.fetch_add(1);
 
 					if (i >= tasks.size())
 					    break;
@@ -280,14 +278,14 @@ static void groupConversionImages(
  * @return Estimated total output size in bytes, or 1 if the estimate
  *         is zero.
  */
-static size_t calculateConversionTotalBytes(
+static std::size_t calculateConversionTotalBytes(
     const std::vector<std::string>& binImg,
     const std::vector<std::string>& mdf,
     const std::vector<std::string>& nrg,
     const std::vector<std::string>& chd,
     const std::vector<std::string>& daa) {
 
-	size_t totalBytes = 0;
+	std::size_t totalBytes = 0;
 
 	totalBytes += calculateTotalBytesForConversions(
 	    binImg, false, false, false, false);
@@ -334,11 +332,11 @@ static size_t calculateConversionTotalBytes(
  */
 static std::thread startConversionProgress(
     const ParsedArgs& args,
-    std::atomic<size_t>& completedBytes,
-    size_t totalBytes,
-    std::atomic<size_t>& completedTasks,
-    std::atomic<size_t>& failedTasks,
-    size_t totalTasks,
+    std::atomic<std::size_t>& completedBytes,
+    std::size_t totalBytes,
+    std::atomic<std::size_t>& completedTasks,
+    std::atomic<std::size_t>& failedTasks,
+    std::size_t totalTasks,
     std::atomic<bool>& isComplete,
     bool& showVerbose) {
 
@@ -396,7 +394,7 @@ static std::vector<ConversionTask> buildConversionTasks(
 
 	std::vector<ConversionTask> tasks;
 
-	const size_t totalTasks =
+	const std::size_t totalTasks =
 	    binImg.size() + mdf.size() + nrg.size() +
 	    chd.size() + daa.size();
 
@@ -440,8 +438,8 @@ static std::vector<ConversionTask> buildConversionTasks(
 static void displayConversionResults(
     bool silentMode,
     bool showVerbose,
-    const std::atomic<size_t>& completedTasks,
-    const std::atomic<size_t>& failedTasks) {
+    const std::atomic<std::size_t>& completedTasks,
+    const std::atomic<std::size_t>& failedTasks) {
 
 	if (silentMode || !showVerbose)
 	    return;
@@ -479,7 +477,7 @@ static void displayConversionResults(
  * @return 0 if the operation completed successfully; otherwise 1.
  */
 static int getConversionExitStatus(
-    size_t failedTasks,
+    std::size_t failedTasks,
     bool hasErrors,
     bool cancelled) {
 
@@ -555,7 +553,7 @@ int handleConvert(const ParsedArgs& args) {
 	            .append(images.size() == 1 ? "" : "s")
 	            .append("; Attempting to convert...\n"));
 
-	std::atomic<size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
+	std::atomic<std::size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
 	std::atomic<bool> isComplete{false};
 
 	std::vector<std::string> successfulOutputs;
@@ -563,7 +561,7 @@ int handleConvert(const ParsedArgs& args) {
 	bool showVerbose = false;
 
 	// Calculate estimated output size.
-	const size_t totalBytes = calculateConversionTotalBytes(
+	const std::size_t totalBytes = calculateConversionTotalBytes(
 	    binImg, mdf, nrg, chd, daa);
 
 	// Start progress display.

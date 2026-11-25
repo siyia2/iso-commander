@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <signal.h>
 
 import std;
@@ -62,12 +61,12 @@ static std::string buildOperationLabel(const bool modeMdf, const bool modeNrg,
  */
 static void conversionWorker(const std::vector<std::string>& fileList,
                              const std::vector<int>& indices,
-                             std::atomic<size_t>& nextIndex,
+                             std::atomic<std::size_t>& nextIndex,
                              const ConversionMode& mode,
                              const ConversionBatchData& batchData)
 {
 
-	for (size_t i; (i = nextIndex.fetch_add(1)) < indices.size();) {
+	for (std::size_t i; (i = nextIndex.fetch_add(1)) < indices.size();) {
 		convertToISO(
 		    {fileList[indices[i] - 1]},
 		    mode,
@@ -176,7 +175,7 @@ void processInputForConversions(const std::string& input,
 	}
 
 	ThreadPool& pool = getStaticThreadPool();
-	const size_t numThreads = std::max(size_t(2),
+	const std::size_t numThreads = std::max(std::size_t(2),
 	    std::min({processedIndices.size(), GlobalThreadCaps::CONV_THREAD_CAP,
 			      pool.threadCount()}));
 
@@ -184,10 +183,10 @@ void processInputForConversions(const std::string& input,
 	filesToProcess.reserve(processedIndices.size());
 	for (int idx : processedIndices)
 	    filesToProcess.push_back(fileList[idx - 1]);
-	const size_t totalBytes = calculateTotalBytesForConversions(
+	const std::size_t totalBytes = calculateTotalBytesForConversions(
 	    filesToProcess, modeMdf, modeNrg, modeChd, modeDaa);
 
-	const size_t totalTasks = processedIndices.size();
+	const std::size_t totalTasks = processedIndices.size();
 	const std::string suffix = (totalTasks > 1 ? "tasks" : "task");
 	const std::string operation =
 	    buildOperationLabel(modeMdf, modeNrg, modeChd, modeDaa);
@@ -201,9 +200,9 @@ void processInputForConversions(const std::string& input,
 	const std::string header = hdr.str();
 	std::cout << header;
 
-	std::atomic<size_t> completedBytes(0);
-	std::atomic<size_t> completedTasks(0);
-	std::atomic<size_t> failedTasks(0);
+	std::atomic<std::size_t> completedBytes(0);
+	std::atomic<std::size_t> completedTasks(0);
+	std::atomic<std::size_t> failedTasks(0);
 	std::atomic<bool>   isProcessingComplete(false);
 
 	std::thread progressThread = launchProgressBar(
@@ -212,7 +211,7 @@ void processInputForConversions(const std::string& input,
 	    &isProcessingComplete, &verbose, operation, header);
 
 	const std::vector<int> indices(processedIndices.begin(), processedIndices.end());
-	std::atomic<size_t> nextIndex(0);
+	std::atomic<std::size_t> nextIndex(0);
 
 	std::vector<std::future<void>> futures;
 	futures.reserve(numThreads);
@@ -232,7 +231,7 @@ void processInputForConversions(const std::string& input,
 		.outPathsMutex = &outPathsMutex
 	};
 
-	for (size_t t = 0; t < numThreads; ++t) {
+	for (std::size_t t = 0; t < numThreads; ++t) {
 		futures.emplace_back(pool.enqueue(
 		    [&fileList, &indices, &nextIndex, mode, batchData]() {
 

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <stdio.h>
 #include <signal.h>
 
@@ -79,7 +78,7 @@ void verbosePrint(std::unordered_set<std::string>& primarySet,
 		// Stored mount/unmount records: how many there are, and how to walk them as
 		// formatted lines (one line in memory at a time).
 		struct RecordSource {
-			std::function<size_t()> count;
+			std::function<std::size_t()> count;
 			std::function<void(const std::function<void(std::string_view)>&)> each;
 		};
 
@@ -371,7 +370,7 @@ namespace {
 	 * @param vt               Theme structure providing color codes.
 	 */
 	void printInvalidPathsReport(const std::unordered_set<std::string>& invalidPaths,
-	                             size_t totalProcessed,
+	                             std::size_t totalProcessed,
 	                             bool hasValidPaths,
 	                             const VerboseAndDatabaseTheme& vt) {
 
@@ -540,7 +539,7 @@ void saveAndReportResultsForDatabase(DatabaseRefreshResult& result,
 	        ? countDifferentEntries(result.allIsoFiles, GlobalState::globalIsoFileList)
 	        : 0;
 
-	const size_t totalProcessed = result.totalFiles.load();
+	const std::size_t totalProcessed = result.totalFiles.load();
 	const bool hasValidPaths = !result.validPaths.empty();
 	const bool hasIsoFiles = !result.allIsoFiles.empty();
 
@@ -728,7 +727,7 @@ static void renderImageSearchSummary(const ImageSearchRequest& req,
                                      const VerboseAndDatabaseTheme& vt,
                                      const std::function<void()>& repaintCallerHeader,
                                      const std::string& verboseFindOutput,
-                                     const size_t totalProcessed,
+                                     const std::size_t totalProcessed,
                                      const double totalElapsedTime,
                                      const bool hadDirectories,
                                      const bool hasFindContent) {
@@ -793,7 +792,7 @@ void verboseImageSearchResults(ImageSearchRequest& req,
 	const bool hadDirectories = !req.directoryPaths.empty();
 	const std::string verboseFindOutput = captureVerboseFindOutput(req, hadDirectories);
 	const bool hasFindContent = verboseFindOutput.size() > 1;
-	const size_t totalProcessed = req.totalFiles.load();
+	const std::size_t totalProcessed = req.totalFiles.load();
 
 	const double total_elapsed_time =
 	    static_cast<double>(monotonicNowNs() - req.start_time_ns) / 1e9;

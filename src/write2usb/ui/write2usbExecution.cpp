@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <signal.h>
 
 import std;
@@ -105,10 +104,10 @@ namespace WriteExecution {
 	std::shared_ptr<std::vector<ProgressInfo>>
 	prepareWriteData(const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {
 
-		std::vector<size_t> order(validPairsIn.size());
-		std::iota(order.begin(), order.end(), size_t{0});
+		std::vector<std::size_t> order(validPairsIn.size());
+		std::iota(order.begin(), order.end(), std::size_t{0});
 
-		std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+		std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
 
 			const int c = naturalCompare(validPairsIn[a].first.filename,
 			                             validPairsIn[b].first.filename);
@@ -121,7 +120,7 @@ namespace WriteExecution {
 		auto& progress   = *progressPtr;
 		progress.reserve(validPairsIn.size());
 
-		for (size_t idx : order) {
+		for (std::size_t idx : order) {
 			const auto& [iso, device] = validPairsIn[idx];
 			progress.push_back(ProgressInfo{iso.filename, device, iso.sizeStr, iso.path});
 		}
@@ -187,13 +186,13 @@ void drainManagerForWrite2UsbUI(
     std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr)
 {
 
-	static std::atomic<size_t> activeDrains{0};
+	static std::atomic<std::size_t> activeDrains{0};
 
 	std::vector<bool> needsDrain;
 	needsDrain.reserve(progressData.size());
 
-	size_t newlyDraining = 0;
-	for (size_t i = 0; i < progressData.size(); ++i) {
+	std::size_t newlyDraining = 0;
+	for (std::size_t i = 0; i < progressData.size(); ++i) {
 		const bool pending =
 		    !progressData[i].completed.load() && !progressData[i].failed.load();
 		needsDrain.push_back(pending);
@@ -207,7 +206,7 @@ void drainManagerForWrite2UsbUI(
 		g_drainingCancelled.store(true, std::memory_order_release);
 	}
 
-	for (size_t i = 0; i < futures.size(); ++i) {
+	for (std::size_t i = 0; i < futures.size(); ++i) {
 		g_drainingManager.add(std::thread([
 		    f = std::move(futures[i]),
 		    tracked = needsDrain[i],
@@ -302,7 +301,7 @@ std::shared_ptr<WriteScreen> WriteExecution::performWithWriter(
 	auto& progressData   = *progressDataPtr;
 	for (auto& row : progressData) row.verifyRequested = verify;
 
-	const size_t totalTasks = progressData.size();
+	const std::size_t totalTasks = progressData.size();
 
 	auto syncPtr = std::make_shared<WriteSync>();
 	auto& finishedTasks   = syncPtr->finishedTasks;
@@ -320,7 +319,7 @@ std::shared_ptr<WriteScreen> WriteExecution::performWithWriter(
 	std::vector<std::future<void>> futures;
 	futures.reserve(totalTasks);
 	const auto batchStart = std::chrono::steady_clock::now();
-	for (size_t i = 0; i < totalTasks; ++i) {
+	for (std::size_t i = 0; i < totalTasks; ++i) {
 		futures.push_back(pool.enqueue([progressDataPtr, syncPtr, i, writer]() {
 
 			auto& progress = (*progressDataPtr)[i];
@@ -460,7 +459,7 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
 			fsPath.filename().string(),
 			size,
 			formatFileSize(size),
-			static_cast<size_t>(idx)
+			static_cast<std::size_t>(idx)
 		});
 	}
 

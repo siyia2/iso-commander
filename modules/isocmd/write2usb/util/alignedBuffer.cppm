@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-module;
-
-#include <stddef.h>
-
 export module isocmd.write2usb.util.alignedBuffer;
 
 import std;
@@ -21,12 +17,12 @@ export extern "C++" {
 struct AlignedBuffer {
 	void*  ptr  = nullptr;
 	char*  data = nullptr;
-	size_t size;
+	std::size_t size;
 
-	AlignedBuffer(size_t size, size_t alignment) : size(size) {
+	AlignedBuffer(std::size_t size, std::size_t alignment) : size(size) {
 
-		size_t remainder    = size % alignment;
-		size_t adjustedSize = (remainder == 0) ? size : (size + alignment - remainder);
+		std::size_t remainder    = size % alignment;
+		std::size_t adjustedSize = (remainder == 0) ? size : (size + alignment - remainder);
 		ptr = std::aligned_alloc(alignment, adjustedSize);
 		if (ptr) {
 			data = static_cast<char*>(ptr);

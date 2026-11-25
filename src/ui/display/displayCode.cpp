@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <signal.h>
 #include <sys/stat.h>
 
@@ -62,8 +61,8 @@ namespace {
 	void applyReloadedIsoList(std::vector<std::string>& freshList,
 	                           std::vector<std::string>& filteredFiles,
 	                           bool& isFiltered,
-	                           size_t& currentPage,
-	                           size_t originalPage) {
+	                           std::size_t& currentPage,
+	                           std::size_t originalPage) {
 
 		std::unordered_set<std::string> oldPaths;
 		if (isFiltered) {
@@ -197,8 +196,8 @@ bool loadAndDisplayIso(std::vector<std::string>& filteredFiles,
                      bool& umountMvRmBreak,
                      std::vector<std::string>& pendingIndices,
                      bool& hasPendingProcess,
-                     size_t& currentPage,
-                     size_t& originalPage,
+                     std::size_t& currentPage,
+                     std::size_t& originalPage,
                      std::shared_ptr<RefreshState> state) {
 
 	signal(SIGINT, SIG_IGN);
@@ -308,7 +307,7 @@ namespace {
 	 */
 	bool refreshMountedIsoCache(struct stat& lastDirStat,
 	                            std::vector<std::string>& lastSortedDirs,
-	                            size_t& lastIsoCount) {
+	                            std::size_t& lastIsoCount) {
 
 		struct stat currentDirStat{};
 		if (stat(MOUNTED_ISO_PATH.c_str(), &currentDirStat) != 0) {
@@ -351,7 +350,7 @@ namespace {
 	 * @param[in,out] lastSortedDirs Static cached directory list to swap-clear.
 	 * @param[in,out] lastIsoCount   Static cached directory count to reset to zero.
 	 */
-	void handleEmptyMountedIsos(std::vector<std::string>& lastSortedDirs, size_t& lastIsoCount) {
+	void handleEmptyMountedIsos(std::vector<std::string>& lastSortedDirs, std::size_t& lastIsoCount) {
 
 		const MainTheme* theme = getActiveTheme();
 		const bool isOriginal = (globalTheme == "original");
@@ -405,8 +404,8 @@ namespace {
 	                                   bool umountMvRmBreak,
 	                                   std::vector<std::string>& pendingIndices,
 	                                   bool& hasPendingProcess,
-	                                   size_t currentPage,
-	                                   size_t& originalPage,
+	                                   std::size_t currentPage,
+	                                   std::size_t& originalPage,
 	                                   bool dirsChanged) {
 
 		if (filteredFiles.size() == isoDirs.size() || umountMvRmBreak) {
@@ -474,15 +473,15 @@ namespace {
  */
 bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<std::string>& filteredFiles,
                                bool& isFiltered, bool& umountMvRmBreak, std::vector<std::string>& pendingIndices,
-                               bool& hasPendingProcess, size_t& currentPage,
-                               size_t& originalPage, std::shared_ptr<RefreshState> state) {
+                               bool& hasPendingProcess, std::size_t& currentPage,
+                               std::size_t& originalPage, std::shared_ptr<RefreshState> state) {
 
 	signal(SIGINT, SIG_IGN);
 	disable_ctrl_d();
 
 	static struct stat lastDirStat{};
 	static std::vector<std::string> lastSortedDirs;
-	static size_t lastIsoCount = 0;
+	static std::size_t lastIsoCount = 0;
 
 	const bool dirsChanged = refreshMountedIsoCache(lastDirStat, lastSortedDirs, lastIsoCount);
 	isoDirs = lastSortedDirs;
@@ -656,7 +655,7 @@ void applyPendingSort(std::vector<std::string>& files, const CacheTarget& target
  * @param state              [in] Shared state forwarded to @c printList.
  */
 void loadAndDisplayImageFiles(std::vector<std::string>& files, const std::string& fileType, bool& need2Sort, bool& isFiltered, bool& list,
-                                std::vector<std::string>& pendingIndices, bool& hasPendingProcess, size_t& currentPage, std::shared_ptr<RefreshState> state) {
+                                std::vector<std::string>& pendingIndices, bool& hasPendingProcess, std::size_t& currentPage, std::shared_ptr<RefreshState> state) {
 
 	const CacheTarget target = resolveCacheTarget(fileType);
 

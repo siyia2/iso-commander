@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <readline/history.h>
 #include <readline/readline.h>
@@ -159,7 +157,7 @@ static void executeParallelTraversal(
     bool promptFlag,
     std::vector<std::string>& allIsoFiles,
     std::unordered_set<std::string>& uniqueErrorMessages,
-    std::atomic<size_t>& totalFiles
+    std::atomic<std::size_t>& totalFiles
 ) {
 
 	auto& pool = getStaticThreadPool();
@@ -247,7 +245,7 @@ static void processPathTraversalAndReporting(const std::string& input,
 	std::unordered_set<std::string> invalidPaths;
 	std::unordered_set<std::string> uniqueErrorMessages;
 	std::vector<std::string> allIsoFiles;
-	std::atomic<size_t> totalFiles{0};
+	std::atomic<std::size_t> totalFiles{0};
 
 	std::cout << "\033[3H\033[J\n";
 	disableInput();
@@ -380,12 +378,12 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
 				const std::string header = promptHeaderForRepaint(prompt);
 				std::cout << header;
 
-				size_t end = header.size();
+				std::size_t end = header.size();
 				while (end > 0) {
 					const char c = header[end - 1];
 					if (c == '\001' || c == '\002') { --end; continue; }
 					if (c == 'm') {
-						const size_t esc = header.rfind('\033', end - 1);
+						const std::size_t esc = header.rfind('\033', end - 1);
 						if (esc != std::string::npos && esc + 1 < end && header[esc + 1] == '[') {
 							end = esc;
 							continue;
@@ -457,10 +455,10 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
  */
 void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFiles,
               std::unordered_set<std::string>& uniqueErrorMessages,
-              std::atomic<size_t>& totalFiles, std::mutex& traverseFilesMutex,
+              std::atomic<std::size_t>& totalFiles, std::mutex& traverseFilesMutex,
               std::mutex& traverseErrorsMutex, int maxDepth, bool promptFlag) {
 
-	const size_t BATCH_SIZE = 100;
+	const std::size_t BATCH_SIZE = 100;
 	std::vector<std::string> localIsoFiles;
 	std::atomic<bool> g_CancelledMessageAdded{false};
 
@@ -501,7 +499,7 @@ void traverse(const std::filesystem::path& path, std::vector<std::string>& isoFi
 			const auto& entry = *it;
 
 			if (promptFlag && entry.is_regular_file()) {
-				uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
+				std::uint64_t val = totalFiles.fetch_add(1, std::memory_order_relaxed) + 1;
 				if (val % 100 == 0) {
 					std::lock_guard<std::mutex> lock(GlobalMutexes::couNtMutex);
 					std::cout << "\r" << color << "Total files processed: " << val << std::flush;

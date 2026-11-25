@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-module;
-
-#include <stddef.h>
-
 export module isocmd.write2usb.ui.textWidth;
 
 import std;
@@ -27,7 +23,7 @@ export extern "C++" {
  * @param s Input string containing UTF-8 encoded text.
  * @return The number of UTF-8 code points in @p s.
  */
-size_t utf8Width(const std::string& s);
+std::size_t utf8Width(const std::string& s);
 
 /**
  * @brief Visible width of a string that may contain ANSI CSI escapes.
@@ -39,7 +35,7 @@ size_t utf8Width(const std::string& s);
  * @param s String that may contain colour/formatting escapes.
  * @return Visible columns @p s occupies when printed.
  */
-size_t visibleWidth(const std::string& s);
+std::size_t visibleWidth(const std::string& s);
 
 /**
  * @brief Cuts a string to at most @p maxCols visible columns.
@@ -56,7 +52,7 @@ size_t visibleWidth(const std::string& s);
  *                still emitted.
  * @return The longest prefix of @p s whose visible width is <= @p maxCols.
  */
-std::string clipToWidth(const std::string& s, size_t maxCols);
+std::string clipToWidth(const std::string& s, std::size_t maxCols);
 
 /**
  * @brief Shortens an ISO filename to fit a column budget, keeping ".iso".
@@ -79,6 +75,6 @@ std::string clipToWidth(const std::string& s, size_t maxCols);
  *                stem floor and returns "….iso" or "…".
  * @return @p name unchanged if it fits, otherwise the shortened form.
  */
-std::string truncateIsoName(const std::string& name, size_t maxCols);
+std::string truncateIsoName(const std::string& name, std::size_t maxCols);
 
 } // extern "C++"

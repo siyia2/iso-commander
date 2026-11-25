@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-
 import std;
 import isocmd.core.cancellation;
 
@@ -57,7 +55,7 @@ namespace fs = std::filesystem;
 bool convertNrgToIso(
     const std::string& inputFile,
     const std::string& outputFile,
-    std::atomic<size_t>* completedBytes) {
+    std::atomic<std::size_t>* completedBytes) {
 
 	if (GlobalState::g_operationCancelled.load()) {
 		GlobalState::g_operationCancelled.store(true);
@@ -72,7 +70,7 @@ bool convertNrgToIso(
 	nrgFile.seekg(0, std::ios::end);
 	nrgFile.seekg(0, std::ios::beg);
 
-	constexpr size_t ISO_CHECK_OFFSET = 16 * 2048;
+	constexpr std::size_t ISO_CHECK_OFFSET = 16 * 2048;
 
 	char isoBuf[8];
 	nrgFile.seekg(ISO_CHECK_OFFSET);
@@ -95,7 +93,7 @@ bool convertNrgToIso(
 		return false;
 	}
 
-	constexpr size_t BUFFER_SIZE = 1024 * 1024;
+	constexpr std::size_t BUFFER_SIZE = 1024 * 1024;
 	std::vector<char> buffer(BUFFER_SIZE);
 
 	while (nrgFile) {
@@ -125,7 +123,7 @@ bool convertNrgToIso(
 
 			if (completedBytes) {
 				completedBytes->fetch_add(
-				    static_cast<size_t>(bytesRead),
+				    static_cast<std::size_t>(bytesRead),
 				    std::memory_order_relaxed
 				);
 			}

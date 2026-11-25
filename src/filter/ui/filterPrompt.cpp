@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <stdio.h>
 #include <readline/history.h>
 #include <readline/readline.h>
@@ -108,7 +107,7 @@ static void repaintOnResize(
 	    ctx.hasPendingProcess &&
 	    ctx.state &&
 	    !ctx.listType.empty()) {
-		size_t page = ctx.currentPage;
+		std::size_t page = ctx.currentPage;
 
 		printList(
 		    StringListView(previewSource),

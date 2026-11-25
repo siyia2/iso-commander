@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include <stddef.h>
-#include <stdint.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -13,7 +11,7 @@ import isocmd.write2usb.util.writeTypes;
 import isocmd.write2usb.util.telemetry;
 
 namespace usb_verify {
-	ReadbackProgress::ReadbackProgress(ProgressInfo& slot, uint64_t total)
+	ReadbackProgress::ReadbackProgress(ProgressInfo& slot, std::uint64_t total)
 	    : slot_(slot), total_(total), start_(write_telemetry::Clock::now()),
 	      estimator_(start_, write_telemetry::windowsStallTimeoutSeconds) {
 
@@ -24,7 +22,7 @@ namespace usb_verify {
 
 	}
 
-	void ReadbackProgress::record(size_t bytes) {
+	void ReadbackProgress::record(std::size_t bytes) {
 
 		done_ += bytes;
 		slot_.bytesVerified.store(done_);
@@ -45,40 +43,40 @@ namespace usb_verify {
 
 	}
 
-	bool readChecksum(int fd, uint64_t size, char* buffer, size_t bufferSize,
-	                  size_t alignment, ReadbackProgress& progress, uint64_t& result) {
+	bool readChecksum(int fd, std::uint64_t size, char* buffer, std::size_t bufferSize,
+	                  std::size_t alignment, ReadbackProgress& progress, std::uint64_t& result) {
 
     	if (!buffer || !bufferSize || !alignment ||
         bufferSize % alignment || size % alignment ||
         reinterpret_cast<std::uintptr_t>(buffer) % alignment)
             return false;
 		Checksum64 checksum;
-		uint64_t done = 0;
+		std::uint64_t done = 0;
 		while (done < size) {
 			if (GlobalState::g_operationCancelled.load()) return false;
-			const size_t count = static_cast<size_t>(std::min<uint64_t>(size - done, bufferSize));
+			const std::size_t count = static_cast<std::size_t>(std::min<std::uint64_t>(size - done, bufferSize));
 			const ssize_t n = read(fd, buffer, count);
 			if (n < 0 && errno == EINTR) continue;
-			if (n <= 0 || static_cast<size_t>(n) > count || static_cast<size_t>(n) % alignment)
+			if (n <= 0 || static_cast<std::size_t>(n) > count || static_cast<std::size_t>(n) % alignment)
 			    return false;
-			checksum.update(buffer, static_cast<size_t>(n));
-			done += static_cast<size_t>(n);
-			progress.record(static_cast<size_t>(n));
+			checksum.update(buffer, static_cast<std::size_t>(n));
+			done += static_cast<std::size_t>(n);
+			progress.record(static_cast<std::size_t>(n));
 		}
 		result = checksum.value;
 		return !GlobalState::g_operationCancelled.load();
 
 	}
 
-	bool verifyFile(const std::filesystem::path& path, uint64_t size, uint64_t expected,
-	                char* buffer, size_t bufferSize, ReadbackProgress& progress) {
+	bool verifyFile(const std::filesystem::path& path, std::uint64_t size, std::uint64_t expected,
+	                char* buffer, std::size_t bufferSize, ReadbackProgress& progress) {
 
 		const int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
 		if (fd < 0) return false;
 		struct stat st{};
-		uint64_t actual = 0;
+		std::uint64_t actual = 0;
 		bool ok = fstat(fd, &st) == 0 && S_ISREG(st.st_mode) && st.st_size >= 0 &&
-		          static_cast<uint64_t>(st.st_size) == size &&
+		          static_cast<std::uint64_t>(st.st_size) == size &&
 		          readChecksum(fd, size, buffer, bufferSize, 1, progress, actual) && actual == expected;
 		if (close(fd) != 0) ok = false;
 		return ok;

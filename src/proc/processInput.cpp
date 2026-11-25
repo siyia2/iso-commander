@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <signal.h>
 #include <sys/stat.h>
 
@@ -62,11 +61,11 @@ static std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::un
 		}
 
 		if (!uniqueNameFiles.empty()) {
-			size_t usedChunks = indexChunks.size();
-			size_t remainingThreads = (numThreads > usedChunks) ? numThreads - usedChunks : 1;
+			std::size_t usedChunks = indexChunks.size();
+			std::size_t remainingThreads = (numThreads > usedChunks) ? numThreads - usedChunks : 1;
 
 			std::vector<std::vector<int>> uniqueChunks(remainingThreads);
-			for (size_t i = 0; i < uniqueNameFiles.size(); ++i)
+			for (std::size_t i = 0; i < uniqueNameFiles.size(); ++i)
 			    uniqueChunks[i % remainingThreads].push_back(uniqueNameFiles[i]);
 
 			for (auto& c : uniqueChunks)
@@ -74,7 +73,7 @@ static std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::un
 		}
 	} else {
 		std::vector<std::vector<int>> deleteChunks(numThreads);
-		for (size_t i = 0; i < processedIndicesVector.size(); ++i)
+		for (std::size_t i = 0; i < processedIndicesVector.size(); ++i)
 		    deleteChunks[i % numThreads].push_back(processedIndicesVector[i]);
 
 		for (auto& c : deleteChunks)
@@ -95,10 +94,10 @@ static std::vector<std::vector<int>> groupFilesIntoChunksForCpMvRm(const std::un
  * @param isoFiles    Master list of files used for index resolution.
  * @return size_t     Total size in bytes of all targeted files.
  */
-static size_t calculateTotalBytes(const std::vector<std::vector<int>>& indexChunks,
+static std::size_t calculateTotalBytes(const std::vector<std::vector<int>>& indexChunks,
                                   const std::vector<std::string>& isoFiles) {
 
-	size_t totalBytes = 0;
+	std::size_t totalBytes = 0;
 	for (const auto& chunk : indexChunks) {
 		for (int idx : chunk) {
 			struct ::stat st;
@@ -179,10 +178,10 @@ namespace {
 	 * @param[in] poolSize  Total number of threads available in the shared pool.
 	 * @return Worker thread count to allocate for chunking.
 	 */
-	size_t computeTargetThreadCount(size_t taskCount, bool isDelete, size_t poolSize) {
+	std::size_t computeTargetThreadCount(std::size_t taskCount, bool isDelete, std::size_t poolSize) {
 
-		const size_t cap = isDelete ? GlobalThreadCaps::RM_THREAD_CAP : GlobalThreadCaps::CPMV_THREAD_CAP;
-		return std::max(size_t(2), std::min({taskCount, cap, poolSize}));
+		const std::size_t cap = isDelete ? GlobalThreadCaps::RM_THREAD_CAP : GlobalThreadCaps::CPMV_THREAD_CAP;
+		return std::max(std::size_t(2), std::min({taskCount, cap, poolSize}));
 
 	}
 
@@ -203,16 +202,16 @@ namespace {
 	void computeWorkloadTotals(const std::vector<std::vector<int>>& indexChunks,
 	                                  const std::vector<std::string>& isoFiles,
 	                                  const std::string& processedUserDestDir,
-	                                  size_t taskCount,
+	                                  std::size_t taskCount,
 	                                  bool isCopyOrMove,
-	                                  size_t& totalBytes,
-	                                  size_t& totalTasks) {
+	                                  std::size_t& totalBytes,
+	                                  std::size_t& totalTasks) {
 
 		totalBytes = calculateTotalBytes(indexChunks, isoFiles);
 		totalTasks = taskCount;
 
 		if (isCopyOrMove) {
-			const size_t destCount = static_cast<size_t>(
+			const std::size_t destCount = static_cast<std::size_t>(
 			    std::count(processedUserDestDir.begin(), processedUserDestDir.end(), ';')) + 1;
 			totalBytes *= destCount;
 			totalTasks *= destCount;
@@ -228,7 +227,7 @@ namespace {
 	 * @param[in] process        Operation name string ("cp", "mv", or "rm").
 	 * @return Formatted header string passed to the progress display thread.
 	 */
-	std::string printCpMvRmOperationHeader(size_t totalTasks,
+	std::string printCpMvRmOperationHeader(std::size_t totalTasks,
 	                                              const std::string& operationColor,
 	                                              const std::string& process) {
 
@@ -255,7 +254,7 @@ namespace {
 	 * @param[in] isDelete            True for `rm` (skips database update); false otherwise.
 	 */
 	void syncDatabaseForDestinations(const std::vector<std::string>& successfulDestPaths,
-	                                        size_t completedTaskCount,
+	                                        std::size_t completedTaskCount,
 	                                        bool isDelete) {
 
 		if (completedTaskCount == 0 || isDelete) {
@@ -323,7 +322,7 @@ void processInputForCpMvRm(const std::string& input,
 	std::string operationColor = std::string(isDelete ? UI::Palette::Red : (isCopy ? UI::Palette::Green : UI::Palette::Yellow));
 
 	ThreadPool& pool = getStaticThreadPool();
-	const size_t numThreads = computeTargetThreadCount(processedIndices.size(), isDelete, pool.threadCount());
+	const std::size_t numThreads = computeTargetThreadCount(processedIndices.size(), isDelete, pool.threadCount());
 	std::vector<std::vector<int>> indexChunks = groupFilesIntoChunksForCpMvRm(processedIndices, isoFiles, numThreads, isDelete);
 
 	bool overwriteExisting = false;
@@ -361,8 +360,8 @@ void processInputForCpMvRm(const std::string& input,
 
 	clearScrollBuffer();
 
-	size_t totalBytes = 0;
-	size_t totalTasks = 0;
+	std::size_t totalBytes = 0;
+	std::size_t totalTasks = 0;
 	computeWorkloadTotals(indexChunks, isoFiles, processedUserDestDir,
 	                      processedIndices.size(), isCopy || isMove,
 	                      totalBytes, totalTasks);
@@ -370,9 +369,9 @@ void processInputForCpMvRm(const std::string& input,
 	const std::string header = printCpMvRmOperationHeader(totalTasks, operationColor, process);
 	const std::string coloredProcess = getColoredProcess(process, isDelete, isMove, isCopy);
 
-	std::atomic<size_t> completedBytes(0);
-	std::atomic<size_t> completedTasks(0);
-	std::atomic<size_t> failedTasks(0);
+	std::atomic<std::size_t> completedBytes(0);
+	std::atomic<std::size_t> completedTasks(0);
+	std::atomic<std::size_t> failedTasks(0);
 	std::atomic<bool> isProcessingComplete(false);
 
 	std::thread progressThread = launchProgressBar(
@@ -402,7 +401,7 @@ void processInputForCpMvRm(const std::string& input,
 
 	executeFileOperations(pool, indexChunks, options, progress);
 
-	const size_t finalCompletedTasks = completedTasks.load();
+	const std::size_t finalCompletedTasks = completedTasks.load();
 	if (finalCompletedTasks == 0) {
 		umountMvRmBreak = false;
 	}

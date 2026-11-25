@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-
 import std;
 import isocmd.converters.mdf2iso;
 import isocmd.core.cancellation;
@@ -160,8 +158,8 @@ namespace {
 	    std::ofstream& isoFile,
 	    const std::string& isoPath,
 	    const MdfTypeInfo& layout,
-	    size_t sectorCount,
-	    std::atomic<size_t>* completedBytes) {
+	    std::size_t sectorCount,
+	    std::atomic<std::size_t>* completedBytes) {
 
 		std::vector<char> sectorBuffer(layout.sector_data);
 
@@ -219,7 +217,7 @@ namespace {
 bool convertMdfToIso(
     const std::string& mdfPath,
     const std::string& isoPath,
-    std::atomic<size_t>* completedBytes) {
+    std::atomic<std::size_t>* completedBytes) {
 
 	if (consumeCancellationFlag()) {
 		return false;
@@ -249,8 +247,8 @@ bool convertMdfToIso(
 
 	mdfFile.seekg(0, std::ios::end);
 
-	const size_t sourceLength =
-	    static_cast<size_t>(mdfFile.tellg()) / layout.sector_size;
+	const std::size_t sourceLength =
+	    static_cast<std::size_t>(mdfFile.tellg()) / layout.sector_size;
 
 	mdfFile.seekg(0, std::ios::beg);
 

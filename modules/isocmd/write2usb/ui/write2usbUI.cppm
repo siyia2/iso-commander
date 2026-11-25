@@ -1,10 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-module;
-
-#include <stddef.h>
-#include <stdint.h>
-
 export module isocmd.write2usb.ui.write2usbUI;
 
 import std;
@@ -19,7 +14,7 @@ export extern "C++" {
 /**
  * Performs the actual write2usb.
  */
-bool writeIsoToDevice(const std::string& isoPath, const std::string& device, size_t progressIndex, std::vector<ProgressInfo>& progressData);
+bool writeIsoToDevice(const std::string& isoPath, const std::string& device, std::size_t progressIndex, std::vector<ProgressInfo>& progressData);
 
 /**
  * Returns true if the block device or any of its partitions is currently mounted.
@@ -113,10 +108,10 @@ void stopWriteScreen(WriteScreen& screen);
  */
 class ConfirmResizeWatcher {
 public:
-	using Painter = std::function<std::vector<size_t>(size_t cols)>;
+	using Painter = std::function<std::vector<std::size_t>(std::size_t cols)>;
 
-	ConfirmResizeWatcher(Painter paint, size_t drawnCols,
-	                     std::vector<size_t> drawnWidths,
+	ConfirmResizeWatcher(Painter paint, std::size_t drawnCols,
+	                     std::vector<std::size_t> drawnWidths,
 	                     const std::string& promptText);
 
 	~ConfirmResizeWatcher();
@@ -151,7 +146,7 @@ std::vector<std::string> getRemovableDevices();
  * @brief Validates parsed ISO-to-device mappings and returns viable pairs.
  */
 std::vector<std::pair<IsoInfo, std::string>> validateDevices(
-    const std::vector<std::pair<size_t, std::string>>& deviceMap,
+    const std::vector<std::pair<std::size_t, std::string>>& deviceMap,
     const std::vector<IsoInfo>& selectedIsos,
     bool noPermissions,
     std::vector<std::string>& validationErrors);
@@ -159,7 +154,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(
 /**
  * @brief Parses semicolon-delimited INDEX>DEVICE mappings.
  */
-std::vector<std::pair<size_t, std::string>> parseDeviceMappings(
+std::vector<std::pair<std::size_t, std::string>> parseDeviceMappings(
     const std::string& pairString,
     const std::vector<std::string>& selectedIsos,
     std::vector<std::string>& errors);
@@ -174,14 +169,14 @@ void writeToUsb(const std::string& input, const std::vector<std::string>& isoFil
 // Internal dependency-injected entry points. Production wrappers below/above
 // always supply the real writer and discovery/validation functions.
 namespace WriteExecution {
-	using Writer = bool (*)(const std::string&, const std::string&, size_t, std::vector<ProgressInfo>&);
+	using Writer = bool (*)(const std::string&, const std::string&, std::size_t, std::vector<ProgressInfo>&);
 	std::shared_ptr<WriteScreen> performWithWriter(
 	    const std::vector<std::pair<IsoInfo, std::string>>&, Writer, bool* allSucceeded = nullptr, bool verify = false);
 }
 namespace WriteMapping {
 	using Discover = std::vector<std::string> (*)();
 	using Validate = std::vector<std::pair<IsoInfo, std::string>> (*)(
-	    const std::vector<std::pair<size_t, std::string>>&, const std::vector<IsoInfo>&,
+	    const std::vector<std::pair<std::size_t, std::string>>&, const std::vector<IsoInfo>&,
 	    bool, std::vector<std::string>&);
 	std::vector<std::pair<IsoInfo, std::string>> collectWithDevices(
 	    const std::vector<IsoInfo>&, Discover, Validate, bool noPermissions);
@@ -192,7 +187,7 @@ namespace WriteMapping {
 /**
  * Converts a raw byte count into a human-readable string (KB, MB, GB).
  */
-std::string formatFileSize(uint64_t size);
+std::string formatFileSize(std::uint64_t size);
 
 /**
  * Formats a speed value into a readable string (e.g., "15.4 MB/s").
@@ -204,7 +199,7 @@ std::string formatSpeed(double mbPerSec);
  * @param device Path to the device (e.g., "/dev/sdb").
  * @return Size in bytes.
  */
-uint64_t getBlockDeviceSize(const std::string& device);
+std::uint64_t getBlockDeviceSize(const std::string& device);
 
 // --- Shared validation helpers (defined in the same .cpp as validateDevices) ---
 
@@ -260,7 +255,7 @@ namespace WriteValidation {
 	 *         the device is usable.
 	 */
 	std::optional<std::string> checkDevice(const UI::WriteTheme& wt, const std::string& device,
-	                                       const std::string& shown, uint64_t& size);
+	                                       const std::string& shown, std::uint64_t& size);
 
 	/**
 	 * @brief Checks that an ISO fits on a device.
@@ -273,7 +268,7 @@ namespace WriteValidation {
 	 *         drive name, or std::nullopt if the ISO fits.
 	 */
 	std::optional<std::string> checkCapacity(const UI::WriteTheme& wt, const IsoInfo& iso,
-	                                         const std::string& device, uint64_t deviceSize);
+	                                         const std::string& device, std::uint64_t deviceSize);
 
 } // namespace WriteValidation
 

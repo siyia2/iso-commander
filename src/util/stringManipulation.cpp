@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-
 import std;
 import isocmd.core.caches;
 import isocmd.ui.display.display;
@@ -63,7 +61,7 @@ static std::string shortenDirectory(std::string_view originalDir) {
 	std::string processedDir;
 	processedDir.reserve(originalDir.size());
 
-	size_t start = 0;
+	std::size_t start = 0;
 	while (start < originalDir.size()) {
 		auto end = originalDir.find_first_of('/', start);
 		if (end == std::string_view::npos) {
@@ -71,9 +69,9 @@ static std::string shortenDirectory(std::string_view originalDir) {
 		}
 
 		std::string_view component = originalDir.substr(start, end - start);
-		size_t truncatePos = std::min<size_t>(16, component.size());
+		std::size_t truncatePos = std::min<std::size_t>(16, component.size());
 
-		for (size_t i = 0; i < truncatePos; ++i) {
+		for (std::size_t i = 0; i < truncatePos; ++i) {
 			char c = component[i];
 			// Truncate at first special character
 			if (c == ' ' || c == '-' || c == '_' || c == '.') {
@@ -174,14 +172,14 @@ std::tuple<std::string_view, std::string_view, std::string_view> parseMountPoint
 	}
 
 	// 2. Logic: Find positions using string_view (no copies)
-	size_t delimPos = dir.find(kDelim);
+	std::size_t delimPos = dir.find(kDelim);
 	if (delimPos == std::string_view::npos) {
 		auto& stored = GlobalCaches::cachedParsesForUmount[std::string(dir)] = {std::string(dir), "", ""};
 		return {std::get<0>(stored), "", ""};
 	}
 
-	size_t lastTildePos = dir.find_last_of('~');
-	size_t afterDelim = delimPos + kDelim.size();
+	std::size_t lastTildePos = dir.find_last_of('~');
+	std::size_t afterDelim = delimPos + kDelim.size();
 
 	std::string directoryPart(dir.substr(0, afterDelim));
 	std::string filenamePart;
@@ -210,15 +208,15 @@ std::tuple<std::string_view, std::string_view, std::string_view> parseMountPoint
  */
 std::string trimWhitespace(const std::string& str) {
 
-	size_t first = str.find_first_not_of(" \t\n\r\f\v");
+	std::size_t first = str.find_first_not_of(" \t\n\r\f\v");
 	if (first == std::string::npos) return "";
-	size_t last = str.find_last_not_of(" \t\n\r\f\v");
+	std::size_t last = str.find_last_not_of(" \t\n\r\f\v");
 
 	std::string trimmed = str.substr(first, (last - first + 1));
 	std::string result;
 	result.reserve(trimmed.size());
 
-	for (size_t i = 0; i < trimmed.length(); ++i) {
+	for (std::size_t i = 0; i < trimmed.length(); ++i) {
 		if (trimmed[i] == ' ') {
 			// Check neighbors to see if we are adjacent to a semicolon
 			bool adjSemicolon = (i + 1 < trimmed.length() && trimmed[i + 1] == ';') ||

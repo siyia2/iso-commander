@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-#include <ctype.h>
 #include <unistd.h>
 
 import std;
@@ -106,7 +104,7 @@ static void scanDirectoryForISOs(const fs::path& dir,
 
 			if (entry.is_regular_file()) {
 				std::string ext = entry.path().extension().string();
-				std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+				std::transform(ext.begin(), ext.end(), ext.begin(), static_cast<int (*)(int)>(std::tolower));
 				if (ext == ".iso")
 				    isoFiles.insert(fs::canonical(entry.path()).string());
 			} else if (entry.is_directory() &&
@@ -176,7 +174,7 @@ static bool collectIsosAndValidatePaths(const ParsedArgs& args,
 
 			if (fs::is_regular_file(path)) {
 				std::string ext = path.extension().string();
-				std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+				std::transform(ext.begin(), ext.end(), ext.begin(), static_cast<int (*)(int)>(std::tolower));
 
 				if (ext != ".iso") {
 					warnMsg(args.silentMode,
@@ -234,32 +232,32 @@ static bool collectIsosAndValidatePaths(const ParsedArgs& args,
  * @param failedTasks Atomic counter tracking failed mount operations.
  * @return The final value of the atomic task index upon thread completion.
  */
-static size_t runMountThreadPool(const std::vector<std::string>& files,
+static std::size_t runMountThreadPool(const std::vector<std::string>& files,
                                  bool silentMode,
-                                 std::atomic<size_t>& completedBytes,
-                                 std::atomic<size_t>& completedTasks,
-                                 std::atomic<size_t>& failedTasks) {
+                                 std::atomic<std::size_t>& completedBytes,
+                                 std::atomic<std::size_t>& completedTasks,
+                                 std::atomic<std::size_t>& failedTasks) {
 
 	ThreadPool& pool = getStaticThreadPool();
-	const size_t poolSize = pool.threadCount();
-	const size_t numThreads = std::min({
+	const std::size_t poolSize = pool.threadCount();
+	const std::size_t numThreads = std::min({
 		files.size(),
 		GlobalThreadCaps::MOUNT_THREAD_CAP,
 		poolSize
 	});
 
-	std::atomic<size_t> nextTask{0};
+	std::atomic<std::size_t> nextTask{0};
 	std::vector<std::future<void>> futures;
 	futures.reserve(numThreads);
 
-	for (size_t t = 0; t < numThreads; ++t) {
+	for (std::size_t t = 0; t < numThreads; ++t) {
 		futures.emplace_back(pool.enqueue(
 		    [&files, &nextTask,
 		     &completedBytes, &completedTasks, &failedTasks,
 		     silentMode]() {
 
 				while (!GlobalState::g_operationCancelled.load()) {
-					const size_t i = nextTask.fetch_add(1);
+					const std::size_t i = nextTask.fetch_add(1);
 
 					if (i >= files.size())
 					    break;
@@ -293,13 +291,13 @@ static size_t runMountThreadPool(const std::vector<std::string>& files,
  * @param silentMode Whether silent output mode is enabled.
  */
 static void handleCancelledLeftovers(const std::vector<std::string>& files,
-                                     size_t nextTaskVal,
-                                     std::atomic<size_t>& completedTasks,
-                                     std::atomic<size_t>& failedTasks,
+                                     std::size_t nextTaskVal,
+                                     std::atomic<std::size_t>& completedTasks,
+                                     std::atomic<std::size_t>& failedTasks,
                                      bool silentMode) {
 
 	if (GlobalState::g_operationCancelled.load()) {
-		const size_t first = std::min(nextTaskVal, files.size());
+		const std::size_t first = std::min(nextTaskVal, files.size());
 		if (first < files.size())
 		    mountIsoFiles(
 		        std::vector<std::string>(files.begin() + first, files.end()),
@@ -320,8 +318,8 @@ static void handleCancelledLeftovers(const std::vector<std::string>& files,
  * @param failedTasks Atomic counter tracking failed mount operations.
  */
 static void showMountSummary(bool silentMode, bool showVerbose,
-                             std::atomic<size_t>& completedTasks,
-                             std::atomic<size_t>& failedTasks) {
+                             std::atomic<std::size_t>& completedTasks,
+                             std::atomic<std::size_t>& failedTasks) {
 
 	if (!silentMode && showVerbose) {
 		SyncOutput sync;
@@ -407,14 +405,14 @@ int handleMount(const ParsedArgs& args) {
 	            .append(isoFiles.size() == 1 ? "" : "s")
 	            .append("; Attempting to mount...\n"));
 
-	std::atomic<size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
+	std::atomic<std::size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
 	std::atomic<bool> isComplete{false};
 	bool showVerbose = false;
 
 	// Sort for deterministic processing order.
 	std::vector<std::string> files(isoFiles.begin(), isoFiles.end());
 	std::sort(files.begin(), files.end());
-	const size_t totalTasks = files.size();
+	const std::size_t totalTasks = files.size();
 
 	// Start the progress bar unless output is silent.
 	std::thread barThread;
@@ -440,7 +438,7 @@ int handleMount(const ParsedArgs& args) {
 		    coloredProcess, header);
 	}
 
-	size_t nextTaskVal = runMountThreadPool(files, args.silentMode, completedBytes, completedTasks, failedTasks);
+	std::size_t nextTaskVal = runMountThreadPool(files, args.silentMode, completedBytes, completedTasks, failedTasks);
 
 	isComplete.store(true, std::memory_order_release);
 

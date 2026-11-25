@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-
 import std;
 import isocmd.core.globalMutexes;
 import isocmd.core.lists;
@@ -19,9 +17,9 @@ namespace {
 	 * @return        Index of the first non-zero character, or @c str.size() if all
 	 *                remaining characters are `'0'`.
 	 */
-	size_t skipLeadingZeros(std::string_view str, size_t pos) {
+	std::size_t skipLeadingZeros(std::string_view str, std::size_t pos) {
 
-		const size_t size = str.size();
+		const std::size_t size = str.size();
 		while (pos < size && str[pos] == '0') {
 			++pos;
 		}
@@ -36,9 +34,9 @@ namespace {
 	 * @param[in] start Index where digit scanning begins.
 	 * @return          One-past-the-last digit index within @p str.
 	 */
-	size_t findNumericEnd(std::string_view str, size_t start) {
+	std::size_t findNumericEnd(std::string_view str, std::size_t start) {
 
-		const size_t size = str.size();
+		const std::size_t size = str.size();
 		while (start < size && std::isdigit(static_cast<unsigned char>(str[start]))) {
 			++start;
 		}
@@ -57,10 +55,10 @@ namespace {
 	 * @return            `-1` if the slice in @p a is less than in @p b, `1` if
 	 *                    greater, or `0` if identical across @p len characters.
 	 */
-	int compareDigitSlices(std::string_view a, size_t start_a,
-	                              std::string_view b, size_t start_b, size_t len) {
+	int compareDigitSlices(std::string_view a, std::size_t start_a,
+	                              std::string_view b, std::size_t start_b, std::size_t len) {
 
-		for (size_t k = 0; k < len; ++k) {
+		for (std::size_t k = 0; k < len; ++k) {
 			const char ca = a[start_a + k];
 			const char cb = b[start_b + k];
 			if (ca != cb) {
@@ -83,16 +81,16 @@ namespace {
 	 * @param[in,out] j Current index position in string view @p b, advanced past the numeric sequence.
 	 * @return        A negative value if @p a sorts before @p b, positive if after, or 0 if equivalent.
 	 */
-	int compareNumericSequence(std::string_view a, std::string_view b, size_t& i, size_t& j) {
+	int compareNumericSequence(std::string_view a, std::string_view b, std::size_t& i, std::size_t& j) {
 
-		const size_t start_a = skipLeadingZeros(a, i);
-		const size_t start_b = skipLeadingZeros(b, j);
+		const std::size_t start_a = skipLeadingZeros(a, i);
+		const std::size_t start_b = skipLeadingZeros(b, j);
 
-		const size_t end_a = findNumericEnd(a, start_a);
-		const size_t end_b = findNumericEnd(b, start_b);
+		const std::size_t end_a = findNumericEnd(a, start_a);
+		const std::size_t end_b = findNumericEnd(b, start_b);
 
-		const size_t nz_len_a = end_a - start_a;
-		const size_t nz_len_b = end_b - start_b;
+		const std::size_t nz_len_a = end_a - start_a;
+		const std::size_t nz_len_b = end_b - start_b;
 
 		if (nz_len_a != nz_len_b) {
 			return (nz_len_a < nz_len_b) ? -1 : 1;
@@ -103,8 +101,8 @@ namespace {
 			return digit_cmp;
 		}
 
-		const size_t zeros_a = start_a - i;
-		const size_t zeros_b = start_b - j;
+		const std::size_t zeros_a = start_a - i;
+		const std::size_t zeros_b = start_b - j;
 
 		if (zeros_a != zeros_b) {
 			return (zeros_a < zeros_b) ? -1 : 1;
@@ -129,7 +127,7 @@ namespace {
 	 * @param[in,out] j Current index position in string view @p b, advanced by 1 on success.
 	 * @return        A negative value if @p a sorts before @p b, positive if after, or 0 if equivalent.
 	 */
-	int compareAlphaSequence(std::string_view a, std::string_view b, size_t& i, size_t& j) {
+	int compareAlphaSequence(std::string_view a, std::string_view b, std::size_t& i, std::size_t& j) {
 
 		const char ca = static_cast<char>(
 		    std::tolower(static_cast<unsigned char>(a[i])));
@@ -194,9 +192,9 @@ namespace {
  */
 int naturalCompare(std::string_view a, std::string_view b) {
 
-	size_t i = 0, j = 0;
-	const size_t size_a = a.size();
-	const size_t size_b = b.size();
+	std::size_t i = 0, j = 0;
+	const std::size_t size_a = a.size();
+	const std::size_t size_b = b.size();
 
 	while (i < size_a && j < size_b) {
 		const bool is_num_a = std::isdigit(static_cast<unsigned char>(a[i]));
@@ -273,24 +271,24 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
 	const bool namesOnly = displayConfig::toggleNamesOnly;
 	ThreadPool& pool = getStaticThreadPool();
 
-	const size_t numThreads =
+	const std::size_t numThreads =
 	    std::min(pool.threadCount(),
 	             GlobalThreadCaps::SORT_THREAD_CAP);
 
-	const size_t n = files.size();
+	const std::size_t n = files.size();
 
-	const size_t numChunks =
-	    std::min<size_t>(numThreads * 2, n / 1000 + 1);
+	const std::size_t numChunks =
+	    std::min<std::size_t>(numThreads * 2, n / 1000 + 1);
 
-	const size_t chunkSize =
+	const std::size_t chunkSize =
 	    (n + numChunks - 1) / numChunks;
 
 	auto comparator = [namesOnly](const std::string& a,
 	                              const std::string& b) {
 
 		if (namesOnly) {
-			const size_t a_slash = a.find_last_of('/');
-			const size_t b_slash = b.find_last_of('/');
+			const std::size_t a_slash = a.find_last_of('/');
+			const std::size_t b_slash = b.find_last_of('/');
 
 			std::string_view a_view = a;
 			std::string_view b_view = b;
@@ -308,12 +306,12 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
 
 	};
 
-	std::vector<std::pair<size_t, size_t>> chunks;
+	std::vector<std::pair<std::size_t, std::size_t>> chunks;
 	std::vector<std::future<void>> futures;
 
-	for (size_t i = 0; i < numChunks; ++i) {
-		const size_t start = i * chunkSize;
-		const size_t end = std::min(n, (i + 1) * chunkSize);
+	for (std::size_t i = 0; i < numChunks; ++i) {
+		const std::size_t start = i * chunkSize;
+		const std::size_t end = std::min(n, (i + 1) * chunkSize);
 
 		if (start >= end)
 		    break;
@@ -336,18 +334,18 @@ void sortFilesCaseInsensitive(std::vector<std::string>& files) {
 	futures.clear();
 
 	while (chunks.size() > 1) {
-		std::vector<std::pair<size_t, size_t>> newChunks;
+		std::vector<std::pair<std::size_t, std::size_t>> newChunks;
 		std::vector<std::future<void>> mergeFutures;
 
-		for (size_t i = 0; i < chunks.size(); i += 2) {
+		for (std::size_t i = 0; i < chunks.size(); i += 2) {
 			if (i + 1 >= chunks.size()) {
 				newChunks.push_back(chunks[i]);
 				break;
 			}
 
-			const size_t start = chunks[i].first;
-			const size_t mid   = chunks[i].second;
-			const size_t end   = chunks[i + 1].second;
+			const std::size_t start = chunks[i].first;
+			const std::size_t mid   = chunks[i].second;
+			const std::size_t end   = chunks[i + 1].second;
 
 			mergeFutures.emplace_back(
 			    pool.enqueue([comparator, start, mid, end, &files]() {

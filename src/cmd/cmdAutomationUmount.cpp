@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
 #include <unistd.h>
 
 import std;
@@ -26,14 +25,14 @@ using namespace IsoCli;
  */
 static void runUnmountWorkers(const std::vector<std::string>& paths,
                               bool silentMode,
-                              std::atomic<size_t>& completedBytes,
-                              std::atomic<size_t>& completedTasks,
-                              std::atomic<size_t>& failedTasks,
-                              std::atomic<size_t>& nextTask) {
+                              std::atomic<std::size_t>& completedBytes,
+                              std::atomic<std::size_t>& completedTasks,
+                              std::atomic<std::size_t>& failedTasks,
+                              std::atomic<std::size_t>& nextTask) {
 
 	ThreadPool& pool = getStaticThreadPool();
-	const size_t poolSize = pool.threadCount();
-	const size_t numThreads = std::min({
+	const std::size_t poolSize = pool.threadCount();
+	const std::size_t numThreads = std::min({
 		paths.size(),
 		GlobalThreadCaps::UMOUNT_THREAD_CAP,
 		poolSize
@@ -42,7 +41,7 @@ static void runUnmountWorkers(const std::vector<std::string>& paths,
 	std::vector<std::future<void>> futures;
 	futures.reserve(numThreads);
 
-	for (size_t t = 0; t < numThreads; ++t) {
+	for (std::size_t t = 0; t < numThreads; ++t) {
 		futures.emplace_back(pool.enqueue(
 		    [&paths, &nextTask,
 		     &completedBytes, &completedTasks, &failedTasks,
@@ -51,7 +50,7 @@ static void runUnmountWorkers(const std::vector<std::string>& paths,
 				// Stop claiming new items on Ctrl+C so the bar ends at once;
 				// unclaimed items are marked as cancelled after the bar.
 				while (!GlobalState::g_operationCancelled.load()) {
-					const size_t i = nextTask.fetch_add(1);
+					const std::size_t i = nextTask.fetch_add(1);
 
 					if (i >= paths.size())
 					    break;
@@ -239,11 +238,11 @@ static CollectionResult collectMountPoints(const ParsedArgs& args) {
  * @return std::thread Joinable progress bar thread, or a default-constructed thread in silent mode.
  */
 static std::thread startProgressThread(
-    size_t totalTasks,
+    std::size_t totalTasks,
     const std::string& coloredProcess,
-    std::atomic<size_t>& completedBytes,
-    std::atomic<size_t>& completedTasks,
-    std::atomic<size_t>& failedTasks,
+    std::atomic<std::size_t>& completedBytes,
+    std::atomic<std::size_t>& completedTasks,
+    std::atomic<std::size_t>& failedTasks,
     std::atomic<bool>& isComplete,
     bool& showVerbose
 ) {
@@ -277,13 +276,13 @@ static std::thread startProgressThread(
  */
 static void handleCancelledRemainder(
     const std::vector<std::string>& paths,
-    const std::atomic<size_t>& nextTask,
-    std::atomic<size_t>& completedTasks,
-    std::atomic<size_t>& failedTasks,
+    const std::atomic<std::size_t>& nextTask,
+    std::atomic<std::size_t>& completedTasks,
+    std::atomic<std::size_t>& failedTasks,
     bool silentMode
 ) {
 
-	const size_t first = std::min(nextTask.load(), paths.size());
+	const std::size_t first = std::min(nextTask.load(), paths.size());
 	if (first < paths.size()) {
 		unmountISO(
 		    std::vector<std::string>(paths.begin() + first, paths.end()),
@@ -298,8 +297,8 @@ static void handleCancelledRemainder(
  * @param[in] failedTasks Atomic counter of failed unmount tasks.
  */
 static void printVerboseUnmountSummary(
-    const std::atomic<size_t>& completedTasks,
-    const std::atomic<size_t>& failedTasks
+    const std::atomic<std::size_t>& completedTasks,
+    const std::atomic<std::size_t>& failedTasks
 ) {
 
 	SyncOutput sync;
@@ -330,7 +329,7 @@ static void printVerboseUnmountSummary(
  * @param[in] hasErrors Flag indicating prior path validation errors.
  * @return int Returns `0` when no failures, validation errors, or cancellations occurred; `1` otherwise.
  */
-static int computeUnmountExitCode(size_t failedTasks, bool hasErrors) {
+static int computeUnmountExitCode(std::size_t failedTasks, bool hasErrors) {
 
 	return (failedTasks == 0 && !hasErrors &&
 	        !GlobalState::g_operationCancelled.load()) ? 0 : 1;
@@ -371,14 +370,14 @@ static int executeUnmounts(const std::unordered_set<std::string>& mountPoints,
 	            .append(mountPoints.size() == 1 ? "" : "s")
 	            .append("; Attempting to unmount...\n"));
 
-	std::atomic<size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
+	std::atomic<std::size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
 	std::atomic<bool> isComplete{false};
 	bool showVerbose = false;
 
 	// Sort for deterministic processing order.
 	std::vector<std::string> paths(mountPoints.begin(), mountPoints.end());
 	std::sort(paths.begin(), paths.end());
-	const size_t totalTasks = paths.size();
+	const std::size_t totalTasks = paths.size();
 
 	// Start the progress bar unless output is silent.
 	std::thread barThread;
@@ -392,7 +391,7 @@ static int executeUnmounts(const std::unordered_set<std::string>& mountPoints,
 		    isComplete, showVerbose);
 	}
 
-	std::atomic<size_t> nextTask{0};
+	std::atomic<std::size_t> nextTask{0};
 	runUnmountWorkers(paths, args.silentMode, completedBytes, completedTasks, failedTasks, nextTask);
 
 	isComplete.store(true, std::memory_order_release);

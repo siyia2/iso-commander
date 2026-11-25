@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -450,7 +448,7 @@ namespace {
 		                         const std::string& ntfsMnt,
 		                         std::vector<IsoCopyEntry>& ntfsEntries,
 		                         std::vector<IsoCopyEntry>& espEntries,
-		                         uint64_t& totalBytes) {
+		                         std::uint64_t& totalBytes) {
 
 			try {
 				for (const auto& entry :
@@ -464,7 +462,7 @@ namespace {
 					const bool toESP = isEspEntry(rel, isoType);
 					const fs::path dest =
 					    fs::path(toESP ? fatMnt : ntfsMnt) / rel;
-					const uint64_t sz =
+					const std::uint64_t sz =
 					    entry.is_regular_file() ? entry.file_size() : 0;
 
 					totalBytes += sz;
@@ -694,9 +692,9 @@ namespace {
 		/**
 		 * @brief Polls progress and speed into @p info.
 		 */
-		void runProgressMonitor(std::atomic<uint64_t>& accumulator,
+		void runProgressMonitor(std::atomic<std::uint64_t>& accumulator,
 		                        std::atomic<bool>& active,
-		                        uint64_t totalBytes,
+		                        std::uint64_t totalBytes,
 		                        ProgressInfo& info) {
 
 			write_telemetry::SpeedEstimator estimator(write_telemetry::Clock::now(),
@@ -704,7 +702,7 @@ namespace {
 			while (active.load()) {
 				std::this_thread::sleep_for(std::chrono::milliseconds(500));
 				const auto now = write_telemetry::Clock::now();
-				const uint64_t currentWritten = accumulator.load();
+				const std::uint64_t currentWritten = accumulator.load();
 				info.bytesWritten.store(currentWritten);
 				info.progress.store(write_telemetry::transferPercent(currentWritten, totalBytes));
 				if (auto speed = estimator.sample(currentWritten, now))
@@ -822,7 +820,7 @@ namespace {
 		                       const std::string& ntfsMnt,
 		                       EntryVec& ntfsEntries,
 		                       EntryVec& espEntries,
-		                       uint64_t& totalBytes) {
+		                       std::uint64_t& totalBytes) {
 
 			if (!iso::enumerateIsoEntries(
 			        isoMnt, isoType, fatMnt, ntfsMnt,
@@ -903,10 +901,10 @@ namespace {
 
 		}
 
-		bool verifyEntries(const EntryVec& entries, const std::vector<uint64_t>& checksums,
-		                   char* buffer, size_t bufferSize, usb_verify::ReadbackProgress& progress) {
+		bool verifyEntries(const EntryVec& entries, const std::vector<std::uint64_t>& checksums,
+		                   char* buffer, std::size_t bufferSize, usb_verify::ReadbackProgress& progress) {
 
-			size_t index = 0;
+			std::size_t index = 0;
 			for (const auto& entry : entries) {
 				if (isCancelled()) return false;
 				if (entry.isDir) {
@@ -921,7 +919,7 @@ namespace {
 
 		}
 
-		double averageSpeedMBps(uint64_t totalBytes, double seconds) {
+		double averageSpeedMBps(std::uint64_t totalBytes, double seconds) {
 
 			if (seconds <= 0.0) return 0.0;
 
@@ -1002,14 +1000,14 @@ static bool copyAndVerifyWindowsIso(
 	const steps::FailureReporter report{slot};
 
 	std::vector<iso::IsoCopyEntry> ntfsEntries, espEntries;
-	uint64_t totalBytes = 0;
+	std::uint64_t totalBytes = 0;
 
 	if (!steps::enumerateNonEmpty(
 	        isoMnt, isoType, fatMnt, ntfsMnt,
 	        ntfsEntries, espEntries, totalBytes))
 	    return report.failUnlessCancelled();
 
-	std::atomic<uint64_t> totalBytesWrittenAccumulator{0};
+	std::atomic<std::uint64_t> totalBytesWrittenAccumulator{0};
 	std::atomic<bool> monitoringActive{true};
 
 	const auto startTime = std::chrono::high_resolution_clock::now();
@@ -1025,13 +1023,13 @@ static bool copyAndVerifyWindowsIso(
 	// Ensures the thread is stopped and joined on every return path.
 	ThreadGuard threadGuard(progressMonitorThread, monitoringActive);
 
-	constexpr size_t bufferSize = copy::kBufferSize;
+	constexpr std::size_t bufferSize = copy::kBufferSize;
 
 	AlignedBuffer ioBuf(bufferSize, copy::kBufferAlign);
 	if (!ioBuf)
 	    return report.failUnlessCancelled();
 
-	std::vector<uint64_t> ntfsChecksums, espChecksums;
+	std::vector<std::uint64_t> ntfsChecksums, espChecksums;
 
 	auto runPass = [&](std::vector<iso::IsoCopyEntry>& entries) {
 
@@ -1106,7 +1104,7 @@ static bool copyAndVerifyWindowsIso(
  */
 bool writeWindowsIsoToDevice(const std::string& isoPath,
                              const std::string& device,
-                             size_t progressIndex,
+                             std::size_t progressIndex,
                              std::vector<ProgressInfo>& progressData) {
 
 	namespace steps = win_iso_steps;

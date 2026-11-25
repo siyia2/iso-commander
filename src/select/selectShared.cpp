@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <stddef.h>
-
 import std;
 import isocmd.core.uiState;
 import isocmd.input.readline;
@@ -82,7 +80,7 @@ namespace select_shared {
 				return false;
 			}
 
-			const size_t firstDash = token.find('-');
+			const std::size_t firstDash = token.find('-');
 			const bool hasMultipleDashes = firstDash != std::string_view::npos &&
 			                               token.find('-', firstDash + 1) != std::string_view::npos;
 			if (hasMultipleDashes) {
@@ -110,23 +108,23 @@ namespace select_shared {
 			}
 
 			out.source = hasSourceSuffix;
-			out.lo = static_cast<size_t>(lo);
-			out.hi = static_cast<size_t>(hi);
+			out.lo = static_cast<std::size_t>(lo);
+			out.hi = static_cast<std::size_t>(hi);
 			return true;
 
 		}
 
-		std::vector<size_t> resolveIndices(std::vector<std::string> &paths,
+		std::vector<std::size_t> resolveIndices(std::vector<std::string> &paths,
 		                                   const std::vector<std::string> &source, bool prune) {
 
 			if (paths.empty())
 			    return {};
-			std::unordered_map<std::string_view, size_t> indexOf;
+			std::unordered_map<std::string_view, std::size_t> indexOf;
 			indexOf.reserve(source.size());
-			for (size_t i = 0; i < source.size(); ++i)
+			for (std::size_t i = 0; i < source.size(); ++i)
 			    indexOf.emplace(source[i], i + 1); // first occurrence wins
 
-			std::vector<size_t> idx;
+			std::vector<std::size_t> idx;
 			idx.reserve(paths.size());
 
 			if (prune) {
@@ -154,11 +152,11 @@ namespace select_shared {
 
 		}
 
-		std::vector<std::string> compressRuns(const std::vector<size_t> &idx) {
+		std::vector<std::string> compressRuns(const std::vector<std::size_t> &idx) {
 
 			std::vector<std::string> out;
-			for (size_t i = 0; i < idx.size();) {
-				size_t j = i;
+			for (std::size_t i = 0; i < idx.size();) {
+				std::size_t j = i;
 				while (j + 1 < idx.size() && idx[j + 1] == idx[j] + 1)
 				    ++j;
 				out.push_back(i == j ? std::to_string(idx[i])
@@ -186,7 +184,7 @@ namespace select_shared {
 		                  const std::vector<std::string> &viewList,
 		                  const std::vector<std::string> &sourceList) {
 
-			const size_t semi = inputString.find(';');
+			const std::size_t semi = inputString.find(';');
 			if (semi == std::string::npos || inputString.find('/') != std::string::npos)
 			    return false;
 
@@ -206,7 +204,7 @@ namespace select_shared {
 				if (t.lo > list.size() || t.hi > list.size())
 				    continue;
 
-				for (size_t n = t.lo;; ++n) {
+				for (std::size_t n = t.lo;; ++n) {
 					const std::string &path = list[n - 1];
 					if (seen.insert(path).second)
 					    paths.push_back(path);

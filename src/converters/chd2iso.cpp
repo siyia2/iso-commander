@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
-#include <stddef.h>
-#include <stdint.h>
 #include <errno.h>
 #include <stdio.h>
 #include <chd.h>
@@ -18,10 +16,10 @@ namespace {
 	 * @brief Layout and buffer size parameters for extracting sector user data from CHD hunks.
 	 */
 	struct HunkExtractConfig {
-		uint32_t hunkSize;       ///< Size of each compressed/decompressed hunk in bytes.
-		uint32_t rawSectorSize;  ///< Size of each raw sector within a hunk in bytes.
-		uint32_t sectorsPerHunk; ///< Number of sectors contained in a single hunk.
-		uint32_t userDataOffset; ///< Byte offset of user payload data inside each raw sector.
+		std::uint32_t hunkSize;       ///< Size of each compressed/decompressed hunk in bytes.
+		std::uint32_t rawSectorSize;  ///< Size of each raw sector within a hunk in bytes.
+		std::uint32_t sectorsPerHunk; ///< Number of sectors contained in a single hunk.
+		std::uint32_t userDataOffset; ///< Byte offset of user payload data inside each raw sector.
 	};
 
 	/**
@@ -30,10 +28,10 @@ namespace {
 	struct HunkWorkerContext {
 		const std::string& chdPath;            ///< Path to the source CHD file.
 		void* mapped;                          ///< Writable memory-mapped output buffer.
-		uint32_t startHunk;                    ///< Inclusive starting hunk index for the worker.
-		uint32_t endHunk;                      ///< Exclusive ending hunk index for the worker.
+		std::uint32_t startHunk;                    ///< Inclusive starting hunk index for the worker.
+		std::uint32_t endHunk;                      ///< Exclusive ending hunk index for the worker.
 		HunkExtractConfig config;              ///< Sector layout and hunk extraction configuration.
-		std::atomic<size_t>* completedBytes = nullptr; ///< Optional atomic counter of bytes written.
+		std::atomic<std::size_t>* completedBytes = nullptr; ///< Optional atomic counter of bytes written.
 		std::atomic<bool>& errorOccurred;      ///< Shared flag signaling read, open, or cancel failure.
 	};
 
@@ -42,8 +40,8 @@ namespace {
 	 */
 	struct HunkConvertParams {
 		HunkExtractConfig extract; ///< Sector layout and hunk extraction configuration.
-		uint32_t totalHunks;       ///< Total number of hunks in the CHD image.
-		uint64_t totalUserData;    ///< Total extracted user data size in bytes.
+		std::uint32_t totalHunks;       ///< Total number of hunks in the CHD image.
+		std::uint64_t totalUserData;    ///< Total extracted user data size in bytes.
 	};
 
 	/**
@@ -95,7 +93,7 @@ namespace {
 namespace fs = std::filesystem;
 
 /// Size of the user data payload in a single CD-ROM sector (ISO9660 logical block).
-static constexpr uint32_t kUserDataSize = 2048;
+static constexpr std::uint32_t kUserDataSize = 2048;
 
 /**
  * @brief Detects the correct user data offset within a CD-ROM sector layout.
@@ -111,19 +109,19 @@ static constexpr uint32_t kUserDataSize = 2048;
  *
  * @return The detected user data offset in bytes (0, 16, or 24), or a sensible fallback offset if detection fails.
  */
-static uint32_t detectUserDataOffset(chd_file* chd, uint32_t hunkSize, uint32_t rawSectorSize, uint32_t sectorsPerHunk) {
+static std::uint32_t detectUserDataOffset(chd_file* chd, std::uint32_t hunkSize, std::uint32_t rawSectorSize, std::uint32_t sectorsPerHunk) {
 
 	if (rawSectorSize == 2048) return 0;
 
-	uint32_t targetHunk = 16 / sectorsPerHunk;
-	uint32_t sectorIndex = 16 % sectorsPerHunk;
-	std::vector<uint8_t> testBuf(hunkSize);
+	std::uint32_t targetHunk = 16 / sectorsPerHunk;
+	std::uint32_t sectorIndex = 16 % sectorsPerHunk;
+	std::vector<std::uint8_t> testBuf(hunkSize);
 
 	if (chd_read(chd, targetHunk, testBuf.data()) == CHDERR_NONE) {
-		const uint8_t* s16 = testBuf.data() + (sectorIndex * rawSectorSize);
-		std::vector<uint32_t> candidates = (rawSectorSize == 2352) ? std::vector<uint32_t>{16, 24} : std::vector<uint32_t>{0, 16, 24};
+		const std::uint8_t* s16 = testBuf.data() + (sectorIndex * rawSectorSize);
+		std::vector<std::uint32_t> candidates = (rawSectorSize == 2352) ? std::vector<std::uint32_t>{16, 24} : std::vector<std::uint32_t>{0, 16, 24};
 
-		for (uint32_t off : candidates) {
+		for (std::uint32_t off : candidates) {
 			if (std::memcmp(s16 + off + 1, "CD001", 5) == 0) {
 				return off;
 			}
@@ -154,10 +152,10 @@ static uint32_t detectUserDataOffset(chd_file* chd, uint32_t hunkSize, uint32_t 
  *
  * @return true if conversion completed successfully, false on error or user cancellation.
  */
-static bool convertSingleThreaded(chd_file* rawChd, const std::string& isoPath, uint32_t hunkSize,
-                                  uint32_t rawSectorSize, uint32_t sectorsPerHunk,
-                                  uint32_t userDataOffset, uint32_t totalHunks,
-                                  std::atomic<size_t>* completedBytes) {
+static bool convertSingleThreaded(chd_file* rawChd, const std::string& isoPath, std::uint32_t hunkSize,
+                                  std::uint32_t rawSectorSize, std::uint32_t sectorsPerHunk,
+                                  std::uint32_t userDataOffset, std::uint32_t totalHunks,
+                                  std::atomic<std::size_t>* completedBytes) {
 
 	// The buffer must outlive the stream, and pubsetbuf() must be called
 	// before open() for it to take effect on libstdc++.
@@ -167,11 +165,11 @@ static bool convertSingleThreaded(chd_file* rawChd, const std::string& isoPath, 
 	isoFile.open(isoPath, std::ios::binary | std::ios::trunc);
 	if (!isoFile.is_open()) return false;
 
-	std::vector<uint8_t> hunkBuffer(hunkSize);
-	const uint32_t userDataPerHunk = sectorsPerHunk * kUserDataSize;
-	std::vector<uint8_t> hunkUserData(userDataPerHunk);
+	std::vector<std::uint8_t> hunkBuffer(hunkSize);
+	const std::uint32_t userDataPerHunk = sectorsPerHunk * kUserDataSize;
+	std::vector<std::uint8_t> hunkUserData(userDataPerHunk);
 
-	for (uint32_t hunk = 0; hunk < totalHunks; ++hunk) {
+	for (std::uint32_t hunk = 0; hunk < totalHunks; ++hunk) {
 		if (GlobalState::g_operationCancelled.load()) {
 			isoFile.close();
 			fs::remove(isoPath);
@@ -183,9 +181,9 @@ static bool convertSingleThreaded(chd_file* rawChd, const std::string& isoPath, 
 			return false;
 		}
 
-		uint8_t* dest = hunkUserData.data();
-		for (uint32_t s = 0; s < sectorsPerHunk; ++s) {
-			const uint8_t* src = hunkBuffer.data() + (s * rawSectorSize);
+		std::uint8_t* dest = hunkUserData.data();
+		for (std::uint32_t s = 0; s < sectorsPerHunk; ++s) {
+			const std::uint8_t* src = hunkBuffer.data() + (s * rawSectorSize);
 			std::memcpy(dest, src + userDataOffset, kUserDataSize);
 			dest += kUserDataSize;
 		}
@@ -219,7 +217,7 @@ static bool convertSingleThreaded(chd_file* rawChd, const std::string& isoPath, 
  *
  * @return true on success, false if the space could not be reserved (e.g. ENOSPC).
  */
-static bool reserveFileSpace(int fd, uint64_t size) {
+static bool reserveFileSpace(int fd, std::uint64_t size) {
 
 #if defined(__linux__)
 	int rc = ::posix_fallocate(fd, 0, static_cast<off_t>(size));
@@ -240,13 +238,13 @@ static bool reserveFileSpace(int fd, uint64_t size) {
  * @param sectorsPerHunk Number of sectors contained in a single hunk.
  * @param userDataOffset Byte offset of user data within each raw sector.
  */
-static void extractHunkUserData(const uint8_t* hunkBuffer, uint8_t* userDataBuffer,
-                                uint32_t rawSectorSize, uint32_t sectorsPerHunk,
-                                uint32_t userDataOffset) {
+static void extractHunkUserData(const std::uint8_t* hunkBuffer, std::uint8_t* userDataBuffer,
+                                std::uint32_t rawSectorSize, std::uint32_t sectorsPerHunk,
+                                std::uint32_t userDataOffset) {
 
-	uint8_t* dest = userDataBuffer;
-	for (uint32_t s = 0; s < sectorsPerHunk; ++s) {
-		const uint8_t* src = hunkBuffer + (s * rawSectorSize);
+	std::uint8_t* dest = userDataBuffer;
+	for (std::uint32_t s = 0; s < sectorsPerHunk; ++s) {
+		const std::uint8_t* src = hunkBuffer + (s * rawSectorSize);
 		std::memcpy(dest, src + userDataOffset, kUserDataSize);
 		dest += kUserDataSize;
 	}
@@ -270,11 +268,11 @@ static void processHunkRangeWorker(const HunkWorkerContext& ctx) {
 	}
 	ChdFilePtr threadChdPtr(threadChd);
 
-	const uint32_t userDataPerHunk = ctx.config.sectorsPerHunk * kUserDataSize;
-	std::vector<uint8_t> hunkBuffer(ctx.config.hunkSize);
-	std::vector<uint8_t> userDataBuffer(userDataPerHunk);
+	const std::uint32_t userDataPerHunk = ctx.config.sectorsPerHunk * kUserDataSize;
+	std::vector<std::uint8_t> hunkBuffer(ctx.config.hunkSize);
+	std::vector<std::uint8_t> userDataBuffer(userDataPerHunk);
 
-	for (uint32_t hunk = ctx.startHunk;
+	for (std::uint32_t hunk = ctx.startHunk;
 		 hunk < ctx.endHunk && !ctx.errorOccurred.load(std::memory_order_relaxed);
 		 ++hunk) {
 		if (GlobalState::g_operationCancelled.load() ||
@@ -287,7 +285,7 @@ static void processHunkRangeWorker(const HunkWorkerContext& ctx) {
 		                    ctx.config.rawSectorSize, ctx.config.sectorsPerHunk,
 		                    ctx.config.userDataOffset);
 
-		const uint64_t offset = static_cast<uint64_t>(hunk) * userDataPerHunk;
+		const std::uint64_t offset = static_cast<std::uint64_t>(hunk) * userDataPerHunk;
 		std::memcpy(static_cast<char*>(ctx.mapped) + offset, userDataBuffer.data(),
 		            userDataPerHunk);
 
@@ -307,7 +305,7 @@ static void processHunkRangeWorker(const HunkWorkerContext& ctx) {
  * @param totalUserData Total size of the output file and mapping in bytes.
  * @return Non-null mapping pointer on success, or `nullptr` on failure.
  */
-static void* createAndMapOutputFile(const std::string& isoPath, uint64_t totalUserData) {
+static void* createAndMapOutputFile(const std::string& isoPath, std::uint64_t totalUserData) {
 
 	const int fd = ::open(isoPath.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644);
 	if (fd == -1) {
@@ -352,7 +350,7 @@ static void* createAndMapOutputFile(const std::string& isoPath, uint64_t totalUs
  */
 static bool convertMultiThreaded(const std::string& chdPath, const std::string& isoPath,
                                  const HunkConvertParams& params,
-                                 std::atomic<size_t>* completedBytes) {
+                                 std::atomic<std::size_t>* completedBytes) {
 
 	void* mapped = createAndMapOutputFile(isoPath, params.totalUserData);
 	if (!mapped) {
@@ -360,14 +358,14 @@ static bool convertMultiThreaded(const std::string& chdPath, const std::string& 
 	}
 
 	constexpr unsigned int kNumThreads = 2;
-	const uint32_t hunksPerThread = (params.totalHunks + kNumThreads - 1) / kNumThreads;
+	const std::uint32_t hunksPerThread = (params.totalHunks + kNumThreads - 1) / kNumThreads;
 	std::vector<std::thread> threads;
 	threads.reserve(kNumThreads);
 	std::atomic<bool> errorOccurred{false};
 
 	for (unsigned int t = 0; t < kNumThreads; ++t) {
-		const uint32_t start = t * hunksPerThread;
-		const uint32_t end = std::min(start + hunksPerThread, params.totalHunks);
+		const std::uint32_t start = t * hunksPerThread;
+		const std::uint32_t end = std::min(start + hunksPerThread, params.totalHunks);
 		if (start >= end) {
 			continue;
 		}
@@ -441,7 +439,7 @@ static bool convertMultiThreaded(const std::string& chdPath, const std::string& 
  * @see GlobalState::g_operationCancelled Global cancellation flag.
  */
 bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
-                     std::atomic<size_t>* completedBytes) {
+                     std::atomic<std::size_t>* completedBytes) {
 
 	if (GlobalState::g_operationCancelled.load()) return false;
 
@@ -452,19 +450,19 @@ bool convertChdToIso(const std::string& chdPath, const std::string& isoPath,
 	const chd_header* header = chd_get_header(chd.get());
 	if (!header) return false;
 
-	uint32_t hunkSize = header->hunkbytes;
-	uint32_t rawSectorSize = 0;
+	std::uint32_t hunkSize = header->hunkbytes;
+	std::uint32_t rawSectorSize = 0;
 	if (hunkSize % 2448 == 0)      rawSectorSize = 2448;
 	else if (hunkSize % 2352 == 0) rawSectorSize = 2352;
 	else if (hunkSize % 2048 == 0) rawSectorSize = 2048;
 	else return false;
 
-	uint32_t sectorsPerHunk = hunkSize / rawSectorSize;
-	const uint64_t totalUserData = static_cast<uint64_t>(header->totalhunks) * sectorsPerHunk * kUserDataSize;
+	std::uint32_t sectorsPerHunk = hunkSize / rawSectorSize;
+	const std::uint64_t totalUserData = static_cast<std::uint64_t>(header->totalhunks) * sectorsPerHunk * kUserDataSize;
 
-	uint32_t userDataOffset = detectUserDataOffset(chd.get(), hunkSize, rawSectorSize, sectorsPerHunk);
+	std::uint32_t userDataOffset = detectUserDataOffset(chd.get(), hunkSize, rawSectorSize, sectorsPerHunk);
 
-	const uint64_t ONE_GB = 1ULL << 30;
+	const std::uint64_t ONE_GB = 1ULL << 30;
 	if (totalUserData <= ONE_GB) {
 		return convertSingleThreaded(chd.get(), isoPath, hunkSize, rawSectorSize,
 		                             sectorsPerHunk, userDataOffset, header->totalhunks, completedBytes);
