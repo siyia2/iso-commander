@@ -342,6 +342,7 @@ void ConfirmResizeWatcher::stop() {
  * <rows...>                            (from line 4)
  * (empty)
  * Successful: n/m | Time Elapsed: x.xs
+ * Successful: n/m | Verified: v/m | Time Elapsed: x.xs (with verification)
  * @endcode
  * The prompt itself is not printed by this class: after repaint() the
  * program's resize hook calls rl_redisplay(), which redraws the prompt and
@@ -385,9 +386,17 @@ public:
     void finish(std::chrono::steady_clock::duration elapsed) {
         std::lock_guard<std::mutex> rl(renderMutex_);
 
-        size_t failed = 0;
-        for (const auto& prog : progressData_)
+        size_t failed = 0, written = 0, verified = 0;
+        bool verificationRequested = false;
+        for (const auto& prog : progressData_) {
             if (prog.failed.load()) ++failed;
+            const bool complete = prog.completed.load();
+            if (complete || prog.writeCompleted.load()) ++written;
+            if (prog.verifyRequested) {
+                verificationRequested = true;
+                if (complete) ++verified;
+            }
+        }
 
         const size_t completed = syncPtr_->completedTasks.load();
         const bool   cancelled = GlobalState::g_operationCancelled.load();
@@ -413,10 +422,16 @@ public:
         std::ostringstream sm;
         sm << std::fixed << std::setprecision(1);
         sm << "\n" << color << "Successful: "
-           << wt_.colorSuccess << completed
+           << wt_.colorSuccess << written
            << color << "/"
-           << wt_.colorWarning << progressData_.size()
-           << color << " | Time Elapsed: "
+           << wt_.colorWarning << progressData_.size();
+        if (verificationRequested) {
+            sm << color << " | Verified: "
+               << wt_.colorSuccess << verified
+               << color << "/"
+               << wt_.colorWarning << progressData_.size();
+        }
+        sm << color << " | Time Elapsed: "
            << color << secs << "s"
            << wt_.colorStatus << UI::Palette::Reset << "\n";
         summaryText_ = sm.str();

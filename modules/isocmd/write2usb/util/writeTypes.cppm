@@ -43,7 +43,8 @@ struct ProgressInfo {
     std::atomic<bool> verifying{false};
     std::atomic<uint64_t> bytesVerified{0};
 
-    std::atomic<bool> completed{false};
+    std::atomic<bool> writeCompleted{false}; // All writes and final flush succeeded.
+    std::atomic<bool> completed{false};      // Write and any requested verification succeeded.
     std::atomic<bool> failed{false};
     std::atomic<uint64_t> bytesWritten{0};
     std::atomic<int> progress{0};

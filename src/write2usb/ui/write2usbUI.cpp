@@ -312,37 +312,115 @@ namespace MappingPrompt {
     }
 
     /**
-     * @brief Prompts the user to confirm the valid ISO-to-device mapping pairs.
+     * @brief Prompts the user to enable optional checksum verification.
      *
-     * @param devicePrompt The current device input prompt string.
-     * @param mainInputString The raw input string entered by the user.
-     * @param warnRows Warning rows generated for the valid pairs.
-     * @param wt The current write theme configuration.
-     * @param color Color formatting string for confirmation prompt.
-     * @return Verification choice on confirmation; nullopt when declined or aborted.
+     * Preserves the confirmation view across terminal resizes and repeats
+     * the prompt until a valid answer is entered or input is aborted.
+     *
+     * @param repaint Callback that redraws the accepted confirmation view.
+     * @param wt      The current write theme configuration.
+     * @param color   Color formatting string for the verification prompt.
+     * @return true to verify, false to skip, or nullopt on abort.
      */
-    std::optional<bool> confirmDeviceMappings(const std::string& devicePrompt,
-                                      const std::string& mainInputString,
-                                      const std::vector<WarnRow>& warnRows,
-                                      const WriteTheme& wt,
-                                      std::string_view color)
+    std::optional<bool> promptChecksumVerification(
+        const ConfirmResizeWatcher::Painter& repaint,
+        const WriteTheme& wt,
+        std::string_view color)
+    {
+        const std::string verifyText = "Verify checksum? (y/n): ";
+
+        std::string verifyPrompt("\001");
+        verifyPrompt.append(color)
+                    .append("\002")
+                    .append(verifyText)
+                    .append(wt.rl_resetCol);
+
+        for (;;) {
+            const size_t cols = terminalSize().cols;
+            std::vector<size_t> widths;
+
+            {
+                SyncOutput sync;
+                widths = repaint(cols);
+            }
+
+            std::unique_ptr<char, decltype(&std::free)> answer(
+                nullptr, &std::free);
+
+            {
+                ConfirmationModeGuard confirmGuard;
+                ConfirmResizeWatcher watcher(
+                    repaint, cols, std::move(widths), verifyText);
+
+                answer.reset(readline(verifyPrompt.c_str()));
+                watcher.stop();
+            }
+
+            if (!answer || std::string_view(answer.get()) == "\x1b")
+                return std::nullopt;
+
+            std::string choice(answer.get());
+
+            while (!choice.empty() &&
+                   std::isspace(static_cast<unsigned char>(choice.back())))
+                choice.pop_back();
+
+            if (choice == "y" || choice == "Y")
+                return true;
+
+            if (choice.empty() || choice == "n" || choice == "N")
+                return false;
+        }
+    }
+
+    /**
+     * @brief Confirms valid ISO-to-device mappings and prompts for optional
+     *        checksum verification.
+     *
+     * @param devicePrompt    The current device input prompt string.
+     * @param mainInputString The raw input string entered by the user.
+     * @param warnRows        Warning rows generated for the valid pairs.
+     * @param wt              The current write theme configuration.
+     * @param color           Color formatting string for the prompts.
+     * @return Verification choice on confirmation; nullopt when declined
+     *         or aborted.
+     */
+    std::optional<bool> confirmDeviceMappings(
+        const std::string& devicePrompt,
+        const std::string& mainInputString,
+        const std::vector<WarnRow>& warnRows,
+        const WriteTheme& wt,
+        std::string_view color)
     {
         const size_t drawnCols = terminalSize().cols;
         std::vector<size_t> drawnWidths;
+
         {
             SyncOutput sync;
-            drawnWidths = renderConfirmRows(drawnCols, /*clearFirst=*/false, devicePrompt, mainInputString, warnRows, wt);
+            drawnWidths = renderConfirmRows(
+                drawnCols, false,
+                devicePrompt, mainInputString, warnRows, wt);
         }
 
         const std::string promptText = "Proceed? (y/n): ";
-        std::string confirmPrompt("\001");
-        confirmPrompt.append(color).append("\002").append(promptText).append(wt.rl_resetCol);
 
-        std::unique_ptr<char, decltype(&std::free)> confirmation(nullptr, &std::free);
+        std::string confirmPrompt("\001");
+        confirmPrompt.append(color)
+                     .append("\002")
+                     .append(promptText)
+                     .append(wt.rl_resetCol);
+
+        std::unique_ptr<char, decltype(&std::free)> confirmation(
+            nullptr, &std::free);
+
         {
             ConfirmationModeGuard confirmGuard;
             ConfirmResizeWatcher watcher(
-                [&](size_t cols) { return renderConfirmRows(cols, /*clearFirst=*/true, devicePrompt, mainInputString, warnRows, wt); },
+                [&](size_t cols) {
+                    return renderConfirmRows(
+                        cols, true,
+                        devicePrompt, mainInputString, warnRows, wt);
+                },
                 drawnCols, drawnWidths, promptText);
 
             confirmation.reset(readline(confirmPrompt.c_str()));
@@ -350,49 +428,33 @@ namespace MappingPrompt {
         }
 
         std::string ans;
+
         if (confirmation) {
             ans = confirmation.get();
-            while (!ans.empty() && std::isspace(static_cast<unsigned char>(ans.back()))) {
+
+            while (!ans.empty() &&
+                   std::isspace(static_cast<unsigned char>(ans.back())))
                 ans.pop_back();
-            }
         }
 
-        if (ans != "y" && ans != "Y") return std::nullopt;
+        if (ans != "y" && ans != "Y")
+            return std::nullopt;
 
-        // Keep the second question in the same confirmation view. On resize,
-        // replay the accepted first question before Readline redraws the input.
-        const std::string verifyText = "Verify checksum? (y/n): ";
-        std::string verifyPrompt("\001");
-        verifyPrompt.append(color).append("\002").append(verifyText).append(wt.rl_resetCol);
+        // Preserve the accepted confirmation when repainting
+        // the checksum verification prompt.
         const auto repaint = [&](size_t cols) {
-            auto widths = renderConfirmRows(cols, true, devicePrompt, mainInputString, warnRows, wt);
-            std::cout << color << promptText << ans << UI::Palette::BoldReset << "\n";
+            auto widths = renderConfirmRows(
+                cols, true,
+                devicePrompt, mainInputString, warnRows, wt);
+
+            std::cout << color << promptText << ans
+                      << UI::Palette::BoldReset << "\n";
+
             widths.push_back(utf8Width(promptText + ans));
             return widths;
         };
-        // A resize may have occurred during the first question: repaint using
-        // the current dimensions before arming the second watcher.
-        for (;;) {
-            const size_t cols = terminalSize().cols;
-            std::vector<size_t> widths;
-            {
-                SyncOutput sync;
-                widths = repaint(cols);
-            }
-            std::unique_ptr<char, decltype(&std::free)> answer(nullptr, &std::free);
-            {
-                ConfirmationModeGuard confirmGuard;
-                ConfirmResizeWatcher watcher(repaint, cols, std::move(widths), verifyText);
-                answer.reset(readline(verifyPrompt.c_str()));
-                watcher.stop();
-            }
-            if (!answer || std::string_view(answer.get()) == "\x1b") return std::nullopt;
-            std::string choice(answer.get());
-            while (!choice.empty() && std::isspace(static_cast<unsigned char>(choice.back())))
-                choice.pop_back();
-            if (choice == "y" || choice == "Y") return true;
-            if (choice.empty() || choice == "n" || choice == "N") return false;
-        }
+
+        return promptChecksumVerification(repaint, wt, color);
     }
 
 } // namespace MappingPrompt

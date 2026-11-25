@@ -235,13 +235,13 @@ namespace {
                 posix_fadvise(isoFd_, 0, 0, POSIX_FADV_DONTNEED);
 
                 while (!aborted()) {
-                    if (fsync(devFd_) == 0) break;
+                    if (fsync(devFd_) == 0) return finishIfComplete();
                     if (errno == EINTR) continue;
                     if (!aborted()) markFailed();
                     return false;
                 }
 
-                return finishIfComplete();
+                return false;
             }
 
         private:
@@ -326,8 +326,13 @@ namespace {
              * @return true if the transfer completed; false if aborted or incomplete.
              */
             bool finishIfComplete() {
-                if (aborted() || localBytesWritten_ < paddedSize_)
+                if (localBytesWritten_ < paddedSize_)
                     return false;
+
+                auto& info = progressData_[progressIndex_];
+                // The complete image was written and fsynced independently of readback.
+                info.writeCompleted.store(true);
+                if (aborted()) return false;
 
                 const auto totalElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                                               Clock::now() - startTime_);
@@ -336,7 +341,6 @@ namespace {
                     ? (static_cast<double>(fileSize_) / (1024.0 * 1024.0)) / seconds
                     : 0.0;
 
-                auto& info = progressData_[progressIndex_];
                 info.speed.store(avgSpeed);
                 info.bytesWritten.store(directBytesWritten_.load());
                 if (verify_) {
@@ -611,18 +615,63 @@ namespace {
             }
 
             /**
+             * @brief Checks cancellation and restores alignment after a partial write.
+             *
+             * Rewinds to the current chunk's starting offset when an unaligned
+             * short write occurs, subject to the per-chunk restart limit.
+             * Retries interrupted seeks and preserves the progress high-water mark.
+             *
+             * @param chunkStart Absolute starting offset of the current write chunk.
+             * @param done       Bytes written during the current attempt.
+             * @param restarts   Number of restarts for the current chunk.
+             * @return false on I/O failure or cancellation.
+             */
+            bool recoverWriteAlignment(uint64_t chunkStart,
+                                       size_t& done,
+                                       unsigned& restarts) {
+                if (isCancelled()) {
+                    cancelled_ = true;
+                    return false;
+                }
+
+                if (done % sectorSize_ == 0)
+                    return true;
+
+                if (restarts == io::kMaxDirectWriteRestarts) {
+                    ioFailed_ = true;
+                    return false;
+                }
+
+                ++restarts;
+
+                // Restore an absolute sector-aligned device offset.
+                const auto start = static_cast<off_t>(chunkStart);
+                off_t position;
+
+                do {
+                    if (isCancelled()) {
+                        cancelled_ = true;
+                        return false;
+                    }
+
+                    position = lseek(devFd_, start, SEEK_SET);
+                } while (position == -1 && errno == EINTR);
+
+                if (position != start) {
+                    ioFailed_ = true;
+                    return false;
+                }
+
+                done = 0;
+                return true;
+            }
+
+            /**
              * @brief Writes one buffer to the device.
              *
-             * Handles aligned partial writes and EINTR. If a short write reports an
-             * unaligned byte count, rewinds to the start of the current write chunk
-             * and replays it, with at most kMaxDirectWriteRestarts restarts per chunk.
-             * The high-water mark prevents replayed bytes from inflating progress.
-             * All requests remain sector-aligned; cancellation is checked on retries.
-             *
-             * @par Utility
-             * Sending data to a drive may take several tries, because it can be partial or
-             * interrupted. This deals with that, and checks for cancel after each piece,
-             * so the main loop can stay simple.
+             * Handles partial writes, EINTR, cancellation and sector-aligned
+             * chunk replay. A high-water mark prevents replayed bytes from
+             * inflating progress.
              *
              * @param c Chunk to write.
              * @return false on I/O failure or cancellation (ioFailed_ / cancelled_
@@ -630,9 +679,11 @@ namespace {
              */
             bool writeBuffer(const Chunk& c) {
                 size_t offset = 0;
+
                 while (offset < c.len) {
                     const size_t len = std::min(c.len - offset, writeChunk_);
                     const uint64_t chunkStart = localBytesWritten_;
+
                     size_t done = 0;
                     size_t highWater = 0;
                     unsigned restarts = 0;
@@ -643,50 +694,31 @@ namespace {
                             return false;
                         }
 
-                        const ssize_t written = write(devFd_, c.buf + offset + done, len - done);
-                        if (written < 0 && errno == EINTR) continue;
+                        const ssize_t written =
+                            write(devFd_, c.buf + offset + done, len - done);
+
+                        if (written < 0 && errno == EINTR)
+                            continue;
+
                         if (written <= 0 || static_cast<size_t>(written) > len - done) {
                             ioFailed_ = true;
                             return false;
                         }
 
                         done += static_cast<size_t>(written);
+
                         if (done > highWater) {
                             recordWritten(done - highWater);
                             highWater = done;
                         }
 
-                        if (isCancelled()) {
-                            cancelled_ = true;
+                        if (!recoverWriteAlignment(chunkStart, done, restarts))
                             return false;
-                        }
-
-                        if (done % sectorSize_ != 0) {
-                            if (restarts == io::kMaxDirectWriteRestarts) {
-                                ioFailed_ = true;
-                                return false;
-                            }
-                            ++restarts;
-                            // Restart from an absolute aligned offset: the kernel's
-                            // current offset may no longer satisfy O_DIRECT alignment.
-                            const auto start = static_cast<off_t>(chunkStart);
-                            off_t position;
-                            do {
-                                if (isCancelled()) {
-                                    cancelled_ = true;
-                                    return false;
-                                }
-                                position = lseek(devFd_, start, SEEK_SET);
-                            } while (position == -1 && errno == EINTR);
-                            if (position != start) {
-                                ioFailed_ = true;
-                                return false;
-                            }
-                            done = 0;
-                        }
                     }
+
                     offset += len;
                 }
+
                 return true;
             }
 

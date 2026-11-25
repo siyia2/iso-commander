@@ -424,7 +424,9 @@ int writeUiTest(const char* binary) {
                 const auto frame=plain(std::string_view(term.output).substr(startResult,end-startResult));
                 const bool successful=i==0 || i==3;
                 CHECK(has(frame,successful?"COMPLETED":i==1?"PARTIAL":"FAILED"));
-                CHECK(has(frame,successful?"Successful: 3/3":i==1?"Successful: 2/3":"Successful: 0/3"));
+                CHECK(has(frame,i==2?"Successful: 0/3":"Successful: 3/3"));
+                if (i==3) CHECK(!has(frame,"Verified:"));
+                else CHECK(has(frame,i==0?"Verified: 3/3":i==1?"Verified: 2/3":"Verified: 0/3"));
                 // The slowest device takes 200 ms to write and another 400 ms
                 // to verify, even when verification fails. The summary must
                 // not stop at write completion or another device finishing.
@@ -504,10 +506,10 @@ int progressScreenTest(const char* binary) {
             checkSpeedSpacing(frame);
             term.send("\n"); frame=screenFrame(term,start,"INTERRUPTED");
             checkSpeedSpacing(frame);
-            CHECK(has(frame,"Successful: 1/3") && has(frame,"DONE") && has(frame,"FAIL") && has(frame,"] CXL  ") && has(frame,"(avg)"));
+            CHECK(has(frame,"Successful: 3/3 | Verified: 1/3") && has(frame,"PASS") && has(frame,"FAIL") && has(frame,"] CXL  ") && has(frame,"(avg)"));
             CHECK(has(frame,"▇▇▇▇▇"));
             start=term.output.size(); term.resize(20,100);
-            frame=screenFrame(term,start,"INTERRUPTED"); CHECK(has(frame,"Successful: 1/3"));
+            frame=screenFrame(term,start,"INTERRUPTED"); CHECK(has(frame,"Successful: 3/3 | Verified: 1/3"));
             term.send("\n"); term.waitFor("TEST-PROGRESS-PASS",start); term.waitForExit();
         } catch (...) { printOutput(term.output); throw; }
         std::cout<<"PASS: live and final USB progress rows, glyphs, speeds, cancellation and terminal resizing\n";

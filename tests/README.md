@@ -84,8 +84,12 @@ images and mixed success/failure batches in both modes, plus a multi-chunk
 image with a partial final sector (nonzero padding sentinel and untouched
 tail marker). Successful verified verbose rows must
 report PASS rather than DONE, and all cases check exact exit status and both
-full devices. Checksum mismatch and readback cancellation are injected in the
-separate privileged writer executable, not the production CLI.
+full devices. Verbose verified runs assert separate Successful and Verified
+counts, and ordinary writes must omit Verified. Checksum mismatch and readback
+cancellation are injected in the separate privileged writer executable, which
+asserts that a flushed write remains successful even if readback fails or is
+cancelled. The PTY tests also check mixed verification results and cancellation
+with distinct write/verification counts, including after a resize.
 Mounted rejection uses a private tmpfs mount with the test device name as
 its source, rather than mounting or formatting the loop. Busy rejection
 uses a synthetic in-flight counter. Each case runs in its own shell so

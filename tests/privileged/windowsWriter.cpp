@@ -152,7 +152,7 @@ int windowsWriterTest(const std::string& loop, const std::string& layout) {
         // satisfy the partition, labels, contents or exact byte-count assertions.
         const bool success = writeIsoToDevice(iso.string(), device.string(), 0, progress);
         CHECK(readFile("/proc/self/mountinfo") == before);
-        CHECK(success && slot.completed && !slot.failed && slot.verifying && slot.progress == 100);
+        CHECK(success && slot.writeCompleted && slot.completed && !slot.failed && slot.verifying && slot.progress == 100);
         CHECK(slot.bytesWritten == total && slot.bytesVerified == total);
         CHECK(deviceProperty(device, "PTTYPE") == "gpt");
         checkPartition(sys, fatPart, 1);

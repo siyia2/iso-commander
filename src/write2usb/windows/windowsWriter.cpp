@@ -888,14 +888,124 @@ bool isWindowsIso(const std::string& isoPath) {
 }
 
 /**
- * @brief Wipe a block device, repartition it, and write a Windows-family ISO
- *        using buffered I/O with paced writeback.
+ * @brief Copy Windows ISO contents to prepared filesystems and optionally
+ *        verify the written data using CRC-64 readback.
+ *
+ * @return true on successful copying and optional verification;
+ *         false on error or cancellation.
+ */
+static bool copyAndVerifyWindowsIso(
+        const std::string& isoMnt,
+        IsoType isoType,
+        const std::string& fatPart,
+        const std::string& ntfsPart,
+        const std::string& fatMnt,
+        const std::string& ntfsMnt,
+        mnt::ScopedMount& fatScope,
+        mnt::ScopedMount& ntfsScope,
+        const std::string& ntfsDriver,
+        ProgressInfo& slot) {
+    namespace steps = win_iso_steps;
+
+    const steps::FailureReporter report{slot};
+
+    std::vector<iso::IsoCopyEntry> ntfsEntries, espEntries;
+    uint64_t totalBytes = 0;
+
+    if (!steps::enumerateNonEmpty(
+            isoMnt, isoType, fatMnt, ntfsMnt,
+            ntfsEntries, espEntries, totalBytes))
+        return report.failUnlessCancelled();
+
+    std::atomic<uint64_t> totalBytesWrittenAccumulator{0};
+    std::atomic<bool> monitoringActive{true};
+
+    const auto startTime = std::chrono::high_resolution_clock::now();
+
+    std::thread progressMonitorThread([&, totalBytes]() {
+        telemetry::runProgressMonitor(
+            totalBytesWrittenAccumulator, monitoringActive,
+            totalBytes, slot);
+    });
+
+    // Ensures the thread is stopped and joined on every return path.
+    ThreadGuard threadGuard(progressMonitorThread, monitoringActive);
+
+    constexpr size_t bufferSize = copy::kBufferSize;
+
+    AlignedBuffer ioBuf(bufferSize, copy::kBufferAlign);
+    if (!ioBuf)
+        return report.failUnlessCancelled();
+
+    std::vector<uint64_t> ntfsChecksums, espChecksums;
+
+    auto runPass = [&](std::vector<iso::IsoCopyEntry>& entries) {
+        auto* checksums = slot.verifyRequested
+            ? (&entries == &ntfsEntries ? &ntfsChecksums : &espChecksums)
+            : nullptr;
+
+        return copy::processEntries(
+            entries, isoType, ntfsMnt,
+            bufferSize, ioBuf.data,
+            totalBytesWrittenAccumulator, checksums);
+    };
+
+    if (!steps::runCopyPasses(
+            runPass, isoType, ntfsMnt, fatMnt,
+            ntfsEntries, espEntries))
+        return report.failUnlessCancelled();
+
+    // Copying and the final filesystem flush have succeeded.
+    slot.writeCompleted.store(true);
+    threadGuard.stop();
+    slot.bytesWritten.store(totalBytesWrittenAccumulator.load());
+
+    if (steps::isCancelled())
+        return false;
+
+    if (slot.verifyRequested) {
+        usb_verify::ReadbackProgress readback(slot, totalBytes);
+
+        if ((isoType == IsoType::WindowsInstall &&
+             !steps::reopenReadOnly(
+                 ntfsPart, ntfsScope, ntfsDriver.c_str())) ||
+            !steps::reopenReadOnly(fatPart, fatScope, "vfat") ||
+            !steps::verifyEntries(
+                ntfsEntries, ntfsChecksums,
+                ioBuf.data, bufferSize, readback) ||
+            !steps::verifyEntries(
+                espEntries, espChecksums,
+                ioBuf.data, bufferSize, readback))
+            return report.failUnlessCancelled();
+
+        if (!readback.finish())
+            return report.failUnlessCancelled();
+
+        return true;
+    }
+
+    const auto totalElapsed =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::high_resolution_clock::now() - startTime);
+
+    const double seconds = totalElapsed.count() / 1000.0;
+
+    steps::reportSuccess(
+        slot, steps::averageSpeedMBps(totalBytes, seconds));
+
+    return true;
+}
+
+/**
+ * @brief Wipe and repartition a block device, write a Windows-family ISO
+ *        using paced writeback, and optionally verify the written data.
  *
  * @param isoPath       Path to the source ISO file.
  * @param device        Target block device. Will be wiped.
  * @param progressIndex Index into progressData for live status reporting.
  * @param progressData  Shared progress tracking array.
- * @return true on success; false on error, truncated source, or cancellation.
+ * @return true on successful writing and optional verification;
+ *         false on error, truncated source, or cancellation.
  */
 bool writeWindowsIsoToDevice(const std::string& isoPath,
                              const std::string& device,
@@ -910,7 +1020,6 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
     if (!mkdtemp(isoMntBuf))
         return report.fail();
 
-    // ScopedMount always removes the dir; setMounted() arms safeUmount.
     mnt::ScopedMount isoScope(isoMntBuf);
 
     if (!steps::mountIso(isoPath, isoMntBuf, isoScope))
@@ -939,82 +1048,22 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
     const std::string fatMnt = fatMntBuf;
     const std::string ntfsMnt =
-        (isoType == IsoType::WindowsInstall) ? ntfsMntBuf : std::string{};
+        (isoType == IsoType::WindowsInstall)
+            ? ntfsMntBuf : std::string{};
 
     std::string ntfsDriver;
+
     if (!steps::mountTargets(
             isoType, fatPart, ntfsPart,
             fatMnt, ntfsMnt, fatScope, ntfsScope, ntfsDriver))
         return report.failUnlessCancelled();
 
-    std::vector<iso::IsoCopyEntry> ntfsEntries, espEntries;
-    uint64_t totalBytes = 0;
-
-    if (!steps::enumerateNonEmpty(
-            isoMnt, isoType, fatMnt, ntfsMnt,
-            ntfsEntries, espEntries, totalBytes))
-        return report.failUnlessCancelled();
-
-    std::atomic<uint64_t> totalBytesWrittenAccumulator{0};
-    std::atomic<bool> monitoringActive{true};
-
-    const auto startTime = std::chrono::high_resolution_clock::now();
-
-    std::thread progressMonitorThread([&, totalBytes]() {
-        telemetry::runProgressMonitor(
-            totalBytesWrittenAccumulator, monitoringActive,
-            totalBytes, slot);
-    });
-
-    // Ensures the thread is always stopped and joined on any return path.
-    ThreadGuard threadGuard(progressMonitorThread, monitoringActive);
-
-    constexpr size_t bufferSize = copy::kBufferSize;
-
-    AlignedBuffer ioBuf(bufferSize, copy::kBufferAlign);
-    if (!ioBuf)
-        return report.failUnlessCancelled();
-
-    std::vector<uint64_t> ntfsChecksums, espChecksums;
-    auto runPass = [&](std::vector<iso::IsoCopyEntry>& entries) {
-        auto* checksums = slot.verifyRequested ? (&entries == &ntfsEntries ? &ntfsChecksums : &espChecksums) : nullptr;
-        return copy::processEntries(
-            entries, isoType, ntfsMnt,
-            bufferSize, ioBuf.data,
-            totalBytesWrittenAccumulator, checksums);
-    };
-
-    if (!steps::runCopyPasses(
-            runPass, isoType, ntfsMnt, fatMnt,
-            ntfsEntries, espEntries))
-        return report.failUnlessCancelled();
-
-    threadGuard.stop();
-    slot.bytesWritten.store(totalBytesWrittenAccumulator.load());
-    if (steps::isCancelled()) return false;
-
-    if (slot.verifyRequested) {
-        usb_verify::ReadbackProgress readback(slot, totalBytes);
-        if ((isoType == IsoType::WindowsInstall && !steps::reopenReadOnly(ntfsPart, ntfsScope, ntfsDriver.c_str())) ||
-            !steps::reopenReadOnly(fatPart, fatScope, "vfat") ||
-            !steps::verifyEntries(ntfsEntries, ntfsChecksums, ioBuf.data, bufferSize, readback) ||
-            !steps::verifyEntries(espEntries, espChecksums, ioBuf.data, bufferSize, readback))
-            return report.failUnlessCancelled();
-        if (!readback.finish()) return report.failUnlessCancelled();
-        return true;
-    }
-
-    // ScopedMount destructors for ntfsScope, fatScope and isoScope fire here
-    // in reverse declaration order: ntfs -> fat -> iso.
-
-    const auto totalElapsed =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::high_resolution_clock::now() - startTime);
-
-    const double seconds = totalElapsed.count() / 1000.0;
-
-    steps::reportSuccess(
-        slot, steps::averageSpeedMBps(totalBytes, seconds));
-
-    return true;
+    // Mount scopes remain alive throughout copying and verification,
+    // then clean up in reverse order: NTFS -> FAT32 -> ISO.
+    return copyAndVerifyWindowsIso(
+        isoMnt, isoType,
+        fatPart, ntfsPart,
+        fatMnt, ntfsMnt,
+        fatScope, ntfsScope,
+        ntfsDriver, slot);
 }

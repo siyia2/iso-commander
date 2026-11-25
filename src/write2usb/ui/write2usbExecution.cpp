@@ -32,6 +32,7 @@ ProgressInfo::ProgressInfo(ProgressInfo&& other) noexcept
       verifyRequested(other.verifyRequested),
       verifying(other.verifying.load()),
       bytesVerified(other.bytesVerified.load()),
+      writeCompleted(other.writeCompleted.load()),
       completed(other.completed.load()),
       failed(other.failed.load()),
       bytesWritten(other.bytesWritten.load()),
@@ -48,6 +49,7 @@ ProgressInfo& ProgressInfo::operator=(ProgressInfo&& other) noexcept {
         verifyRequested = other.verifyRequested;
         verifying.store(other.verifying.load());
         bytesVerified.store(other.bytesVerified.load());
+        writeCompleted.store(other.writeCompleted.load());
         completed.store(other.completed.load());
         failed.store(other.failed.load());
         bytesWritten.store(other.bytesWritten.load());
@@ -317,6 +319,7 @@ std::shared_ptr<WriteScreen> WriteExecution::performWithWriter(
             }
 
             if (success) {
+                progress.writeCompleted.store(true);
                 progress.completed.store(true);
                 syncPtr->completedTasks.fetch_add(1);
             } else if (!GlobalState::g_operationCancelled.load()) {

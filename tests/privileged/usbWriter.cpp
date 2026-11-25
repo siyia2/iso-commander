@@ -81,6 +81,7 @@ void rawIoFaults(const fs::path& src, const std::string& device, int pinned,
             CHECK(result == success);
             for (const auto& rule : plan.rules) CHECK(rule.consumed());
             CHECK(progress[0].completed.load() == success);
+            CHECK(progress[0].writeCompleted.load() == (success || (verify && written == paddedImage.size())));
             CHECK(progress[0].failed.load() == (!success && !cancelled));
             CHECK(GlobalState::g_operationCancelled.load() == cancelled);
             if (verify && written == paddedImage.size()) {
