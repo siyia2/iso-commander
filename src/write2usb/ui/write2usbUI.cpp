@@ -327,7 +327,7 @@ namespace MappingPrompt {
         const WriteTheme& wt,
         std::string_view color)
     {
-        const std::string verifyText = "Verify checksum? (y/n): ";
+        const std::string verifyText = "Verify after writing? (y/n): ";
 
         std::string verifyPrompt("\001");
         verifyPrompt.append(color)
