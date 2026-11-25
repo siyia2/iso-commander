@@ -9,7 +9,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 
 1. **Arch Linux (AUR)** — `yay -S iso-commander` or `yay -S iso-commander-bin`
 2. **Static Binary** — Download from the [latest release](https://github.com/siyia2/iso-commander/releases)
-3. **Source** — `make` (requires GCC 15+)
+3. **Source** — `make` (GCC 15+ with the C++23 standard library module; GCC 16+ recommended)
 
 ### Dependencies
 

@@ -18,15 +18,20 @@
 #    make SANITIZE=2       ThreadSanitizer build
 #    make FAST=1           quick development build: -O0, no LTO (separate build/fast tree).
 #                          Much quicker edit-compile-link cycles; not for release use.
+#    make UNITY=0          compile each source file separately (default with FAST=1).
+#    make UNITY=1          hybrid unity: combine small files within each directory
+#                          (default regardless of processor count).
+#    make UNITY=2          full directory-based unity compilation.
+#    make -jN              limit parallel jobs without changing unity groups.
 #
 #  Requires GCC 15+ with libstdc++'s C++23 standard library module.
 #  Native std is cached outside the ordinary build tree.
+#  std cache entries survive unrelated Makefile edits; the key tracks the
+#  actual std compilation configuration and installed header dependencies.
 #    make clean                   discard build output, preserve standard-library cache
 #    make clean cache             discard only the persistent standard-library cache
 #    make clean all               discard build output and the persistent standard-library cache
 #    make nocache                 build without the persistent std cache; rebuild std each time
-#  std cache entries survive unrelated Makefile edits; the key tracks the
-#  actual std compilation configuration and installed header dependencies.
 #    make test-unit                   safe unit and CLI regression tests
 #    make test-integration       unprivileged filesystem, cancellation, USB, import and PTY tests
 #    make test-privileged        build as user, run loop-device, mount and CLI tests via sudo
@@ -201,9 +206,76 @@ OBJ_DIR  := $(BUILD_DIR)/$(VARIANT)
 SRCS     := $(sort $(shell find $(SRC_DIR) -name '*.cpp'))
 MOD_DIR  := modules
 MODSRCS  := $(sort $(shell find $(MOD_DIR) -name '*.cppm'))
-OBJS     := $(SRCS:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o) $(MODSRCS:$(MOD_DIR)/%.cppm=$(OBJ_DIR)/mod/%.o)
+
+# ---------- Combined compilation of implementation files ----------
+# Sharing translation units reduces repeated import std and template overhead.
+# Hybrid unity bounds group sizes to preserve independent compilation jobs.
+# Grouping is deterministic and independent of processor count and -j.
+# UNITY=0: per-file (default with FAST=1); 1: hybrid (default); 2: full directory.
+UNITY ?= $(if $(filter 1,$(FAST)),0,1)
+ifneq ($(words $(UNITY)),1)
+    $(error UNITY must be 0, 1 or 2)
+endif
+ifeq ($(filter 0 1 2,$(UNITY)),)
+    $(error UNITY must be 0, 1 or 2)
+endif
+
+# Hybrid limits: source lines are a cheap approximation of compilation cost.
+UNITY_MAX_FILES := 4
+UNITY_MAX_LINES := 2000
+UNITY_STANDALONE_LINES := 1000
+
+# Always compiled on their own:
+#   app/main.cpp           the test targets replace it
+#   converters/daa2iso.cpp defines many short macros that would leak into others
+UNITY_EXCLUDE := $(SRC_DIR)/app/main.cpp $(SRC_DIR)/converters/daa2iso.cpp
+
+ifneq ($(UNITY),0)
+    UNITY_CANDIDATES := $(filter-out $(UNITY_EXCLUDE),$(SRCS))
+    # Assign sorted sources to bounded groups within their immediate directory.
+    # Large files are skipped rather than breaking the current small-file group.
+    # Singleton groups remain normal objects. Name groups after their first member
+    # and use distinct paths for hybrid/full to avoid mixing old objects.
+    UNITY_ASSIGNMENTS := $(shell LC_ALL=C awk -v src="$(SRC_DIR)/" -v mode="$(UNITY)" \
+        -v maxfiles="$(UNITY_MAX_FILES)" -v maxlines="$(UNITY_MAX_LINES)" \
+        -v standalone="$(UNITY_STANDALONE_LINES)" '\
+      BEGIN { \
+        for (i = 1; i < ARGC; ++i) { \
+          file = ARGV[i]; rel = substr(file, length(src) + 1); \
+          dir = rel; if (dir !~ /\//) dir = "."; else sub(/\/[^\/]*$$/, "", dir); \
+          lines = 0; \
+          if (mode == 1) { \
+            while ((status = (getline line < file)) > 0) ++lines; \
+            if (status < 0) { print "Cannot read " file > "/dev/stderr"; exit 1; } \
+            close(file); if (lines >= standalone || lines > maxlines) continue; \
+          } \
+          g = active[dir]; \
+          if (g == "" || (mode == 1 && (count[g] >= maxfiles || total[g] + lines > maxlines))) { \
+            sub(/\.cpp$$/, "", rel); g = (mode == 1 ? "hybrid/" : "full/") rel; \
+            active[dir] = g; \
+          } \
+          ++count[g]; total[g] += lines; assigned[file] = g; \
+        } \
+        for (i = 1; i < ARGC; ++i) { \
+          file = ARGV[i]; g = assigned[file]; \
+          if (g != "" && count[g] >= 2) printf "%s=%s ", file, g; \
+        } \
+      }' $(UNITY_CANDIDATES))
+    ifneq ($(.SHELLSTATUS),0)
+        $(error Failed to generate unity groups)
+    endif
+endif
+UNITY_GROUPS := $(sort $(foreach pair,$(UNITY_ASSIGNMENTS),$(word 2,$(subst =, ,$(pair)))))
+group_srcs = $(patsubst %=$1,%,$(filter %=$1,$(UNITY_ASSIGNMENTS)))
+UNITY_SRCS := $(foreach g,$(UNITY_GROUPS),$(call group_srcs,$g))
+UNITY_OBJS := $(UNITY_GROUPS:%=$(OBJ_DIR)/unity/%.o)
+# source=object pairs, used by the import dependency scan below.
+UNITY_MAP  := $(foreach g,$(UNITY_GROUPS),$(foreach s,$(call group_srcs,$g),$s=$(OBJ_DIR)/unity/$g.o))
+
+OBJS     := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(filter-out $(UNITY_SRCS),$(SRCS))) \
+            $(UNITY_OBJS) $(MODSRCS:$(MOD_DIR)/%.cppm=$(OBJ_DIR)/mod/%.o)
 DEPFILES := $(OBJS:.o=.d)
-TEST_SCAN_SRCS := $(sort $(shell find tests -name '*.cpp'))
+TEST_SCAN_SRCS := $(sort $(shell find tests -name '*.cpp' 2>/dev/null))
 
 # ---------- C++23 modules ----------
 # modules/isocmd/a/b.cppm  ->  module isocmd.a.b  ->  $(GCM_DIR)/isocmd.a.b.gcm
@@ -247,12 +319,21 @@ $(CONFIG_STAMP): FORCE Makefile
 	@{ printf '%s\n' '$(CXX)' '$(shell $(CXX) --version 2>/dev/null | head -n 1)' '$(CPPFLAGS)' '$(CXXFLAGS)' '$(LDFLAGS)' '$(LIBS)' '$(STD_CACHE_KEY)' '$(MOD_NAMES)'; } > $@.tmp
 	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
 
+# Source membership and unity grouping, kept apart from CONFIG_STAMP so
+# adding/removing a source does not invalidate every object. Also track test
+# membership for graph regeneration and relinking after source removal.
+UNITY_STAMP := $(OBJ_DIR)/unity.config
+$(UNITY_STAMP): FORCE
+	@mkdir -p $(@D)
+	@printf '%s\n' '$(UNITY_MAP)' '$(SRCS)' '$(TEST_SCAN_SRCS)' > $@.tmp
+	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
+
 # Each linkage type has its own executable and link stamp. Relink only
 # when switching variants that share that executable (e.g. release and fast).
 LINK_STAMP := $(BUILD_DIR)/link-$(TARGET).config
 $(LINK_STAMP): FORCE
 	@mkdir -p $(@D)
-	@printf '%s\n' '$(OBJ_DIR)' > $@.tmp
+	@printf '%s\n' '$(OBJ_DIR)' '$(OBJS)' '$(UNITY_MAP)' > $@.tmp
 	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
 MODFLAGS := -fmodule-mapper=$(MAPPER)
 
@@ -274,11 +355,12 @@ endef
 # fan-out. Source line counts approximate cost; the graph and link order are
 # unchanged. Large independent implementation files retain high priority.
 MODDEPS_MK := $(OBJ_DIR)/moddeps.mk
-$(MODDEPS_MK): $(MODSRCS) $(SRCS) $(TEST_SCAN_SRCS) Makefile $(CONFIG_STAMP)
+$(MODDEPS_MK): $(MODSRCS) $(SRCS) $(TEST_SCAN_SRCS) Makefile $(CONFIG_STAMP) $(UNITY_STAMP)
 	@mkdir -p $(@D)
 	@set -e; tmp="$$(mktemp)"; trap 'rm -f "$$tmp"' EXIT; \
 	LC_ALL=C awk -v obj="$(OBJ_DIR)" -v gcm="$(GCM_DIR)" \
-	    -v stdgcm="$(STD_MODULE_GCM)" -v src="$(SRC_DIR)/" -v mod="$(MOD_DIR)/" '\
+	    -v stdgcm="$(STD_MODULE_GCM)" -v src="$(SRC_DIR)/" -v mod="$(MOD_DIR)/" \
+	    -v units="$(UNITY_MAP)" '\
 	  function emit(    n,o,g,i,k,dep) { \
 	    if (file == "") return; \
 	    if (index(file, mod) == 1) { \
@@ -292,11 +374,12 @@ $(MODDEPS_MK): $(MODSRCS) $(SRCS) $(TEST_SCAN_SRCS) Makefile $(CONFIG_STAMP)
 	      return; \
 	    } else { \
 	      n = substr(file, length(src) + 1); sub(/\.cpp$$/, "", n); \
-	      o = obj "/" n ".o"; \
+	      o = (file in unit) ? unit[file] : obj "/" n ".o"; \
 	      if (n == "app/main") printf "%s/tests/menuApp.o: %s\n", obj, deps; \
 	    } \
 	    printf "%s: %s\n", o, deps; \
-	    objects[++count] = o; cost[o] = 1 + lines / 200; \
+	    if (!(o in cost)) objects[++count] = o; \
+	    cost[o] += 1 + lines / 200; \
 	    if (g != "") { module_gcm[o] = g; if (deps == "") root_modules[o] = 1; } \
 	    n = split(deps, imports, /[[:space:]]+/); \
 	    for (i = 1; i <= n; ++i) { \
@@ -322,6 +405,8 @@ $(MODDEPS_MK): $(MODSRCS) $(SRCS) $(TEST_SCAN_SRCS) Makefile $(CONFIG_STAMP)
 	    return total; \
 	  } \
 	  BEGIN { \
+	    n = split(units, pairs, /[[:space:]]+/); \
+	    for (i = 1; i <= n; ++i) if (split(pairs[i], kv, "=") == 2) unit[kv[1]] = kv[2]; \
 	    for (i = 1; i < ARGC; ++i) { \
 	      file = ARGV[i]; deps = ""; lines = 0; \
 	      while ((status = (getline line < file)) > 0) { \
@@ -422,6 +507,26 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp Makefile $(CONFIG_STAMP) | $(MAPPER)
 	$(Q)$(CXX) $(CPPFLAGS) $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -c $< -o $@
 	$(publish_depfile)
 
+# Generated sources that include each group. GCC rejects a textual system header
+# that first appears after `import std;`, so every member's #include <...> lines
+# are repeated at the top, ahead of any import (include guards make the later
+# copies no-ops). Rewritten only when that text changes, so adding or removing
+# a file or an include is picked up automatically.
+# -MMD records the included files, so editing any member rebuilds its group.
+$(UNITY_OBJS:.o=.cpp): $(OBJ_DIR)/unity/%.cpp: FORCE
+	@mkdir -p $(@D)
+	@{ awk '/^#include[ \t]*</ && !seen[$$0]++' $(call group_srcs,$*); \
+	   printf '#include "%s"\n' $(call group_srcs,$*); } > $@.tmp
+	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
+
+$(UNITY_OBJS): $(OBJ_DIR)/unity/%.o: $(OBJ_DIR)/unity/%.cpp Makefile $(CONFIG_STAMP) | $(MAPPER)
+	@echo "  CXX     $(firstword $(call group_srcs,$*)) (combined, $(words $(call group_srcs,$*)) files)"
+	$(Q)$(CXX) $(CPPFLAGS) -iquote . $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -c $< -o $@
+	$(publish_depfile)
+
+# Direct membership dependencies also cover the first build or a missing .d.
+$(foreach g,$(UNITY_GROUPS),$(eval $(OBJ_DIR)/unity/$g.o: $(call group_srcs,$g)))
+
 # Module interface units: GCC emits the .o and .gcm in one step.
 $(OBJ_DIR)/mod/%.o: $(MOD_DIR)/%.cppm Makefile $(CONFIG_STAMP) | $(MAPPER)
 	@echo "  MOD     $<"
@@ -456,9 +561,10 @@ $(OBJ_DIR)/tests/%.o: tests/%.cpp tests/common/testHarness.h Makefile $(CONFIG_S
 	$(Q)$(CXX) $(CPPFLAGS) $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -c $< -o $@
 	$(publish_depfile)
 
-$(TEST_BIN): $(TEST_UNIT_OBJS) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ)
-$(TEST_INTEGRATION_BIN): $(TEST_INTEGRATION_OBJS) $(TEST_FAULT_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ)
-$(TEST_PRIVILEGED_BIN): $(TEST_PRIVILEGED_OBJS) $(TEST_FAULT_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ)
+$(TEST_BIN): $(TEST_UNIT_OBJS) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
+$(TEST_INTEGRATION_BIN): $(TEST_INTEGRATION_OBJS) $(TEST_FAULT_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
+$(TEST_PRIVILEGED_BIN): $(TEST_PRIVILEGED_OBJS) $(TEST_FAULT_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
+# The unity stamp also forces relinking when the production object list changes.
 # forkpty is in libc on modern glibc; -lutil also supports older glibc.
 # Only the integration executable needs it.
 $(TEST_BIN) $(TEST_INTEGRATION_BIN) $(TEST_PRIVILEGED_BIN):
@@ -468,13 +574,13 @@ $(TEST_BIN) $(TEST_INTEGRATION_BIN) $(TEST_PRIVILEGED_BIN):
 test-unit: $(TARGET) $(TEST_BIN)
 	$(Q)sh tests/run.sh "$(TEST_BIN)" "$(TARGET)"
 
-$(TEST_MENU_OBJ): src/app/main.cpp Makefile $(CONFIG_STAMP) | $(MAPPER)
+$(TEST_MENU_OBJ): src/app/main.cpp Makefile $(CONFIG_STAMP) $(STD_MODULE_GCM) | $(MAPPER)
 	@echo "  TEST CXX $< (private menu lock)"
 	@mkdir -p $(@D)
 	$(Q)$(CXX) $(CPPFLAGS) $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -DISOCMD_TEST_PRIVATE_LOCK -c $< -o $@
 	$(publish_depfile)
 
-$(TEST_MENU_BIN): $(TEST_MENU_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ)
+$(TEST_MENU_BIN): $(TEST_MENU_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
 	@echo "  TEST LD  $@"
 	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(TEST_LIB_OBJS) $(TEST_MENU_OBJ) -o $@ $(LIBS)
 
@@ -503,6 +609,7 @@ help:
 	@echo "  make                       Build isocmd (default)"
 	@echo "  make all                   Same as make"
 	@echo "  make nocache               Rebuild std without the persistent cache"
+	@echo "  make -jN                   Limit parallel jobs to N"
 	@echo ""
 	@echo "Testing:"
 	@echo "  make test-unit             Unit and CLI regression tests"
@@ -528,6 +635,8 @@ help:
 	@echo "  SANITIZE=1                 Enable AddressSanitizer (ASan)"
 	@echo "  SANITIZE=2                 Enable ThreadSanitizer (TSan)"
 	@echo "  FAST=1                     Enable fast development build (-O0, no LTO)"
+	@echo "  UNITY=0|1|2                Per file (0), hybrid (1, default), or full directory (2)"
+	@echo "                             FAST=1 defaults to UNITY=0"
 	@echo "  V=1                        Enable verbose build output"
 	@echo "  BINDIR=<dir>               Set installation directory"
 	@echo "  BUILD_DIR=<dir>            Set build directory"

@@ -233,7 +233,7 @@ void unmountISO(
 namespace {
 
 	/// Case-insensitive three-way compare, the same ordering verbosePrint() uses.
-	int compareIgnoreCase(std::string_view a, std::string_view b) {
+	int compareMountPointIgnoreCase(std::string_view a, std::string_view b) {
 
 		const size_t n = std::min(a.size(), b.size());
 		for (size_t i = 0; i < n; ++i) {
@@ -290,11 +290,11 @@ void forEachUmountLine(bool completed, const std::function<void(std::string_view
 	// old string sets did.
 	std::sort(refs.begin(), refs.end(), [&](const UmountLineRef& a, const UmountLineRef& b) {
 
-		if (int c = compareIgnoreCase(a.key, b.key)) return c < 0;
+		if (int c = compareMountPointIgnoreCase(a.key, b.key)) return c < 0;
 		if (a.index == b.index) return false;
 		const std::string la = line(a.index);
 		const std::string lb = line(b.index);
-		if (int c = compareIgnoreCase(la, lb)) return c < 0;
+		if (int c = compareMountPointIgnoreCase(la, lb)) return c < 0;
 		return la < lb;
 
 	});
