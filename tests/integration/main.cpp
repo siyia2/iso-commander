@@ -3,7 +3,7 @@
 #include "../common/testHarness.h"
 
 namespace isocmd_tests {
-    void backgroundImport(); void filesystemOperations(); void directoryTraversal(); void cancellation(); void activeCancellation(); void usbWriter(); void windowsIoRecovery(); void windowsIoFailures(); void windowsCleanupFailures(); void windowsFinalWriteback(); int terminalChild(); int terminalTest(const char* binary); int menuTest(const char* binary); int workflowTest(const char* binary); int writeUiChild(); int progressScreenChild(); int writeUiTest(const char* binary); int progressScreenTest(const char* binary);
+    void backgroundImport(); void filesystemOperations(); void directoryTraversal(); void cancellation(); void activeCancellation(); void usbWriter(); void windowsIoRecovery(); void windowsIoFailures(); void windowsCleanupFailures(); void windowsFinalWriteback(); int terminalChild(); int terminalTest(const char* binary); int menuTest(const char* binary); int workflowTest(const char* binary); int settingsWorkflowTest(const char* binary); int importWorkflowTest(const char* binary); int conversionWorkflowTest(const char* binary); int writeUiChild(); int progressScreenChild(); int writeUiTest(const char* binary); int progressScreenTest(const char* binary);
 }
 int main(int argc,char** argv) {
     using namespace isocmd_tests;
@@ -11,6 +11,9 @@ int main(int argc,char** argv) {
     if (argc==2 && std::string_view(argv[1])=="--terminal-test") return terminalTest(argv[0]);
     if (argc==3 && std::string_view(argv[1])=="--menu-test") return menuTest(argv[2]);
     if (argc==3 && std::string_view(argv[1])=="--workflow-test") return workflowTest(argv[2]);
+    if (argc==3 && std::string_view(argv[1])=="--settings-workflow-test") return settingsWorkflowTest(argv[2]);
+    if (argc==3 && std::string_view(argv[1])=="--import-workflow-test") return importWorkflowTest(argv[2]);
+    if (argc==3 && std::string_view(argv[1])=="--conversion-workflow-test") return conversionWorkflowTest(argv[2]);
     if (argc==2 && std::string_view(argv[1])=="--write-ui-child") return writeUiChild();
     if (argc==2 && std::string_view(argv[1])=="--write-ui-test") return writeUiTest(argv[0]);
     if (argc==2 && std::string_view(argv[1])=="--progress-child") return progressScreenChild();

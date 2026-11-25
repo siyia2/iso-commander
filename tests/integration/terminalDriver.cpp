@@ -395,6 +395,259 @@ namespace isocmd_tests {
         } catch(const std::exception& e) { std::cerr<<"FAIL: interactive workflows: "<<e.what()<<'\n'; return 1; }
     }
 
+    namespace {
+        // Each extended workflow runs in a fresh runner sandbox and launches
+        // the real menu binary. Never point destructive commands at user data.
+        fs::path workflowHome() {
+            const char* sandbox = std::getenv("ISOCMD_TEST_SANDBOX");
+            const char* home = std::getenv("HOME");
+            CHECK(sandbox && home && ::geteuid() != 0);
+            CHECK(fs::path(home) == fs::path(sandbox)/"home");
+            CHECK(fs::is_directory(home) && !fs::is_symlink(home));
+            return home;
+        }
+
+        constexpr std::string_view mainPrompt = "Enter choice [1-5]: ";
+        constexpr std::string_view selectionPrompt = "? for help: ";
+        constexpr std::string_view valuePrompt = "Skip";
+        constexpr std::string_view continuePrompt = "to continue...";
+        constexpr std::string_view returnPrompt = "to return...";
+
+        std::string step(TerminalSession& term, std::string_view input, std::string_view marker) {
+            const auto start = term.output.size();
+            term.send(input);
+            auto end = term.waitFor(marker, start);
+            // The value prompt has an ANSI sequence between Skip and the colon.
+            if (marker == valuePrompt) end = term.waitFor(": ", end);
+            return plain(std::string_view(term.output).substr(start, end-start));
+        }
+
+        void expectStep(TerminalSession& term, std::string_view input,
+                        std::string_view marker, std::string_view expected) {
+            CHECK(has(step(term, input, marker), expected));
+        }
+
+        template<class Workflow>
+        void runMenuWorkflow(const char* binary, Workflow workflow) {
+            TerminalSession term(binary, nullptr, 120);
+            try {
+                term.waitFor(mainPrompt, term.waitFor("Main Menu"));
+                workflow(term);
+                term.send("5\n");
+                term.waitForExit();
+            } catch (...) { printOutput(term.output); throw; }
+        }
+
+        std::vector<std::string> fileLines(const fs::path& file) {
+            std::vector<std::string> lines;
+            std::istringstream stream(readFile(file));
+            for (std::string line; std::getline(stream, line);)
+                if (!line.empty()) lines.push_back(line);
+            std::sort(lines.begin(), lines.end());
+            return lines;
+        }
+    }
+
+    int settingsWorkflowTest(const char* binary) {
+        try {
+            const auto home = workflowHome();
+            const auto config = home/".config/isocmd/config";
+            fs::create_directories(config.parent_path());
+            writeFile(config, "pagination = 2\nauto_update = off\nfilenames_only = off\n");
+            runMenuWorkflow(binary, [&](TerminalSession& term) {
+                expectStep(term, "4\n", selectionPrompt, "Settings Editor");
+                const auto original = readFile(config);
+                expectStep(term, "?", returnPrompt, "Selecting Edits");
+                step(term, "\n", selectionPrompt);
+                // Select two settings; navigate without applying anything.
+                expectStep(term, "5 6\n", valuePrompt, "Setting: filenames_only");
+                expectStep(term, "\x1b[6~", valuePrompt, "Setting: pagination");
+                expectStep(term, "\x1b[5~", valuePrompt, "Setting: filenames_only");
+                expectStep(term, "g2\n", valuePrompt, "Setting: pagination");
+                expectStep(term, "1001\n", "to try again...", "Invalid value:");
+                CHECK(readFile(config) == original);
+                expectStep(term, "\n", valuePrompt, "Current: 2");
+                // Resize with a typed value, then submit the preserved buffer.
+                const auto typed = term.output.size();
+                term.send("3"); term.waitFor("3", typed);
+                const auto resizeStart = term.output.size();
+                term.resize(20, 100);
+                auto end = term.waitFor(valuePrompt, resizeStart);
+                end = term.waitFor(": ", end);
+                term.waitFor("3", end);
+                expectStep(term, "\n", continuePrompt, "Updated and saved to:");
+                CHECK(has(readFile(config), "pagination = 3\n"));
+                expectStep(term, "\n", valuePrompt, "Setting: filenames_only");
+                // Skip the remaining batch item; no change to its value.
+                step(term, "\n", selectionPrompt);
+                CHECK(has(readFile(config), "filenames_only = off\n"));
+                step(term, "5\n", valuePrompt);
+                step(term, "\x1b", selectionPrompt);
+                CHECK(has(readFile(config), "filenames_only = off\n"));
+                step(term, "r", "Reset all settings to default? (y/n): ");
+                step(term, "n\n", selectionPrompt);
+                CHECK(has(readFile(config), "pagination = 3\n"));
+                step(term, "\x1b", mainPrompt);
+            });
+            // New process must load the persisted value, not just the old cache.
+            runMenuWorkflow(binary, [&](TerminalSession& term) {
+                step(term, "4\n", selectionPrompt);
+                expectStep(term, "6\n", valuePrompt, "Current: 3");
+                step(term, "\x1b", selectionPrompt);
+                step(term, "r", "Reset all settings to default? (y/n): ");
+                expectStep(term, "y\n", continuePrompt, "Defaults applied");
+                CHECK(has(readFile(config), "pagination = 25\n"));
+                step(term, "\n", selectionPrompt);
+                expectStep(term, "6\n", valuePrompt, "Current: 25");
+                step(term, "\x1b", selectionPrompt);
+                step(term, "\x1b", mainPrompt);
+            });
+            std::cout << "PASS: interactive settings batch navigation, validation, resize, persistence and reset\n";
+            return 0;
+        } catch (const std::exception& e) {
+            std::cerr << "FAIL: interactive settings: " << e.what() << '\n'; return 1;
+        }
+    }
+
+    int importWorkflowTest(const char* binary) {
+        try {
+            const auto home = workflowHome();
+            const auto dbDir = home/".local/share/isocmd/database";
+            const auto db = dbDir/"iso_commander_database.txt";
+            const auto paths = dbDir/"iso_commander_path_database.txt";
+            const auto filters = dbDir/"iso_commander_filter_database.txt";
+            fs::create_directories(dbDir);
+            writeFile(db, ""); writeFile(paths, ""); writeFile(filters, "fixture-filter\n");
+            TempDir fixture;
+            const auto source = fixture.path/"import-source";
+            const auto nested = source/"nested";
+            const auto missing = fixture.path/"missing-directory";
+            fs::create_directories(nested);
+            writeFile(source/"alpha.iso", "alpha");
+            writeFile(nested/"beta.ISO", "beta");
+            writeFile(source/"ignored.txt", "ignore");
+            const std::vector<std::string> expected = {(source/"alpha.iso").string(), (nested/"beta.ISO").string()};
+            runMenuWorkflow(binary, [&](TerminalSession& term) {
+                step(term, "3\n", "DB, ? for help:");
+                expectStep(term, "?\n", returnPrompt, "Cleanup/Display Commands");
+                step(term, "\n", "DB, ? for help:");
+                expectStep(term, missing.string()+"\n", continuePrompt, "Lack of valid paths");
+                CHECK(readFile(db).empty() && readFile(paths).empty());
+                step(term, "\n", "DB, ? for help:");
+                const auto input = source.string()+";"+nested.string()+";"+missing.string()+"\n";
+                auto frame = step(term, input, continuePrompt);
+                CHECK(has(frame, "2 ISO imported") && has(frame, "Invalid paths omitted from search:"));
+                CHECK(has(frame, missing.string()));
+                CHECK(fileLines(db) == expected);
+                CHECK(fileLines(paths) == std::vector<std::string>{source.string()+";"+nested.string()});
+                CHECK(!has(readFile(paths), missing.string()));
+                // Repaint the report; must not re-import or duplicate history.
+                const auto start = term.output.size(); term.resize(20, 100);
+                const auto end = term.waitFor(continuePrompt, start);
+                CHECK(has(plain(std::string_view(term.output).substr(start, end-start)), "2 ISO imported"));
+                CHECK(fileLines(db) == expected);
+                step(term, "\n", "DB, ? for help:");
+                expectStep(term, source.string()+"\n", continuePrompt, "No new ISO found");
+                CHECK(fileLines(db) == expected);
+                step(term, "\n", "DB, ? for help:");
+                frame = step(term, "*stats\n", returnPrompt);
+                CHECK(has(frame, "=== ISO Database ===") && has(frame, "Entries: 2"));
+                step(term, "\n", "DB, ? for help:");
+                expectStep(term, "!clr_paths\n", continuePrompt, "FolderPath database cleared successfully.");
+                CHECK(readFile(paths).empty() && fileLines(db) == expected);
+                CHECK(readFile(filters) == "fixture-filter\n");
+                step(term, "\n", "DB, ? for help:");
+                expectStep(term, "!clr_filter\n", continuePrompt, "FilterTerm database cleared successfully.");
+                CHECK(readFile(filters).empty() && fileLines(db) == expected);
+                step(term, "\n", "DB, ? for help:");
+                expectStep(term, "!clr\n", continuePrompt, "ISO database cleared successfully.");
+                CHECK(readFile(db).empty());
+                step(term, "\n", "DB, ? for help:");
+                step(term, "\x1b", mainPrompt);
+            });
+            CHECK(readFile(db).empty() && readFile(paths).empty() && readFile(filters).empty());
+            CHECK(readFile(source/"alpha.iso") == "alpha" && readFile(nested/"beta.ISO") == "beta");
+            std::cout << "PASS: interactive import, duplicate scan, statistics, history and database cleanup\n";
+            return 0;
+        } catch (const std::exception& e) {
+            std::cerr << "FAIL: interactive import: " << e.what() << '\n'; return 1;
+        }
+    }
+
+    int conversionWorkflowTest(const char* binary) {
+        try {
+            const auto home = workflowHome();
+            const auto db = home/".local/share/isocmd/database/iso_commander_database.txt";
+            TempDir fixture;
+            const auto source = fixture.path/"images";
+            fs::create_directories(source);
+            const std::string alpha(2048, 'A'), beta(2048, 'B');
+            auto rawSector = [](const std::string& payload, char mode) {
+                std::string data(2352, '\0'); data[15] = mode;
+                data.replace(16, payload.size(), payload); return data;
+            };
+            writeFile(source/"alpha.img", rawSector(alpha, 1));
+            writeFile(source/"beta.img", rawSector(beta, 1));
+            writeFile(source/"broken.img", rawSector(alpha, 3));
+            runMenuWorkflow(binary, [&](TerminalSession& term) {
+                expectStep(term, "2\n", mainPrompt, "Convert2ISO");
+                step(term, "1\n", "? for help:");
+                expectStep(term, "ls\n", continuePrompt, "entries to display.");
+                step(term, "\n", "? for help:");
+                auto frame = step(term, source.string()+"\n", continuePrompt);
+                CHECK(has(frame, "3 {.bin/.img} files found"));
+                frame = step(term, "\n", selectionPrompt);
+                CHECK(has(frame, "alpha.img") && has(frame, "beta.img") && has(frame, "broken.img"));
+                expectStep(term, "1;\n", selectionPrompt, "Pending Indices");
+                frame = step(term, "clr\n", selectionPrompt);
+                CHECK(!has(frame, "Pending Indices"));
+                expectStep(term, "1;\n", selectionPrompt, "Pending Indices");
+                step(term, "/", "Filter: ");
+                const auto start = term.output.size(); term.send("beta");
+                frame = queryFrame(term, start, "beta");
+                CHECK(has(frame, "beta.img") && !has(frame, "alpha.img"));
+                frame = step(term, "\n", selectionPrompt);
+                CHECK(has(frame, "beta.img") && !has(frame, "alpha.img"));
+                // Execute the staged source index while another image is visible.
+                expectStep(term, "P", "verbose output? (y/n): ", "COMPLETED");
+                frame = step(term, "n\n", selectionPrompt);
+                CHECK(has(frame, "beta.img") && !has(frame, "alpha.img"));
+                CHECK(readFile(source/"alpha.iso") == alpha);
+                CHECK(!fs::exists(source/"beta.iso") && !fs::exists(source/"broken.iso"));
+                expectStep(term, "1\n", "verbose output? (y/n): ", "COMPLETED");
+                step(term, "n\n", selectionPrompt);
+                CHECK(readFile(source/"beta.iso") == beta);
+                step(term, "\x1b", selectionPrompt);
+                expectStep(term, "3\n", "verbose output? (y/n): ", "FAILED");
+                step(term, "n\n", selectionPrompt);
+                CHECK(!fs::exists(source/"broken.iso"));
+                CHECK(fileLines(db) == (std::vector<std::string>{(source/"alpha.iso").string(), (source/"beta.iso").string()}));
+                // Existing output is a skip and must never be overwritten.
+                writeFile(source/"alpha.iso", "keep existing ISO");
+                expectStep(term, "1\n", "verbose output? (y/n): ", "COMPLETED");
+                step(term, "n\n", selectionPrompt);
+                CHECK(readFile(source/"alpha.iso") == "keep existing ISO");
+                step(term, "\x1b", "? for help:");
+                frame = step(term, "ls\n", selectionPrompt);
+                CHECK(has(frame, "alpha.img") && has(frame, "beta.img"));
+                step(term, "\x1b", "? for help:");
+                expectStep(term, "!clr\n", continuePrompt, "BIN/IMG cache cleared.");
+                step(term, "\n", "? for help:");
+                expectStep(term, "ls\n", continuePrompt, "entries to display.");
+                step(term, "\n", "? for help:");
+                step(term, "\x1b", mainPrompt); // Convert2ISO submenu
+                step(term, "\x1b", mainPrompt); // main menu
+            });
+            CHECK(readFile(source/"alpha.img") == rawSector(alpha, 1));
+            CHECK(readFile(source/"beta.img") == rawSector(beta, 1));
+            CHECK(readFile(source/"broken.img") == rawSector(alpha, 3));
+            std::cout << "PASS: interactive image discovery, staged/filtered conversion, failure, skip and RAM cache\n";
+            return 0;
+        } catch (const std::exception& e) {
+            std::cerr << "FAIL: interactive conversion: " << e.what() << '\n'; return 1;
+        }
+    }
+
     int writeUiTest(const char* binary) {
         try {
             TerminalSession term(binary,"--write-ui-child",120);
@@ -414,9 +667,9 @@ namespace isocmd_tests {
                 // Declining retains the input for editing; resubmit it unchanged.
                 end=term.waitFor(mapping,end); term.send("\n"); end=term.waitFor("Proceed? (y/n): ",end);
                 term.send("y\n");
-                end=term.waitFor("Verify checksum? (y/n): ",end);
+                end=term.waitFor("Verify write integrity? (y/n): ",end);
                 const auto verifyResize=term.output.size(); term.resize(24,110);
-                end=term.waitFor("Verify checksum? (y/n): ",verifyResize);
+                end=term.waitFor("Verify write integrity? (y/n): ",verifyResize);
                 const auto afterConfirm=term.output.size(); term.send("y\n");
                 for (int i=0;i<4;++i) {
                     const auto startResult=i==0?afterConfirm:end;
@@ -444,7 +697,7 @@ namespace isocmd_tests {
                 end=term.waitFor("TEST-VERIFY-DEFAULT",end);
                 end=term.waitFor("? for help: ",end);
                 term.send("1>/dev/zero;2>/dev/null\n"); end=term.waitFor("Proceed? (y/n): ",end);
-                term.send("y\n"); end=term.waitFor("Verify checksum? (y/n): ",end);
+                term.send("y\n"); end=term.waitFor("Verify write integrity? (y/n): ",end);
                 term.send("\n");
                 term.waitFor("TEST-WRITE-UI-PASS",end); term.waitForExit();
             } catch (...) { printOutput(term.output); throw; }
