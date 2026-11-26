@@ -328,12 +328,12 @@ void ConfirmResizeWatcher::stop() {
  * @endcode
  * Device path, drive name and speed are padded to the widest value across
  * rows so the bars line up. Drive names are always shown in full. The bar
- * has 5 cells, with 10% steps while writing (empty ░, half ▄, full ▇)
- * and 10% steps during active verification (empty ░, half ⡇, full ⣿). Both are
- * floored from the percentage, so the bar is full only at 100%. Terminal
- * states restore the regular bar. Failure or cancellation after a completed
- * write shows the full write bar rather than the interrupted verification
- * percentage.
+ * has 5 cells and 10% steps while writing (empty ░, half ▄, full ▇)
+ * and during active verification (empty space, half ⡆, full ⣶).
+ * Both are floored from the percentage, so the bar is full only at 100%.
+ * Terminal states restore the regular write bar. Failure or cancellation
+ * after a completed write shows the full write bar rather than the
+ * interrupted verification percentage.
  * The status column shows the live percentage (writing or verification),
  * DONE or PASS (speed shown
  * as the write-only " (avg)"), FAIL or CXL
