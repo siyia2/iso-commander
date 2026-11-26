@@ -214,16 +214,51 @@ namespace isocmd_tests {
 
 		}
 
-		// Readline can emit several preview frames for one input write. Require the
-		// complete edited query after the Filter prompt in the same latest redraw.
-		std::string queryFrame(TerminalSession& term,std::size_t start,std::string_view query) {
+		// Readline echoes the old prompt while typing. Wait for a complete new
+		// screen before accepting the next prompt as a completed action.
+		std::size_t waitForRedrawnPrompt(TerminalSession& term, std::string_view prompt, std::size_t start) {
+
+			const auto begin = term.waitFor("\033[?2026h", start);
+			const auto end = term.waitFor("\033[?2026l", begin);
+			return term.waitFor(prompt, end);
+
+		}
+
+		// Menu titles and list contents are drawn before Readline starts the
+		// next input row. A prompt match alone can still be the old input echo.
+		std::size_t waitForStepPrompt(TerminalSession& term, std::string_view prompt, std::size_t start) {
+
+			if (prompt == "Enter choice [1-5]: " || prompt == "Enter choice [1-6]: " ||
+			    prompt == "? for help: " || prompt == "Skip")
+			    return waitForRedrawnPrompt(term, prompt, start);
+
+			// Folder search prompts have a multiline header but no initial
+			// synchronized redraw. Wait for a new Readline session instead.
+			if (prompt == "? for help:" || prompt == "DB, ? for help:" ||
+			    prompt == "into, ? for help:") {
+				const auto ready = term.waitFor("\033[?2004h", start);
+				const auto header = term.waitFor(prompt, ready);
+				return term.waitFor("\033[K\r", header);
+			}
+			return term.waitFor(prompt, start);
+
+		}
+
+		// Each preview repaint has its own synchronized list frame, followed by
+		// navigation hints and the input row. Ignore prompt-only redisplays left
+		// over from the previous key, even when they contain the same query.
+		std::string queryFrame(TerminalSession& term, std::size_t start, std::string_view query,
+		                       bool visibleTail = false) {
 
 			for (;;) {
-				const auto prompt=term.waitFor("Filter: ",start);
-				const auto end=term.waitFor(query,prompt);
-				const auto frame=listFrame(term,start,end);
-				if (has(frame,std::string("Filter: ")+std::string(query))) return frame;
-				start=prompt;
+				const auto begin = term.waitFor("\033[?2026h", start);
+				const auto painted = term.waitFor("\033[?2026l", begin);
+				const auto prompt = term.waitFor("Filter: ", painted);
+				const auto end = term.waitFor("\033[K\r", prompt);
+				const auto input = plain(std::string_view(term.output).substr(prompt, end-prompt));
+				if (visibleTail ? input.ends_with(query) : input == query)
+				    return listFrame(term, begin, end);
+				start = end;
 			}
 
 		}
@@ -388,7 +423,9 @@ namespace isocmd_tests {
 		std::string workflowStep(TerminalSession& term, std::string_view input, std::string_view prompt) {
 
 			const auto start=term.output.size(); term.send(input);
-			return listFrame(term,start,term.waitFor(prompt,start));
+			if (prompt == "Filter: ") return queryFrame(term, start, "");
+			const auto end = waitForStepPrompt(term, prompt, start);
+			return listFrame(term,start,end);
 
 		}
 
@@ -426,8 +463,8 @@ namespace isocmd_tests {
 			const std::string query = "FILTER-START!" + std::string(2400, 'z') + "FILTER-TAIL!";
 			auto begin=term.output.size();
 			term.send("\x15\033[200~" + query + "\033[201~");
-			auto end=term.waitFor("FILTER-TAIL!",begin);
-			auto frame=listFrame(term,begin,end);
+			auto frame=queryFrame(term,begin,"FILTER-TAIL!",true);
+			std::size_t end;
 			CHECK(has(frame,"No filter results") && has(frame,"Filter: «"));
 			begin=term.output.size(); term.send("\x01");
 			end=term.waitFor("FILTER-START!",begin);
@@ -436,12 +473,11 @@ namespace isocmd_tests {
 			CHECK(has(frame,"Filter: FILTER-START!") && has(frame,"»"));
 			begin=term.output.size(); term.send("\x05");
 			end=term.waitFor("FILTER-TAIL!",begin);
+			term.waitFor("\033[K\r",end);
 			begin=term.output.size(); term.resize(18,55);
-			end=term.waitFor("FILTER-TAIL!",begin);
-			CHECK(has(listFrame(term,begin,end),"Filter: «"));
+			CHECK(has(queryFrame(term,begin,"FILTER-TAIL!",true),"Filter: «"));
 			begin=term.output.size(); term.resize(18,95);
-			end=term.waitFor("FILTER-TAIL!",begin);
-			CHECK(has(listFrame(term,begin,end),"Filter: «"));
+			CHECK(has(queryFrame(term,begin,"FILTER-TAIL!",true),"Filter: «"));
 			frame=workflowPreview(term,"\x15zzzz-no-fixture","zzzz-no-fixture");
 			CHECK(has(frame,"No filter results"));
 
@@ -619,7 +655,8 @@ namespace isocmd_tests {
 
 			const auto start = term.output.size();
 			term.send(input);
-			auto end = term.waitFor(marker, start);
+			if (marker == "Filter: ") return queryFrame(term, start, "");
+			auto end = waitForStepPrompt(term, marker, start);
 			// The value prompt has an ANSI sequence between Skip and the colon.
 			if (marker == valuePrompt) end = term.waitFor(": ", end);
 			return plain(std::string_view(term.output).substr(start, end-start));
@@ -629,7 +666,10 @@ namespace isocmd_tests {
 		void expectStep(TerminalSession& term, std::string_view input,
 		                std::string_view marker, std::string_view expected) {
 
-			CHECK(has(step(term, input, marker), expected));
+			const auto frame = step(term, input, marker);
+			if (!has(frame, expected))
+			    throw std::runtime_error("expected '" + std::string(expected) +
+			        "' before prompt '" + std::string(marker) + "'");
 
 		}
 
@@ -759,7 +799,7 @@ namespace isocmd_tests {
 
 			const auto start = term.output.size();
 			term.send(input);
-			const auto end = term.waitFor(marker, start);
+			const auto end = waitForStepPrompt(term, marker, start);
 			return term.output.substr(start, end-start);
 
 		}
@@ -809,10 +849,10 @@ namespace isocmd_tests {
 			frame = rawStep(term, "5\n", selectionPrompt);
 			checkListAppearance(frame, a, 120);
 			const auto start = term.output.size(); term.resize(20, 80);
-			const auto end = term.waitFor(selectionPrompt, start);
+			const auto end = waitForStepPrompt(term, selectionPrompt, start);
 			checkListAppearance(std::string_view(term.output).substr(start, end-start), a, 80);
 			const auto wideStart = term.output.size(); term.resize(24, 120);
-			const auto wideEnd = term.waitFor(selectionPrompt, wideStart);
+			const auto wideEnd = waitForStepPrompt(term, selectionPrompt, wideStart);
 			checkListAppearance(std::string_view(term.output).substr(wideStart, wideEnd-wideStart), a, 120);
 			step(term, "\x1b", "Enter choice [1-6]: ");
 			frame = rawStep(term, "\x1b", mainPrompt);
