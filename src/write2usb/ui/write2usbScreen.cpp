@@ -356,8 +356,8 @@ void ConfirmResizeWatcher::stop() {
  * (line 3: empty)
  * <rows...>                            (from line 4)
  * (empty)
- * Successful: n/m | Time Elapsed: x.xs
- * Successful: n/m | Verified: v/m | Time Elapsed: x.xs (with verification)
+ * Written: n/m | Time Elapsed: x.xs
+ * Written: n/m | Verified: v/m | Time Elapsed: x.xs (with verification)
  * @endcode
  * The prompt itself is not printed by this class: after repaint() the
  * program's resize hook calls redisplayPrompt(), which redraws the prompt and
@@ -443,7 +443,7 @@ public:
 
 		std::ostringstream sm;
 		sm << std::fixed << std::setprecision(1);
-		sm << "\n" << color << "Successful: "
+		sm << "\n" << color << "Written: "
 		   << wt_.colorSuccess << written
 		   << color << "/"
 		   << wt_.colorWarning << progressData_.size();
