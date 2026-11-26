@@ -60,15 +60,14 @@ Mount ISOs, convert images, write bootable USB drives — done right
 
 ## USB Boot Mode Support
 
-| ISO Type         | Write Method      | BIOS | UEFI |
-|------------------|-------------------|:----:|:----:|
-| Windows < 10     | Unsupported       | ✗    | ✗    |
-| Windows 10/11    | GPT + FAT32 + NTFS | ✗    | ✓    |
-| Windows 10/11 PE | GPT + FAT32       | ✗    | ✓    |
-| Linux/BSD        | Raw Sector Copy   | ✓ *  | ✓ *  |
+| ISO Type         | Write Method      | BIOS | UEFI | CRC-64 |
+|------------------|-------------------|:----:|:----:|:------:|
+| Windows < 10     | Unsupported       | ✗    | ✗    | ✗       |
+| Windows 10/11    | GPT + FAT32 + NTFS | ✗    | ✓   | ✓       |
+| Windows 10/11 PE | GPT + FAT32       | ✗    | ✓    | ✓       |
+| Linux/BSD        | Raw Sector Copy   | ✓ *  | ✓ *  | ✓       |
 
 > \* Boot support depends on what the source ISO supports\
-> Optional CRC-64 readback verification is supported
 
 ## 🏆 Credits
 
